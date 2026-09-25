@@ -8,8 +8,6 @@ This file records project decisions separately from hypotheses. Items marked **H
 
 Use successful videos to identify demonstrated demand and transferable mechanisms. Do not treat the source video itself as the production blueprint.
 
-Core principle:
-
 > **Copy the demonstrated demand, not the video.**
 
 ## D-002 — Use the Source Dependency Test
@@ -20,16 +18,17 @@ A transformed concept should retain its main value even if borrowed clips are re
 
 Selective source footage may still be useful as evidence or illustration, subject to rights/licensing/copyright review.
 
-## D-003 — Separate Opportunity from Retention
+## D-003 — Separate Opportunity, Packaging, and Retention
 
 **Status:** Accepted
 
-The system has two distinct questions:
+The system treats these as distinct questions:
 
 - **Opportunity:** What is worth making?
-- **Retention:** How should it be presented?
+- **Packaging:** Will the intended viewer choose it?
+- **Retention:** Will the viewer keep watching and receive the promised payoff?
 
-Do not use retention mechanics as a substitute for demand research, or demand metrics as a substitute for creative construction.
+Do not use retention mechanics as a substitute for demand research, or demand metrics as a substitute for packaging and creative construction.
 
 ## D-004 — Long-form and Shorts require separate format logic
 
@@ -67,6 +66,7 @@ Claims such as:
 - secondary hook at 15–20 seconds;
 - visual reset every 3–5 seconds;
 - fixed retention targets;
+- the first 30 seconds determining virality;
 - a single universally dominant ranking signal;
 
 must not become hard production rules solely because creator/vendor literature recommends them.
@@ -97,7 +97,7 @@ Full 30-query evidence is still required.
 
 **Status:** Accepted
 
-Discovery, why-it-worked analysis, transformation, research, story, and format decisions should occur upstream. OpenMontage or equivalent tooling belongs in the Production Engine.
+Discovery, why-it-worked analysis, transformation, research, story, packaging, and format decisions should occur upstream. OpenMontage or equivalent tooling belongs in the Production Engine.
 
 ## D-012 — Build incrementally
 
@@ -117,6 +117,28 @@ Keep API secrets and generated experiment output out of Git:
 - `experiment_01_discovery/output/`
 
 Source code, configuration, project documentation, and validated decisions belong in the repository. Evidence-storage policy can be revisited when repeated experiments need versioned datasets.
+
+## D-014 — Packaging is a first-class engine
+
+**Status:** Accepted
+
+Packaging is not merely a retention subtask. It governs the viewer's decision before retention can occur.
+
+Its responsibility includes concept framing, title, thumbnail where relevant, opening-frame presentation where relevant, curiosity/promise, and alignment between the promise and the delivered video.
+
+## D-015 — Production should optimize for progress, not arbitrary motion
+
+**Status:** Accepted
+
+Frequent visual change can be useful, but "change the screen every 3–5 seconds" is not a universal project rule.
+
+Visuals should advance understanding, emotion, evidence, story, or attention. Generic motion or unrelated stock footage is not considered progress merely because it changes the screen.
+
+## D-016 — Actual channel evidence should replace generic benchmarks over time
+
+**Status:** Accepted
+
+Published best-practice numbers are starting hypotheses. Once the project publishes enough content, its own packaging, retention, satisfaction, and outcome data should increasingly determine production decisions.
 
 ## Next decision gate
 
