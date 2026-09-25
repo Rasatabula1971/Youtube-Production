@@ -1,0 +1,84 @@
+{
+  "niches": [
+    {
+      "name": "automotive_racing",
+      "queries": [
+        "motorsport engineering",
+        "race car technology",
+        "F1 engineering"
+      ]
+    },
+    {
+      "name": "science_engineering",
+      "queries": [
+        "engineering explained",
+        "science explained",
+        "how it works engineering"
+      ]
+    },
+    {
+      "name": "fitness",
+      "queries": [
+        "fitness science",
+        "workout science",
+        "exercise explained"
+      ]
+    },
+    {
+      "name": "personal_finance",
+      "queries": [
+        "personal finance explained",
+        "money mistakes",
+        "investing explained"
+      ]
+    },
+    {
+      "name": "history",
+      "queries": [
+        "history explained",
+        "untold history",
+        "historical mystery"
+      ]
+    },
+    {
+      "name": "technology_ai",
+      "queries": [
+        "AI explained",
+        "technology explained",
+        "future technology"
+      ]
+    },
+    {
+      "name": "cooking_food",
+      "queries": [
+        "food science",
+        "cooking explained",
+        "why food works"
+      ]
+    },
+    {
+      "name": "diy_home",
+      "queries": [
+        "DIY project",
+        "home improvement explained",
+        "repair explained"
+      ]
+    },
+    {
+      "name": "travel",
+      "queries": [
+        "travel explained",
+        "hidden travel",
+        "travel mistakes"
+      ]
+    },
+    {
+      "name": "music_culture",
+      "queries": [
+        "music explained",
+        "music history",
+        "instrument explained"
+      ]
+    }
+  ]
+}
