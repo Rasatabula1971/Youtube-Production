@@ -9,10 +9,11 @@ Build a repeatable system that:
 3. transforms transferable mechanisms into genuinely new concepts;
 4. researches and verifies the new concept;
 5. creates an original story and script;
-6. selects the correct format;
-7. produces the video;
-8. applies human quality gates; and
-9. learns from actual publishing performance.
+6. packages the concept so its promise is clear and compelling;
+7. selects the correct format;
+8. produces the video;
+9. applies human quality gates; and
+10. learns from actual publishing performance.
 
 This is not intended to be a generic "viral video generator."
 
@@ -35,21 +36,25 @@ If **no**, the concept is too dependent on the source.
 ```text
 01 Opportunity Engine
         ↓
-02 Retention Engine
+02 Packaging Engine
         ↓
-03 Transformation Engine
+03 Retention Engine
         ↓
-04 Story & Script Engine
+04 Transformation Engine
         ↓
-05 Format Engine
+05 Research / Story / Script Engine
         ↓
-06 Production Engine
+06 Format Engine
         ↓
-07 Quality Gates
+07 Production Engine
         ↓
-08 Learning Engine
+08 Quality Gates
+        ↓
+09 Learning Engine
         ↺
 ```
+
+The diagram is a responsibility map, not a rigid one-way runtime pipeline. In practice, Transformation and research can inform Packaging, and the Learning Engine feeds evidence back into every upstream stage.
 
 ### 01 — Opportunity Engine
 
@@ -65,24 +70,45 @@ Candidate signals:
 
 **Current work is here.**
 
-### 02 — Retention Engine
+### 02 — Packaging Engine
 
-Purpose: understand the mechanisms that kept viewers choosing and continuing to watch.
+Purpose: turn a worthwhile concept into a clear viewer promise that earns the choice to watch.
+
+Research and production dimensions:
+
+- concept framing;
+- title;
+- thumbnail for surfaces where thumbnails matter;
+- opening-frame presentation where format requires it;
+- curiosity gap;
+- specificity;
+- emotional or practical payoff;
+- consistency between packaging and the actual video.
+
+Title and thumbnail should complement rather than merely duplicate each other when both are relevant.
+
+Packaging must not make a promise the video does not satisfy.
+
+### 03 — Retention Engine
+
+Purpose: understand and construct the mechanisms that keep viewers watching after they choose the video.
 
 Research dimensions:
 
-- packaging;
 - hook;
 - open loops;
 - narrative progression;
 - information reveals;
-- visual/audio resets;
+- escalation;
+- visual/audio progression;
 - payoffs;
-- satisfaction.
+- satisfaction of the original promise.
 
-Published "best practice" numbers are hypotheses until validated. Examples such as fixed hook windows, fixed visual-reset intervals, or universal retention percentages must not automatically become system rules.
+Published "best practice" numbers remain hypotheses until validated. Fixed hook windows, fixed visual-reset intervals, universal retention percentages, and claims that one signal dominates the recommendation system must not automatically become production rules.
 
-### 03 — Transformation Engine
+The project should increasingly learn from actual retention curves, including intros, top moments, spikes and dips, once its own videos are published.
+
+### 04 — Transformation Engine
 
 Purpose: turn evidence from successful content into genuinely new concepts.
 
@@ -104,19 +130,22 @@ Research / verification
 Selected concept
 ```
 
-### 04 — Story & Script Engine
+Transformation should preserve useful mechanisms without reproducing the source creator's script or story.
+
+### 05 — Research / Story / Script Engine
 
 Produces:
 
+- evidence and primary-source research where practical;
+- fact verification;
 - hook;
 - story architecture;
 - evidence-backed script;
-- fact verification;
 - visual directions.
 
-The system should preserve useful mechanisms without reproducing the source creator's script or story.
+A useful default is narrative progress rather than disconnected facts, but individual formats may justify other structures.
 
-### 05 — Format Engine
+### 06 — Format Engine
 
 Long-form and Shorts are separate production branches.
 
@@ -129,7 +158,7 @@ They may share:
 
 They should not be treated as identical edits of the same timeline.
 
-### 06 — Production Engine
+### 07 — Production Engine
 
 Potential capabilities:
 
@@ -142,21 +171,24 @@ Potential capabilities:
 - editing/composition;
 - rendering.
 
+Visuals should support the narration or story rather than exist only to create motion.
+
 OpenMontage and related production tooling belong here. Production tooling is the backend, not the creative decision-maker.
 
-### 07 — Quality Gates
+### 08 — Quality Gates
 
 Human review remains part of the system.
 
 Planned gates:
 
-- concept/hook gate;
-- script gate;
+- concept gate;
+- packaging/hook gate;
+- script/fact gate;
 - source/copyright/licensing gate;
 - rough-cut gate;
 - final human review.
 
-### 08 — Learning Engine
+### 09 — Learning Engine
 
 Once content is published, actual channel performance should increasingly replace generic internet benchmarks.
 
@@ -166,17 +198,17 @@ Potential measurements include:
 - retention curve;
 - average view duration;
 - average percentage viewed;
-- dips and spikes;
+- intros, dips, spikes and top moments;
 - engagement/satisfaction indicators;
 - publishing outcome.
 
-Learnings feed back into Opportunity, Retention, Transformation, Story, and Format decisions.
+Learnings feed back into Opportunity, Packaging, Retention, Transformation, Story, Format, and Production decisions.
 
 ## 4. Current milestone
 
 # M1 — Prove the Opportunity Engine
 
-Do not build all eight engines at once.
+Do not build all nine engines at once.
 
 The immediate goal is to establish whether the discovery system can consistently surface useful source opportunities across multiple niches.
 
@@ -249,30 +281,73 @@ EMOTION
 PACING
 VISUAL LANGUAGE
 AUDIENCE PROMISE
+PAYOFF
 ```
 
-Candidate retention mechanisms include:
+Candidate mechanisms include:
 
-- pattern interruption;
 - curiosity gaps;
 - primary/secondary hooks;
 - open loops;
 - narrative escalation;
 - information reveals;
-- visual/audio resets;
-- payoff.
+- visual/audio changes;
+- payoff;
+- title/thumbnail promise;
+- opening-frame promise.
 
 These are variables to test, not universal laws.
 
-Experiment 02 should produce a structured **why-it-worked profile** that can feed the Transformation Engine.
+Experiment 02 should produce a structured **why-it-worked profile** that can feed both the Packaging and Transformation/Retention engines.
 
-## 7. Scope control
+## 7. Working production theory
+
+Current evidence and source material support a broad model:
+
+```text
+Proven demand
+    ↓
+Original concept
+    ↓
+Packaging / viewer choice
+    ↓
+Retention / continued viewing
+    ↓
+Satisfaction / promised payoff
+    ↓
+Measured performance
+    ↓
+Learning
+    ↺
+```
+
+The following are useful working principles:
+
+- idea/topic selection precedes expensive production;
+- packaging should make a clear promise;
+- the opening should quickly establish or begin fulfilling that promise;
+- story/progression is often more useful than disconnected facts;
+- visuals should correspond to the information being communicated;
+- weak sections should be identified from real retention data and improved in later productions;
+- repeated production is for learning and format discovery, not merely upload consistency.
+
+The following remain **hypotheses**, not hard rules:
+
+- visual change every 3–5 seconds;
+- audio being a fixed percentage of the experience;
+- one universal hook duration;
+- the first 30 seconds determining whether a video "goes viral";
+- universal retention targets;
+- particular niches automatically having a higher million-view ceiling;
+- a single repeatable structure guaranteeing million-view performance.
+
+## 8. Scope control
 
 Before adding an agent, database, vector store, queue, framework, scraper, API, or automation layer, identify the specific validated failure or bottleneck it solves.
 
 Do not add infrastructure merely because it may be useful later.
 
-## 8. Success condition for M1
+## 9. Success condition for M1
 
 M1 succeeds when we can demonstrate that the Opportunity Engine:
 
