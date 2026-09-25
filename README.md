@@ -6,12 +6,13 @@ Research-driven system for discovering proven audience demand, understanding why
 
 **Copy the demonstrated demand, not the video.**
 
-The project separates two problems:
+The project separates three early questions:
 
-- **Opportunity Engine** — determines what may be worth making.
-- **Retention Engine** — determines how the opportunity should be presented.
+- **Opportunity Engine** — what may be worth making?
+- **Packaging Engine** — will the intended viewer choose it?
+- **Retention Engine** — will the viewer keep watching and receive the promised payoff?
 
-A transformation layer connects those engines to research, scripting, format selection, production, quality control, and learning.
+Transformation, research/story/script, format selection, production, quality control, and learning follow from those decisions.
 
 ## Current status
 
@@ -28,6 +29,23 @@ The experiment collects independent signals rather than calculating a final oppo
 - Format candidate
 
 Current thresholds are research hypotheses, not frozen production rules.
+
+## Planned system
+
+```text
+Opportunity
+    ↓
+Transformation / original concept
+    ↓
+Packaging → choose to watch
+    ↓
+Retention → keep watching
+    ↓
+Satisfaction → deliver the promise
+    ↓
+Learning
+    ↺
+```
 
 ## Repository
 
