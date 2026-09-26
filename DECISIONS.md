@@ -426,3 +426,38 @@ frozen manifest.
 
 Only one experiment job may run at a time. The server binds to localhost and
 retains job logs outside Git.
+
+
+## D-036 — Transformation preserves mechanisms, not source expression
+
+**Status:** Accepted
+
+The Transformation Engine may use only Experiment 02 patterns that are ready
+for the Transformation Engine under the existing human-review handoff gate.
+
+A generated concept must preserve a transferable mechanism while remaining
+independently valuable without the source creator's title, wording, footage,
+story sequence, personality, examples, or exact execution.
+
+Concepts must declare a passing Source Dependency Test, require no source
+assets, and provide independent research questions before they can become
+Concept Gate candidates.
+
+The Transformation Engine does not rank concepts or calculate a concept score.
+
+## D-037 — Concept selection is an explicit human gate
+
+**Status:** Accepted
+
+Structurally valid concept candidates do not move directly into research.
+
+Every candidate receives one explicit ACCEPT / REWORK / REJECT decision at the
+Concept Gate.
+
+ACCEPT requires human confirmation of originality, audience-promise clarity,
+source independence, feasibility, and researchability. REWORK requires a note
+describing what must change. Only ACCEPT concepts enter the Research Engine
+handoff.
+
+The Concept Gate is not a performance prediction and does not create a numeric
+concept ranking.
