@@ -40,8 +40,6 @@ PROFILE = {
         "downforce",
         "suspension",
         "power unit",
-        "mechanic",
-        "mechanics",
         "pit stop",
     ],
     "context_terms": [
@@ -54,6 +52,9 @@ PROFILE = {
         "racing",
         "track",
         "driver",
+        "engineer",
+        "mechanic",
+        "mechanics",
     ],
     "theme_rules": {
         "hidden_mechanisms": [
@@ -125,6 +126,17 @@ class RelevanceTests(unittest.TestCase):
         self.assertEqual(
             result["relevance"],
             RELEVANCE_ON_INTENT,
+        )
+
+
+    def test_mechanic_vibe_clip_is_adjacent_not_on_intent(self) -> None:
+        result = classify_relevance(
+            "McLaren Mechanic has unlimited Aura",
+            PROFILE,
+        )
+        self.assertEqual(
+            result["relevance"],
+            RELEVANCE_ADJACENT,
         )
 
     def test_themes_are_multi_label(self) -> None:
