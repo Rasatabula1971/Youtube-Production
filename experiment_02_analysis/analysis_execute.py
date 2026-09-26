@@ -401,7 +401,7 @@ def build_analysis_request(
                     "new_direction": "A genuinely new concept direction",
                     "evidence_refs": ["evidence.id"],
                     "source_dependency_test": {
-                        "passes": true,
+                        "passes": True,
                         "rationale": "Why the new concept keeps its value without the source expression"
                     }
                 }
