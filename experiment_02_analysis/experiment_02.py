@@ -332,7 +332,11 @@ def validate_profile(
             item,
             path=f"transfer.transferable_mechanisms[{index}]",
             evidence=evidence,
-            allowed_evidence_types=set(config["evidence_types"]),
+            allowed_evidence_types={
+                evidence_type
+                for evidence_type in config["evidence_types"]
+                if evidence_type != "opportunity_evidence"
+            },
             config=config,
             require_mechanism_ids=True,
         )
@@ -346,7 +350,11 @@ def validate_profile(
             item,
             path=f"transfer.source_specific_elements[{index}]",
             evidence=evidence,
-            allowed_evidence_types=set(config["evidence_types"]),
+            allowed_evidence_types={
+                evidence_type
+                for evidence_type in config["evidence_types"]
+                if evidence_type != "opportunity_evidence"
+            },
             config=config,
         )
         errors.extend(item_errors)
