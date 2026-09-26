@@ -193,10 +193,11 @@ def youtube_health(
 
 
 def _search_prefix(strategy: str) -> str:
-    if strategy == "relevance":
+    if strategy in {"relevance", "date"}:
+        # yt-dlp removed broken ytsearchdate support in 2026.
+        # Keep "date" as a compatibility request but execute the
+        # supported ytsearch path and report the effective strategy.
         return "ytsearch"
-    if strategy == "date":
-        return "ytsearchdate"
     raise ValueError(
         "strategy must be relevance or date"
     )
@@ -241,6 +242,11 @@ def search_youtube(
             "yt-dlp is not available on PATH"
         )
 
+    effective_strategy = (
+        "relevance"
+        if strategy == "date"
+        else strategy
+    )
     search_target = (
         f"{_search_prefix(strategy)}{limit}:{query}"
     )
@@ -329,6 +335,12 @@ def search_youtube(
         "status": status,
         "query": query,
         "strategy": strategy,
+        "effective_strategy": effective_strategy,
+        "strategy_note": (
+            "yt-dlp removed ytsearchdate; date requests use supported ytsearch relevance"
+            if strategy == "date"
+            else None
+        ),
         "requested_limit": limit,
         "result_count": len(results),
         "parse_errors": parse_errors,
