@@ -394,33 +394,127 @@ def discovery_backend_counts(audit: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _yt_dlp_strategy(search_order: str) -> str:
-    return "date" if search_order == "date" else "relevance"
+YT_DLP_RELEVANCE_POOL = 50
+YT_DLP_DATE_POOL = 100
+
+
+def _parse_yt_dlp_datetime(item: dict[str, Any]) -> datetime | None:
+    timestamp = item.get("timestamp")
+    if timestamp is not None:
+        try:
+            return datetime.fromtimestamp(
+                float(timestamp),
+                tz=timezone.utc,
+            )
+        except (TypeError, ValueError, OSError):
+            pass
+
+    upload_date = str(item.get("upload_date") or "").strip()
+    if len(upload_date) == 8 and upload_date.isdigit():
+        try:
+            return datetime.strptime(
+                upload_date,
+                "%Y%m%d",
+            ).replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _yt_dlp_pool(
+    query: str,
+    cache: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    if query in cache:
+        return [dict(item) for item in cache[query]]
+
+    merged: dict[str, dict[str, Any]] = {}
+    for strategy, limit in (
+        ("date", YT_DLP_DATE_POOL),
+        ("relevance", YT_DLP_RELEVANCE_POOL),
+    ):
+        result = search_youtube(
+            query,
+            limit=limit,
+            strategy=strategy,
+            require_agent_reach_health=False,
+        )
+        for raw in result.get("results", []):
+            video_id = str(raw.get("video_id", "")).strip()
+            if not video_id:
+                continue
+
+            if video_id not in merged:
+                item = dict(raw)
+                item["discovery_strategies"] = [strategy]
+                merged[video_id] = item
+                continue
+
+            existing = merged[video_id]
+            strategies = list(
+                existing.get("discovery_strategies", [])
+            )
+            if strategy not in strategies:
+                strategies.append(strategy)
+            existing["discovery_strategies"] = strategies
+
+            for key, value in raw.items():
+                if existing.get(key) in {None, ""} and value not in {None, ""}:
+                    existing[key] = value
+
+    cache[query] = list(merged.values())
+    return [dict(item) for item in cache[query]]
 
 
 def _yt_dlp_ids(
     query: str,
-    search_order: str,
-    cache: dict[tuple[str, str], list[str]],
+    age_window: dict[str, Any],
+    format_target: str,
+    minimum_views: int,
+    cache: dict[str, list[dict[str, Any]]],
 ) -> list[str]:
-    strategy = _yt_dlp_strategy(search_order)
-    key = (query, strategy)
-    if key in cache:
-        return list(cache[key])
+    pool = _yt_dlp_pool(query, cache)
 
-    result = search_youtube(
-        query,
-        limit=50,
-        strategy=strategy,
-        require_agent_reach_health=False,
-    )
-    ids = [
-        str(item.get("video_id", "")).strip()
-        for item in result.get("results", [])
-        if str(item.get("video_id", "")).strip()
-    ]
-    cache[key] = ids
-    return list(ids)
+    after = datetime.fromisoformat(
+        str(age_window["published_after"]).replace("Z", "+00:00")
+    ).date()
+    before = datetime.fromisoformat(
+        str(age_window["published_before"]).replace("Z", "+00:00")
+    ).date()
+
+    ids: list[str] = []
+    for item in pool:
+        observed = _parse_yt_dlp_datetime(item)
+        if observed is not None:
+            observed_date = observed.date()
+            if observed_date < after or observed_date > before:
+                continue
+
+        duration_raw = item.get("duration_seconds")
+        if duration_raw is not None:
+            try:
+                duration = float(duration_raw)
+            except (TypeError, ValueError):
+                duration = 0.0
+            if duration > 0:
+                if format_target == "short_candidate" and duration > 180:
+                    continue
+                if format_target == "long_form_candidate" and duration <= 180:
+                    continue
+
+        views_raw = item.get("view_count")
+        if views_raw is not None:
+            try:
+                if int(views_raw) < int(minimum_views):
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        video_id = str(item.get("video_id", "")).strip()
+        if video_id:
+            ids.append(video_id)
+
+    return ids
 
 def discover(
     config: dict[str, Any],
@@ -439,6 +533,7 @@ def discover(
     audit: list[dict[str, Any]] | None = None,
     completed_jobs: set[str] | None = None,
     discovery_backend: str = "auto",
+    yt_dlp_cache: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[
     dict[str, set[str]],
     dict[str, list[dict[str, Any]]],
@@ -459,7 +554,7 @@ def discover(
     api_search_available = discovery_backend != "yt_dlp"
     fallback_health_checked = False
     fallback_ready = False
-    fallback_cache: dict[tuple[str, str], list[str]] = {}
+    fallback_cache = yt_dlp_cache if yt_dlp_cache is not None else {}
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
@@ -587,7 +682,9 @@ def discover(
                             try:
                                 ids = _yt_dlp_ids(
                                     query,
-                                    order,
+                                    age_window,
+                                    format_target,
+                                    int(config["minimum_views"]),
                                     fallback_cache,
                                 )
                             except AcquisitionError as exc:
@@ -605,7 +702,11 @@ def discover(
                                 )
 
                             backend_used = "agent_reach_yt_dlp"
-                            backend_strategy = _yt_dlp_strategy(order)
+                            backend_strategy = "date+relevance"
+                            print(
+                                "    yt-dlp age/format/view filtered candidates: "
+                                f"{len(ids)}"
+                            )
 
                         for rank, video_id in enumerate(ids, start=1):
                             discovered.setdefault(video_id, set()).add(topic_name)
