@@ -62,16 +62,33 @@ class QueryProfileTests(unittest.TestCase):
         self.assertEqual(profile["recent_result_share"], 0.6667)
 
     def test_evidence_is_attached_without_score(self) -> None:
-        profiles = [{"query": "F1 engineering"}]
+        profiles = [
+            {
+                "niche": "automotive_racing",
+                "query": "F1 engineering",
+            }
+        ]
         rows = [
             {
-                "matched_queries": ["F1 engineering"],
+                "query_matches": [
+                    {
+                        "niche": "automotive_racing",
+                        "query": "F1 engineering",
+                        "rank": 1,
+                    }
+                ],
                 "relevance": "ON_INTENT",
                 "outlier_reliability": "TRUSTED",
                 "outlier_ratio": 5.0,
             },
             {
-                "matched_queries": ["F1 engineering"],
+                "query_matches": [
+                    {
+                        "niche": "automotive_racing",
+                        "query": "F1 engineering",
+                        "rank": 2,
+                    }
+                ],
                 "relevance": "OFF_INTENT",
                 "outlier_reliability": "CAUTION",
                 "outlier_ratio": 1500.0,
