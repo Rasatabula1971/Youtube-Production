@@ -27,8 +27,11 @@ from experiment_02 import (
 ENRICHED_DIR = OUTPUT_DIR / "profiles_enriched"
 INGESTION_REPORTS_DIR = OUTPUT_DIR / "ingestion_reports"
 
-TIMECODE_RE = re.compile(
+TIMECODE_HMS_RE = re.compile(
     r"^(?P<h>\d{1,2}):(?P<m>\d{2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$"
+)
+TIMECODE_MS_RE = re.compile(
+    r"^(?P<m>\d{1,2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$"
 )
 TAG_RE = re.compile(r"<[^>]+>")
 
@@ -51,14 +54,23 @@ def resolve_bundle_path(bundle_path: Path, value: str | None) -> Path | None:
 
 
 def parse_timecode(value: str) -> float:
-    match = TIMECODE_RE.match(value.strip())
-    if not match:
-        raise ValueError(f"Invalid subtitle timecode: {value!r}")
-    hours = int(match.group("h"))
-    minutes = int(match.group("m"))
-    seconds = int(match.group("s"))
-    milliseconds = int(match.group("ms"))
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+    cleaned = value.strip()
+    match = TIMECODE_HMS_RE.match(cleaned)
+    if match:
+        hours = int(match.group("h"))
+        minutes = int(match.group("m"))
+        seconds = int(match.group("s"))
+        milliseconds = int(match.group("ms"))
+        return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+
+    match = TIMECODE_MS_RE.match(cleaned)
+    if match:
+        minutes = int(match.group("m"))
+        seconds = int(match.group("s"))
+        milliseconds = int(match.group("ms"))
+        return minutes * 60 + seconds + milliseconds / 1000.0
+
+    raise ValueError(f"Invalid subtitle timecode: {value!r}")
 
 
 def format_seconds(value: float) -> str:
@@ -85,6 +97,7 @@ def parse_subtitle_file(path: Path) -> list[dict[str, Any]]:
     raw = path.read_text(encoding="utf-8-sig")
     lines = raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     evidence: list[dict[str, Any]] = []
+    digest = sha256_file(path)
     index = 0
     cue_ordinal = 0
 
@@ -138,7 +151,7 @@ def parse_subtitle_file(path: Path) -> list[dict[str, Any]]:
                 "locator": f"{format_seconds(start)}-{format_seconds(end)}",
                 "observation": observation,
                 "source_file": str(path),
-                "source_sha256": sha256_file(path),
+                "source_sha256": digest,
             }
         )
 
