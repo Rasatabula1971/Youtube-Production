@@ -446,3 +446,43 @@ M1 succeeds when we can demonstrate that the Opportunity Engine:
 - provides enough evidence to select candidates for Experiment 02 without relying on an invented composite score.
 
 Only then should discovery logic be frozen and the project advance.
+
+
+## 7. Transformation Engine framework
+
+The Transformation Engine framework is now implemented offline.
+
+It consumes the future Experiment 02 transformation handoff and prepares
+mechanism-bound concept-generation requests only from entries that are
+READY_FOR_TRANSFORMATION_ENGINE.
+
+Returned concepts are structurally validated for:
+
+- unique concept identity;
+- premise and audience promise;
+- format intent;
+- mechanism application;
+- transformation method;
+- independent research questions;
+- declared absence of source-specific elements; and
+- a passing Source Dependency Test with no required source assets.
+
+The engine does not rank concepts, calculate a composite score, or claim that a
+mechanism will cause performance.
+
+### Concept Gate
+
+The human Concept Gate sits between structural concept validation and research.
+
+Every concept receives exactly one decision:
+
+- ACCEPT;
+- REWORK; or
+- REJECT.
+
+ACCEPT requires explicit human confirmation that the concept is original
+enough, has a clear audience promise, is source-independent, feasible, and
+researchable.
+
+Only ACCEPT concepts enter the future Research Engine handoff. Working titles
+remain provisional and are not treated as final packaging.
