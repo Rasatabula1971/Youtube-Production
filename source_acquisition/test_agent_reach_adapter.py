@@ -197,7 +197,7 @@ class AgentReachAdapterTests(unittest.TestCase):
             run.call_args.kwargs["shell"]
         )
 
-    def test_date_strategy_uses_ytsearchdate(self):
+    def test_date_strategy_compatibility_uses_supported_ytsearch(self):
         with (
             patch.object(
                 adapter,
@@ -223,15 +223,27 @@ class AgentReachAdapterTests(unittest.TestCase):
                 ),
             ) as run,
         ):
-            adapter.search_youtube(
+            result = adapter.search_youtube(
                 "query",
                 limit=3,
                 strategy="date",
             )
 
+        command = run.call_args.args[0]
         self.assertIn(
-            "ytsearchdate3:query",
-            run.call_args.args[0],
+            "ytsearch3:query",
+            command,
+        )
+        self.assertFalse(
+            any("ytsearchdate" in part for part in command)
+        )
+        self.assertEqual(
+            result["effective_strategy"],
+            "relevance",
+        )
+        self.assertIn(
+            "removed ytsearchdate",
+            result["strategy_note"],
         )
 
 

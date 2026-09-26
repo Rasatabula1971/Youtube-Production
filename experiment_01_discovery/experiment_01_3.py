@@ -395,8 +395,7 @@ def discovery_backend_counts(audit: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-YT_DLP_RELEVANCE_POOL = 50
-YT_DLP_DATE_POOL = 100
+YT_DLP_RELEVANCE_POOL = 100
 
 
 def _parse_yt_dlp_datetime(item: dict[str, Any]) -> datetime | None:
@@ -422,49 +421,91 @@ def _parse_yt_dlp_datetime(item: dict[str, Any]) -> datetime | None:
     return None
 
 
+def _yt_dlp_query_variants(
+    query: str,
+    age_window: dict[str, Any],
+) -> list[str]:
+    after = datetime.fromisoformat(
+        str(age_window["published_after"]).replace("Z", "+00:00")
+    )
+    before = datetime.fromisoformat(
+        str(age_window["published_before"]).replace("Z", "+00:00")
+    )
+
+    variants = [str(query).strip()]
+    for year in range(after.year, before.year + 1):
+        variants.append(f"{str(query).strip()} {year}")
+
+    return list(
+        dict.fromkeys(
+            value
+            for value in variants
+            if value
+        )
+    )
+
+
 def _yt_dlp_pool(
     query: str,
+    age_window: dict[str, Any],
     cache: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
-    if query in cache:
-        return [dict(item) for item in cache[query]]
+    variants = _yt_dlp_query_variants(
+        query,
+        age_window,
+    )
+    cache_key = "||".join(variants)
+    if cache_key in cache:
+        return [
+            dict(item)
+            for item in cache[cache_key]
+        ]
 
     merged: dict[str, dict[str, Any]] = {}
-    for strategy, limit in (
-        ("date", YT_DLP_DATE_POOL),
-        ("relevance", YT_DLP_RELEVANCE_POOL),
-    ):
+
+    for variant in variants:
         result = search_youtube(
-            query,
-            limit=limit,
-            strategy=strategy,
+            variant,
+            limit=YT_DLP_RELEVANCE_POOL,
+            strategy="relevance",
             require_agent_reach_health=False,
         )
         for raw in result.get("results", []):
-            video_id = str(raw.get("video_id", "")).strip()
+            video_id = str(
+                raw.get("video_id", "")
+            ).strip()
             if not video_id:
                 continue
 
             if video_id not in merged:
                 item = dict(raw)
-                item["discovery_strategies"] = [strategy]
+                item["discovery_queries"] = [variant]
                 merged[video_id] = item
                 continue
 
             existing = merged[video_id]
-            strategies = list(
-                existing.get("discovery_strategies", [])
+            queries = list(
+                existing.get(
+                    "discovery_queries",
+                    [],
+                )
             )
-            if strategy not in strategies:
-                strategies.append(strategy)
-            existing["discovery_strategies"] = strategies
+            if variant not in queries:
+                queries.append(variant)
+            existing["discovery_queries"] = queries
 
             for key, value in raw.items():
-                if existing.get(key) in (None, "") and value not in (None, ""):
+                if (
+                    existing.get(key) in (None, "")
+                    and value not in (None, "")
+                ):
                     existing[key] = value
 
-    cache[query] = list(merged.values())
-    return [dict(item) for item in cache[query]]
+    cache[cache_key] = list(merged.values())
+    return [
+        dict(item)
+        for item in cache[cache_key]
+    ]
 
 
 def _yt_dlp_ids(
@@ -474,7 +515,11 @@ def _yt_dlp_ids(
     minimum_views: int,
     cache: dict[str, list[dict[str, Any]]],
 ) -> list[str]:
-    pool = _yt_dlp_pool(query, cache)
+    pool = _yt_dlp_pool(
+        query,
+        age_window,
+        cache,
+    )
 
     after = datetime.fromisoformat(
         str(age_window["published_after"]).replace("Z", "+00:00")
@@ -703,7 +748,7 @@ def discover(
                                 )
 
                             backend_used = "agent_reach_yt_dlp"
-                            backend_strategy = "date+relevance"
+                            backend_strategy = "ytsearch_relevance+year_hint"
                             print(
                                 "    yt-dlp age/format/view filtered candidates: "
                                 f"{len(ids)}"
