@@ -1533,9 +1533,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     print(f"Completed search jobs total: {len(completed_jobs):,}")
 
     details = get_video_details(list(discovered), api_key)
+    measurement_observed_at = datetime.now(timezone.utc).isoformat()
     append_candidate_detail_snapshots(
         details,
-        datetime.now(timezone.utc).isoformat(),
+        measurement_observed_at,
     )
     channel_ids = sorted(
         {
@@ -1612,7 +1613,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         encoding="utf-8",
     )
 
-    apply_velocity(rows, observed_at)
+    apply_velocity(rows, measurement_observed_at)
     topic_velocity = aggregate_age_matched_velocity(rows)
     summary = build_summary("discover", manifest, rows, [], topic_velocity)
     write_outputs(rows, topic_velocity, summary)
