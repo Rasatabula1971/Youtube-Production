@@ -8,10 +8,14 @@ is simply benefiting from being newer than the comparison videos.
 The default cohort is:
 
 - target age: 120 days
-- tolerance: +/-15 days
-- accepted age window: 105-135 days
+- primary tolerance: +/-15 days
+- primary age window: 105-135 days
+- fallback tolerance: +/-30 days
+- fallback age window: 90-150 days
+- fallback is used only for topic/format cells with fewer than 3 unique channels
 - minimum views at discovery: 500,000
-- search orders: `viewCount` and `relevance`
+- primary search orders: `viewCount` and `relevance`
+- fallback search order: `relevance`
 - Shorts and long-form candidates analyzed separately
 
 No final opportunity score is calculated.
@@ -64,17 +68,30 @@ sample between observations.
 
 A video enters the cohort only when:
 
-1. it is inside the exact age window;
+1. it is inside the primary age window, or the fallback window for a sparse topic/format cell;
 2. it has at least the configured minimum views;
-3. its title or description contains a target mechanism term; and
-4. its title or description also contains Formula 1 / motorsport context.
+3. its **title** contains a target mechanism term;
+4. its **title** also contains Formula 1 / motorsport context;
+5. its title does not contain configured gaming/sim-racing exclusion terms; and
+6. its actual duration format matches the search branch that discovered it.
 
-The context gate prevents false positives such as a Rocketdyne **F-1 engine**
+Descriptions no longer qualify a video for a topic. This prevents metadata text
+from turning a general video into false engineering evidence.
+
+The context gate also prevents false positives such as a Rocketdyne **F-1 engine**
 video being accepted as Formula 1 engine evidence.
 
 Rejected results remain in `rejected_candidates.json` for auditability.
 
 ## First run — discover and freeze
+
+Discovery now searches format-specific YouTube duration branches:
+
+- `short` for short candidates
+- `medium` for 4-20 minute long-form candidates
+- `long` for videos over 20 minutes
+
+This prevents Shorts from crowding long-form discovery.
 
 From PowerShell:
 
@@ -158,12 +175,16 @@ Outlier performance remains supporting evidence only.
 
 ## Starting over
 
-Discovery intentionally refuses to run when an Experiment 01.3 snapshot file
-already exists. This prevents a replacement cohort from inheriting old
-snapshots.
+To intentionally replace an existing 01.3 cohort, use:
 
-To restart the experiment, archive or remove the entire:
+```powershell
+python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-cohort
+```
 
-`output\experiment_01_3`
+The program automatically moves the previous `output\experiment_01_3`
+directory into:
 
-directory first, then run discovery again.
+`output\archive\experiment_01_3_<timestamp>`
+
+before creating the new cohort. Old snapshots therefore remain preserved and
+cannot contaminate the replacement cohort.
