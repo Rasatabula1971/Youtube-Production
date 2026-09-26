@@ -491,8 +491,15 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         raise ValueError("Research handoff concepts must be a list")
 
     paths = []
+    seen_concept_ids: set[str] = set()
     for concept in concepts:
         plan = build_research_plan(concept)
+        concept_id = str(plan["concept_id"])
+        if concept_id in seen_concept_ids:
+            raise ValueError(
+                f"Duplicate concept_id in research handoff: {concept_id}"
+            )
+        seen_concept_ids.add(concept_id)
         destination = (
             PLANS_DIR
             / f"{safe_slug(plan['concept_id'])}.research_plan.json"
