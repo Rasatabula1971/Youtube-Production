@@ -300,3 +300,25 @@ Transferable mechanisms must be separated from source-specific wording,
 footage, personality, story details and execution. The objective is to preserve
 a useful mechanism while creating a new concept whose main value survives
 without the source creator's expression.
+
+
+## D-030 — Source evidence ingestion is local and fingerprinted
+
+**Status:** Accepted
+
+Experiment 02 source acquisition is separated from interpretation.
+
+The initial ingestion layer accepts user-supplied transcript, image and
+timestamped-note files rather than automatically scraping or downloading source
+media.
+
+Every imported source file is SHA-256 fingerprinted. Stable evidence IDs and
+file provenance are recorded so a later creative finding can be traced back to
+the exact source material used.
+
+Registering a file is not itself an observation. Thumbnail or opening-frame
+files without a written observation remain `REGISTERED_UNOBSERVED` and cannot
+automatically support a creative finding.
+
+Local evidence files and generated enriched profiles remain untracked by Git by
+default.

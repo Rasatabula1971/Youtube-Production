@@ -1,0 +1,22 @@
+{
+  "notes": [
+    {
+      "type": "visual_note",
+      "start_seconds": 0.0,
+      "end_seconds": 4.2,
+      "observation": "Describe the visible shot, graphic, demonstration, or edit."
+    },
+    {
+      "type": "timing_note",
+      "start_seconds": 0.0,
+      "end_seconds": 12.0,
+      "observation": "Describe timing, cut density, pauses, reveal timing, or structural timing."
+    },
+    {
+      "type": "audio_note",
+      "start_seconds": 0.0,
+      "end_seconds": 8.0,
+      "observation": "Describe narration delivery, music, sound effects, silence, or audio transition."
+    }
+  ]
+}
