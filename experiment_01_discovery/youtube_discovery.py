@@ -1,4 +1,4 @@
-"""Stage 2 Experiment 01.1 — Proven YouTube Content Discovery.
+"""Stage 2 Experiment 01.2 — Relevance & Evidence Quality.
 
 Purpose:
 Discover proven YouTube content and collect independent signals for:
@@ -8,6 +8,10 @@ Discover proven YouTube content and collect independent signals for:
 3. Momentum proxy
 4. Channel-baseline quality
 5. Format candidate
+6. Search provenance
+7. Relevance quality
+8. Outlier reliability
+9. Content themes
 
 IMPORTANT:
 This is research tooling.
@@ -35,6 +39,16 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from evidence_quality import (
+    RELEVANCE_ADJACENT,
+    RELEVANCE_OFF_INTENT,
+    RELEVANCE_ON_INTENT,
+    RELIABILITY_CAUTION,
+    RELIABILITY_TRUSTED,
+    RELIABILITY_UNAVAILABLE,
+    annotate_evidence_quality,
+)
 
 
 # ============================================================
@@ -785,11 +799,16 @@ def main() -> None:
         set[str],
     ] = {}
 
+    query_matches: dict[
+        str,
+        list[dict[str, Any]],
+    ] = {}
+
     search_calls = 0
 
     print()
     print(
-        "STAGE 2 — EXPERIMENT 01.1"
+        "STAGE 2 — EXPERIMENT 01.2"
     )
 
     print(
@@ -862,9 +881,12 @@ def main() -> None:
 
             search_calls += 1
 
-            for item in data.get(
-                "items",
-                [],
+            for rank, item in enumerate(
+                data.get(
+                    "items",
+                    [],
+                ),
+                start=1,
             ):
 
                 video_id = (
@@ -885,6 +907,17 @@ def main() -> None:
                         set(),
                     ).add(
                         niche_name
+                    )
+
+                    query_matches.setdefault(
+                        video_id,
+                        [],
+                    ).append(
+                        {
+                            "niche": niche_name,
+                            "query": query,
+                            "rank": rank,
+                        }
                     )
 
         if (
@@ -1102,6 +1135,37 @@ def main() -> None:
                         )
                     ),
 
+                "matched_queries":
+                    sorted(
+                        {
+                            match["query"]
+                            for match
+                            in query_matches.get(
+                                video_id,
+                                [],
+                            )
+                        }
+                    ),
+
+                "best_search_rank":
+                    min(
+                        (
+                            match["rank"]
+                            for match
+                            in query_matches.get(
+                                video_id,
+                                [],
+                            )
+                        ),
+                        default=None,
+                    ),
+
+                "query_matches":
+                    query_matches.get(
+                        video_id,
+                        [],
+                    ),
+
                 # --------------------------------------------
                 # Format signal
                 # --------------------------------------------
@@ -1288,6 +1352,23 @@ def main() -> None:
             )
 
     # ========================================================
+    # EXPERIMENT 01.2 — RELEVANCE / EVIDENCE QUALITY
+    # ========================================================
+
+    niche_lookup = {
+        niche["name"]: niche
+        for niche in config["niches"]
+    }
+
+    for row in rows:
+        row.update(
+            annotate_evidence_quality(
+                row,
+                niche_lookup,
+            )
+        )
+
+    # ========================================================
     # SORT
     #
     # Sorting is for inspection only.
@@ -1338,6 +1419,9 @@ def main() -> None:
         "channel_id",
         "channel_title",
         "niches",
+        "matched_queries",
+        "best_search_rank",
+        "query_matches",
 
         "duration_seconds",
         "format_candidate",
@@ -1359,6 +1443,13 @@ def main() -> None:
         "baseline_confidence",
         "baseline_warning",
         "outlier_ratio",
+        "outlier_reliability",
+        "outlier_reliability_reason",
+
+        "relevance",
+        "relevance_reason",
+        "relevance_matches",
+        "themes",
     ]
 
     with csv_file.open(
@@ -1384,6 +1475,31 @@ def main() -> None:
                 "niches"
             ] = "|".join(
                 row["niches"]
+            )
+
+            flat_row[
+                "matched_queries"
+            ] = "|".join(
+                row["matched_queries"]
+            )
+
+            flat_row[
+                "query_matches"
+            ] = json.dumps(
+                row["query_matches"],
+                ensure_ascii=False,
+            )
+
+            flat_row[
+                "relevance_matches"
+            ] = "|".join(
+                row["relevance_matches"]
+            )
+
+            flat_row[
+                "themes"
+            ] = "|".join(
+                row["themes"]
             )
 
             writer.writerow(
@@ -1448,6 +1564,38 @@ def main() -> None:
         for row in rows
     )
 
+    relevance_counts = {
+        label: sum(
+            row.get("relevance") == label
+            for row in rows
+        )
+        for label in (
+            RELEVANCE_ON_INTENT,
+            RELEVANCE_ADJACENT,
+            RELEVANCE_OFF_INTENT,
+        )
+    }
+
+    reliability_counts = {
+        label: sum(
+            row.get("outlier_reliability") == label
+            for row in rows
+        )
+        for label in (
+            RELIABILITY_TRUSTED,
+            RELIABILITY_CAUTION,
+            RELIABILITY_UNAVAILABLE,
+        )
+    }
+
+    theme_counts: dict[str, int] = {}
+    for row in rows:
+        for theme in row.get("themes", []):
+            theme_counts[theme] = (
+                theme_counts.get(theme, 0)
+                + 1
+            )
+
     # ========================================================
     # DISTRIBUTION DATA
     #
@@ -1494,7 +1642,7 @@ def main() -> None:
 
     summary = {
         "experiment":
-            "Stage 2 Experiment 01.1",
+            "Stage 2 Experiment 01.2",
 
         "search_calls":
             search_calls,
@@ -1535,6 +1683,23 @@ def main() -> None:
                 warned_baselines,
         },
 
+        "relevance_analysis":
+            relevance_counts,
+
+        "outlier_reliability_analysis":
+            reliability_counts,
+
+        "theme_counts":
+            dict(
+                sorted(
+                    theme_counts.items(),
+                    key=lambda item: (
+                        -item[1],
+                        item[0],
+                    ),
+                )
+            ),
+
         "distribution": {
             "median_views":
                 median_or_none(
@@ -1555,7 +1720,7 @@ def main() -> None:
         "important_notes": [
             (
                 "No final opportunity score "
-                "is calculated in Experiment 01.1."
+                "is calculated in Experiment 01.2."
             ),
             (
                 "Views measure absolute demand."
@@ -1585,6 +1750,19 @@ def main() -> None:
                 "separately rather than inferred from "
                 "popularity."
             ),
+            (
+                "Experiment 01.2 relevance labels are "
+                "deterministic research annotations, "
+                "not a final opportunity score."
+            ),
+            (
+                "OFF_INTENT rows remain in raw outputs "
+                "so search contamination stays auditable."
+            ),
+            (
+                "Outlier reliability never changes the "
+                "raw outlier ratio; it only flags caution."
+            ),
         ],
     }
 
@@ -1611,7 +1789,7 @@ def main() -> None:
     )
 
     print(
-        "EXPERIMENT 01.1 COMPLETE"
+        "EXPERIMENT 01.2 COMPLETE"
     )
 
     print(
@@ -1661,6 +1839,31 @@ def main() -> None:
     print(
         f"Baseline warnings:        "
         f"{warned_baselines:,}"
+    )
+
+    print(
+        f"ON_INTENT:                "
+        f"{relevance_counts[RELEVANCE_ON_INTENT]:,}"
+    )
+
+    print(
+        f"ADJACENT:                 "
+        f"{relevance_counts[RELEVANCE_ADJACENT]:,}"
+    )
+
+    print(
+        f"OFF_INTENT:               "
+        f"{relevance_counts[RELEVANCE_OFF_INTENT]:,}"
+    )
+
+    print(
+        f"Trusted outliers:         "
+        f"{reliability_counts[RELIABILITY_TRUSTED]:,}"
+    )
+
+    print(
+        f"Caution outliers:         "
+        f"{reliability_counts[RELIABILITY_CAUTION]:,}"
     )
 
     print()

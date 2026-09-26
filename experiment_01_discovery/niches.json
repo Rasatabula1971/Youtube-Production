@@ -6,7 +6,120 @@
         "motorsport engineering",
         "race car technology",
         "F1 engineering"
-      ]
+      ],
+      "intent_profile": {
+        "exclude_terms": [
+          "gta",
+          "gameplay",
+          "gaming",
+          "remote control",
+          "rc car",
+          "toy car",
+          "minecraft",
+          "forza",
+          "gran turismo"
+        ],
+        "strong_terms": [
+          "engineering",
+          "technology",
+          "gearbox",
+          "brake",
+          "brakes",
+          "tire",
+          "tires",
+          "tyre",
+          "tyres",
+          "steering",
+          "engine",
+          "aerodynamic",
+          "aerodynamics",
+          "aero",
+          "downforce",
+          "suspension",
+          "power unit",
+          "pit stop",
+          "chassis",
+          "diffuser",
+          "drs",
+          "hybrid",
+          "battery",
+          "intercooler",
+          "turbo"
+        ],
+        "context_terms": [
+          "f1",
+          "formula 1",
+          "formula e",
+          "motorsport",
+          "race car",
+          "racecar",
+          "racing",
+          "track",
+          "driver",
+          "f2",
+          "f3",
+          "engineer",
+          "mechanic",
+          "mechanics"
+        ],
+        "theme_rules": {
+          "hidden_mechanisms": [
+            "how",
+            "works",
+            "explained",
+            "why",
+            "inside"
+          ],
+          "engineering_extremes": [
+            "fastest",
+            "insane",
+            "genius",
+            "extreme",
+            "impossible",
+            "hot"
+          ],
+          "rules_loopholes": [
+            "banned",
+            "cheat",
+            "cheated",
+            "legal",
+            "illegal",
+            "rule",
+            "rules",
+            "loophole"
+          ],
+          "comparisons": [
+            " vs ",
+            "versus",
+            "comparison",
+            "compare"
+          ],
+          "failure_safety": [
+            "crash",
+            "collision",
+            "safety",
+            "survive",
+            "failure",
+            "fail",
+            "destroyed",
+            "explode",
+            "overheat"
+          ],
+          "engineering_constraints": [
+            "couldn't",
+            "cannot",
+            "takes",
+            "cost",
+            "no keys",
+            "steering",
+            "gearbox",
+            "tires",
+            "tyres",
+            "brakes",
+            "engine"
+          ]
+        }
+      }
     },
     {
       "name": "science_engineering",

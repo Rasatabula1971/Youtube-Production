@@ -18,7 +18,7 @@ Transformation, research/story/script, format selection, production, quality con
 
 **Milestone M1 — Prove the Opportunity Engine**
 
-Current experiment: **Stage 2 / Experiment 01.1 — Proven YouTube Content Discovery**
+Current experiment: **Stage 2 / Experiment 01.2 — Relevance & Evidence Quality**
 
 The experiment collects independent signals rather than calculating a final opportunity score:
 
@@ -27,6 +27,10 @@ The experiment collects independent signals rather than calculating a final oppo
 - Momentum proxy
 - Baseline quality
 - Format candidate
+- Search provenance
+- Relevance quality
+- Outlier reliability
+- Theme labels
 
 Current thresholds are research hypotheses, not frozen production rules.
 
@@ -65,3 +69,10 @@ Generated experiment output and secrets remain outside Git:
 - `experiment_01_discovery/output/`
 
 See [PROJECT.md](PROJECT.md) for the system roadmap and [DECISIONS.md](DECISIONS.md) for the decision record.
+
+
+## Experiment 01.2
+
+The first automotive live run proved collection worked but also exposed search contamination from gaming, RC and adjacent entertainment. Experiment 01.2 therefore annotates relevance and evidence reliability without deleting raw rows or changing raw metrics.
+
+See `experiment_01_discovery/EXPERIMENT_01_2.md`.
