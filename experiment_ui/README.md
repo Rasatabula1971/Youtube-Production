@@ -128,3 +128,25 @@ measured velocity refresh are complete.
 
 The downstream controls can be visible while 01.3 is quota-blocked, but their
 run buttons remain gated by real output evidence.
+
+
+## Source acquisition
+
+The UI includes an ACQ action group for the optional Agent Reach integration.
+
+**Run Agent Reach Doctor** checks channel health and reports the active YouTube
+backend. This action remains available even when Agent Reach is missing so the
+log can report the dependency state.
+
+**Run YouTube Discovery Benchmark** becomes available when both agent-reach and
+yt-dlp are on PATH. It uses the Experiment 01.3 configured queries and writes
+benchmark output under:
+
+~~~text
+source_acquisition/output/youtube_discovery_benchmark/
+~~~
+
+When the current 01.3 discovery checkpoint exists, the benchmark automatically
+compares Agent Reach / yt-dlp video IDs with the saved YouTube API search audit.
+
+The benchmark never modifies the 01.3 cohort.
