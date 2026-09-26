@@ -16,9 +16,10 @@ Transformation, research/story/script, format selection, production, quality con
 
 ## Current status
 
-**Milestone M1 — Prove the Opportunity Engine**
+**Milestone M1 — Prove the Opportunity Engine / prepare the Experiment 02 handoff**
 
-Current experiment: **Stage 2 / Experiment 01.2 — Relevance & Evidence Quality**
+The repository now contains Experiments 01.2 through 01.5 plus the offline
+Experiment 02 why-it-worked analysis framework.
 
 The experiment collects independent signals rather than calculating a final opportunity score:
 
@@ -61,15 +62,23 @@ Learning
 ├── README.md
 ├── PROJECT.md
 ├── DECISIONS.md
-└── experiment_01_discovery/
-    ├── niches.json
-    └── youtube_discovery.py
+├── experiment_01_discovery/
+│   ├── experiment_01_3.py
+│   ├── experiment_01_4.py
+│   ├── experiment_01_5.py
+│   ├── niches.json
+│   └── youtube_discovery.py
+└── experiment_02_analysis/
+    ├── experiment_02.py
+    ├── experiment_02_config.json
+    └── profile_template.json
 ```
 
 Generated experiment output and secrets remain outside Git:
 
 - `.env`
 - `experiment_01_discovery/output/`
+- `experiment_02_analysis/output/`
 
 See [PROJECT.md](PROJECT.md) for the system roadmap and [DECISIONS.md](DECISIONS.md) for the decision record.
 
@@ -84,3 +93,16 @@ See `experiment_01_discovery/EXPERIMENT_01_2.md`.
 ### Research intelligence
 
 Experiment 01.2 now produces transparent query competition profiles, persistent view snapshots for measured velocity, and topic-level evidence split by Shorts/long-form. These features are evidence layers only; they do not create a final opportunity or keyword score.
+
+
+## Experiment 02 framework
+
+Experiment 02 is offline-first. It prepares evidence profiles from the
+Experiment 01.5 study set, validates creative findings against typed source
+evidence, separates findings from hypotheses, and aggregates repeated
+mechanisms across independent videos/channels.
+
+It does not fetch transcripts or videos automatically and does not spend
+YouTube API quota.
+
+See `experiment_02_analysis/EXPERIMENT_02.md`.

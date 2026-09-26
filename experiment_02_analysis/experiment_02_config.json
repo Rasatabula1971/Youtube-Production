@@ -1,0 +1,70 @@
+{
+  "experiment_id": "02",
+  "schema_version": "2.0",
+  "required_dimensions": [
+    "packaging",
+    "opening_hook",
+    "story_progression",
+    "information_reveals",
+    "emotion",
+    "pacing",
+    "visual_language",
+    "audience_promise",
+    "payoff",
+    "promise_payoff_alignment"
+  ],
+  "allowed_confidence": [
+    "LOW",
+    "MODERATE",
+    "HIGH"
+  ],
+  "evidence_types": [
+    "metadata",
+    "transcript",
+    "thumbnail",
+    "opening_frame",
+    "visual_note",
+    "timing_note",
+    "audio_note",
+    "opportunity_evidence"
+  ],
+  "dimension_evidence_types": {
+    "packaging": ["metadata", "thumbnail", "opening_frame"],
+    "opening_hook": ["transcript", "opening_frame", "visual_note", "audio_note"],
+    "story_progression": ["transcript", "visual_note", "timing_note"],
+    "information_reveals": ["transcript", "visual_note", "timing_note"],
+    "emotion": ["transcript", "visual_note", "audio_note"],
+    "pacing": ["timing_note", "visual_note", "audio_note", "transcript"],
+    "visual_language": ["thumbnail", "opening_frame", "visual_note"],
+    "audience_promise": ["metadata", "thumbnail", "opening_frame", "transcript"],
+    "payoff": ["transcript", "visual_note", "audio_note"],
+    "promise_payoff_alignment": ["metadata", "thumbnail", "transcript", "visual_note"]
+  },
+  "minimum_replication_videos": 2,
+  "minimum_replication_channels": 2,
+  "mechanism_taxonomy": {
+    "curiosity_gap": "Creates a specific unanswered question or information gap.",
+    "hidden_mechanism": "Reveals an internal, overlooked, or normally unseen mechanism.",
+    "stakes": "Makes the consequence, cost, danger, limitation, or importance concrete.",
+    "open_loop": "Introduces a question or unresolved thread that is paid off later.",
+    "progressive_reveal": "Releases key information in stages rather than all at once.",
+    "escalation": "Raises complexity, consequence, surprise, or intensity over time.",
+    "contrast": "Uses a clear before/after, normal/extreme, old/new, or A/B contrast.",
+    "visual_proof": "Shows evidence or mechanism visually rather than relying only on narration.",
+    "specificity": "Uses concrete numbers, parts, constraints, examples, or named details.",
+    "counterintuitive_fact": "Leads with or develops a fact that contradicts common expectation.",
+    "problem_solution": "Structures progress around a defined problem and how it is solved.",
+    "failure_mode": "Uses breakdown, failure, limitation, or what-goes-wrong as the organizing device.",
+    "rules_constraint": "Uses rules, regulations, design constraints, or loopholes as narrative pressure.",
+    "payoff_reveal": "Resolves the central promise with a clear reveal, answer, result, or demonstration.",
+    "identity_emotion": "Connects the subject to identity, fandom, mastery, status, nostalgia, or belonging."
+  },
+  "causal_warning_phrases": [
+    "caused the views",
+    "made it viral",
+    "the algorithm pushed",
+    "youtube pushed",
+    "this is why it went viral",
+    "guaranteed retention"
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": "2.0",
+  "experiment_id": "02",
+  "study_id": "",
+  "video_id": "",
+  "youtube_url": "",
+  "source": {
+    "title": "",
+    "channel_id": "",
+    "channel_title": "",
+    "format_candidate": "",
+    "topic": "",
+    "views_at_handoff": null,
+    "age_matched_velocity_index": null,
+    "replicated_families": []
+  },
+  "source_inputs": {
+    "transcript": {"status": "NOT_PROVIDED", "source": null},
+    "thumbnail": {"status": "NOT_PROVIDED", "source": null},
+    "opening_frame": {"status": "NOT_PROVIDED", "source": null},
+    "visual_notes": {"status": "NOT_PROVIDED", "source": null},
+    "timing_notes": {"status": "NOT_PROVIDED", "source": null},
+    "audio_notes": {"status": "NOT_PROVIDED", "source": null}
+  },
+  "evidence": [
+    {
+      "evidence_id": "metadata.title",
+      "type": "metadata",
+      "locator": "video title",
+      "observation": ""
+    }
+  ],
+  "analysis": {
+    "packaging": {"findings": [], "notes": ""},
+    "opening_hook": {"findings": [], "notes": ""},
+    "story_progression": {"findings": [], "notes": ""},
+    "information_reveals": {"findings": [], "notes": ""},
+    "emotion": {"findings": [], "notes": ""},
+    "pacing": {"findings": [], "notes": ""},
+    "visual_language": {"findings": [], "notes": ""},
+    "audience_promise": {"findings": [], "notes": ""},
+    "payoff": {"findings": [], "notes": ""},
+    "promise_payoff_alignment": {"findings": [], "notes": ""}
+  },
+  "working_hypotheses": [],
+  "transfer": {
+    "transferable_mechanisms": [],
+    "source_specific_elements": [],
+    "transformation_opportunities": []
+  },
+  "review": {
+    "analyst": null,
+    "completed": false,
+    "notes": ""
+  }
+}
