@@ -107,10 +107,14 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
             f"Concept {concept_id} requires an approved packaging object"
         )
 
-    dependencies = packaging.get("research_dependencies", [])
-    if not isinstance(dependencies, list) or not dependencies:
+    if "research_dependencies" not in packaging:
         raise ValueError(
             f"Concept {concept_id} packaging requires research_dependencies"
+        )
+    dependencies = packaging.get("research_dependencies")
+    if not isinstance(dependencies, list):
+        raise ValueError(
+            f"Concept {concept_id} packaging research_dependencies must be a list"
         )
 
     for index, dependency in enumerate(dependencies, start=1):
