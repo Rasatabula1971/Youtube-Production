@@ -1,5 +1,8 @@
+import json
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import experiment_01_3 as exp13
@@ -133,6 +136,190 @@ class Experiment013Tests(unittest.TestCase):
         self.assertEqual(completed, {"job-1"})
 
 
+
+    def test_yt_dlp_pool_combines_date_and_relevance_and_caches(self):
+        date_result = {
+            "results": [
+                {
+                    "video_id": "date-only",
+                    "title": "Date result",
+                    "upload_date": "20260520",
+                    "duration_seconds": 120,
+                    "view_count": 800000,
+                },
+                {
+                    "video_id": "shared",
+                    "title": "Shared result",
+                    "upload_date": "20260521",
+                    "duration_seconds": 300,
+                    "view_count": 900000,
+                },
+            ]
+        }
+        relevance_result = {
+            "results": [
+                {
+                    "video_id": "shared",
+                    "title": "Shared result",
+                    "upload_date": "20260521",
+                    "duration_seconds": 300,
+                    "view_count": 900000,
+                },
+                {
+                    "video_id": "relevance-only",
+                    "title": "Relevant result",
+                    "upload_date": "20260522",
+                    "duration_seconds": 500,
+                    "view_count": 1000000,
+                },
+            ]
+        }
+        cache = {}
+
+        with patch.object(
+            exp13,
+            "search_youtube",
+            side_effect=[date_result, relevance_result],
+        ) as search:
+            first = exp13._yt_dlp_pool(
+                "F1 brakes engineering",
+                cache,
+            )
+            second = exp13._yt_dlp_pool(
+                "F1 brakes engineering",
+                cache,
+            )
+
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(
+            search.call_args_list[0].kwargs["strategy"],
+            "date",
+        )
+        self.assertEqual(
+            search.call_args_list[0].kwargs["limit"],
+            exp13.YT_DLP_DATE_POOL,
+        )
+        self.assertEqual(
+            search.call_args_list[1].kwargs["strategy"],
+            "relevance",
+        )
+        self.assertEqual(
+            search.call_args_list[1].kwargs["limit"],
+            exp13.YT_DLP_RELEVANCE_POOL,
+        )
+        self.assertEqual(
+            {item["video_id"] for item in first},
+            {"date-only", "shared", "relevance-only"},
+        )
+        shared = next(
+            item for item in first
+            if item["video_id"] == "shared"
+        )
+        self.assertEqual(
+            shared["discovery_strategies"],
+            ["date", "relevance"],
+        )
+        self.assertEqual(first, second)
+
+    def test_yt_dlp_ids_prefilter_age_format_and_views(self):
+        pool = [
+            {
+                "video_id": "keep",
+                "upload_date": "20260520",
+                "duration_seconds": 120,
+                "view_count": 800000,
+            },
+            {
+                "video_id": "wrong-age",
+                "upload_date": "20260720",
+                "duration_seconds": 120,
+                "view_count": 800000,
+            },
+            {
+                "video_id": "wrong-format",
+                "upload_date": "20260520",
+                "duration_seconds": 600,
+                "view_count": 800000,
+            },
+            {
+                "video_id": "low-views",
+                "upload_date": "20260520",
+                "duration_seconds": 120,
+                "view_count": 100000,
+            },
+        ]
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T23:59:59Z",
+        }
+
+        with patch.object(
+            exp13,
+            "_yt_dlp_pool",
+            return_value=pool,
+        ):
+            ids = exp13._yt_dlp_ids(
+                "F1 brakes engineering",
+                window,
+                "short_candidate",
+                500000,
+                {},
+            )
+
+        self.assertEqual(ids, ["keep"])
+
+    def test_velocity_history_reads_archived_snapshots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = (
+                root
+                / "archive"
+                / "experiment_01_3_20260926T190000Z"
+            )
+            archive.mkdir(parents=True)
+            archived_snapshot = archive / "video_snapshots.jsonl"
+            archived_snapshot.write_text(
+                json.dumps(
+                    {
+                        "video_id": "video-a",
+                        "observed_at": "2026-09-26T17:00:00+00:00",
+                        "views": 1000,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            current = root / "current.jsonl"
+            persistent = root / "persistent.jsonl"
+            persistent.write_text(
+                json.dumps(
+                    {
+                        "video_id": "video-a",
+                        "observed_at": "2026-09-26T18:00:00+00:00",
+                        "views": 1100,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(exp13, "OUTPUT_ROOT", root),
+                patch.object(exp13, "SNAPSHOT_FILE", current),
+                patch.object(
+                    exp13,
+                    "PERSISTENT_SNAPSHOT_FILE",
+                    persistent,
+                ),
+            ):
+                history = exp13.load_velocity_history()
+
+        self.assertEqual(
+            [item["views"] for item in history["video-a"]],
+            [1000, 1100],
+        )
+
     def test_auto_discovery_falls_back_to_yt_dlp_when_api_unavailable(self):
         config = {
             "search_orders": ["viewCount"],
@@ -200,7 +387,7 @@ class Experiment013Tests(unittest.TestCase):
         )
         self.assertEqual(
             matches["video-a"][0]["backend_search_strategy"],
-            "relevance",
+            "date+relevance",
         )
         self.assertEqual(len(completed), 1)
 
