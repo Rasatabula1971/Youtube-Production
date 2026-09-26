@@ -68,10 +68,14 @@ Learning
 │   ├── experiment_01_5.py
 │   ├── niches.json
 │   └── youtube_discovery.py
-└── experiment_02_analysis/
-    ├── experiment_02.py
-    ├── experiment_02_config.json
-    └── profile_template.json
+├── experiment_02_analysis/
+│   ├── experiment_02.py
+│   ├── experiment_02_config.json
+│   └── profile_template.json
+└── transformation_engine/
+    ├── transformation_engine.py
+    ├── concept_gate.py
+    └── transformation_config.json
 ```
 
 Generated experiment output and secrets remain outside Git:
@@ -122,3 +126,19 @@ The UI opens on localhost and provides gated controls for Experiment 01.3,
 folder access.
 
 See `experiment_ui/README.md`.
+
+
+## Transformation Engine
+
+The repository now includes the offline Transformation Engine framework and
+human Concept Gate.
+
+The engine consumes human-confirmed Experiment 02 mechanism handoffs, prepares
+structured concept-generation requests, validates Source Dependency Test
+requirements, and sends only human-accepted concepts into a Research Engine
+handoff.
+
+No concept score or automatic winner is produced.
+
+See `transformation_engine/TRANSFORMATION_ENGINE.md` and
+`transformation_engine/CONCEPT_GATE.md`.
