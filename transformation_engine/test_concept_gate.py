@@ -13,6 +13,12 @@ class ConceptGateTests(unittest.TestCase):
             "required_accept_criteria": [
                 "originality_clear",
                 "audience_promise_clear",
+                "viewer_problem_specific",
+                "viewer_moment_clear",
+                "desired_outcome_specific",
+                "content_gap_honest",
+                "channel_fit_confirmed",
+                "title_clarity_passes",
                 "source_independent",
                 "feasible",
                 "researchable",
@@ -29,6 +35,27 @@ class ConceptGateTests(unittest.TestCase):
                     "working_title": "Why Racing Brakes Behave Backwards",
                     "premise": "Investigate a counterintuitive brake constraint.",
                     "audience_promise": "Explain the hidden reason.",
+                    "viewer_problem": "Why do racing brakes need conditions that seem wrong for road cars?",
+                    "viewer_moment": "Trying to understand a surprising race-car engineering tradeoff.",
+                    "desired_outcome": "Understand why temperature changes the brake design.",
+                    "content_gap": {
+                        "hypothesis": "Many explanations show hot brakes without explaining the design consequence.",
+                        "evidence_status": "HYPOTHESIS",
+                        "evidence_basis": [],
+                    },
+                    "channel_fit": {
+                        "status": "FIT",
+                        "rationale": "Automotive engineering explainer.",
+                    },
+                    "title_clarity_test": {
+                        "options": [
+                            "Why Racing Brakes Behave Backwards",
+                            "Why F1 Brakes Hate Normal Temperatures",
+                            "The Brake Problem Road Cars Never Face",
+                        ],
+                        "result": "PASS",
+                        "rationale": "Clear problem across three title framings.",
+                    },
                     "format_intent": "long_form",
                     "mechanism_application": "One unanswered question.",
                     "transformation_method": "Different system and research path.",
@@ -48,6 +75,27 @@ class ConceptGateTests(unittest.TestCase):
                     "working_title": "Inside an F1 Brake Duct",
                     "premise": "Explain an unseen mechanism.",
                     "audience_promise": "Show how airflow is managed.",
+                    "viewer_problem": "What does an F1 brake duct actually do?",
+                    "viewer_moment": "Watching or learning about F1 and noticing the hidden duct complexity.",
+                    "desired_outcome": "Understand the duct's functional role.",
+                    "content_gap": {
+                        "hypothesis": "The component is often shown without its function being explained.",
+                        "evidence_status": "HYPOTHESIS",
+                        "evidence_basis": [],
+                    },
+                    "channel_fit": {
+                        "status": "FIT",
+                        "rationale": "Fits hidden-mechanism automotive content.",
+                    },
+                    "title_clarity_test": {
+                        "options": [
+                            "Inside an F1 Brake Duct",
+                            "What F1 Brake Ducts Actually Do",
+                            "The Hidden Job of an F1 Brake Duct",
+                        ],
+                        "result": "PASS",
+                        "rationale": "Three clear ways to express the same mechanism.",
+                    },
                     "format_intent": "short",
                     "mechanism_application": "Reveal hidden function.",
                     "transformation_method": "New subsystem.",
@@ -107,6 +155,19 @@ class ConceptGateTests(unittest.TestCase):
                 candidates,
                 self.config,
             )
+
+    def test_review_request_exposes_viewer_need_and_gap(self):
+        request = build_review_request(
+            self.candidates,
+            self.config,
+        )
+
+        first = request["items"][0]
+        self.assertIn("viewer_problem", first)
+        self.assertIn("viewer_moment", first)
+        self.assertIn("content_gap", first)
+        self.assertIn("channel_fit", first)
+        self.assertIn("title_clarity_test", first)
 
     def test_accept_requires_all_criteria_true(self):
         request = build_review_request(

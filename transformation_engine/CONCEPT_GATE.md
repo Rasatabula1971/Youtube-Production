@@ -92,3 +92,17 @@ The Concept Gate decides whether an idea is worth researching.
 
 It does not establish facts, write the script, create final packaging, or
 predict performance.
+
+
+## Viewer need / gap / fit criteria
+
+Concept ACCEPT now also requires explicit human confirmation that:
+
+- the viewer problem is specific rather than merely a broad topic;
+- the viewer moment is understandable;
+- the desired outcome is concrete;
+- content-gap status is honest about the evidence available;
+- the concept fits the intended channel/audience;
+- the idea passes the three-title clarity test.
+
+These checks do not create a concept score or ranking.

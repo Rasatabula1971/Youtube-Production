@@ -410,6 +410,11 @@ Learning
 
 The following are useful working principles:
 
+- a topic is not yet a finished idea; the concept should identify a specific viewer problem, viewer moment and desired outcome;
+- content-gap claims should preserve whether they are SUPPORTED, HYPOTHESIS or UNASSESSED rather than being inferred from popularity;
+- channel fit is a separate human judgment from demand;
+- three working title options are used as an idea-clarity test before packaging;
+- approved packaging carries a one-sentence viewer promise into Research and Story / Script;
 - idea/topic selection precedes expensive production;
 - packaging should make a clear promise;
 - the opening should quickly establish or begin fulfilling that promise;
@@ -603,3 +608,27 @@ The route is transparent to the operator and preserves backend provenance.
 
 The source switch affects candidate discovery only. Existing project validation
 and official YouTube API metadata / snapshot measurement remain authoritative.
+
+
+## 8. Viewer Need / Gap / Fit framing
+
+The Transformation and Packaging stages now preserve a dedicated viewer-need
+layer between opportunity evidence and script work.
+
+Concept candidates record:
+
+- viewer problem;
+- viewer moment;
+- desired outcome;
+- content-gap hypothesis/evidence state;
+- channel-fit state/rationale;
+- three-title clarity test.
+
+Packaging candidates then restate that intent as a one-sentence promise and
+must preserve problem, gap and channel-fit alignment through the Packaging Gate.
+
+Opportunity metrics do not by themselves prove an unanswered viewer need.
+Comment/question mining is a planned future evidence source for validating
+content-gap hypotheses.
+
+See `transformation_engine/VIEWER_NEED_FRAMING.md`.

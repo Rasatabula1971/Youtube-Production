@@ -18,6 +18,27 @@
         "passes": true,
         "source_assets_required": false,
         "rationale": ""
+      },
+      "viewer_problem": "",
+      "viewer_moment": "",
+      "desired_outcome": "",
+      "content_gap": {
+        "hypothesis": "",
+        "evidence_status": "HYPOTHESIS",
+        "evidence_basis": []
+      },
+      "channel_fit": {
+        "status": "UNASSESSED",
+        "rationale": ""
+      },
+      "title_clarity_test": {
+        "options": [
+          "",
+          "",
+          ""
+        ],
+        "result": "REFRAME",
+        "rationale": ""
       }
     }
   ]

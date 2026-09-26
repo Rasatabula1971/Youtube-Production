@@ -7,6 +7,12 @@
       "criteria": {
         "originality_clear": true,
         "audience_promise_clear": true,
+        "viewer_problem_specific": true,
+        "viewer_moment_clear": true,
+        "desired_outcome_specific": true,
+        "content_gap_honest": true,
+        "channel_fit_confirmed": true,
+        "title_clarity_passes": true,
         "source_independent": true,
         "feasible": true,
         "researchable": true

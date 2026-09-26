@@ -148,6 +148,10 @@ structured concept-generation requests, validates Source Dependency Test
 requirements, and sends only human-accepted concepts into a Research Engine
 handoff.
 
+Concepts now also define the specific viewer problem, viewer moment, desired
+outcome, content-gap evidence state, channel fit, and a three-title clarity
+test before the Concept Gate.
+
 No concept score or automatic winner is produced.
 
 See `transformation_engine/TRANSFORMATION_ENGINE.md` and
@@ -179,8 +183,10 @@ A human-accepted concept is converted into multiple title / thumbnail /
 opening-frame package candidates. One package may be approved per concept.
 
 The approved package defines the promise the future Story / Script Engine must
-fulfill. Its research dependencies are injected into the Research Engine as
-mandatory research questions.
+fulfill. It carries the accepted viewer problem/moment/outcome and an explicit
+one-sentence promise, while preserving content-gap and channel-fit context. Its
+research dependencies are injected into the Research Engine as mandatory
+research questions.
 
 No package score, CTR prediction or automatic winner is produced.
 
@@ -205,3 +211,20 @@ The Experiment Control UI includes Agent Reach Doctor and YouTube Discovery
 Benchmark actions when the external dependency is available.
 
 See source_acquisition/README.md.
+
+
+## Viewer Need Framing
+
+The project now separates a broad topic from the specific viewer need it serves.
+
+Transformation and Packaging preserve:
+
+- viewer problem;
+- viewer moment;
+- desired outcome;
+- content-gap evidence status;
+- channel fit;
+- three-title idea-clarity test;
+- approved one-sentence promise.
+
+See `transformation_engine/VIEWER_NEED_FRAMING.md`.
