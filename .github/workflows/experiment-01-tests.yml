@@ -1,14 +1,16 @@
-name: Experiment 01 tests
+name: Research pipeline tests
 
 on:
   pull_request:
     paths:
       - "experiment_01_discovery/**"
+      - "experiment_02_analysis/**"
       - ".github/workflows/experiment-01-tests.yml"
   push:
     branches: [main]
     paths:
       - "experiment_01_discovery/**"
+      - "experiment_02_analysis/**"
       - ".github/workflows/experiment-01-tests.yml"
 
 jobs:
@@ -21,3 +23,5 @@ jobs:
           python-version: "3.13"
       - name: Run Experiment 01 tests
         run: python -m unittest discover -s experiment_01_discovery -p "test_*.py" -v
+      - name: Run Experiment 02 tests
+        run: python -m unittest discover -s experiment_02_analysis -p "test_*.py" -v
