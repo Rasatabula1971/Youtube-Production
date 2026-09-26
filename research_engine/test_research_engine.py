@@ -44,6 +44,32 @@ class ResearchEngineTests(unittest.TestCase):
             "concept_gate": {
                 "decision": "ACCEPT",
             },
+            "packaging": {
+                "package_id": "c1-pkg001",
+                "title": "Why F1 Brakes Work Backwards",
+                "thumbnail": {
+                    "message": "Visual contrast",
+                    "visual_concept": "Split comparison",
+                    "text_overlay": "",
+                },
+                "opening_frame": {
+                    "purpose": "Prove the problem exists",
+                    "visual_concept": "Close-up evidence",
+                },
+                "expected_viewer": "Curious automotive viewer",
+                "awareness_level": "Basic familiarity",
+                "core_promise": "Explain the hidden mechanism",
+                "curiosity_gap": "Why does the obvious solution fail?",
+                "expected_payoff": "Viewer understands the tradeoff",
+                "format_intent": "long_form",
+                "title_thumbnail_relationship": "Title asks why; thumbnail shows contrast",
+                "research_dependencies": [
+                    "Verify the package's central brake-temperature comparison."
+                ],
+                "packaging_gate": {
+                    "decision": "ACCEPT",
+                },
+            },
         }
 
     def source(self, source_id="src001", publisher="FIA"):
@@ -79,8 +105,20 @@ class ResearchEngineTests(unittest.TestCase):
 
         self.assertEqual(
             [item["question_id"] for item in plan["research_questions"]],
-            ["rq001", "rq002"],
+            ["rq001", "rq002", "pkgq001"],
         )
+        self.assertEqual(
+            plan["research_questions"][-1]["origin"],
+            "packaging",
+        )
+
+
+    def test_plan_requires_approved_packaging_context(self):
+        concept = dict(self.concept)
+        concept.pop("packaging")
+
+        with self.assertRaises(ValueError):
+            build_research_plan(concept)
 
     def test_single_source_is_not_called_verified(self):
         coverage = claim_coverage_state(
