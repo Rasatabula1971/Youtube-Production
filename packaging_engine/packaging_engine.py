@@ -205,17 +205,14 @@ def validate_package(
     if not isinstance(dependencies, list):
         errors.append("research_dependencies must be a list")
     else:
-        valid = [
-            str(value).strip()
+        invalid = [
+            value
             for value in dependencies
-            if str(value).strip()
+            if not str(value).strip()
         ]
-        if len(valid) < int(
-            config["minimum_research_dependencies"]
-        ):
+        if invalid:
             errors.append(
-                "research_dependencies must contain at least "
-                f"{config['minimum_research_dependencies']} non-empty item(s)"
+                "research_dependencies may be empty, but listed items must be non-empty"
             )
 
     declared_concept_id = str(
