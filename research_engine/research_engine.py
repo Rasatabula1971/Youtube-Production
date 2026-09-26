@@ -21,7 +21,7 @@ PROJECT_ROOT = HERE.parent
 CONFIG_FILE = HERE / "research_config.json"
 DEFAULT_HANDOFF = (
     PROJECT_ROOT
-    / "transformation_engine"
+    / "packaging_engine"
     / "output"
     / "research_handoff.json"
 )
@@ -97,6 +97,33 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
             {
                 "question_id": f"rq{index:03d}",
                 "question": text,
+                "origin": "concept",
+            }
+        )
+
+    packaging = concept.get("packaging")
+    if not isinstance(packaging, dict):
+        raise ValueError(
+            f"Concept {concept_id} requires an approved packaging object"
+        )
+
+    dependencies = packaging.get("research_dependencies", [])
+    if not isinstance(dependencies, list) or not dependencies:
+        raise ValueError(
+            f"Concept {concept_id} packaging requires research_dependencies"
+        )
+
+    for index, dependency in enumerate(dependencies, start=1):
+        text = str(dependency).strip()
+        if not text:
+            raise ValueError(
+                f"Concept {concept_id} has an empty packaging research dependency"
+            )
+        questions.append(
+            {
+                "question_id": f"pkgq{index:03d}",
+                "question": text,
+                "origin": "packaging",
             }
         )
 
@@ -110,6 +137,7 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
         "mechanism_id": concept.get("mechanism_id"),
         "mechanism_label": concept.get("mechanism_label"),
         "concept_gate": concept.get("concept_gate"),
+        "packaging": packaging,
         "research_questions": questions,
         "instructions": [
             "Research the concept independently from the source videos that inspired the mechanism.",
@@ -118,7 +146,8 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
             "Link every factual claim to one or more research questions.",
             "Record supporting, contradicting, and qualifying evidence instead of silently reconciling disagreements.",
             "Do not mark a claim verified merely because multiple sources agree.",
-            "Working title and audience promise remain provisional until Packaging Engine review.",
+            "The approved package defines the promise the future script must fulfill.",
+            "Packaging research dependencies are mandatory research questions and must be resolved before Story / Script.",
         ],
         "response_schema": {
             "concept_id": concept_id,
@@ -452,6 +481,7 @@ def validate_research_response(
                 "mechanism_id",
                 "mechanism_label",
                 "concept_gate",
+                "packaging",
             )
         },
         "research_questions": plan["research_questions"],
