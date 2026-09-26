@@ -21,7 +21,6 @@
         ],
         "strong_terms": [
           "engineering",
-          "engineer",
           "technology",
           "gearbox",
           "brake",
@@ -38,8 +37,6 @@
           "downforce",
           "suspension",
           "power unit",
-          "mechanic",
-          "mechanics",
           "pit stop",
           "chassis",
           "diffuser",
@@ -60,7 +57,10 @@
           "track",
           "driver",
           "f2",
-          "f3"
+          "f3",
+          "engineer",
+          "mechanic",
+          "mechanics"
         ],
         "theme_rules": {
           "hidden_mechanisms": [
