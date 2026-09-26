@@ -74,6 +74,14 @@ def build_review_request(
                 "working_title": concept.get("working_title"),
                 "premise": concept.get("premise"),
                 "audience_promise": concept.get("audience_promise"),
+                "viewer_problem": concept.get("viewer_problem"),
+                "viewer_moment": concept.get("viewer_moment"),
+                "desired_outcome": concept.get("desired_outcome"),
+                "content_gap": concept.get("content_gap"),
+                "channel_fit": concept.get("channel_fit"),
+                "title_clarity_test": concept.get(
+                    "title_clarity_test"
+                ),
                 "format_intent": concept.get("format_intent"),
                 "mechanism_application": concept.get(
                     "mechanism_application"
@@ -102,6 +110,24 @@ def build_review_request(
             ),
             "audience_promise_clear": (
                 "The viewer can understand what value or answer the concept promises."
+            ),
+            "viewer_problem_specific": (
+                "The concept names a specific viewer problem, question, or curiosity rather than only a broad topic."
+            ),
+            "viewer_moment_clear": (
+                "The situation or decision moment in which the viewer needs this video is understandable."
+            ),
+            "desired_outcome_specific": (
+                "The viewer's intended learning, fix, avoidance, or decision outcome is concrete."
+            ),
+            "content_gap_honest": (
+                "The proposed content gap is framed as SUPPORTED, HYPOTHESIS, or UNASSESSED consistently with the available evidence."
+            ),
+            "channel_fit_confirmed": (
+                "The concept supports the audience and channel the project intends to build rather than attracting a mismatched audience."
+            ),
+            "title_clarity_passes": (
+                "At least three distinct working title options can communicate the concept clearly enough to justify packaging."
             ),
             "source_independent": (
                 "The concept retains its main value without source wording, footage, story, personality, or exact execution."
@@ -314,6 +340,24 @@ def apply_gate(
                 "premise": concept.get("premise"),
                 "audience_promise": concept.get(
                     "audience_promise"
+                ),
+                "viewer_problem": concept.get(
+                    "viewer_problem"
+                ),
+                "viewer_moment": concept.get(
+                    "viewer_moment"
+                ),
+                "desired_outcome": concept.get(
+                    "desired_outcome"
+                ),
+                "content_gap": concept.get(
+                    "content_gap", {}
+                ),
+                "channel_fit": concept.get(
+                    "channel_fit", {}
+                ),
+                "title_clarity_test": concept.get(
+                    "title_clarity_test", {}
                 ),
                 "format_intent": concept.get("format_intent"),
                 "mechanism_application": concept.get(
