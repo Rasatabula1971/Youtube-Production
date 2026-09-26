@@ -123,6 +123,10 @@ def build_concept_request(
             "Generate genuinely new video concepts that use the transferable mechanism without copying source expression.",
             "Do not reuse source titles, scripts, footage, story sequences, personalities, or exact examples.",
             "Each concept must have a distinct premise and audience promise.",
+            "Define the specific viewer problem, the moment the viewer is in, and the desired outcome.",
+            "State a content-gap hypothesis separately from evidence; do not claim a gap is proven without a concrete evidence basis.",
+            "State channel fit explicitly. Use REVIEW or UNASSESSED when fit is not yet defensible.",
+            "Run a three-title clarity test before accepting the concept as packaging-ready.",
             "The source creator's material must not be required for the concept to retain its main value.",
             "Do not claim the mechanism will cause views, virality, retention, or recommendation.",
             "Do not rank the concepts.",
@@ -136,6 +140,27 @@ def build_concept_request(
                     "working_title": "working title, not final packaging",
                     "premise": "what the new video investigates or explains",
                     "audience_promise": "what the viewer is promised",
+                    "viewer_problem": "specific problem, question, or curiosity the viewer is trying to resolve",
+                    "viewer_moment": "the situation or decision state the viewer is in when this matters",
+                    "desired_outcome": "what the viewer wants to understand, fix, avoid, or decide",
+                    "content_gap": {
+                        "hypothesis": "what existing content may leave unanswered, too broad, outdated, or poorly served",
+                        "evidence_status": "SUPPORTED|HYPOTHESIS|UNASSESSED",
+                        "evidence_basis": []
+                    },
+                    "channel_fit": {
+                        "status": "FIT|REVIEW|UNASSESSED",
+                        "rationale": "why this concept does or does not fit the audience/channel being built"
+                    },
+                    "title_clarity_test": {
+                        "options": [
+                            "title option 1",
+                            "title option 2",
+                            "title option 3"
+                        ],
+                        "result": "PASS|REFRAME",
+                        "rationale": "whether three distinct clear titles can express the idea"
+                    },
                     "format_intent": "long_form|short|either",
                     "mechanism_application": "how the mechanism is used in the new concept",
                     "transformation_method": "how this differs from the source examples",
@@ -171,11 +196,95 @@ def validate_concept(
         "working_title",
         "premise",
         "audience_promise",
+        "viewer_problem",
+        "viewer_moment",
+        "desired_outcome",
         "mechanism_application",
         "transformation_method",
     ):
         if not str(concept.get(field, "")).strip():
             errors.append(f"{field} is required")
+
+    content_gap = concept.get("content_gap")
+    if not isinstance(content_gap, dict):
+        errors.append("content_gap must be an object")
+    else:
+        if not str(content_gap.get("hypothesis", "")).strip():
+            errors.append("content_gap.hypothesis is required")
+        gap_status = str(
+            content_gap.get("evidence_status", "")
+        ).strip().upper()
+        if gap_status not in {
+            "SUPPORTED",
+            "HYPOTHESIS",
+            "UNASSESSED",
+        }:
+            errors.append(
+                "content_gap.evidence_status must be "
+                "SUPPORTED, HYPOTHESIS, or UNASSESSED"
+            )
+        evidence_basis = content_gap.get("evidence_basis")
+        if not isinstance(evidence_basis, list):
+            errors.append(
+                "content_gap.evidence_basis must be a list"
+            )
+        elif gap_status == "SUPPORTED" and not [
+            item
+            for item in evidence_basis
+            if str(item).strip()
+        ]:
+            errors.append(
+                "SUPPORTED content_gap requires evidence_basis"
+            )
+
+    channel_fit = concept.get("channel_fit")
+    if not isinstance(channel_fit, dict):
+        errors.append("channel_fit must be an object")
+    else:
+        fit_status = str(
+            channel_fit.get("status", "")
+        ).strip().upper()
+        if fit_status not in {
+            "FIT",
+            "REVIEW",
+            "UNASSESSED",
+        }:
+            errors.append(
+                "channel_fit.status must be FIT, REVIEW, or UNASSESSED"
+            )
+        if not str(channel_fit.get("rationale", "")).strip():
+            errors.append("channel_fit.rationale is required")
+
+    title_test = concept.get("title_clarity_test")
+    if not isinstance(title_test, dict):
+        errors.append("title_clarity_test must be an object")
+    else:
+        options = title_test.get("options")
+        if not isinstance(options, list):
+            errors.append(
+                "title_clarity_test.options must be a list"
+            )
+        else:
+            valid_options = [
+                str(option).strip()
+                for option in options
+                if str(option).strip()
+            ]
+            if len(valid_options) < 3:
+                errors.append(
+                    "title_clarity_test.options must contain at least 3 non-empty titles"
+                )
+        result = str(
+            title_test.get("result", "")
+        ).strip().upper()
+        if result not in {"PASS", "REFRAME"}:
+            errors.append(
+                "title_clarity_test.result must be PASS or REFRAME"
+            )
+        if not str(title_test.get("rationale", "")).strip():
+            errors.append(
+                "title_clarity_test.rationale is required"
+            )
 
     format_intent = str(concept.get("format_intent", "")).strip()
     if format_intent not in config["allowed_format_intents"]:
