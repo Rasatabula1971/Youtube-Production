@@ -205,6 +205,19 @@ def checkpoint_status() -> str | None:
     return None
 
 
+def exp13_valid_velocity_samples() -> int:
+    payload = safe_load_json(EXP13_DIR / "summary.json")
+    if not isinstance(payload, dict):
+        return 0
+    velocity = payload.get("velocity_analysis", {})
+    if not isinstance(velocity, dict):
+        return 0
+    try:
+        return int(velocity.get("valid_velocity_samples") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def exp14_plan_status() -> str | None:
     return json_file_status(EXP14_DIR / "expansion_plan.json", "status")
 
@@ -231,11 +244,18 @@ def stage_statuses() -> list[dict[str, Any]]:
         and exp13_summary.exists()
         and exp13_topic.exists()
     )
+    valid_velocity_samples = exp13_valid_velocity_samples()
+    velocity_ready = cohort_ready and valid_velocity_samples > 0
     cp_status = checkpoint_status()
 
-    if cohort_ready:
-        exp13_state = "COHORT_FROZEN"
-        exp13_detail = "Corrected 01.3 cohort exists."
+    if velocity_ready:
+        exp13_state = "VELOCITY_READY"
+        exp13_detail = (
+            f"Corrected cohort has {valid_velocity_samples} valid velocity samples."
+        )
+    elif cohort_ready:
+        exp13_state = "COHORT_FROZEN_AWAITING_REFRESH"
+        exp13_detail = "Corrected cohort is frozen; refresh is still needed for measured velocity."
     elif EXP13_CHECKPOINT.exists():
         exp13_state = cp_status or "CHECKPOINTED"
         exp13_detail = "Discovery is incomplete. Rerun resumes from the checkpoint."
@@ -255,21 +275,21 @@ def stage_statuses() -> list[dict[str, Any]]:
             "state": exp13_state,
             "detail": exp13_detail,
             "ready": True,
-            "current": not cohort_ready,
+            "current": not velocity_ready,
         },
         {
             "id": "01.4",
             "title": "Depth Expansion",
             "state": execution_status
             or plan_status
-            or ("READY_TO_PLAN" if cohort_ready else "WAITING_FOR_01_3"),
+            or ("READY_TO_PLAN" if velocity_ready else "WAITING_FOR_01_3"),
             "detail": (
-                "Completed 01.3 evidence is required before planning."
-                if not cohort_ready
+                "Measured 01.3 velocity evidence is required before planning."
+                if not velocity_ready
                 else "Plan and execute depth-first expansion."
             ),
-            "ready": cohort_ready,
-            "current": False,
+            "ready": velocity_ready,
+            "current": velocity_ready and execution_status != "COMPLETE",
         },
         {
             "id": "01.5",
@@ -282,7 +302,7 @@ def stage_statuses() -> list[dict[str, Any]]:
             ),
             "detail": "Creates the evidence-backed Experiment 02 study set.",
             "ready": execution_status == "COMPLETE",
-            "current": False,
+            "current": execution_status == "COMPLETE" and not (EXP15_DIR / "study_set.json").exists(),
         },
         {
             "id": "02",
@@ -295,7 +315,7 @@ def stage_statuses() -> list[dict[str, Any]]:
             ),
             "detail": "Evidence ingestion, FAIR analysis, human review and synthesis.",
             "ready": (EXP15_DIR / "study_set.json").exists(),
-            "current": False,
+            "current": (EXP15_DIR / "study_set.json").exists(),
         },
     ]
 
@@ -305,6 +325,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     exp13_evidence = (
         (EXP13_DIR / "topic_velocity.json").exists()
         and (EXP13_DIR / "summary.json").exists()
+        and exp13_valid_velocity_samples() > 0
     )
 
     plan_ready = exp14_plan_status() == "READY"
@@ -336,9 +357,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "exp14_plan": {
             "enabled": exp13_evidence,
             "reason": (
-                "01.3 evidence available."
+                "Measured 01.3 velocity evidence available."
                 if exp13_evidence
-                else "Waiting for corrected 01.3 cohort."
+                else "Waiting for corrected 01.3 refresh with valid velocity samples."
             ),
         },
         "exp14_execute": {
