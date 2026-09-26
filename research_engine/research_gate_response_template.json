@@ -1,0 +1,18 @@
+{
+  "concept_id": "CONCEPT_ID",
+  "reviewer": "YOUR_NAME_OR_ID",
+  "decisions": [
+    {
+      "claim_id": "clm001",
+      "decision": "ACCEPT",
+      "criteria": {
+        "source_traceable": true,
+        "wording_supported": true,
+        "conflicts_addressed": true,
+        "safe_for_script": true
+      },
+      "note": ""
+    }
+  ],
+  "overall_note": ""
+}
