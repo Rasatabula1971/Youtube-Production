@@ -393,6 +393,7 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
 def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
+    global_ids: set[str] = set()
 
     if not RESPONSES_DIR.exists():
         return accepted, rejected
@@ -429,6 +430,19 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
             continue
 
         for concept in result["accepted"]:
+            concept_id = str(concept.get("concept_id", "")).strip()
+            if concept_id in global_ids:
+                rejected.append(
+                    {
+                        "response_source": str(response_path),
+                        "concept": concept,
+                        "errors": [
+                            "concept_id must be globally unique across all responses"
+                        ],
+                    }
+                )
+                continue
+            global_ids.add(concept_id)
             concept["response_source"] = str(response_path)
             accepted.append(concept)
         for item in result["rejected"]:
