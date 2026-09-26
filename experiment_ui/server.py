@@ -269,7 +269,7 @@ def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
         return None
-    job = manager.public_job()
+    job = manager.current()
     if not job:
         return None
     if job.get("status") not in {"RUNNING", "STOPPING"}:
