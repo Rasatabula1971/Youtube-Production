@@ -50,10 +50,20 @@ The request contains:
 - source context;
 - objective evidence metrics;
 - the controlled mechanism taxonomy;
-- one evidence packet per analysis dimension;
+- one compact evidence library with each evidence item stored once;
+- per-dimension evidence-reference lists;
+- dimension-specific evidence selection strategies;
 - allowed evidence types per dimension;
 - response schemas;
 - analysis instructions.
+
+Evidence selection is deliberately asymmetric:
+
+- opening hook emphasizes early evidence;
+- audience promise preserves title/thumbnail/opening-frame evidence before early transcript evidence;
+- payoff emphasizes late evidence;
+- promise/payoff alignment combines packaging evidence with early and late evidence;
+- story, reveals, emotion, pacing and visual-language packets sample across the timeline.
 
 ### Objective metrics
 
@@ -103,6 +113,11 @@ Output:
 - deterministic apply report under `output\analysis_apply_reports\`.
 
 The original enriched profile is not overwritten.
+
+Apply mode is also non-destructive for omitted sections. A partial response can
+update one analysis dimension without clearing previously accepted findings in
+other dimensions or transfer sections. Existing working hypotheses are
+preserved and deduplicated across repeated applies.
 
 ## Automatic hypothesis routing
 
