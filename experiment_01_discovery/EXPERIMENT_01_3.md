@@ -199,8 +199,7 @@ keeps the strict pass deliberately small and saves discovery progress.
 Strict discovery uses one `viewCount` search per query/duration branch. The
 `relevance` order is reserved for sparse-cell expansion only.
 
-If the API quota is exhausted or the configured per-run search budget is
-reached, the experiment writes:
+If the configured per-run API search budget is reached, the experiment writes:
 
 `output\experiment_01_3_discovery_checkpoint.json`
 
@@ -220,3 +219,64 @@ python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-co
 ```
 
 The checkpoint is deleted automatically once the cohort is successfully frozen.
+
+
+## Automatic discovery backend
+
+Experiment 01.3 now defaults to:
+
+~~~text
+--discovery-backend auto
+~~~
+
+Auto mode uses one control path:
+
+~~~text
+YouTube Data API v3 search.list
+        ↓
+available → use API search results
+unavailable / quota rejected
+        ↓
+Agent Reach health check
+        ↓
+yt-dlp search fallback
+        ↓
+existing local 01.3 validation
+        ↓
+official YouTube videos.list / channels.list metadata
+        ↓
+frozen cohort and later refresh measurements
+~~~
+
+The fallback changes discovery only.
+
+All candidate videos still pass the same project-owned age, minimum-view,
+title-topic, motorsport-context and actual-duration validation before they may
+enter the cohort.
+
+Official YouTube API metadata remains canonical for accepted candidates and for
+all repeated velocity snapshots.
+
+Every search audit record stores:
+
+- discovery_backend;
+- requested search order;
+- backend search strategy;
+- query;
+- phase;
+- format target;
+- result IDs.
+
+This allows one frozen cohort to contain candidates discovered through either
+backend without hiding their provenance.
+
+### Explicit backend modes
+
+For diagnostics, the CLI also supports:
+
+~~~text
+--discovery-backend youtube_api
+--discovery-backend yt_dlp
+~~~
+
+Routine UI execution uses auto mode.
