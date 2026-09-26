@@ -322,6 +322,7 @@ class Experiment013Tests(unittest.TestCase):
 
     def test_auto_discovery_falls_back_to_yt_dlp_when_api_unavailable(self):
         config = {
+            "minimum_views": 500000,
             "search_orders": ["viewCount"],
             "search_profiles": {
                 "short_candidate": ["short"],
@@ -394,6 +395,7 @@ class Experiment013Tests(unittest.TestCase):
 
     def test_auto_mode_uses_fallback_when_api_budget_is_zero(self):
         config = {
+            "minimum_views": 500000,
             "search_orders": ["viewCount"],
             "search_profiles": {
                 "short_candidate": ["short"],
@@ -448,6 +450,7 @@ class Experiment013Tests(unittest.TestCase):
 
     def test_api_only_mode_does_not_fall_back(self):
         config = {
+            "minimum_views": 500000,
             "search_orders": ["viewCount"],
             "search_profiles": {
                 "short_candidate": ["short"],
