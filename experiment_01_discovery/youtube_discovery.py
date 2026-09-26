@@ -1720,7 +1720,7 @@ def main() -> None:
         "important_notes": [
             (
                 "No final opportunity score "
-                "is calculated in Experiment 01.1."
+                "is calculated in Experiment 01.2."
             ),
             (
                 "Views measure absolute demand."
