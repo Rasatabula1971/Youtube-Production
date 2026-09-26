@@ -16,6 +16,7 @@ from typing import Any
 from agent_reach_adapter import (
     AcquisitionError,
     doctor,
+    render_console_json,
     search_youtube,
     youtube_health,
 )
@@ -505,11 +506,7 @@ def main() -> None:
             api_reference=args.api_reference.resolve(),
         )
 
-    print(json.dumps(
-        result,
-        indent=2,
-        ensure_ascii=False,
-    ))
+    print(render_console_json(result))
 
 
 if __name__ == "__main__":
