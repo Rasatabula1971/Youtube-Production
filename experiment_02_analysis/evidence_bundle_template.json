@@ -1,0 +1,14 @@
+{
+  "video_id": "YOUTUBE_VIDEO_ID",
+  "profile": "output/profiles_to_complete/YOUTUBE_VIDEO_ID.json",
+  "transcript": "evidence/YOUTUBE_VIDEO_ID/transcript.srt",
+  "thumbnail": {
+    "path": "evidence/YOUTUBE_VIDEO_ID/thumbnail.jpg",
+    "observation": "Describe only what is visibly present in the thumbnail."
+  },
+  "opening_frame": {
+    "path": "evidence/YOUTUBE_VIDEO_ID/opening_frame.jpg",
+    "observation": "Describe only what is visibly present in the opening frame."
+  },
+  "notes": "evidence/YOUTUBE_VIDEO_ID/evidence_notes.json"
+}
