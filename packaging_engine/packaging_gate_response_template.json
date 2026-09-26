@@ -6,6 +6,11 @@
       "decision": "ACCEPT",
       "criteria": {
         "promise_clear": true,
+        "viewer_problem_aligned": true,
+        "viewer_moment_fit": true,
+        "one_sentence_promise_clear": true,
+        "content_gap_honest": true,
+        "channel_fit_preserved": true,
         "concept_aligned": true,
         "title_thumbnail_complementary": true,
         "not_misleading": true,
