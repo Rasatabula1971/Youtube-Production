@@ -257,3 +257,46 @@ age-matched-velocity metric, with absolute views only as a tie-breaker.
 
 The resulting study set is a research handoff, not a claim that its first item
 is universally the best video.
+
+
+## D-027 — Experiment 02 findings require typed source evidence
+
+**Status:** Accepted
+
+Creative findings in Experiment 02 must reference identifiable source evidence.
+
+Supported evidence types include metadata, transcript segments, thumbnails,
+opening frames, visual notes, timing notes and audio notes.
+
+Opportunity evidence from Experiments 01.3-01.5 explains why a source was
+selected. It does not substitute for source-content evidence when making claims
+about packaging, hook, story, pacing, emotion, visuals or payoff.
+
+Unsupported interpretation must remain explicitly labelled as a working
+hypothesis.
+
+## D-028 — Repeated mechanisms are observational, not causal proof
+
+**Status:** Accepted
+
+Experiment 02 may identify mechanisms that recur across successful videos and
+independent channels.
+
+Repeated occurrence does not prove that the mechanism caused the performance.
+Claims such as "this made it viral" or "the algorithm pushed it because of X"
+require evidence that public source-video observation does not provide.
+
+Cross-video aggregation therefore reports replicated patterns, not causal
+effects.
+
+## D-029 — Transformation opportunities must pass the Source Dependency Test
+
+**Status:** Accepted
+
+A transformation opportunity in Experiment 02 must record whether it passes the
+Source Dependency Test and why.
+
+Transferable mechanisms must be separated from source-specific wording,
+footage, personality, story details and execution. The objective is to preserve
+a useful mechanism while creating a new concept whose main value survives
+without the source creator's expression.
