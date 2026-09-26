@@ -29,6 +29,7 @@ from experiment_02 import (
     validate_profile,
     validate_supported_item,
 )
+from evidence_ingest import sha256_file
 
 REQUESTS_DIR = OUTPUT_DIR / "analysis_requests"
 ANALYZED_DIR = OUTPUT_DIR / "profiles_analyzed"
@@ -210,8 +211,31 @@ def select_dimension_evidence(
     if len(ordered) <= maximum:
         return ordered
 
-    if dimension in {"opening_hook", "audience_promise"}:
-        return ordered[:maximum]
+    if dimension == "opening_hook":
+        static = [
+            item for item in ordered if item.get("type") == "opening_frame"
+        ]
+        timed = [
+            item for item in ordered if item.get("type") != "opening_frame"
+        ]
+        selected = static[:maximum]
+        selected.extend(timed[: max(0, maximum - len(selected))])
+        return selected[:maximum]
+
+    if dimension == "audience_promise":
+        static = [
+            item
+            for item in ordered
+            if item.get("type") in {"metadata", "thumbnail", "opening_frame"}
+        ]
+        timed = [
+            item
+            for item in ordered
+            if item.get("type") not in {"metadata", "thumbnail", "opening_frame"}
+        ]
+        selected = static[:maximum]
+        selected.extend(timed[: max(0, maximum - len(selected))])
+        return selected[:maximum]
 
     if dimension == "payoff":
         return ordered[-maximum:]
