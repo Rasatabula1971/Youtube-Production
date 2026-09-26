@@ -55,10 +55,16 @@ def build_review_request(
         raise ValueError("concept_candidates concepts must be a list")
 
     items = []
+    seen_ids: set[str] = set()
     for concept in concepts:
         concept_id = str(concept.get("concept_id", "")).strip()
         if not concept_id:
             raise ValueError("Every concept candidate requires concept_id")
+        if concept_id in seen_ids:
+            raise ValueError(
+                f"Duplicate concept_id in candidates: {concept_id}"
+            )
+        seen_ids.add(concept_id)
 
         items.append(
             {
