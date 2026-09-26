@@ -95,6 +95,24 @@ def build_review_request(
                 "awareness_level": package.get(
                     "awareness_level"
                 ),
+                "viewer_problem": package.get(
+                    "viewer_problem"
+                ),
+                "viewer_moment": package.get(
+                    "viewer_moment"
+                ),
+                "desired_outcome": package.get(
+                    "desired_outcome"
+                ),
+                "one_sentence_promise": package.get(
+                    "one_sentence_promise"
+                ),
+                "gap_positioning": package.get(
+                    "gap_positioning"
+                ),
+                "channel_fit_alignment": package.get(
+                    "channel_fit_alignment"
+                ),
                 "core_promise": package.get(
                     "core_promise"
                 ),
@@ -128,6 +146,21 @@ def build_review_request(
         "criteria": {
             "promise_clear": (
                 "The package communicates one understandable main promise."
+            ),
+            "viewer_problem_aligned": (
+                "The package addresses the specific viewer problem accepted at the Concept Gate rather than drifting back to a broad topic."
+            ),
+            "viewer_moment_fit": (
+                "The package makes sense for the situation or decision moment in which the viewer needs the video."
+            ),
+            "one_sentence_promise_clear": (
+                "The package can state who has the problem and what specific outcome the video delivers in one sentence."
+            ),
+            "content_gap_honest": (
+                "Gap positioning does not upgrade an unverified gap hypothesis into a proven market fact."
+            ),
+            "channel_fit_preserved": (
+                "The package remains aligned with the intended channel/audience instead of chasing unrelated clicks."
             ),
             "concept_aligned": (
                 "The package accurately represents the accepted concept."
@@ -402,6 +435,12 @@ def apply_gate(
                 "opening_frame",
                 "expected_viewer",
                 "awareness_level",
+                "viewer_problem",
+                "viewer_moment",
+                "desired_outcome",
+                "one_sentence_promise",
+                "gap_positioning",
+                "channel_fit_alignment",
                 "core_promise",
                 "curiosity_gap",
                 "expected_payoff",
