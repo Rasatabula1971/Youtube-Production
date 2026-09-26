@@ -204,16 +204,22 @@ def search_youtube(
             f"limit must be between 1 and {MAX_SEARCH_RESULTS}"
         )
 
-    health = youtube_health()
-    if require_agent_reach_health and not health["ready"]:
-        raise AcquisitionError(
-            "Agent Reach YouTube channel is not ready: "
-            + str(
-                health.get("message")
-                or health.get("channel_status")
-                or health.get("doctor_status")
+    if require_agent_reach_health:
+        health = youtube_health()
+        if not health["ready"]:
+            raise AcquisitionError(
+                "Agent Reach YouTube channel is not ready: "
+                + str(
+                    health.get("message")
+                    or health.get("channel_status")
+                    or health.get("doctor_status")
+                )
             )
-        )
+    else:
+        health = {
+            "ready": True,
+            "active_backend": "yt-dlp",
+        }
 
     executable = yt_dlp_path()
     if not executable:
