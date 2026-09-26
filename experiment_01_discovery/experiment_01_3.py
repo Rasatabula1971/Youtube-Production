@@ -54,6 +54,7 @@ OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_3"
 CHECKPOINT_FILE = OUTPUT_ROOT / "experiment_01_3_discovery_checkpoint.json"
 MANIFEST_FILE = OUTPUT_DIR / "cohort_manifest.json"
 SNAPSHOT_FILE = OUTPUT_DIR / "video_snapshots.jsonl"
+PERSISTENT_SNAPSHOT_FILE = OUTPUT_ROOT / "experiment_01_3_snapshot_history.jsonl"
 CANDIDATES_FILE = OUTPUT_DIR / "candidates.csv"
 RAW_FILE = OUTPUT_DIR / "raw_results.json"
 REJECTED_FILE = OUTPUT_DIR / "rejected_candidates.json"
@@ -974,8 +975,49 @@ def static_candidate(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row.get(key) for key in STATIC_KEYS}
 
 
+def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
+    paths = [
+        PERSISTENT_SNAPSHOT_FILE,
+        SNAPSHOT_FILE,
+    ]
+    archive_root = OUTPUT_ROOT / "archive"
+    if archive_root.exists():
+        paths.extend(
+            sorted(
+                archive_root.glob(
+                    "experiment_01_3_*/video_snapshots.jsonl"
+                )
+            )
+        )
+
+    merged: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    seen: set[tuple[str, str, int]] = set()
+
+    for path in paths:
+        for video_id, snapshots in load_snapshot_history(path).items():
+            for snapshot in snapshots:
+                key = (
+                    str(video_id),
+                    str(snapshot["observed_at"]),
+                    int(snapshot["views"]),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged[str(video_id)].append(dict(snapshot))
+
+    for snapshots in merged.values():
+        snapshots.sort(
+            key=lambda item: datetime.fromisoformat(
+                str(item["observed_at"]).replace("Z", "+00:00")
+            )
+        )
+
+    return dict(merged)
+
+
 def apply_velocity(rows: list[dict[str, Any]], observed_at: str) -> None:
-    history = load_snapshot_history(SNAPSHOT_FILE)
+    history = load_velocity_history()
     for row in rows:
         row.update(
             calculate_snapshot_velocity(
@@ -985,7 +1027,12 @@ def apply_velocity(rows: list[dict[str, Any]], observed_at: str) -> None:
                 history=history,
             )
         )
+
+    # Keep a run-local snapshot file for auditability and a persistent
+    # cross-cohort ledger so rebuilding discovery does not reset velocity
+    # history for videos already observed.
     append_snapshots(SNAPSHOT_FILE, rows, observed_at)
+    append_snapshots(PERSISTENT_SNAPSHOT_FILE, rows, observed_at)
 
 
 def refresh_rows(manifest: dict[str, Any], api_key: str) -> tuple[list[dict[str, Any]], list[str]]:
