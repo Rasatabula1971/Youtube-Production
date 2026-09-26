@@ -203,3 +203,27 @@ Count decreases are treated as platform/data adjustments, not negative audience 
 A topic answers what the video is about (for example brakes or aerodynamics). A theme describes a transferable presentation/content mechanism (for example hidden mechanisms, comparisons or rules/loopholes).
 
 Topic evidence is aggregated separately for Shorts and long-form, and OFF_INTENT rows do not contribute.
+
+
+## D-023 — Age-matched validation precedes depth expansion
+
+**Status:** Accepted
+
+Before expanding deeply into a topic, control the freshness confound with
+Experiment 01.3. A topic/format cell should show replicated current-velocity
+evidence across multiple independent channels before Experiment 01.4 spends
+additional search quota on deeper sub-angle discovery.
+
+Depth expansion is still Opportunity Engine work. It must not be treated as a
+substitute for Experiment 02's creative why-it-worked analysis.
+
+## D-024 — Expansion query planning is frozen before execution
+
+**Status:** Accepted
+
+Experiment 01.4 separates zero-quota planning from YouTube search execution.
+
+The plan records evidence-ready cells, deterministic query families, format
+branches, search ordering, lookback window and call budget before execution.
+Execution is checkpointed so quota interruptions do not silently change the
+planned experiment or repeat completed search work.
