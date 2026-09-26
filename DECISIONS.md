@@ -153,3 +153,28 @@ Questions for that gate:
 5. How should recency and lifetime average view rate be represented?
 6. Is a composite score justified at all?
 7. Which candidates should enter Experiment 02?
+
+
+## D-017 — Relevance is a separate evidence dimension
+
+**Status:** Accepted
+
+High views or a high channel-relative breakout do not prove that a result is relevant to the intended content market.
+
+Experiment 01.2 records relevance separately as `ON_INTENT`, `ADJACENT`, `OFF_INTENT`, or `UNREVIEWED`. OFF_INTENT rows remain in raw outputs so search contamination stays measurable.
+
+## D-018 — Outlier reliability does not alter the raw ratio
+
+**Status:** Accepted
+
+The raw channel-relative `outlier_ratio` remains unchanged. A separate reliability annotation records whether the ratio is `TRUSTED`, requires `CAUTION`, or is `UNAVAILABLE`.
+
+Weak baseline samples, baseline warnings and extreme ratios are reasons for caution, not reasons to rewrite the measurement.
+
+## D-019 — Relevance rules must be auditable and data-tuned
+
+**Status:** Accepted
+
+Experiment 01.2 uses explicit niche configuration and deterministic term matching rather than an opaque final relevance score.
+
+Rules should be changed in response to observed false positives/false negatives from live datasets. The first automotive sample already showed that the words "engineer" and "mechanic" alone are too weak to qualify a video as technical intent, so they are treated as context signals instead.
