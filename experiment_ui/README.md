@@ -37,8 +37,11 @@ The pipeline cards show the current state of:
 
 The UI determines readiness from the actual generated files and summaries.
 
-For 01.3, a frozen cohort is not enough to unlock 01.4. The UI waits for at
-least one valid measured velocity sample from a refresh.
+For 01.3, a frozen cohort is not enough to unlock 01.4. At least one
+topic/format cell must first reach the independent-channel floor, and then that
+cell must have enough measured velocity evidence for 01.4.
+
+An insufficient cohort is clearly labeled and is not refreshable.
 
 ## Experiment 01.3
 
@@ -58,8 +61,15 @@ of restarting it.
 The UI displays the checkpoint status, including quota-related pause states
 written by Experiment 01.3.
 
-Once the corrected cohort is frozen, **Refresh 01.3 Frozen Cohort** becomes
-available.
+Once the corrected cohort is frozen, the UI checks whether at least one
+topic/format cell has three independent channels.
+
+If not, it shows **INSUFFICIENT COHORT — RERUN DISCOVERY** and keeps
+**Refresh 01.3 Frozen Cohort** disabled.
+
+If the cohort is sufficient, refresh becomes available. Cross-run snapshot
+history is preserved so rebuilding discovery no longer automatically restarts
+the velocity clock.
 
 ## Downstream gating
 

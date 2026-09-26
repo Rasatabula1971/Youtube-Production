@@ -592,3 +592,27 @@ D-043's benchmark remains useful for comparing backend coverage, but successful
 benchmarking is no longer a prerequisite for using yt-dlp as a continuity
 fallback because the user explicitly chose automatic availability routing and
 the project retains strict downstream validation plus official measurement.
+
+
+## D-045 — 01.3 does not refresh structurally insufficient cohorts
+
+**Status:** Accepted
+
+A frozen Experiment 01.3 cohort is not considered refresh-worthy merely because
+discovery exited successfully.
+
+At least one topic/format cell must meet the configured independent-channel
+floor before velocity refresh is enabled. If no cell meets that floor, the
+human-facing state is INSUFFICIENT COHORT and the next action is another
+discovery pass.
+
+The yt-dlp fallback uses a cached date-plus-relevance candidate pool and
+prefilters known age, format and view metadata before official API enrichment.
+
+Official YouTube video/channel metadata remains canonical for final cohort
+acceptance and velocity measurement.
+
+Official candidate view observations are retained across cohort rebuilds in a
+persistent snapshot ledger, and archived official observations may be reused
+for the same video ID. Replacing a cohort must not needlessly reset the
+measurement clock.

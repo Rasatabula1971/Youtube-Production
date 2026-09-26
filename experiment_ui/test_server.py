@@ -232,6 +232,22 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "EXP2_OUTPUT", exp2),
                 patch.object(server, "EXP13_CHECKPOINT", checkpoint),
                 patch.object(server, "current_action_id", return_value=None),
+                patch.object(
+                    server,
+                    "exp13_cohort_readiness",
+                    return_value={
+                        "frozen_size": 6,
+                        "required_unique_channels": 3,
+                        "ready_cell_count": 1,
+                        "max_unique_channels_in_cell": 3,
+                        "sufficient": True,
+                    },
+                ),
+                patch.object(
+                    server,
+                    "exp13_depth_ready_cell_count",
+                    return_value=1,
+                ),
             ):
                 stage = server.stage_statuses()[0]
 
@@ -243,6 +259,113 @@ class ExperimentUiTests(unittest.TestCase):
             self.assertTrue(
                 all(item["done"] for item in stage["criteria"])
             )
+
+
+    def test_insufficient_cohort_tells_user_to_rerun_not_wait(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp13 = root / "01_3"
+            exp14 = root / "01_4"
+            exp15 = root / "01_5"
+            exp2 = root / "02"
+            checkpoint = root / "checkpoint.json"
+            exp13.mkdir()
+
+            (exp13 / "cohort_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "video_ids": ["only-video"],
+                        "candidates": [
+                            {
+                                "video_id": "only-video",
+                                "channel_id": "channel-1",
+                                "format_candidate": "long_form_candidate",
+                                "validated_topics": ["brakes"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (exp13 / "topic_velocity.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+            (exp13 / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "velocity_analysis": {
+                            "valid_velocity_samples": 0,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP13_DIR", exp13),
+                patch.object(server, "EXP14_DIR", exp14),
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(server, "EXP2_OUTPUT", exp2),
+                patch.object(server, "EXP13_CHECKPOINT", checkpoint),
+                patch.object(server, "current_action_id", return_value=None),
+                patch.object(
+                    server,
+                    "exp13_cohort_readiness",
+                    return_value={
+                        "frozen_size": 1,
+                        "required_unique_channels": 3,
+                        "ready_cell_count": 0,
+                        "max_unique_channels_in_cell": 1,
+                        "sufficient": False,
+                    },
+                ),
+                patch.object(
+                    server,
+                    "exp13_depth_ready_cell_count",
+                    return_value=0,
+                ),
+            ):
+                stage = server.stage_statuses()[0]
+
+            self.assertFalse(stage["complete"])
+            self.assertEqual(
+                stage["human_status"],
+                "INSUFFICIENT COHORT — RERUN DISCOVERY",
+            )
+            self.assertIn(
+                "Do not wait",
+                stage["next_action"],
+            )
+
+    def test_refresh_is_disabled_for_insufficient_cohort(self):
+        with (
+            patch.object(
+                server,
+                "exp13_cohort_readiness",
+                return_value={
+                    "frozen_size": 1,
+                    "required_unique_channels": 3,
+                    "ready_cell_count": 0,
+                    "max_unique_channels_in_cell": 1,
+                    "sufficient": False,
+                },
+            ),
+            patch.object(
+                server,
+                "exp13_depth_ready_cell_count",
+                return_value=0,
+            ),
+        ):
+            readiness = server.action_readiness()
+
+        self.assertFalse(
+            readiness["exp13_refresh"]["enabled"]
+        )
+        self.assertIn(
+            "do not wait",
+            readiness["exp13_refresh"]["reason"].lower(),
+        )
 
     def test_unknown_action_is_rejected(self):
         manager = server.JobManager()

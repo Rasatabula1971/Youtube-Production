@@ -54,6 +54,7 @@ OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_3"
 CHECKPOINT_FILE = OUTPUT_ROOT / "experiment_01_3_discovery_checkpoint.json"
 MANIFEST_FILE = OUTPUT_DIR / "cohort_manifest.json"
 SNAPSHOT_FILE = OUTPUT_DIR / "video_snapshots.jsonl"
+PERSISTENT_SNAPSHOT_FILE = OUTPUT_ROOT / "experiment_01_3_snapshot_history.jsonl"
 CANDIDATES_FILE = OUTPUT_DIR / "candidates.csv"
 RAW_FILE = OUTPUT_DIR / "raw_results.json"
 REJECTED_FILE = OUTPUT_DIR / "rejected_candidates.json"
@@ -394,33 +395,127 @@ def discovery_backend_counts(audit: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _yt_dlp_strategy(search_order: str) -> str:
-    return "date" if search_order == "date" else "relevance"
+YT_DLP_RELEVANCE_POOL = 50
+YT_DLP_DATE_POOL = 100
+
+
+def _parse_yt_dlp_datetime(item: dict[str, Any]) -> datetime | None:
+    timestamp = item.get("timestamp")
+    if timestamp is not None:
+        try:
+            return datetime.fromtimestamp(
+                float(timestamp),
+                tz=timezone.utc,
+            )
+        except (TypeError, ValueError, OSError):
+            pass
+
+    upload_date = str(item.get("upload_date") or "").strip()
+    if len(upload_date) == 8 and upload_date.isdigit():
+        try:
+            return datetime.strptime(
+                upload_date,
+                "%Y%m%d",
+            ).replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _yt_dlp_pool(
+    query: str,
+    cache: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    if query in cache:
+        return [dict(item) for item in cache[query]]
+
+    merged: dict[str, dict[str, Any]] = {}
+    for strategy, limit in (
+        ("date", YT_DLP_DATE_POOL),
+        ("relevance", YT_DLP_RELEVANCE_POOL),
+    ):
+        result = search_youtube(
+            query,
+            limit=limit,
+            strategy=strategy,
+            require_agent_reach_health=False,
+        )
+        for raw in result.get("results", []):
+            video_id = str(raw.get("video_id", "")).strip()
+            if not video_id:
+                continue
+
+            if video_id not in merged:
+                item = dict(raw)
+                item["discovery_strategies"] = [strategy]
+                merged[video_id] = item
+                continue
+
+            existing = merged[video_id]
+            strategies = list(
+                existing.get("discovery_strategies", [])
+            )
+            if strategy not in strategies:
+                strategies.append(strategy)
+            existing["discovery_strategies"] = strategies
+
+            for key, value in raw.items():
+                if existing.get(key) in (None, "") and value not in (None, ""):
+                    existing[key] = value
+
+    cache[query] = list(merged.values())
+    return [dict(item) for item in cache[query]]
 
 
 def _yt_dlp_ids(
     query: str,
-    search_order: str,
-    cache: dict[tuple[str, str], list[str]],
+    age_window: dict[str, Any],
+    format_target: str,
+    minimum_views: int,
+    cache: dict[str, list[dict[str, Any]]],
 ) -> list[str]:
-    strategy = _yt_dlp_strategy(search_order)
-    key = (query, strategy)
-    if key in cache:
-        return list(cache[key])
+    pool = _yt_dlp_pool(query, cache)
 
-    result = search_youtube(
-        query,
-        limit=50,
-        strategy=strategy,
-        require_agent_reach_health=False,
-    )
-    ids = [
-        str(item.get("video_id", "")).strip()
-        for item in result.get("results", [])
-        if str(item.get("video_id", "")).strip()
-    ]
-    cache[key] = ids
-    return list(ids)
+    after = datetime.fromisoformat(
+        str(age_window["published_after"]).replace("Z", "+00:00")
+    ).date()
+    before = datetime.fromisoformat(
+        str(age_window["published_before"]).replace("Z", "+00:00")
+    ).date()
+
+    ids: list[str] = []
+    for item in pool:
+        observed = _parse_yt_dlp_datetime(item)
+        if observed is not None:
+            observed_date = observed.date()
+            if observed_date < after or observed_date > before:
+                continue
+
+        duration_raw = item.get("duration_seconds")
+        if duration_raw is not None:
+            try:
+                duration = float(duration_raw)
+            except (TypeError, ValueError):
+                duration = 0.0
+            if duration > 0:
+                if format_target == "short_candidate" and duration > 180:
+                    continue
+                if format_target == "long_form_candidate" and duration <= 180:
+                    continue
+
+        views_raw = item.get("view_count")
+        if views_raw is not None:
+            try:
+                if int(views_raw) < int(minimum_views):
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        video_id = str(item.get("video_id", "")).strip()
+        if video_id:
+            ids.append(video_id)
+
+    return ids
 
 def discover(
     config: dict[str, Any],
@@ -439,6 +534,7 @@ def discover(
     audit: list[dict[str, Any]] | None = None,
     completed_jobs: set[str] | None = None,
     discovery_backend: str = "auto",
+    yt_dlp_cache: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[
     dict[str, set[str]],
     dict[str, list[dict[str, Any]]],
@@ -459,7 +555,7 @@ def discover(
     api_search_available = discovery_backend != "yt_dlp"
     fallback_health_checked = False
     fallback_ready = False
-    fallback_cache: dict[tuple[str, str], list[str]] = {}
+    fallback_cache = yt_dlp_cache if yt_dlp_cache is not None else {}
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
@@ -587,7 +683,9 @@ def discover(
                             try:
                                 ids = _yt_dlp_ids(
                                     query,
-                                    order,
+                                    age_window,
+                                    format_target,
+                                    int(config["minimum_views"]),
                                     fallback_cache,
                                 )
                             except AcquisitionError as exc:
@@ -605,7 +703,11 @@ def discover(
                                 )
 
                             backend_used = "agent_reach_yt_dlp"
-                            backend_strategy = _yt_dlp_strategy(order)
+                            backend_strategy = "date+relevance"
+                            print(
+                                "    yt-dlp age/format/view filtered candidates: "
+                                f"{len(ids)}"
+                            )
 
                         for rank, video_id in enumerate(ids, start=1):
                             discovered.setdefault(video_id, set()).add(topic_name)
@@ -654,6 +756,54 @@ def merge_discovery(
     for video_id, items in extra_matches.items():
         base_matches.setdefault(video_id, []).extend(items)
     base_audit.extend(extra_audit)
+
+
+def cohort_discovery_readiness(
+    rows: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    required = int(
+        config["minimum_unique_channels_per_topic_format"]
+    )
+    channels: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    for row in rows:
+        channel_id = str(row.get("channel_id") or "").strip()
+        fmt = str(row.get("format_candidate") or "").strip()
+        if not channel_id or not fmt:
+            continue
+        for topic in row.get("validated_topics", []):
+            channels[(str(topic), fmt)].add(channel_id)
+
+    cells = []
+    for (topic, fmt), channel_ids in sorted(channels.items()):
+        cells.append(
+            {
+                "topic": topic,
+                "format_candidate": fmt,
+                "unique_channels": len(channel_ids),
+                "refresh_worthy": len(channel_ids) >= required,
+            }
+        )
+
+    ready = [
+        cell
+        for cell in cells
+        if cell["refresh_worthy"]
+    ]
+    return {
+        "required_unique_channels_per_topic_format": required,
+        "refresh_worthy": bool(ready),
+        "refresh_worthy_cell_count": len(ready),
+        "maximum_unique_channels_in_any_cell": max(
+            (
+                int(cell["unique_channels"])
+                for cell in cells
+            ),
+            default=0,
+        ),
+        "cells": cells,
+    }
 
 
 def deficient_topic_formats(
@@ -873,8 +1023,147 @@ def static_candidate(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row.get(key) for key in STATIC_KEYS}
 
 
+def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
+    merged: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    seen: set[tuple[str, str, int]] = set()
+
+    def add_snapshot(
+        video_id: str,
+        observed_at: str,
+        views: int,
+    ) -> None:
+        key = (str(video_id), str(observed_at), int(views))
+        if key in seen:
+            return
+        try:
+            datetime.fromisoformat(
+                str(observed_at).replace("Z", "+00:00")
+            )
+        except ValueError:
+            return
+        seen.add(key)
+        merged[str(video_id)].append(
+            {
+                "video_id": str(video_id),
+                "observed_at": str(observed_at),
+                "views": int(views),
+            }
+        )
+
+    paths = [
+        PERSISTENT_SNAPSHOT_FILE,
+        SNAPSHOT_FILE,
+    ]
+    archive_root = OUTPUT_ROOT / "archive"
+    archive_dirs: list[Path] = []
+    if archive_root.exists():
+        archive_dirs = sorted(
+            archive_root.glob("experiment_01_3_*")
+        )
+        paths.extend(
+            archive_dir / "video_snapshots.jsonl"
+            for archive_dir in archive_dirs
+        )
+
+    for path in paths:
+        for video_id, snapshots in load_snapshot_history(path).items():
+            for snapshot in snapshots:
+                add_snapshot(
+                    str(video_id),
+                    str(snapshot["observed_at"]),
+                    int(snapshot["views"]),
+                )
+
+    # Older discovery runs fetched official YouTube metadata for many
+    # candidates that were later rejected. Reuse those API observations as
+    # history too, so a rebuilt cohort does not needlessly restart the clock
+    # when one of those videos becomes eligible later.
+    for archive_dir in archive_dirs:
+        summary_path = archive_dir / "summary.json"
+        try:
+            summary = json.loads(
+                summary_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        observed_at = str(
+            summary.get("cohort_created_at") or ""
+        ).strip()
+        if not observed_at:
+            continue
+
+        for name in (
+            "raw_results.json",
+            "rejected_candidates.json",
+        ):
+            path = archive_dir / name
+            try:
+                rows = json.loads(
+                    path.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(rows, list):
+                continue
+
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                video_id = str(row.get("video_id") or "").strip()
+                views = row.get("views")
+                if not video_id or views is None:
+                    continue
+                try:
+                    add_snapshot(
+                        video_id,
+                        observed_at,
+                        int(views),
+                    )
+                except (TypeError, ValueError):
+                    continue
+
+    for snapshots in merged.values():
+        snapshots.sort(
+            key=lambda item: datetime.fromisoformat(
+                str(item["observed_at"]).replace("Z", "+00:00")
+            )
+        )
+
+    return dict(merged)
+
+
+def append_candidate_detail_snapshots(
+    details: dict[str, dict[str, Any]],
+    observed_at: str,
+) -> None:
+    rows = []
+    for video_id, item in details.items():
+        stats = item.get("statistics", {})
+        views = stats.get("viewCount")
+        if views is None:
+            continue
+        try:
+            view_count = int(views)
+        except (TypeError, ValueError):
+            continue
+        rows.append(
+            {
+                "video_id": str(video_id),
+                "views": view_count,
+            }
+        )
+
+    if rows:
+        append_snapshots(
+            PERSISTENT_SNAPSHOT_FILE,
+            rows,
+            observed_at,
+        )
+
+
 def apply_velocity(rows: list[dict[str, Any]], observed_at: str) -> None:
-    history = load_snapshot_history(SNAPSHOT_FILE)
+    history = load_velocity_history()
     for row in rows:
         row.update(
             calculate_snapshot_velocity(
@@ -884,7 +1173,12 @@ def apply_velocity(rows: list[dict[str, Any]], observed_at: str) -> None:
                 history=history,
             )
         )
+
+    # Keep a run-local snapshot file for auditability and a persistent
+    # cross-cohort ledger so rebuilding discovery does not reset velocity
+    # history for videos already observed.
     append_snapshots(SNAPSHOT_FILE, rows, observed_at)
+    append_snapshots(PERSISTENT_SNAPSHOT_FILE, rows, observed_at)
 
 
 def refresh_rows(manifest: dict[str, Any], api_key: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -981,6 +1275,7 @@ def build_summary(
                 [float(r["current_views_per_day"]) for r in valid]
             ),
         },
+        "cohort_readiness": manifest.get("cohort_readiness", {}),
         "topic_velocity": topic_velocity,
         "important_notes": [
             "The cohort is frozen after discovery; refresh mode performs no new search.",
@@ -1099,6 +1394,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     print(f"Discovery backend: {args.discovery_backend}")
     print(f"Per-run YouTube API search budget: {args.max_searches}\n")
 
+    yt_dlp_cache: dict[str, list[dict[str, Any]]] = {}
+
     (
         discovered,
         matches,
@@ -1120,6 +1417,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         audit=audit,
         completed_jobs=completed_jobs,
         discovery_backend=args.discovery_backend,
+        yt_dlp_cache=yt_dlp_cache,
     )
 
     save_discovery_checkpoint(
@@ -1166,6 +1464,15 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     deficient = deficient_topic_formats(strict_rows, config)
     expansion_calls = 0
     expansion_status = "COMPLETE"
+    expansion_backend = args.discovery_backend
+    if (
+        args.discovery_backend == "auto"
+        and any(
+            item.get("discovery_backend") == "agent_reach_yt_dlp"
+            for item in audit
+        )
+    ):
+        expansion_backend = "yt_dlp"
 
     if deficient and strict_calls < args.max_searches:
         print("\nSparse topic/format cells detected; widening only those cells:")
@@ -1194,7 +1501,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
             matches=matches,
             audit=audit,
             completed_jobs=completed_jobs,
-            discovery_backend=args.discovery_backend,
+            discovery_backend=expansion_backend,
+            yt_dlp_cache=yt_dlp_cache,
         )
 
         save_discovery_checkpoint(
@@ -1225,6 +1533,11 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     print(f"Completed search jobs total: {len(completed_jobs):,}")
 
     details = get_video_details(list(discovered), api_key)
+    measurement_observed_at = datetime.now(timezone.utc).isoformat()
+    append_candidate_detail_snapshots(
+        details,
+        measurement_observed_at,
+    )
     channel_ids = sorted(
         {
             str(item.get("snippet", {}).get("channelId", ""))
@@ -1288,6 +1601,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         },
         "search_audit": audit,
         "rejected_during_discovery": len(rejected),
+        "cohort_readiness": cohort_discovery_readiness(
+            rows,
+            config,
+        ),
         "video_ids": [r["video_id"] for r in rows],
         "candidates": [static_candidate(r) for r in rows],
     }
@@ -1296,7 +1613,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         encoding="utf-8",
     )
 
-    apply_velocity(rows, observed_at)
+    apply_velocity(rows, measurement_observed_at)
     topic_velocity = aggregate_age_matched_velocity(rows)
     summary = build_summary("discover", manifest, rows, [], topic_velocity)
     write_outputs(rows, topic_velocity, summary)
@@ -1340,11 +1657,30 @@ def print_completion(mode: str, summary: dict[str, Any]) -> None:
     print("\nResults:")
     for path in (
         MANIFEST_FILE, CANDIDATES_FILE, RAW_FILE, REJECTED_FILE,
-        TOPIC_FILE, SUMMARY_FILE, SNAPSHOT_FILE,
+        TOPIC_FILE, SUMMARY_FILE, SNAPSHOT_FILE, PERSISTENT_SNAPSHOT_FILE,
     ):
         print(f"  {path}")
     if mode == "discover":
-        print("\nCohort frozen. Run refresh after at least one hour.")
+        readiness = summary.get("cohort_readiness", {})
+        if not readiness.get("refresh_worthy"):
+            print(
+                "\nINSUFFICIENT COHORT: no topic/format cell has enough "
+                "independent channels for useful velocity measurement."
+            )
+            print(
+                "Rerun discovery with the improved acquisition path. "
+                "Do not wait for a velocity refresh."
+            )
+        elif summary["velocity_analysis"]["valid_velocity_samples"] > 0:
+            print(
+                "\nCohort frozen and prior snapshot history produced "
+                "measured velocity immediately."
+            )
+        else:
+            print(
+                "\nCohort frozen and suitable for velocity measurement. "
+                "Refresh may reuse persistent snapshot history from earlier runs."
+            )
     else:
         print("\nRefresh used the same frozen IDs; no discovery search was performed.")
 
