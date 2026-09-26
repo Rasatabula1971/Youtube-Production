@@ -26,7 +26,7 @@ class Experiment013Tests(unittest.TestCase):
             ["f1", "formula 1", "motorsport"],
         )
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
-        self.assertEqual(result["topic_relevance_reason"], "missing_motorsport_context")
+        self.assertEqual(result["topic_relevance_reason"], "missing_motorsport_context_in_title")
 
     def test_formula_1_gearbox_is_on_topic(self):
         result = classify_topic_relevance(
@@ -35,6 +35,45 @@ class Experiment013Tests(unittest.TestCase):
             ["f1", "formula 1", "motorsport"],
         )
         self.assertEqual(result["topic_relevance"], "ON_TOPIC")
+
+
+    def test_sim_racing_title_does_not_become_steering_topic(self):
+        result = classify_topic_relevance(
+            "ULTRA REALISTIC F1 2026 - Charles Leclerc Ferrari Monaco GP",
+            ["steering"],
+            ["f1", "formula 1", "motorsport"],
+            ["sim racing", "simracing", "gameplay"],
+        )
+        self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
+        self.assertEqual(result["topic_relevance_reason"], "missing_topic_term_in_title")
+
+    def test_corvette_short_does_not_become_aerodynamics_topic(self):
+        result = classify_topic_relevance(
+            "Corvette takes a 90° turn at full speed. #formula1 #f1 #shorts",
+            ["aerodynamic", "aerodynamics", "aero", "downforce"],
+            ["f1", "formula 1", "motorsport"],
+        )
+        self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
+        self.assertEqual(result["topic_relevance_reason"], "missing_topic_term_in_title")
+
+    def test_description_terms_cannot_rescue_title_only_validation(self):
+        result = classify_topic_relevance(
+            "How Engineers Spent a Century Solving the Clutch",
+            ["gearbox", "transmission", "engine", "turbo"],
+            ["f1", "formula 1", "motorsport"],
+        )
+        self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
+        self.assertEqual(result["topic_relevance_reason"], "missing_topic_term_in_title")
+
+    def test_excluded_sim_racing_title_is_rejected_even_with_topic_term(self):
+        result = classify_topic_relevance(
+            "F1 Steering Setup for Sim Racing",
+            ["steering"],
+            ["f1", "formula 1", "motorsport"],
+            ["sim racing", "simracing", "gameplay"],
+        )
+        self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
+        self.assertEqual(result["topic_relevance_reason"], "excluded_title_term")
 
     def test_confidence_uses_unique_channels(self):
         self.assertEqual(confidence_from_unique_channels(0), "INSUFFICIENT")
