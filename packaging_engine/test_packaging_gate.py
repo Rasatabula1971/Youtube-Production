@@ -12,6 +12,11 @@ class PackagingGateTests(unittest.TestCase):
         self.config = {
             "required_accept_criteria": [
                 "promise_clear",
+                "viewer_problem_aligned",
+                "viewer_moment_fit",
+                "one_sentence_promise_clear",
+                "content_gap_honest",
+                "channel_fit_preserved",
                 "concept_aligned",
                 "title_thumbnail_complementary",
                 "not_misleading",
@@ -63,6 +68,12 @@ class PackagingGateTests(unittest.TestCase):
             },
             "expected_viewer": "Curious automotive viewer",
             "awareness_level": "Basic familiarity",
+            "viewer_problem": "Why does this race-car system behave differently from the road-car version?",
+            "viewer_moment": "Trying to understand a surprising engineering difference.",
+            "desired_outcome": "Understand the tradeoff and the mechanism causing it.",
+            "one_sentence_promise": "This video helps curious automotive viewers understand the surprising engineering difference so they can make sense of the tradeoff.",
+            "gap_positioning": "Explains the mechanism behind a commonly shown but often under-explained difference.",
+            "channel_fit_alignment": "Keeps the package focused on automotive engineering explanation.",
             "core_promise": "Explain the hidden mechanism",
             "curiosity_gap": "Why does the obvious solution fail?",
             "expected_payoff": "Viewer understands the tradeoff",
@@ -75,6 +86,27 @@ class PackagingGateTests(unittest.TestCase):
                 "working_title": title,
                 "premise": "Independent concept",
                 "audience_promise": "Explain it",
+                "viewer_problem": "Why does this race-car system behave differently from the road-car version?",
+                "viewer_moment": "Trying to understand a surprising engineering difference.",
+                "desired_outcome": "Understand the tradeoff and mechanism.",
+                "content_gap": {
+                    "hypothesis": "The mechanism is often under-explained.",
+                    "evidence_status": "HYPOTHESIS",
+                    "evidence_basis": [],
+                },
+                "channel_fit": {
+                    "status": "FIT",
+                    "rationale": "Automotive engineering audience.",
+                },
+                "title_clarity_test": {
+                    "options": [
+                        title,
+                        title + " Explained",
+                        "The Hidden Engineering Behind " + title,
+                    ],
+                    "result": "PASS",
+                    "rationale": "Clear across multiple title framings.",
+                },
                 "format_intent": "long_form",
                 "research_questions": [
                     "What causes the difference?"
@@ -125,6 +157,18 @@ class PackagingGateTests(unittest.TestCase):
             request["package_count"],
             3,
         )
+
+    def test_request_contains_viewer_need_fields(self):
+        request = build_review_request(
+            self.candidates,
+            self.config,
+        )
+        first = request["items"][0]
+        self.assertIn("viewer_problem", first)
+        self.assertIn("viewer_moment", first)
+        self.assertIn("one_sentence_promise", first)
+        self.assertIn("gap_positioning", first)
+        self.assertIn("channel_fit_alignment", first)
 
     def test_accept_requires_all_criteria(self):
         request = build_review_request(
@@ -183,6 +227,10 @@ class PackagingGateTests(unittest.TestCase):
         self.assertIn(
             "packaging",
             handoff["concepts"][0],
+        )
+        self.assertIn(
+            "one_sentence_promise",
+            handoff["concepts"][0]["packaging"],
         )
 
     def test_rework_requires_note(self):
