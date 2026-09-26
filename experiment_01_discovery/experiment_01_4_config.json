@@ -1,0 +1,103 @@
+{
+  "experiment_id": "01.4",
+  "purpose": "depth_first_topic_expansion",
+  "minimum_unique_channels": 3,
+  "minimum_velocity_samples": 3,
+  "maximum_plan_searches": 30,
+  "search_order": "viewCount",
+  "lookback_days": 1825,
+  "motorsport_context_terms": [
+    "f1",
+    "formula 1",
+    "formula one",
+    "motorsport",
+    "race car",
+    "racecar",
+    "racing",
+    "grand prix",
+    "pit stop",
+    "mclaren",
+    "ferrari",
+    "red bull",
+    "mercedes",
+    "aston martin",
+    "alpine",
+    "williams",
+    "sauber",
+    "haas"
+  ],
+  "exclude_title_terms": [
+    "sim racing",
+    "simracing",
+    "gameplay",
+    "assetto corsa",
+    "gran turismo",
+    "forza",
+    "f1 26 game",
+    "ea sports"
+  ],
+  "duration_filters": {
+    "short_candidate": ["short"],
+    "long_form_candidate": ["medium", "long"]
+  },
+  "topic_definitions": {
+    "gearbox_transmission": {
+      "query_root": "F1 gearbox",
+      "match_terms": ["gearbox", "transmission", "gear ratio", "gearing"]
+    },
+    "brakes": {
+      "query_root": "F1 brakes",
+      "match_terms": ["brake", "brakes"]
+    },
+    "tyres_tires": {
+      "query_root": "F1 tyres",
+      "match_terms": ["tyre", "tyres", "tire", "tires"]
+    },
+    "steering": {
+      "query_root": "F1 steering",
+      "match_terms": ["steering"]
+    },
+    "suspension_chassis": {
+      "query_root": "F1 suspension",
+      "match_terms": ["suspension", "chassis"]
+    },
+    "aerodynamics_downforce": {
+      "query_root": "F1 aerodynamics",
+      "match_terms": ["aerodynamic", "aerodynamics", "aero", "downforce", "diffuser", "drs"]
+    },
+    "engine_power_unit": {
+      "query_root": "F1 engine",
+      "match_terms": ["engine", "power unit", "turbo", "hybrid"]
+    },
+    "pit_stops": {
+      "query_root": "F1 pit stop",
+      "match_terms": ["pit stop", "pitstop"]
+    }
+  },
+  "query_families": [
+    {
+      "family": "how_it_works",
+      "template": "{root} how it works"
+    },
+    {
+      "family": "hidden_mechanism",
+      "template": "{root} inside explained"
+    },
+    {
+      "family": "engineering_constraints",
+      "template": "{root} engineering challenge"
+    },
+    {
+      "family": "failure_problem",
+      "template": "{root} failure problem"
+    },
+    {
+      "family": "evolution",
+      "template": "{root} evolution"
+    },
+    {
+      "family": "rules_loopholes",
+      "template": "{root} rules banned"
+    }
+  ]
+}
