@@ -601,6 +601,8 @@ def merge_analysis_response(
 
     response_analysis = response.get("analysis", {})
     for dimension in config["required_dimensions"]:
+        if dimension not in response_analysis:
+            continue
         payload = response_analysis.get(dimension, {})
         findings = payload.get("findings", [])
         if findings is None:
@@ -650,6 +652,8 @@ def merge_analysis_response(
         ("transferable_mechanisms", "description", True),
         ("source_specific_elements", "element", False),
     ):
+        if key not in transfer_response:
+            continue
         accepted_items: list[dict[str, Any]] = []
         items = transfer_response.get(key, []) or []
         if not isinstance(items, list):
@@ -679,6 +683,7 @@ def merge_analysis_response(
         transfer_result[key] = accepted_items
 
     accepted_transformations: list[dict[str, Any]] = []
+    transformations_present = "transformation_opportunities" in transfer_response
     transformations = transfer_response.get("transformation_opportunities", []) or []
     if not isinstance(transformations, list):
         raise ValueError("transfer.transformation_opportunities must be a list")
@@ -728,7 +733,8 @@ def merge_analysis_response(
                 }
             )
 
-    transfer_result["transformation_opportunities"] = accepted_transformations
+    if transformations_present:
+        transfer_result["transformation_opportunities"] = accepted_transformations
 
     explicit_hypotheses = response.get("working_hypotheses", []) or []
     if not isinstance(explicit_hypotheses, list):
@@ -760,9 +766,19 @@ def merge_analysis_response(
             ]
         accepted_explicit_hypotheses.append(normalized)
 
-    result["working_hypotheses"] = (
-        accepted_explicit_hypotheses + routed_hypotheses
+    combined_hypotheses = (
+        list(result.get("working_hypotheses", []))
+        + accepted_explicit_hypotheses
+        + routed_hypotheses
     )
+    deduped_hypotheses: list[dict[str, Any]] = []
+    seen_hypotheses: set[str] = set()
+    for hypothesis in combined_hypotheses:
+        key = json.dumps(hypothesis, sort_keys=True, ensure_ascii=False)
+        if key not in seen_hypotheses:
+            seen_hypotheses.add(key)
+            deduped_hypotheses.append(hypothesis)
+    result["working_hypotheses"] = deduped_hypotheses
 
     result["analysis_execution"] = {
         "response_video_id": response_video_id,
