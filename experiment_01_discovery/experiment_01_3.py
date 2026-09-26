@@ -1366,6 +1366,15 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     deficient = deficient_topic_formats(strict_rows, config)
     expansion_calls = 0
     expansion_status = "COMPLETE"
+    expansion_backend = args.discovery_backend
+    if (
+        args.discovery_backend == "auto"
+        and any(
+            item.get("discovery_backend") == "agent_reach_yt_dlp"
+            for item in audit
+        )
+    ):
+        expansion_backend = "yt_dlp"
 
     if deficient and strict_calls < args.max_searches:
         print("\nSparse topic/format cells detected; widening only those cells:")
@@ -1394,7 +1403,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
             matches=matches,
             audit=audit,
             completed_jobs=completed_jobs,
-            discovery_backend=args.discovery_backend,
+            discovery_backend=expansion_backend,
             yt_dlp_cache=yt_dlp_cache,
         )
 
