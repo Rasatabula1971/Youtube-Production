@@ -91,6 +91,11 @@ def build_query_competition_profile(
 
     return {
         "query": query,
+        "search_order": "viewCount",
+        "result_position_semantics": (
+            "position_in_viewCount_ordered_API_results;"
+            "not_organic_relevance_rank"
+        ),
         "results_returned": len(video_ids),
         "results_with_details": detail_count,
         "unique_channels": len(channel_counts),
