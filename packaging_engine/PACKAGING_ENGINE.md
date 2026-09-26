@@ -100,3 +100,24 @@ The Packaging Engine does not:
 
 Research dependencies explicitly capture what must be verified before the
 package can safely control the script.
+
+
+## Viewer-need packaging contract
+
+Each package must preserve the accepted concept's viewer need and include:
+
+- `viewer_problem`;
+- `viewer_moment`;
+- `desired_outcome`;
+- `one_sentence_promise`;
+- `gap_positioning`;
+- `channel_fit_alignment`.
+
+The one-sentence promise should make the value easy to understand in the form:
+
+~~~text
+This video helps [specific viewer/problem] so they can [specific outcome].
+~~~
+
+Gap positioning must not upgrade a `HYPOTHESIS` or `UNASSESSED` gap into a
+proven audience fact.
