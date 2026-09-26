@@ -25,6 +25,20 @@ class AcquisitionError(RuntimeError):
     """Raised when a source-acquisition backend cannot safely run."""
 
 
+def render_console_json(payload: Any) -> str:
+    """Render JSON safely for redirected Windows consoles and UI logs.
+
+    ensure_ascii=True keeps stdout ASCII-only while preserving all Unicode
+    content as JSON escape sequences. This avoids cp1252 encode failures when
+    Agent Reach returns localized channel messages.
+    """
+    return json.dumps(
+        payload,
+        indent=2,
+        ensure_ascii=True,
+    )
+
+
 def agent_reach_path() -> str | None:
     return shutil.which("agent-reach")
 
@@ -359,11 +373,7 @@ def main() -> None:
             strategy=args.strategy,
         )
 
-    print(json.dumps(
-        result,
-        indent=2,
-        ensure_ascii=False,
-    ))
+    print(render_console_json(result))
 
 
 if __name__ == "__main__":
