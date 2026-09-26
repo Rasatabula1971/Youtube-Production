@@ -31,43 +31,117 @@
   "topics": [
     {
       "topic": "gearbox_transmission",
-      "queries": ["F1 gearbox engineering"],
-      "match_terms": ["gearbox", "transmission", "gear ratio", "gearing"]
+      "queries": [
+        "F1 gearbox engineering"
+      ],
+      "match_terms": [
+        "gearbox",
+        "transmission",
+        "gear ratio",
+        "gearing"
+      ]
     },
     {
       "topic": "brakes",
-      "queries": ["F1 brakes engineering"],
-      "match_terms": ["brake", "brakes"]
+      "queries": [
+        "F1 brakes engineering"
+      ],
+      "match_terms": [
+        "brake",
+        "brakes"
+      ]
     },
     {
       "topic": "tyres_tires",
-      "queries": ["F1 tyre engineering", "F1 tire engineering"],
-      "match_terms": ["tyre", "tyres", "tire", "tires"]
+      "queries": [
+        "F1 tyre engineering",
+        "F1 tire engineering"
+      ],
+      "match_terms": [
+        "tyre",
+        "tyres",
+        "tire",
+        "tires"
+      ]
     },
     {
       "topic": "steering",
-      "queries": ["F1 steering engineering"],
-      "match_terms": ["steering"]
+      "queries": [
+        "F1 steering engineering"
+      ],
+      "match_terms": [
+        "steering"
+      ]
     },
     {
       "topic": "suspension_chassis",
-      "queries": ["F1 suspension engineering"],
-      "match_terms": ["suspension", "chassis"]
+      "queries": [
+        "F1 suspension engineering"
+      ],
+      "match_terms": [
+        "suspension",
+        "chassis"
+      ]
     },
     {
       "topic": "aerodynamics_downforce",
-      "queries": ["F1 aerodynamics engineering"],
-      "match_terms": ["aerodynamic", "aerodynamics", "aero", "downforce", "diffuser", "drs"]
+      "queries": [
+        "F1 aerodynamics engineering"
+      ],
+      "match_terms": [
+        "aerodynamic",
+        "aerodynamics",
+        "aero",
+        "downforce",
+        "diffuser",
+        "drs"
+      ]
     },
     {
       "topic": "engine_power_unit",
-      "queries": ["F1 engine engineering"],
-      "match_terms": ["engine", "power unit", "turbo", "hybrid"]
+      "queries": [
+        "F1 engine engineering"
+      ],
+      "match_terms": [
+        "engine",
+        "power unit",
+        "turbo",
+        "hybrid"
+      ]
     },
     {
       "topic": "pit_stops",
-      "queries": ["F1 pit stop engineering"],
-      "match_terms": ["pit stop", "pitstop"]
+      "queries": [
+        "F1 pit stop engineering"
+      ],
+      "match_terms": [
+        "pit stop",
+        "pitstop"
+      ]
     }
+  ],
+  "wide_age_tolerance_days": 30,
+  "minimum_unique_channels_per_topic_format": 3,
+  "expansion_search_orders": [
+    "relevance"
+  ],
+  "search_profiles": {
+    "short_candidate": [
+      "short"
+    ],
+    "long_form_candidate": [
+      "medium",
+      "long"
+    ]
+  },
+  "exclude_title_terms": [
+    "sim racing",
+    "simracing",
+    "gameplay",
+    "assetto corsa",
+    "gran turismo",
+    "forza",
+    "f1 26 game",
+    "ea sports"
   ]
 }
