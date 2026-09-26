@@ -102,6 +102,7 @@ def collect(
                     item["query"],
                     limit=limit,
                     strategy=current_strategy,
+                    require_agent_reach_health=False,
                 )
             except (
                 AcquisitionError,
