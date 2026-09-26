@@ -198,3 +198,22 @@ The framework succeeds when it can:
 
 The resulting evidence can then feed Packaging, Retention and Transformation
 work without treating successful source videos as templates to copy.
+
+
+## Evidence ingestion layer
+
+The offline evidence-ingestion layer is implemented in:
+
+`evidence_ingest.py`
+
+It accepts a per-video bundle manifest and imports:
+
+- SRT/VTT/plain-text transcripts;
+- registered thumbnail files;
+- registered opening-frame files; and
+- structured visual/timing/audio notes.
+
+Imported files are SHA-256 fingerprinted and converted into stable evidence
+IDs. Prepared source profiles are not overwritten by default.
+
+See `EVIDENCE_INGESTION.md` for the workflow and templates.
