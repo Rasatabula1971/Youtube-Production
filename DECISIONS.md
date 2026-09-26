@@ -548,7 +548,7 @@ active backend, then call that upstream tool directly.
 
 ## D-043 — Benchmark quota-free YouTube discovery before replacing search.list
 
-**Status:** Accepted
+**Status:** Superseded by D-044
 
 Experiment 01.3 currently uses YouTube Data API search.list for controlled
 discovery and official API endpoints for measurement.
@@ -565,3 +565,30 @@ discovery backend be added to Experiment 01.3.
 
 Even then, official YouTube videos.list / channels.list remain the canonical
 measurement and snapshot path.
+
+
+## D-044 — Experiment 01.3 uses one automatic discovery control
+
+**Status:** Accepted
+
+Routine Experiment 01.3 discovery uses one AUTO control instead of requiring
+the operator to choose between YouTube Data API v3 and Agent Reach / yt-dlp.
+
+AUTO attempts YouTube search.list first. If that search path is unavailable or
+quota-rejected, remaining discovery jobs automatically use the healthy Agent
+Reach / yt-dlp backend.
+
+This is a discovery fallback, not a measurement substitution.
+
+All discovered IDs still pass the existing local age, minimum-view,
+title-topic, motorsport-context and actual-duration validation. Official
+YouTube videos.list / channels.list remain canonical for candidate metadata,
+channel baselines, frozen cohort details and repeated velocity measurements.
+
+Every query match and search audit record must retain discovery backend
+provenance.
+
+D-043's benchmark remains useful for comparing backend coverage, but successful
+benchmarking is no longer a prerequisite for using yt-dlp as a continuity
+fallback because the user explicitly chose automatic availability routing and
+the project retains strict downstream validation plus official measurement.
