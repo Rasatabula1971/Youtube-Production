@@ -63,3 +63,17 @@ It does not mean every factual implication has already been verified.
 
 Research still has to resolve the package dependencies before the Story /
 Script Engine may use the approved promise.
+
+
+## Additional acceptance checks
+
+The Packaging Gate now confirms that:
+
+- the package still addresses the accepted viewer problem;
+- the framing fits the viewer's moment;
+- the one-sentence promise is clear;
+- gap positioning remains honest about evidence;
+- channel fit is preserved while improving click appeal.
+
+Packaging may sharpen the communication, but it must not broaden the idea into
+a different audience merely to chase clicks.
