@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -36,8 +37,35 @@ EXP15_DIR = EXP1_OUTPUT / "experiment_01_5"
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 EXP2_OUTPUT = EXP2_DIR / "output"
+SOURCE_ACQ_OUTPUT = PROJECT_ROOT / "source_acquisition" / "output"
 
 ACTION_DEFS: dict[str, dict[str, Any]] = {
+    "agent_reach_doctor": {
+        "label": "Run Agent Reach Doctor",
+        "stage": "ACQ",
+        "command": [
+            sys.executable,
+            "source_acquisition/agent_reach_adapter.py",
+            "--mode",
+            "doctor",
+        ],
+        "description": "Checks source-acquisition channels and confirms the active YouTube backend.",
+    },
+    "agent_reach_youtube_benchmark": {
+        "label": "Run YouTube Discovery Benchmark",
+        "stage": "ACQ",
+        "command": [
+            sys.executable,
+            "source_acquisition/youtube_discovery_benchmark.py",
+            "--mode",
+            "collect",
+            "--limit",
+            "10",
+            "--strategy",
+            "relevance",
+        ],
+        "description": "Compares Agent Reach / yt-dlp discovery against the saved 01.3 API search audit without changing the cohort.",
+    },
     "exp13_discover": {
         "label": "Run / Resume 01.3 Discovery",
         "stage": "01.3",
@@ -171,6 +199,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
 OPEN_TARGETS = {
     "experiment_01_output": EXP1_OUTPUT,
     "experiment_02_output": EXP2_OUTPUT,
+    "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
 
@@ -337,7 +366,26 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     analyzed = has_json_files(EXP2_OUTPUT / "profiles_analyzed")
     reviewed = has_json_files(EXP2_OUTPUT / "profiles_reviewed")
 
+    agent_reach_installed = shutil.which("agent-reach") is not None
+    yt_dlp_installed = shutil.which("yt-dlp") is not None
+
     return {
+        "agent_reach_doctor": {
+            "enabled": True,
+            "reason": (
+                "Agent Reach detected; run health checks."
+                if agent_reach_installed
+                else "Agent Reach is not installed; doctor will report the missing dependency."
+            ),
+        },
+        "agent_reach_youtube_benchmark": {
+            "enabled": agent_reach_installed and yt_dlp_installed,
+            "reason": (
+                "Agent Reach and yt-dlp are available."
+                if agent_reach_installed and yt_dlp_installed
+                else "Install Agent Reach and confirm yt-dlp before benchmarking."
+            ),
+        },
         "exp13_discover": {
             "enabled": True,
             "reason": (
