@@ -93,6 +93,21 @@ class ConceptGateTests(unittest.TestCase):
         self.assertEqual(request["concept_count"], 2)
         self.assertEqual(len(request["items"]), 2)
 
+
+    def test_duplicate_concept_ids_are_rejected(self):
+        candidates = {
+            "concepts": [
+                dict(self.candidates["concepts"][0]),
+                dict(self.candidates["concepts"][0]),
+            ]
+        }
+
+        with self.assertRaises(ValueError):
+            build_review_request(
+                candidates,
+                self.config,
+            )
+
     def test_accept_requires_all_criteria_true(self):
         request = build_review_request(
             self.candidates,
