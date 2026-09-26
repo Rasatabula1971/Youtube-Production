@@ -1,0 +1,28 @@
+{
+  "concept_id": "CONCEPT_ID",
+  "packages": [
+    {
+      "package_id": "CONCEPT_ID-pkg001",
+      "title": "",
+      "thumbnail": {
+        "message": "",
+        "visual_concept": "",
+        "text_overlay": ""
+      },
+      "opening_frame": {
+        "purpose": "",
+        "visual_concept": ""
+      },
+      "expected_viewer": "",
+      "awareness_level": "",
+      "core_promise": "",
+      "curiosity_gap": "",
+      "expected_payoff": "",
+      "format_intent": "long_form",
+      "title_thumbnail_relationship": "",
+      "research_dependencies": [
+        ""
+      ]
+    }
+  ]
+}

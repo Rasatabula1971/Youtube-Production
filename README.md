@@ -163,3 +163,20 @@ an accepted claim.
 
 See `research_engine/RESEARCH_ENGINE.md` and
 `research_engine/RESEARCH_GATE.md`.
+
+
+## Packaging Engine
+
+The repository now includes the Packaging Engine and human Packaging Gate.
+
+A human-accepted concept is converted into multiple title / thumbnail /
+opening-frame package candidates. One package may be approved per concept.
+
+The approved package defines the promise the future Story / Script Engine must
+fulfill. Its research dependencies are injected into the Research Engine as
+mandatory research questions.
+
+No package score, CTR prediction or automatic winner is produced.
+
+See `packaging_engine/PACKAGING_ENGINE.md` and
+`packaging_engine/PACKAGING_GATE.md`.

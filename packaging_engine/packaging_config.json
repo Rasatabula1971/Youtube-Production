@@ -1,0 +1,9 @@
+{
+  "packages_per_concept": 5,
+  "allowed_format_intents": [
+    "long_form",
+    "short",
+    "either"
+  ],
+  "minimum_research_dependencies": 0
+}

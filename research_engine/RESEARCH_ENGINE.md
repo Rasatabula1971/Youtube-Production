@@ -16,10 +16,14 @@ It does not decide that a claim is true simply because multiple sources agree.
 Default input:
 
 ~~~text
-transformation_engine/output/research_handoff.json
+packaging_engine/output/research_handoff.json
 ~~~
 
-Only concepts already accepted by the human Concept Gate should appear there.
+Only concepts with a human-approved package should appear there.
+
+The approved package is preserved in the research plan. Its research
+dependencies are appended as mandatory package questions with stable IDs such
+as `pkgq001`.
 
 ## Prepare
 
@@ -156,3 +160,15 @@ Draft research packages go to the human Research Gate.
 
 Only Research Gate accepted claims may enter the verified research package used
 by the future Story / Script Engine.
+
+
+## Package research dependencies
+
+Packaging occurs before deep research and Story / Script.
+
+Every approved package carries factual/evidentiary dependencies. The Research
+Engine converts them into mandatory `pkgq...` research questions alongside the
+original concept questions.
+
+The Research Gate therefore cannot mark the package READY_FOR_STORY_SCRIPT
+while a promise-critical package dependency remains unresolved.

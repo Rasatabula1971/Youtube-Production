@@ -497,3 +497,36 @@ the package remains RESEARCH_INCOMPLETE.
 
 Here, verified means human-approved for this project's script use, not universal
 or permanent truth.
+
+
+## D-040 — Packaging is approved before Story / Script
+
+**Status:** Accepted
+
+The Story / Script Engine must not begin from a topic or research package alone.
+
+A human-approved packaging object must exist first and must define the intended
+viewer, awareness level, title, thumbnail communication, opening-frame intent,
+core promise, curiosity gap and expected payoff.
+
+Title and thumbnail are treated as one communication unit and should complement
+rather than simply repeat each other.
+
+Packaging candidates are not ranked with a clickability score or predicted CTR.
+
+## D-041 — Package dependencies become mandatory research questions
+
+**Status:** Accepted
+
+A packaging candidate may imply factual or evidentiary requirements that are
+not yet verified.
+
+Every candidate therefore records explicit research dependencies. Once a
+package is human-approved, those dependencies become mandatory research
+questions in the Research Engine.
+
+The research package cannot become READY_FOR_STORY_SCRIPT until those package
+questions are covered by accepted claims.
+
+At most one package may be ACCEPTED per concept, preventing downstream research
+and scripting from inheriting competing promises.
