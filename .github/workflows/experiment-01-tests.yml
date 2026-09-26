@@ -5,12 +5,16 @@ on:
     paths:
       - "experiment_01_discovery/**"
       - "experiment_02_analysis/**"
+      - "experiment_ui/**"
+      - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
   push:
     branches: [main]
     paths:
       - "experiment_01_discovery/**"
       - "experiment_02_analysis/**"
+      - "experiment_ui/**"
+      - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
 
 jobs:
@@ -25,3 +29,5 @@ jobs:
         run: python -m unittest discover -s experiment_01_discovery -p "test_*.py" -v
       - name: Run Experiment 02 tests
         run: python -m unittest discover -s experiment_02_analysis -p "test_*.py" -v
+      - name: Run Experiment UI tests
+        run: python -m unittest discover -s experiment_ui -p "test_*.py" -v
