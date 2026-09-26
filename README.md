@@ -76,10 +76,16 @@ Learning
 │   ├── transformation_engine.py
 │   ├── concept_gate.py
 │   └── transformation_config.json
-└── research_engine/
-    ├── research_engine.py
-    ├── research_gate.py
-    └── research_config.json
+├── research_engine/
+│   ├── research_engine.py
+│   ├── research_gate.py
+│   └── research_config.json
+├── packaging_engine/
+│   ├── packaging_engine.py
+│   └── packaging_gate.py
+└── source_acquisition/
+    ├── agent_reach_adapter.py
+    └── youtube_discovery_benchmark.py
 ```
 
 Generated experiment output and secrets remain outside Git:
@@ -180,3 +186,22 @@ No package score, CTR prediction or automatic winner is produced.
 
 See `packaging_engine/PACKAGING_ENGINE.md` and
 `packaging_engine/PACKAGING_GATE.md`.
+
+
+## Source Acquisition / Agent Reach
+
+Agent Reach is integrated only as an external acquisition and backend-health
+layer.
+
+The first use is a YouTube discovery benchmark. Agent Reach reports whether
+YouTube is healthy and which backend is active; the project then calls yt-dlp
+directly for quota-free search and compares those video IDs with the saved
+Experiment 01.3 YouTube API search audit.
+
+The benchmark does not modify the 01.3 cohort and does not replace official API
+measurement.
+
+The Experiment Control UI includes Agent Reach Doctor and YouTube Discovery
+Benchmark actions when the external dependency is available.
+
+See source_acquisition/README.md.

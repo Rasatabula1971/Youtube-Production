@@ -558,3 +558,37 @@ Only concepts with one approved package enter the Research Engine. The approved
 package's research dependencies are converted into mandatory package research
 questions, so the future Story / Script Engine cannot inherit an unverified
 title/thumbnail promise.
+
+
+## 10. Source Acquisition layer
+
+Agent Reach is adopted only as an external source-acquisition capability and
+health layer.
+
+The project keeps its own opportunity calculations, evidence models, reasoning,
+human gates, Story / Script logic, production logic and learning metrics.
+
+The acquisition pattern is:
+
+~~~text
+capability request
+    ↓
+Agent Reach doctor / backend health
+    ↓
+active upstream backend
+    ↓
+direct upstream tool call
+    ↓
+project-owned evidence and validation
+~~~
+
+For YouTube, the first evaluated backend is yt-dlp. A dedicated benchmark
+compares yt-dlp search results with the saved Experiment 01.3 YouTube Data API
+search audit.
+
+Experiment 01.3 is not switched to Agent Reach automatically. The benchmark
+must first show that quota-free discovery has acceptable candidate coverage and
+contamination characteristics.
+
+If adopted after benchmarking, official YouTube API calls remain the canonical
+measurement path for video/channel metadata, repeated snapshots and velocity.

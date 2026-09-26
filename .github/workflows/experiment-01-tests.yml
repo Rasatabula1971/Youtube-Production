@@ -9,6 +9,7 @@ on:
       - "transformation_engine/**"
       - "research_engine/**"
       - "packaging_engine/**"
+      - "source_acquisition/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
   push:
@@ -20,6 +21,7 @@ on:
       - "transformation_engine/**"
       - "research_engine/**"
       - "packaging_engine/**"
+      - "source_acquisition/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
 
@@ -43,3 +45,5 @@ jobs:
         run: python -m unittest discover -s research_engine -p "test_*.py" -v
       - name: Run Packaging Engine tests
         run: python -m unittest discover -s packaging_engine -p "test_*.py" -v
+      - name: Run Source Acquisition tests
+        run: python -m unittest discover -s source_acquisition -p "test_*.py" -v
