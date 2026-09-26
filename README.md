@@ -106,3 +106,19 @@ It does not fetch transcripts or videos automatically and does not spend
 YouTube API quota.
 
 See `experiment_02_analysis/EXPERIMENT_02.md`.
+
+
+## Experiment Control UI
+
+The experiment phase now includes a local browser control panel so routine runs
+do not require PowerShell commands.
+
+On Windows, double-click:
+
+`Start Experiment UI.bat`
+
+The UI opens on localhost and provides gated controls for Experiment 01.3,
+01.4, 01.5 and the built Experiment 02 workflow, with live job logs and output
+folder access.
+
+See `experiment_ui/README.md`.
