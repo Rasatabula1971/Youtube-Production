@@ -620,3 +620,57 @@ Official candidate view observations are retained across cohort rebuilds in a
 persistent snapshot ledger, and archived official observations may be reused
 for the same video ID. Replacing a cohort must not needlessly reset the
 measurement clock.
+
+
+## D-046 — A topic is not a finished viewer need
+
+**Status:** Accepted
+
+Opportunity evidence may establish that a topic attracts attention, but a concept
+must separately identify the specific problem, question or curiosity the viewer
+is trying to resolve, the moment in which that need matters, and the desired
+outcome.
+
+Transformation therefore records `viewer_problem`, `viewer_moment` and
+`desired_outcome` before Concept Gate review.
+
+Demand does not substitute for this framing.
+
+## D-047 — Content-gap claims preserve evidence status
+
+**Status:** Accepted
+
+A content gap must be labelled `SUPPORTED`, `HYPOTHESIS` or `UNASSESSED`.
+
+Popularity, outlier performance or model intuition alone do not prove that an
+existing content gap exists. `SUPPORTED` requires a concrete evidence basis.
+
+Future comment/question mining may provide audience evidence for repeated
+unanswered problems, confusion, missing examples or follow-up needs. Until such
+evidence exists, gap claims remain hypotheses or unassessed.
+
+No numeric gap score is introduced.
+
+## D-048 — Channel fit is separate from popularity
+
+**Status:** Accepted
+
+A concept can be popular and still be wrong for the audience/channel the project
+intends to build.
+
+Concept Gate and Packaging Gate therefore require explicit human confirmation of
+channel fit/alignment. Channel fit is not inferred from views and is not reduced
+to a numeric score.
+
+## D-049 — Three-title and one-sentence tests are clarity gates
+
+**Status:** Accepted
+
+Before Concept Gate acceptance, a concept must support at least three distinct
+working title options. This is an idea-clarity test, not final title selection
+or ranking.
+
+Packaging must then express the viewer need and outcome in one clear sentence.
+
+If the idea cannot survive these clarity checks, the correct action is REWORK /
+REFRAME rather than cosmetic title optimization.
