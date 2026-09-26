@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Production — Experiment Control</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">YOUTUBE PRODUCTION</p>
+        <h1>Experiment Control</h1>
+        <p class="subtitle">Run the experiment pipeline without PowerShell commands.</p>
+      </div>
+      <div class="top-actions">
+        <button class="ghost" data-open="experiment_01_output">Open 01 Output</button>
+        <button class="ghost" data-open="experiment_02_output">Open 02 Output</button>
+      </div>
+    </header>
+
+    <section class="notice" id="currentNotice">
+      <div>
+        <span class="notice-dot"></span>
+        <strong>Loading experiment state…</strong>
+      </div>
+      <span id="lastUpdated"></span>
+    </section>
+
+    <section class="panel pipeline-panel">
+      <div class="panel-head">
+        <div>
+          <p class="section-kicker">PIPELINE</p>
+          <h2>Experiment stages</h2>
+        </div>
+        <button class="icon-button" id="refreshStatus" title="Refresh status">↻</button>
+      </div>
+      <div class="stage-grid" id="stageGrid"></div>
+    </section>
+
+    <section class="workspace-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="section-kicker">CONTROLS</p>
+            <h2>Available actions</h2>
+          </div>
+        </div>
+        <div class="action-groups" id="actionGroups"></div>
+      </section>
+
+      <section class="panel job-panel">
+        <div class="panel-head">
+          <div>
+            <p class="section-kicker">LIVE JOB</p>
+            <h2 id="jobTitle">No job running</h2>
+          </div>
+          <div class="job-actions">
+            <button class="danger" id="stopJob" disabled>Stop</button>
+            <button class="ghost compact" data-open="ui_jobs">Open logs</button>
+          </div>
+        </div>
+
+        <div class="job-meta" id="jobMeta">
+          <span class="status-chip neutral">IDLE</span>
+          <span>Choose an enabled action to start.</span>
+        </div>
+
+        <pre class="log-view" id="logView">No job output yet.</pre>
+      </section>
+    </section>
+
+    <section class="panel safeguards">
+      <div class="panel-head">
+        <div>
+          <p class="section-kicker">SAFEGUARDS</p>
+          <h2>What the UI will not do</h2>
+        </div>
+      </div>
+      <div class="guard-grid">
+        <article>
+          <strong>No arbitrary shell</strong>
+          <p>Only predefined experiment commands are available.</p>
+        </article>
+        <article>
+          <strong>No stage skipping</strong>
+          <p>Downstream actions remain blocked until their required outputs exist.</p>
+        </article>
+        <article>
+          <strong>One job at a time</strong>
+          <p>Prevents overlapping discovery, refresh, or analysis runs.</p>
+        </article>
+        <article>
+          <strong>Localhost only</strong>
+          <p>The control server binds to your own computer, not the network.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
