@@ -524,3 +524,37 @@ claim. Otherwise the package remains RESEARCH_INCOMPLETE.
 
 Only sources used by accepted claims are retained in the verified research
 package.
+
+
+## 9. Packaging Engine framework
+
+The Packaging Engine is implemented as the required bridge between human-
+accepted concepts and deep research / scripting.
+
+The project uses a package-before-script rule:
+
+- title and thumbnail are treated as one communication unit;
+- the package defines one core promise and expected payoff;
+- title and thumbnail should complement rather than merely repeat each other;
+- expected viewer and awareness level are explicit;
+- opening-frame intent is part of the package;
+- any factual or evidentiary dependency implied by the package must be listed
+  for downstream research.
+
+The engine creates multiple package candidates but does not rank them or predict
+CTR.
+
+### Packaging Gate
+
+Every package candidate receives ACCEPT / REWORK / REJECT.
+
+ACCEPT requires explicit human confirmation of promise clarity, concept
+alignment, title/thumbnail complementarity, non-misleading framing, viewer-
+awareness fit, payoff clarity and explicit research dependencies.
+
+At most one package may be accepted per concept.
+
+Only concepts with one approved package enter the Research Engine. The approved
+package's research dependencies are converted into mandatory package research
+questions, so the future Story / Script Engine cannot inherit an unverified
+title/thumbnail promise.
