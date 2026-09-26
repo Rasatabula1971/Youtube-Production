@@ -39,7 +39,9 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 CONFIG_FILE = HERE / "experiment_01_3_config.json"
-OUTPUT_DIR = HERE / "output" / "experiment_01_3"
+OUTPUT_ROOT = HERE / "output"
+OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_3"
+CHECKPOINT_FILE = OUTPUT_ROOT / "experiment_01_3_discovery_checkpoint.json"
 MANIFEST_FILE = OUTPUT_DIR / "cohort_manifest.json"
 SNAPSHOT_FILE = OUTPUT_DIR / "video_snapshots.jsonl"
 CANDIDATES_FILE = OUTPUT_DIR / "candidates.csv"
@@ -251,6 +253,98 @@ def load_api_key() -> str:
     return api_key
 
 
+def load_discovery_checkpoint() -> dict[str, Any] | None:
+    if not CHECKPOINT_FILE.exists():
+        return None
+    try:
+        return json.loads(CHECKPOINT_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_discovery_checkpoint(
+    *,
+    observed_at: str,
+    target_age_days: int,
+    age_tolerance_days: int,
+    wide_age_tolerance_days: int,
+    strict_window: dict[str, Any],
+    wide_window: dict[str, Any],
+    discovered: dict[str, set[str]],
+    matches: dict[str, list[dict[str, Any]]],
+    audit: list[dict[str, Any]],
+    completed_jobs: set[str],
+    status: str,
+) -> None:
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "experiment_id": EXPERIMENT_ID,
+        "status": status,
+        "observed_at": observed_at,
+        "target_age_days": target_age_days,
+        "age_tolerance_days": age_tolerance_days,
+        "wide_age_tolerance_days": wide_age_tolerance_days,
+        "strict_window": strict_window,
+        "wide_window": wide_window,
+        "completed_search_jobs": sorted(completed_jobs),
+        "discovered": {
+            video_id: sorted(topics)
+            for video_id, topics in discovered.items()
+        },
+        "matches": matches,
+        "audit": audit,
+    }
+    CHECKPOINT_FILE.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def restore_checkpoint_state(
+    checkpoint: dict[str, Any],
+) -> tuple[
+    dict[str, set[str]],
+    dict[str, list[dict[str, Any]]],
+    list[dict[str, Any]],
+    set[str],
+]:
+    discovered = {
+        str(video_id): set(topics)
+        for video_id, topics in checkpoint.get("discovered", {}).items()
+    }
+    matches = {
+        str(video_id): list(items)
+        for video_id, items in checkpoint.get("matches", {}).items()
+    }
+    audit = list(checkpoint.get("audit", []))
+    completed_jobs = set(checkpoint.get("completed_search_jobs", []))
+    return discovered, matches, audit, completed_jobs
+
+
+def search_job_key(
+    *,
+    search_phase: str,
+    topic_name: str,
+    query: str,
+    format_target: str,
+    video_duration: str,
+    order: str,
+    age_window: dict[str, Any],
+) -> str:
+    return "|".join(
+        [
+            search_phase,
+            topic_name,
+            query,
+            format_target,
+            video_duration,
+            order,
+            str(age_window["published_after"]),
+            str(age_window["published_before"]),
+        ]
+    )
+
+
 def discover(
     config: dict[str, Any],
     api_key: str,
@@ -263,12 +357,24 @@ def discover(
     topic_format_targets: dict[str, set[str]] | None = None,
     search_phase: str = "strict",
     calls_already: int = 0,
-) -> tuple[dict[str, set[str]], dict[str, list[dict[str, Any]]], list[dict[str, Any]], int]:
-    """Search one age window using format-specific YouTube duration branches."""
+    discovered: dict[str, set[str]] | None = None,
+    matches: dict[str, list[dict[str, Any]]] | None = None,
+    audit: list[dict[str, Any]] | None = None,
+    completed_jobs: set[str] | None = None,
+) -> tuple[
+    dict[str, set[str]],
+    dict[str, list[dict[str, Any]]],
+    list[dict[str, Any]],
+    set[str],
+    int,
+    str,
+]:
+    """Search one age window and preserve completed work across quota failures."""
 
-    discovered: dict[str, set[str]] = {}
-    matches: dict[str, list[dict[str, Any]]] = {}
-    audit: list[dict[str, Any]] = []
+    discovered = discovered if discovered is not None else {}
+    matches = matches if matches is not None else {}
+    audit = audit if audit is not None else []
+    completed_jobs = completed_jobs if completed_jobs is not None else set()
     calls = 0
     orders = list(search_orders or config["search_orders"])
     search_profiles = config["search_profiles"]
@@ -288,8 +394,27 @@ def discover(
                 duration_filters = list(search_profiles.get(format_target, []))
                 for video_duration in duration_filters:
                     for order in orders:
+                        job_key = search_job_key(
+                            search_phase=search_phase,
+                            topic_name=topic_name,
+                            query=query,
+                            format_target=format_target,
+                            video_duration=video_duration,
+                            order=order,
+                            age_window=age_window,
+                        )
+                        if job_key in completed_jobs:
+                            continue
+
                         if calls_already + calls >= max_searches:
-                            return discovered, matches, audit, calls
+                            return (
+                                discovered,
+                                matches,
+                                audit,
+                                completed_jobs,
+                                calls,
+                                "SEARCH_BUDGET_REACHED",
+                            )
 
                         params: dict[str, Any] = {
                             "part": "snippet",
@@ -308,11 +433,23 @@ def discover(
 
                         print(
                             f"  {topic_name}: {query} "
-                            f"[{format_target}; duration={video_duration}; order={order}; phase={search_phase}]"
+                            f"[{format_target}; duration={video_duration}; "
+                            f"order={order}; phase={search_phase}]"
                         )
-                        data = api_get("search", api_key, **params)
-                        calls += 1
 
+                        try:
+                            data = api_get("search", api_key, **params)
+                        except SystemExit:
+                            return (
+                                discovered,
+                                matches,
+                                audit,
+                                completed_jobs,
+                                calls,
+                                "QUOTA_EXHAUSTED",
+                            )
+
+                        calls += 1
                         ids = []
                         for rank, item in enumerate(data.get("items", []), start=1):
                             video_id = item.get("id", {}).get("videoId")
@@ -344,9 +481,9 @@ def discover(
                                 "video_ids": ids,
                             }
                         )
+                        completed_jobs.add(job_key)
 
-    return discovered, matches, audit, calls
-
+    return discovered, matches, audit, completed_jobs, calls, "COMPLETE"
 
 def merge_discovery(
     base_discovered: dict[str, set[str]],
@@ -733,27 +870,59 @@ def write_outputs(rows: list[dict[str, Any]], topic_velocity: dict[str, Any], su
 
 
 def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str) -> None:
-    if OUTPUT_DIR.exists():
-        if not args.replace_cohort:
-            raise SystemExit(
-                "01.3 output already exists. Use --mode refresh, or rerun discovery "
-                "with --replace-cohort to archive the old cohort and start clean."
-            )
-        archived = archive_existing_output()
-        if archived is not None:
-            print(f"Archived previous Experiment 01.3 output to: {archived}")
+    checkpoint = None if args.restart_discovery else load_discovery_checkpoint()
 
-    observed_dt = datetime.now(timezone.utc)
-    observed_at = observed_dt.isoformat()
-    target = args.target_age_days or int(config["target_age_days"])
-    tolerance = (
-        args.age_tolerance_days
-        if args.age_tolerance_days is not None
-        else int(config["age_tolerance_days"])
-    )
-    wide_tolerance = int(config["wide_age_tolerance_days"])
-    strict_window = calculate_age_window(observed_dt, target, tolerance)
-    wide_window = calculate_age_window(observed_dt, target, wide_tolerance)
+    if checkpoint is not None:
+        observed_at = str(checkpoint["observed_at"])
+        observed_dt = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        target = int(checkpoint["target_age_days"])
+        tolerance = int(checkpoint["age_tolerance_days"])
+        wide_tolerance = int(checkpoint["wide_age_tolerance_days"])
+        strict_window = dict(checkpoint["strict_window"])
+        wide_window = dict(checkpoint["wide_window"])
+        discovered, matches, audit, completed_jobs = restore_checkpoint_state(checkpoint)
+        print(f"Resuming saved Experiment 01.3 discovery checkpoint: {CHECKPOINT_FILE}")
+        print(f"Completed search jobs already saved: {len(completed_jobs):,}")
+    else:
+        if args.restart_discovery and CHECKPOINT_FILE.exists():
+            CHECKPOINT_FILE.unlink()
+
+        if OUTPUT_DIR.exists():
+            if not args.replace_cohort:
+                raise SystemExit(
+                    "01.3 output already exists. Use --mode refresh, or rerun discovery "
+                    "with --replace-cohort to archive the old cohort and start clean."
+                )
+            archived = archive_existing_output()
+            if archived is not None:
+                print(f"Archived previous Experiment 01.3 output to: {archived}")
+
+        observed_dt = datetime.now(timezone.utc)
+        observed_at = observed_dt.isoformat()
+        target = args.target_age_days or int(config["target_age_days"])
+        tolerance = (
+            args.age_tolerance_days
+            if args.age_tolerance_days is not None
+            else int(config["age_tolerance_days"])
+        )
+        wide_tolerance = int(config["wide_age_tolerance_days"])
+        strict_window = calculate_age_window(observed_dt, target, tolerance)
+        wide_window = calculate_age_window(observed_dt, target, wide_tolerance)
+        discovered, matches, audit, completed_jobs = {}, {}, [], set()
+
+        save_discovery_checkpoint(
+            observed_at=observed_at,
+            target_age_days=target,
+            age_tolerance_days=tolerance,
+            wide_age_tolerance_days=wide_tolerance,
+            strict_window=strict_window,
+            wide_window=wide_window,
+            discovered=discovered,
+            matches=matches,
+            audit=audit,
+            completed_jobs=completed_jobs,
+            status="STARTED",
+        )
 
     print("\nSTAGE 2 — EXPERIMENT 01.3")
     print("=" * 60)
@@ -767,9 +936,17 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         f"{wide_window['minimum_age_days']}-{wide_window['maximum_age_days']} days"
     )
     print("Validation: title-only topic + motorsport context")
-    print("Search: format-separated short / medium / long branches\n")
+    print("Search: format-separated short / medium / long branches")
+    print(f"Per-run search budget: {args.max_searches}\n")
 
-    discovered, matches, audit, strict_calls = discover(
+    (
+        discovered,
+        matches,
+        audit,
+        completed_jobs,
+        strict_calls,
+        strict_status,
+    ) = discover(
         config,
         api_key,
         strict_window,
@@ -778,7 +955,32 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         args.language,
         search_phase="strict",
         calls_already=0,
+        discovered=discovered,
+        matches=matches,
+        audit=audit,
+        completed_jobs=completed_jobs,
     )
+
+    save_discovery_checkpoint(
+        observed_at=observed_at,
+        target_age_days=target,
+        age_tolerance_days=tolerance,
+        wide_age_tolerance_days=wide_tolerance,
+        strict_window=strict_window,
+        wide_window=wide_window,
+        discovered=discovered,
+        matches=matches,
+        audit=audit,
+        completed_jobs=completed_jobs,
+        status=strict_status,
+    )
+
+    if strict_status != "COMPLETE":
+        print("\nExperiment 01.3 discovery paused safely.")
+        print(f"Reason: {strict_status}")
+        print(f"Checkpoint: {CHECKPOINT_FILE}")
+        print("Rerun the same discover command; completed searches will be skipped.")
+        return
 
     strict_details = get_video_details(list(discovered), api_key)
     strict_channel_ids = sorted(
@@ -802,13 +1004,21 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
 
     deficient = deficient_topic_formats(strict_rows, config)
     expansion_calls = 0
+    expansion_status = "COMPLETE"
 
     if deficient and strict_calls < args.max_searches:
         print("\nSparse topic/format cells detected; widening only those cells:")
         for topic_name, formats in sorted(deficient.items()):
             print(f"  {topic_name}: {', '.join(sorted(formats))}")
 
-        extra_discovered, extra_matches, extra_audit, expansion_calls = discover(
+        (
+            discovered,
+            matches,
+            audit,
+            completed_jobs,
+            expansion_calls,
+            expansion_status,
+        ) = discover(
             config,
             api_key,
             wide_window,
@@ -819,20 +1029,38 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
             topic_format_targets=deficient,
             search_phase="expanded",
             calls_already=strict_calls,
-        )
-        merge_discovery(
-            discovered,
-            matches,
-            audit,
-            extra_discovered,
-            extra_matches,
-            extra_audit,
+            discovered=discovered,
+            matches=matches,
+            audit=audit,
+            completed_jobs=completed_jobs,
         )
 
-    total_calls = strict_calls + expansion_calls
+        save_discovery_checkpoint(
+            observed_at=observed_at,
+            target_age_days=target,
+            age_tolerance_days=tolerance,
+            wide_age_tolerance_days=wide_tolerance,
+            strict_window=strict_window,
+            wide_window=wide_window,
+            discovered=discovered,
+            matches=matches,
+            audit=audit,
+            completed_jobs=completed_jobs,
+            status=expansion_status,
+        )
+
+        if expansion_status != "COMPLETE":
+            print("\nExperiment 01.3 discovery paused safely.")
+            print(f"Reason: {expansion_status}")
+            print(f"Checkpoint: {CHECKPOINT_FILE}")
+            print("Rerun the same discover command; completed searches will be skipped.")
+            return
+
+    calls_this_run = strict_calls + expansion_calls
 
     print(f"\nUnique search hits: {len(discovered):,}")
-    print(f"Search calls used: {total_calls:,}/{args.max_searches:,}")
+    print(f"Search calls this run: {calls_this_run:,}/{args.max_searches:,}")
+    print(f"Completed search jobs total: {len(completed_jobs):,}")
 
     details = get_video_details(list(discovered), api_key)
     channel_ids = sorted(
@@ -888,10 +1116,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         "search_orders": config["search_orders"],
         "expansion_search_orders": config["expansion_search_orders"],
         "search_profiles": config["search_profiles"],
-        "search_calls": total_calls,
-        "strict_search_calls": strict_calls,
-        "expansion_search_calls": expansion_calls,
-        "search_limit_reached": total_calls >= args.max_searches,
+        "search_calls_this_run": calls_this_run,
+        "completed_search_jobs_total": len(completed_jobs),
         "adaptive_expansion": {
             topic: sorted(formats)
             for topic, formats in sorted(deficient.items())
@@ -910,6 +1136,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     topic_velocity = aggregate_age_matched_velocity(rows)
     summary = build_summary("discover", manifest, rows, [], topic_velocity)
     write_outputs(rows, topic_velocity, summary)
+
+    if CHECKPOINT_FILE.exists():
+        CHECKPOINT_FILE.unlink()
+
     print_completion("discover", summary)
 
 def run_refresh(api_key: str) -> None:
@@ -958,12 +1188,17 @@ def print_completion(mode: str, summary: dict[str, Any]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage 2 Experiment 01.3 age-matched velocity validation")
     parser.add_argument("--mode", choices=("discover", "refresh"), required=True)
-    parser.add_argument("--max-searches", type=int, default=80)
+    parser.add_argument("--max-searches", type=int, default=60)
     parser.add_argument("--target-age-days", type=int, default=None)
     parser.add_argument("--age-tolerance-days", type=int, default=None)
     parser.add_argument("--region-code", default=None)
     parser.add_argument("--language", default=None)
     parser.add_argument("--replace-cohort", action="store_true")
+    parser.add_argument(
+        "--restart-discovery",
+        action="store_true",
+        help="Discard a saved 01.3 discovery checkpoint and start discovery over.",
+    )
     args = parser.parse_args()
 
     config = load_config()
