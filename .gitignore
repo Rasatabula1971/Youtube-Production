@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 
 experiment_01_discovery/output/
+experiment_02_analysis/output/
