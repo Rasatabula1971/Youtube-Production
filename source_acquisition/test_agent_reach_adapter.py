@@ -7,6 +7,24 @@ import agent_reach_adapter as adapter
 
 
 class AgentReachAdapterTests(unittest.TestCase):
+
+    def test_console_json_is_cp1252_safe_with_unicode_messages(self):
+        rendered = adapter.render_console_json(
+            {
+                "youtube": {
+                    "status": "ok",
+                    "message": "可提取视频信息和字幕",
+                }
+            }
+        )
+
+        rendered.encode("cp1252")
+        self.assertIn("\\u53ef", rendered)
+        self.assertEqual(
+            json.loads(rendered)["youtube"]["message"],
+            "可提取视频信息和字幕",
+        )
+
     def test_missing_agent_reach_is_reported(self):
         with patch.object(
             adapter.shutil,
