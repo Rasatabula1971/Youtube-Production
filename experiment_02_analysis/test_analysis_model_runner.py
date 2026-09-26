@@ -349,7 +349,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             request_path.write_text(json.dumps(request), encoding="utf-8")
 
             broken_profile = self.profile()
-            broken_profile["analysis"].pop("packaging")
+            broken_profile["schema_version"] = "1.0"
             profile_path.write_text(
                 json.dumps(broken_profile),
                 encoding="utf-8",
