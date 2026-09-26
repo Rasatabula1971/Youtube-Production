@@ -47,18 +47,32 @@ async function api(url, options) {
 }
 
 function stateClass(stage) {
-  if (stage.current) return "current";
-  if (!stage.ready) return "blocked";
-  return "";
+  const classes = [];
+  if (stage.current) classes.push("current");
+  if (!stage.ready) classes.push("blocked");
+  if (stage.complete) classes.push("complete");
+  if (stage.tone) classes.push("tone-" + stage.tone);
+  return classes.join(" ");
 }
 
 function renderStages(stages) {
   stageGrid.innerHTML = stages.map(function (stage) {
+    const criteria = (stage.criteria || []).map(function (item) {
+      return '<li class="' + (item.done ? "done" : "pending") + '">' +
+        '<span class="criterion-mark">' + (item.done ? "✓" : "○") + '</span>' +
+        '<span>' + escapeHtml(item.label) + '</span>' +
+        '</li>';
+    }).join("");
+
     return '<article class="stage-card ' + stateClass(stage) + '">' +
       '<div class="stage-id">EXPERIMENT ' + escapeHtml(stage.id) + '</div>' +
       '<div class="stage-title">' + escapeHtml(stage.title) + '</div>' +
+      '<div class="human-status">' + escapeHtml(stage.human_status || stage.state) + '</div>' +
       '<div class="stage-detail">' + escapeHtml(stage.detail) + '</div>' +
-      '<div class="stage-state">' + escapeHtml(stage.state) + '</div>' +
+      '<ul class="criteria-list">' + criteria + '</ul>' +
+      '<div class="stage-next"><strong>Next:</strong> ' +
+        escapeHtml(stage.next_action || "No action.") + '</div>' +
+      '<div class="machine-state">Machine: ' + escapeHtml(stage.state) + '</div>' +
       '</article>';
   }).join("");
 }
@@ -100,20 +114,20 @@ function renderActions(actions) {
   });
 }
 
-function currentStageMessage(stages, checkpoint) {
+function currentStageMessage(stages) {
   const current = stages.find(function (stage) { return stage.current; });
-  if (!current) return "No active experiment stage detected.";
-
-  if (current.id === "01.3") {
-    if (checkpoint && checkpoint.exists) {
-      return "Current live stage: Experiment 01.3 — " +
-        (checkpoint.status || "checkpoint saved") +
-        ". Resume when YouTube quota is available.";
-    }
-    return "Current live stage: Experiment 01.3 — corrected age-matched discovery.";
+  if (!current) {
+    const complete = stages.length && stages.every(function (stage) {
+      return stage.complete;
+    });
+    return complete
+      ? "All displayed experiment stages are complete."
+      : "No active experiment stage detected.";
   }
 
-  return "Current live stage: Experiment " + current.id + " — " + current.title + ".";
+  return "Experiment " + current.id + " — " +
+    (current.human_status || current.state) +
+    ". Next: " + (current.next_action || "No action.");
 }
 
 function renderJob(job, log) {
@@ -163,15 +177,21 @@ async function loadStatus() {
     renderJob(data.job);
 
     currentNotice.querySelector("strong").textContent =
-      currentStageMessage(data.stages, data.checkpoint);
+      currentStageMessage(data.stages);
 
-    currentNotice.classList.toggle(
-      "blocked",
-      Boolean(data.checkpoint && data.checkpoint.exists)
-    );
+    const currentStage = data.stages.find(function (stage) {
+      return stage.current;
+    });
+    const tone = currentStage ? currentStage.tone : "ready";
+
+    currentNotice.classList.toggle("blocked", tone === "blocked");
     currentNotice.classList.toggle(
       "ready",
-      !Boolean(data.checkpoint && data.checkpoint.exists)
+      tone === "complete" || tone === "ready"
+    );
+    currentNotice.classList.toggle(
+      "running",
+      tone === "running" || tone === "action"
     );
     lastUpdated.textContent = new Date(data.updated_at).toLocaleTimeString();
 
