@@ -137,12 +137,12 @@ class Experiment013Tests(unittest.TestCase):
 
 
 
-    def test_yt_dlp_pool_combines_date_and_relevance_and_caches(self):
-        date_result = {
+    def test_yt_dlp_pool_uses_supported_base_and_year_hint_queries(self):
+        base_result = {
             "results": [
                 {
-                    "video_id": "date-only",
-                    "title": "Date result",
+                    "video_id": "base-only",
+                    "title": "Base result",
                     "upload_date": "20260520",
                     "duration_seconds": 120,
                     "view_count": 800000,
@@ -156,7 +156,7 @@ class Experiment013Tests(unittest.TestCase):
                 },
             ]
         }
-        relevance_result = {
+        year_result = {
             "results": [
                 {
                     "video_id": "shared",
@@ -166,8 +166,8 @@ class Experiment013Tests(unittest.TestCase):
                     "view_count": 900000,
                 },
                 {
-                    "video_id": "relevance-only",
-                    "title": "Relevant result",
+                    "video_id": "year-only",
+                    "title": "Year result",
                     "upload_date": "20260522",
                     "duration_seconds": 500,
                     "view_count": 1000000,
@@ -175,51 +175,65 @@ class Experiment013Tests(unittest.TestCase):
             ]
         }
         cache = {}
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T23:59:59Z",
+        }
 
         with patch.object(
             exp13,
             "search_youtube",
-            side_effect=[date_result, relevance_result],
+            side_effect=[base_result, year_result],
         ) as search:
             first = exp13._yt_dlp_pool(
                 "F1 brakes engineering",
+                window,
                 cache,
             )
             second = exp13._yt_dlp_pool(
                 "F1 brakes engineering",
+                window,
                 cache,
             )
 
         self.assertEqual(search.call_count, 2)
         self.assertEqual(
-            search.call_args_list[0].kwargs["strategy"],
-            "date",
+            search.call_args_list[0].args[0],
+            "F1 brakes engineering",
         )
         self.assertEqual(
-            search.call_args_list[0].kwargs["limit"],
-            exp13.YT_DLP_DATE_POOL,
+            search.call_args_list[1].args[0],
+            "F1 brakes engineering 2026",
+        )
+        self.assertEqual(
+            search.call_args_list[0].kwargs["strategy"],
+            "relevance",
         )
         self.assertEqual(
             search.call_args_list[1].kwargs["strategy"],
             "relevance",
         )
         self.assertEqual(
-            search.call_args_list[1].kwargs["limit"],
+            search.call_args_list[0].kwargs["limit"],
             exp13.YT_DLP_RELEVANCE_POOL,
         )
         self.assertEqual(
             {item["video_id"] for item in first},
-            {"date-only", "shared", "relevance-only"},
+            {"base-only", "shared", "year-only"},
         )
         shared = next(
             item for item in first
             if item["video_id"] == "shared"
         )
         self.assertEqual(
-            shared["discovery_strategies"],
-            ["date", "relevance"],
+            shared["discovery_queries"],
+            [
+                "F1 brakes engineering",
+                "F1 brakes engineering 2026",
+            ],
         )
         self.assertEqual(first, second)
+
 
     def test_yt_dlp_ids_prefilter_age_format_and_views(self):
         pool = [
@@ -388,7 +402,7 @@ class Experiment013Tests(unittest.TestCase):
         )
         self.assertEqual(
             matches["video-a"][0]["backend_search_strategy"],
-            "date+relevance",
+            "ytsearch_relevance+year_hint",
         )
         self.assertEqual(len(completed), 1)
 
