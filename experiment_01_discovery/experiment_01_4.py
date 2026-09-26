@@ -626,6 +626,8 @@ def run_plan(args: argparse.Namespace) -> None:
         maximum_searches=args.plan_searches,
     )
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    if CHECKPOINT_FILE.exists():
+        CHECKPOINT_FILE.unlink()
     PLAN_FILE.write_text(
         json.dumps(plan, indent=2, ensure_ascii=False),
         encoding="utf-8",
