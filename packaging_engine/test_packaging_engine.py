@@ -15,7 +15,7 @@ class PackagingEngineTests(unittest.TestCase):
                 "short",
                 "either",
             ],
-            "minimum_research_dependencies": 1,
+            "minimum_research_dependencies": 0,
         }
         self.concept = {
             "concept_id": "c1",
@@ -114,13 +114,32 @@ class PackagingEngineTests(unittest.TestCase):
 
         self.assertEqual(len(result["accepted"]), 0)
 
-    def test_research_dependency_is_required(self):
+    def test_empty_research_dependencies_are_allowed(self):
         request = build_package_request(
             self.concept,
             self.config,
         )
         package = self.valid_package()
         package["research_dependencies"] = []
+
+        result = validate_response(
+            {
+                "concept_id": "c1",
+                "packages": [package],
+            },
+            request,
+            self.config,
+        )
+
+        self.assertEqual(len(result["accepted"]), 1)
+
+    def test_blank_research_dependency_is_rejected(self):
+        request = build_package_request(
+            self.concept,
+            self.config,
+        )
+        package = self.valid_package()
+        package["research_dependencies"] = [""]
 
         result = validate_response(
             {
