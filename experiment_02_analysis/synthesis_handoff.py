@@ -22,7 +22,8 @@ HERE = Path(__file__).resolve().parent
 SYNTHESIS_CONFIG_FILE = HERE / "synthesis_config.json"
 
 OUTPUT_DIR = HERE / "output"
-DEFAULT_PROFILES_DIR = OUTPUT_DIR / "profiles_analyzed"
+ANALYZED_PROFILES_DIR = OUTPUT_DIR / "profiles_analyzed"
+REVIEWED_PROFILES_DIR = OUTPUT_DIR / "profiles_reviewed"
 SYNTHESIS_DIR = OUTPUT_DIR / "synthesis"
 MECHANISM_LIBRARY_FILE = SYNTHESIS_DIR / "mechanism_library.json"
 HANDOFF_FILE = SYNTHESIS_DIR / "transformation_handoff.json"
@@ -486,6 +487,14 @@ def build_summary(
     }
 
 
+def preferred_profiles_dir() -> Path:
+    if REVIEWED_PROFILES_DIR.exists() and any(
+        REVIEWED_PROFILES_DIR.glob("*.json")
+    ):
+        return REVIEWED_PROFILES_DIR
+    return ANALYZED_PROFILES_DIR
+
+
 def load_profiles(profiles_dir: Path) -> list[dict[str, Any]]:
     if not profiles_dir.exists():
         return []
@@ -552,11 +561,16 @@ def main() -> None:
     parser.add_argument(
         "--profiles-dir",
         type=Path,
-        default=DEFAULT_PROFILES_DIR,
+        default=None,
     )
     args = parser.parse_args()
 
-    summary = run_build(args.profiles_dir.resolve())
+    profiles_dir = (
+        args.profiles_dir.resolve()
+        if args.profiles_dir is not None
+        else preferred_profiles_dir().resolve()
+    )
+    summary = run_build(profiles_dir)
 
     print("\nEXPERIMENT 02 SYNTHESIS / HANDOFF")
     print("=" * 60)
