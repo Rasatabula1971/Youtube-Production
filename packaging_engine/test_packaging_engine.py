@@ -22,6 +22,27 @@ class PackagingEngineTests(unittest.TestCase):
             "working_title": "Why Racing Brakes Behave Backwards",
             "premise": "Investigate a counterintuitive brake design constraint.",
             "audience_promise": "Explain the hidden engineering reason.",
+            "viewer_problem": "Why do racing brakes need conditions that seem wrong for road cars?",
+            "viewer_moment": "Trying to understand a counterintuitive engineering tradeoff.",
+            "desired_outcome": "Understand why temperature changes the brake design.",
+            "content_gap": {
+                "hypothesis": "Many explanations show hot brakes without explaining the design consequence.",
+                "evidence_status": "HYPOTHESIS",
+                "evidence_basis": [],
+            },
+            "channel_fit": {
+                "status": "FIT",
+                "rationale": "Matches the automotive engineering audience.",
+            },
+            "title_clarity_test": {
+                "options": [
+                    "Why Racing Brakes Behave Backwards",
+                    "Why F1 Brakes Hate Normal Temperatures",
+                    "The Brake Problem Road Cars Never Face",
+                ],
+                "result": "PASS",
+                "rationale": "Clear across multiple title framings.",
+            },
             "format_intent": "long_form",
             "mechanism_id": "curiosity_gap",
             "mechanism_label": "Curiosity",
@@ -54,6 +75,12 @@ class PackagingEngineTests(unittest.TestCase):
             },
             "expected_viewer": "Curious automotive viewer",
             "awareness_level": "Knows race brakes are extreme but not why",
+            "viewer_problem": "Why do racing brakes need conditions that seem wrong for road cars?",
+            "viewer_moment": "Trying to understand a counterintuitive engineering tradeoff.",
+            "desired_outcome": "Understand why temperature changes the brake design.",
+            "one_sentence_promise": "This video helps curious automotive viewers understand why racing brakes need extreme heat so they can make sense of the design tradeoff.",
+            "gap_positioning": "Focus on the design consequence of temperature rather than merely showing glowing brakes.",
+            "channel_fit_alignment": "Keeps the package centered on automotive engineering explanation.",
             "core_promise": "Explain why race brakes need conditions that would damage road brakes.",
             "curiosity_gap": "Why does the obvious road-car solution fail?",
             "expected_payoff": "Viewer understands the engineering tradeoff.",
@@ -94,6 +121,38 @@ class PackagingEngineTests(unittest.TestCase):
 
         self.assertEqual(len(result["accepted"]), 1)
         self.assertEqual(len(result["rejected"]), 0)
+
+    def test_request_preserves_viewer_problem_and_gap(self):
+        request = build_package_request(
+            self.concept,
+            self.config,
+        )
+
+        self.assertEqual(
+            request["concept"]["viewer_problem"],
+            self.concept["viewer_problem"],
+        )
+        self.assertIn("content_gap", request["concept"])
+        self.assertIn("channel_fit", request["concept"])
+
+    def test_missing_one_sentence_promise_rejects(self):
+        request = build_package_request(
+            self.concept,
+            self.config,
+        )
+        package = self.valid_package()
+        package["one_sentence_promise"] = ""
+
+        result = validate_response(
+            {
+                "concept_id": "c1",
+                "packages": [package],
+            },
+            request,
+            self.config,
+        )
+
+        self.assertEqual(len(result["accepted"]), 0)
 
     def test_missing_thumbnail_message_rejects(self):
         request = build_package_request(
