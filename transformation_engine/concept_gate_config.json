@@ -2,6 +2,12 @@
   "required_accept_criteria": [
     "originality_clear",
     "audience_promise_clear",
+    "viewer_problem_specific",
+    "viewer_moment_clear",
+    "desired_outcome_specific",
+    "content_gap_honest",
+    "channel_fit_confirmed",
+    "title_clarity_passes",
     "source_independent",
     "feasible",
     "researchable"
