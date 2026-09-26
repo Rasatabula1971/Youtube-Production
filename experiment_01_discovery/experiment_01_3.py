@@ -323,10 +323,37 @@ def restore_checkpoint_state(
         for video_id, topics in checkpoint.get("discovered", {}).items()
     }
     matches = {
-        str(video_id): list(items)
+        str(video_id): [dict(item) for item in items]
         for video_id, items in checkpoint.get("matches", {}).items()
     }
-    audit = list(checkpoint.get("audit", []))
+    audit = [
+        dict(item)
+        for item in checkpoint.get("audit", [])
+    ]
+
+    # Checkpoints created before automatic backend routing could only have
+    # come from YouTube Data API v3 search. Backfill provenance so a resumed
+    # mixed-backend cohort remains auditable.
+    for items in matches.values():
+        for item in items:
+            item.setdefault(
+                "discovery_backend",
+                "youtube_api_v3",
+            )
+            item.setdefault(
+                "backend_search_strategy",
+                item.get("search_order"),
+            )
+    for item in audit:
+        item.setdefault(
+            "discovery_backend",
+            "youtube_api_v3",
+        )
+        item.setdefault(
+            "backend_search_strategy",
+            item.get("search_order"),
+        )
+
     completed_jobs = set(checkpoint.get("completed_search_jobs", []))
     return discovered, matches, audit, completed_jobs
 
@@ -461,15 +488,25 @@ def discover(
                         if job_key in completed_jobs:
                             continue
 
-                        if calls_already + calls >= max_searches:
-                            return (
-                                discovered,
-                                matches,
-                                audit,
-                                completed_jobs,
-                                calls,
-                                "SEARCH_BUDGET_REACHED",
-                            )
+                        if (
+                            api_search_available
+                            and calls_already + calls >= max_searches
+                        ):
+                            if discovery_backend == "auto":
+                                api_search_available = False
+                                print(
+                                    "  YouTube API search budget reached; "
+                                    "switching remaining discovery jobs to Agent Reach / yt-dlp."
+                                )
+                            else:
+                                return (
+                                    discovered,
+                                    matches,
+                                    audit,
+                                    completed_jobs,
+                                    calls,
+                                    "SEARCH_BUDGET_REACHED",
+                                )
 
                         params: dict[str, Any] = {
                             "part": "snippet",
