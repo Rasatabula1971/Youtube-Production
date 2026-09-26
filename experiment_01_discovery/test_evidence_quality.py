@@ -12,6 +12,7 @@ from experiment_01_discovery.evidence_quality import (
     classify_outlier_reliability,
     classify_relevance,
     classify_themes,
+    classify_topics,
 )
 
 
@@ -56,6 +57,10 @@ PROFILE = {
         "mechanic",
         "mechanics",
     ],
+    "topic_rules": {
+        "brakes": ["brake", "brakes"],
+        "gearbox_transmission": ["gearbox", "transmission"],
+    },
     "theme_rules": {
         "hidden_mechanisms": [
             "how",
@@ -138,6 +143,14 @@ class RelevanceTests(unittest.TestCase):
             result["relevance"],
             RELEVANCE_ADJACENT,
         )
+
+    def test_topics_are_specific_and_multi_label_capable(self) -> None:
+        topics = classify_topics(
+            "How F1 Brakes and Gearbox Work",
+            PROFILE["topic_rules"],
+        )
+        self.assertIn("brakes", topics)
+        self.assertIn("gearbox_transmission", topics)
 
     def test_themes_are_multi_label(self) -> None:
         themes = classify_themes(

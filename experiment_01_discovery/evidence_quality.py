@@ -161,21 +161,40 @@ def classify_outlier_reliability(
     }
 
 
+def _classify_rule_labels(
+    title: str,
+    rules: dict[str, list[str]] | None,
+) -> list[str]:
+    if not rules:
+        return []
+
+    text = _normalize(title)
+    labels = [
+        label
+        for label, terms in rules.items()
+        if _matching_terms(text, terms)
+    ]
+    return sorted(labels)
+
+
 def classify_themes(
     title: str,
     theme_rules: dict[str, list[str]] | None,
 ) -> list[str]:
-    if not theme_rules:
-        return []
+    return _classify_rule_labels(
+        title,
+        theme_rules,
+    )
 
-    text = _normalize(title)
-    themes = [
-        theme
-        for theme, terms in theme_rules.items()
-        if _matching_terms(text, terms)
-    ]
 
-    return sorted(themes)
+def classify_topics(
+    title: str,
+    topic_rules: dict[str, list[str]] | None,
+) -> list[str]:
+    return _classify_rule_labels(
+        title,
+        topic_rules,
+    )
 
 
 def choose_intent_profile(
@@ -221,6 +240,7 @@ def annotate_evidence_quality(
     )
 
     themes: list[str] = []
+    topics: list[str] = []
     if (
         relevance["relevance"]
         not in {
@@ -228,13 +248,19 @@ def annotate_evidence_quality(
             RELEVANCE_UNREVIEWED,
         }
     ):
+        title = row.get("title", "")
         themes = classify_themes(
-            row.get("title", ""),
+            title,
             (profile or {}).get("theme_rules"),
+        )
+        topics = classify_topics(
+            title,
+            (profile or {}).get("topic_rules"),
         )
 
     return {
         **relevance,
         **reliability,
         "themes": themes,
+        "topics": topics,
     }

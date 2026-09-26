@@ -87,3 +87,90 @@ We want to know:
 5. Are the theme labels useful enough to identify repeated opportunity patterns?
 
 No final opportunity score is introduced in Experiment 01.2.
+
+
+## Market-intelligence additions
+
+Experiment 01.2 now also borrows three transparent research ideas common to mature YouTube research tools without copying proprietary scores.
+
+### Query competition profile
+
+Each executed query produces `query_profiles.json` with descriptive evidence including:
+
+- results returned;
+- unique channels and unique-channel ratio;
+- top-channel and top-3 channel concentration;
+- median video views;
+- median channel subscribers;
+- share of results from channels above the configured large-channel threshold;
+- share of results published within the configured recent window;
+- analyzed 500K+ relevance counts;
+- trusted/caution outlier counts;
+- median trusted outlier ratio.
+
+The YouTube API call currently uses `order=viewCount`. Therefore result position is the position in a **view-count-ordered research result set**, not YouTube organic relevance rank.
+
+No query competition score is calculated.
+
+### Repeated snapshots / current velocity
+
+`output/video_snapshots.jsonl` stores immutable view-count observations over time.
+
+On later runs, the system compares the current observation with the most recent prior snapshot at least one hour old and records:
+
+- prior observation timestamp and views;
+- elapsed hours;
+- view-count delta;
+- views per hour;
+- views per day;
+- status.
+
+The first run correctly produces `NO_PRIOR`. A YouTube count decrease is stored as `NEGATIVE_ADJUSTMENT` rather than being mislabeled as negative audience velocity.
+
+This is measured view accumulation between two observations. It is more current than lifetime `average_views_per_day`, but it is still an interval average rather than an instantaneous platform metric.
+
+### Topic evidence aggregation
+
+The automotive intent profile now has specific topic rules, separate from broader presentation themes.
+
+Initial topics:
+
+- brakes;
+- gearbox / transmission;
+- tyres / tires;
+- steering;
+- engine / power unit;
+- aerodynamics / downforce;
+- suspension / chassis;
+- pit stops;
+- hybrid / battery;
+- race safety.
+
+`topic_evidence.json` aggregates evidence by topic and separately by `short_candidate` and `long_form_candidate`.
+
+For each topic it records:
+
+- video count;
+- unique channels;
+- relevance counts;
+- trusted/caution outlier counts;
+- median views;
+- median outlier ratio;
+- median trusted outlier ratio;
+- available snapshot-velocity sample count;
+- median current views/day when repeat snapshots exist.
+
+OFF_INTENT videos do not contribute to topic evidence.
+
+## New generated files
+
+The generated output set is now:
+
+- `output/raw_results.json`
+- `output/candidates.csv`
+- `output/summary.json`
+- `output/query_profiles.json`
+- `output/topic_evidence.json`
+- `output/video_snapshots.jsonl`
+
+All remain outside Git.

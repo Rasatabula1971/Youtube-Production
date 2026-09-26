@@ -178,3 +178,28 @@ Weak baseline samples, baseline warnings and extreme ratios are reasons for caut
 Experiment 01.2 uses explicit niche configuration and deterministic term matching rather than an opaque final relevance score.
 
 Rules should be changed in response to observed false positives/false negatives from live datasets. The first automotive sample already showed that the words "engineer" and "mechanic" alone are too weak to qualify a video as technical intent, so they are treated as context signals instead.
+
+
+## D-020 — Query competition is a profile, not a score
+
+**Status:** Accepted
+
+Experiment 01.2 records channel concentration, channel scale, recency and query-level evidence independently. It does not collapse them into a proprietary-style keyword or competition score.
+
+The current YouTube API query uses `order=viewCount`, so result position must not be described as organic relevance rank.
+
+## D-021 — Current velocity requires repeated observations
+
+**Status:** Accepted
+
+Lifetime `views / age_days` remains a historical accumulation measure. A separate snapshot store records repeated view counts and calculates views/hour and views/day only when observations are separated by at least one hour.
+
+Count decreases are treated as platform/data adjustments, not negative audience velocity.
+
+## D-022 — Topic evidence is separate from presentation theme
+
+**Status:** Accepted
+
+A topic answers what the video is about (for example brakes or aerodynamics). A theme describes a transferable presentation/content mechanism (for example hidden mechanisms, comparisons or rules/loopholes).
+
+Topic evidence is aggregated separately for Shorts and long-form, and OFF_INTENT rows do not contribute.

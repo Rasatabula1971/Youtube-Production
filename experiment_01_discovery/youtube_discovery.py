@@ -49,6 +49,14 @@ from evidence_quality import (
     RELIABILITY_UNAVAILABLE,
     annotate_evidence_quality,
 )
+from market_intelligence import (
+    aggregate_topic_evidence,
+    append_snapshots,
+    build_query_competition_profile,
+    calculate_snapshot_velocity,
+    enrich_query_profiles_with_evidence,
+    load_snapshot_history,
+)
 
 
 # ============================================================
@@ -61,6 +69,7 @@ PROJECT_ROOT = HERE.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 NICHE_FILE = HERE / "niches.json"
 OUTPUT_DIR = HERE / "output"
+SNAPSHOT_FILE = OUTPUT_DIR / "video_snapshots.jsonl"
 
 
 # ============================================================
@@ -790,6 +799,11 @@ def main() -> None:
         exist_ok=True,
     )
 
+    run_observed_at = (
+        datetime.now(timezone.utc)
+        .isoformat()
+    )
+
     # ========================================================
     # DISCOVERY
     # ========================================================
@@ -803,6 +817,10 @@ def main() -> None:
         str,
         list[dict[str, Any]],
     ] = {}
+
+    query_search_results: list[
+        dict[str, Any]
+    ] = []
 
     search_calls = 0
 
@@ -881,11 +899,17 @@ def main() -> None:
 
             search_calls += 1
 
-            for rank, item in enumerate(
+            search_items = list(
                 data.get(
                     "items",
                     [],
-                ),
+                )
+            )
+
+            query_video_ids: list[str] = []
+
+            for rank, item in enumerate(
+                search_items,
                 start=1,
             ):
 
@@ -901,6 +925,10 @@ def main() -> None:
                 )
 
                 if video_id:
+
+                    query_video_ids.append(
+                        video_id
+                    )
 
                     discovered.setdefault(
                         video_id,
@@ -919,6 +947,14 @@ def main() -> None:
                             "rank": rank,
                         }
                     )
+
+            query_search_results.append(
+                {
+                    "niche": niche_name,
+                    "query": query,
+                    "video_ids": query_video_ids,
+                }
+            )
 
         if (
             search_calls
@@ -969,6 +1005,20 @@ def main() -> None:
             api_key,
         )
     )
+
+    query_profiles = [
+        {
+            "niche":
+                item["niche"],
+            **build_query_competition_profile(
+                query=item["query"],
+                video_ids=item["video_ids"],
+                details=details,
+                channels=channels,
+            ),
+        }
+        for item in query_search_results
+    ]
 
     # ========================================================
     # BUILD DATASET
@@ -1369,6 +1419,45 @@ def main() -> None:
         )
 
     # ========================================================
+    # REPEATED SNAPSHOTS / TRUE VIEW ACCUMULATION VELOCITY
+    # ========================================================
+
+    snapshot_history = (
+        load_snapshot_history(
+            SNAPSHOT_FILE
+        )
+    )
+
+    for row in rows:
+        row.update(
+            calculate_snapshot_velocity(
+                video_id=row["video_id"],
+                current_views=row["views"],
+                observed_at=run_observed_at,
+                history=snapshot_history,
+            )
+        )
+
+    append_snapshots(
+        SNAPSHOT_FILE,
+        rows,
+        run_observed_at,
+    )
+
+    query_profiles = (
+        enrich_query_profiles_with_evidence(
+            query_profiles,
+            rows,
+        )
+    )
+
+    topic_evidence = (
+        aggregate_topic_evidence(
+            rows
+        )
+    )
+
+    # ========================================================
     # SORT
     #
     # Sorting is for inspection only.
@@ -1397,6 +1486,34 @@ def main() -> None:
     raw_file.write_text(
         json.dumps(
             rows,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    query_profiles_file = (
+        OUTPUT_DIR
+        / "query_profiles.json"
+    )
+
+    query_profiles_file.write_text(
+        json.dumps(
+            query_profiles,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    topic_evidence_file = (
+        OUTPUT_DIR
+        / "topic_evidence.json"
+    )
+
+    topic_evidence_file.write_text(
+        json.dumps(
+            topic_evidence,
             indent=2,
             ensure_ascii=False,
         ),
@@ -1446,10 +1563,19 @@ def main() -> None:
         "outlier_reliability",
         "outlier_reliability_reason",
 
+        "velocity_status",
+        "velocity_previous_at",
+        "velocity_previous_views",
+        "velocity_interval_hours",
+        "view_delta_since_snapshot",
+        "current_views_per_hour",
+        "current_views_per_day",
+
         "relevance",
         "relevance_reason",
         "relevance_matches",
         "themes",
+        "topics",
     ]
 
     with csv_file.open(
@@ -1500,6 +1626,12 @@ def main() -> None:
                 "themes"
             ] = "|".join(
                 row["themes"]
+            )
+
+            flat_row[
+                "topics"
+            ] = "|".join(
+                row["topics"]
             )
 
             writer.writerow(
@@ -1595,6 +1727,30 @@ def main() -> None:
                 theme_counts.get(theme, 0)
                 + 1
             )
+
+    topic_counts: dict[str, int] = {}
+    for row in rows:
+        for topic in row.get("topics", []):
+            topic_counts[topic] = (
+                topic_counts.get(topic, 0)
+                + 1
+            )
+
+    velocity_valid = sum(
+        row.get("velocity_status") == "VALID"
+        for row in rows
+    )
+
+    velocity_no_prior = sum(
+        row.get("velocity_status") == "NO_PRIOR"
+        for row in rows
+    )
+
+    velocity_adjustments = sum(
+        row.get("velocity_status")
+        == "NEGATIVE_ADJUSTMENT"
+        for row in rows
+    )
 
     # ========================================================
     # DISTRIBUTION DATA
@@ -1700,6 +1856,34 @@ def main() -> None:
                 )
             ),
 
+        "topic_counts":
+            dict(
+                sorted(
+                    topic_counts.items(),
+                    key=lambda item: (
+                        -item[1],
+                        item[0],
+                    ),
+                )
+            ),
+
+        "query_profiles_generated":
+            len(query_profiles),
+
+        "velocity_analysis": {
+            "valid_velocity_samples":
+                velocity_valid,
+
+            "no_prior_snapshot":
+                velocity_no_prior,
+
+            "negative_view_adjustments":
+                velocity_adjustments,
+
+            "snapshot_file":
+                str(SNAPSHOT_FILE),
+        },
+
         "distribution": {
             "median_views":
                 median_or_none(
@@ -1736,9 +1920,9 @@ def main() -> None:
                 "current velocity."
             ),
             (
-                "True current velocity requires "
-                "another observation of the same "
-                "video at a later time."
+                "Snapshot velocity is calculated only "
+                "from repeated API observations separated "
+                "by at least one hour."
             ),
             (
                 "format_candidate is a heuristic. "
@@ -1866,6 +2050,21 @@ def main() -> None:
         f"{reliability_counts[RELIABILITY_CAUTION]:,}"
     )
 
+    print(
+        f"Velocity samples:         "
+        f"{velocity_valid:,}"
+    )
+
+    print(
+        f"Topics with evidence:     "
+        f"{len(topic_evidence):,}"
+    )
+
+    print(
+        f"Query profiles:           "
+        f"{len(query_profiles):,}"
+    )
+
     print()
     print(
         "No final score has been assigned."
@@ -1891,6 +2090,18 @@ def main() -> None:
 
     print(
         f"  {summary_file}"
+    )
+
+    print(
+        f"  {query_profiles_file}"
+    )
+
+    print(
+        f"  {topic_evidence_file}"
+    )
+
+    print(
+        f"  {SNAPSHOT_FILE}"
     )
 
 

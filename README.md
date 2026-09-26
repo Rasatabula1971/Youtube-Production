@@ -31,6 +31,9 @@ The experiment collects independent signals rather than calculating a final oppo
 - Relevance quality
 - Outlier reliability
 - Theme labels
+- Query competition profiles
+- Repeated-snapshot velocity
+- Topic-level evidence by format
 
 Current thresholds are research hypotheses, not frozen production rules.
 
@@ -76,3 +79,8 @@ See [PROJECT.md](PROJECT.md) for the system roadmap and [DECISIONS.md](DECISIONS
 The first automotive live run proved collection worked but also exposed search contamination from gaming, RC and adjacent entertainment. Experiment 01.2 therefore annotates relevance and evidence reliability without deleting raw rows or changing raw metrics.
 
 See `experiment_01_discovery/EXPERIMENT_01_2.md`.
+
+
+### Research intelligence
+
+Experiment 01.2 now produces transparent query competition profiles, persistent view snapshots for measured velocity, and topic-level evidence split by Shorts/long-form. These features are evidence layers only; they do not create a final opportunity or keyword score.

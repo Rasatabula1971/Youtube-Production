@@ -118,6 +118,58 @@
             "brakes",
             "engine"
           ]
+        },
+        "topic_rules": {
+          "brakes": [
+            "brake",
+            "brakes"
+          ],
+          "gearbox_transmission": [
+            "gearbox",
+            "transmission",
+            "gear ratio",
+            "gearing"
+          ],
+          "tyres_tires": [
+            "tire",
+            "tires",
+            "tyre",
+            "tyres"
+          ],
+          "steering": [
+            "steering"
+          ],
+          "engine_power_unit": [
+            "engine",
+            "power unit",
+            "turbo",
+            "intercooler"
+          ],
+          "aerodynamics_downforce": [
+            "aerodynamic",
+            "aerodynamics",
+            "aero",
+            "downforce",
+            "diffuser",
+            "drs"
+          ],
+          "suspension_chassis": [
+            "suspension",
+            "chassis"
+          ],
+          "pit_stops": [
+            "pit stop"
+          ],
+          "hybrid_battery": [
+            "hybrid",
+            "battery"
+          ],
+          "race_safety": [
+            "safety",
+            "crash",
+            "survive",
+            "collision"
+          ]
         }
       }
     },
