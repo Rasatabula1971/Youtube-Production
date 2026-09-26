@@ -132,6 +132,118 @@ class ExperimentUiTests(unittest.TestCase):
 
                 manager.stop()
 
+
+    def test_checkpoint_complete_is_not_stage_complete_without_cohort(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp13 = root / "01_3"
+            exp14 = root / "01_4"
+            exp15 = root / "01_5"
+            exp2 = root / "02"
+            checkpoint = root / "checkpoint.json"
+            checkpoint.write_text(
+                json.dumps({"status": "COMPLETE"}),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP13_DIR", exp13),
+                patch.object(server, "EXP14_DIR", exp14),
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(server, "EXP2_OUTPUT", exp2),
+                patch.object(server, "EXP13_CHECKPOINT", checkpoint),
+                patch.object(server, "current_action_id", return_value=None),
+            ):
+                stage = server.stage_statuses()[0]
+
+            self.assertFalse(stage["complete"])
+            self.assertEqual(
+                stage["human_status"],
+                "DISCOVERY NEEDS RESUME",
+            )
+            self.assertEqual(stage["state"], "COMPLETE")
+
+    def test_running_discovery_has_human_running_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp13 = root / "01_3"
+            exp14 = root / "01_4"
+            exp15 = root / "01_5"
+            exp2 = root / "02"
+            checkpoint = root / "checkpoint.json"
+            checkpoint.write_text(
+                json.dumps({"status": "COMPLETE"}),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP13_DIR", exp13),
+                patch.object(server, "EXP14_DIR", exp14),
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(server, "EXP2_OUTPUT", exp2),
+                patch.object(server, "EXP13_CHECKPOINT", checkpoint),
+                patch.object(
+                    server,
+                    "current_action_id",
+                    return_value="exp13_discover",
+                ),
+            ):
+                stage = server.stage_statuses()[0]
+
+            self.assertFalse(stage["complete"])
+            self.assertEqual(
+                stage["human_status"],
+                "DISCOVERY RUNNING",
+            )
+            self.assertEqual(stage["tone"], "running")
+
+    def test_velocity_ready_is_human_stage_complete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp13 = root / "01_3"
+            exp14 = root / "01_4"
+            exp15 = root / "01_5"
+            exp2 = root / "02"
+            checkpoint = root / "checkpoint.json"
+            exp13.mkdir()
+            (exp13 / "cohort_manifest.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+            (exp13 / "topic_velocity.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+            (exp13 / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "velocity_analysis": {
+                            "valid_velocity_samples": 4,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP13_DIR", exp13),
+                patch.object(server, "EXP14_DIR", exp14),
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(server, "EXP2_OUTPUT", exp2),
+                patch.object(server, "EXP13_CHECKPOINT", checkpoint),
+                patch.object(server, "current_action_id", return_value=None),
+            ):
+                stage = server.stage_statuses()[0]
+
+            self.assertTrue(stage["complete"])
+            self.assertEqual(
+                stage["human_status"],
+                "STAGE COMPLETE",
+            )
+            self.assertTrue(
+                all(item["done"] for item in stage["criteria"])
+            )
+
     def test_unknown_action_is_rejected(self):
         manager = server.JobManager()
         with self.assertRaises(ValueError):
