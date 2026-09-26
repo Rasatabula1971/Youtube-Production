@@ -283,6 +283,87 @@ class AnalysisExecutionTests(unittest.TestCase):
                 self.config,
             )
 
+
+    def test_partial_response_preserves_omitted_dimension(self):
+        profile = self.profile()
+        profile["analysis"]["packaging"]["findings"] = [
+            {
+                "finding": "Existing packaging finding.",
+                "mechanism_ids": [],
+                "evidence_refs": ["metadata.title"],
+                "confidence": "LOW",
+            }
+        ]
+
+        response = {
+            "video_id": "v1",
+            "analysis": {
+                "opening_hook": {
+                    "findings": [
+                        {
+                            "finding": "The opening asks a direct question.",
+                            "mechanism_ids": ["curiosity_gap"],
+                            "evidence_refs": [
+                                "transcript.t000000000_000005000_0001"
+                            ],
+                            "confidence": "MODERATE",
+                        }
+                    ]
+                }
+            },
+            "working_hypotheses": [],
+            "transfer": {},
+        }
+
+        merged, _ = merge_analysis_response(
+            profile,
+            response,
+            self.config,
+        )
+
+        self.assertEqual(
+            merged["analysis"]["packaging"]["findings"][0]["finding"],
+            "Existing packaging finding.",
+        )
+        self.assertEqual(
+            len(merged["analysis"]["opening_hook"]["findings"]),
+            1,
+        )
+
+    def test_reapplying_same_hypothesis_does_not_duplicate_it(self):
+        response = {
+            "video_id": "v1",
+            "analysis": {
+                "opening_hook": {
+                    "findings": [
+                        {
+                            "finding": "This question made it viral.",
+                            "mechanism_ids": ["curiosity_gap"],
+                            "evidence_refs": [
+                                "transcript.t000000000_000005000_0001"
+                            ],
+                            "confidence": "LOW",
+                        }
+                    ]
+                }
+            },
+            "working_hypotheses": [],
+            "transfer": {},
+        }
+
+        first, _ = merge_analysis_response(
+            self.profile(),
+            response,
+            self.config,
+        )
+        second, _ = merge_analysis_response(
+            first,
+            response,
+            self.config,
+        )
+
+        self.assertEqual(len(second["working_hypotheses"]), 1)
+
     def test_failed_source_dependency_test_routes_to_hypothesis(self):
         response = {
             "video_id": "v1",
