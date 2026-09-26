@@ -232,3 +232,18 @@ Unsupported findings and unsupported causal interpretations are automatically
 routed to `working_hypotheses` rather than accepted as factual findings.
 
 See `ANALYSIS_EXECUTION.md`.
+
+
+## Analysis model runner
+
+The first automated analysis runner is implemented in
+analysis_model_runner.py.
+
+It uses FAIR through FAIR's own Python environment, requires schema-valid JSON,
+restricts claims to evidence actually shown to the model, and then passes the
+response through the deterministic Experiment 02 apply gate.
+
+The runner fails closed on model escalation, infrastructure failure, invalid
+final profiles, or any non-false paid_inference_executed signal.
+
+See ANALYSIS_MODEL_RUNNER.md.

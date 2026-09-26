@@ -343,3 +343,28 @@ enter the factual analysis.
 The helper does not infer semantic labels such as hook, curiosity gap, payoff or
 story structure from keyword rules alone. Those labels require analysis of the
 available source evidence.
+
+
+## D-032 — Model analysis runs through FAIR and the evidence gate
+
+**Status:** Accepted
+
+Automated Experiment 02 first-pass analysis must not call model providers
+directly.
+
+The initial runner uses FAIR as the provider router and cost-policy boundary.
+FAIR validates response structure and free-only routing. Experiment 02 then
+restricts the response to evidence that was actually supplied to the model and
+runs the deterministic evidence apply gate.
+
+A model response is not considered applied merely because FAIR accepted its
+JSON shape. The resulting Experiment 02 profile must also pass final profile
+validation.
+
+The runner fails closed if FAIR reports paid inference, escalation, provider
+failure, bridge failure, response parsing failure, or final profile validation
+failure.
+
+Recurring free-tier providers that require operator confirmation remain
+unconfirmed by default. Runtime-zero-cost providers may use FAIR's own
+zero-price enforcement.
