@@ -758,6 +758,54 @@ def merge_discovery(
     base_audit.extend(extra_audit)
 
 
+def cohort_discovery_readiness(
+    rows: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    required = int(
+        config["minimum_unique_channels_per_topic_format"]
+    )
+    channels: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    for row in rows:
+        channel_id = str(row.get("channel_id") or "").strip()
+        fmt = str(row.get("format_candidate") or "").strip()
+        if not channel_id or not fmt:
+            continue
+        for topic in row.get("validated_topics", []):
+            channels[(str(topic), fmt)].add(channel_id)
+
+    cells = []
+    for (topic, fmt), channel_ids in sorted(channels.items()):
+        cells.append(
+            {
+                "topic": topic,
+                "format_candidate": fmt,
+                "unique_channels": len(channel_ids),
+                "refresh_worthy": len(channel_ids) >= required,
+            }
+        )
+
+    ready = [
+        cell
+        for cell in cells
+        if cell["refresh_worthy"]
+    ]
+    return {
+        "required_unique_channels_per_topic_format": required,
+        "refresh_worthy": bool(ready),
+        "refresh_worthy_cell_count": len(ready),
+        "maximum_unique_channels_in_any_cell": max(
+            (
+                int(cell["unique_channels"])
+                for cell in cells
+            ),
+            default=0,
+        ),
+        "cells": cells,
+    }
+
+
 def deficient_topic_formats(
     rows: list[dict[str, Any]],
     config: dict[str, Any],
@@ -1129,6 +1177,7 @@ def build_summary(
                 [float(r["current_views_per_day"]) for r in valid]
             ),
         },
+        "cohort_readiness": manifest.get("cohort_readiness", {}),
         "topic_velocity": topic_velocity,
         "important_notes": [
             "The cohort is frozen after discovery; refresh mode performs no new search.",
@@ -1440,6 +1489,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         },
         "search_audit": audit,
         "rejected_during_discovery": len(rejected),
+        "cohort_readiness": cohort_discovery_readiness(
+            rows,
+            config,
+        ),
         "video_ids": [r["video_id"] for r in rows],
         "candidates": [static_candidate(r) for r in rows],
     }
@@ -1492,11 +1545,30 @@ def print_completion(mode: str, summary: dict[str, Any]) -> None:
     print("\nResults:")
     for path in (
         MANIFEST_FILE, CANDIDATES_FILE, RAW_FILE, REJECTED_FILE,
-        TOPIC_FILE, SUMMARY_FILE, SNAPSHOT_FILE,
+        TOPIC_FILE, SUMMARY_FILE, SNAPSHOT_FILE, PERSISTENT_SNAPSHOT_FILE,
     ):
         print(f"  {path}")
     if mode == "discover":
-        print("\nCohort frozen. Run refresh after at least one hour.")
+        readiness = summary.get("cohort_readiness", {})
+        if not readiness.get("refresh_worthy"):
+            print(
+                "\nINSUFFICIENT COHORT: no topic/format cell has enough "
+                "independent channels for useful velocity measurement."
+            )
+            print(
+                "Rerun discovery with the improved acquisition path. "
+                "Do not wait for a velocity refresh."
+            )
+        elif summary["velocity_analysis"]["valid_velocity_samples"] > 0:
+            print(
+                "\nCohort frozen and prior snapshot history produced "
+                "measured velocity immediately."
+            )
+        else:
+            print(
+                "\nCohort frozen and suitable for velocity measurement. "
+                "Refresh may reuse persistent snapshot history from earlier runs."
+            )
     else:
         print("\nRefresh used the same frozen IDs; no discovery search was performed.")
 
