@@ -86,6 +86,52 @@ class ExperimentUiTests(unittest.TestCase):
                 self.assertEqual(final["status"], "SUCCEEDED")
                 self.assertIn("hello-ui", manager.log_text())
 
+
+    def test_current_job_state_is_json_serializable_while_running(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs = root / "jobs"
+            state = root / "job_state.json"
+            actions = {
+                "test_action": {
+                    "label": "Test",
+                    "stage": "test",
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        "import time; print('running'); time.sleep(1)",
+                    ],
+                    "description": "test",
+                }
+            }
+
+            manager = server.JobManager()
+            with (
+                patch.object(server, "ACTION_DEFS", actions),
+                patch.object(
+                    server,
+                    "action_readiness",
+                    return_value={
+                        "test_action": {
+                            "enabled": True,
+                            "reason": "test",
+                        }
+                    },
+                ),
+                patch.object(server, "PROJECT_ROOT", root),
+                patch.object(server, "JOB_LOG_DIR", jobs),
+                patch.object(server, "UI_OUTPUT_DIR", root),
+                patch.object(server, "JOB_STATE_FILE", state),
+            ):
+                manager.start("test_action")
+                current = manager.current()
+
+                self.assertIsNotNone(current)
+                self.assertNotIn("_log_handle", current)
+                json.dumps(current)
+
+                manager.stop()
+
     def test_unknown_action_is_rejected(self):
         manager = server.JobManager()
         with self.assertRaises(ValueError):
