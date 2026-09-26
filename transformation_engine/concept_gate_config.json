@@ -1,0 +1,10 @@
+{
+  "required_accept_criteria": [
+    "originality_clear",
+    "audience_promise_clear",
+    "source_independent",
+    "feasible",
+    "researchable"
+  ],
+  "require_reviewer_name": true
+}

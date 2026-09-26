@@ -6,6 +6,7 @@ on:
       - "experiment_01_discovery/**"
       - "experiment_02_analysis/**"
       - "experiment_ui/**"
+      - "transformation_engine/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
   push:
@@ -14,6 +15,7 @@ on:
       - "experiment_01_discovery/**"
       - "experiment_02_analysis/**"
       - "experiment_ui/**"
+      - "transformation_engine/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
 
@@ -31,3 +33,5 @@ jobs:
         run: python -m unittest discover -s experiment_02_analysis -p "test_*.py" -v
       - name: Run Experiment UI tests
         run: python -m unittest discover -s experiment_ui -p "test_*.py" -v
+      - name: Run Transformation Engine tests
+        run: python -m unittest discover -s transformation_engine -p "test_*.py" -v

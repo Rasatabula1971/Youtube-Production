@@ -1,0 +1,18 @@
+{
+  "reviewer": "YOUR_NAME_OR_ID",
+  "decisions": [
+    {
+      "concept_id": "CONCEPT_ID",
+      "decision": "ACCEPT",
+      "criteria": {
+        "originality_clear": true,
+        "audience_promise_clear": true,
+        "source_independent": true,
+        "feasible": true,
+        "researchable": true
+      },
+      "note": ""
+    }
+  ],
+  "overall_note": ""
+}

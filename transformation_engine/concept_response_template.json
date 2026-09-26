@@ -1,0 +1,24 @@
+{
+  "mechanism_id": "MECHANISM_ID",
+  "concepts": [
+    {
+      "concept_id": "MECHANISM_ID-001",
+      "working_title": "",
+      "premise": "",
+      "audience_promise": "",
+      "format_intent": "long_form",
+      "mechanism_application": "",
+      "transformation_method": "",
+      "research_questions": [
+        "",
+        ""
+      ],
+      "source_specific_elements_used": [],
+      "source_dependency_test": {
+        "passes": true,
+        "source_assets_required": false,
+        "rationale": ""
+      }
+    }
+  ]
+}
