@@ -496,8 +496,8 @@ class JobManager:
         if process is not None and process.poll() is not None and job.get("status") == "RUNNING":
             self._finalize(process.returncode)
 
-        with self._lock:
-            return dict(self._job) if self._job else None
+        public = self.public_job()
+        return public or None
 
     def start(self, action_id: str) -> dict[str, Any]:
         if action_id not in ACTION_DEFS:
