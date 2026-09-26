@@ -1024,35 +1024,104 @@ def static_candidate(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
+    merged: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    seen: set[tuple[str, str, int]] = set()
+
+    def add_snapshot(
+        video_id: str,
+        observed_at: str,
+        views: int,
+    ) -> None:
+        key = (str(video_id), str(observed_at), int(views))
+        if key in seen:
+            return
+        try:
+            datetime.fromisoformat(
+                str(observed_at).replace("Z", "+00:00")
+            )
+        except ValueError:
+            return
+        seen.add(key)
+        merged[str(video_id)].append(
+            {
+                "video_id": str(video_id),
+                "observed_at": str(observed_at),
+                "views": int(views),
+            }
+        )
+
     paths = [
         PERSISTENT_SNAPSHOT_FILE,
         SNAPSHOT_FILE,
     ]
     archive_root = OUTPUT_ROOT / "archive"
+    archive_dirs: list[Path] = []
     if archive_root.exists():
-        paths.extend(
-            sorted(
-                archive_root.glob(
-                    "experiment_01_3_*/video_snapshots.jsonl"
-                )
-            )
+        archive_dirs = sorted(
+            archive_root.glob("experiment_01_3_*")
         )
-
-    merged: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    seen: set[tuple[str, str, int]] = set()
+        paths.extend(
+            archive_dir / "video_snapshots.jsonl"
+            for archive_dir in archive_dirs
+        )
 
     for path in paths:
         for video_id, snapshots in load_snapshot_history(path).items():
             for snapshot in snapshots:
-                key = (
+                add_snapshot(
                     str(video_id),
                     str(snapshot["observed_at"]),
                     int(snapshot["views"]),
                 )
-                if key in seen:
+
+    # Older discovery runs fetched official YouTube metadata for many
+    # candidates that were later rejected. Reuse those API observations as
+    # history too, so a rebuilt cohort does not needlessly restart the clock
+    # when one of those videos becomes eligible later.
+    for archive_dir in archive_dirs:
+        summary_path = archive_dir / "summary.json"
+        try:
+            summary = json.loads(
+                summary_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        observed_at = str(
+            summary.get("cohort_created_at") or ""
+        ).strip()
+        if not observed_at:
+            continue
+
+        for name in (
+            "raw_results.json",
+            "rejected_candidates.json",
+        ):
+            path = archive_dir / name
+            try:
+                rows = json.loads(
+                    path.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(rows, list):
+                continue
+
+            for row in rows:
+                if not isinstance(row, dict):
                     continue
-                seen.add(key)
-                merged[str(video_id)].append(dict(snapshot))
+                video_id = str(row.get("video_id") or "").strip()
+                views = row.get("views")
+                if not video_id or views is None:
+                    continue
+                try:
+                    add_snapshot(
+                        video_id,
+                        observed_at,
+                        int(views),
+                    )
+                except (TypeError, ValueError):
+                    continue
 
     for snapshots in merged.values():
         snapshots.sort(
@@ -1062,6 +1131,35 @@ def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
         )
 
     return dict(merged)
+
+
+def append_candidate_detail_snapshots(
+    details: dict[str, dict[str, Any]],
+    observed_at: str,
+) -> None:
+    rows = []
+    for video_id, item in details.items():
+        stats = item.get("statistics", {})
+        views = stats.get("viewCount")
+        if views is None:
+            continue
+        try:
+            view_count = int(views)
+        except (TypeError, ValueError):
+            continue
+        rows.append(
+            {
+                "video_id": str(video_id),
+                "views": view_count,
+            }
+        )
+
+    if rows:
+        append_snapshots(
+            PERSISTENT_SNAPSHOT_FILE,
+            rows,
+            observed_at,
+        )
 
 
 def apply_velocity(rows: list[dict[str, Any]], observed_at: str) -> None:
@@ -1435,6 +1533,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     print(f"Completed search jobs total: {len(completed_jobs):,}")
 
     details = get_video_details(list(discovered), api_key)
+    append_candidate_detail_snapshots(
+        details,
+        datetime.now(timezone.utc).isoformat(),
+    )
     channel_ids = sorted(
         {
             str(item.get("snippet", {}).get("channelId", ""))
