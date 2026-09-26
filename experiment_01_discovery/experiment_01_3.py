@@ -1200,6 +1200,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     print(f"Discovery backend: {args.discovery_backend}")
     print(f"Per-run YouTube API search budget: {args.max_searches}\n")
 
+    yt_dlp_cache: dict[str, list[dict[str, Any]]] = {}
+
     (
         discovered,
         matches,
@@ -1221,6 +1223,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         audit=audit,
         completed_jobs=completed_jobs,
         discovery_backend=args.discovery_backend,
+        yt_dlp_cache=yt_dlp_cache,
     )
 
     save_discovery_checkpoint(
@@ -1296,6 +1299,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
             audit=audit,
             completed_jobs=completed_jobs,
             discovery_backend=args.discovery_backend,
+            yt_dlp_cache=yt_dlp_cache,
         )
 
         save_discovery_checkpoint(
