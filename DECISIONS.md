@@ -606,8 +606,12 @@ floor before velocity refresh is enabled. If no cell meets that floor, the
 human-facing state is INSUFFICIENT COHORT and the next action is another
 discovery pass.
 
-The yt-dlp fallback uses a cached date-plus-relevance candidate pool and
-prefilters known age, format and view metadata before official API enrichment.
+The yt-dlp fallback uses only currently supported `ytsearch` acquisition.
+For each configured query it merges the base query with a year-hinted query
+derived from the active age window, then prefilters known age, format and view
+metadata before official API enrichment.
+
+The removed/broken `ytsearchdate` scheme must not be used.
 
 Official YouTube video/channel metadata remains canonical for final cohort
 acceptance and velocity measurement.
