@@ -101,14 +101,12 @@ class AnalysisExecutionTests(unittest.TestCase):
     def test_request_filters_evidence_by_dimension(self):
         request = build_analysis_request(self.profile(), self.config)
 
-        packaging_ids = {
-            item["evidence_id"]
-            for item in request["dimensions"]["packaging"]["evidence"]
-        }
-        hook_ids = {
-            item["evidence_id"]
-            for item in request["dimensions"]["opening_hook"]["evidence"]
-        }
+        packaging_ids = set(
+            request["dimensions"]["packaging"]["evidence_refs"]
+        )
+        hook_ids = set(
+            request["dimensions"]["opening_hook"]["evidence_refs"]
+        )
 
         self.assertEqual(packaging_ids, {"metadata.title"})
         self.assertEqual(
@@ -118,6 +116,46 @@ class AnalysisExecutionTests(unittest.TestCase):
                 "transcript.t000005000_000010000_0002",
             },
         )
+
+
+    def test_request_uses_single_compact_evidence_library(self):
+        request = build_analysis_request(self.profile(), self.config)
+
+        self.assertIn("evidence_library", request)
+        self.assertIn("metadata.title", request["evidence_library"])
+        self.assertNotIn("opportunity.01_5", request["evidence_library"])
+        self.assertNotIn("evidence", request["dimensions"]["packaging"])
+
+    def test_audience_promise_keeps_title_when_transcript_is_large(self):
+        profile = self.profile()
+        for index in range(20):
+            start = 10 + index
+            end = start + 1
+            profile["evidence"].append(
+                {
+                    "evidence_id": f"transcript.extra{index}",
+                    "type": "transcript",
+                    "locator": f"00:00:{start:02d}.000-00:00:{end:02d}.000",
+                    "observation": f"Transcript segment {index}",
+                }
+            )
+
+        config = dict(self.config)
+        config["required_dimensions"] = ["audience_promise"]
+        config["dimension_evidence_types"] = {
+            "audience_promise": ["metadata", "transcript"]
+        }
+        config["analysis_execution"] = {
+            "opening_window_seconds": 30,
+            "max_evidence_items_per_dimension": 3,
+            "max_observation_chars": 500,
+        }
+
+        request = build_analysis_request(profile, config)
+        refs = request["dimensions"]["audience_promise"]["evidence_refs"]
+
+        self.assertIn("metadata.title", refs)
+        self.assertEqual(len(refs), 3)
 
     def test_objective_metrics_count_timestamped_transcript(self):
         metrics = objective_metrics(
