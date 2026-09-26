@@ -381,7 +381,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                             "transcript.t000005000_000010000_0002"
                         ],
                         "source_dependency_test": {
-                            "passes": false,
+                            "passes": False,
                             "rationale": "The idea depends on the source animation.",
                         },
                     }
