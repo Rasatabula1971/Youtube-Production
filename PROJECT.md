@@ -252,6 +252,25 @@ The collector can search 10 niches × 3 queries. Experiment 01.2 is first being 
 
 - configured multi-label content mechanisms for the niche.
 
+**Query competition profile**
+
+- channel concentration;
+- channel-size distribution;
+- result recency;
+- query-level relevance and outlier evidence;
+- no composite competition score.
+
+**Snapshot velocity**
+
+- repeated view-count observations;
+- measured view delta over elapsed time;
+- current views/hour and views/day when a prior snapshot exists.
+
+**Topic evidence**
+
+- topic-level demand/breakout aggregation;
+- separate Shorts and long-form evidence.
+
 **Demand**
 
 - views;
