@@ -212,7 +212,9 @@ Do not build all nine engines at once.
 
 The immediate goal is to establish whether the discovery system can consistently surface useful source opportunities across multiple niches.
 
-### Experiment 01.1
+### Experiment 01.2
+
+Experiment 01.1 proved collection and baseline measurement but exposed relevance contamination in the first automotive run. Experiment 01.2 keeps the same collector and adds query provenance, deterministic relevance labels, outlier reliability flags, and theme annotations.
 
 Current collector:
 
@@ -222,9 +224,33 @@ Current niche configuration:
 
 `experiment_01_discovery/niches.json`
 
-The experiment searches 10 niches × 3 queries.
+The collector can search 10 niches × 3 queries. Experiment 01.2 is first being rerun on the same 3 automotive queries before expanding.
 
 ### Signals currently collected
+
+**Search provenance**
+
+- matched queries;
+- best search rank;
+- niche/query/rank records.
+
+**Relevance quality**
+
+- ON_INTENT;
+- ADJACENT;
+- OFF_INTENT;
+- explicit reason/matched terms.
+
+**Outlier reliability**
+
+- TRUSTED;
+- CAUTION;
+- UNAVAILABLE;
+- explicit reason.
+
+**Theme annotations**
+
+- configured multi-label content mechanisms for the niche.
 
 **Demand**
 
