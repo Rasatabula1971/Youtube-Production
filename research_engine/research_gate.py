@@ -76,11 +76,17 @@ def build_review_request(
 
     source_lookup = compact_source_lookup(package)
     items = []
+    seen_claim_ids: set[str] = set()
 
     for claim in package.get("claims", []):
         claim_id = str(claim.get("claim_id", "")).strip()
         if not claim_id:
             raise ValueError("Every research claim requires claim_id")
+        if claim_id in seen_claim_ids:
+            raise ValueError(
+                f"Duplicate claim_id in draft package: {claim_id}"
+            )
+        seen_claim_ids.add(claim_id)
 
         evidence = []
         for link in claim.get("evidence_links", []):
