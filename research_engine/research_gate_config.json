@@ -1,0 +1,10 @@
+{
+  "required_accept_criteria": [
+    "source_traceable",
+    "wording_supported",
+    "conflicts_addressed",
+    "safe_for_script"
+  ],
+  "require_reviewer_name": true,
+  "require_conflict_resolution_note": true
+}

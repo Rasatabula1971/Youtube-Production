@@ -461,3 +461,39 @@ handoff.
 
 The Concept Gate is not a performance prediction and does not create a numeric
 concept ranking.
+
+
+## D-038 — Research evidence structure is not automatic truth verification
+
+**Status:** Accepted
+
+The Research Engine records source provenance, claim wording, research-question
+coverage and supporting / contradicting / qualifying evidence without
+automatically declaring claims true.
+
+UNSUPPORTED, SINGLE_SOURCE, MULTI_SOURCE and CONFLICTED are structural evidence
+states only. MULTI_SOURCE does not mean verified, and CONFLICTED does not mean
+false.
+
+Source types are descriptive and no numeric source-authority score is
+introduced.
+
+## D-039 — Script claims require explicit human Research Gate approval
+
+**Status:** Accepted
+
+A draft research claim may enter the Story / Script Engine only after an
+explicit human ACCEPT decision.
+
+ACCEPT requires source traceability, supported wording, handled conflicts and
+script-safety confirmation. An accepted CONFLICTED claim additionally requires
+a written resolution note.
+
+Rejected and REWORK claims do not enter the verified research package.
+
+The verified research package is READY_FOR_STORY_SCRIPT only when every
+original concept research question has at least one accepted claim. Otherwise
+the package remains RESEARCH_INCOMPLETE.
+
+Here, verified means human-approved for this project's script use, not universal
+or permanent truth.

@@ -72,10 +72,14 @@ Learning
 │   ├── experiment_02.py
 │   ├── experiment_02_config.json
 │   └── profile_template.json
-└── transformation_engine/
-    ├── transformation_engine.py
-    ├── concept_gate.py
-    └── transformation_config.json
+├── transformation_engine/
+│   ├── transformation_engine.py
+│   ├── concept_gate.py
+│   └── transformation_config.json
+└── research_engine/
+    ├── research_engine.py
+    ├── research_gate.py
+    └── research_config.json
 ```
 
 Generated experiment output and secrets remain outside Git:
@@ -142,3 +146,20 @@ No concept score or automatic winner is produced.
 
 See `transformation_engine/TRANSFORMATION_ENGINE.md` and
 `transformation_engine/CONCEPT_GATE.md`.
+
+
+## Research Engine
+
+The repository now includes the offline Research Engine framework and human
+Research Gate.
+
+Accepted concepts are converted into research plans with stable question IDs.
+Structured source/claim evidence preserves support, contradiction and
+qualification without automatically labeling claims true.
+
+Only human-accepted claims can enter a verified research package. The package
+stays RESEARCH_INCOMPLETE until every original research question is covered by
+an accepted claim.
+
+See `research_engine/RESEARCH_ENGINE.md` and
+`research_engine/RESEARCH_GATE.md`.

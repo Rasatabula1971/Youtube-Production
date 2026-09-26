@@ -1,0 +1,20 @@
+{
+  "allowed_source_types": [
+    "primary",
+    "secondary",
+    "dataset",
+    "documentation",
+    "expert_statement"
+  ],
+  "allowed_stances": [
+    "SUPPORTS",
+    "CONTRADICTS",
+    "QUALIFIES"
+  ],
+  "allowed_claim_roles": [
+    "core",
+    "supporting",
+    "context"
+  ],
+  "require_source_locator": true
+}

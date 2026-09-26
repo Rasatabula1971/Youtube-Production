@@ -1,0 +1,33 @@
+{
+  "concept_id": "CONCEPT_ID",
+  "sources": [
+    {
+      "source_id": "src001",
+      "title": "",
+      "publisher": "",
+      "url": "",
+      "source_type": "primary",
+      "published_at": "",
+      "accessed_at": "",
+      "provenance_note": ""
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "clm001",
+      "statement": "",
+      "role": "core",
+      "question_ids": [
+        "rq001"
+      ],
+      "evidence_links": [
+        {
+          "source_id": "src001",
+          "stance": "SUPPORTS",
+          "locator": "",
+          "evidence_note": ""
+        }
+      ]
+    }
+  ]
+}
