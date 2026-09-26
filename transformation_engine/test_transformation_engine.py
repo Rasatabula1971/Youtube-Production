@@ -48,6 +48,27 @@ class TransformationEngineTests(unittest.TestCase):
             "working_title": "Why Racing Brakes Behave Backwards",
             "premise": "Investigate a counterintuitive brake design constraint.",
             "audience_promise": "Explain the hidden engineering reason.",
+            "viewer_problem": "Why do racing brakes behave poorly in conditions that suit road brakes?",
+            "viewer_moment": "Trying to understand a counterintuitive race-car engineering tradeoff.",
+            "desired_outcome": "Understand the thermal constraint and why the obvious road-car solution fails.",
+            "content_gap": {
+                "hypothesis": "Existing explanations may describe hot brakes without connecting temperature to the design tradeoff.",
+                "evidence_status": "HYPOTHESIS",
+                "evidence_basis": [],
+            },
+            "channel_fit": {
+                "status": "FIT",
+                "rationale": "Matches the channel's automotive engineering and mechanism-explainer direction.",
+            },
+            "title_clarity_test": {
+                "options": [
+                    "Why Racing Brakes Behave Backwards",
+                    "Why F1 Brakes Hate Normal Temperatures",
+                    "The Brake Problem Road Cars Never Face",
+                ],
+                "result": "PASS",
+                "rationale": "Three distinct titles express the same clear viewer problem and payoff.",
+            },
             "format_intent": "long_form",
             "mechanism_application": "Lead with one concrete unanswered engineering question.",
             "transformation_method": "Uses a different system, research path, and explanation.",
@@ -100,6 +121,61 @@ class TransformationEngineTests(unittest.TestCase):
 
         self.assertEqual(len(result["accepted"]), 1)
         self.assertEqual(len(result["rejected"]), 0)
+
+    def test_missing_viewer_problem_is_rejected(self):
+        request = build_concept_request(self.entry, self.config)
+        concept = self.valid_concept()
+        concept["viewer_problem"] = ""
+
+        result = validate_response(
+            {
+                "mechanism_id": "curiosity_gap",
+                "concepts": [concept],
+            },
+            request,
+            self.config,
+        )
+
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertTrue(
+            any(
+                "viewer_problem is required" in error
+                for error in result["rejected"][0]["errors"]
+            )
+        )
+
+    def test_supported_gap_requires_evidence_basis(self):
+        request = build_concept_request(self.entry, self.config)
+        concept = self.valid_concept()
+        concept["content_gap"]["evidence_status"] = "SUPPORTED"
+        concept["content_gap"]["evidence_basis"] = []
+
+        result = validate_response(
+            {
+                "mechanism_id": "curiosity_gap",
+                "concepts": [concept],
+            },
+            request,
+            self.config,
+        )
+
+        self.assertEqual(len(result["accepted"]), 0)
+
+    def test_title_clarity_requires_three_options(self):
+        request = build_concept_request(self.entry, self.config)
+        concept = self.valid_concept()
+        concept["title_clarity_test"]["options"] = ["One", "Two"]
+
+        result = validate_response(
+            {
+                "mechanism_id": "curiosity_gap",
+                "concepts": [concept],
+            },
+            request,
+            self.config,
+        )
+
+        self.assertEqual(len(result["accepted"]), 0)
 
     def test_source_dependent_concept_is_rejected(self):
         request = build_concept_request(self.entry, self.config)
