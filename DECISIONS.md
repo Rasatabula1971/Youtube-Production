@@ -407,3 +407,22 @@ to true.
 Cross-video synthesis should automatically prefer human-reviewed profiles when
 they are available, while retaining analyzed profiles as the fallback during
 earlier pipeline stages.
+
+
+## D-035 — Experiment controls use a local gated UI
+
+**Status:** Accepted
+
+Routine experiment execution should not require the operator to remember or
+retype PowerShell commands.
+
+A dependency-free local browser UI may invoke only predefined experiment action
+IDs. It must not expose arbitrary shell execution.
+
+The UI reads actual experiment outputs to determine readiness and preserves the
+existing stage gates. In particular, Experiment 01.4 remains blocked until the
+corrected Experiment 01.3 cohort has measured velocity evidence, not merely a
+frozen manifest.
+
+Only one experiment job may run at a time. The server binds to localhost and
+retains job logs outside Git.
