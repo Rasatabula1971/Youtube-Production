@@ -226,6 +226,25 @@ Current niche configuration:
 
 The collector can search 10 niches × 3 queries. Experiment 01.2 is first being rerun on the same 3 automotive queries before expanding.
 
+### Experiment 01.3 — Age-Matched Velocity Validation
+
+Experiment 01.3 controls for publication age before comparing current topic
+momentum. It freezes a same-age cohort, separates Shorts and long-form
+candidates, measures repeated-snapshot velocity, and keeps experiment output
+physically isolated.
+
+### Experiment 01.4 — Depth-First Topic Expansion
+
+Experiment 01.4 consumes validated 01.3 topic/format evidence and expands only
+cells with replicated current-velocity evidence across multiple channels.
+
+Its first mode is offline planning, so query families and YouTube search cost
+are frozen before any search quota is spent. Execution is checkpointed and
+quota-bounded.
+
+01.4 remains part of the Opportunity Engine. It does not replace Experiment 02,
+which will study why selected successful videos worked creatively.
+
 ### Signals currently collected
 
 **Search provenance**
