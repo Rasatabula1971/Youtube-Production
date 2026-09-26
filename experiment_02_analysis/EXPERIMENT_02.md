@@ -247,3 +247,17 @@ The runner fails closed on model escalation, infrastructure failure, invalid
 final profiles, or any non-false paid_inference_executed signal.
 
 See ANALYSIS_MODEL_RUNNER.md.
+
+
+## Synthesis and Transformation handoff
+
+The cross-video synthesis layer is implemented in synthesis_handoff.py.
+
+It validates analyzed profiles, builds a mechanism library, separates
+single-source observations from replicated patterns, tracks human-review
+coverage, and creates a deterministic Transformation Engine handoff.
+
+Model-only replicated patterns remain drafts that require human review by
+default. No mechanism ranking or composite score is introduced.
+
+See SYNTHESIS_HANDOFF.md.
