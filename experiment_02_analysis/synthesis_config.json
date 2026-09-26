@@ -1,0 +1,6 @@
+{
+  "max_observed_examples_per_mechanism": 12,
+  "max_transfer_descriptions_per_mechanism": 12,
+  "max_transformation_directions_per_mechanism": 12,
+  "require_human_review_for_ready": true
+}
