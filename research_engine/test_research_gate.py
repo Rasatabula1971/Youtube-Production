@@ -134,6 +134,20 @@ class ResearchGateTests(unittest.TestCase):
             "Journal",
         )
 
+
+    def test_duplicate_claim_ids_are_rejected(self):
+        package = dict(self.package)
+        package["claims"] = [
+            dict(self.package["claims"][0]),
+            dict(self.package["claims"][0]),
+        ]
+
+        with self.assertRaises(ValueError):
+            build_review_request(
+                package,
+                self.config,
+            )
+
     def test_accept_requires_all_criteria(self):
         request = build_review_request(
             self.package,
