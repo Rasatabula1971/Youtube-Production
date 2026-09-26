@@ -121,7 +121,15 @@ class Experiment013Tests(unittest.TestCase):
 
         self.assertEqual(discovered["video-a"], {"brakes", "steering"})
         self.assertEqual(matches["video-a"][0]["target_topic"], "brakes")
+        self.assertEqual(
+            matches["video-a"][0]["discovery_backend"],
+            "youtube_api_v3",
+        )
         self.assertEqual(audit[0]["target_topic"], "brakes")
+        self.assertEqual(
+            audit[0]["discovery_backend"],
+            "youtube_api_v3",
+        )
         self.assertEqual(completed, {"job-1"})
 
 
@@ -195,6 +203,61 @@ class Experiment013Tests(unittest.TestCase):
             "relevance",
         )
         self.assertEqual(len(completed), 1)
+
+
+    def test_auto_mode_uses_fallback_when_api_budget_is_zero(self):
+        config = {
+            "search_orders": ["viewCount"],
+            "search_profiles": {
+                "short_candidate": ["short"],
+            },
+            "topics": [
+                {
+                    "topic": "brakes",
+                    "queries": ["F1 brakes engineering"],
+                }
+            ],
+        }
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T00:00:00Z",
+        }
+
+        with (
+            patch.object(
+                exp13,
+                "api_get",
+            ) as api,
+            patch.object(
+                exp13,
+                "youtube_health",
+                return_value={
+                    "ready": True,
+                    "active_backend": "yt-dlp",
+                },
+            ),
+            patch.object(
+                exp13,
+                "_yt_dlp_ids",
+                return_value=["video-a"],
+            ),
+        ):
+            result = exp13.discover(
+                config,
+                "api-key",
+                window,
+                0,
+                None,
+                None,
+                discovery_backend="auto",
+            )
+
+        api.assert_not_called()
+        self.assertEqual(result[-1], "COMPLETE")
+        self.assertEqual(
+            result[2][0]["discovery_backend"],
+            "agent_reach_yt_dlp",
+        )
 
     def test_api_only_mode_does_not_fall_back(self):
         config = {
