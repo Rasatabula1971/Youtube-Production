@@ -56,6 +56,12 @@ Generated files:
 - `summary.json`
 - `video_snapshots.jsonl`
 
+A persistent cross-cohort measurement ledger is also stored at:
+
+`experiment_01_discovery/output/experiment_01_3_snapshot_history.jsonl`
+
+Replacing a cohort does not archive this ledger.
+
 ## Why the cohort is frozen
 
 The first run searches YouTube and freezes accepted video IDs in
@@ -102,14 +108,22 @@ cd "C:\Youtube Production"
 python .\experiment_01_discovery\experiment_01_3.py --mode discover
 ```
 
-The first run creates the fixed cohort and writes snapshot #1.
+The first run creates the fixed cohort and writes a measurement snapshot.
 
-Current velocity should normally be unavailable on the first run because the
-new Experiment 01.3 snapshot history has no earlier observation.
+Experiment 01.3 now preserves official candidate observations across cohort
+rebuilds and also reads measurements from archived 01.3 runs. If an accepted
+video was observed in an earlier run, current velocity may therefore be
+available immediately after rebuilding the cohort instead of restarting the
+measurement clock.
 
-## Second run — refresh the same videos
+## Refresh the same videos
 
-After at least one hour:
+Only refresh a cohort that the UI marks as having enough independent channels.
+
+If the UI reports **INSUFFICIENT COHORT — RERUN DISCOVERY**, do not wait for a
+refresh. Rerun discovery instead.
+
+When a cohort is refresh-worthy:
 
 ```powershell
 cd "C:\Youtube Production"
@@ -187,8 +201,12 @@ directory into:
 
 `output\archive\experiment_01_3_<timestamp>`
 
-before creating the new cohort. Old snapshots therefore remain preserved and
-cannot contaminate the replacement cohort.
+before creating the new cohort. Run-local files remain auditable, while the
+separate persistent snapshot ledger remains available to later cohorts.
+
+Archived official observations from `raw_results.json`,
+`rejected_candidates.json` and `video_snapshots.jsonl` are also eligible
+history for the same video ID.
 
 
 ## Search quota and resume
@@ -280,3 +298,41 @@ For diagnostics, the CLI also supports:
 ~~~
 
 Routine UI execution uses auto mode.
+
+
+## yt-dlp age-aware fallback pool
+
+The quota-free fallback no longer reuses only a small relevance-ranked search
+pool.
+
+For each configured query it builds one cached pool from:
+
+- up to 100 date-ordered yt-dlp results; and
+- up to 50 relevance-ordered yt-dlp results.
+
+Known yt-dlp metadata is prefiltered by the active 01.3 age window, the project
+short/long boundary, and the minimum-view threshold before official YouTube API
+enrichment.
+
+The same raw pool is reused across format branches and across strict/expanded
+passes. Once AUTO mode falls back to yt-dlp, the expanded pass remains on
+yt-dlp instead of retrying an already quota-exhausted search.list endpoint.
+
+Final acceptance still uses official YouTube video/channel metadata and the
+existing project validation gates.
+
+## Insufficient cohort rule
+
+A frozen cohort is not automatically worth refreshing.
+
+At least one topic/format cell must contain the configured minimum of three
+independent channels before the UI enables velocity refresh.
+
+If no cell reaches that floor, the human status is:
+
+~~~text
+INSUFFICIENT COHORT — RERUN DISCOVERY
+~~~
+
+The correct action is another discovery pass, not waiting for a velocity
+refresh.
