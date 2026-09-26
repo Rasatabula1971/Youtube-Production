@@ -29,6 +29,19 @@ class EvidenceIngestTests(unittest.TestCase):
         self.assertEqual(evidence[0]["locator"], "00:00:00.000-00:00:02.500")
         self.assertEqual(evidence[0]["observation"], "This is the hook.")
 
+
+    def test_parse_vtt_supports_minute_second_timecodes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "test.vtt"
+            path.write_text(
+                "WEBVTT\n\n00:00.000 --> 00:02.000\nOpening line.\n",
+                encoding="utf-8",
+            )
+            evidence = parse_subtitle_file(path)
+
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["locator"], "00:00:00.000-00:00:02.000")
+
     def test_plain_text_uses_paragraph_boundaries(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "test.txt"
