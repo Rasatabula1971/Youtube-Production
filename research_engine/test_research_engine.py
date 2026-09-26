@@ -36,6 +36,27 @@ class ResearchEngineTests(unittest.TestCase):
             "working_title": "Why Racing Brakes Behave Backwards",
             "premise": "Investigate a brake engineering constraint.",
             "audience_promise": "Explain the hidden reason.",
+            "viewer_problem": "Why do racing brakes need extreme heat?",
+            "viewer_moment": "Trying to understand a counterintuitive engineering tradeoff.",
+            "desired_outcome": "Understand why temperature changes the brake design.",
+            "content_gap": {
+                "hypothesis": "The design consequence is often under-explained.",
+                "evidence_status": "HYPOTHESIS",
+                "evidence_basis": [],
+            },
+            "channel_fit": {
+                "status": "FIT",
+                "rationale": "Automotive engineering audience.",
+            },
+            "title_clarity_test": {
+                "options": [
+                    "Why Racing Brakes Behave Backwards",
+                    "Why F1 Brakes Hate Normal Temperatures",
+                    "The Brake Problem Road Cars Never Face",
+                ],
+                "result": "PASS",
+                "rationale": "Clear across three framings.",
+            },
             "format_intent": "long_form",
             "research_questions": [
                 "What thermal limits drive the design?",
@@ -58,6 +79,12 @@ class ResearchEngineTests(unittest.TestCase):
                 },
                 "expected_viewer": "Curious automotive viewer",
                 "awareness_level": "Basic familiarity",
+                "viewer_problem": "Why do racing brakes need extreme heat?",
+                "viewer_moment": "Trying to understand a counterintuitive engineering tradeoff.",
+                "desired_outcome": "Understand why temperature changes the brake design.",
+                "one_sentence_promise": "This video helps curious automotive viewers understand why racing brakes need extreme heat so they can make sense of the design tradeoff.",
+                "gap_positioning": "Explain the design consequence rather than only showing hot brakes.",
+                "channel_fit_alignment": "Automotive engineering explanation.",
                 "core_promise": "Explain the hidden mechanism",
                 "curiosity_gap": "Why does the obvious solution fail?",
                 "expected_payoff": "Viewer understands the tradeoff",
@@ -110,6 +137,14 @@ class ResearchEngineTests(unittest.TestCase):
         self.assertEqual(
             plan["research_questions"][-1]["origin"],
             "packaging",
+        )
+        self.assertEqual(
+            plan["viewer_problem"],
+            self.concept["viewer_problem"],
+        )
+        self.assertEqual(
+            plan["packaging"]["one_sentence_promise"],
+            self.concept["packaging"]["one_sentence_promise"],
         )
 
 
