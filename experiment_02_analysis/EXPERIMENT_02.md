@@ -217,3 +217,18 @@ Imported files are SHA-256 fingerprinted and converted into stable evidence
 IDs. Prepared source profiles are not overwritten by default.
 
 See `EVIDENCE_INGESTION.md` for the workflow and templates.
+
+
+## Analysis execution helper
+
+The evidence-linked execution helper is implemented in:
+
+`analysis_execute.py`
+
+It creates compact dimension-specific analysis requests from enriched profiles,
+then validates and merges a human/LLM response.
+
+Unsupported findings and unsupported causal interpretations are automatically
+routed to `working_hypotheses` rather than accepted as factual findings.
+
+See `ANALYSIS_EXECUTION.md`.

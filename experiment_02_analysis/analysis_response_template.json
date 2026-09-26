@@ -1,0 +1,21 @@
+{
+  "video_id": "YOUTUBE_VIDEO_ID",
+  "analysis": {
+    "packaging": {"findings": [], "notes": ""},
+    "opening_hook": {"findings": [], "notes": ""},
+    "story_progression": {"findings": [], "notes": ""},
+    "information_reveals": {"findings": [], "notes": ""},
+    "emotion": {"findings": [], "notes": ""},
+    "pacing": {"findings": [], "notes": ""},
+    "visual_language": {"findings": [], "notes": ""},
+    "audience_promise": {"findings": [], "notes": ""},
+    "payoff": {"findings": [], "notes": ""},
+    "promise_payoff_alignment": {"findings": [], "notes": ""}
+  },
+  "working_hypotheses": [],
+  "transfer": {
+    "transferable_mechanisms": [],
+    "source_specific_elements": [],
+    "transformation_opportunities": []
+  }
+}

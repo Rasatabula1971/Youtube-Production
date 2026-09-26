@@ -29,16 +29,60 @@
     "opportunity_evidence"
   ],
   "dimension_evidence_types": {
-    "packaging": ["metadata", "thumbnail", "opening_frame"],
-    "opening_hook": ["transcript", "opening_frame", "visual_note", "audio_note"],
-    "story_progression": ["transcript", "visual_note", "timing_note"],
-    "information_reveals": ["transcript", "visual_note", "timing_note"],
-    "emotion": ["transcript", "visual_note", "audio_note"],
-    "pacing": ["timing_note", "visual_note", "audio_note", "transcript"],
-    "visual_language": ["thumbnail", "opening_frame", "visual_note"],
-    "audience_promise": ["metadata", "thumbnail", "opening_frame", "transcript"],
-    "payoff": ["transcript", "visual_note", "audio_note"],
-    "promise_payoff_alignment": ["metadata", "thumbnail", "transcript", "visual_note"]
+    "packaging": [
+      "metadata",
+      "thumbnail",
+      "opening_frame"
+    ],
+    "opening_hook": [
+      "transcript",
+      "opening_frame",
+      "visual_note",
+      "audio_note"
+    ],
+    "story_progression": [
+      "transcript",
+      "visual_note",
+      "timing_note"
+    ],
+    "information_reveals": [
+      "transcript",
+      "visual_note",
+      "timing_note"
+    ],
+    "emotion": [
+      "transcript",
+      "visual_note",
+      "audio_note"
+    ],
+    "pacing": [
+      "timing_note",
+      "visual_note",
+      "audio_note",
+      "transcript"
+    ],
+    "visual_language": [
+      "thumbnail",
+      "opening_frame",
+      "visual_note"
+    ],
+    "audience_promise": [
+      "metadata",
+      "thumbnail",
+      "opening_frame",
+      "transcript"
+    ],
+    "payoff": [
+      "transcript",
+      "visual_note",
+      "audio_note"
+    ],
+    "promise_payoff_alignment": [
+      "metadata",
+      "thumbnail",
+      "transcript",
+      "visual_note"
+    ]
   },
   "minimum_replication_videos": 2,
   "minimum_replication_channels": 2,
@@ -66,5 +110,10 @@
     "youtube pushed",
     "this is why it went viral",
     "guaranteed retention"
-  ]
+  ],
+  "analysis_execution": {
+    "opening_window_seconds": 30,
+    "max_evidence_items_per_dimension": 60,
+    "max_observation_chars": 1200
+  }
 }
