@@ -1,0 +1,10 @@
+{
+  "concepts_per_mechanism": 5,
+  "allowed_format_intents": [
+    "long_form",
+    "short",
+    "either"
+  ],
+  "require_ready_handoff": true,
+  "minimum_research_questions": 2
+}
