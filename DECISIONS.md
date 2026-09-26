@@ -368,3 +368,22 @@ failure.
 Recurring free-tier providers that require operator confirmation remain
 unconfirmed by default. Runtime-zero-cost providers may use FAIR's own
 zero-price enforcement.
+
+
+## D-033 — Replicated model patterns remain drafts until human review
+
+**Status:** Accepted
+
+Cross-video synthesis may identify mechanisms that recur across independent
+videos and channels, but model-generated analysis alone does not create a ready
+Transformation Engine handoff.
+
+A replicated mechanism is MODEL_SYNTHESIS_DRAFT until the same replication
+threshold is met among profiles with review.completed=true. Only then is it a
+HUMAN_CONFIRMED_PATTERN and eligible for READY_FOR_TRANSFORMATION_ENGINE.
+
+Single-source observations remain visible in the mechanism library but do not
+enter the transformation handoff.
+
+Replication breadth, topic scope and format scope are descriptive evidence, not
+a score or ranking.
