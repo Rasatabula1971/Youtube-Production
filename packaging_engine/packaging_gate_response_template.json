@@ -1,0 +1,20 @@
+{
+  "reviewer": "YOUR_NAME_OR_ID",
+  "decisions": [
+    {
+      "package_id": "PACKAGE_ID",
+      "decision": "ACCEPT",
+      "criteria": {
+        "promise_clear": true,
+        "concept_aligned": true,
+        "title_thumbnail_complementary": true,
+        "not_misleading": true,
+        "viewer_awareness_fit": true,
+        "payoff_defined": true,
+        "research_dependencies_explicit": true
+      },
+      "note": ""
+    }
+  ],
+  "overall_note": ""
+}
