@@ -129,15 +129,19 @@ def enrich_query_profiles_with_evidence(
 ) -> list[dict[str, Any]]:
     """Attach analyzed >=500K evidence counts to query profiles."""
 
-    rows_by_query: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    rows_by_query: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        for query in row.get("matched_queries", []):
-            rows_by_query[query].append(row)
+        for match in row.get("query_matches", []):
+            niche = str(match.get("niche", ""))
+            query = str(match.get("query", ""))
+            if query:
+                rows_by_query[(niche, query)].append(row)
 
     result: list[dict[str, Any]] = []
     for profile in profiles:
         query = profile["query"]
-        matched = rows_by_query.get(query, [])
+        niche = str(profile.get("niche", ""))
+        matched = rows_by_query.get((niche, query), [])
         trusted_ratios = [
             float(row["outlier_ratio"])
             for row in matched
