@@ -387,3 +387,23 @@ enter the transformation handoff.
 
 Replication breadth, topic scope and format scope are descriptive evidence, not
 a score or ranking.
+
+
+## D-034 — Human review requires explicit item decisions
+
+**Status:** Accepted
+
+A model-analyzed Experiment 02 profile becomes human-reviewed only after every
+factual analysis item and transfer item receives one explicit ACCEPT or REJECT
+decision.
+
+There is no implicit approval and no popularity-based approval. Reviewers judge
+whether each claim fairly represents its cited evidence.
+
+Rejected items are removed, accepted items remain unchanged, and the resulting
+profile must still pass Experiment 02 validation before review.completed is set
+to true.
+
+Cross-video synthesis should automatically prefer human-reviewed profiles when
+they are available, while retaining analyzed profiles as the fallback during
+earlier pipeline stages.
