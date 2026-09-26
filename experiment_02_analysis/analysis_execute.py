@@ -103,7 +103,11 @@ def objective_metrics(
         counts[evidence_type] = counts.get(evidence_type, 0) + 1
 
         start, end = evidence_time_bounds(item)
-        if start is not None and start <= opening_window_seconds:
+        if evidence_type == "opening_frame":
+            evidence_id = str(item.get("evidence_id", "")).strip()
+            if evidence_id:
+                opening_refs.append(evidence_id)
+        elif start is not None and start <= opening_window_seconds:
             if evidence_type in {
                 "transcript",
                 "opening_frame",
@@ -151,39 +155,141 @@ def objective_metrics(
     }
 
 
+def evidence_sort_key(
+    item: dict[str, Any],
+    original_index: int,
+) -> tuple[int, float, int]:
+    start, _ = evidence_time_bounds(item)
+    if start is None:
+        return (1, float(original_index), original_index)
+    return (0, start, original_index)
+
+
+def evenly_sample(
+    items: list[dict[str, Any]],
+    maximum: int,
+) -> list[dict[str, Any]]:
+    if maximum <= 0 or not items:
+        return []
+    if len(items) <= maximum:
+        return items
+    if maximum == 1:
+        return [items[0]]
+
+    indexes = {
+        round(index * (len(items) - 1) / (maximum - 1))
+        for index in range(maximum)
+    }
+    return [items[index] for index in sorted(indexes)]
+
+
+def select_dimension_evidence(
+    profile: dict[str, Any],
+    dimension: str,
+    config: dict[str, Any],
+    *,
+    maximum: int,
+) -> list[dict[str, Any]]:
+    allowed_types = set(
+        config["dimension_evidence_types"].get(dimension, [])
+    )
+    indexed = [
+        (index, item)
+        for index, item in enumerate(profile.get("evidence", []))
+        if item.get("type") in allowed_types
+        and item.get("type") != "opportunity_evidence"
+    ]
+    ordered = [
+        item
+        for index, item in sorted(
+            indexed,
+            key=lambda pair: evidence_sort_key(pair[1], pair[0]),
+        )
+    ]
+
+    if len(ordered) <= maximum:
+        return ordered
+
+    if dimension in {"opening_hook", "audience_promise"}:
+        return ordered[:maximum]
+
+    if dimension == "payoff":
+        return ordered[-maximum:]
+
+    if dimension == "promise_payoff_alignment":
+        metadata_like = [
+            item
+            for item in ordered
+            if item.get("type") in {"metadata", "thumbnail", "opening_frame"}
+        ]
+        timed = [
+            item
+            for item in ordered
+            if item.get("type") not in {"metadata", "thumbnail", "opening_frame"}
+        ]
+        remaining = max(0, maximum - len(metadata_like[:maximum]))
+        early_count = remaining // 2
+        late_count = remaining - early_count
+        selected = metadata_like[:maximum]
+        if timed and remaining:
+            selected.extend(timed[:early_count])
+            if late_count:
+                selected.extend(timed[-late_count:])
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in selected:
+            evidence_id = str(item.get("evidence_id", ""))
+            if evidence_id and evidence_id not in seen:
+                seen.add(evidence_id)
+                deduped.append(item)
+        return deduped[:maximum]
+
+    return evenly_sample(ordered, maximum)
+
+
 def dimension_packet(
     profile: dict[str, Any],
     dimension: str,
     config: dict[str, Any],
     *,
     max_evidence_items: int,
-    max_observation_chars: int,
 ) -> dict[str, Any]:
     allowed_types = set(
         config["dimension_evidence_types"].get(dimension, [])
     )
-    matching = [
+    all_matching = [
         item
         for item in profile.get("evidence", [])
         if item.get("type") in allowed_types
         and item.get("type") != "opportunity_evidence"
     ]
+    selected = select_dimension_evidence(
+        profile,
+        dimension,
+        config,
+        maximum=max_evidence_items,
+    )
 
-    selected = matching[:max_evidence_items]
     return {
         "dimension": dimension,
         "allowed_evidence_types": sorted(allowed_types),
-        "evidence_available": bool(matching),
-        "evidence_item_count": len(matching),
-        "evidence_items_in_packet": len(selected),
-        "evidence_truncated": len(matching) > len(selected),
-        "evidence": [
-            compact_evidence_item(
-                item,
-                max_observation_chars=max_observation_chars,
-            )
+        "evidence_available": bool(all_matching),
+        "evidence_item_count": len(all_matching),
+        "evidence_refs": [
+            str(item.get("evidence_id"))
             for item in selected
+            if item.get("evidence_id")
         ],
+        "evidence_truncated": len(all_matching) > len(selected),
+        "selection_strategy": (
+            "early"
+            if dimension in {"opening_hook", "audience_promise"}
+            else "late"
+            if dimension == "payoff"
+            else "early_and_late"
+            if dimension == "promise_payoff_alignment"
+            else "distributed"
+        ),
         "response_schema": {
             "findings": [
                 {
@@ -196,7 +302,6 @@ def dimension_packet(
             "notes": "Optional analyst notes",
         },
     }
-
 
 def build_analysis_request(
     profile: dict[str, Any],
@@ -219,9 +324,22 @@ def build_analysis_request(
             dimension,
             config,
             max_evidence_items=max_evidence_items,
-            max_observation_chars=max_observation_chars,
         )
         for dimension in config["required_dimensions"]
+    }
+
+    used_refs = {
+        ref
+        for packet in dimensions.values()
+        for ref in packet["evidence_refs"]
+    }
+    library = {
+        str(item["evidence_id"]): compact_evidence_item(
+            item,
+            max_observation_chars=max_observation_chars,
+        )
+        for item in profile.get("evidence", [])
+        if item.get("evidence_id") in used_refs
     }
 
     return {
@@ -235,6 +353,7 @@ def build_analysis_request(
             opening_window_seconds=opening_window_seconds,
         ),
         "mechanism_taxonomy": config["mechanism_taxonomy"],
+        "evidence_library": library,
         "dimensions": dimensions,
         "transfer_response_schema": {
             "transferable_mechanisms": [
@@ -271,7 +390,8 @@ def build_analysis_request(
             "evidence_refs": ["optional.evidence.id"],
         },
         "instructions": [
-            "Use only the evidence supplied in this request.",
+            "Use only evidence items in evidence_library.",
+            "Each dimension lists the evidence_refs selected for that dimension.",
             "Do not infer thumbnail, visual, audio, pacing, hook, story, or payoff details that are not evidenced.",
             "Every factual finding must cite one or more evidence_refs.",
             "Use only mechanism_ids from the supplied mechanism_taxonomy.",
@@ -281,7 +401,6 @@ def build_analysis_request(
             "Transformation opportunities must pass the Source Dependency Test.",
         ],
     }
-
 
 def supported_finding_or_hypothesis(
     finding: dict[str, Any],
@@ -660,6 +779,10 @@ def run_prepare(profile_path: Path, output_path: Path | None) -> None:
     profile = load_json(profile_path)
     config = load_config()
     request = build_analysis_request(profile, config)
+    request["request_provenance"] = {
+        "profile_source": str(profile_path),
+        "profile_sha256": sha256_file(profile_path),
+    }
 
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
     video_id = safe_filename(str(profile.get("video_id", "unknown")))
@@ -741,6 +864,10 @@ def run_batch_prepare(
     for profile_path in paths:
         profile = load_json(profile_path)
         request = build_analysis_request(profile, config)
+        request["request_provenance"] = {
+            "profile_source": str(profile_path),
+            "profile_sha256": sha256_file(profile_path),
+        }
         video_id = safe_filename(str(profile.get("video_id", profile_path.stem)))
         destination = REQUESTS_DIR / f"{video_id}.analysis_request.json"
         destination.write_text(
