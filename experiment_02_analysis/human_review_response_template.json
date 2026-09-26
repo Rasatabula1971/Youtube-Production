@@ -1,0 +1,12 @@
+{
+  "video_id": "YOUTUBE_VIDEO_ID",
+  "reviewer": "YOUR_NAME_OR_ID",
+  "decisions": [
+    {
+      "item_id": "analysis.opening_hook.findings.0000",
+      "decision": "ACCEPT",
+      "note": ""
+    }
+  ],
+  "overall_note": ""
+}
