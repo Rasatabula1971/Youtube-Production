@@ -68,8 +68,13 @@ PROJECT_ROOT = HERE.parent
 
 ENV_FILE = PROJECT_ROOT / ".env"
 NICHE_FILE = HERE / "niches.json"
-OUTPUT_DIR = HERE / "output"
-SNAPSHOT_FILE = OUTPUT_DIR / "video_snapshots.jsonl"
+OUTPUT_ROOT = HERE / "output"
+
+# Keep experiment outputs physically isolated so snapshots and
+# result files from separate experiments cannot overwrite or
+# contaminate one another.
+EXPERIMENT_OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_2"
+SNAPSHOT_FILE = EXPERIMENT_OUTPUT_DIR / "video_snapshots.jsonl"
 
 
 # ============================================================
@@ -794,7 +799,7 @@ def main() -> None:
             "a 'niches' array."
         )
 
-    OUTPUT_DIR.mkdir(
+    EXPERIMENT_OUTPUT_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )
@@ -1479,7 +1484,7 @@ def main() -> None:
     # ========================================================
 
     raw_file = (
-        OUTPUT_DIR
+        EXPERIMENT_OUTPUT_DIR
         / "raw_results.json"
     )
 
@@ -1493,7 +1498,7 @@ def main() -> None:
     )
 
     query_profiles_file = (
-        OUTPUT_DIR
+        EXPERIMENT_OUTPUT_DIR
         / "query_profiles.json"
     )
 
@@ -1507,7 +1512,7 @@ def main() -> None:
     )
 
     topic_evidence_file = (
-        OUTPUT_DIR
+        EXPERIMENT_OUTPUT_DIR
         / "topic_evidence.json"
     )
 
@@ -1525,7 +1530,7 @@ def main() -> None:
     # ========================================================
 
     csv_file = (
-        OUTPUT_DIR
+        EXPERIMENT_OUTPUT_DIR
         / "candidates.csv"
     )
 
@@ -1951,7 +1956,7 @@ def main() -> None:
     }
 
     summary_file = (
-        OUTPUT_DIR
+        EXPERIMENT_OUTPUT_DIR
         / "summary.json"
     )
 
