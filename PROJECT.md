@@ -486,3 +486,41 @@ researchable.
 
 Only ACCEPT concepts enter the future Research Engine handoff. Working titles
 remain provisional and are not treated as final packaging.
+
+
+## 8. Research Engine framework
+
+The Research Engine framework is implemented offline.
+
+It consumes only concepts accepted by the human Concept Gate and creates one
+research plan per concept. Original concept research questions receive stable
+question IDs so claims can be traced back to the information need they answer.
+
+Structured research responses separate:
+
+- source provenance;
+- factual claims;
+- claim role;
+- linked research questions; and
+- evidence links with SUPPORTS / CONTRADICTS / QUALIFIES stances.
+
+The engine reports structural claim coverage as UNSUPPORTED, SINGLE_SOURCE,
+MULTI_SOURCE, or CONFLICTED. These are evidence-shape labels, not truth scores.
+
+### Research Gate
+
+The human Research Gate reviews each claim against its cited source, locator,
+and evidence note.
+
+Every claim receives ACCEPT / REWORK / REJECT. ACCEPT requires explicit human
+confirmation that the source is traceable, wording is supported, conflicts are
+addressed, and the claim is safe for script use.
+
+CONFLICTED claims require a written resolution note before acceptance.
+
+A research package becomes READY_FOR_STORY_SCRIPT only when at least one claim
+is accepted and every original research question is covered by an accepted
+claim. Otherwise the package remains RESEARCH_INCOMPLETE.
+
+Only sources used by accepted claims are retained in the verified research
+package.
