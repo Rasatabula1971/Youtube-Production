@@ -245,6 +245,16 @@ quota-bounded.
 01.4 remains part of the Opportunity Engine. It does not replace Experiment 02,
 which will study why selected successful videos worked creatively.
 
+### Experiment 01.5 — Opportunity Handoff Gate
+
+Experiment 01.5 combines the validated topic/format evidence from 01.3 with
+the deeper sub-angle evidence from 01.4 and creates auditable candidate packets
+for Experiment 02.
+
+It is offline and uses explicit PASS / REVIEW / HOLD evidence gates rather than
+a composite opportunity score. A small diversity-constrained study set becomes
+the formal handoff from M1 into Experiment 02.
+
 ### Signals currently collected
 
 **Search provenance**

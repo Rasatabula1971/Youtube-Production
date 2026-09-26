@@ -1,0 +1,12 @@
+{
+  "experiment_id": "01.5",
+  "purpose": "opportunity_handoff_gate",
+  "minimum_topic_unique_channels": 3,
+  "minimum_topic_velocity_samples": 3,
+  "minimum_family_unique_channels": 2,
+  "minimum_family_video_count": 2,
+  "candidate_view_reference": 500000,
+  "max_study_candidates": 8,
+  "max_per_topic_format": 2,
+  "max_per_channel": 1
+}
