@@ -473,8 +473,10 @@ class JobManager:
                 "log_path": str(log_path),
             }
             self._job["_log_handle"] = log_handle
-            self._save_state()
-            return self.public_job()
+
+        payload = self.public_job()
+        self._save_state(payload)
+        return payload
 
     def _finalize(self, return_code: int | None) -> None:
         with self._lock:
@@ -493,7 +495,8 @@ class JobManager:
             else:
                 self._job["status"] = "SUCCEEDED" if return_code == 0 else "FAILED"
             self._process = None
-            self._save_state()
+
+        self._save_state(self.public_job())
 
     def stop(self) -> dict[str, Any]:
         with self._lock:
@@ -533,9 +536,8 @@ class JobManager:
             return ""
         return text[-max_chars:]
 
-    def _save_state(self) -> None:
+    def _save_state(self, payload: dict[str, Any]) -> None:
         UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        payload = self.public_job()
         JOB_STATE_FILE.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),
             encoding="utf-8",
