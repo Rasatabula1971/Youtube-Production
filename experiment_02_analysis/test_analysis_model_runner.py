@@ -219,12 +219,14 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             ["google_gemini_api", "groq", "mistral"],
         )
 
+    @patch("analysis_model_runner.load_experiment_config")
     @patch("analysis_model_runner.resolve_fair_paths")
     @patch("analysis_model_runner.call_fair_bridge")
     def test_run_one_applies_accepted_response(
         self,
         call_bridge,
         resolve_paths,
+        load_config,
     ):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -244,6 +246,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            load_config.return_value = self.config
             resolve_paths.return_value = {
                 "repo": root,
                 "env_file": root / ".env",
@@ -289,6 +292,79 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "APPLIED")
         self.assertEqual(result["provider_id"], "kilo_free")
         self.assertEqual(result["apply"]["accepted_findings"], 1)
+
+
+    @patch("analysis_model_runner.load_experiment_config")
+    @patch("analysis_model_runner.resolve_fair_paths")
+    @patch("analysis_model_runner.call_fair_bridge")
+    def test_invalid_final_profile_is_not_applied(
+        self,
+        call_bridge,
+        resolve_paths,
+        load_config,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            request_path = root / "v1.analysis_request.json"
+            profile_path = root / "v1.profile.json"
+
+            request = self.request()
+            request["request_provenance"] = {
+                "profile_source": str(profile_path),
+            }
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+
+            broken_profile = self.profile()
+            broken_profile["analysis"].pop("packaging")
+            profile_path.write_text(
+                json.dumps(broken_profile),
+                encoding="utf-8",
+            )
+
+            load_config.return_value = self.config
+            resolve_paths.return_value = {
+                "repo": root,
+                "env_file": root / ".env",
+                "python": root / "python.exe",
+            }
+            call_bridge.return_value = {
+                "status": "ACCEPTED",
+                "reason_code": "QUALITY_ACCEPTED",
+                "request_id": "req-2",
+                "output": json.dumps(self.valid_response()),
+                "provider_id": "kilo_free",
+                "model_id": "model-free",
+                "best_quality_score": 85.0,
+                "verification_state": "SCHEMA_VERIFIED",
+                "paid_inference_executed": False,
+                "attempts": [],
+            }
+
+            import analysis_model_runner as module
+
+            old_runs = module.MODEL_RUNS_DIR
+            old_responses = module.MODEL_RESPONSES_DIR
+            old_raw = module.RAW_OUTPUTS_DIR
+            old_analyzed = module.ANALYZED_DIR
+            try:
+                module.MODEL_RUNS_DIR = root / "runs"
+                module.MODEL_RESPONSES_DIR = root / "responses"
+                module.RAW_OUTPUTS_DIR = root / "raw"
+                module.ANALYZED_DIR = root / "analyzed"
+
+                result = run_one(
+                    request_path,
+                    profile_path=profile_path,
+                    force=True,
+                    runner_config=self.runner_config(),
+                )
+            finally:
+                module.MODEL_RUNS_DIR = old_runs
+                module.MODEL_RESPONSES_DIR = old_responses
+                module.RAW_OUTPUTS_DIR = old_raw
+                module.ANALYZED_DIR = old_analyzed
+
+        self.assertEqual(result["status"], "APPLY_VALIDATION_FAILED")
 
     @patch("analysis_model_runner.resolve_fair_paths")
     @patch("analysis_model_runner.call_fair_bridge")
