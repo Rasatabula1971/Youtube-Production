@@ -1,6 +1,11 @@
 {
   "required_accept_criteria": [
     "promise_clear",
+    "viewer_problem_aligned",
+    "viewer_moment_fit",
+    "one_sentence_promise_clear",
+    "content_gap_honest",
+    "channel_fit_preserved",
     "concept_aligned",
     "title_thumbnail_complementary",
     "not_misleading",
