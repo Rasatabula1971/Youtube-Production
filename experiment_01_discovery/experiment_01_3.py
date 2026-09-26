@@ -12,6 +12,7 @@ import csv
 import json
 import os
 import re
+import shutil
 import statistics
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -102,33 +103,48 @@ def calculate_age_window(
 
 
 def classify_topic_relevance(
-    text: str,
+    title: str,
     topic_terms: list[str],
     motorsport_context_terms: list[str],
+    exclude_title_terms: list[str] | None = None,
 ) -> dict[str, Any]:
-    topic_matches = matching_terms(text, topic_terms)
-    context_matches = matching_terms(text, motorsport_context_terms)
+    """Strict title-only topic validation for Experiment 01.3."""
+
+    excluded = matching_terms(title, exclude_title_terms or [])
+    topic_matches = matching_terms(title, topic_terms)
+    context_matches = matching_terms(title, motorsport_context_terms)
+
+    if excluded:
+        return {
+            "topic_relevance": "OFF_TOPIC",
+            "topic_relevance_reason": "excluded_title_term",
+            "topic_term_matches": topic_matches,
+            "motorsport_context_matches": context_matches,
+            "excluded_title_matches": excluded,
+        }
     if not topic_matches:
         return {
             "topic_relevance": "OFF_TOPIC",
-            "topic_relevance_reason": "missing_topic_term",
+            "topic_relevance_reason": "missing_topic_term_in_title",
             "topic_term_matches": [],
             "motorsport_context_matches": context_matches,
+            "excluded_title_matches": [],
         }
     if not context_matches:
         return {
             "topic_relevance": "OFF_TOPIC",
-            "topic_relevance_reason": "missing_motorsport_context",
+            "topic_relevance_reason": "missing_motorsport_context_in_title",
             "topic_term_matches": topic_matches,
             "motorsport_context_matches": [],
+            "excluded_title_matches": [],
         }
     return {
         "topic_relevance": "ON_TOPIC",
-        "topic_relevance_reason": "topic_and_motorsport_context",
+        "topic_relevance_reason": "title_topic_and_motorsport_context",
         "topic_term_matches": topic_matches,
         "motorsport_context_matches": context_matches,
+        "excluded_title_matches": [],
     }
-
 
 def confidence_from_unique_channels(count: int) -> str:
     if count >= 5:
@@ -214,6 +230,10 @@ def load_config() -> dict[str, Any]:
         "age_tolerance_days",
         "minimum_views",
         "search_orders",
+        "expansion_search_orders",
+        "search_profiles",
+        "wide_age_tolerance_days",
+        "minimum_unique_channels_per_topic_format",
         "motorsport_context_terms",
         "topics",
     }
@@ -238,64 +258,152 @@ def discover(
     max_searches: int,
     region_code: str | None,
     language: str | None,
+    *,
+    search_orders: list[str] | None = None,
+    topic_format_targets: dict[str, set[str]] | None = None,
+    search_phase: str = "strict",
+    calls_already: int = 0,
 ) -> tuple[dict[str, set[str]], dict[str, list[dict[str, Any]]], list[dict[str, Any]], int]:
+    """Search one age window using format-specific YouTube duration branches."""
+
     discovered: dict[str, set[str]] = {}
     matches: dict[str, list[dict[str, Any]]] = {}
     audit: list[dict[str, Any]] = []
     calls = 0
+    orders = list(search_orders or config["search_orders"])
+    search_profiles = config["search_profiles"]
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
+        target_formats = (
+            sorted(topic_format_targets.get(topic_name, set()))
+            if topic_format_targets is not None
+            else sorted(search_profiles)
+        )
+        if not target_formats:
+            continue
+
         for query in topic["queries"]:
-            for order in config["search_orders"]:
-                if calls >= max_searches:
-                    return discovered, matches, audit, calls
+            for format_target in target_formats:
+                duration_filters = list(search_profiles.get(format_target, []))
+                for video_duration in duration_filters:
+                    for order in orders:
+                        if calls_already + calls >= max_searches:
+                            return discovered, matches, audit, calls
 
-                params: dict[str, Any] = {
-                    "part": "snippet",
-                    "q": query,
-                    "type": "video",
-                    "order": order,
-                    "maxResults": 50,
-                    "publishedAfter": age_window["published_after"],
-                    "publishedBefore": age_window["published_before"],
-                }
-                if region_code:
-                    params["regionCode"] = region_code
-                if language:
-                    params["relevanceLanguage"] = language
-
-                print(f"  {topic_name}: {query} [order={order}]")
-                data = api_get("search", api_key, **params)
-                calls += 1
-
-                ids = []
-                for rank, item in enumerate(data.get("items", []), start=1):
-                    video_id = item.get("id", {}).get("videoId")
-                    if not video_id:
-                        continue
-                    ids.append(video_id)
-                    discovered.setdefault(video_id, set()).add(topic_name)
-                    matches.setdefault(video_id, []).append(
-                        {
-                            "target_topic": topic_name,
-                            "query": query,
-                            "search_order": order,
-                            "rank": rank,
+                        params: dict[str, Any] = {
+                            "part": "snippet",
+                            "q": query,
+                            "type": "video",
+                            "order": order,
+                            "maxResults": 50,
+                            "publishedAfter": age_window["published_after"],
+                            "publishedBefore": age_window["published_before"],
+                            "videoDuration": video_duration,
                         }
-                    )
-                audit.append(
-                    {
-                        "target_topic": topic_name,
-                        "query": query,
-                        "search_order": order,
-                        "results_returned": len(ids),
-                        "video_ids": ids,
-                    }
-                )
+                        if region_code:
+                            params["regionCode"] = region_code
+                        if language:
+                            params["relevanceLanguage"] = language
+
+                        print(
+                            f"  {topic_name}: {query} "
+                            f"[{format_target}; duration={video_duration}; order={order}; phase={search_phase}]"
+                        )
+                        data = api_get("search", api_key, **params)
+                        calls += 1
+
+                        ids = []
+                        for rank, item in enumerate(data.get("items", []), start=1):
+                            video_id = item.get("id", {}).get("videoId")
+                            if not video_id:
+                                continue
+                            ids.append(video_id)
+                            discovered.setdefault(video_id, set()).add(topic_name)
+                            matches.setdefault(video_id, []).append(
+                                {
+                                    "target_topic": topic_name,
+                                    "query": query,
+                                    "search_order": order,
+                                    "search_phase": search_phase,
+                                    "search_format_target": format_target,
+                                    "video_duration_filter": video_duration,
+                                    "rank": rank,
+                                }
+                            )
+
+                        audit.append(
+                            {
+                                "target_topic": topic_name,
+                                "query": query,
+                                "search_order": order,
+                                "search_phase": search_phase,
+                                "search_format_target": format_target,
+                                "video_duration_filter": video_duration,
+                                "results_returned": len(ids),
+                                "video_ids": ids,
+                            }
+                        )
 
     return discovered, matches, audit, calls
 
+
+def merge_discovery(
+    base_discovered: dict[str, set[str]],
+    base_matches: dict[str, list[dict[str, Any]]],
+    base_audit: list[dict[str, Any]],
+    extra_discovered: dict[str, set[str]],
+    extra_matches: dict[str, list[dict[str, Any]]],
+    extra_audit: list[dict[str, Any]],
+) -> None:
+    for video_id, topics in extra_discovered.items():
+        base_discovered.setdefault(video_id, set()).update(topics)
+    for video_id, items in extra_matches.items():
+        base_matches.setdefault(video_id, []).extend(items)
+    base_audit.extend(extra_audit)
+
+
+def deficient_topic_formats(
+    rows: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, set[str]]:
+    minimum_channels = int(config["minimum_unique_channels_per_topic_format"])
+    channels: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    for row in rows:
+        channel_id = str(row.get("channel_id", ""))
+        if not channel_id:
+            continue
+        for topic in row.get("validated_topics", []):
+            channels[(str(topic), str(row.get("format_candidate", "unknown")))].add(channel_id)
+
+    deficient: dict[str, set[str]] = {}
+    for topic in config["topics"]:
+        topic_name = str(topic["topic"])
+        for format_target in config["search_profiles"]:
+            if len(channels.get((topic_name, format_target), set())) < minimum_channels:
+                deficient.setdefault(topic_name, set()).add(format_target)
+
+    return deficient
+
+
+def archive_existing_output() -> Path | None:
+    """Archive a prior 01.3 run before intentionally replacing its cohort."""
+
+    if not OUTPUT_DIR.exists():
+        return None
+
+    archive_root = OUTPUT_DIR.parent / "archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    destination = archive_root / f"experiment_01_3_{timestamp}"
+    suffix = 1
+    while destination.exists():
+        destination = archive_root / f"experiment_01_3_{timestamp}_{suffix}"
+        suffix += 1
+
+    shutil.move(str(OUTPUT_DIR), str(destination))
+    return destination
 
 def build_rows(
     discovered: dict[str, set[str]],
@@ -305,9 +413,12 @@ def build_rows(
     config: dict[str, Any],
     age_window: dict[str, Any],
     api_key: str,
+    *,
+    include_baselines: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     topics = {str(t["topic"]): t for t in config["topics"]}
     context_terms = list(config["motorsport_context_terms"])
+    exclude_title_terms = list(config.get("exclude_title_terms", []))
     minimum_views = int(config["minimum_views"])
     minimum_age = float(age_window["minimum_age_days"])
     maximum_age = float(age_window["maximum_age_days"])
@@ -323,7 +434,6 @@ def build_rows(
         stats = item.get("statistics", {})
         content = item.get("contentDetails", {})
         title = str(snippet.get("title", ""))
-        description = str(snippet.get("description", ""))
         published_at = str(snippet.get("publishedAt", ""))
         if not published_at:
             continue
@@ -339,25 +449,49 @@ def build_rows(
         searched_topics = sorted(searched_set)
         validated_topics = []
         validation = {}
-        text = f"{title}\n{description}"
+
         for topic_name in searched_topics:
-            result = classify_topic_relevance(
-                text,
-                list(topics[topic_name].get("match_terms", [])),
-                context_terms,
-            )
+            format_matches = [
+                match
+                for match in query_matches.get(video_id, [])
+                if match.get("target_topic") == topic_name
+                and match.get("search_format_target") == fmt
+            ]
+            if not format_matches:
+                result = {
+                    "topic_relevance": "OFF_TOPIC",
+                    "topic_relevance_reason": "format_branch_mismatch",
+                    "topic_term_matches": [],
+                    "motorsport_context_matches": [],
+                    "excluded_title_matches": [],
+                }
+            else:
+                result = classify_topic_relevance(
+                    title,
+                    list(topics[topic_name].get("match_terms", [])),
+                    context_terms,
+                    exclude_title_terms,
+                )
+
             validation[topic_name] = result
             if result["topic_relevance"] == "ON_TOPIC":
                 validated_topics.append(topic_name)
 
         reasons = []
         if days < minimum_age or days > maximum_age:
-            reasons.append("outside_exact_age_window")
+            reasons.append("outside_allowed_age_window")
         if views < minimum_views:
             reasons.append("below_minimum_views")
         if not validated_topics:
             reasons.append("no_validated_topic")
 
+        search_phases = sorted(
+            {
+                str(match.get("search_phase", ""))
+                for match in query_matches.get(video_id, [])
+                if match.get("search_phase")
+            }
+        )
         row: dict[str, Any] = {
             "experiment_id": EXPERIMENT_ID,
             "video_id": video_id,
@@ -368,6 +502,8 @@ def build_rows(
             "searched_topics": searched_topics,
             "validated_topics": sorted(validated_topics),
             "query_matches": query_matches.get(video_id, []),
+            "search_phases": search_phases,
+            "cohort_window_source": "strict" if "strict" in search_phases else "expanded",
             "published_at": published_at,
             "age_days": round(days, 2),
             "duration_seconds": duration,
@@ -382,6 +518,23 @@ def build_rows(
             rejected.append({**row, "rejection_reasons": reasons})
             continue
 
+        if not include_baselines:
+            row.update(
+                {
+                    "topic_relevance": "ON_TOPIC",
+                    "topic_relevance_reason": "strict_title_validation",
+                    "channel_baseline_median": None,
+                    "baseline_sample_size": 0,
+                    "baseline_confidence": "not_calculated",
+                    "baseline_warning": "",
+                    "outlier_ratio": None,
+                    "outlier_reliability": "UNAVAILABLE",
+                    "outlier_reliability_reason": "preliminary_cohort_check",
+                }
+            )
+            eligible.append(row)
+            continue
+
         if channel_id not in history_cache:
             upload_ids = get_recent_upload_ids(channel, api_key, maximum=25)
             history_cache[channel_id] = list(get_video_details(upload_ids, api_key).values())
@@ -393,7 +546,7 @@ def build_rows(
         row.update(
             {
                 "topic_relevance": "ON_TOPIC",
-                "topic_relevance_reason": "validated_topic_and_motorsport_context",
+                "topic_relevance_reason": "strict_title_validation",
                 "channel_baseline_median": baseline,
                 "baseline_sample_size": sample_size,
                 "baseline_confidence": confidence,
@@ -411,10 +564,10 @@ def build_rows(
     eligible.sort(key=lambda r: (r["format_candidate"], r["validated_topics"], -r["views"]))
     return eligible, rejected
 
-
 STATIC_KEYS = (
     "experiment_id", "video_id", "youtube_url", "title", "channel_id",
     "channel_title", "searched_topics", "validated_topics", "query_matches",
+    "search_phases", "cohort_window_source",
     "published_at", "duration_seconds", "format_candidate",
     "channel_subscribers", "topic_relevance", "topic_relevance_reason",
     "channel_baseline_median", "baseline_sample_size", "baseline_confidence",
@@ -507,6 +660,12 @@ def build_summary(
         "maximum_age_days": manifest.get("maximum_age_days"),
         "published_after": manifest.get("published_after"),
         "published_before": manifest.get("published_before"),
+        "fallback_age_tolerance_days": manifest.get("fallback_age_tolerance_days"),
+        "fallback_minimum_age_days": manifest.get("fallback_minimum_age_days"),
+        "fallback_maximum_age_days": manifest.get("fallback_maximum_age_days"),
+        "fallback_published_after": manifest.get("fallback_published_after"),
+        "fallback_published_before": manifest.get("fallback_published_before"),
+        "adaptive_expansion": manifest.get("adaptive_expansion"),
         "minimum_views": manifest.get("minimum_views"),
         "search_orders": manifest.get("search_orders"),
         "search_calls": manifest.get("search_calls"),
@@ -529,6 +688,9 @@ def build_summary(
         "topic_velocity": topic_velocity,
         "important_notes": [
             "The cohort is frozen after discovery; refresh mode performs no new search.",
+            "Topic and motorsport-context validation use title text only.",
+            "Discovery uses separate short/medium/long YouTube duration branches.",
+            "The primary 105-135 day window widens to 90-150 only for sparse topic/format cells.",
             "Primary metric: median current views/day within the same age window and format.",
             "Short-form and long-form candidates are benchmarked separately.",
             "Age-matched velocity index = topic median / whole-cohort median for the same format.",
@@ -541,6 +703,7 @@ def build_summary(
 CSV_FIELDS = [
     "experiment_id", "video_id", "youtube_url", "title", "channel_id",
     "channel_title", "searched_topics", "validated_topics", "query_matches",
+    "search_phases", "cohort_window_source",
     "published_at", "age_days", "duration_seconds", "format_candidate",
     "views", "likes", "channel_subscribers", "channel_baseline_median",
     "baseline_sample_size", "baseline_confidence", "baseline_warning",
@@ -565,17 +728,20 @@ def write_outputs(rows: list[dict[str, Any]], topic_velocity: dict[str, Any], su
             flat["searched_topics"] = "|".join(row.get("searched_topics", []))
             flat["validated_topics"] = "|".join(row.get("validated_topics", []))
             flat["query_matches"] = json.dumps(row.get("query_matches", []), ensure_ascii=False)
+            flat["search_phases"] = "|".join(row.get("search_phases", []))
             writer.writerow({field: flat.get(field) for field in CSV_FIELDS})
 
 
 def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str) -> None:
-    if MANIFEST_FILE.exists() and not args.replace_cohort:
-        raise SystemExit("01.3 cohort already exists. Use --mode refresh.")
-    if SNAPSHOT_FILE.exists():
-        raise SystemExit(
-            "Refusing discovery while 01.3 snapshots exist. Archive/remove "
-            "output\\experiment_01_3 before replacing the cohort."
-        )
+    if OUTPUT_DIR.exists():
+        if not args.replace_cohort:
+            raise SystemExit(
+                "01.3 output already exists. Use --mode refresh, or rerun discovery "
+                "with --replace-cohort to archive the old cohort and start clean."
+            )
+        archived = archive_existing_output()
+        if archived is not None:
+            print(f"Archived previous Experiment 01.3 output to: {archived}")
 
     observed_dt = datetime.now(timezone.utc)
     observed_at = observed_dt.isoformat()
@@ -585,18 +751,89 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         if args.age_tolerance_days is not None
         else int(config["age_tolerance_days"])
     )
-    window = calculate_age_window(observed_dt, target, tolerance)
+    wide_tolerance = int(config["wide_age_tolerance_days"])
+    strict_window = calculate_age_window(observed_dt, target, tolerance)
+    wide_window = calculate_age_window(observed_dt, target, wide_tolerance)
 
     print("\nSTAGE 2 — EXPERIMENT 01.3")
     print("=" * 60)
     print("Mode: DISCOVER + FREEZE COHORT")
-    print(f"Age window: {window['minimum_age_days']}-{window['maximum_age_days']} days")
-    print(f"Publication window: {window['published_after']} to {window['published_before']}\n")
-
-    discovered, matches, audit, calls = discover(
-        config, api_key, window, args.max_searches, args.region_code, args.language
+    print(
+        f"Primary age window: "
+        f"{strict_window['minimum_age_days']}-{strict_window['maximum_age_days']} days"
     )
+    print(
+        f"Fallback age window: "
+        f"{wide_window['minimum_age_days']}-{wide_window['maximum_age_days']} days"
+    )
+    print("Validation: title-only topic + motorsport context")
+    print("Search: format-separated short / medium / long branches\n")
+
+    discovered, matches, audit, strict_calls = discover(
+        config,
+        api_key,
+        strict_window,
+        args.max_searches,
+        args.region_code,
+        args.language,
+        search_phase="strict",
+        calls_already=0,
+    )
+
+    strict_details = get_video_details(list(discovered), api_key)
+    strict_channel_ids = sorted(
+        {
+            str(item.get("snippet", {}).get("channelId", ""))
+            for item in strict_details.values()
+            if item.get("snippet", {}).get("channelId")
+        }
+    )
+    strict_channels = get_channel_details(strict_channel_ids, api_key)
+    strict_rows, _ = build_rows(
+        discovered,
+        matches,
+        strict_details,
+        strict_channels,
+        config,
+        strict_window,
+        api_key,
+        include_baselines=False,
+    )
+
+    deficient = deficient_topic_formats(strict_rows, config)
+    expansion_calls = 0
+
+    if deficient and strict_calls < args.max_searches:
+        print("\nSparse topic/format cells detected; widening only those cells:")
+        for topic_name, formats in sorted(deficient.items()):
+            print(f"  {topic_name}: {', '.join(sorted(formats))}")
+
+        extra_discovered, extra_matches, extra_audit, expansion_calls = discover(
+            config,
+            api_key,
+            wide_window,
+            args.max_searches,
+            args.region_code,
+            args.language,
+            search_orders=list(config["expansion_search_orders"]),
+            topic_format_targets=deficient,
+            search_phase="expanded",
+            calls_already=strict_calls,
+        )
+        merge_discovery(
+            discovered,
+            matches,
+            audit,
+            extra_discovered,
+            extra_matches,
+            extra_audit,
+        )
+
+    total_calls = strict_calls + expansion_calls
+
     print(f"\nUnique search hits: {len(discovered):,}")
+    print(f"Search calls used: {total_calls:,}/{args.max_searches:,}")
+
     details = get_video_details(list(discovered), api_key)
     channel_ids = sorted(
         {
@@ -607,43 +844,73 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     )
     channels = get_channel_details(channel_ids, api_key)
     rows, rejected = build_rows(
-        discovered, matches, details, channels, config, window, api_key
+        discovered,
+        matches,
+        details,
+        channels,
+        config,
+        wide_window,
+        api_key,
+        include_baselines=True,
     )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    REJECTED_FILE.write_text(json.dumps(rejected, indent=2, ensure_ascii=False), encoding="utf-8")
+    REJECTED_FILE.write_text(
+        json.dumps(rejected, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     if not rows:
-        raise SystemExit("No videos passed the age, view, topic and motorsport-context filters.")
+        raise SystemExit(
+            "No videos passed the age, view, title-topic and motorsport-context filters."
+        )
 
     manifest = {
         "experiment_id": EXPERIMENT_ID,
         "cohort_id": (
-            f"day{target}_{window['minimum_age_days']}_{window['maximum_age_days']}_"
-            f"{observed_dt.strftime('%Y%m%dT%H%M%SZ')}"
+            f"day{target}_adaptive_{observed_dt.strftime('%Y%m%dT%H%M%SZ')}"
         ),
         "created_at": observed_at,
         "target_age_days": target,
         "age_tolerance_days": tolerance,
-        "minimum_age_days": window["minimum_age_days"],
-        "maximum_age_days": window["maximum_age_days"],
-        "published_after": window["published_after"],
-        "published_before": window["published_before"],
+        "minimum_age_days": strict_window["minimum_age_days"],
+        "maximum_age_days": strict_window["maximum_age_days"],
+        "published_after": strict_window["published_after"],
+        "published_before": strict_window["published_before"],
+        "fallback_age_tolerance_days": wide_tolerance,
+        "fallback_minimum_age_days": wide_window["minimum_age_days"],
+        "fallback_maximum_age_days": wide_window["maximum_age_days"],
+        "fallback_published_after": wide_window["published_after"],
+        "fallback_published_before": wide_window["published_before"],
         "minimum_views": int(config["minimum_views"]),
+        "minimum_unique_channels_per_topic_format": int(
+            config["minimum_unique_channels_per_topic_format"]
+        ),
         "search_orders": config["search_orders"],
-        "search_calls": calls,
+        "expansion_search_orders": config["expansion_search_orders"],
+        "search_profiles": config["search_profiles"],
+        "search_calls": total_calls,
+        "strict_search_calls": strict_calls,
+        "expansion_search_calls": expansion_calls,
+        "search_limit_reached": total_calls >= args.max_searches,
+        "adaptive_expansion": {
+            topic: sorted(formats)
+            for topic, formats in sorted(deficient.items())
+        },
         "search_audit": audit,
         "rejected_during_discovery": len(rejected),
         "video_ids": [r["video_id"] for r in rows],
         "candidates": [static_candidate(r) for r in rows],
     }
-    MANIFEST_FILE.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    MANIFEST_FILE.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     apply_velocity(rows, observed_at)
     topic_velocity = aggregate_age_matched_velocity(rows)
     summary = build_summary("discover", manifest, rows, [], topic_velocity)
     write_outputs(rows, topic_velocity, summary)
     print_completion("discover", summary)
-
 
 def run_refresh(api_key: str) -> None:
     if not MANIFEST_FILE.exists():
@@ -691,7 +958,7 @@ def print_completion(mode: str, summary: dict[str, Any]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage 2 Experiment 01.3 age-matched velocity validation")
     parser.add_argument("--mode", choices=("discover", "refresh"), required=True)
-    parser.add_argument("--max-searches", type=int, default=50)
+    parser.add_argument("--max-searches", type=int, default=80)
     parser.add_argument("--target-age-days", type=int, default=None)
     parser.add_argument("--age-tolerance-days", type=int, default=None)
     parser.add_argument("--region-code", default=None)
