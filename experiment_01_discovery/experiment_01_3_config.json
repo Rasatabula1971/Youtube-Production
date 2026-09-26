@@ -1,0 +1,73 @@
+{
+  "experiment_id": "01.3",
+  "purpose": "age_matched_velocity_validation",
+  "target_age_days": 120,
+  "age_tolerance_days": 15,
+  "minimum_views": 500000,
+  "search_orders": [
+    "viewCount",
+    "relevance"
+  ],
+  "motorsport_context_terms": [
+    "f1",
+    "formula 1",
+    "formula one",
+    "motorsport",
+    "race car",
+    "racecar",
+    "racing",
+    "grand prix",
+    "pit stop",
+    "mclaren",
+    "ferrari",
+    "red bull",
+    "mercedes",
+    "aston martin",
+    "alpine",
+    "williams",
+    "sauber",
+    "haas"
+  ],
+  "topics": [
+    {
+      "topic": "gearbox_transmission",
+      "queries": ["F1 gearbox engineering"],
+      "match_terms": ["gearbox", "transmission", "gear ratio", "gearing"]
+    },
+    {
+      "topic": "brakes",
+      "queries": ["F1 brakes engineering"],
+      "match_terms": ["brake", "brakes"]
+    },
+    {
+      "topic": "tyres_tires",
+      "queries": ["F1 tyre engineering", "F1 tire engineering"],
+      "match_terms": ["tyre", "tyres", "tire", "tires"]
+    },
+    {
+      "topic": "steering",
+      "queries": ["F1 steering engineering"],
+      "match_terms": ["steering"]
+    },
+    {
+      "topic": "suspension_chassis",
+      "queries": ["F1 suspension engineering"],
+      "match_terms": ["suspension", "chassis"]
+    },
+    {
+      "topic": "aerodynamics_downforce",
+      "queries": ["F1 aerodynamics engineering"],
+      "match_terms": ["aerodynamic", "aerodynamics", "aero", "downforce", "diffuser", "drs"]
+    },
+    {
+      "topic": "engine_power_unit",
+      "queries": ["F1 engine engineering"],
+      "match_terms": ["engine", "power unit", "turbo", "hybrid"]
+    },
+    {
+      "topic": "pit_stops",
+      "queries": ["F1 pit stop engineering"],
+      "match_terms": ["pit stop", "pitstop"]
+    }
+  ]
+}
