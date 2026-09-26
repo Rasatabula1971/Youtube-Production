@@ -265,6 +265,19 @@ def exp2_status() -> str | None:
     return json_file_status(EXP2_OUTPUT / "summary.json", "status")
 
 
+def current_action_id() -> str | None:
+    manager = globals().get("JOB_MANAGER")
+    if manager is None:
+        return None
+    job = manager.current()
+    if not job:
+        return None
+    if job.get("status") not in {"RUNNING", "STOPPING"}:
+        return None
+    value = job.get("action_id")
+    return str(value) if value else None
+
+
 def stage_statuses() -> list[dict[str, Any]]:
     exp13_manifest = EXP13_DIR / "cohort_manifest.json"
     exp13_summary = EXP13_DIR / "summary.json"
@@ -278,33 +291,163 @@ def stage_statuses() -> list[dict[str, Any]]:
     valid_velocity_samples = exp13_valid_velocity_samples()
     velocity_ready = cohort_ready and valid_velocity_samples > 0
     cp_status = checkpoint_status()
+    active_action = current_action_id()
 
     if velocity_ready:
         exp13_state = "VELOCITY_READY"
+        exp13_human = "STAGE COMPLETE"
+        exp13_tone = "complete"
         exp13_detail = (
-            f"Corrected cohort has {valid_velocity_samples} valid velocity samples."
+            f"Measured velocity is available from "
+            f"{valid_velocity_samples} valid samples."
         )
+        exp13_next = "Proceed to Experiment 01.4."
+    elif active_action == "exp13_refresh":
+        exp13_state = "REFRESH_RUNNING"
+        exp13_human = "VELOCITY REFRESH RUNNING"
+        exp13_tone = "running"
+        exp13_detail = "The frozen cohort is being measured for current velocity."
+        exp13_next = "Wait for the refresh to finish."
+    elif active_action == "exp13_discover":
+        exp13_state = "DISCOVERY_RUNNING"
+        exp13_human = "DISCOVERY RUNNING"
+        exp13_tone = "running"
+        exp13_detail = "Candidate discovery is running. The cohort is not finished yet."
+        exp13_next = "Wait for discovery to finish."
     elif cohort_ready:
         exp13_state = "COHORT_FROZEN_AWAITING_REFRESH"
-        exp13_detail = "Corrected cohort is frozen; refresh is still needed for measured velocity."
+        exp13_human = "DISCOVERY COMPLETE — REFRESH NEEDED"
+        exp13_tone = "action"
+        exp13_detail = "The corrected cohort is frozen, but measured velocity is still missing."
+        exp13_next = (
+            "After at least one hour, run Refresh 01.3 Frozen Cohort."
+        )
     elif EXP13_CHECKPOINT.exists():
         exp13_state = cp_status or "CHECKPOINTED"
-        exp13_detail = "Discovery is incomplete. Rerun resumes from the checkpoint."
+        exp13_human = "DISCOVERY NEEDS RESUME"
+        exp13_tone = "action"
+        exp13_detail = "A discovery checkpoint exists, but no frozen cohort exists yet."
+        exp13_next = "Run / Resume 01.3 Auto Discovery."
     else:
         exp13_state = "READY_TO_RUN"
-        exp13_detail = "No active corrected 01.3 cohort or checkpoint exists."
+        exp13_human = "READY TO START"
+        exp13_tone = "ready"
+        exp13_detail = "No corrected 01.3 cohort has been created yet."
+        exp13_next = "Run / Resume 01.3 Auto Discovery."
 
     plan_status = exp14_plan_status()
     execution_status = exp14_execution_status()
     handoff_status = exp15_status()
     analysis_status = exp2_status()
 
+    plan_ready = plan_status == "READY" or execution_status == "COMPLETE"
+    exp14_complete = execution_status == "COMPLETE"
+
+    if exp14_complete:
+        exp14_human = "STAGE COMPLETE"
+        exp14_tone = "complete"
+        exp14_next = "Proceed to Experiment 01.5."
+    elif active_action == "exp14_execute":
+        exp14_human = "EXPANSION RUNNING"
+        exp14_tone = "running"
+        exp14_next = "Wait for expansion execution to finish."
+    elif active_action == "exp14_plan":
+        exp14_human = "BUILDING PLAN"
+        exp14_tone = "running"
+        exp14_next = "Wait for the expansion plan to finish."
+    elif not velocity_ready:
+        exp14_human = "WAITING FOR 01.3"
+        exp14_tone = "blocked"
+        exp14_next = "Complete Experiment 01.3 first."
+    elif plan_ready:
+        exp14_human = "PLAN READY — RUN EXPANSION"
+        exp14_tone = "action"
+        exp14_next = "Run Execute 01.4 Expansion."
+    else:
+        exp14_human = "READY TO PLAN"
+        exp14_tone = "ready"
+        exp14_next = "Run Build 01.4 Expansion Plan."
+
+    study_set_ready = (EXP15_DIR / "study_set.json").exists()
+    if study_set_ready:
+        exp15_human = "STAGE COMPLETE"
+        exp15_tone = "complete"
+        exp15_next = "Proceed to Experiment 02."
+    elif active_action == "exp15_build":
+        exp15_human = "BUILDING HANDOFF"
+        exp15_tone = "running"
+        exp15_next = "Wait for the opportunity handoff to finish."
+    elif not exp14_complete:
+        exp15_human = "WAITING FOR 01.4"
+        exp15_tone = "blocked"
+        exp15_next = "Complete Experiment 01.4 first."
+    else:
+        exp15_human = "READY TO BUILD"
+        exp15_tone = "ready"
+        exp15_next = "Run Build 01.5 Opportunity Handoff."
+
+    synthesis_ready = (
+        EXP2_OUTPUT
+        / "synthesis"
+        / "transformation_handoff.json"
+    ).exists()
+    analyzed = has_json_files(EXP2_OUTPUT / "profiles_analyzed")
+    reviewed = has_json_files(EXP2_OUTPUT / "profiles_reviewed")
+
+    if synthesis_ready:
+        exp2_human = "STAGE COMPLETE"
+        exp2_tone = "complete"
+        exp2_next = "Proceed to the Transformation Engine."
+    elif active_action == "synthesis_build":
+        exp2_human = "BUILDING SYNTHESIS"
+        exp2_tone = "running"
+        exp2_next = "Wait for synthesis to finish."
+    elif active_action in {
+        "exp2_prepare",
+        "analysis_batch_prepare",
+        "analysis_model_one",
+        "human_review_prepare",
+    }:
+        exp2_human = "ANALYSIS RUNNING"
+        exp2_tone = "running"
+        exp2_next = "Wait for the current Experiment 02 job to finish."
+    elif not study_set_ready:
+        exp2_human = "WAITING FOR 01.5"
+        exp2_tone = "blocked"
+        exp2_next = "Complete Experiment 01.5 first."
+    elif reviewed or analyzed:
+        exp2_human = "SYNTHESIS NEEDED"
+        exp2_tone = "action"
+        exp2_next = "Run Build Experiment 02 Synthesis."
+    else:
+        exp2_human = "READY TO PREPARE"
+        exp2_tone = "ready"
+        exp2_next = "Run Prepare Experiment 02 Profiles."
+
     return [
         {
             "id": "01.3",
             "title": "Age-Matched Velocity",
             "state": exp13_state,
+            "human_status": exp13_human,
+            "tone": exp13_tone,
             "detail": exp13_detail,
+            "next_action": exp13_next,
+            "criteria": [
+                {
+                    "label": "Candidate discovery and validation finished",
+                    "done": cohort_ready,
+                },
+                {
+                    "label": "Cohort frozen",
+                    "done": cohort_ready,
+                },
+                {
+                    "label": "Measured velocity samples collected",
+                    "done": velocity_ready,
+                },
+            ],
+            "complete": velocity_ready,
             "ready": True,
             "current": not velocity_ready,
         },
@@ -314,13 +457,27 @@ def stage_statuses() -> list[dict[str, Any]]:
             "state": execution_status
             or plan_status
             or ("READY_TO_PLAN" if velocity_ready else "WAITING_FOR_01_3"),
+            "human_status": exp14_human,
+            "tone": exp14_tone,
             "detail": (
-                "Measured 01.3 velocity evidence is required before planning."
-                if not velocity_ready
-                else "Plan and execute depth-first expansion."
+                "Depth-expansion plan and execution must both finish."
+                if velocity_ready
+                else "Measured 01.3 velocity evidence is required first."
             ),
+            "next_action": exp14_next,
+            "criteria": [
+                {
+                    "label": "Expansion plan ready",
+                    "done": plan_ready,
+                },
+                {
+                    "label": "Expansion executed",
+                    "done": exp14_complete,
+                },
+            ],
+            "complete": exp14_complete,
             "ready": velocity_ready,
-            "current": velocity_ready and execution_status != "COMPLETE",
+            "current": velocity_ready and not exp14_complete,
         },
         {
             "id": "01.5",
@@ -328,12 +485,26 @@ def stage_statuses() -> list[dict[str, Any]]:
             "state": handoff_status
             or (
                 "READY_TO_BUILD"
-                if execution_status == "COMPLETE"
+                if exp14_complete
                 else "WAITING_FOR_01_4"
             ),
+            "human_status": exp15_human,
+            "tone": exp15_tone,
             "detail": "Creates the evidence-backed Experiment 02 study set.",
-            "ready": execution_status == "COMPLETE",
-            "current": execution_status == "COMPLETE" and not (EXP15_DIR / "study_set.json").exists(),
+            "next_action": exp15_next,
+            "criteria": [
+                {
+                    "label": "Opportunity handoff generated",
+                    "done": handoff_status is not None,
+                },
+                {
+                    "label": "Experiment 02 study set exists",
+                    "done": study_set_ready,
+                },
+            ],
+            "complete": study_set_ready,
+            "ready": exp14_complete,
+            "current": exp14_complete and not study_set_ready,
         },
         {
             "id": "02",
@@ -341,15 +512,32 @@ def stage_statuses() -> list[dict[str, Any]]:
             "state": analysis_status
             or (
                 "READY_TO_PREPARE"
-                if (EXP15_DIR / "study_set.json").exists()
+                if study_set_ready
                 else "WAITING_FOR_01_5"
             ),
+            "human_status": exp2_human,
+            "tone": exp2_tone,
             "detail": "Evidence ingestion, FAIR analysis, human review and synthesis.",
-            "ready": (EXP15_DIR / "study_set.json").exists(),
-            "current": (EXP15_DIR / "study_set.json").exists(),
+            "next_action": exp2_next,
+            "criteria": [
+                {
+                    "label": "Profiles analyzed",
+                    "done": analyzed,
+                },
+                {
+                    "label": "Human review available",
+                    "done": reviewed,
+                },
+                {
+                    "label": "Transformation handoff generated",
+                    "done": synthesis_ready,
+                },
+            ],
+            "complete": synthesis_ready,
+            "ready": study_set_ready,
+            "current": study_set_ready and not synthesis_ready,
         },
     ]
-
 
 def action_readiness() -> dict[str, dict[str, Any]]:
     exp13_cohort = (EXP13_DIR / "cohort_manifest.json").exists()
