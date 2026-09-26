@@ -261,3 +261,19 @@ Model-only replicated patterns remain drafts that require human review by
 default. No mechanism ranking or composite score is introduced.
 
 See SYNTHESIS_HANDOFF.md.
+
+
+## Human review gate
+
+The human review gate is implemented in human_review.py.
+
+It prepares evidence-linked review packets from analyzed profiles and requires
+an explicit ACCEPT or REJECT decision for every factual or transfer item.
+
+review.completed becomes true only after complete decision coverage and
+post-review Experiment 02 validation.
+
+The synthesis layer automatically prefers profiles_reviewed when reviewed
+profiles exist, and otherwise falls back to profiles_analyzed.
+
+See HUMAN_REVIEW.md.
