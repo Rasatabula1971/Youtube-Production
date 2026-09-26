@@ -305,18 +305,23 @@ Routine UI execution uses auto mode.
 The quota-free fallback no longer reuses only a small relevance-ranked search
 pool.
 
-For each configured query it builds one cached pool from:
+Current yt-dlp no longer supports the old `ytsearchdate` shortcut.
 
-- up to 100 date-ordered yt-dlp results; and
-- up to 50 relevance-ordered yt-dlp results.
+For each configured query Experiment 01.3 therefore builds one cached pool from
+supported `ytsearch` calls:
 
-Known yt-dlp metadata is prefiltered by the active 01.3 age window, the project
-short/long boundary, and the minimum-view threshold before official YouTube API
-enrichment.
+- the original query, up to 100 results; and
+- a year-hinted version derived from the active age window, for example
+  `F1 gearbox engineering 2026`, up to 100 results.
 
-The same raw pool is reused across format branches and across strict/expanded
-passes. Once AUTO mode falls back to yt-dlp, the expanded pass remains on
-yt-dlp instead of retrying an already quota-exhausted search.list endpoint.
+Known yt-dlp metadata is then prefiltered by the exact active 01.3 age window,
+the project short/long boundary, and the minimum-view threshold before official
+YouTube API enrichment.
+
+The same merged pool is reused across format branches and across
+strict/expanded passes. Once AUTO mode falls back to yt-dlp, the expanded pass
+remains on yt-dlp instead of retrying an already quota-exhausted search.list
+endpoint.
 
 Final acceptance still uses official YouTube video/channel metadata and the
 existing project validation gates.
