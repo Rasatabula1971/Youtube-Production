@@ -460,7 +460,7 @@ def _yt_dlp_pool(
             existing["discovery_strategies"] = strategies
 
             for key, value in raw.items():
-                if existing.get(key) in {None, ""} and value not in {None, ""}:
+                if existing.get(key) in (None, "") and value not in (None, ""):
                     existing[key] = value
 
     cache[query] = list(merged.values())
