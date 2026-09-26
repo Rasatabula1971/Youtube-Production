@@ -116,6 +116,40 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             },
         }
 
+
+    def experiment_config(self):
+        return {
+            "required_dimensions": ["packaging", "opening_hook"],
+            "allowed_confidence": ["LOW", "MODERATE", "HIGH"],
+            "evidence_types": [
+                "metadata",
+                "transcript",
+                "thumbnail",
+                "opening_frame",
+                "visual_note",
+                "timing_note",
+                "audio_note",
+                "opportunity_evidence",
+            ],
+            "dimension_evidence_types": {
+                "packaging": ["metadata", "thumbnail", "opening_frame"],
+                "opening_hook": [
+                    "transcript",
+                    "opening_frame",
+                    "visual_note",
+                    "audio_note",
+                ],
+            },
+            "mechanism_taxonomy": {
+                "curiosity_gap": "Curiosity",
+                "hidden_mechanism": "Hidden mechanism",
+            },
+            "causal_warning_phrases": [
+                "made it viral",
+                "caused the views",
+            ],
+        }
+
     def runner_config(self):
         return {
             "adapter": "fair_subprocess",
@@ -246,7 +280,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            load_config.return_value = self.config
+            load_config.return_value = self.experiment_config()
             resolve_paths.return_value = {
                 "repo": root,
                 "env_file": root / ".env",
@@ -321,7 +355,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            load_config.return_value = self.config
+            load_config.return_value = self.experiment_config()
             resolve_paths.return_value = {
                 "repo": root,
                 "env_file": root / ".env",
