@@ -227,3 +227,33 @@ The plan records evidence-ready cells, deterministic query families, format
 branches, search ordering, lookback window and call budget before execution.
 Execution is checkpointed so quota interruptions do not silently change the
 planned experiment or repeat completed search work.
+
+
+## D-025 — Opportunity handoff uses explicit gates
+
+**Status:** Accepted
+
+The transition from the Opportunity Engine to Experiment 02 must preserve the
+evidence that justified each source candidate.
+
+Experiment 01.5 uses explicit PASS / REVIEW / HOLD conditions based on:
+
+- replicated 01.3 age-matched topic velocity evidence;
+- independent-channel coverage;
+- replicated 01.4 depth-family evidence; and
+- the current project demand-reference hypothesis.
+
+It does not calculate a composite opportunity score.
+
+## D-026 — Experiment 02 receives a diverse evidence set
+
+**Status:** Accepted
+
+The automatic Experiment 02 study set can contain only PASS candidates.
+
+Coverage constraints limit repeated videos from the same channel and repeated
+videos from the same topic/format cell. Ordering uses the primary
+age-matched-velocity metric, with absolute views only as a tie-breaker.
+
+The resulting study set is a research handoff, not a claim that its first item
+is universally the best video.
