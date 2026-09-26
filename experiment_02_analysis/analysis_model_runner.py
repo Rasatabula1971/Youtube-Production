@@ -659,6 +659,7 @@ def run_one(
         "best_quality_score": bridge_result.get("best_quality_score"),
         "verification_state": bridge_result.get("verification_state"),
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
+        "bridge_error_type": bridge_result.get("error_type"),
         "attempts": safe_attempts(bridge_result),
     }
 
@@ -720,6 +721,34 @@ def run_one(
             "error_type": type(exc).__name__,
             "model_response": str(response_path),
             "scope_removals": scope_removals,
+        }
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return report
+
+    if not apply_report.get("final_profile_valid"):
+        report = {
+            **base_report,
+            "status": "APPLY_VALIDATION_FAILED",
+            "model_response": str(response_path),
+            "scope_removals": scope_removals,
+            "apply": {
+                "accepted_findings": apply_report.get("accepted_findings"),
+                "accepted_transfer_items": apply_report.get(
+                    "accepted_transfer_items"
+                ),
+                "routed_to_hypotheses": apply_report.get(
+                    "routed_to_hypotheses"
+                ),
+                "final_validation_errors": apply_report.get(
+                    "final_validation_errors"
+                ),
+                "final_validation_warnings": apply_report.get(
+                    "final_validation_warnings"
+                ),
+            },
         }
         report_path.write_text(
             json.dumps(report, indent=2, ensure_ascii=False),
@@ -827,7 +856,11 @@ def run_batch(
         if result.get("status") != "SKIPPED_ALREADY_APPLIED":
             invoked += 1
 
-        if result.get("status") == "COST_POLICY_VIOLATION":
+        if result.get("status") in {
+            "COST_POLICY_VIOLATION",
+            "RUNNER_ERROR",
+            "MODEL_FAILED",
+        }:
             break
 
     summary = {
