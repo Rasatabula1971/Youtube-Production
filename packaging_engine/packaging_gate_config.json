@@ -1,0 +1,12 @@
+{
+  "required_accept_criteria": [
+    "promise_clear",
+    "concept_aligned",
+    "title_thumbnail_complementary",
+    "not_misleading",
+    "viewer_awareness_fit",
+    "payoff_defined",
+    "research_dependencies_explicit"
+  ],
+  "require_reviewer_name": true
+}
