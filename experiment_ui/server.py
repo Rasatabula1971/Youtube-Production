@@ -32,7 +32,9 @@ JOB_STATE_FILE = UI_OUTPUT_DIR / "job_state.json"
 EXP1_OUTPUT = PROJECT_ROOT / "experiment_01_discovery" / "output"
 EXP13_DIR = EXP1_OUTPUT / "experiment_01_3"
 EXP13_CHECKPOINT = EXP1_OUTPUT / "experiment_01_3_discovery_checkpoint.json"
+EXP13_CONFIG = PROJECT_ROOT / "experiment_01_discovery" / "experiment_01_3_config.json"
 EXP14_DIR = EXP1_OUTPUT / "experiment_01_4"
+EXP14_CONFIG = PROJECT_ROOT / "experiment_01_discovery" / "experiment_01_4_config.json"
 EXP15_DIR = EXP1_OUTPUT / "experiment_01_5"
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
@@ -249,6 +251,106 @@ def exp13_valid_velocity_samples() -> int:
         return 0
 
 
+def exp13_cohort_readiness() -> dict[str, Any]:
+    manifest = safe_load_json(EXP13_DIR / "cohort_manifest.json")
+    config = safe_load_json(EXP13_CONFIG)
+    if not isinstance(manifest, dict):
+        return {
+            "frozen_size": 0,
+            "required_unique_channels": 3,
+            "ready_cell_count": 0,
+            "max_unique_channels_in_cell": 0,
+            "sufficient": False,
+        }
+
+    required = 3
+    if isinstance(config, dict):
+        try:
+            required = int(
+                config.get(
+                    "minimum_unique_channels_per_topic_format",
+                    3,
+                )
+            )
+        except (TypeError, ValueError):
+            required = 3
+
+    cells: dict[tuple[str, str], set[str]] = {}
+    for candidate in manifest.get("candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        channel_id = str(candidate.get("channel_id") or "").strip()
+        fmt = str(candidate.get("format_candidate") or "").strip()
+        if not channel_id or not fmt:
+            continue
+        for topic in candidate.get("validated_topics", []):
+            key = (str(topic), fmt)
+            cells.setdefault(key, set()).add(channel_id)
+
+    counts = [len(channels) for channels in cells.values()]
+    ready_count = sum(count >= required for count in counts)
+    frozen_size = len(manifest.get("video_ids", []))
+
+    return {
+        "frozen_size": frozen_size,
+        "required_unique_channels": required,
+        "ready_cell_count": ready_count,
+        "max_unique_channels_in_cell": max(counts, default=0),
+        "sufficient": ready_count > 0,
+    }
+
+
+def exp13_depth_ready_cell_count() -> int:
+    topic_velocity = safe_load_json(EXP13_DIR / "topic_velocity.json")
+    config = safe_load_json(EXP14_CONFIG)
+    if not isinstance(topic_velocity, dict):
+        return 0
+
+    minimum_channels = 3
+    minimum_velocity = 3
+    if isinstance(config, dict):
+        try:
+            minimum_channels = int(
+                config.get("minimum_unique_channels", 3)
+            )
+        except (TypeError, ValueError):
+            minimum_channels = 3
+        try:
+            minimum_velocity = int(
+                config.get("minimum_velocity_samples", 3)
+            )
+        except (TypeError, ValueError):
+            minimum_velocity = 3
+
+    ready = 0
+    topics = topic_velocity.get("topics", {})
+    if not isinstance(topics, dict):
+        return 0
+
+    for topic in topics.values():
+        if not isinstance(topic, dict):
+            continue
+        by_format = topic.get("by_format", {})
+        if not isinstance(by_format, dict):
+            continue
+        for cell in by_format.values():
+            if not isinstance(cell, dict):
+                continue
+            try:
+                channels = int(cell.get("unique_channels") or 0)
+                samples = int(cell.get("velocity_sample_count") or 0)
+            except (TypeError, ValueError):
+                continue
+            if (
+                channels >= minimum_channels
+                and samples >= minimum_velocity
+                and cell.get("age_matched_velocity_index") is not None
+            ):
+                ready += 1
+
+    return ready
+
+
 def exp14_plan_status() -> str | None:
     return json_file_status(EXP14_DIR / "expansion_plan.json", "status")
 
@@ -283,13 +385,19 @@ def stage_statuses() -> list[dict[str, Any]]:
     exp13_summary = EXP13_DIR / "summary.json"
     exp13_topic = EXP13_DIR / "topic_velocity.json"
 
-    cohort_ready = (
+    cohort_files_ready = (
         exp13_manifest.exists()
         and exp13_summary.exists()
         and exp13_topic.exists()
     )
+    cohort_info = exp13_cohort_readiness()
+    cohort_sufficient = (
+        cohort_files_ready
+        and bool(cohort_info["sufficient"])
+    )
     valid_velocity_samples = exp13_valid_velocity_samples()
-    velocity_ready = cohort_ready and valid_velocity_samples > 0
+    depth_ready_cells = exp13_depth_ready_cell_count()
+    velocity_ready = cohort_sufficient and depth_ready_cells > 0
     cp_status = checkpoint_status()
     active_action = current_action_id()
 
@@ -298,8 +406,8 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp13_human = "STAGE COMPLETE"
         exp13_tone = "complete"
         exp13_detail = (
-            f"Measured velocity is available from "
-            f"{valid_velocity_samples} valid samples."
+            f"{depth_ready_cells} topic/format cell(s) have enough "
+            "independent channels and measured velocity for 01.4."
         )
         exp13_next = "Proceed to Experiment 01.4."
     elif active_action == "exp13_refresh":
@@ -307,20 +415,37 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp13_human = "VELOCITY REFRESH RUNNING"
         exp13_tone = "running"
         exp13_detail = "The frozen cohort is being measured for current velocity."
-        exp13_next = "Wait for the refresh to finish."
+        exp13_next = "Wait for the refresh job to finish."
     elif active_action == "exp13_discover":
         exp13_state = "DISCOVERY_RUNNING"
         exp13_human = "DISCOVERY RUNNING"
         exp13_tone = "running"
         exp13_detail = "Candidate discovery is running. The cohort is not finished yet."
         exp13_next = "Wait for discovery to finish."
-    elif cohort_ready:
-        exp13_state = "COHORT_FROZEN_AWAITING_REFRESH"
-        exp13_human = "DISCOVERY COMPLETE — REFRESH NEEDED"
+    elif cohort_files_ready and not cohort_sufficient:
+        exp13_state = "INSUFFICIENT_COHORT"
+        exp13_human = "INSUFFICIENT COHORT — RERUN DISCOVERY"
         exp13_tone = "action"
-        exp13_detail = "The corrected cohort is frozen, but measured velocity is still missing."
+        exp13_detail = (
+            f"Frozen cohort has {cohort_info['frozen_size']} video(s). "
+            f"No topic/format cell reached the required "
+            f"{cohort_info['required_unique_channels']} independent channels."
+        )
         exp13_next = (
-            "After at least one hour, run Refresh 01.3 Frozen Cohort."
+            "Run / Resume 01.3 Auto Discovery again. "
+            "Do not wait for a velocity refresh."
+        )
+    elif cohort_sufficient:
+        exp13_state = "COHORT_FROZEN_AWAITING_REFRESH"
+        exp13_human = "COHORT READY — VELOCITY NEEDED"
+        exp13_tone = "action"
+        exp13_detail = (
+            f"The cohort has {cohort_info['ready_cell_count']} topic/format "
+            "cell(s) with enough independent channels."
+        )
+        exp13_next = (
+            "Run Refresh 01.3 Frozen Cohort. If an older snapshot exists, "
+            "velocity can be calculated immediately."
         )
     elif EXP13_CHECKPOINT.exists():
         exp13_state = cp_status or "CHECKPOINTED"
@@ -436,14 +561,14 @@ def stage_statuses() -> list[dict[str, Any]]:
             "criteria": [
                 {
                     "label": "Candidate discovery and validation finished",
-                    "done": cohort_ready,
+                    "done": cohort_files_ready,
                 },
                 {
-                    "label": "Cohort frozen",
-                    "done": cohort_ready,
+                    "label": "At least one cell has enough independent channels",
+                    "done": cohort_sufficient,
                 },
                 {
-                    "label": "Measured velocity samples collected",
+                    "label": "Velocity evidence is ready for 01.4",
                     "done": velocity_ready,
                 },
             ],
@@ -540,12 +665,12 @@ def stage_statuses() -> list[dict[str, Any]]:
     ]
 
 def action_readiness() -> dict[str, dict[str, Any]]:
-    exp13_cohort = (EXP13_DIR / "cohort_manifest.json").exists()
-    exp13_evidence = (
-        (EXP13_DIR / "topic_velocity.json").exists()
-        and (EXP13_DIR / "summary.json").exists()
-        and exp13_valid_velocity_samples() > 0
+    cohort_info = exp13_cohort_readiness()
+    exp13_cohort = (
+        (EXP13_DIR / "cohort_manifest.json").exists()
+        and bool(cohort_info["sufficient"])
     )
+    exp13_evidence = exp13_depth_ready_cell_count() > 0
 
     plan_ready = exp14_plan_status() == "READY"
     exp14_complete = exp14_execution_status() == "COMPLETE"
@@ -587,9 +712,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "exp13_refresh": {
             "enabled": exp13_cohort,
             "reason": (
-                "Frozen cohort available."
+                "Cohort has enough independent channels for velocity measurement."
                 if exp13_cohort
-                else "Run 01.3 discovery first."
+                else (
+                    "Cohort is missing or insufficient. Rerun 01.3 discovery; "
+                    "do not wait for refresh."
+                )
             ),
         },
         "exp14_plan": {
