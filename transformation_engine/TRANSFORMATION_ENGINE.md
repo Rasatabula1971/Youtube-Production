@@ -127,3 +127,23 @@ A structurally valid concept is only a candidate.
 
 It has not yet passed the human Concept Gate and must not enter research or
 script generation automatically.
+
+
+## Viewer-need framing
+
+Concept generation now requires more than a topic and audience promise.
+
+Every concept must include:
+
+- `viewer_problem` — the specific problem, question, or curiosity;
+- `viewer_moment` — the situation or decision state in which that need matters;
+- `desired_outcome` — what the viewer wants to understand, fix, avoid, or decide;
+- `content_gap` — a gap hypothesis plus an explicit evidence status;
+- `channel_fit` — FIT / REVIEW / UNASSESSED with rationale;
+- `title_clarity_test` — at least three working title options and PASS / REFRAME.
+
+The three-title test is an idea-clarity check, not final packaging.
+
+A content gap may be `SUPPORTED`, `HYPOTHESIS`, or `UNASSESSED`.
+`SUPPORTED` requires a non-empty evidence basis. The engine must not infer a
+proven gap from views, outliers, or model intuition alone.
