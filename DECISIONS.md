@@ -322,3 +322,24 @@ automatically support a creative finding.
 
 Local evidence files and generated enriched profiles remain untracked by Git by
 default.
+
+
+## D-031 — Analysis execution separates reasoning from acceptance
+
+**Status:** Accepted
+
+Experiment 02 separates creative reasoning from deterministic evidence
+acceptance.
+
+An analyst or model may propose findings, mechanisms, source-specific elements
+and transformation opportunities. The repository accepts them only after
+checking their evidence references, evidence type, controlled mechanism IDs,
+causal wording and Source Dependency Test requirements.
+
+A proposed finding that is not adequately supported is preserved as a
+`working_hypothesis` with the reason it was not accepted. It must not silently
+enter the factual analysis.
+
+The helper does not infer semantic labels such as hook, curiosity gap, payoff or
+story structure from keyword rules alone. Those labels require analysis of the
+available source evidence.
