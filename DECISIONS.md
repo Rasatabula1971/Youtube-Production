@@ -530,3 +530,38 @@ questions are covered by accepted claims.
 
 At most one package may be ACCEPTED per concept, preventing downstream research
 and scripting from inheriting competing promises.
+
+
+## D-042 — Agent Reach is an acquisition layer, not a reasoning layer
+
+**Status:** Accepted
+
+Agent Reach may be used to discover, read or transcribe external sources and to
+report which upstream backend is currently healthy.
+
+It must not replace the project's opportunity calculations, Experiment 02
+evidence model, FAIR routing, Transformation / Packaging / Research decisions,
+human gates, Story / Script logic, production logic or learning metrics.
+
+The integration follows Agent Reach's own model: run doctor to determine the
+active backend, then call that upstream tool directly.
+
+## D-043 — Benchmark quota-free YouTube discovery before replacing search.list
+
+**Status:** Accepted
+
+Experiment 01.3 currently uses YouTube Data API search.list for controlled
+discovery and official API endpoints for measurement.
+
+Agent Reach / yt-dlp may be evaluated as a quota-free discovery backend, but
+must not silently replace search.list.
+
+The initial benchmark compares video-ID overlap per configured 01.3 query
+against the saved API search audit and records the limitations caused by
+different publication-window, duration and ordering controls.
+
+Only after acceptable coverage and contamination are demonstrated may a new
+discovery backend be added to Experiment 01.3.
+
+Even then, official YouTube videos.list / channels.list remain the canonical
+measurement and snapshot path.
