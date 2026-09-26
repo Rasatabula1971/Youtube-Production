@@ -14,8 +14,9 @@ The default cohort is:
 - fallback age window: 90-150 days
 - fallback is used only for topic/format cells with fewer than 3 unique channels
 - minimum views at discovery: 500,000
-- primary search orders: `viewCount` and `relevance`
+- primary search order: `viewCount`
 - fallback search order: `relevance`
+- default per-run search budget: 60 calls
 - Shorts and long-form candidates analyzed separately
 
 No final opportunity score is calculated.
@@ -188,3 +189,34 @@ directory into:
 
 before creating the new cohort. Old snapshots therefore remain preserved and
 cannot contaminate the replacement cohort.
+
+
+## Search quota and resume
+
+YouTube `search.list` has its own daily call quota. Experiment 01.3 therefore
+keeps the strict pass deliberately small and saves discovery progress.
+
+Strict discovery uses one `viewCount` search per query/duration branch. The
+`relevance` order is reserved for sparse-cell expansion only.
+
+If the API quota is exhausted or the configured per-run search budget is
+reached, the experiment writes:
+
+`output\experiment_01_3_discovery_checkpoint.json`
+
+The cohort is **not** frozen at that point. Run the same command again:
+
+```powershell
+python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-cohort
+```
+
+Completed search jobs are skipped automatically and discovery continues using
+the original publication windows.
+
+To intentionally discard a checkpoint and start the discovery search again:
+
+```powershell
+python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-cohort --restart-discovery
+```
+
+The checkpoint is deleted automatically once the cohort is successfully frozen.

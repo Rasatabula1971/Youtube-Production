@@ -5,8 +5,7 @@
   "age_tolerance_days": 15,
   "minimum_views": 500000,
   "search_orders": [
-    "viewCount",
-    "relevance"
+    "viewCount"
   ],
   "motorsport_context_terms": [
     "f1",

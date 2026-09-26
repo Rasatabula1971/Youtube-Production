@@ -6,6 +6,8 @@ from experiment_01_3 import (
     calculate_age_window,
     classify_topic_relevance,
     confidence_from_unique_channels,
+    restore_checkpoint_state,
+    search_job_key,
 )
 
 
@@ -80,6 +82,44 @@ class Experiment013Tests(unittest.TestCase):
         self.assertEqual(confidence_from_unique_channels(2), "LOW")
         self.assertEqual(confidence_from_unique_channels(4), "MODERATE")
         self.assertEqual(confidence_from_unique_channels(5), "STRONG")
+
+
+    def test_search_job_key_separates_phase_and_window(self):
+        strict = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T00:00:00Z",
+        }
+        wide = {
+            "published_after": "2026-04-29T00:00:00Z",
+            "published_before": "2026-06-28T00:00:00Z",
+        }
+        base = dict(
+            topic_name="brakes",
+            query="F1 brakes engineering",
+            format_target="long_form_candidate",
+            video_duration="medium",
+            order="viewCount",
+        )
+
+        key_a = search_job_key(search_phase="strict", age_window=strict, **base)
+        key_b = search_job_key(search_phase="expanded", age_window=wide, **base)
+
+        self.assertNotEqual(key_a, key_b)
+
+    def test_restore_checkpoint_state_rehydrates_sets(self):
+        checkpoint = {
+            "discovered": {"video-a": ["brakes", "steering"]},
+            "matches": {"video-a": [{"target_topic": "brakes"}]},
+            "audit": [{"target_topic": "brakes"}],
+            "completed_search_jobs": ["job-1"],
+        }
+
+        discovered, matches, audit, completed = restore_checkpoint_state(checkpoint)
+
+        self.assertEqual(discovered["video-a"], {"brakes", "steering"})
+        self.assertEqual(matches["video-a"][0]["target_topic"], "brakes")
+        self.assertEqual(audit[0]["target_topic"], "brakes")
+        self.assertEqual(completed, {"job-1"})
 
     def test_shorts_and_long_form_use_separate_velocity_baselines(self):
         rows = [
