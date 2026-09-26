@@ -44,7 +44,7 @@ least one valid measured velocity sample from a refresh.
 
 The main control is:
 
-**Run / Resume 01.3 Discovery**
+**Run / Resume 01.3 Auto Discovery**
 
 It executes the same checkpoint-aware command previously run from PowerShell:
 
@@ -150,3 +150,18 @@ When the current 01.3 discovery checkpoint exists, the benchmark automatically
 compares Agent Reach / yt-dlp video IDs with the saved YouTube API search audit.
 
 The benchmark never modifies the 01.3 cohort.
+
+
+## Automatic 01.3 discovery backend
+
+The 01.3 button automatically chooses the available discovery path.
+
+It first attempts YouTube Data API v3 search. If YouTube search quota is
+unavailable, it switches remaining search jobs to Agent Reach / yt-dlp without
+requiring another button or command.
+
+The fallback affects discovery only. Official YouTube API metadata and velocity
+measurement remain unchanged.
+
+The separate acquisition benchmark remains available as a diagnostic tool, but
+it is not required for routine 01.3 execution.

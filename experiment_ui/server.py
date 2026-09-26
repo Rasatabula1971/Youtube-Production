@@ -67,7 +67,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": "Compares Agent Reach / yt-dlp discovery against the saved 01.3 API search audit without changing the cohort.",
     },
     "exp13_discover": {
-        "label": "Run / Resume 01.3 Discovery",
+        "label": "Run / Resume 01.3 Auto Discovery",
         "stage": "01.3",
         "command": [
             sys.executable,
@@ -75,8 +75,10 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "--mode",
             "discover",
             "--replace-cohort",
+            "--discovery-backend",
+            "auto",
         ],
-        "description": "Runs the corrected age-matched discovery. Resumes from checkpoint automatically.",
+        "description": "Uses YouTube Data API v3 search when available and automatically falls back to Agent Reach / yt-dlp when search quota is unavailable. Official API metadata and measurement remain unchanged.",
     },
     "exp13_refresh": {
         "label": "Refresh 01.3 Frozen Cohort",

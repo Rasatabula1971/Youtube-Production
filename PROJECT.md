@@ -592,3 +592,14 @@ contamination characteristics.
 
 If adopted after benchmarking, official YouTube API calls remain the canonical
 measurement path for video/channel metadata, repeated snapshots and velocity.
+
+
+### Experiment 01.3 automatic source routing
+
+AUTO discovery now attempts the YouTube Data API v3 search path first and
+falls back to Agent Reach / yt-dlp when search is unavailable.
+
+The route is transparent to the operator and preserves backend provenance.
+
+The source switch affects candidate discovery only. Existing project validation
+and official YouTube API metadata / snapshot measurement remain authoritative.

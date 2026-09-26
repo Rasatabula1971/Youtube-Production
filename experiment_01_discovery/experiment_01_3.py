@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import statistics
+import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -37,6 +38,15 @@ from youtube_discovery import (
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from source_acquisition.agent_reach_adapter import (
+    AcquisitionError,
+    search_youtube,
+    youtube_health,
+)
+
 ENV_FILE = PROJECT_ROOT / ".env"
 CONFIG_FILE = HERE / "experiment_01_3_config.json"
 OUTPUT_ROOT = HERE / "output"
@@ -313,10 +323,37 @@ def restore_checkpoint_state(
         for video_id, topics in checkpoint.get("discovered", {}).items()
     }
     matches = {
-        str(video_id): list(items)
+        str(video_id): [dict(item) for item in items]
         for video_id, items in checkpoint.get("matches", {}).items()
     }
-    audit = list(checkpoint.get("audit", []))
+    audit = [
+        dict(item)
+        for item in checkpoint.get("audit", [])
+    ]
+
+    # Checkpoints created before automatic backend routing could only have
+    # come from YouTube Data API v3 search. Backfill provenance so a resumed
+    # mixed-backend cohort remains auditable.
+    for items in matches.values():
+        for item in items:
+            item.setdefault(
+                "discovery_backend",
+                "youtube_api_v3",
+            )
+            item.setdefault(
+                "backend_search_strategy",
+                item.get("search_order"),
+            )
+    for item in audit:
+        item.setdefault(
+            "discovery_backend",
+            "youtube_api_v3",
+        )
+        item.setdefault(
+            "backend_search_strategy",
+            item.get("search_order"),
+        )
+
     completed_jobs = set(checkpoint.get("completed_search_jobs", []))
     return discovered, matches, audit, completed_jobs
 
@@ -345,6 +382,46 @@ def search_job_key(
     )
 
 
+
+
+def discovery_backend_counts(audit: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in audit:
+        backend = str(
+            item.get("discovery_backend", "unknown")
+        )
+        counts[backend] = counts.get(backend, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _yt_dlp_strategy(search_order: str) -> str:
+    return "date" if search_order == "date" else "relevance"
+
+
+def _yt_dlp_ids(
+    query: str,
+    search_order: str,
+    cache: dict[tuple[str, str], list[str]],
+) -> list[str]:
+    strategy = _yt_dlp_strategy(search_order)
+    key = (query, strategy)
+    if key in cache:
+        return list(cache[key])
+
+    result = search_youtube(
+        query,
+        limit=50,
+        strategy=strategy,
+        require_agent_reach_health=False,
+    )
+    ids = [
+        str(item.get("video_id", "")).strip()
+        for item in result.get("results", [])
+        if str(item.get("video_id", "")).strip()
+    ]
+    cache[key] = ids
+    return list(ids)
+
 def discover(
     config: dict[str, Any],
     api_key: str,
@@ -361,6 +438,7 @@ def discover(
     matches: dict[str, list[dict[str, Any]]] | None = None,
     audit: list[dict[str, Any]] | None = None,
     completed_jobs: set[str] | None = None,
+    discovery_backend: str = "auto",
 ) -> tuple[
     dict[str, set[str]],
     dict[str, list[dict[str, Any]]],
@@ -378,6 +456,10 @@ def discover(
     calls = 0
     orders = list(search_orders or config["search_orders"])
     search_profiles = config["search_profiles"]
+    api_search_available = discovery_backend != "yt_dlp"
+    fallback_health_checked = False
+    fallback_ready = False
+    fallback_cache: dict[tuple[str, str], list[str]] = {}
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
@@ -406,15 +488,25 @@ def discover(
                         if job_key in completed_jobs:
                             continue
 
-                        if calls_already + calls >= max_searches:
-                            return (
-                                discovered,
-                                matches,
-                                audit,
-                                completed_jobs,
-                                calls,
-                                "SEARCH_BUDGET_REACHED",
-                            )
+                        if (
+                            api_search_available
+                            and calls_already + calls >= max_searches
+                        ):
+                            if discovery_backend == "auto":
+                                api_search_available = False
+                                print(
+                                    "  YouTube API search budget reached; "
+                                    "switching remaining discovery jobs to Agent Reach / yt-dlp."
+                                )
+                            else:
+                                return (
+                                    discovered,
+                                    matches,
+                                    audit,
+                                    completed_jobs,
+                                    calls,
+                                    "SEARCH_BUDGET_REACHED",
+                                )
 
                         params: dict[str, Any] = {
                             "part": "snippet",
@@ -437,25 +529,85 @@ def discover(
                             f"order={order}; phase={search_phase}]"
                         )
 
-                        try:
-                            data = api_get("search", api_key, **params)
-                        except SystemExit:
-                            return (
-                                discovered,
-                                matches,
-                                audit,
-                                completed_jobs,
-                                calls,
-                                "QUOTA_EXHAUSTED",
-                            )
+                        ids: list[str] = []
+                        backend_used = ""
+                        backend_strategy = order
 
-                        calls += 1
-                        ids = []
-                        for rank, item in enumerate(data.get("items", []), start=1):
-                            video_id = item.get("id", {}).get("videoId")
-                            if not video_id:
-                                continue
-                            ids.append(video_id)
+                        if api_search_available:
+                            try:
+                                data = api_get("search", api_key, **params)
+                                calls += 1
+                                for item in data.get("items", []):
+                                    video_id = item.get("id", {}).get("videoId")
+                                    if video_id:
+                                        ids.append(str(video_id))
+                                backend_used = "youtube_api_v3"
+                            except SystemExit:
+                                if discovery_backend == "youtube_api":
+                                    return (
+                                        discovered,
+                                        matches,
+                                        audit,
+                                        completed_jobs,
+                                        calls,
+                                        "YOUTUBE_API_UNAVAILABLE",
+                                    )
+                                api_search_available = False
+                                print(
+                                    "  YouTube search API unavailable; "
+                                    "switching remaining discovery jobs to Agent Reach / yt-dlp."
+                                )
+
+                        if not backend_used:
+                            if not fallback_health_checked:
+                                health = youtube_health()
+                                fallback_health_checked = True
+                                fallback_ready = bool(health.get("ready"))
+                                if fallback_ready:
+                                    print(
+                                        "  Agent Reach fallback ready: "
+                                        f"{health.get('active_backend')}"
+                                    )
+                                else:
+                                    print(
+                                        "  Agent Reach fallback unavailable: "
+                                        f"{health.get('message') or health.get('channel_status')}"
+                                    )
+
+                            if not fallback_ready:
+                                return (
+                                    discovered,
+                                    matches,
+                                    audit,
+                                    completed_jobs,
+                                    calls,
+                                    "SEARCH_BACKENDS_UNAVAILABLE",
+                                )
+
+                            try:
+                                ids = _yt_dlp_ids(
+                                    query,
+                                    order,
+                                    fallback_cache,
+                                )
+                            except AcquisitionError as exc:
+                                print(
+                                    "  Agent Reach / yt-dlp search failed: "
+                                    f"{exc}"
+                                )
+                                return (
+                                    discovered,
+                                    matches,
+                                    audit,
+                                    completed_jobs,
+                                    calls,
+                                    "SEARCH_BACKENDS_UNAVAILABLE",
+                                )
+
+                            backend_used = "agent_reach_yt_dlp"
+                            backend_strategy = _yt_dlp_strategy(order)
+
+                        for rank, video_id in enumerate(ids, start=1):
                             discovered.setdefault(video_id, set()).add(topic_name)
                             matches.setdefault(video_id, []).append(
                                 {
@@ -466,6 +618,8 @@ def discover(
                                     "search_format_target": format_target,
                                     "video_duration_filter": video_duration,
                                     "rank": rank,
+                                    "discovery_backend": backend_used,
+                                    "backend_search_strategy": backend_strategy,
                                 }
                             )
 
@@ -477,6 +631,8 @@ def discover(
                                 "search_phase": search_phase,
                                 "search_format_target": format_target,
                                 "video_duration_filter": video_duration,
+                                "discovery_backend": backend_used,
+                                "backend_search_strategy": backend_strategy,
                                 "results_returned": len(ids),
                                 "video_ids": ids,
                             }
@@ -806,6 +962,8 @@ def build_summary(
         "minimum_views": manifest.get("minimum_views"),
         "search_orders": manifest.get("search_orders"),
         "search_calls_this_run": manifest.get("search_calls_this_run"),
+        "discovery_backend_mode": manifest.get("discovery_backend_mode"),
+        "discovery_backend_counts": manifest.get("discovery_backend_counts", {}),
         "completed_search_jobs_total": manifest.get("completed_search_jobs_total"),
         "frozen_cohort_size": len(manifest.get("video_ids", [])),
         "available_cohort_videos": len(rows),
@@ -938,7 +1096,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     )
     print("Validation: title-only topic + motorsport context")
     print("Search: format-separated short / medium / long branches")
-    print(f"Per-run search budget: {args.max_searches}\n")
+    print(f"Discovery backend: {args.discovery_backend}")
+    print(f"Per-run YouTube API search budget: {args.max_searches}\n")
 
     (
         discovered,
@@ -960,6 +1119,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         matches=matches,
         audit=audit,
         completed_jobs=completed_jobs,
+        discovery_backend=args.discovery_backend,
     )
 
     save_discovery_checkpoint(
@@ -1034,6 +1194,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
             matches=matches,
             audit=audit,
             completed_jobs=completed_jobs,
+            discovery_backend=args.discovery_backend,
         )
 
         save_discovery_checkpoint(
@@ -1118,6 +1279,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         "expansion_search_orders": config["expansion_search_orders"],
         "search_profiles": config["search_profiles"],
         "search_calls_this_run": calls_this_run,
+        "discovery_backend_mode": args.discovery_backend,
+        "discovery_backend_counts": discovery_backend_counts(audit),
         "completed_search_jobs_total": len(completed_jobs),
         "adaptive_expansion": {
             topic: sorted(formats)
@@ -1195,6 +1358,15 @@ def main() -> None:
     parser.add_argument("--region-code", default=None)
     parser.add_argument("--language", default=None)
     parser.add_argument("--replace-cohort", action="store_true")
+    parser.add_argument(
+        "--discovery-backend",
+        choices=("auto", "youtube_api", "yt_dlp"),
+        default="auto",
+        help=(
+            "Discovery backend. auto tries YouTube Data API v3 first and "
+            "falls back to Agent Reach / yt-dlp when search is unavailable."
+        ),
+    )
     parser.add_argument(
         "--restart-discovery",
         action="store_true",

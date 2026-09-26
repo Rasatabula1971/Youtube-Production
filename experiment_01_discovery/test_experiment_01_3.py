@@ -1,5 +1,8 @@
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
+
+import experiment_01_3 as exp13
 
 from experiment_01_3 import (
     aggregate_age_matched_velocity,
@@ -118,8 +121,188 @@ class Experiment013Tests(unittest.TestCase):
 
         self.assertEqual(discovered["video-a"], {"brakes", "steering"})
         self.assertEqual(matches["video-a"][0]["target_topic"], "brakes")
+        self.assertEqual(
+            matches["video-a"][0]["discovery_backend"],
+            "youtube_api_v3",
+        )
         self.assertEqual(audit[0]["target_topic"], "brakes")
+        self.assertEqual(
+            audit[0]["discovery_backend"],
+            "youtube_api_v3",
+        )
         self.assertEqual(completed, {"job-1"})
+
+
+    def test_auto_discovery_falls_back_to_yt_dlp_when_api_unavailable(self):
+        config = {
+            "search_orders": ["viewCount"],
+            "search_profiles": {
+                "short_candidate": ["short"],
+            },
+            "topics": [
+                {
+                    "topic": "brakes",
+                    "queries": ["F1 brakes engineering"],
+                }
+            ],
+        }
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T00:00:00Z",
+        }
+
+        with (
+            patch.object(
+                exp13,
+                "api_get",
+                side_effect=SystemExit("quota"),
+            ),
+            patch.object(
+                exp13,
+                "youtube_health",
+                return_value={
+                    "ready": True,
+                    "active_backend": "yt-dlp",
+                },
+            ),
+            patch.object(
+                exp13,
+                "_yt_dlp_ids",
+                return_value=["video-a"],
+            ),
+        ):
+            (
+                discovered,
+                matches,
+                audit,
+                completed,
+                calls,
+                status,
+            ) = exp13.discover(
+                config,
+                "api-key",
+                window,
+                60,
+                None,
+                None,
+                discovery_backend="auto",
+            )
+
+        self.assertEqual(status, "COMPLETE")
+        self.assertEqual(calls, 0)
+        self.assertEqual(
+            discovered["video-a"],
+            {"brakes"},
+        )
+        self.assertEqual(
+            audit[0]["discovery_backend"],
+            "agent_reach_yt_dlp",
+        )
+        self.assertEqual(
+            matches["video-a"][0]["backend_search_strategy"],
+            "relevance",
+        )
+        self.assertEqual(len(completed), 1)
+
+
+    def test_auto_mode_uses_fallback_when_api_budget_is_zero(self):
+        config = {
+            "search_orders": ["viewCount"],
+            "search_profiles": {
+                "short_candidate": ["short"],
+            },
+            "topics": [
+                {
+                    "topic": "brakes",
+                    "queries": ["F1 brakes engineering"],
+                }
+            ],
+        }
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T00:00:00Z",
+        }
+
+        with (
+            patch.object(
+                exp13,
+                "api_get",
+            ) as api,
+            patch.object(
+                exp13,
+                "youtube_health",
+                return_value={
+                    "ready": True,
+                    "active_backend": "yt-dlp",
+                },
+            ),
+            patch.object(
+                exp13,
+                "_yt_dlp_ids",
+                return_value=["video-a"],
+            ),
+        ):
+            result = exp13.discover(
+                config,
+                "api-key",
+                window,
+                0,
+                None,
+                None,
+                discovery_backend="auto",
+            )
+
+        api.assert_not_called()
+        self.assertEqual(result[-1], "COMPLETE")
+        self.assertEqual(
+            result[2][0]["discovery_backend"],
+            "agent_reach_yt_dlp",
+        )
+
+    def test_api_only_mode_does_not_fall_back(self):
+        config = {
+            "search_orders": ["viewCount"],
+            "search_profiles": {
+                "short_candidate": ["short"],
+            },
+            "topics": [
+                {
+                    "topic": "brakes",
+                    "queries": ["F1 brakes engineering"],
+                }
+            ],
+        }
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T00:00:00Z",
+        }
+
+        with (
+            patch.object(
+                exp13,
+                "api_get",
+                side_effect=SystemExit("quota"),
+            ),
+            patch.object(
+                exp13,
+                "_yt_dlp_ids",
+            ) as fallback,
+        ):
+            result = exp13.discover(
+                config,
+                "api-key",
+                window,
+                60,
+                None,
+                None,
+                discovery_backend="youtube_api",
+            )
+
+        self.assertEqual(
+            result[-1],
+            "YOUTUBE_API_UNAVAILABLE",
+        )
+        fallback.assert_not_called()
 
     def test_shorts_and_long_form_use_separate_velocity_baselines(self):
         rows = [
