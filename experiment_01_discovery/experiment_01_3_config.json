@@ -38,6 +38,12 @@
         "transmission",
         "gear ratio",
         "gearing"
+      ],
+      "expansion_queries": [
+        "F1 gearbox explained"
+      ],
+      "short_expansion_queries": [
+        "F1 gearbox #shorts"
       ]
     },
     {
@@ -48,6 +54,12 @@
       "match_terms": [
         "brake",
         "brakes"
+      ],
+      "expansion_queries": [
+        "F1 brakes explained"
+      ],
+      "short_expansion_queries": [
+        "F1 brakes #shorts"
       ]
     },
     {
@@ -61,6 +73,13 @@
         "tyres",
         "tire",
         "tires"
+      ],
+      "expansion_queries": [
+        "F1 tyre technology"
+      ],
+      "short_expansion_queries": [
+        "F1 tyres #shorts",
+        "F1 tires #shorts"
       ]
     },
     {
@@ -70,6 +89,12 @@
       ],
       "match_terms": [
         "steering"
+      ],
+      "expansion_queries": [
+        "F1 steering wheel explained"
+      ],
+      "short_expansion_queries": [
+        "F1 steering #shorts"
       ]
     },
     {
@@ -80,6 +105,12 @@
       "match_terms": [
         "suspension",
         "chassis"
+      ],
+      "expansion_queries": [
+        "F1 suspension explained"
+      ],
+      "short_expansion_queries": [
+        "F1 suspension #shorts"
       ]
     },
     {
@@ -94,6 +125,12 @@
         "downforce",
         "diffuser",
         "drs"
+      ],
+      "expansion_queries": [
+        "F1 aerodynamics explained"
+      ],
+      "short_expansion_queries": [
+        "F1 aerodynamics #shorts"
       ]
     },
     {
@@ -106,6 +143,12 @@
         "power unit",
         "turbo",
         "hybrid"
+      ],
+      "expansion_queries": [
+        "F1 power unit explained"
+      ],
+      "short_expansion_queries": [
+        "F1 engine #shorts"
       ]
     },
     {
@@ -116,6 +159,12 @@
       "match_terms": [
         "pit stop",
         "pitstop"
+      ],
+      "expansion_queries": [
+        "F1 pit stop explained"
+      ],
+      "short_expansion_queries": [
+        "F1 pit stop #shorts"
       ]
     }
   ],
