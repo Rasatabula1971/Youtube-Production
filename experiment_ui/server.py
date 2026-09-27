@@ -1294,15 +1294,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     "Visual structure evidence is already ready."
                     if visual_complete
                     else (
-                        "Visual structure was attempted; transcript-only analysis may continue. Use Tools & Diagnostics to force a retry."
+                        "Visual structure was attempted; transcript-only analysis may continue. "
+                        "Use Tools & Diagnostics to force a retry."
                         if visual_attempted
                         else (
-                        "yt-dlp and ffmpeg are required for automatic visual structure sampling."
-                        if human_gate_ready and evidence_complete and not visual_available
-                        else (
-                            "Acquire transcript-backed source evidence first."
-                            if human_gate_ready and not evidence_complete
-                            else "Human opportunity approval is required first."
+                            "yt-dlp and ffmpeg are required for automatic visual "
+                            "structure sampling."
+                            if (
+                                human_gate_ready
+                                and evidence_complete
+                                and not visual_available
+                            )
+                            else (
+                                "Acquire transcript-backed source evidence first."
+                                if human_gate_ready and not evidence_complete
+                                else "Human opportunity approval is required first."
+                            )
                         )
                     )
                 )
