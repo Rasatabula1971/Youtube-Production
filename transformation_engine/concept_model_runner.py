@@ -257,6 +257,7 @@ def run_one(
         config=runner_config,
         paths=paths,
     )
+    payload["settings"]["client_id"] = "youtube-transformation-concepts"
 
     MODEL_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     RAW_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
