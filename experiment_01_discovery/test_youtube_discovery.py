@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import unittest
 import urllib.error
 from email.message import Message
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import youtube_discovery
@@ -38,6 +40,86 @@ def success_response(payload: dict):
     response.__exit__.return_value = False
     response.read.return_value = json.dumps(payload).encode("utf-8")
     return response
+
+
+class YoutubeDiscoveryCheckpointTests(unittest.TestCase):
+    def test_search_checkpoint_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "search_checkpoint.json"
+            signature = youtube_discovery.discovery_checkpoint_signature(
+                {
+                    "niches": [
+                        {
+                            "name": "automotive",
+                            "queries": ["f1 gearbox"],
+                        }
+                    ]
+                },
+                published_after="2026-01-01T00:00:00Z",
+                region_code="US",
+                language="en",
+            )
+
+            youtube_discovery.save_search_checkpoint(
+                path,
+                signature=signature,
+                discovered={"v1": {"automotive"}},
+                query_matches={
+                    "v1": [
+                        {
+                            "niche": "automotive",
+                            "query": "f1 gearbox",
+                            "rank": 1,
+                        }
+                    ]
+                },
+                query_search_results=[
+                    {
+                        "niche": "automotive",
+                        "query": "f1 gearbox",
+                        "video_ids": ["v1"],
+                    }
+                ],
+                completed_jobs={"automotive::f1 gearbox"},
+                search_calls=1,
+            )
+
+            loaded = youtube_discovery.load_search_checkpoint(
+                path,
+                signature,
+            )
+
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded["search_calls"], 1)
+        self.assertEqual(
+            loaded["completed_jobs"],
+            ["automotive::f1 gearbox"],
+        )
+        self.assertEqual(
+            loaded["discovered"]["v1"],
+            ["automotive"],
+        )
+
+    def test_search_checkpoint_ignores_changed_signature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "search_checkpoint.json"
+            original = {"queries": [], "region_code": "US"}
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "signature": original,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = youtube_discovery.load_search_checkpoint(
+                path,
+                {"queries": [], "region_code": "GB"},
+            )
+
+        self.assertIsNone(loaded)
 
 
 class YoutubeDiscoveryApiTests(unittest.TestCase):
