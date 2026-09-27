@@ -145,7 +145,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": "Fetches current view counts for the same frozen video IDs. No new search discovery.",
     },
     "exp13_auto_refresh_install": {
-        "label": "Install 01.3 Auto Refresh",
+        "label": "Install Opportunity Auto-Continue",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -160,12 +160,12 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             sys.executable,
         ],
         "description": (
-            "Registers a Windows Task Scheduler job every two hours. The "
-            "self-limiting runner skips API work when no refresh is needed."
+            "Registers the Windows continuation task used by automatic "
+            "Opportunity Research while velocity evidence is pending."
         ),
     },
     "exp13_auto_refresh_remove": {
-        "label": "Remove 01.3 Auto Refresh",
+        "label": "Remove Opportunity Auto-Continue",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -175,7 +175,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "-File",
             "scripts/remove_experiment_01_3_auto_refresh.ps1",
         ],
-        "description": "Removes the Windows Task Scheduler auto-refresh job.",
+        "description": "Removes the Windows Opportunity Research continuation task.",
     },
     "exp14_plan": {
         "label": "Build 01.4 Expansion Plan",
@@ -1143,6 +1143,19 @@ def workflow_guidance(
             ),
             "next_action_id": "exp2_prepare",
             "next_title": "Prepare Experiment 02",
+        }
+
+    if research_status == "DISCOVERY_RUNNING" and not study_set:
+        return {
+            "state": "RUNNING_AUTOMATIC",
+            "current_action_id": None,
+            "current_title": "Opportunity Research running",
+            "current_detail": str(
+                research_state.get("message")
+                or "Discovery and validation are running automatically."
+            ),
+            "next_action_id": None,
+            "next_title": "Automatic velocity validation",
         }
 
     if research_status == "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH" and not study_set:
