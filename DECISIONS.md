@@ -767,3 +767,20 @@ evidence and requests human attention instead of polling indefinitely.
 
 Doctor commands, manual experiment actions, clean restart, scheduler management
 and benchmarks are maintenance tools and belong under **Tools & Diagnostics**.
+
+
+## D-055 — Creator workflow uses multiple views, not one scrolling control page
+
+**Status:** Accepted
+
+The normal working UI is split into Home, Opportunity, Analyze & Create, and
+Tools & Diagnostics views.
+
+Home should fit the current decision, next step, compact progress and recent
+activity without exposing full experiment internals. Human opportunity review
+gets its own workspace. Experiment 02 and later creative stages share the
+Analyze & Create workspace. Doctors, manual experiment controls, raw outputs and
+technical stage state belong in Tools & Diagnostics.
+
+The Live Job console is global and opens as a drawer so logs remain available
+without occupying permanent vertical space.
