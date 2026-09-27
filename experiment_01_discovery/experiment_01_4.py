@@ -79,6 +79,14 @@ def load_config() -> dict[str, Any]:
     missing = sorted(required - set(config))
     if missing:
         raise SystemExit("Experiment 01.4 config is missing: " + ", ".join(missing))
+
+    for topic, definition in config["topic_definitions"].items():
+        niche = str(definition.get("niche") or "").strip()
+        if not niche:
+            raise SystemExit(
+                f"Experiment 01.4 topic '{topic}' is missing required niche."
+            )
+
     return config
 
 
