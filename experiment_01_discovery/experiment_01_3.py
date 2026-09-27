@@ -60,7 +60,63 @@ RAW_FILE = OUTPUT_DIR / "raw_results.json"
 REJECTED_FILE = OUTPUT_DIR / "rejected_candidates.json"
 TOPIC_FILE = OUTPUT_DIR / "topic_velocity.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+REFRESH_LOCK_FILE = OUTPUT_ROOT / "experiment_01_3_refresh.lock"
 EXPERIMENT_ID = "01.3"
+
+
+def acquire_refresh_lock(
+    path: Path = REFRESH_LOCK_FILE,
+    *,
+    stale_minutes: int = 30,
+) -> bool:
+    """Prevent manual and scheduled refreshes from overlapping."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+
+    if path.exists():
+        try:
+            modified = datetime.fromtimestamp(
+                path.stat().st_mtime,
+                tz=timezone.utc,
+            )
+            age_minutes = (now - modified).total_seconds() / 60
+        except OSError:
+            age_minutes = 0
+        if age_minutes >= stale_minutes:
+            try:
+                path.unlink()
+            except OSError:
+                return False
+        else:
+            return False
+
+    try:
+        fd = os.open(
+            path,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+        )
+    except FileExistsError:
+        return False
+
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "created_at": now.isoformat(),
+                }
+            )
+        )
+    return True
+
+
+def release_refresh_lock(
+    path: Path = REFRESH_LOCK_FILE,
+) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def median_or_none(values: list[float | int]) -> float | None:
@@ -159,7 +215,8 @@ def classify_topic_relevance(
         "excluded_title_matches": [],
     }
 
-def confidence_from_unique_channels(count: int) -> str:
+def topic_channel_confidence(count: int) -> str:
+    """Describe topic evidence breadth from independent source channels."""
     if count >= 5:
         return "STRONG"
     if count >= 3:
@@ -167,6 +224,32 @@ def confidence_from_unique_channels(count: int) -> str:
     if count >= 1:
         return "LOW"
     return "INSUFFICIENT"
+
+
+def confidence_from_unique_channels(count: int) -> str:
+    """Backward-compatible alias for older callers/tests."""
+    return topic_channel_confidence(count)
+
+
+def topic_niche_map(config: dict[str, Any]) -> dict[str, str]:
+    """Return the configured niche for every globally unique topic ID."""
+    mapping: dict[str, str] = {}
+    for item in config.get("topics", []):
+        topic = str(item.get("topic") or "").strip()
+        niche = str(item.get("niche") or "").strip()
+        if not topic:
+            raise ValueError("Experiment 01.3 topic is missing its topic ID.")
+        if not niche:
+            raise ValueError(
+                f"Experiment 01.3 topic '{topic}' is missing required niche."
+            )
+        existing = mapping.get(topic)
+        if existing is not None and existing != niche:
+            raise ValueError(
+                f"Experiment 01.3 topic '{topic}' is assigned to multiple niches."
+            )
+        mapping[topic] = niche
+    return mapping
 
 
 def dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -180,44 +263,105 @@ def dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def aggregate_age_matched_velocity(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    eligible = dedupe_rows([row for row in rows if row.get("topic_relevance") == "ON_TOPIC"])
+def aggregate_age_matched_velocity(
+    rows: list[dict[str, Any]],
+    topic_niches: dict[str, str],
+) -> dict[str, Any]:
+    """Aggregate velocity against a niche-and-format matched cohort baseline."""
 
-    cohort_values: dict[str, list[float]] = defaultdict(list)
-    for row in eligible:
-        if row.get("current_views_per_day") is not None:
-            cohort_values[str(row.get("format_candidate", "unknown"))].append(
-                float(row["current_views_per_day"])
-            )
-    cohort_medians = {fmt: median_or_none(values) for fmt, values in cohort_values.items()}
+    eligible = dedupe_rows(
+        [
+            row
+            for row in rows
+            if row.get("topic_relevance") == "ON_TOPIC"
+        ]
+    )
 
-    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    cohort_values: dict[tuple[str, str], list[float]] = defaultdict(list)
     for row in eligible:
+        velocity = row.get("current_views_per_day")
+        if velocity is None:
+            continue
+        fmt = str(row.get("format_candidate", "unknown"))
+        row_niches = {
+            topic_niches.get(str(topic), "unknown")
+            for topic in row.get("validated_topics", [])
+        }
+        for niche in row_niches:
+            cohort_values[(niche, fmt)].append(float(velocity))
+
+    cohort_medians = {
+        key: median_or_none(values)
+        for key, values in cohort_values.items()
+    }
+    cohort_medians_nested: dict[str, dict[str, float | None]] = {}
+    for (niche, fmt), value in sorted(cohort_medians.items()):
+        cohort_medians_nested.setdefault(niche, {})[fmt] = value
+
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in eligible:
+        fmt = str(row.get("format_candidate", "unknown"))
         for topic in row.get("validated_topics", []):
-            grouped[(str(topic), str(row.get("format_candidate", "unknown")))].append(row)
+            topic_name = str(topic)
+            niche = topic_niches.get(topic_name, "unknown")
+            grouped[(niche, topic_name, fmt)].append(row)
 
     topics: dict[str, Any] = {}
-    for (topic, fmt), group in sorted(grouped.items()):
+    for (niche, topic, fmt), group in sorted(grouped.items()):
         group = dedupe_rows(group)
-        velocities = [float(r["current_views_per_day"]) for r in group if r.get("current_views_per_day") is not None]
-        ages = [float(r["age_days"]) for r in group if r.get("age_days") is not None]
-        views = [int(r["views"]) for r in group if r.get("views") is not None]
+        velocities = [
+            float(r["current_views_per_day"])
+            for r in group
+            if r.get("current_views_per_day") is not None
+        ]
+        ages = [
+            float(r["age_days"])
+            for r in group
+            if r.get("age_days") is not None
+        ]
+        views = [
+            int(r["views"])
+            for r in group
+            if r.get("views") is not None
+        ]
         trusted = [
             float(r["outlier_ratio"])
             for r in group
-            if r.get("outlier_reliability") == "TRUSTED" and r.get("outlier_ratio") is not None
+            if r.get("outlier_reliability") == "TRUSTED"
+            and r.get("outlier_ratio") is not None
         ]
-        unique_channels = len({r.get("channel_id") for r in group if r.get("channel_id")})
+        unique_channels = len(
+            {
+                r.get("channel_id")
+                for r in group
+                if r.get("channel_id")
+            }
+        )
         topic_median = median_or_none(velocities)
-        cohort_median = cohort_medians.get(fmt)
+        cohort_median = cohort_medians.get((niche, fmt))
         index = None
-        if topic_median is not None and cohort_median is not None and cohort_median > 0:
+        if (
+            topic_median is not None
+            and cohort_median is not None
+            and cohort_median > 0
+        ):
             index = round(topic_median / cohort_median, 3)
 
-        topics.setdefault(topic, {"by_format": {}})["by_format"][fmt] = {
+        topic_payload = topics.setdefault(
+            topic,
+            {
+                "niche": niche,
+                "by_format": {},
+            },
+        )
+        topic_payload["niche"] = niche
+        topic_payload["by_format"][fmt] = {
+            "niche": niche,
             "video_count": len(group),
             "unique_channels": unique_channels,
-            "confidence": confidence_from_unique_channels(unique_channels),
+            "topic_channel_confidence": topic_channel_confidence(
+                unique_channels
+            ),
             "velocity_sample_count": len(velocities),
             "median_age_days": median_or_none(ages),
             "median_views": median_or_none(views),
@@ -228,8 +372,20 @@ def aggregate_age_matched_velocity(rows: list[dict[str, Any]]) -> dict[str, Any]
             "median_trusted_outlier_ratio": median_or_none(trusted),
         }
 
+    legacy_by_format: dict[str, float | None] = {}
+    if len(cohort_medians_nested) == 1:
+        legacy_by_format = dict(
+            next(iter(cohort_medians_nested.values()))
+        )
+
     return {
-        "cohort_median_current_views_per_day_by_format": cohort_medians,
+        "cohort_median_current_views_per_day_by_niche_format":
+            cohort_medians_nested,
+        # Transitional single-niche alias for older consumers. It is empty
+        # once more than one niche is present so cross-niche pooling cannot
+        # silently reappear.
+        "cohort_median_current_views_per_day_by_format":
+            legacy_by_format,
         "topics": topics,
     }
 
@@ -253,6 +409,10 @@ def load_config() -> dict[str, Any]:
     missing = sorted(required - set(config))
     if missing:
         raise SystemExit("Experiment 01.3 config is missing: " + ", ".join(missing))
+    try:
+        topic_niche_map(config)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     return config
 
 
@@ -659,6 +819,7 @@ def discover(
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
+        topic_niche = str(topic.get("niche") or "unknown")
         target_formats = (
             sorted(topic_format_targets.get(topic_name, set()))
             if topic_format_targets is not None
@@ -828,6 +989,7 @@ def discover(
                             matches.setdefault(video_id, []).append(
                                 {
                                     "target_topic": topic_name,
+                                    "target_niche": topic_niche,
                                     "query": query,
                                     "search_order": order,
                                     "search_phase": search_phase,
@@ -842,6 +1004,7 @@ def discover(
                         audit.append(
                             {
                                 "target_topic": topic_name,
+                                "target_niche": topic_niche,
                                 "query": query,
                                 "search_order": order,
                                 "search_phase": search_phase,
@@ -894,11 +1057,13 @@ def cohort_discovery_readiness(
         for topic in row.get("validated_topics", []):
             channels[(str(topic), fmt)].add(channel_id)
 
+    topic_niches = topic_niche_map(config)
     cells = []
     for (topic, fmt), channel_ids in sorted(channels.items()):
         cells.append(
             {
                 "topic": topic,
+                "niche": topic_niches.get(topic, "unknown"),
                 "format_candidate": fmt,
                 "unique_channels": len(channel_ids),
                 "refresh_worthy": len(channel_ids) >= required,
@@ -979,6 +1144,7 @@ def build_rows(
     include_baselines: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     topics = {str(t["topic"]): t for t in config["topics"]}
+    topic_niches = topic_niche_map(config)
     context_terms = list(config["motorsport_context_terms"])
     exclude_title_terms = list(config.get("exclude_title_terms", []))
     minimum_views = int(config["minimum_views"])
@@ -1009,6 +1175,13 @@ def build_rows(
         subscribers = int(channel.get("statistics", {}).get("subscriberCount", 0) or 0)
 
         searched_topics = sorted(searched_set)
+        searched_niches = sorted(
+            {
+                topic_niches[topic_name]
+                for topic_name in searched_topics
+                if topic_name in topic_niches
+            }
+        )
         validated_topics = []
         validation = {}
 
@@ -1062,7 +1235,15 @@ def build_rows(
             "channel_id": channel_id,
             "channel_title": snippet.get("channelTitle"),
             "searched_topics": searched_topics,
+            "searched_niches": searched_niches,
             "validated_topics": sorted(validated_topics),
+            "validated_niches": sorted(
+                {
+                    topic_niches[topic_name]
+                    for topic_name in validated_topics
+                    if topic_name in topic_niches
+                }
+            ),
             "query_matches": query_matches.get(video_id, []),
             "search_phases": search_phases,
             "cohort_window_source": "strict" if "strict" in search_phases else "expanded",
@@ -1128,7 +1309,8 @@ def build_rows(
 
 STATIC_KEYS = (
     "experiment_id", "video_id", "youtube_url", "title", "channel_id",
-    "channel_title", "searched_topics", "validated_topics", "query_matches",
+    "channel_title", "searched_topics", "searched_niches", "validated_topics",
+    "validated_niches", "query_matches",
     "search_phases", "cohort_window_source",
     "published_at", "duration_seconds", "format_candidate",
     "channel_subscribers", "topic_relevance", "topic_relevance_reason",
@@ -1347,11 +1529,14 @@ def build_summary(
 ) -> dict[str, Any]:
     format_counts: dict[str, int] = {}
     topic_counts: dict[str, int] = {}
+    niche_counts: dict[str, int] = {}
     for row in rows:
         fmt = str(row.get("format_candidate", "unknown"))
         format_counts[fmt] = format_counts.get(fmt, 0) + 1
         for topic in row.get("validated_topics", []):
             topic_counts[str(topic)] = topic_counts.get(str(topic), 0) + 1
+        for niche in row.get("validated_niches", []):
+            niche_counts[str(niche)] = niche_counts.get(str(niche), 0) + 1
 
     valid = [r for r in rows if r.get("velocity_status") == "VALID"]
     return {
@@ -1383,6 +1568,12 @@ def build_summary(
         "missing_videos": missing,
         "rejected_during_discovery": int(manifest.get("rejected_during_discovery", 0)),
         "format_counts": dict(sorted(format_counts.items())),
+        "niche_counts": dict(
+            sorted(
+                niche_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ),
         "topic_counts": dict(sorted(topic_counts.items(), key=lambda item: (-item[1], item[0]))),
         "velocity_analysis": {
             "valid_velocity_samples": len(valid),
@@ -1401,10 +1592,10 @@ def build_summary(
             "Topic and motorsport-context validation use title text only.",
             "Discovery uses separate short/medium/long YouTube duration branches.",
             "The primary 105-135 day window widens to 90-150 only for sparse topic/format cells.",
-            "Primary metric: median current views/day within the same age window and format.",
+            "Primary metric: median current views/day within the same age window, niche and format.",
             "Short-form and long-form candidates are benchmarked separately.",
-            "Age-matched velocity index = topic median / whole-cohort median for the same format.",
-            "1-2 unique channels = LOW confidence; 3-4 = MODERATE; 5+ = STRONG.",
+            "Age-matched velocity index = topic median / niche-and-format cohort median.",
+            "Topic channel confidence: 1-2 = LOW; 3-4 = MODERATE; 5+ = STRONG.",
             "Outlier ratio is supporting evidence only; no final opportunity score is calculated.",
         ],
     }
@@ -1412,7 +1603,8 @@ def build_summary(
 
 CSV_FIELDS = [
     "experiment_id", "video_id", "youtube_url", "title", "channel_id",
-    "channel_title", "searched_topics", "validated_topics", "query_matches",
+    "channel_title", "searched_topics", "searched_niches", "validated_topics",
+    "validated_niches", "query_matches",
     "search_phases", "cohort_window_source",
     "published_at", "age_days", "duration_seconds", "format_candidate",
     "views", "likes", "channel_subscribers", "channel_baseline_median",
@@ -1436,7 +1628,9 @@ def write_outputs(rows: list[dict[str, Any]], topic_velocity: dict[str, Any], su
         for row in rows:
             flat = dict(row)
             flat["searched_topics"] = "|".join(row.get("searched_topics", []))
+            flat["searched_niches"] = "|".join(row.get("searched_niches", []))
             flat["validated_topics"] = "|".join(row.get("validated_topics", []))
+            flat["validated_niches"] = "|".join(row.get("validated_niches", []))
             flat["query_matches"] = json.dumps(row.get("query_matches", []), ensure_ascii=False)
             flat["search_phases"] = "|".join(row.get("search_phases", []))
             writer.writerow({field: flat.get(field) for field in CSV_FIELDS})
@@ -1704,6 +1898,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         "fallback_published_after": wide_window["published_after"],
         "fallback_published_before": wide_window["published_before"],
         "minimum_views": int(config["minimum_views"]),
+        "topic_niches": topic_niche_map(config),
         "minimum_unique_channels_per_topic_format": int(
             config["minimum_unique_channels_per_topic_format"]
         ),
@@ -1733,7 +1928,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     )
 
     apply_velocity(rows, measurement_observed_at)
-    topic_velocity = aggregate_age_matched_velocity(rows)
+    topic_velocity = aggregate_age_matched_velocity(
+        rows,
+        topic_niche_map(config),
+    )
     summary = build_summary("discover", manifest, rows, [], topic_velocity)
     write_outputs(rows, topic_velocity, summary)
 
@@ -1742,24 +1940,57 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
 
     print_completion("discover", summary)
 
-def run_refresh(api_key: str) -> None:
-    if not MANIFEST_FILE.exists():
-        raise SystemExit("No 01.3 cohort exists. Run --mode discover first.")
-    manifest = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
-    observed_at = datetime.now(timezone.utc).isoformat()
+def run_refresh(config: dict[str, Any], api_key: str) -> None:
+    if not acquire_refresh_lock():
+        raise SystemExit(
+            "Another Experiment 01.3 refresh is already running."
+        )
 
-    print("\nSTAGE 2 — EXPERIMENT 01.3")
-    print("=" * 60)
-    print("Mode: REFRESH FROZEN COHORT")
-    print(f"Cohort: {manifest.get('cohort_id')}")
-    print(f"Frozen videos: {len(manifest.get('video_ids', [])):,}\n")
+    try:
+        if not MANIFEST_FILE.exists():
+            raise SystemExit(
+                "No 01.3 cohort exists. Run --mode discover first."
+            )
+        manifest = json.loads(
+            MANIFEST_FILE.read_text(encoding="utf-8")
+        )
+        observed_at = datetime.now(timezone.utc).isoformat()
 
-    rows, missing = refresh_rows(manifest, api_key)
-    apply_velocity(rows, observed_at)
-    topic_velocity = aggregate_age_matched_velocity(rows)
-    summary = build_summary("refresh", manifest, rows, missing, topic_velocity)
-    write_outputs(rows, topic_velocity, summary)
-    print_completion("refresh", summary)
+        print("\nSTAGE 2 — EXPERIMENT 01.3")
+        print("=" * 60)
+        print("Mode: REFRESH FROZEN COHORT")
+        print(f"Cohort: {manifest.get('cohort_id')}")
+        print(
+            f"Frozen videos: "
+            f"{len(manifest.get('video_ids', [])):,}\n"
+        )
+
+        rows, missing = refresh_rows(manifest, api_key)
+        apply_velocity(rows, observed_at)
+        manifest_topic_niches = manifest.get("topic_niches")
+        topic_niches = (
+            {
+                str(topic): str(niche)
+                for topic, niche in manifest_topic_niches.items()
+            }
+            if isinstance(manifest_topic_niches, dict)
+            else topic_niche_map(config)
+        )
+        topic_velocity = aggregate_age_matched_velocity(
+            rows,
+            topic_niches,
+        )
+        summary = build_summary(
+            "refresh",
+            manifest,
+            rows,
+            missing,
+            topic_velocity,
+        )
+        write_outputs(rows, topic_velocity, summary)
+        print_completion("refresh", summary)
+    finally:
+        release_refresh_lock()
 
 
 def print_completion(mode: str, summary: dict[str, Any]) -> None:
@@ -1834,7 +2065,7 @@ def main() -> None:
     if args.mode == "discover":
         run_discover(args, config, api_key)
     else:
-        run_refresh(api_key)
+        run_refresh(config, api_key)
 
 
 if __name__ == "__main__":

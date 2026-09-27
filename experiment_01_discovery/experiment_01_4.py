@@ -79,16 +79,15 @@ def load_config() -> dict[str, Any]:
     missing = sorted(required - set(config))
     if missing:
         raise SystemExit("Experiment 01.4 config is missing: " + ", ".join(missing))
+
+    for topic, definition in config["topic_definitions"].items():
+        niche = str(definition.get("niche") or "").strip()
+        if not niche:
+            raise SystemExit(
+                f"Experiment 01.4 topic '{topic}' is missing required niche."
+            )
+
     return config
-
-
-def confidence_rank(value: str) -> int:
-    return {
-        "INSUFFICIENT": 0,
-        "LOW": 1,
-        "MODERATE": 2,
-        "STRONG": 3,
-    }.get(str(value).upper(), 0)
 
 
 def extract_topic_cells(topic_velocity: dict[str, Any]) -> list[dict[str, Any]]:
@@ -97,6 +96,11 @@ def extract_topic_cells(topic_velocity: dict[str, Any]) -> list[dict[str, Any]]:
         for fmt, evidence in payload.get("by_format", {}).items():
             row = dict(evidence)
             row["topic"] = str(topic)
+            row["niche"] = str(
+                evidence.get("niche")
+                or payload.get("niche")
+                or ""
+            )
             row["format_candidate"] = str(fmt)
             cells.append(row)
     return cells
@@ -162,6 +166,11 @@ def build_tasks_for_cell(
     if not topic_def:
         return []
 
+    niche = str(
+        cell.get("niche")
+        or topic_def.get("niche")
+        or ""
+    )
     root = str(topic_def["query_root"])
     duration_filters = list(config["duration_filters"].get(fmt, []))
     tasks: list[dict[str, Any]] = []
@@ -174,6 +183,7 @@ def build_tasks_for_cell(
         for duration_filter in duration_filters:
             task = {
                 "topic": topic,
+                "niche": niche,
                 "format_candidate": fmt,
                 "family": family_name,
                 "query": query,
@@ -268,10 +278,14 @@ def build_plan(
         "ready_cells": [
             {
                 "topic": cell["topic"],
+                "niche": cell.get("niche"),
                 "format_candidate": cell["format_candidate"],
                 "unique_channels": cell.get("unique_channels"),
                 "velocity_sample_count": cell.get("velocity_sample_count"),
-                "confidence": cell.get("confidence"),
+                "topic_channel_confidence": (
+                    cell.get("topic_channel_confidence")
+                    or cell.get("confidence")
+                ),
                 "age_matched_velocity_index": cell.get("age_matched_velocity_index"),
                 "median_current_views_per_day": cell.get("median_current_views_per_day"),
             }
@@ -406,6 +420,7 @@ def build_candidates(
             video_provenance[str(video_id)].append(
                 {
                     "topic": result["topic"],
+                    "niche": result.get("niche"),
                     "format_candidate": result["format_candidate"],
                     "family": result["family"],
                     "query": result["query"],
@@ -451,6 +466,14 @@ def build_candidates(
                 valid_topics.append(topic)
                 valid_provenance.append(match)
 
+        validated_niches = sorted(
+            {
+                str(match.get("niche"))
+                for match in valid_provenance
+                if match.get("niche")
+            }
+        )
+
         row = {
             "experiment_id": EXPERIMENT_ID,
             "video_id": video_id,
@@ -462,6 +485,7 @@ def build_candidates(
             "age_days": round(age_days(published_at), 2) if published_at else None,
             "duration_seconds": duration_seconds,
             "format_candidate": fmt,
+            "validated_niches": validated_niches,
             "views": views,
             "likes": int(statistics["likeCount"]) if statistics.get("likeCount") is not None else None,
             "validated_topics": sorted(set(valid_topics)),
@@ -516,7 +540,19 @@ def aggregate_expansion_evidence(
                 if row.get("channel_id")
             }
         )
+        niche = next(
+            (
+                str(provenance.get("niche"))
+                for row in rows
+                for provenance in row.get("query_provenance", [])
+                if provenance.get("topic") == topic
+                and provenance.get("family") == family
+                and provenance.get("niche")
+            ),
+            "",
+        )
         output.setdefault(topic, {}).setdefault(fmt, {})[family] = {
+            "niche": niche,
             "video_count": len(values),
             "unique_channels": unique_channels,
             "median_views": median_or_none(views),
@@ -547,6 +583,7 @@ CSV_FIELDS = [
     "age_days",
     "duration_seconds",
     "format_candidate",
+    "validated_niches",
     "views",
     "likes",
     "validated_topics",
@@ -583,6 +620,7 @@ def write_candidate_outputs(
         for row in candidates:
             flat = dict(row)
             flat["validated_topics"] = "|".join(row.get("validated_topics", []))
+            flat["validated_niches"] = "|".join(row.get("validated_niches", []))
             flat["matched_families"] = "|".join(row.get("matched_families", []))
             flat["query_provenance"] = json.dumps(
                 row.get("query_provenance", []),

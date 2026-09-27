@@ -13,14 +13,43 @@ class ExperimentUiTests(unittest.TestCase):
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
         self.assertIn("exp13_restart", server.ACTION_DEFS)
+        self.assertIn("exp13_auto_refresh_install", server.ACTION_DEFS)
+        self.assertIn("exp13_auto_refresh_remove", server.ACTION_DEFS)
         self.assertIn(
             "--restart-discovery",
             server.ACTION_DEFS["exp13_restart"]["command"],
+        )
+        self.assertIn(
+            "scripts/install_experiment_01_3_auto_refresh.ps1",
+            server.ACTION_DEFS["exp13_auto_refresh_install"]["command"],
+        )
+        self.assertIn(
+            "scripts/remove_experiment_01_3_auto_refresh.ps1",
+            server.ACTION_DEFS["exp13_auto_refresh_remove"]["command"],
         )
         for action in server.ACTION_DEFS.values():
             self.assertIsInstance(action["command"], list)
             self.assertTrue(action["command"])
             self.assertFalse(any(part in {"cmd", "powershell"} for part in action["command"]))
+
+    def test_auto_refresh_actions_are_windows_gated(self):
+        with patch.object(server, "IS_WINDOWS", False):
+            readiness = server.action_readiness()
+        self.assertFalse(
+            readiness["exp13_auto_refresh_install"]["enabled"]
+        )
+        self.assertFalse(
+            readiness["exp13_auto_refresh_remove"]["enabled"]
+        )
+
+        with patch.object(server, "IS_WINDOWS", True):
+            readiness = server.action_readiness()
+        self.assertTrue(
+            readiness["exp13_auto_refresh_install"]["enabled"]
+        )
+        self.assertTrue(
+            readiness["exp13_auto_refresh_remove"]["enabled"]
+        )
 
     def test_job_manager_sets_unbuffered_python_output(self):
         with tempfile.TemporaryDirectory() as tmp:

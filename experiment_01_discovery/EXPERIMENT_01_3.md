@@ -38,6 +38,10 @@ Configuration lives in:
 
 `experiment_01_3_config.json`
 
+Every configured topic now has an explicit `niche`. The current eight F1
+topics all belong to `automotive_racing`. Future niches may share the same
+Experiment 01.3 run without contaminating each other's velocity baseline.
+
 ## Output isolation
 
 Experiment 01.3 never writes into Experiment 01.2 output files.
@@ -138,7 +142,39 @@ Refresh mode:
 - requests current video statistics;
 - compares them with the prior Experiment 01.3 snapshot;
 - calculates current views/hour and current views/day; and
-- aggregates the results by topic and format.
+- aggregates the results by niche, topic and format.
+
+### Automatic refresh on Windows
+
+Manual refresh remains available, but it is no longer the normal operational
+dependency.
+
+The Experiment Control UI provides:
+
+- **Install 01.3 Auto Refresh**
+- **Remove 01.3 Auto Refresh**
+
+The installer registers a Windows Task Scheduler job every two hours. The
+scheduled job runs `scheduled_refresh.py`, which is deliberately self-limiting.
+It skips API work when:
+
+- no frozen cohort exists;
+- the frozen cohort is structurally insufficient;
+- a recent snapshot already exists;
+- another scheduled refresh is already running; or
+- the current cohort already has enough independent-channel and velocity
+  evidence to unlock Experiment 01.4.
+
+When a refresh is due, the task invokes only:
+
+`experiment_01_3.py --mode refresh`
+
+It never performs discovery and therefore never spends `search.list` quota.
+
+Scheduler status and logs are written under:
+
+- `output/experiment_01_3/scheduled_refresh_status.json`
+- `output/experiment_01_3/scheduled_refresh.log`
 
 ## Primary metric
 
@@ -148,12 +184,15 @@ For each topic and each format:
 
 The age-matched velocity index is:
 
-`topic median current views/day / whole cohort median current views/day`
+`topic median current views/day / niche-and-format cohort median current views/day`
 
-The denominator is calculated independently for:
+The denominator is calculated independently for each:
 
-- `short_candidate`
-- `long_form_candidate`
+- niche; and
+- format (`short_candidate` or `long_form_candidate`).
+
+This prevents a structurally fast niche from inflating or suppressing another
+niche's topic index when multiple niches are validated in the same run.
 
 Interpretation:
 
@@ -162,16 +201,17 @@ Interpretation:
 - `2.0` = twice cohort median
 - `0.5` = half cohort median
 
-## Confidence
+## Topic channel confidence
 
-Topic confidence is based on independent channels:
+`topic_channel_confidence` describes independent-channel breadth only:
 
 - 1-2 unique channels: `LOW`
 - 3-4 unique channels: `MODERATE`
 - 5+ unique channels: `STRONG`
 
-This prevents one unusually successful video from being treated as strong
-topic-level evidence.
+This is intentionally separate from `baseline_confidence`, which describes the
+sample quality of one candidate channel's historical view baseline. The two
+labels measure different evidence dimensions and do not share thresholds.
 
 ## Supporting signals
 

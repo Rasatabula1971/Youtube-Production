@@ -39,7 +39,7 @@ The experiment collects independent signals rather than calculating a final oppo
 - Theme labels
 - Query competition profiles
 - Repeated-snapshot velocity
-- Topic-level evidence by format
+- Topic-level evidence by niche and format
 
 Current thresholds are research hypotheses, not frozen production rules.
 
@@ -150,7 +150,9 @@ On Windows, double-click:
 
 The UI opens on localhost and provides gated controls for Experiment 01.3,
 01.4, 01.5 and the built Experiment 02 workflow, with live job logs and output
-folder access.
+folder access. On Windows it can also install/remove a self-limiting scheduled
+01.3 frozen-cohort refresh so velocity sampling does not depend on remembering
+to click Refresh manually.
 
 See `experiment_ui/README.md`.
 

@@ -106,7 +106,14 @@ function renderOpportunityGate(gate) {
       '<div>' +
       '<div class="opportunity-label">OPPORTUNITY</div>' +
       '<h3>' + escapeHtml(humanizeToken(opportunity.topic)) + '</h3>' +
-      '<p>' + escapeHtml(humanizeToken(opportunity.format_candidate)) + '</p>' +
+      '<p>' +
+      escapeHtml(
+        [
+          humanizeToken(opportunity.niche),
+          humanizeToken(opportunity.format_candidate)
+        ].filter(Boolean).join(" · ")
+      ) +
+      '</p>' +
       '</div>' +
       '<span class="decision-chip decision-' +
       escapeHtml(decision.toLowerCase()) + '">' +
@@ -129,8 +136,12 @@ function renderOpportunityGate(gate) {
       '<div><span>Current views/day</span><strong>' +
       escapeHtml(compactNumber(evidence.median_current_views_per_day)) +
       '</strong></div>' +
-      '<div><span>Confidence</span><strong>' +
-      escapeHtml(evidence.confidence || "—") +
+      '<div><span>Topic channel confidence</span><strong>' +
+      escapeHtml(
+        evidence.topic_channel_confidence ||
+        evidence.confidence ||
+        "—"
+      ) +
       '</strong></div>' +
       '</div>' +
 
