@@ -276,11 +276,101 @@ class Experiment013Tests(unittest.TestCase):
                 "F1 brakes engineering",
                 window,
                 "short_candidate",
+                "short",
                 500000,
                 {},
             )
 
         self.assertEqual(ids, ["keep"])
+
+    def test_yt_dlp_duration_branches_do_not_overlap(self):
+        pool = [
+            {
+                "video_id": "short",
+                "upload_date": "20260520",
+                "duration_seconds": 180,
+                "view_count": 800000,
+            },
+            {
+                "video_id": "medium-low",
+                "upload_date": "20260520",
+                "duration_seconds": 181,
+                "view_count": 800000,
+            },
+            {
+                "video_id": "medium-high",
+                "upload_date": "20260520",
+                "duration_seconds": 1200,
+                "view_count": 800000,
+            },
+            {
+                "video_id": "long",
+                "upload_date": "20260520",
+                "duration_seconds": 1201,
+                "view_count": 800000,
+            },
+        ]
+        window = {
+            "published_after": "2026-05-14T00:00:00Z",
+            "published_before": "2026-06-13T23:59:59Z",
+        }
+
+        with patch.object(
+            exp13,
+            "_yt_dlp_pool",
+            return_value=pool,
+        ):
+            medium = exp13._yt_dlp_ids(
+                "F1 brakes engineering",
+                window,
+                "long_form_candidate",
+                "medium",
+                500000,
+                {},
+            )
+            long_form = exp13._yt_dlp_ids(
+                "F1 brakes engineering",
+                window,
+                "long_form_candidate",
+                "long",
+                500000,
+                {},
+            )
+
+        self.assertEqual(medium, ["medium-low", "medium-high"])
+        self.assertEqual(long_form, ["long"])
+
+    def test_expanded_query_families_add_new_discovery_queries(self):
+        topic = {
+            "queries": ["F1 brakes engineering"],
+            "expansion_queries": ["F1 brakes explained"],
+            "short_expansion_queries": ["F1 brakes #shorts"],
+        }
+
+        self.assertEqual(
+            exp13._topic_queries(
+                topic,
+                search_phase="strict",
+                format_target="short_candidate",
+            ),
+            ["F1 brakes engineering"],
+        )
+        self.assertEqual(
+            exp13._topic_queries(
+                topic,
+                search_phase="expanded",
+                format_target="long_form_candidate",
+            ),
+            ["F1 brakes explained"],
+        )
+        self.assertEqual(
+            exp13._topic_queries(
+                topic,
+                search_phase="expanded",
+                format_target="short_candidate",
+            ),
+            ["F1 brakes explained", "F1 brakes #shorts"],
+        )
 
     def test_velocity_history_reads_archived_snapshots(self):
         with tempfile.TemporaryDirectory() as tmp:
