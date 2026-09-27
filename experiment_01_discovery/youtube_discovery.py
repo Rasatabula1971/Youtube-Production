@@ -75,6 +75,7 @@ OUTPUT_ROOT = HERE / "output"
 # contaminate one another.
 EXPERIMENT_OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_2"
 SNAPSHOT_FILE = EXPERIMENT_OUTPUT_DIR / "video_snapshots.jsonl"
+SEARCH_CHECKPOINT_FILE = EXPERIMENT_OUTPUT_DIR / "search_checkpoint.json"
 
 
 # ============================================================
@@ -754,6 +755,76 @@ def calculate_channel_baseline(
     )
 
 
+def discovery_checkpoint_signature(
+    config: dict[str, Any],
+    *,
+    published_after: str | None,
+    region_code: str | None,
+    language: str | None,
+) -> dict[str, Any]:
+    return {
+        "queries": [
+            {
+                "niche": str(niche.get("name", "")),
+                "queries": list(niche.get("queries", [])),
+            }
+            for niche in config.get("niches", [])
+        ],
+        "published_after": published_after,
+        "region_code": region_code,
+        "language": language,
+    }
+
+
+def load_search_checkpoint(
+    path: Path,
+    signature: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != 1
+        or payload.get("signature") != signature
+    ):
+        return None
+    return payload
+
+
+def save_search_checkpoint(
+    path: Path,
+    *,
+    signature: dict[str, Any],
+    discovered: dict[str, set[str]],
+    query_matches: dict[str, list[dict[str, Any]]],
+    query_search_results: list[dict[str, Any]],
+    completed_jobs: set[str],
+    search_calls: int,
+) -> None:
+    payload = {
+        "version": 1,
+        "signature": signature,
+        "search_calls": search_calls,
+        "completed_jobs": sorted(completed_jobs),
+        "discovered": {
+            video_id: sorted(niches)
+            for video_id, niches in discovered.items()
+        },
+        "query_matches": query_matches,
+        "query_search_results": query_search_results,
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -893,7 +964,58 @@ def main() -> None:
         dict[str, Any]
     ] = []
 
-    search_calls = 0
+    signature = discovery_checkpoint_signature(
+        config,
+        published_after=args.published_after,
+        region_code=args.region_code,
+        language=args.language,
+    )
+    checkpoint = load_search_checkpoint(
+        SEARCH_CHECKPOINT_FILE,
+        signature,
+    )
+    completed_jobs: set[str] = set()
+
+    if checkpoint is not None:
+        discovered = {
+            str(video_id): set(niches)
+            for video_id, niches in checkpoint.get(
+                "discovered",
+                {},
+            ).items()
+        }
+        query_matches = {
+            str(video_id): list(matches)
+            for video_id, matches in checkpoint.get(
+                "query_matches",
+                {},
+            ).items()
+        }
+        query_search_results = list(
+            checkpoint.get(
+                "query_search_results",
+                [],
+            )
+        )
+        completed_jobs = set(
+            checkpoint.get(
+                "completed_jobs",
+                [],
+            )
+        )
+        search_calls = int(
+            checkpoint.get(
+                "search_calls",
+                0,
+            )
+        )
+        print(
+            "Resuming Experiment 01.2 search checkpoint: "
+            f"{len(completed_jobs):,} completed queries, "
+            f"{search_calls:,} search calls."
+        )
+    else:
+        search_calls = 0
 
     print()
     print(
@@ -922,6 +1044,13 @@ def main() -> None:
         for query in niche[
             "queries"
         ]:
+
+            job_key = f"{niche_name}::{query}"
+            if job_key in completed_jobs:
+                print(
+                    f"  Already checkpointed: {query}"
+                )
+                continue
 
             if (
                 search_calls
@@ -1025,6 +1154,16 @@ def main() -> None:
                     "query": query,
                     "video_ids": query_video_ids,
                 }
+            )
+            completed_jobs.add(job_key)
+            save_search_checkpoint(
+                SEARCH_CHECKPOINT_FILE,
+                signature=signature,
+                discovered=discovered,
+                query_matches=query_matches,
+                query_search_results=query_search_results,
+                completed_jobs=completed_jobs,
+                search_calls=search_calls,
             )
 
         if (
@@ -2168,6 +2307,9 @@ def main() -> None:
     print(
         f"  {summary_file}"
     )
+
+    if SEARCH_CHECKPOINT_FILE.exists():
+        SEARCH_CHECKPOINT_FILE.unlink()
 
     print(
         f"  {query_profiles_file}"
