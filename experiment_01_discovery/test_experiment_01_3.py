@@ -95,6 +95,34 @@ class Experiment013Tests(unittest.TestCase):
         )
 
 
+    def test_refresh_lock_blocks_overlap_and_releases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lock = Path(tmp) / "refresh.lock"
+
+            self.assertTrue(
+                exp13.acquire_refresh_lock(
+                    lock,
+                    stale_minutes=30,
+                )
+            )
+            self.assertFalse(
+                exp13.acquire_refresh_lock(
+                    lock,
+                    stale_minutes=30,
+                )
+            )
+
+            exp13.release_refresh_lock(lock)
+
+            self.assertFalse(lock.exists())
+            self.assertTrue(
+                exp13.acquire_refresh_lock(
+                    lock,
+                    stale_minutes=30,
+                )
+            )
+            exp13.release_refresh_lock(lock)
+
     def test_search_job_key_separates_phase_and_window(self):
         strict = {
             "published_after": "2026-05-14T00:00:00Z",
