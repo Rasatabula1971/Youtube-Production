@@ -784,3 +784,24 @@ technical stage state belong in Tools & Diagnostics.
 
 The Live Job console is global and opens as a drawer so logs remain available
 without occupying permanent vertical space.
+
+
+## D-056 — Experiment 02 network acquisition is separate from offline ingestion
+
+**Status:** Accepted
+
+Experiment 02 may automatically acquire public source evidence, but network
+acquisition must remain outside `evidence_ingest.py`.
+
+The source-acquisition layer may use `yt-dlp` to retrieve English captions,
+thumbnail and metadata with `--skip-download`. It must not download video media
+as part of this evidence step.
+
+A transcript is required before automatic acquisition can create an enriched
+profile. A thumbnail without an observation is provenance only and cannot
+support a finding.
+
+Guided Experiment 02 readiness is provenance-aware. Current prepared profiles,
+enriched profiles, analysis requests and analyzed outputs must correspond to the
+current approved video set; stale same-ID artifacts do not advance the workflow
+unless their recorded hashes match the current upstream artifact.

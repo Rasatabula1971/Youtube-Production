@@ -70,6 +70,209 @@ class ExperimentUiTests(unittest.TestCase):
             server.WORKFLOW_ACTION_ORDER,
         )
 
+    def test_experiment_02_evidence_acquisition_is_guided_step(self):
+        self.assertIn("exp2_acquire", server.ACTION_DEFS)
+        self.assertIn(
+            "source_acquisition/experiment_02_evidence.py",
+            server.ACTION_DEFS["exp2_acquire"]["command"][1],
+        )
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[
+                server.WORKFLOW_ACTION_ORDER.index("exp2_prepare") + 1
+            ],
+            "exp2_acquire",
+        )
+
+    def test_exp2_acquisition_requires_prepared_profiles_and_transcript_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                review_requests,
+                reviewed,
+            ):
+                path.mkdir()
+
+            profile = prepared / "v1.json"
+            profile.write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(
+                    server,
+                    "EXP2_REVIEW_REQUESTS_DIR",
+                    review_requests,
+                ),
+                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                patch.object(
+                    server,
+                    "EXP2_SYNTHESIS_FILE",
+                    root / "missing_synthesis.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_ACQUISITION_SUMMARY",
+                    root / "missing_acquisition.json",
+                ),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": True,
+                        "opportunities": [],
+                    },
+                ),
+                patch.object(
+                    server.shutil,
+                    "which",
+                    side_effect=lambda name: (
+                        "C:/fake/yt-dlp.exe"
+                        if name == "yt-dlp"
+                        else None
+                    ),
+                ),
+            ):
+                readiness = server.action_readiness()
+
+                self.assertFalse(readiness["exp2_prepare"]["enabled"])
+                self.assertTrue(readiness["exp2_acquire"]["enabled"])
+                self.assertFalse(
+                    readiness["analysis_batch_prepare"]["enabled"]
+                )
+
+                enriched_profile = enriched / "v1.json"
+                enriched_profile.write_text(
+                    json.dumps(
+                        {
+                            "source_inputs": {
+                                "transcript": {"status": "PROVIDED"}
+                            },
+                            "evidence": [
+                                {
+                                    "evidence_id": "transcript.p0001",
+                                    "type": "transcript",
+                                    "observation": "Ready.",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                readiness = server.action_readiness()
+                self.assertFalse(readiness["exp2_acquire"]["enabled"])
+                self.assertTrue(
+                    readiness["analysis_batch_prepare"]["enabled"]
+                )
+
+    def test_analysis_request_must_match_current_enriched_profile_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                review_requests,
+                reviewed,
+            ):
+                path.mkdir()
+
+            (prepared / "v1.json").write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            enriched_path = enriched / "v1.json"
+            enriched_path.write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Evidence.",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            request_path = requests / "v1.analysis_request.json"
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "request_provenance": {
+                            "profile_sha256": "stale"
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(
+                    server,
+                    "EXP2_REVIEW_REQUESTS_DIR",
+                    review_requests,
+                ),
+                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                patch.object(
+                    server,
+                    "EXP2_SYNTHESIS_FILE",
+                    root / "missing_synthesis.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_ACQUISITION_SUMMARY",
+                    root / "missing_acquisition.json",
+                ),
+            ):
+                state = server.exp2_artifact_state()
+                self.assertFalse(state["requests_complete"])
+
+                request_path.write_text(
+                    json.dumps(
+                        {
+                            "request_provenance": {
+                                "profile_sha256": server.sha256_file(
+                                    enriched_path
+                                )
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                state = server.exp2_artifact_state()
+                self.assertTrue(state["requests_complete"])
+
     def test_waiting_automatic_velocity_blocks_duplicate_research_start(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
