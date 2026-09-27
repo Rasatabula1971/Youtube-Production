@@ -82,6 +82,24 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": "Uses YouTube Data API v3 search when available and automatically falls back to Agent Reach / yt-dlp when search quota is unavailable. Official API metadata and measurement remain unchanged.",
     },
+    "exp13_restart": {
+        "label": "Restart 01.3 Discovery Clean",
+        "stage": "01.3",
+        "command": [
+            sys.executable,
+            "experiment_01_discovery/experiment_01_3.py",
+            "--mode",
+            "discover",
+            "--replace-cohort",
+            "--restart-discovery",
+            "--discovery-backend",
+            "auto",
+        ],
+        "description": (
+            "Archives the current 01.3 output, deletes the saved discovery "
+            "checkpoint, and starts a completely new corrected discovery run."
+        ),
+    },
     "exp13_refresh": {
         "label": "Refresh 01.3 Frozen Cohort",
         "stage": "01.3",
@@ -416,7 +434,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp13_tone = "running"
         exp13_detail = "The frozen cohort is being measured for current velocity."
         exp13_next = "Wait for the refresh job to finish."
-    elif active_action == "exp13_discover":
+    elif active_action in {"exp13_discover", "exp13_restart"}:
         exp13_state = "DISCOVERY_RUNNING"
         exp13_human = "DISCOVERY RUNNING"
         exp13_tone = "running"
@@ -709,6 +727,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 else "Start corrected 01.3 discovery."
             ),
         },
+        "exp13_restart": {
+            "enabled": True,
+            "reason": (
+                "Discard the saved discovery checkpoint and start a clean 01.3 run."
+                if EXP13_CHECKPOINT.exists()
+                else "Start a completely new 01.3 discovery run."
+            ),
+        },
         "exp13_refresh": {
             "enabled": exp13_cohort,
             "reason": (
@@ -837,6 +863,9 @@ class JobManager:
             if os.name == "nt":
                 creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
+            child_env = os.environ.copy()
+            child_env["PYTHONUNBUFFERED"] = "1"
+
             process = subprocess.Popen(
                 action["command"],
                 cwd=PROJECT_ROOT,
@@ -845,6 +874,7 @@ class JobManager:
                 text=True,
                 shell=False,
                 creationflags=creationflags,
+                env=child_env,
             )
 
             self._process = process
