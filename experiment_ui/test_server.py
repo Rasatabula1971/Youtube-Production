@@ -119,6 +119,57 @@ class ExperimentUiTests(unittest.TestCase):
             with patch.object(server, "EXP13_DIR", fake_dir):
                 self.assertEqual(server.exp13_valid_velocity_samples(), 7)
 
+    def test_job_manager_forces_utf8_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs = root / "jobs"
+            state = root / "job_state.json"
+            actions = {
+                "test_utf8": {
+                    "label": "UTF8",
+                    "stage": "test",
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        (
+                            "import os; "
+                            "print(os.environ.get('PYTHONUTF8')); "
+                            "print(os.environ.get('PYTHONIOENCODING')); "
+                            "print('STAGE 2 — UTF8')"
+                        ),
+                    ],
+                    "description": "test",
+                }
+            }
+
+            manager = server.JobManager()
+            with (
+                patch.object(server, "ACTION_DEFS", actions),
+                patch.object(
+                    server,
+                    "action_readiness",
+                    return_value={
+                        "test_utf8": {
+                            "enabled": True,
+                            "reason": "test",
+                        }
+                    },
+                ),
+                patch.object(server, "PROJECT_ROOT", root),
+                patch.object(server, "JOB_LOG_DIR", jobs),
+                patch.object(server, "UI_OUTPUT_DIR", root),
+                patch.object(server, "JOB_STATE_FILE", state),
+            ):
+                manager.start("test_utf8")
+                deadline = time.time() + 5
+                while manager.running() and time.time() < deadline:
+                    time.sleep(0.05)
+
+                log = manager.log_text()
+                self.assertIn("1", log)
+                self.assertIn("utf-8", log.lower())
+                self.assertIn("STAGE 2 — UTF8", log)
+
     def test_job_manager_runs_allowlisted_command_without_deadlock(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
