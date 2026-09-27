@@ -1,9 +1,14 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from analysis_execute import (
     build_analysis_request,
     merge_analysis_response,
     objective_metrics,
+    run_batch_prepare,
 )
 
 
@@ -97,6 +102,33 @@ class AnalysisExecutionTests(unittest.TestCase):
                 "transformation_opportunities": [],
             },
         }
+
+    def test_batch_prepare_removes_stale_analysis_requests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles = root / "profiles"
+            requests = root / "requests"
+            profiles.mkdir()
+            requests.mkdir()
+
+            profile = self.profile()
+            (profiles / "v1.json").write_text(
+                json.dumps(profile),
+                encoding="utf-8",
+            )
+            stale = requests / "old.analysis_request.json"
+            stale.write_text(
+                json.dumps({"video_id": "old"}),
+                encoding="utf-8",
+            )
+
+            with patch("analysis_execute.REQUESTS_DIR", requests):
+                run_batch_prepare(profiles)
+
+            self.assertFalse(stale.exists())
+            self.assertTrue(
+                (requests / "v1.analysis_request.json").exists()
+            )
 
     def test_request_filters_evidence_by_dimension(self):
         request = build_analysis_request(self.profile(), self.config)
