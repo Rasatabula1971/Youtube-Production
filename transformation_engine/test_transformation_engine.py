@@ -1,8 +1,13 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
+import transformation_engine as module
 from transformation_engine import (
     build_concept_request,
     ready_entries,
+    run_prepare,
     validate_response,
 )
 
@@ -94,6 +99,78 @@ class TransformationEngineTests(unittest.TestCase):
         )
 
         self.assertEqual(len(result), 1)
+
+    def test_prepare_binds_requests_to_handoff_and_invalidates_stale_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            handoff = root / "handoff.json"
+            output = root / "output"
+            requests = output / "concept_requests"
+            responses = output / "concept_responses"
+            output.mkdir()
+            requests.mkdir()
+            responses.mkdir()
+
+            payload = {
+                "status": "READY_FOR_TRANSFORMATION_ENGINE",
+                "entries": [self.entry],
+            }
+            handoff.write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+
+            old_output = module.OUTPUT_DIR
+            old_requests = module.REQUESTS_DIR
+            old_responses = module.RESPONSES_DIR
+            old_candidates = module.CANDIDATES_FILE
+            old_rejected = module.REJECTED_FILE
+            old_summary = module.SUMMARY_FILE
+            try:
+                module.OUTPUT_DIR = output
+                module.REQUESTS_DIR = requests
+                module.RESPONSES_DIR = responses
+                module.CANDIDATES_FILE = output / "concept_candidates.json"
+                module.REJECTED_FILE = output / "rejected_concepts.json"
+                module.SUMMARY_FILE = output / "summary.json"
+
+                first = run_prepare(handoff)
+                request_path = requests / "curiosity_gap.concept_request.json"
+                request = json.loads(
+                    request_path.read_text(encoding="utf-8")
+                )
+                first_hash = request["request_provenance"]["handoff_sha256"]
+                self.assertEqual(
+                    first_hash,
+                    module.sha256_file(handoff),
+                )
+
+                (output / "concept_gate_ui_state.json").write_text(
+                    json.dumps({"status": "COMPLETE"}),
+                    encoding="utf-8",
+                )
+
+                payload["entries"][0]["label"] = "Changed mechanism label"
+                handoff.write_text(
+                    json.dumps(payload),
+                    encoding="utf-8",
+                )
+                second = run_prepare(handoff)
+
+                self.assertNotEqual(
+                    first["handoff_sha256"],
+                    second["handoff_sha256"],
+                )
+                self.assertFalse(
+                    (output / "concept_gate_ui_state.json").exists()
+                )
+            finally:
+                module.OUTPUT_DIR = old_output
+                module.REQUESTS_DIR = old_requests
+                module.RESPONSES_DIR = old_responses
+                module.CANDIDATES_FILE = old_candidates
+                module.REJECTED_FILE = old_rejected
+                module.SUMMARY_FILE = old_summary
 
     def test_request_preserves_mechanism_context_without_ranking(self):
         request = build_concept_request(self.entry, self.config)
