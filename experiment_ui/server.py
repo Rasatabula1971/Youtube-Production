@@ -102,6 +102,22 @@ PACKAGING_RESPONSES_DIR = PACKAGING_OUTPUT / "package_responses"
 PACKAGING_CANDIDATES_FILE = PACKAGING_OUTPUT / "package_candidates.json"
 PACKAGING_RESEARCH_HANDOFF = PACKAGING_OUTPUT / "research_handoff.json"
 
+RESEARCH_DIR = PROJECT_ROOT / "research_engine"
+if str(RESEARCH_DIR) not in sys.path:
+    sys.path.insert(0, str(RESEARCH_DIR))
+
+from research_review import (  # noqa: E402
+    apply_action as apply_research_gate_action,
+    snapshot as research_gate_snapshot,
+)
+
+RESEARCH_OUTPUT = RESEARCH_DIR / "output"
+RESEARCH_PLANS_DIR = RESEARCH_OUTPUT / "plans"
+RESEARCH_EVIDENCE_DIR = RESEARCH_OUTPUT / "acquired_evidence"
+RESEARCH_RESPONSES_DIR = RESEARCH_OUTPUT / "research_responses"
+RESEARCH_DRAFTS_DIR = RESEARCH_OUTPUT / "draft_packages"
+RESEARCH_VERIFIED_DIR = RESEARCH_OUTPUT / "verified_packages"
+
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
@@ -118,6 +134,10 @@ WORKFLOW_ACTION_ORDER = [
     "package_prepare",
     "package_generate",
     "package_gate_prepare",
+    "research_prepare",
+    "research_acquire",
+    "research_generate",
+    "research_gate_prepare",
 ]
 
 ACTION_DEFS: dict[str, dict[str, Any]] = {
@@ -499,6 +519,58 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Prepares the compact human Packaging Gate. No package is selected automatically."
         ),
     },
+    "research_prepare": {
+        "label": "Prepare Research Plans",
+        "stage": "06",
+        "command": [
+            sys.executable,
+            "research_engine/research_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Turns approved packages into bounded research questions, including package promise dependencies."
+        ),
+    },
+    "research_acquire": {
+        "label": "Acquire Research Evidence",
+        "stage": "06",
+        "command": [
+            sys.executable,
+            "research_engine/research_acquisition.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses Agent Reach Exa search and Jina Reader to acquire real web pages for current research questions."
+        ),
+    },
+    "research_generate": {
+        "label": "Structure Research Claims",
+        "stage": "06",
+        "command": [
+            sys.executable,
+            "research_engine/research_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to structure claims strictly from acquired page evidence."
+        ),
+    },
+    "research_gate_prepare": {
+        "label": "Prepare Research Gate",
+        "stage": "06",
+        "command": [
+            sys.executable,
+            "research_engine/research_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the compact human claim-by-claim Research Gate before Script."
+        ),
+    },
 }
 
 OPEN_TARGETS = {
@@ -506,6 +578,7 @@ OPEN_TARGETS = {
     "experiment_02_output": EXP2_OUTPUT,
     "transformation_output": TRANSFORM_OUTPUT,
     "packaging_output": PACKAGING_OUTPUT,
+    "research_output": RESEARCH_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
@@ -1020,6 +1093,113 @@ def packaging_artifact_state() -> dict[str, Any]:
     }
 
 
+def research_artifact_state() -> dict[str, Any]:
+    packaging_handoff_hash = (
+        sha256_file(PACKAGING_RESEARCH_HANDOFF)
+        if PACKAGING_RESEARCH_HANDOFF.exists()
+        else None
+    )
+    plan_hashes: dict[str, str] = {}
+    if packaging_handoff_hash and RESEARCH_PLANS_DIR.exists():
+        for path in RESEARCH_PLANS_DIR.glob("*.research_plan.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            provenance = payload.get("plan_provenance", {})
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if (
+                concept_id
+                and isinstance(provenance, dict)
+                and provenance.get("packaging_handoff_sha256")
+                == packaging_handoff_hash
+            ):
+                plan_hashes[concept_id] = sha256_file(path)
+
+    evidence_hashes: dict[str, str] = {}
+    if RESEARCH_EVIDENCE_DIR.exists():
+        for path in RESEARCH_EVIDENCE_DIR.glob("*.research_evidence.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("provenance", {})
+            if (
+                concept_id in plan_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("plan_sha256") == plan_hashes[concept_id]
+                and payload.get("pages")
+            ):
+                evidence_hashes[concept_id] = sha256_file(path)
+
+    response_hashes: dict[str, str] = {}
+    if RESEARCH_RESPONSES_DIR.exists():
+        for path in RESEARCH_RESPONSES_DIR.glob("*.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("response_provenance", {})
+            if (
+                concept_id in plan_hashes
+                and concept_id in evidence_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("plan_sha256") == plan_hashes[concept_id]
+                and provenance.get("evidence_sha256") == evidence_hashes[concept_id]
+            ):
+                response_hashes[concept_id] = sha256_file(path)
+
+    current_drafts: set[str] = set()
+    if RESEARCH_DRAFTS_DIR.exists():
+        for path in RESEARCH_DRAFTS_DIR.glob("*.draft_research_package.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("draft_provenance", {})
+            if (
+                concept_id in plan_hashes
+                and concept_id in response_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("plan_sha256") == plan_hashes[concept_id]
+                and provenance.get("response_sha256") == response_hashes[concept_id]
+            ):
+                current_drafts.add(concept_id)
+
+    plans_ready = bool(plan_hashes)
+    evidence_complete = plans_ready and set(plan_hashes).issubset(evidence_hashes)
+    responses_complete = plans_ready and set(plan_hashes).issubset(response_hashes)
+    drafts_ready = responses_complete and set(plan_hashes).issubset(current_drafts)
+    gate = research_gate_snapshot() if drafts_ready else {
+        "status": "WAITING_FOR_DRAFT_RESEARCH_PACKAGES",
+        "complete": False,
+        "claims": [],
+    }
+    verified = gate.get("verified_packages", []) if isinstance(gate, dict) else []
+    story_ready = (
+        bool(gate.get("complete"))
+        and bool(verified)
+        and all(
+            isinstance(item, dict)
+            and item.get("status") == "READY_FOR_STORY_SCRIPT"
+            for item in verified
+        )
+    )
+    return {
+        "packaging_handoff_sha256": packaging_handoff_hash,
+        "plan_concept_ids": sorted(plan_hashes),
+        "evidence_concept_ids": sorted(evidence_hashes),
+        "response_concept_ids": sorted(response_hashes),
+        "draft_concept_ids": sorted(current_drafts),
+        "plans_ready": plans_ready,
+        "evidence_complete": evidence_complete,
+        "responses_complete": responses_complete,
+        "drafts_ready": drafts_ready,
+        "research_gate": gate,
+        "research_gate_complete": bool(gate.get("complete")),
+        "story_ready": story_ready,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -1274,6 +1454,16 @@ def stage_statuses() -> list[dict[str, Any]]:
     )
     packaging_gate_complete = bool(packaging["packaging_gate_complete"])
     packaging_research_ready = bool(packaging["research_ready"])
+    research = research_artifact_state()
+    research_plans = bool(research["plans_ready"])
+    research_evidence = bool(research["evidence_complete"])
+    research_drafts = bool(research["drafts_ready"])
+    research_gate = research["research_gate"]
+    research_gate_status = str(
+        research_gate.get("status") or "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"
+    )
+    research_gate_complete = bool(research["research_gate_complete"])
+    story_ready = bool(research["story_ready"])
 
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
@@ -1356,6 +1546,52 @@ def stage_statuses() -> list[dict[str, Any]]:
         package_human = "PACKAGING NEEDS ATTENTION"
         package_tone = "action"
         package_next = "Inspect the Packaging Gate state."
+
+    if story_ready:
+        research_human = "RESEARCH APPROVED — STAGE COMPLETE"
+        research_tone = "complete"
+        research_next = "Proceed to Story / Script."
+    elif active_action in {
+        "research_prepare",
+        "research_acquire",
+        "research_generate",
+        "research_gate_prepare",
+    }:
+        research_human = "RESEARCH WORK RUNNING"
+        research_tone = "running"
+        research_next = "Wait for the current Research job to finish."
+    elif not packaging_research_ready:
+        research_human = "WAITING FOR APPROVED PACKAGE"
+        research_tone = "blocked"
+        research_next = "Approve a package first."
+    elif not research_plans:
+        research_human = "READY TO PREPARE RESEARCH"
+        research_tone = "ready"
+        research_next = "Run Prepare Research Plans."
+    elif not research_evidence:
+        research_human = "WEB EVIDENCE NEEDED"
+        research_tone = "action"
+        research_next = "Run Acquire Research Evidence."
+    elif not research_drafts:
+        research_human = "CLAIM STRUCTURING NEEDED"
+        research_tone = "action"
+        research_next = "Run Structure Research Claims."
+    elif research_gate_status == "READY_TO_PREPARE":
+        research_human = "PREPARE RESEARCH GATE"
+        research_tone = "action"
+        research_next = "Run Prepare Research Gate."
+    elif research_gate_status == "AWAITING_HUMAN_DECISION":
+        research_human = "HUMAN RESEARCH DECISION NEEDED"
+        research_tone = "action"
+        research_next = "Review claims in Analyze & Create."
+    elif research_gate_complete:
+        research_human = "RESEARCH INCOMPLETE"
+        research_tone = "action"
+        research_next = "Rework unresolved research before Script."
+    else:
+        research_human = "RESEARCH NEEDS ATTENTION"
+        research_tone = "action"
+        research_next = "Inspect the Research Gate state."
 
     return [
         {
@@ -1591,6 +1827,47 @@ def stage_statuses() -> list[dict[str, Any]]:
             "ready": research_ready,
             "current": research_ready and not packaging_research_ready,
         },
+        {
+            "id": "06",
+            "title": "Research",
+            "state": research_gate_status,
+            "human_status": research_human,
+            "tone": research_tone,
+            "detail": (
+                "Acquires real web evidence, structures traceable claims, and "
+                "stops for human claim approval before Story / Script."
+            ),
+            "next_action": research_next,
+            "criteria": [
+                {
+                    "label": "Approved package handoff ready",
+                    "done": packaging_research_ready,
+                },
+                {
+                    "label": "Research plans prepared",
+                    "done": research_plans,
+                },
+                {
+                    "label": "Web evidence acquired",
+                    "done": research_evidence,
+                },
+                {
+                    "label": "Draft research packages built",
+                    "done": research_drafts,
+                },
+                {
+                    "label": "Human Research Gate complete",
+                    "done": research_gate_complete,
+                },
+                {
+                    "label": "All research questions resolved for Script",
+                    "done": story_ready,
+                },
+            ],
+            "complete": story_ready,
+            "ready": packaging_research_ready,
+            "current": packaging_research_ready and not story_ready,
+        },
     ]
 
 def opportunity_research_state() -> dict[str, Any]:
@@ -1647,6 +1924,15 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
     )
     packaging_gate_complete = bool(packaging["packaging_gate_complete"])
+    research = research_artifact_state()
+    research_plans = bool(research["plans_ready"])
+    research_evidence = bool(research["evidence_complete"])
+    research_drafts = bool(research["drafts_ready"])
+    research_gate = research["research_gate"]
+    research_gate_status = str(
+        research_gate.get("status") or "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"
+    )
+    research_gate_complete = bool(research["research_gate_complete"])
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -2119,6 +2405,67 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "research_prepare": {
+            "enabled": bool(packaging["research_ready"]) and not research_plans,
+            "reason": (
+                "Approved packages are ready to become research plans."
+                if bool(packaging["research_ready"]) and not research_plans
+                else (
+                    "Research plans are already current."
+                    if research_plans
+                    else "Approve a package first."
+                )
+            ),
+        },
+        "research_acquire": {
+            "enabled": research_plans and not research_evidence,
+            "reason": (
+                "Current research plans are ready for real web evidence acquisition."
+                if research_plans and not research_evidence
+                else (
+                    "Current web evidence already exists."
+                    if research_evidence
+                    else "Prepare current research plans first."
+                )
+            ),
+        },
+        "research_generate": {
+            "enabled": research_evidence and not research_drafts,
+            "reason": (
+                "Acquired pages are ready for FAIR claim structuring."
+                if research_evidence and not research_drafts
+                else (
+                    "Draft research packages already exist."
+                    if research_drafts
+                    else "Acquire current web evidence first."
+                )
+            ),
+        },
+        "research_gate_prepare": {
+            "enabled": (
+                research_drafts
+                and (
+                    research_gate_status == "READY_TO_PREPARE"
+                    or (
+                        research_gate_complete
+                        and not bool(research["story_ready"])
+                    )
+                )
+            ),
+            "reason": (
+                "Draft research claims are ready for human review."
+                if research_drafts and research_gate_status == "READY_TO_PREPARE"
+                else (
+                    "Research remains incomplete; reopen the Research Gate."
+                    if research_drafts and research_gate_complete
+                    else (
+                        "Research Gate is already prepared or complete."
+                        if research_drafts
+                        else "Structure current research claims first."
+                    )
+                )
+            ),
+        },
     }
 
 
@@ -2369,6 +2716,24 @@ def workflow_guidance(
             "next_title": "Research",
         }
 
+    research = research_artifact_state()
+    research_gate = research.get("research_gate", {})
+    if (
+        research.get("drafts_ready")
+        and research_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_RESEARCH_GATE",
+            "current_action_id": None,
+            "current_title": "Review Research Claims",
+            "current_detail": (
+                "Check each claim against its cited acquired source evidence. "
+                "Accept only wording safe to carry into the script."
+            ),
+            "next_action_id": None,
+            "next_title": "Story / Script",
+        }
+
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
         gate_info = readiness.get(action_id, {})
         if gate_info.get("enabled"):
@@ -2418,6 +2783,7 @@ def status_payload() -> dict[str, Any]:
     workflow = workflow_guidance(readiness)
     transformation = transformation_artifact_state()
     packaging = packaging_artifact_state()
+    research = research_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -2464,6 +2830,8 @@ def status_payload() -> dict[str, Any]:
         "concept_gate": transformation["concept_gate"],
         "packaging": packaging,
         "packaging_gate": packaging["packaging_gate"],
+        "research": research,
+        "research_gate": research["research_gate"],
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -2533,6 +2901,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/packaging-gate":
             self._send_json(packaging_gate_snapshot())
+            return
+        if route == "/api/research-gate":
+            self._send_json(research_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -2618,6 +2989,21 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/packaging-gate":
                 payload = apply_packaging_gate_action(
                     package_id=str(body.get("package_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(
+                        str(body["note"])
+                        if body.get("note") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/research-gate":
+                payload = apply_research_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    claim_id=str(body.get("claim_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(
