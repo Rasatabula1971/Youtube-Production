@@ -107,13 +107,20 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("action") == "doctor":
         try:
             await fair.close()
-        finally:
+        except Exception as exc:
             return {
-                "status": "READY",
+                "status": "DOCTOR_CLOSE_FAILED",
+                "error_type": type(exc).__name__,
                 "providers": providers,
                 "skipped": skipped,
                 "paid_inference_executed": False,
             }
+        return {
+            "status": "READY",
+            "providers": providers,
+            "skipped": skipped,
+            "paid_inference_executed": False,
+        }
 
     try:
         result = await fair.solve(
