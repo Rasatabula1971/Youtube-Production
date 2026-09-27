@@ -830,35 +830,51 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "reason": "Safe diagnostic; no inference.",
         },
         "analysis_batch_prepare": {
-            "enabled": enriched,
+            "enabled": human_gate_ready and enriched,
             "reason": (
-                "Enriched profiles available."
-                if enriched
-                else "Evidence ingestion must create enriched profiles first."
+                "Human-approved enriched profiles available."
+                if human_gate_ready and enriched
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Evidence ingestion must create enriched profiles first."
+                )
             ),
         },
         "analysis_model_one": {
-            "enabled": requests,
+            "enabled": human_gate_ready and requests,
             "reason": (
-                "Analysis requests available."
-                if requests
-                else "Prepare analysis requests first."
+                "Human-approved analysis requests available."
+                if human_gate_ready and requests
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Prepare analysis requests first."
+                )
             ),
         },
         "human_review_prepare": {
-            "enabled": analyzed,
+            "enabled": human_gate_ready and analyzed,
             "reason": (
-                "Analyzed profiles available."
-                if analyzed
-                else "Run model or human analysis first."
+                "Human-approved analyzed profiles available."
+                if human_gate_ready and analyzed
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Run model or human analysis first."
+                )
             ),
         },
         "synthesis_build": {
-            "enabled": analyzed or reviewed,
+            "enabled": human_gate_ready and (analyzed or reviewed),
             "reason": (
-                "Analyzed/reviewed profiles available."
-                if analyzed or reviewed
-                else "Waiting for Experiment 02 analyzed profiles."
+                "Human-approved analyzed/reviewed profiles available."
+                if human_gate_ready and (analyzed or reviewed)
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Waiting for Experiment 02 analyzed profiles."
+                )
             ),
         },
     }
@@ -1068,6 +1084,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
