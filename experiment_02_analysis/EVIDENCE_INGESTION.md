@@ -134,3 +134,43 @@ as source provenance but cannot support a creative finding.
 
 Experiment 02 analysis still requires explicit evidence references and
 appropriate evidence types.
+
+
+## Automatic source acquisition
+
+The offline ingestion boundary remains unchanged.
+
+Approved Experiment 02 profiles can now be populated by a separate network
+collector:
+
+`source_acquisition/experiment_02_evidence.py`
+
+Run:
+
+~~~powershell
+python .\source_acquisition\experiment_02_evidence.py --mode acquire
+~~~
+
+The collector uses `yt-dlp` only for:
+
+- English subtitles / automatic captions;
+- the video thumbnail; and
+- source metadata (`.info.json`).
+
+It always passes `--skip-download`; video media is not downloaded.
+
+A transcript/caption file is required before the collector calls the offline
+ingestion layer. Thumbnail-only acquisition does **not** create an enriched
+profile and therefore does not unlock analysis.
+
+Downloaded source files and acquisition reports are written under:
+
+`source_acquisition\output\experiment_02\<video_id>\`
+
+The collector creates a normal evidence bundle and invokes
+`evidence_ingest.py`. The existing ingestion rules still apply: an unobserved
+thumbnail is registered as provenance but cannot support a creative finding.
+
+Acquisition is idempotent. A current enriched profile whose ingestion provenance
+matches the prepared-profile SHA-256 and contains transcript evidence is reused
+without another network call.
