@@ -33,12 +33,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Run Experiment 01 tests
         run: python -m unittest discover -s experiment_01_discovery -p "test_*.py" -v
       - name: Run Experiment 02 tests
         run: python -m unittest discover -s experiment_02_analysis -p "test_*.py" -v
       - name: Run Experiment UI tests
         run: python -m unittest discover -s experiment_ui -p "test_*.py" -v
+      - name: Check Experiment UI JavaScript syntax
+        run: node --check experiment_ui/static/app.js
       - name: Run Transformation Engine tests
         run: python -m unittest discover -s transformation_engine -p "test_*.py" -v
       - name: Run Research Engine tests
