@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 STATIC_DIR = HERE / "static"
+APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
 IS_WINDOWS = os.name == "nt"
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -1297,7 +1298,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         route = urlparse(self.path).path
 
-        if route == "/":
+        if route in APP_ROUTES:
             self._send_static(STATIC_DIR / "index.html", "text/html; charset=utf-8")
             return
         if route == "/app.js":

@@ -212,3 +212,24 @@ retried.
 The main action area shows the current required action in blue and the following
 step in amber. Manual experiment controls, Doctor actions, scheduler controls,
 benchmarks and clean-restart controls are under **Tools & Diagnostics**.
+
+
+## UI v3 — multi-view workspace
+
+The working interface is split into four routes so routine work no longer shares
+one vertically long page:
+
+- `/` — **Home**: current step, next step, compact progress, opportunity summary
+  and last activity.
+- `/opportunity` — **Opportunity**: human review of the selected topic and source
+  examples.
+- `/analysis` — **Analyze & Create**: Experiment 02 and downstream creative work.
+- `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
+  outputs, logs and technical status.
+
+The Live Job console is global. The top-bar job indicator opens a slide-out
+drawer from any view, and background polling continues while navigating between
+views.
+
+The local server serves the same application shell at all four routes, so a
+view can be refreshed or bookmarked directly without returning a 404.
