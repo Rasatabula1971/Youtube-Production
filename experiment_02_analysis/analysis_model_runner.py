@@ -660,6 +660,7 @@ def run_one(
         "verification_state": bridge_result.get("verification_state"),
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
         "bridge_error_type": bridge_result.get("error_type"),
+        "bridge_error_detail": bridge_result.get("error_detail"),
         "attempts": safe_attempts(bridge_result),
     }
 
@@ -814,6 +815,7 @@ def run_doctor(config: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": result.get("status"),
         "error_type": result.get("error_type"),
+        "error_detail": result.get("error_detail"),
         "fair_repo": str(paths["repo"]),
         "fair_python": str(paths["python"]),
         "fair_env_file": str(paths["env_file"]),
