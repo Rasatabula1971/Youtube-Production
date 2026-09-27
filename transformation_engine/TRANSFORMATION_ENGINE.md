@@ -147,3 +147,57 @@ The three-title test is an idea-clarity check, not final packaging.
 A content gap may be `SUPPORTED`, `HYPOTHESIS`, or `UNASSESSED`.
 `SUPPORTED` requires a non-empty evidence basis. The engine must not infer a
 proven gap from views, outliers, or model intuition alone.
+
+
+## Automated concept generation
+
+The Transformation Engine now has a FAIR-backed execution layer:
+
+~~~powershell
+python .\transformation_engine\concept_model_runner.py --mode batch --requests-dir ".\transformation_engine\output\concept_requests"
+~~~
+
+The runner reuses the project's existing FAIR subprocess bridge and the same
+free-only cost policy used by Experiment 02. Any result that does not explicitly
+report `paid_inference_executed: false` fails closed.
+
+The execution path is:
+
+~~~text
+Experiment 02 transformation handoff
+        ↓
+Prepare concept requests
+        ↓
+FAIR free-only concept generation
+        ↓
+Deterministic Transformation validation
+        ↓
+concept_candidates.json
+        ↓
+Human Concept Gate
+~~~
+
+Model output does not bypass `validate_response()`. Source-dependent concepts,
+invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
+missing research questions, and malformed Source Dependency Tests are rejected
+before the human gate.
+
+### Provenance
+
+Every prepared concept request records the SHA-256 of the current Experiment 02
+transformation handoff.
+
+Runner-produced concept responses record the exact concept-request SHA-256.
+The deterministic merge rejects a runner response whose request hash no longer
+matches the current request.
+
+When the Experiment 02 synthesis changes, stale Concept Gate artifacts are
+invalidated before new concept requests are prepared.
+
+### Selection boundary
+
+The model generates options. It does not score, rank, or choose a winner.
+
+Human review remains responsible for originality, audience promise, viewer need,
+content-gap honesty, channel fit, title clarity, source independence,
+feasibility, and researchability.
