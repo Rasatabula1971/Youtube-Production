@@ -12,10 +12,61 @@ import server
 class ExperimentUiTests(unittest.TestCase):
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
+        self.assertIn("exp13_restart", server.ACTION_DEFS)
+        self.assertIn(
+            "--restart-discovery",
+            server.ACTION_DEFS["exp13_restart"]["command"],
+        )
         for action in server.ACTION_DEFS.values():
             self.assertIsInstance(action["command"], list)
             self.assertTrue(action["command"])
             self.assertFalse(any(part in {"cmd", "powershell"} for part in action["command"]))
+
+    def test_job_manager_sets_unbuffered_python_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs = root / "jobs"
+            state = root / "job_state.json"
+            actions = {
+                "test_action": {
+                    "label": "Test",
+                    "stage": "test",
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        (
+                            "import os; "
+                            "print(os.environ.get('PYTHONUNBUFFERED', 'missing'))"
+                        ),
+                    ],
+                    "description": "test",
+                }
+            }
+
+            manager = server.JobManager()
+            with (
+                patch.object(server, "ACTION_DEFS", actions),
+                patch.object(
+                    server,
+                    "action_readiness",
+                    return_value={
+                        "test_action": {
+                            "enabled": True,
+                            "reason": "test",
+                        }
+                    },
+                ),
+                patch.object(server, "PROJECT_ROOT", root),
+                patch.object(server, "JOB_LOG_DIR", jobs),
+                patch.object(server, "UI_OUTPUT_DIR", root),
+                patch.object(server, "JOB_STATE_FILE", state),
+            ):
+                manager.start("test_action")
+                deadline = time.time() + 5
+                while manager.running() and time.time() < deadline:
+                    time.sleep(0.05)
+
+                self.assertIn("1", manager.log_text())
 
     def test_velocity_samples_default_to_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
