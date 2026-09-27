@@ -31,6 +31,7 @@ VISION_NOTES_DIR = OUTPUT_DIR / "vision_notes"
 SOURCE_VISUAL_ROOT = (
     PROJECT_ROOT / "source_acquisition" / "output" / "experiment_02"
 )
+ENV_FILE = PROJECT_ROOT / ".env"
 
 MAX_SCENE_REVIEW_FRAMES = 8
 OLLAMA_MODEL_ENV = "EXPERIMENT_02_VISION_MODEL"
@@ -55,6 +56,20 @@ Rules:
 - Do not guess unreadable text.
 - Do not describe audio or narration.
 """
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def utc_now() -> str:
@@ -735,7 +750,8 @@ def apply_review_action(
             if isinstance(target.get("proposal"), dict)
             else ""
         )
-        final = clean_observation(observation or proposed or "")
+        candidate = proposed if observation is None else observation
+        final = clean_observation(candidate or "")
         target["decision"] = "ACCEPT"
         target["final_observation"] = final
 
@@ -752,6 +768,7 @@ def apply_review_action(
 
 
 def main() -> None:
+    load_env_file(ENV_FILE)
     parser = argparse.ArgumentParser(
         description="Prepare and inspect human-gated Experiment 02 vision review"
     )
