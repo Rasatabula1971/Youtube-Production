@@ -10,6 +10,33 @@ import server
 
 
 class ExperimentUiTests(unittest.TestCase):
+    def test_ui_v3_routes_are_registered(self):
+        self.assertEqual(
+            server.APP_ROUTES,
+            {"/", "/opportunity", "/analysis", "/tools"},
+        )
+
+    def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
+        html = (server.STATIC_DIR / "index.html").read_text(
+            encoding="utf-8"
+        )
+        script = (server.STATIC_DIR / "app.js").read_text(
+            encoding="utf-8"
+        )
+
+        for view in ("home", "opportunity", "analysis", "tools"):
+            self.assertIn(f'data-view="{view}"', html)
+
+        self.assertIn('id="jobDrawer"', html)
+        self.assertIn('data-route="/opportunity"', html)
+        self.assertIn('data-route="/analysis"', html)
+        self.assertIn('data-route="/tools"', html)
+
+        self.assertIn('"/opportunity"', script)
+        self.assertIn('"/analysis"', script)
+        self.assertIn('"/tools"', script)
+        self.assertIn("openJobDrawer", script)
+
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
         self.assertIn("exp13_restart", server.ACTION_DEFS)
