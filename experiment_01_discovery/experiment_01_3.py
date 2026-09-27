@@ -763,6 +763,7 @@ def discover(
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
+        topic_niche = str(topic["niche"])
         target_formats = (
             sorted(topic_format_targets.get(topic_name, set()))
             if topic_format_targets is not None
@@ -932,6 +933,7 @@ def discover(
                             matches.setdefault(video_id, []).append(
                                 {
                                     "target_topic": topic_name,
+                                    "target_niche": topic_niche,
                                     "query": query,
                                     "search_order": order,
                                     "search_phase": search_phase,
@@ -946,6 +948,7 @@ def discover(
                         audit.append(
                             {
                                 "target_topic": topic_name,
+                                "target_niche": topic_niche,
                                 "query": query,
                                 "search_order": order,
                                 "search_phase": search_phase,
@@ -1083,6 +1086,7 @@ def build_rows(
     include_baselines: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     topics = {str(t["topic"]): t for t in config["topics"]}
+    topic_niches = topic_niche_map(config)
     context_terms = list(config["motorsport_context_terms"])
     exclude_title_terms = list(config.get("exclude_title_terms", []))
     minimum_views = int(config["minimum_views"])
@@ -1113,6 +1117,13 @@ def build_rows(
         subscribers = int(channel.get("statistics", {}).get("subscriberCount", 0) or 0)
 
         searched_topics = sorted(searched_set)
+        searched_niches = sorted(
+            {
+                topic_niches[topic_name]
+                for topic_name in searched_topics
+                if topic_name in topic_niches
+            }
+        )
         validated_topics = []
         validation = {}
 
@@ -1166,7 +1177,15 @@ def build_rows(
             "channel_id": channel_id,
             "channel_title": snippet.get("channelTitle"),
             "searched_topics": searched_topics,
+            "searched_niches": searched_niches,
             "validated_topics": sorted(validated_topics),
+            "validated_niches": sorted(
+                {
+                    topic_niches[topic_name]
+                    for topic_name in validated_topics
+                    if topic_name in topic_niches
+                }
+            ),
             "query_matches": query_matches.get(video_id, []),
             "search_phases": search_phases,
             "cohort_window_source": "strict" if "strict" in search_phases else "expanded",
@@ -1232,7 +1251,8 @@ def build_rows(
 
 STATIC_KEYS = (
     "experiment_id", "video_id", "youtube_url", "title", "channel_id",
-    "channel_title", "searched_topics", "validated_topics", "query_matches",
+    "channel_title", "searched_topics", "searched_niches", "validated_topics",
+    "validated_niches", "query_matches",
     "search_phases", "cohort_window_source",
     "published_at", "duration_seconds", "format_candidate",
     "channel_subscribers", "topic_relevance", "topic_relevance_reason",
@@ -1451,11 +1471,14 @@ def build_summary(
 ) -> dict[str, Any]:
     format_counts: dict[str, int] = {}
     topic_counts: dict[str, int] = {}
+    niche_counts: dict[str, int] = {}
     for row in rows:
         fmt = str(row.get("format_candidate", "unknown"))
         format_counts[fmt] = format_counts.get(fmt, 0) + 1
         for topic in row.get("validated_topics", []):
             topic_counts[str(topic)] = topic_counts.get(str(topic), 0) + 1
+        for niche in row.get("validated_niches", []):
+            niche_counts[str(niche)] = niche_counts.get(str(niche), 0) + 1
 
     valid = [r for r in rows if r.get("velocity_status") == "VALID"]
     return {
@@ -1487,6 +1510,12 @@ def build_summary(
         "missing_videos": missing,
         "rejected_during_discovery": int(manifest.get("rejected_during_discovery", 0)),
         "format_counts": dict(sorted(format_counts.items())),
+        "niche_counts": dict(
+            sorted(
+                niche_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ),
         "topic_counts": dict(sorted(topic_counts.items(), key=lambda item: (-item[1], item[0]))),
         "velocity_analysis": {
             "valid_velocity_samples": len(valid),
@@ -1505,10 +1534,10 @@ def build_summary(
             "Topic and motorsport-context validation use title text only.",
             "Discovery uses separate short/medium/long YouTube duration branches.",
             "The primary 105-135 day window widens to 90-150 only for sparse topic/format cells.",
-            "Primary metric: median current views/day within the same age window and format.",
+            "Primary metric: median current views/day within the same age window, niche and format.",
             "Short-form and long-form candidates are benchmarked separately.",
-            "Age-matched velocity index = topic median / whole-cohort median for the same format.",
-            "1-2 unique channels = LOW confidence; 3-4 = MODERATE; 5+ = STRONG.",
+            "Age-matched velocity index = topic median / niche-and-format cohort median.",
+            "Topic channel confidence: 1-2 = LOW; 3-4 = MODERATE; 5+ = STRONG.",
             "Outlier ratio is supporting evidence only; no final opportunity score is calculated.",
         ],
     }
@@ -1516,7 +1545,8 @@ def build_summary(
 
 CSV_FIELDS = [
     "experiment_id", "video_id", "youtube_url", "title", "channel_id",
-    "channel_title", "searched_topics", "validated_topics", "query_matches",
+    "channel_title", "searched_topics", "searched_niches", "validated_topics",
+    "validated_niches", "query_matches",
     "search_phases", "cohort_window_source",
     "published_at", "age_days", "duration_seconds", "format_candidate",
     "views", "likes", "channel_subscribers", "channel_baseline_median",
@@ -1540,7 +1570,9 @@ def write_outputs(rows: list[dict[str, Any]], topic_velocity: dict[str, Any], su
         for row in rows:
             flat = dict(row)
             flat["searched_topics"] = "|".join(row.get("searched_topics", []))
+            flat["searched_niches"] = "|".join(row.get("searched_niches", []))
             flat["validated_topics"] = "|".join(row.get("validated_topics", []))
+            flat["validated_niches"] = "|".join(row.get("validated_niches", []))
             flat["query_matches"] = json.dumps(row.get("query_matches", []), ensure_ascii=False)
             flat["search_phases"] = "|".join(row.get("search_phases", []))
             writer.writerow({field: flat.get(field) for field in CSV_FIELDS})
@@ -1808,6 +1840,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         "fallback_published_after": wide_window["published_after"],
         "fallback_published_before": wide_window["published_before"],
         "minimum_views": int(config["minimum_views"]),
+        "topic_niches": topic_niche_map(config),
         "minimum_unique_channels_per_topic_format": int(
             config["minimum_unique_channels_per_topic_format"]
         ),
@@ -1837,7 +1870,10 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     )
 
     apply_velocity(rows, measurement_observed_at)
-    topic_velocity = aggregate_age_matched_velocity(rows)
+    topic_velocity = aggregate_age_matched_velocity(
+        rows,
+        topic_niche_map(config),
+    )
     summary = build_summary("discover", manifest, rows, [], topic_velocity)
     write_outputs(rows, topic_velocity, summary)
 
@@ -1846,7 +1882,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
 
     print_completion("discover", summary)
 
-def run_refresh(api_key: str) -> None:
+def run_refresh(config: dict[str, Any], api_key: str) -> None:
     if not MANIFEST_FILE.exists():
         raise SystemExit("No 01.3 cohort exists. Run --mode discover first.")
     manifest = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
@@ -1860,7 +1896,19 @@ def run_refresh(api_key: str) -> None:
 
     rows, missing = refresh_rows(manifest, api_key)
     apply_velocity(rows, observed_at)
-    topic_velocity = aggregate_age_matched_velocity(rows)
+    manifest_topic_niches = manifest.get("topic_niches")
+    topic_niches = (
+        {
+            str(topic): str(niche)
+            for topic, niche in manifest_topic_niches.items()
+        }
+        if isinstance(manifest_topic_niches, dict)
+        else topic_niche_map(config)
+    )
+    topic_velocity = aggregate_age_matched_velocity(
+        rows,
+        topic_niches,
+    )
     summary = build_summary("refresh", manifest, rows, missing, topic_velocity)
     write_outputs(rows, topic_velocity, summary)
     print_completion("refresh", summary)
@@ -1938,7 +1986,7 @@ def main() -> None:
     if args.mode == "discover":
         run_discover(args, config, api_key)
     else:
-        run_refresh(api_key)
+        run_refresh(config, api_key)
 
 
 if __name__ == "__main__":
