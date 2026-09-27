@@ -119,6 +119,7 @@ def build_profile_from_study_item(
             "channel_id": study_item.get("channel_id"),
             "channel_title": study_item.get("channel_title"),
             "format_candidate": study_item.get("format_candidate"),
+            "niche": study_item.get("niche"),
             "topic": study_item.get("topic"),
             "views_at_handoff": study_item.get("views"),
             "age_matched_velocity_index": (
@@ -164,6 +165,7 @@ def prepare_work_packets(
                 "youtube_url": profile["youtube_url"],
                 "title": profile["source"]["title"],
                 "channel_title": profile["source"]["channel_title"],
+                "niche": profile["source"].get("niche"),
                 "topic": profile["source"]["topic"],
                 "format_candidate": profile["source"]["format_candidate"],
                 "required_source_inputs": list(profile["source_inputs"]),
