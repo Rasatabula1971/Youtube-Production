@@ -50,11 +50,20 @@ from opportunity_gate import (  # noqa: E402
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 EXP2_OUTPUT = EXP2_DIR / "output"
+EXP2_PREPARED_DIR = EXP2_OUTPUT / "profiles_to_complete"
+EXP2_ENRICHED_DIR = EXP2_OUTPUT / "profiles_enriched"
+EXP2_REQUESTS_DIR = EXP2_OUTPUT / "analysis_requests"
+EXP2_ANALYZED_DIR = EXP2_OUTPUT / "profiles_analyzed"
+EXP2_REVIEW_REQUESTS_DIR = EXP2_OUTPUT / "human_review_requests"
+EXP2_REVIEWED_DIR = EXP2_OUTPUT / "profiles_reviewed"
+EXP2_SYNTHESIS_FILE = EXP2_OUTPUT / "synthesis" / "transformation_handoff.json"
 SOURCE_ACQ_OUTPUT = PROJECT_ROOT / "source_acquisition" / "output"
+EXP2_ACQUISITION_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "summary.json"
 
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
+    "exp2_acquire",
     "analysis_batch_prepare",
     "analysis_model_one",
     "human_review_prepare",
@@ -221,6 +230,20 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": "Creates the Experiment 02 work packets and empty evidence profiles.",
+    },
+    "exp2_acquire": {
+        "label": "Acquire Source Evidence",
+        "stage": "02",
+        "command": [
+            sys.executable,
+            "source_acquisition/experiment_02_evidence.py",
+            "--mode",
+            "acquire",
+        ],
+        "description": (
+            "Uses yt-dlp to acquire English captions, thumbnail and source metadata "
+            "for the approved videos. Video media is not downloaded."
+        ),
     },
     "fair_doctor": {
         "label": "Run FAIR Doctor",
@@ -452,6 +475,97 @@ def exp2_status() -> str | None:
     return json_file_status(EXP2_OUTPUT / "summary.json", "status")
 
 
+def json_stems(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    return {
+        item.stem
+        for item in path.glob("*.json")
+        if item.is_file()
+    }
+
+
+def suffixed_json_ids(path: Path, suffix: str) -> set[str]:
+    if not path.exists():
+        return set()
+    ids: set[str] = set()
+    for item in path.glob(f"*{suffix}"):
+        name = item.name
+        if name.endswith(suffix):
+            ids.add(name[: -len(suffix)])
+    return ids
+
+
+def enriched_transcript_ready_ids() -> set[str]:
+    ready: set[str] = set()
+    if not EXP2_ENRICHED_DIR.exists():
+        return ready
+
+    for path in EXP2_ENRICHED_DIR.glob("*.json"):
+        payload = safe_load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        source_inputs = payload.get("source_inputs", {})
+        transcript = (
+            source_inputs.get("transcript", {})
+            if isinstance(source_inputs, dict)
+            else {}
+        )
+        if (
+            not isinstance(transcript, dict)
+            or transcript.get("status") != "PROVIDED"
+        ):
+            continue
+        evidence = payload.get("evidence", [])
+        if not isinstance(evidence, list):
+            continue
+        if any(
+            isinstance(item, dict)
+            and item.get("type") == "transcript"
+            for item in evidence
+        ):
+            ready.add(path.stem)
+    return ready
+
+
+def exp2_artifact_state() -> dict[str, Any]:
+    prepared_ids = json_stems(EXP2_PREPARED_DIR)
+    enriched_ids = enriched_transcript_ready_ids()
+    request_ids = suffixed_json_ids(
+        EXP2_REQUESTS_DIR,
+        ".analysis_request.json",
+    )
+    analyzed_ids = json_stems(EXP2_ANALYZED_DIR)
+    review_request_ids = suffixed_json_ids(
+        EXP2_REVIEW_REQUESTS_DIR,
+        ".review_request.json",
+    )
+    reviewed_ids = json_stems(EXP2_REVIEWED_DIR)
+
+    evidence_complete = bool(prepared_ids) and prepared_ids.issubset(enriched_ids)
+    requests_complete = evidence_complete and prepared_ids.issubset(request_ids)
+
+    return {
+        "prepared_ids": sorted(prepared_ids),
+        "enriched_ready_ids": sorted(enriched_ids),
+        "analysis_request_ids": sorted(request_ids),
+        "analyzed_ids": sorted(analyzed_ids),
+        "review_request_ids": sorted(review_request_ids),
+        "reviewed_ids": sorted(reviewed_ids),
+        "prepared_count": len(prepared_ids),
+        "evidence_ready_count": len(prepared_ids.intersection(enriched_ids)),
+        "evidence_complete": evidence_complete,
+        "requests_complete": requests_complete,
+        "analyzed_current_count": len(prepared_ids.intersection(analyzed_ids)),
+        "review_requests_current_count": len(
+            prepared_ids.intersection(review_request_ids)
+        ),
+        "reviewed_current_count": len(prepared_ids.intersection(reviewed_ids)),
+        "synthesis_ready": EXP2_SYNTHESIS_FILE.exists(),
+        "acquisition_summary": safe_load_json(EXP2_ACQUISITION_SUMMARY),
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -608,13 +722,12 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp15_tone = "ready"
         exp15_next = "Run Build 01.5 Opportunity Handoff."
 
-    synthesis_ready = (
-        EXP2_OUTPUT
-        / "synthesis"
-        / "transformation_handoff.json"
-    ).exists()
-    analyzed = has_json_files(EXP2_OUTPUT / "profiles_analyzed")
-    reviewed = has_json_files(EXP2_OUTPUT / "profiles_reviewed")
+    exp2_artifacts = exp2_artifact_state()
+    profiles_prepared = exp2_artifacts["prepared_count"] > 0
+    evidence_ready = bool(exp2_artifacts["evidence_complete"])
+    synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
+    analyzed = exp2_artifacts["analyzed_current_count"] > 0
+    reviewed = exp2_artifacts["reviewed_current_count"] > 0
 
     if synthesis_ready:
         exp2_human = "STAGE COMPLETE"
@@ -626,6 +739,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp2_next = "Wait for synthesis to finish."
     elif active_action in {
         "exp2_prepare",
+        "exp2_acquire",
         "analysis_batch_prepare",
         "analysis_model_one",
         "human_review_prepare",
@@ -641,14 +755,22 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp2_human = "WAITING FOR HUMAN OPPORTUNITY GATE"
         exp2_tone = "blocked"
         exp2_next = "Approve at least one opportunity before Experiment 02."
+    elif not profiles_prepared:
+        exp2_human = "READY TO PREPARE"
+        exp2_tone = "ready"
+        exp2_next = "Run Prepare Experiment 02 Profiles."
+    elif not evidence_ready:
+        exp2_human = "SOURCE EVIDENCE NEEDED"
+        exp2_tone = "action"
+        exp2_next = "Run Acquire Source Evidence."
     elif reviewed or analyzed:
         exp2_human = "SYNTHESIS NEEDED"
         exp2_tone = "action"
         exp2_next = "Run Build Experiment 02 Synthesis."
     else:
-        exp2_human = "READY TO PREPARE"
-        exp2_tone = "ready"
-        exp2_next = "Run Prepare Experiment 02 Profiles."
+        exp2_human = "EVIDENCE READY — ANALYSIS NEEDED"
+        exp2_tone = "action"
+        exp2_next = "Run Prepare Analysis Requests."
 
     return [
         {
@@ -762,6 +884,14 @@ def stage_statuses() -> list[dict[str, Any]]:
             "next_action": exp2_next,
             "criteria": [
                 {
+                    "label": "Profiles prepared",
+                    "done": profiles_prepared,
+                },
+                {
+                    "label": "Transcript evidence acquired",
+                    "done": evidence_ready,
+                },
+                {
                     "label": "Profiles analyzed",
                     "done": analyzed,
                 },
@@ -805,10 +935,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     human_gate = opportunity_gate_snapshot()
     human_gate_ready = bool(human_gate.get("ready_for_experiment_02"))
 
-    enriched = has_json_files(EXP2_OUTPUT / "profiles_enriched")
-    requests = has_json_files(EXP2_OUTPUT / "analysis_requests")
-    analyzed = has_json_files(EXP2_OUTPUT / "profiles_analyzed")
-    reviewed = has_json_files(EXP2_OUTPUT / "profiles_reviewed")
+    exp2_artifacts = exp2_artifact_state()
+    profiles_prepared = exp2_artifacts["prepared_count"] > 0
+    evidence_complete = bool(exp2_artifacts["evidence_complete"])
+    requests_complete = bool(exp2_artifacts["requests_complete"])
+    analyzed = exp2_artifacts["analyzed_current_count"] > 0
+    review_requests = exp2_artifacts["review_requests_current_count"] > 0
+    reviewed = exp2_artifacts["reviewed_current_count"] > 0
+    synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -910,14 +1044,48 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "exp2_prepare": {
-            "enabled": human_gate_ready,
+            "enabled": human_gate_ready and not profiles_prepared,
             "reason": (
                 "Human-approved opportunity set available."
-                if human_gate_ready
+                if human_gate_ready and not profiles_prepared
                 else (
-                    "Review and approve the 01.5 opportunity gate first."
-                    if study_set
-                    else "Waiting for 01.5 study set."
+                    "Experiment 02 profiles are already prepared."
+                    if profiles_prepared
+                    else (
+                        "Review and approve the 01.5 opportunity gate first."
+                        if study_set
+                        else "Waiting for 01.5 study set."
+                    )
+                )
+            ),
+        },
+        "exp2_acquire": {
+            "enabled": (
+                human_gate_ready
+                and profiles_prepared
+                and not evidence_complete
+                and yt_dlp_installed
+            ),
+            "reason": (
+                "Prepared profiles are ready for caption/thumbnail acquisition."
+                if (
+                    human_gate_ready
+                    and profiles_prepared
+                    and not evidence_complete
+                    and yt_dlp_installed
+                )
+                else (
+                    "Source evidence is already ready."
+                    if evidence_complete
+                    else (
+                        "yt-dlp is required for automatic source evidence acquisition."
+                        if human_gate_ready and profiles_prepared and not yt_dlp_installed
+                        else (
+                            "Prepare Experiment 02 profiles first."
+                            if human_gate_ready and not profiles_prepared
+                            else "Human opportunity approval is required first."
+                        )
+                    )
                 )
             ),
         },
@@ -926,50 +1094,90 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "reason": "Safe diagnostic; no inference.",
         },
         "analysis_batch_prepare": {
-            "enabled": human_gate_ready and enriched,
+            "enabled": (
+                human_gate_ready
+                and evidence_complete
+                and not requests_complete
+            ),
             "reason": (
-                "Human-approved enriched profiles available."
-                if human_gate_ready and enriched
+                "Current approved profiles have transcript-backed evidence."
+                if (
+                    human_gate_ready
+                    and evidence_complete
+                    and not requests_complete
+                )
                 else (
-                    "Human opportunity approval is required first."
-                    if not human_gate_ready
-                    else "Evidence ingestion must create enriched profiles first."
+                    "Analysis requests are already prepared."
+                    if requests_complete
+                    else (
+                        "Human opportunity approval is required first."
+                        if not human_gate_ready
+                        else "Acquire transcript-backed source evidence first."
+                    )
                 )
             ),
         },
         "analysis_model_one": {
-            "enabled": human_gate_ready and requests,
+            "enabled": (
+                human_gate_ready
+                and requests_complete
+                and not analyzed
+            ),
             "reason": (
-                "Human-approved analysis requests available."
-                if human_gate_ready and requests
+                "Current approved analysis requests are ready."
+                if human_gate_ready and requests_complete and not analyzed
                 else (
-                    "Human opportunity approval is required first."
-                    if not human_gate_ready
-                    else "Prepare analysis requests first."
+                    "A current approved profile has already been analyzed."
+                    if analyzed
+                    else (
+                        "Human opportunity approval is required first."
+                        if not human_gate_ready
+                        else "Prepare current analysis requests first."
+                    )
                 )
             ),
         },
         "human_review_prepare": {
-            "enabled": human_gate_ready and analyzed,
+            "enabled": (
+                human_gate_ready
+                and analyzed
+                and not review_requests
+            ),
             "reason": (
-                "Human-approved analyzed profiles available."
-                if human_gate_ready and analyzed
+                "A current approved analyzed profile is ready for review."
+                if human_gate_ready and analyzed and not review_requests
                 else (
-                    "Human opportunity approval is required first."
-                    if not human_gate_ready
-                    else "Run model or human analysis first."
+                    "Human review packets are already prepared."
+                    if review_requests
+                    else (
+                        "Human opportunity approval is required first."
+                        if not human_gate_ready
+                        else "Run model or human analysis first."
+                    )
                 )
             ),
         },
         "synthesis_build": {
-            "enabled": human_gate_ready and (analyzed or reviewed),
+            "enabled": (
+                human_gate_ready
+                and (analyzed or reviewed)
+                and not synthesis_ready
+            ),
             "reason": (
                 "Human-approved analyzed/reviewed profiles available."
-                if human_gate_ready and (analyzed or reviewed)
+                if (
+                    human_gate_ready
+                    and (analyzed or reviewed)
+                    and not synthesis_ready
+                )
                 else (
-                    "Human opportunity approval is required first."
-                    if not human_gate_ready
-                    else "Waiting for Experiment 02 analyzed profiles."
+                    "Synthesis is already built."
+                    if synthesis_ready
+                    else (
+                        "Human opportunity approval is required first."
+                        if not human_gate_ready
+                        else "Waiting for Experiment 02 analyzed profiles."
+                    )
                 )
             ),
         },
@@ -1260,6 +1468,7 @@ def status_payload() -> dict[str, Any]:
         "opportunity_gate": opportunity_gate_snapshot(),
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
+        "experiment_02_artifacts": exp2_artifact_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
