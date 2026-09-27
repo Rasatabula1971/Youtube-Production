@@ -25,10 +25,12 @@ class Experiment014Tests(unittest.TestCase):
                 "gearbox_transmission": {
                     "query_root": "F1 gearbox",
                     "match_terms": ["gearbox"],
+                    "niche": "automotive_racing",
                 },
                 "brakes": {
                     "query_root": "F1 brakes",
                     "match_terms": ["brakes"],
+                    "niche": "automotive_racing",
                 },
             },
             "query_families": [
@@ -112,7 +114,8 @@ class Experiment014Tests(unittest.TestCase):
                             "unique_channels": 4,
                             "velocity_sample_count": 0,
                             "age_matched_velocity_index": None,
-                            "confidence": "MODERATE",
+                            "niche": "automotive_racing",
+                            "topic_channel_confidence": "MODERATE",
                         }
                     }
                 }
@@ -135,7 +138,8 @@ class Experiment014Tests(unittest.TestCase):
                             "unique_channels": 4,
                             "velocity_sample_count": 4,
                             "age_matched_velocity_index": 1.8,
-                            "confidence": "MODERATE",
+                            "niche": "automotive_racing",
+                            "topic_channel_confidence": "MODERATE",
                             "median_current_views_per_day": 12000,
                         }
                     }
@@ -149,6 +153,18 @@ class Experiment014Tests(unittest.TestCase):
         )
         self.assertEqual(plan["status"], "READY")
         self.assertGreater(len(plan["search_tasks"]), 0)
+        self.assertEqual(
+            plan["ready_cells"][0]["niche"],
+            "automotive_racing",
+        )
+        self.assertEqual(
+            plan["ready_cells"][0]["topic_channel_confidence"],
+            "MODERATE",
+        )
+        self.assertEqual(
+            plan["search_tasks"][0]["niche"],
+            "automotive_racing",
+        )
 
 
 if __name__ == "__main__":
