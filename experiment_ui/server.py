@@ -7,6 +7,7 @@ predefined experiment actions; arbitrary shell commands are never accepted.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -475,6 +476,14 @@ def exp2_status() -> str | None:
     return json_file_status(EXP2_OUTPUT / "summary.json", "status")
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def json_stems(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -531,10 +540,24 @@ def enriched_transcript_ready_ids() -> set[str]:
 def exp2_artifact_state() -> dict[str, Any]:
     prepared_ids = json_stems(EXP2_PREPARED_DIR)
     enriched_ids = enriched_transcript_ready_ids()
-    request_ids = suffixed_json_ids(
-        EXP2_REQUESTS_DIR,
-        ".analysis_request.json",
-    )
+    request_ids: set[str] = set()
+    if EXP2_REQUESTS_DIR.exists():
+        for request_path in EXP2_REQUESTS_DIR.glob("*.analysis_request.json"):
+            video_id = request_path.name[: -len(".analysis_request.json")]
+            enriched_path = EXP2_ENRICHED_DIR / f"{video_id}.json"
+            request = safe_load_json(request_path)
+            if (
+                not enriched_path.exists()
+                or not isinstance(request, dict)
+            ):
+                continue
+            provenance = request.get("request_provenance", {})
+            if (
+                isinstance(provenance, dict)
+                and provenance.get("profile_sha256")
+                == sha256_file(enriched_path)
+            ):
+                request_ids.add(video_id)
     analyzed_ids = json_stems(EXP2_ANALYZED_DIR)
     review_request_ids = suffixed_json_ids(
         EXP2_REVIEW_REQUESTS_DIR,
