@@ -28,6 +28,19 @@ const toolActions = document.getElementById("toolActions");
 const stageGrid = document.getElementById("stageGrid");
 const creationTabs = Array.from(document.querySelectorAll(".creation-tab"));
 
+const visionReviewPanel = document.getElementById("visionReviewPanel");
+const visionReviewTitle = document.getElementById("visionReviewTitle");
+const visionReviewSummary = document.getElementById("visionReviewSummary");
+const visionReviewStatus = document.getElementById("visionReviewStatus");
+const visionFrameImage = document.getElementById("visionFrameImage");
+const visionFrameMeta = document.getElementById("visionFrameMeta");
+const visionProposal = document.getElementById("visionProposal");
+const visionObservation = document.getElementById("visionObservation");
+const visionPrev = document.getElementById("visionPrev");
+const visionReject = document.getElementById("visionReject");
+const visionAccept = document.getElementById("visionAccept");
+const visionNext = document.getElementById("visionNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -43,6 +56,9 @@ const toast = document.getElementById("toast");
 let jobTimer = null;
 let latestStatus = null;
 let renderedPath = null;
+let latestVisionSnapshot = null;
+let visionCursor = 0;
+let visionEditing = false;
 
 const ROUTES = {
   "/": {
@@ -200,7 +216,11 @@ function closeJob() {
 
 function statusTone(workflow) {
   const state = String((workflow || {}).state || "");
-  if (state === "ACTION_REQUIRED" || state === "HUMAN_GATE") return "attention";
+  if (
+    state === "ACTION_REQUIRED" ||
+    state === "HUMAN_GATE" ||
+    state === "HUMAN_VISION_GATE"
+  ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
 }
@@ -224,6 +244,9 @@ function primaryTargetForWorkflow(workflow) {
   if (!workflow) return { type: "route", value: "/" };
   if (workflow.state === "HUMAN_GATE") {
     return { type: "route", value: "/opportunity", label: "Review opportunity" };
+  }
+  if (workflow.state === "HUMAN_VISION_GATE") {
+    return { type: "route", value: "/analysis", label: "Review visual evidence" };
   }
   if (workflow.current_action_id === "opportunity_research") {
     return { type: "action", value: "opportunity_research", label: "Run now" };
@@ -495,6 +518,206 @@ function renderActionCollection(actions, target) {
   target.innerHTML = html || '<p class="empty-state">No actions available here yet.</p>';
 }
 
+function flattenVisionFrames(snapshot) {
+  const items = [];
+  (snapshot && snapshot.packets || []).forEach(function (packet) {
+    (packet.frames || []).forEach(function (frame) {
+      items.push({
+        video_id: packet.video_id,
+        provider: packet.provider,
+        model: packet.model,
+        packet_status: packet.status,
+        counts: packet.counts || {},
+        frame: frame
+      });
+    });
+  });
+  return items;
+}
+
+function pendingVisionIndex(items) {
+  return items.findIndex(function (item) {
+    return item.frame && item.frame.decision === "PENDING";
+  });
+}
+
+function currentVisionItem() {
+  const items = flattenVisionFrames(latestVisionSnapshot || {});
+  if (!items.length) return null;
+  visionCursor = Math.max(0, Math.min(visionCursor, items.length - 1));
+  return { item: items[visionCursor], items: items };
+}
+
+function renderVisionReview(snapshot, force) {
+  latestVisionSnapshot = snapshot || {};
+
+  if (
+    !snapshot ||
+    snapshot.status === "NOT_APPLICABLE" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.packets || []).length
+  ) {
+    visionReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    visionReviewPanel.hidden = false;
+    visionReviewTitle.textContent = "Visual evidence reviewed";
+    visionReviewSummary.textContent =
+      "Accepted observations have been ingested into the current Experiment 02 profiles.";
+    visionReviewStatus.textContent = "COMPLETE";
+    visionReviewStatus.className = "status-chip success";
+    visionFrameImage.removeAttribute("src");
+    visionFrameImage.hidden = true;
+    visionFrameMeta.innerHTML = "";
+    visionProposal.innerHTML =
+      '<div class="vision-review-complete">Visual review is complete. The next analysis step can continue.</div>';
+    visionObservation.hidden = true;
+    visionPrev.disabled = true;
+    visionNext.disabled = true;
+    visionReject.disabled = true;
+    visionAccept.disabled = true;
+    return;
+  }
+
+  if (visionEditing && !force) return;
+
+  const items = flattenVisionFrames(snapshot);
+  if (!items.length) {
+    visionReviewPanel.hidden = true;
+    return;
+  }
+
+  const pendingIndex = pendingVisionIndex(items);
+  if (
+    visionCursor >= items.length ||
+    (items[visionCursor] &&
+      items[visionCursor].frame.decision !== "PENDING" &&
+      pendingIndex >= 0)
+  ) {
+    visionCursor = pendingIndex >= 0 ? pendingIndex : 0;
+  }
+
+  const entry = items[visionCursor];
+  const frame = entry.frame || {};
+  const proposal = frame.proposal || null;
+  const counts = snapshot.packets.reduce(function (acc, packet) {
+    const value = packet.counts || {};
+    acc.total += Number(value.total || 0);
+    acc.pending += Number(value.pending || 0);
+    acc.accepted += Number(value.accepted || 0);
+    acc.rejected += Number(value.rejected || 0);
+    return acc;
+  }, { total: 0, pending: 0, accepted: 0, rejected: 0 });
+
+  visionReviewPanel.hidden = false;
+  visionFrameImage.hidden = false;
+  visionObservation.hidden = false;
+  visionFrameImage.src =
+    "/api/vision-frame?video_id=" + encodeURIComponent(entry.video_id) +
+    "&frame_id=" + encodeURIComponent(frame.frame_id || "");
+  visionReviewTitle.textContent =
+    "Frame " + (visionCursor + 1) + " of " + items.length;
+  visionReviewSummary.textContent =
+    counts.pending + " pending · " +
+    counts.accepted + " accepted · " +
+    counts.rejected + " rejected";
+  visionReviewStatus.textContent = frame.decision || "PENDING";
+  visionReviewStatus.className =
+    "status-chip " +
+    (frame.decision === "ACCEPT"
+      ? "success"
+      : frame.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  visionFrameMeta.innerHTML =
+    '<span>Video ' + escapeHtml(entry.video_id) + '</span>' +
+    '<span>' + escapeHtml(humanizeToken(frame.kind)) + '</span>' +
+    '<span>' + escapeHtml(
+      Number(frame.timestamp_seconds || 0).toFixed(3)
+    ) + ' sec</span>' +
+    '<span>' + escapeHtml(
+      entry.provider === "ollama"
+        ? "Drafted by local vision model"
+        : "Human observation required"
+    ) + '</span>';
+
+  if (proposal) {
+    visionProposal.innerHTML =
+      '<strong>MODEL DRAFT — NOT EVIDENCE YET</strong>' +
+      '<div>' + escapeHtml(proposal.observation || "") + '</div>' +
+      (proposal.uncertainty
+        ? '<div class="muted">Uncertainty: ' +
+          escapeHtml(proposal.uncertainty) + '</div>'
+        : '') +
+      '<div class="muted">Confidence: ' +
+      escapeHtml(proposal.confidence || "LOW") + '</div>';
+  } else {
+    visionProposal.innerHTML =
+      '<strong>HUMAN REVIEW</strong>' +
+      '<div>No model draft is available. Describe only what is directly visible, or reject the frame if it adds no useful evidence.</div>';
+  }
+
+  visionObservation.value =
+    frame.final_observation ||
+    (proposal && proposal.observation) ||
+    "";
+  visionPrev.disabled = visionCursor <= 0;
+  visionNext.disabled = visionCursor >= items.length - 1;
+  visionReject.disabled = false;
+  visionAccept.disabled = false;
+  visionEditing = false;
+}
+
+function moveVisionCursor(delta) {
+  const current = currentVisionItem();
+  if (!current) return;
+  visionCursor = Math.max(
+    0,
+    Math.min(current.items.length - 1, visionCursor + delta)
+  );
+  visionEditing = false;
+  renderVisionReview(latestVisionSnapshot, true);
+}
+
+async function submitVisionDecision(action) {
+  const current = currentVisionItem();
+  if (!current) return;
+  const entry = current.item;
+  const frame = entry.frame || {};
+
+  try {
+    const payload = await api("/api/vision-review", {
+      method: "POST",
+      body: JSON.stringify({
+        action: action,
+        video_id: entry.video_id,
+        frame_id: frame.frame_id,
+        observation: action === "ACCEPT_FRAME"
+          ? visionObservation.value
+          : null
+      })
+    });
+    visionEditing = false;
+    latestVisionSnapshot = payload;
+    const items = flattenVisionFrames(payload);
+    const nextPending = pendingVisionIndex(items);
+    if (nextPending >= 0) visionCursor = nextPending;
+    renderVisionReview(payload, true);
+    showToast(
+      action === "ACCEPT_FRAME"
+        ? "Visual observation accepted."
+        : "Frame rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   analysisCurrentTitle.textContent =
@@ -513,13 +736,15 @@ function renderAnalysis(data) {
     return action.surface === "workflow" && action.id !== "opportunity_research";
   });
   renderActionCollection(actions, analysisActions);
+  renderVisionReview(data.vision_review || {}, false);
 
   const currentId = workflow.current_action_id || "";
   const activeIndex = [
     "exp2_prepare",
     "exp2_acquire",
-    "exp2_visual"
-  ].includes(currentId) ? 0 :
+    "exp2_visual",
+    "exp2_vision_prepare"
+  ].includes(currentId) || workflow.state === "HUMAN_VISION_GATE" ? 0 :
     ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId) ? 1 : 0;
   creationTabs.forEach(function (tab, index) {
     tab.classList.toggle("active", index === activeIndex);
@@ -774,6 +999,21 @@ drawerScrim.addEventListener("click", closeJob);
 stopJob.addEventListener("click", stopCurrentJob);
 mobileMenu.addEventListener("click", openSidebar);
 sidebarScrim.addEventListener("click", closeSidebar);
+visionObservation.addEventListener("input", function () {
+  visionEditing = true;
+});
+visionPrev.addEventListener("click", function () {
+  moveVisionCursor(-1);
+});
+visionNext.addEventListener("click", function () {
+  moveVisionCursor(1);
+});
+visionReject.addEventListener("click", function () {
+  submitVisionDecision("REJECT_FRAME");
+});
+visionAccept.addEventListener("click", function () {
+  submitVisionDecision("ACCEPT_FRAME");
+});
 
 renderRoute({ scroll: true });
 loadStatus();
