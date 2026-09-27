@@ -129,8 +129,12 @@ function renderOpportunityGate(gate) {
       '<div><span>Current views/day</span><strong>' +
       escapeHtml(compactNumber(evidence.median_current_views_per_day)) +
       '</strong></div>' +
-      '<div><span>Confidence</span><strong>' +
-      escapeHtml(evidence.confidence || "—") +
+      '<div><span>Topic channel confidence</span><strong>' +
+      escapeHtml(
+        evidence.topic_channel_confidence ||
+        evidence.confidence ||
+        "—"
+      ) +
       '</strong></div>' +
       '</div>' +
 
