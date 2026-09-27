@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $TaskName = "YouTube Production - Opportunity Research Continue"
+$LegacyTaskName = "YouTube Production - Experiment 01.3 Auto Refresh"
 
 Write-Host "Removing task: $TaskName"
 
@@ -10,4 +11,5 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Auto refresh task removed."
+& schtasks.exe /Delete /TN $LegacyTaskName /F 2>$null | Out-Null
+Write-Host "Opportunity Research continuation task removed."
