@@ -54,6 +54,19 @@ const conceptRework = document.getElementById("conceptRework");
 const conceptAccept = document.getElementById("conceptAccept");
 const conceptNext = document.getElementById("conceptNext");
 
+const packagingReviewPanel = document.getElementById("packagingReviewPanel");
+const packagingReviewTitle = document.getElementById("packagingReviewTitle");
+const packagingReviewSummary = document.getElementById("packagingReviewSummary");
+const packagingReviewStatus = document.getElementById("packagingReviewStatus");
+const packagingDetail = document.getElementById("packagingDetail");
+const packagingCriteria = document.getElementById("packagingCriteria");
+const packagingNote = document.getElementById("packagingNote");
+const packagingPrev = document.getElementById("packagingPrev");
+const packagingReject = document.getElementById("packagingReject");
+const packagingRework = document.getElementById("packagingRework");
+const packagingAccept = document.getElementById("packagingAccept");
+const packagingNext = document.getElementById("packagingNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -75,6 +88,9 @@ let visionEditing = false;
 let latestConceptSnapshot = null;
 let conceptCursor = 0;
 let conceptEditing = false;
+let latestPackagingSnapshot = null;
+let packagingCursor = 0;
+let packagingEditing = false;
 
 const ROUTES = {
   "/": {
@@ -930,10 +946,218 @@ async function submitConceptDecision(decision) {
   }
 }
 
+
+function pendingPackagingIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentPackagingItem() {
+  const items = (latestPackagingSnapshot && latestPackagingSnapshot.packages) || [];
+  if (!items.length) return null;
+  packagingCursor = Math.max(0, Math.min(packagingCursor, items.length - 1));
+  return { item: items[packagingCursor], items: items };
+}
+
+function renderPackagingReview(snapshot, force) {
+  latestPackagingSnapshot = snapshot || {};
+
+  if (
+    !snapshot ||
+    snapshot.status === "WAITING_FOR_PACKAGE_CANDIDATES" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.packages || []).length
+  ) {
+    packagingReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    packagingReviewPanel.hidden = false;
+    packagingReviewTitle.textContent = "Packaging Gate complete";
+    packagingReviewSummary.textContent =
+      (snapshot.accepted || 0) + " accepted · " +
+      (snapshot.rework || 0) + " rework · " +
+      (snapshot.rejected || 0) + " rejected";
+    packagingReviewStatus.textContent = snapshot.research_status || "COMPLETE";
+    packagingReviewStatus.className =
+      "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
+    packagingDetail.innerHTML =
+      '<div class="concept-complete">' +
+      ((snapshot.accepted || 0) > 0
+        ? "Approved package is ready for Research."
+        : "No package was approved. Regenerate or rework before Research.") +
+      '</div>';
+    packagingCriteria.innerHTML = "";
+    packagingNote.hidden = true;
+    packagingPrev.disabled = true;
+    packagingNext.disabled = true;
+    packagingReject.disabled = true;
+    packagingRework.disabled = true;
+    packagingAccept.disabled = true;
+    return;
+  }
+
+  if (packagingEditing && !force) return;
+
+  const items = snapshot.packages || [];
+  if (!items.length) {
+    packagingReviewPanel.hidden = true;
+    return;
+  }
+  if (packagingCursor >= items.length) {
+    packagingCursor = Math.max(0, items.length - 1);
+  }
+
+  const pkg = items[packagingCursor] || {};
+  const thumbnail = pkg.thumbnail || {};
+  const opening = pkg.opening_frame || {};
+  const dependencies = (pkg.research_dependencies || []).map(function (item) {
+    return "<li>" + escapeHtml(item) + "</li>";
+  }).join("");
+
+  packagingReviewPanel.hidden = false;
+  packagingNote.hidden = false;
+  packagingReviewTitle.textContent =
+    "Package " + (packagingCursor + 1) + " of " + items.length;
+  packagingReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · reviewer " +
+    escapeHtml(snapshot.reviewer || "local-operator");
+  packagingReviewStatus.textContent = pkg.decision || "PENDING";
+  packagingReviewStatus.className =
+    "status-chip " +
+    (pkg.decision === "ACCEPT"
+      ? "success"
+      : pkg.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  packagingDetail.innerHTML =
+    '<div class="concept-detail-card">' +
+      '<h4>PACKAGE</h4>' +
+      '<h3>' + escapeHtml(pkg.title || pkg.package_id) + '</h3>' +
+      '<div class="concept-meta">' +
+        '<span>' + escapeHtml(humanizeToken(pkg.format_intent)) + '</span>' +
+        '<span>Concept ' + escapeHtml(pkg.concept_id || "") + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="concept-detail-card"><h4>THUMBNAIL</h4><p><strong>Message:</strong> ' +
+      escapeHtml(thumbnail.message || "") + '<br><strong>Visual:</strong> ' +
+      escapeHtml(thumbnail.visual_concept || "") +
+      (thumbnail.text_overlay
+        ? '<br><strong>Text:</strong> ' + escapeHtml(thumbnail.text_overlay)
+        : "") +
+      '</p></div>' +
+    '<div class="concept-detail-card"><h4>OPENING FRAME</h4><p><strong>Purpose:</strong> ' +
+      escapeHtml(opening.purpose || "") + '<br><strong>Visual:</strong> ' +
+      escapeHtml(opening.visual_concept || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>ONE-SENTENCE PROMISE</h4><p>' +
+      escapeHtml(pkg.one_sentence_promise || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>VIEWER NEED</h4><p><strong>Viewer:</strong> ' +
+      escapeHtml(pkg.expected_viewer || "") + '<br><strong>Awareness:</strong> ' +
+      escapeHtml(pkg.awareness_level || "") + '<br><strong>Problem:</strong> ' +
+      escapeHtml(pkg.viewer_problem || "") + '<br><strong>Moment:</strong> ' +
+      escapeHtml(pkg.viewer_moment || "") + '<br><strong>Outcome:</strong> ' +
+      escapeHtml(pkg.desired_outcome || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>PROMISE / CURIOSITY / PAYOFF</h4><p><strong>Core promise:</strong> ' +
+      escapeHtml(pkg.core_promise || "") + '<br><strong>Curiosity gap:</strong> ' +
+      escapeHtml(pkg.curiosity_gap || "") + '<br><strong>Expected payoff:</strong> ' +
+      escapeHtml(pkg.expected_payoff || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>TITLE + THUMBNAIL</h4><p>' +
+      escapeHtml(pkg.title_thumbnail_relationship || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>POSITIONING</h4><p><strong>Gap:</strong> ' +
+      escapeHtml(pkg.gap_positioning || "") + '<br><strong>Channel fit:</strong> ' +
+      escapeHtml(pkg.channel_fit_alignment || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>RESEARCH DEPENDENCIES</h4>' +
+      (dependencies ? '<ul>' + dependencies + '</ul>' : '<p>None declared.</p>') +
+      '</div>';
+
+  const criteriaDescriptions = snapshot.criteria || {};
+  const checked = pkg.criteria_decisions || {};
+  const required = pkg.required_accept_criteria || Object.keys(criteriaDescriptions);
+  packagingCriteria.innerHTML = required.map(function (criterion) {
+    const id = "packaging-criterion-" + packagingCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) +
+      '" data-packaging-criterion="' + escapeHtml(criterion) + '"' +
+      (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  packagingNote.value = pkg.note || "";
+  packagingPrev.disabled = packagingCursor <= 0;
+  packagingNext.disabled = packagingCursor >= items.length - 1;
+  packagingReject.disabled = false;
+  packagingRework.disabled = false;
+  packagingAccept.disabled = false;
+  packagingEditing = false;
+}
+
+function movePackagingCursor(delta) {
+  const current = currentPackagingItem();
+  if (!current) return;
+  packagingCursor = Math.max(
+    0,
+    Math.min(current.items.length - 1, packagingCursor + delta)
+  );
+  packagingEditing = false;
+  renderPackagingReview(latestPackagingSnapshot, true);
+}
+
+function collectPackagingCriteria() {
+  const values = {};
+  packagingCriteria.querySelectorAll("[data-packaging-criterion]").forEach(function (input) {
+    values[input.dataset.packagingCriterion] = Boolean(input.checked);
+  });
+  return values;
+}
+
+async function submitPackagingDecision(decision) {
+  const current = currentPackagingItem();
+  if (!current) return;
+  const pkg = current.item;
+
+  try {
+    const payload = await api("/api/packaging-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        package_id: pkg.package_id,
+        decision: decision,
+        criteria: collectPackagingCriteria(),
+        note: packagingNote.value
+      })
+    });
+    packagingEditing = false;
+    latestPackagingSnapshot = payload;
+    const nextPending = pendingPackagingIndex(payload.packages || []);
+    if (nextPending >= 0) packagingCursor = nextPending;
+    renderPackagingReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Package accepted."
+        : decision === "REWORK"
+          ? "Package sent for rework."
+          : "Package rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
+  const humanCreateGate = [
+    "HUMAN_VISION_GATE",
+    "HUMAN_CONCEPT_GATE",
+    "HUMAN_PACKAGING_GATE"
+  ].includes(workflow.state);
+
   analysisCurrentTitle.textContent =
-    (workflow.state === "HUMAN_VISION_GATE" || workflow.state === "HUMAN_CONCEPT_GATE")
+    humanCreateGate
       ? workflow.current_title
       : (
         workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
@@ -944,7 +1168,7 @@ function renderAnalysis(data) {
       );
 
   analysisCurrentDetail.textContent =
-    (workflow.state === "HUMAN_VISION_GATE" || workflow.state === "HUMAN_CONCEPT_GATE")
+    humanCreateGate
       ? workflow.current_detail
       : (
         data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
@@ -958,18 +1182,28 @@ function renderAnalysis(data) {
   renderActionCollection(actions, analysisActions);
   renderVisionReview(data.vision_review || {}, false);
   renderConceptReview(data.concept_gate || {}, false);
+  renderPackagingReview(data.packaging_gate || {}, false);
 
   const currentId = workflow.current_action_id || "";
-  const activeIndex = [
-    "exp2_prepare",
-    "exp2_acquire",
-    "exp2_visual",
-    "exp2_vision_prepare"
-  ].includes(currentId) || workflow.state === "HUMAN_VISION_GATE" ? 0 :
-    ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId) ? 1 :
+  let activeIndex = 0;
+  if (
+    ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId)
+  ) {
+    activeIndex = 1;
+  } else if (
+    ["package_prepare", "package_generate", "package_gate_prepare"].includes(currentId) ||
+    workflow.state === "HUMAN_PACKAGING_GATE" ||
+    (data.packaging && data.packaging.packaging_gate_complete)
+  ) {
+    activeIndex = 3;
+  } else if (
     ["transform_prepare", "concept_generate", "concept_gate_prepare"].includes(currentId) ||
-      workflow.state === "HUMAN_CONCEPT_GATE" ||
-      (data.transformation && data.transformation.concept_gate_complete) ? 2 : 0;
+    workflow.state === "HUMAN_CONCEPT_GATE" ||
+    (data.transformation && data.transformation.concept_gate_complete)
+  ) {
+    activeIndex = 2;
+  }
+
   creationTabs.forEach(function (tab, index) {
     tab.classList.toggle("active", index === activeIndex);
   });
@@ -1258,6 +1492,27 @@ conceptRework.addEventListener("click", function () {
 });
 conceptAccept.addEventListener("click", function () {
   submitConceptDecision("ACCEPT");
+});
+packagingNote.addEventListener("input", function () {
+  packagingEditing = true;
+});
+packagingCriteria.addEventListener("change", function () {
+  packagingEditing = true;
+});
+packagingPrev.addEventListener("click", function () {
+  movePackagingCursor(-1);
+});
+packagingNext.addEventListener("click", function () {
+  movePackagingCursor(1);
+});
+packagingReject.addEventListener("click", function () {
+  submitPackagingDecision("REJECT");
+});
+packagingRework.addEventListener("click", function () {
+  submitPackagingDecision("REWORK");
+});
+packagingAccept.addEventListener("click", function () {
+  submitPackagingDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });
