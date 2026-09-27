@@ -96,6 +96,7 @@ class Experiment02Tests(unittest.TestCase):
                 "title": "F1 Gearbox",
                 "channel_id": "c1",
                 "channel_title": "Channel",
+                "niche": "automotive_racing",
                 "topic": "gearbox_transmission",
                 "format_candidate": "long_form_candidate",
                 "views": 1000000,
@@ -109,6 +110,8 @@ class Experiment02Tests(unittest.TestCase):
         self.assertEqual(len(packets), 1)
         self.assertEqual(profile["source_inputs"]["transcript"]["status"], "NOT_PROVIDED")
         self.assertEqual(profile["analysis"]["packaging"]["findings"], [])
+        self.assertEqual(profile["source"]["niche"], "automotive_racing")
+        self.assertEqual(packets[0]["niche"], "automotive_racing")
 
     def test_supported_finding_requires_evidence(self):
         profile = self.base_profile()
