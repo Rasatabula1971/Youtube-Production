@@ -721,16 +721,24 @@ async function submitVisionDecision(action) {
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   analysisCurrentTitle.textContent =
-    workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
+    workflow.state === "HUMAN_VISION_GATE"
       ? workflow.current_title
-      : (data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
-        ? "Prepare the approved source evidence"
-        : "Waiting for opportunity approval");
+      : (
+        workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
+          ? workflow.current_title
+          : (data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
+            ? "Prepare the approved source evidence"
+            : "Waiting for opportunity approval")
+      );
 
   analysisCurrentDetail.textContent =
-    data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
-      ? (workflow.current_detail || "The next available analysis step is highlighted.")
-      : "Approve an opportunity before Experiment 02 can begin.";
+    workflow.state === "HUMAN_VISION_GATE"
+      ? workflow.current_detail
+      : (
+        data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
+          ? (workflow.current_detail || "The next available analysis step is highlighted.")
+          : "Approve an opportunity before Experiment 02 can begin."
+      );
 
   const actions = (data.actions || []).filter(function (action) {
     return action.surface === "workflow" && action.id !== "opportunity_research";
