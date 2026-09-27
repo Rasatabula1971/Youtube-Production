@@ -11,13 +11,14 @@ import opportunity_research as research
 
 
 class OpportunityResearchTests(unittest.TestCase):
-    def patch_output_paths(self, stack: ExitStack, root: Path):
+    def patch_output_paths(self, stack: ExitStack, root: Path) -> None:
         exp13 = root / "experiment_01_3"
         exp14 = root / "experiment_01_4"
         exp15 = root / "experiment_01_5"
         exp13.mkdir(parents=True)
         exp14.mkdir(parents=True)
         exp15.mkdir(parents=True)
+
         stack.enter_context(patch.object(research, "OUTPUT_ROOT", root))
         stack.enter_context(patch.object(research, "EXP13_DIR", exp13))
         stack.enter_context(patch.object(research, "EXP14_DIR", exp14))
@@ -31,13 +32,16 @@ class OpportunityResearchTests(unittest.TestCase):
         )
 
     def test_waiting_state_arms_scheduler_when_velocity_not_ready(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
-            with ExitStack() as stack:
-                self.patch_output_paths(stack, root)
-                with (
-                patch.object(research, "study_set_ready", return_value=False),
-                patch.object(research, "velocity_ready", return_value=False),
+            self.patch_output_paths(stack, root)
+            stack.enter_context(
+                patch.object(research, "study_set_ready", return_value=False)
+            )
+            stack.enter_context(
+                patch.object(research, "velocity_ready", return_value=False)
+            )
+            stack.enter_context(
                 patch.object(
                     research.scheduled_refresh,
                     "run_scheduled_refresh",
@@ -45,19 +49,22 @@ class OpportunityResearchTests(unittest.TestCase):
                         "status": "SKIPPED_RECENT_SNAPSHOT",
                         "message": "too recent",
                     },
-                ),
+                )
+            )
+            schedule = stack.enter_context(
                 patch.object(
                     research,
                     "schedule_continuation",
                     return_value=True,
-                ) as schedule,
-            ):
-                result = research.continue_research(
-                    python_executable="python-test",
-                    minimum_interval_hours=1.5,
-                    max_refresh_attempts=3,
-                    schedule_if_waiting=True,
                 )
+            )
+
+            result = research.continue_research(
+                python_executable="python-test",
+                minimum_interval_hours=1.5,
+                max_refresh_attempts=3,
+                schedule_if_waiting=True,
+            )
 
         self.assertEqual(
             result["status"],
@@ -71,18 +78,20 @@ class OpportunityResearchTests(unittest.TestCase):
         )
 
     def test_three_refresh_attempts_stop_instead_of_looping_forever(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
-            patches = self.patch_output_paths(root)
+            self.patch_output_paths(stack, root)
             (root / "opportunity_research_state.json").write_text(
                 json.dumps({"refresh_attempts": 2}),
                 encoding="utf-8",
             )
-
-            with (
-                *patches,
-                patch.object(research, "study_set_ready", return_value=False),
-                patch.object(research, "velocity_ready", return_value=False),
+            stack.enter_context(
+                patch.object(research, "study_set_ready", return_value=False)
+            )
+            stack.enter_context(
+                patch.object(research, "velocity_ready", return_value=False)
+            )
+            stack.enter_context(
                 patch.object(
                     research.scheduled_refresh,
                     "run_scheduled_refresh",
@@ -90,16 +99,21 @@ class OpportunityResearchTests(unittest.TestCase):
                         "status": "REFRESHED",
                         "message": "refreshed",
                     },
-                ),
-                patch.object(research, "remove_continuation_task") as remove,
-                patch.object(research, "schedule_continuation") as schedule,
-            ):
-                result = research.continue_research(
-                    python_executable="python-test",
-                    minimum_interval_hours=1.5,
-                    max_refresh_attempts=3,
-                    schedule_if_waiting=True,
                 )
+            )
+            remove = stack.enter_context(
+                patch.object(research, "remove_continuation_task")
+            )
+            schedule = stack.enter_context(
+                patch.object(research, "schedule_continuation")
+            )
+
+            result = research.continue_research(
+                python_executable="python-test",
+                minimum_interval_hours=1.5,
+                max_refresh_attempts=3,
+                schedule_if_waiting=True,
+            )
 
         self.assertEqual(result["status"], "NEEDS_HUMAN_ATTENTION")
         self.assertEqual(result["refresh_attempts"], 3)
@@ -107,9 +121,9 @@ class OpportunityResearchTests(unittest.TestCase):
         schedule.assert_not_called()
 
     def test_ready_velocity_runs_01_4_then_01_5_and_stops_for_human(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
-            patches = self.patch_output_paths(root)
+            self.patch_output_paths(stack, root)
             exp14 = root / "experiment_01_4"
             exp15 = root / "experiment_01_5"
 
@@ -131,16 +145,24 @@ class OpportunityResearchTests(unittest.TestCase):
                     )
                 return 0
 
-            with (
-                *patches,
-                patch.object(research, "velocity_ready", return_value=True),
-                patch.object(research, "run_command", side_effect=fake_run) as run,
-                patch.object(research, "remove_continuation_task") as remove,
-            ):
-                result = research.advance_downstream(
-                    python_executable="python-test",
-                    refresh_attempts=1,
+            stack.enter_context(
+                patch.object(research, "velocity_ready", return_value=True)
+            )
+            run = stack.enter_context(
+                patch.object(
+                    research,
+                    "run_command",
+                    side_effect=fake_run,
                 )
+            )
+            remove = stack.enter_context(
+                patch.object(research, "remove_continuation_task")
+            )
+
+            result = research.advance_downstream(
+                python_executable="python-test",
+                refresh_attempts=1,
+            )
 
         self.assertEqual(
             result["status"],
@@ -150,9 +172,9 @@ class OpportunityResearchTests(unittest.TestCase):
         remove.assert_called_once()
 
     def test_start_runs_discovery_then_enters_continuation(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
-            patches = self.patch_output_paths(root)
+            self.patch_output_paths(stack, root)
             exp13 = root / "experiment_01_3"
 
             def fake_run(command, label):
@@ -166,21 +188,29 @@ class OpportunityResearchTests(unittest.TestCase):
                 "status": "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
                 "message": "waiting",
             }
-            with (
-                *patches,
-                patch.object(research, "run_command", side_effect=fake_run) as run,
+            run = stack.enter_context(
+                patch.object(
+                    research,
+                    "run_command",
+                    side_effect=fake_run,
+                )
+            )
+            continuation = stack.enter_context(
                 patch.object(
                     research,
                     "continue_research",
                     return_value=expected,
-                ) as continuation,
-                patch.object(research, "remove_continuation_task"),
-            ):
-                result = research.start_research(
-                    python_executable="python-test",
-                    minimum_interval_hours=1.5,
-                    max_refresh_attempts=3,
                 )
+            )
+            stack.enter_context(
+                patch.object(research, "remove_continuation_task")
+            )
+
+            result = research.start_research(
+                python_executable="python-test",
+                minimum_interval_hours=1.5,
+                max_refresh_attempts=3,
+            )
 
         self.assertEqual(result, expected)
         run.assert_called_once()
