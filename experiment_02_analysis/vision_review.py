@@ -177,7 +177,13 @@ def vision_provider_status(
         }
 
     installed = ollama_model_names(tags)
-    if selected_model not in installed:
+    resolved_model = None
+    if selected_model in installed:
+        resolved_model = selected_model
+    elif f"{selected_model}:latest" in installed:
+        resolved_model = f"{selected_model}:latest"
+
+    if resolved_model is None:
         return {
             "status": "MODEL_NOT_INSTALLED",
             "provider": "human",
@@ -190,7 +196,7 @@ def vision_provider_status(
     return {
         "status": "READY",
         "provider": "ollama",
-        "model": selected_model,
+        "model": resolved_model,
         "host": selected_host,
         "message": "Local Ollama vision drafts are available.",
     }
