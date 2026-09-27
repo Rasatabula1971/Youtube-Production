@@ -32,6 +32,15 @@ SUMMARY_FILE = ACQUISITION_ROOT / "summary.json"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".avif"}
 TRANSCRIPT_SUFFIXES = {".vtt", ".srt", ".txt", ".md"}
 
+RATE_LIMIT_PATTERNS = ("HTTP Error 429", "Too Many Requests")
+
+
+def classify_ytdlp_failure(stderr: str) -> str | None:
+    text = stderr or ""
+    if any(pattern.casefold() in text.casefold() for pattern in RATE_LIMIT_PATTERNS):
+        return "RATE_LIMITED_429"
+    return None
+
 
 def load_json(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -299,9 +308,14 @@ def acquire_one(
         info_json = find_info_json(output_dir, video_id)
 
     if transcript is None:
+        failure_status = (
+            classify_ytdlp_failure(yt_result.stderr)
+            if yt_result is not None
+            else None
+        )
         result = {
             "video_id": video_id,
-            "status": "TRANSCRIPT_UNAVAILABLE",
+            "status": failure_status or "TRANSCRIPT_UNAVAILABLE",
             "profile_sha256": prepared_hash,
             "network_called": network_called,
             "yt_dlp_return_code": (
@@ -310,7 +324,11 @@ def acquire_one(
             "thumbnail": str(thumbnail) if thumbnail else None,
             "info_json": str(info_json) if info_json else None,
             "message": (
-                "No English subtitle/caption file was acquired. "
+                "YouTube rate-limited subtitle acquisition (HTTP 429). "
+                "Do not immediately retry; preserve this job and retry after the "
+                "rate limit clears."
+                if failure_status == "RATE_LIMITED_429"
+                else "No English subtitle/caption file was acquired. "
                 "The profile was not enriched."
             ),
         }
