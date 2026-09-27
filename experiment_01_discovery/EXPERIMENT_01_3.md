@@ -315,11 +315,21 @@ supported `ytsearch` calls:
   `F1 gearbox engineering 2026`, up to 100 results.
 
 Known yt-dlp metadata is then prefiltered by the exact active 01.3 age window,
-the project short/long boundary, and the minimum-view threshold before official
-YouTube API enrichment.
+the minimum-view threshold, and the requested duration branch before official
+YouTube API enrichment. Fallback duration branches are intentionally distinct:
 
-The same merged pool is reused across format branches and across
-strict/expanded passes. Once AUTO mode falls back to yt-dlp, the expanded pass
+- short: up to 180 seconds;
+- medium: over 180 seconds through 20 minutes; and
+- long: over 20 minutes.
+
+Strict discovery uses the configured primary query family. Sparse-cell
+expansion uses separate `expansion_queries`, with additional
+`short_expansion_queries` for short-form discovery. This forces expansion to
+acquire genuinely new relevance pools instead of merely filtering the strict
+pool through a wider age window.
+
+Pools are still cached and reused when the exact same query is needed by more
+than one format branch. Once AUTO mode falls back to yt-dlp, the expanded pass
 remains on yt-dlp instead of retrying an already quota-exhausted search.list
 endpoint.
 
