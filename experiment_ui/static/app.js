@@ -106,7 +106,14 @@ function renderOpportunityGate(gate) {
       '<div>' +
       '<div class="opportunity-label">OPPORTUNITY</div>' +
       '<h3>' + escapeHtml(humanizeToken(opportunity.topic)) + '</h3>' +
-      '<p>' + escapeHtml(humanizeToken(opportunity.format_candidate)) + '</p>' +
+      '<p>' +
+      escapeHtml(
+        [
+          humanizeToken(opportunity.niche),
+          humanizeToken(opportunity.format_candidate)
+        ].filter(Boolean).join(" · ")
+      ) +
+      '</p>' +
       '</div>' +
       '<span class="decision-chip decision-' +
       escapeHtml(decision.toLowerCase()) + '">' +
