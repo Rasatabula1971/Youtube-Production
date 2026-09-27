@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,31 +11,31 @@ import opportunity_research as research
 
 
 class OpportunityResearchTests(unittest.TestCase):
-    def patch_output_paths(self, root: Path):
+    def patch_output_paths(self, stack: ExitStack, root: Path):
         exp13 = root / "experiment_01_3"
         exp14 = root / "experiment_01_4"
         exp15 = root / "experiment_01_5"
         exp13.mkdir(parents=True)
         exp14.mkdir(parents=True)
         exp15.mkdir(parents=True)
-        return (
-            patch.object(research, "OUTPUT_ROOT", root),
-            patch.object(research, "EXP13_DIR", exp13),
-            patch.object(research, "EXP14_DIR", exp14),
-            patch.object(research, "EXP15_DIR", exp15),
+        stack.enter_context(patch.object(research, "OUTPUT_ROOT", root))
+        stack.enter_context(patch.object(research, "EXP13_DIR", exp13))
+        stack.enter_context(patch.object(research, "EXP14_DIR", exp14))
+        stack.enter_context(patch.object(research, "EXP15_DIR", exp15))
+        stack.enter_context(
             patch.object(
                 research,
                 "STATE_FILE",
                 root / "opportunity_research_state.json",
-            ),
+            )
         )
 
     def test_waiting_state_arms_scheduler_when_velocity_not_ready(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            patches = self.patch_output_paths(root)
-            with (
-                *patches,
+            with ExitStack() as stack:
+                self.patch_output_paths(stack, root)
+                with (
                 patch.object(research, "study_set_ready", return_value=False),
                 patch.object(research, "velocity_ready", return_value=False),
                 patch.object(
