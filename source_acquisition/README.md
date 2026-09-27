@@ -71,9 +71,31 @@ agent_reach_adapter.py supports:
 - YouTube backend health;
 - YouTube search through the active yt-dlp backend;
 - relevance search through ytsearchN:;
-- date-oriented search through ytsearchdateN:.
+- date-oriented requests through the supported ytsearch compatibility path;
+- web search through Agent Reach's Exa / mcporter backend;
+- public webpage reading through the Jina Reader path used by Agent Reach.
 
 Subprocess execution uses an argument list with shell=False.
+
+## Research acquisition
+
+The Research Engine uses Agent Reach only for source acquisition:
+
+~~~text
+research question
+  ↓
+Exa web search
+  ↓
+real source URLs
+  ↓
+Jina Reader page retrieval
+  ↓
+saved page evidence
+~~~
+
+Agent Reach does not decide whether a claim is true, safe, or suitable for the
+script. FAIR may later structure claims only from the saved acquired pages, and
+the human Research Gate makes the final claim decision.
 
 ## YouTube discovery benchmark
 

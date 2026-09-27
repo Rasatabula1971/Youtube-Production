@@ -10,6 +10,7 @@ The framework does not browse the web, call an LLM, or declare claims true.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,10 @@ def safe_slug(value: str) -> str:
         for char in value
     ).strip("._")
     return cleaned or "unknown"
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def source_host(url: str) -> str | None:
@@ -536,14 +541,20 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         return summary
 
     handoff = load_json(handoff_path)
+    handoff_sha256 = sha256_file(handoff_path)
     concepts = handoff.get("concepts", [])
     if not isinstance(concepts, list):
         raise ValueError("Research handoff concepts must be a list")
 
     paths = []
+    current_destinations: set[Path] = set()
     seen_concept_ids: set[str] = set()
     for concept in concepts:
         plan = build_research_plan(concept)
+        plan["plan_provenance"] = {
+            "packaging_handoff_source": str(handoff_path),
+            "packaging_handoff_sha256": handoff_sha256,
+        }
         concept_id = str(plan["concept_id"])
         if concept_id in seen_concept_ids:
             raise ValueError(
@@ -558,7 +569,12 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
             json.dumps(plan, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        current_destinations.add(destination.resolve())
         paths.append(str(destination))
+
+    for stale_path in PLANS_DIR.glob("*.research_plan.json"):
+        if stale_path.resolve() not in current_destinations:
+            stale_path.unlink()
 
     summary = {
         "status": (
@@ -585,6 +601,7 @@ def run_apply() -> dict[str, Any]:
 
     rejected: list[dict[str, Any]] = []
     drafts: list[str] = []
+    current_destinations: set[Path] = set()
 
     if not RESPONSES_DIR.exists():
         summary = {
@@ -617,6 +634,18 @@ def run_apply() -> dict[str, Any]:
             continue
 
         plan = load_json(plan_path)
+        provenance = response.get("response_provenance")
+        if isinstance(provenance, dict):
+            if provenance.get("plan_sha256") != sha256_file(plan_path):
+                rejected.append(
+                    {
+                        "response": str(response_path),
+                        "errors": [
+                            "response provenance does not match current research plan"
+                        ],
+                    }
+                )
+                continue
         try:
             draft = validate_research_response(
                 response,
@@ -636,11 +665,23 @@ def run_apply() -> dict[str, Any]:
             DRAFTS_DIR
             / f"{safe_slug(concept_id)}.draft_research_package.json"
         )
+        draft["draft_provenance"] = {
+            "plan_source": str(plan_path),
+            "plan_sha256": sha256_file(plan_path),
+            "response_source": str(response_path),
+            "response_sha256": sha256_file(response_path),
+        }
         destination.write_text(
             json.dumps(draft, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        current_destinations.add(destination.resolve())
         drafts.append(str(destination))
+
+    if DRAFTS_DIR.exists():
+        for stale_path in DRAFTS_DIR.glob("*.draft_research_package.json"):
+            if stale_path.resolve() not in current_destinations:
+                stale_path.unlink()
 
     REJECTED_FILE.write_text(
         json.dumps(

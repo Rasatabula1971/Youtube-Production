@@ -329,3 +329,23 @@ Only accepted packages enter
 `packaging_engine/output/research_handoff.json`. The approved package defines
 the promise that downstream Research and Story / Script must support and
 deliver.
+
+
+## Research workflow
+
+After a package is human-approved, Analyze & Create continues through:
+
+**Prepare Research Plans → Acquire Research Evidence → Structure Research Claims
+→ Prepare Research Gate → Review Research Claims**
+
+Web evidence is acquired before FAIR is allowed to structure claims. Search uses
+the Agent Reach Exa path and page content is retrieved through Jina Reader.
+FAIR is restricted to the acquired source IDs and URLs and remains free-only.
+
+The Research Gate is compact and claim-by-claim. The reviewer sees the claim,
+coverage state, linked research question, source title/publisher/type, locator,
+evidence note and URL. ACCEPT requires every configured criterion. REWORK
+requires a note, and conflicted claims require an explicit resolution note.
+
+Only verified packages with every research question resolved become
+`READY_FOR_STORY_SCRIPT`.

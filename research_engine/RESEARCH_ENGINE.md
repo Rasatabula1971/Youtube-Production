@@ -5,11 +5,18 @@
 The Research Engine turns human-accepted concepts into traceable research
 packages for the future Story / Script Engine.
 
-It does not browse the web by itself.
+The deterministic Research Engine itself does not browse the web or call an
+LLM.
 
-It does not call an LLM.
+The guided workflow adds two separate bounded layers:
 
-It does not decide that a claim is true simply because multiple sources agree.
+1. `research_acquisition.py` searches the web through Agent Reach's Exa path
+   and retrieves the actual pages through Jina Reader.
+2. `research_model_runner.py` uses FAIR free-only routing to structure claims
+   only from those acquired pages.
+
+The deterministic validator still does not decide that a claim is true simply
+because multiple sources agree. Human Research Gate approval remains required.
 
 ## Input
 
@@ -172,3 +179,41 @@ original concept questions.
 
 The Research Gate therefore cannot mark the package READY_FOR_STORY_SCRIPT
 while a promise-critical package dependency remains unresolved.
+
+
+## Guided Research workflow
+
+The creator-facing path is:
+
+~~~text
+Prepare Research Plans
+        ↓
+Acquire Research Evidence
+        ↓
+Structure Research Claims
+        ↓
+Prepare Research Gate
+        ↓
+Human claim-by-claim review
+        ↓
+READY_FOR_STORY_SCRIPT
+~~~
+
+### Source grounding boundary
+
+Every acquired evidence file is bound to the SHA-256 of its current research
+plan. Every FAIR response is bound to both the current plan SHA-256 and acquired
+evidence SHA-256.
+
+The FAIR response schema restricts source IDs and URLs to the pages that were
+actually acquired. A deterministic post-model check rejects any source
+ID / URL pair outside that acquired set.
+
+The model is instructed to leave a research question unresolved rather than
+invent a source or unsupported claim.
+
+### Story / Script boundary
+
+Research may move forward only when the human Research Gate has accepted at
+least one claim for every original concept question and every package research
+dependency. Otherwise the verified package remains `RESEARCH_INCOMPLETE`.

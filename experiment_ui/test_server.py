@@ -38,6 +38,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="packagingReviewPanel"', html)
         self.assertIn('id="packagingCriteria"', html)
         self.assertIn('id="packagingNote"', html)
+        self.assertIn('id="researchReviewPanel"', html)
+        self.assertIn('id="researchCriteria"', html)
+        self.assertIn('id="researchNote"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -52,6 +55,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/concept-gate", script)
         self.assertIn("renderPackagingReview", script)
         self.assertIn("/api/packaging-gate", script)
+        self.assertIn("renderResearchReview", script)
+        self.assertIn("/api/research-gate", script)
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
@@ -161,6 +166,106 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn(
             "packaging_engine/package_review.py",
             server.ACTION_DEFS["package_gate_prepare"]["command"][1],
+        )
+
+    def test_research_actions_follow_packaging_gate(self):
+        for action_id in (
+            "research_prepare",
+            "research_acquire",
+            "research_generate",
+            "research_gate_prepare",
+        ):
+            self.assertIn(action_id, server.ACTION_DEFS)
+
+        packaging_index = server.WORKFLOW_ACTION_ORDER.index(
+            "package_gate_prepare"
+        )
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[
+                packaging_index + 1 : packaging_index + 5
+            ],
+            [
+                "research_prepare",
+                "research_acquire",
+                "research_generate",
+                "research_gate_prepare",
+            ],
+        )
+        self.assertIn(
+            "research_engine/research_engine.py",
+            server.ACTION_DEFS["research_prepare"]["command"][1],
+        )
+        self.assertIn(
+            "research_engine/research_acquisition.py",
+            server.ACTION_DEFS["research_acquire"]["command"][1],
+        )
+        self.assertIn(
+            "research_engine/research_model_runner.py",
+            server.ACTION_DEFS["research_generate"]["command"][1],
+        )
+        self.assertIn(
+            "research_engine/research_review.py",
+            server.ACTION_DEFS["research_gate_prepare"]["command"][1],
+        )
+
+    def test_pending_research_gate_becomes_human_workflow_gate(self):
+        with (
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={
+                    "ready_for_experiment_02": True,
+                    "opportunities": [],
+                },
+            ),
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={
+                    "awaiting_human_review": False,
+                    "complete": True,
+                },
+            ),
+            patch.object(
+                server,
+                "opportunity_research_state",
+                return_value={},
+            ),
+            patch.object(
+                server,
+                "transformation_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "research_ready": True,
+                    "concept_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "packaging_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "research_ready": True,
+                    "packaging_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "research_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "research_gate": {
+                        "status": "AWAITING_HUMAN_DECISION",
+                    },
+                },
+            ),
+        ):
+            workflow = server.workflow_guidance({})
+
+        self.assertEqual(workflow["state"], "HUMAN_RESEARCH_GATE")
+        self.assertEqual(
+            workflow["current_title"],
+            "Review Research Claims",
         )
 
     def test_pending_packaging_gate_becomes_human_workflow_gate(self):

@@ -67,6 +67,19 @@ const packagingRework = document.getElementById("packagingRework");
 const packagingAccept = document.getElementById("packagingAccept");
 const packagingNext = document.getElementById("packagingNext");
 
+const researchReviewPanel = document.getElementById("researchReviewPanel");
+const researchReviewTitle = document.getElementById("researchReviewTitle");
+const researchReviewSummary = document.getElementById("researchReviewSummary");
+const researchReviewStatus = document.getElementById("researchReviewStatus");
+const researchDetail = document.getElementById("researchDetail");
+const researchCriteria = document.getElementById("researchCriteria");
+const researchNote = document.getElementById("researchNote");
+const researchPrev = document.getElementById("researchPrev");
+const researchReject = document.getElementById("researchReject");
+const researchRework = document.getElementById("researchRework");
+const researchAccept = document.getElementById("researchAccept");
+const researchNext = document.getElementById("researchNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -91,6 +104,9 @@ let conceptEditing = false;
 let latestPackagingSnapshot = null;
 let packagingCursor = 0;
 let packagingEditing = false;
+let latestResearchSnapshot = null;
+let researchCursor = 0;
+let researchEditing = false;
 
 const ROUTES = {
   "/": {
@@ -1148,12 +1164,206 @@ async function submitPackagingDecision(decision) {
   }
 }
 
+
+function pendingResearchIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentResearchItem() {
+  const items = (latestResearchSnapshot && latestResearchSnapshot.claims) || [];
+  if (!items.length) return null;
+  researchCursor = Math.max(0, Math.min(researchCursor, items.length - 1));
+  return { item: items[researchCursor], items: items };
+}
+
+function renderResearchReview(snapshot, force) {
+  latestResearchSnapshot = snapshot || {};
+  if (
+    !snapshot ||
+    snapshot.status === "WAITING_FOR_DRAFT_RESEARCH_PACKAGES" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.claims || []).length
+  ) {
+    researchReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    researchReviewPanel.hidden = false;
+    researchReviewTitle.textContent = "Research Gate complete";
+    researchReviewSummary.textContent =
+      (snapshot.ready_for_story_script || 0) + " package(s) ready for Story / Script";
+    researchReviewStatus.textContent =
+      (snapshot.verified_packages || []).every(function (item) {
+        return item.status === "READY_FOR_STORY_SCRIPT";
+      }) ? "READY FOR SCRIPT" : "RESEARCH INCOMPLETE";
+    researchReviewStatus.className =
+      "status-chip " +
+      ((snapshot.verified_packages || []).length &&
+       (snapshot.verified_packages || []).every(function (item) {
+         return item.status === "READY_FOR_STORY_SCRIPT";
+       }) ? "success" : "failed");
+    const unresolved = (snapshot.verified_packages || []).flatMap(function (item) {
+      return item.unresolved_question_ids || [];
+    });
+    researchDetail.innerHTML =
+      '<div class="concept-complete">' +
+      (unresolved.length
+        ? "Unresolved research questions: " + escapeHtml(unresolved.join(", "))
+        : "Human-approved research is ready for Story / Script.") +
+      '</div>';
+    researchCriteria.innerHTML = "";
+    researchNote.hidden = true;
+    researchPrev.disabled = true;
+    researchNext.disabled = true;
+    researchReject.disabled = true;
+    researchRework.disabled = true;
+    researchAccept.disabled = true;
+    return;
+  }
+
+  if (researchEditing && !force) return;
+  const items = snapshot.claims || [];
+  if (!items.length) {
+    researchReviewPanel.hidden = true;
+    return;
+  }
+  if (researchCursor >= items.length) {
+    researchCursor = Math.max(0, items.length - 1);
+  }
+
+  const claim = items[researchCursor] || {};
+  const coverage = claim.coverage || {};
+  const evidence = (claim.evidence || []).map(function (link) {
+    const source = link.source || {};
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(link.stance || "EVIDENCE") + '</h4>' +
+      '<p><strong>Source:</strong> ' + escapeHtml(source.title || link.source_id || "") +
+      '<br><strong>Publisher:</strong> ' + escapeHtml(source.publisher || "") +
+      '<br><strong>Type:</strong> ' + escapeHtml(humanizeToken(source.source_type || "")) +
+      '<br><strong>Locator:</strong> ' + escapeHtml(link.locator || "") +
+      '<br><strong>Evidence:</strong> ' + escapeHtml(link.evidence_note || "") +
+      '<br><strong>URL:</strong> ' + escapeHtml(source.url || "") + '</p></div>';
+  }).join("");
+
+  const questions = (claim.question_ids || []).map(function (id) {
+    const match = (claim.research_questions || []).find(function (q) {
+      return q.question_id === id;
+    });
+    return match ? id + " — " + (match.question || "") : id;
+  });
+
+  researchReviewPanel.hidden = false;
+  researchNote.hidden = false;
+  researchReviewTitle.textContent =
+    "Claim " + (researchCursor + 1) + " of " + items.length;
+  researchReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · reviewer " +
+    escapeHtml(snapshot.reviewer || "local-operator");
+  researchReviewStatus.textContent = claim.decision || "PENDING";
+  researchReviewStatus.className =
+    "status-chip " +
+    (claim.decision === "ACCEPT"
+      ? "success"
+      : claim.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  researchDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>CLAIM</h4><h3>' +
+      escapeHtml(claim.statement || claim.claim_id) + '</h3>' +
+      '<div class="concept-meta"><span>' + escapeHtml(humanizeToken(claim.role)) +
+      '</span><span>' + escapeHtml(humanizeToken(coverage.state)) +
+      '</span><span>Concept ' + escapeHtml(claim.concept_id || "") +
+      '</span></div></div>' +
+    '<div class="concept-detail-card"><h4>RESEARCH QUESTIONS</h4><p>' +
+      escapeHtml(questions.join(" | ")) + '</p></div>' +
+    evidence;
+
+  const descriptions = claim.criteria_descriptions || {};
+  const checked = claim.criteria_decisions || {};
+  const required = claim.required_accept_criteria || Object.keys(descriptions);
+  researchCriteria.innerHTML = required.map(function (criterion) {
+    const id = "research-criterion-" + researchCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) +
+      '" data-research-criterion="' + escapeHtml(criterion) + '"' +
+      (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(descriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  researchNote.value = claim.note || "";
+  researchPrev.disabled = researchCursor <= 0;
+  researchNext.disabled = researchCursor >= items.length - 1;
+  researchReject.disabled = false;
+  researchRework.disabled = false;
+  researchAccept.disabled = false;
+  researchEditing = false;
+}
+
+function moveResearchCursor(delta) {
+  const current = currentResearchItem();
+  if (!current) return;
+  researchCursor = Math.max(
+    0,
+    Math.min(current.items.length - 1, researchCursor + delta)
+  );
+  researchEditing = false;
+  renderResearchReview(latestResearchSnapshot, true);
+}
+
+function collectResearchCriteria() {
+  const values = {};
+  researchCriteria.querySelectorAll("[data-research-criterion]").forEach(function (input) {
+    values[input.dataset.researchCriterion] = Boolean(input.checked);
+  });
+  return values;
+}
+
+async function submitResearchDecision(decision) {
+  const current = currentResearchItem();
+  if (!current) return;
+  const claim = current.item;
+  try {
+    const payload = await api("/api/research-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: claim.concept_id,
+        claim_id: claim.claim_id,
+        decision: decision,
+        criteria: collectResearchCriteria(),
+        note: researchNote.value
+      })
+    });
+    researchEditing = false;
+    latestResearchSnapshot = payload;
+    const nextPending = pendingResearchIndex(payload.claims || []);
+    if (nextPending >= 0) researchCursor = nextPending;
+    renderResearchReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Research claim accepted."
+        : decision === "REWORK"
+          ? "Research claim sent for rework."
+          : "Research claim rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
     "HUMAN_VISION_GATE",
     "HUMAN_CONCEPT_GATE",
-    "HUMAN_PACKAGING_GATE"
+    "HUMAN_PACKAGING_GATE",
+    "HUMAN_RESEARCH_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -1183,6 +1393,7 @@ function renderAnalysis(data) {
   renderVisionReview(data.vision_review || {}, false);
   renderConceptReview(data.concept_gate || {}, false);
   renderPackagingReview(data.packaging_gate || {}, false);
+  renderResearchReview(data.research_gate || {}, false);
 
   const currentId = workflow.current_action_id || "";
   let activeIndex = 0;
@@ -1190,6 +1401,12 @@ function renderAnalysis(data) {
     ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId)
   ) {
     activeIndex = 1;
+  } else if (
+    ["research_prepare", "research_acquire", "research_generate", "research_gate_prepare"].includes(currentId) ||
+    workflow.state === "HUMAN_RESEARCH_GATE" ||
+    (data.research && data.research.research_gate_complete)
+  ) {
+    activeIndex = 4;
   } else if (
     ["package_prepare", "package_generate", "package_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_PACKAGING_GATE" ||
@@ -1513,6 +1730,27 @@ packagingRework.addEventListener("click", function () {
 });
 packagingAccept.addEventListener("click", function () {
   submitPackagingDecision("ACCEPT");
+});
+researchNote.addEventListener("input", function () {
+  researchEditing = true;
+});
+researchCriteria.addEventListener("change", function () {
+  researchEditing = true;
+});
+researchPrev.addEventListener("click", function () {
+  moveResearchCursor(-1);
+});
+researchNext.addEventListener("click", function () {
+  moveResearchCursor(1);
+});
+researchReject.addEventListener("click", function () {
+  submitResearchDecision("REJECT");
+});
+researchRework.addEventListener("click", function () {
+  submitResearchDecision("REWORK");
+});
+researchAccept.addEventListener("click", function () {
+  submitResearchDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });
