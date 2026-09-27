@@ -542,8 +542,14 @@ button.danger {
   display: grid;
   grid-template-columns: minmax(360px, .9fr) minmax(520px, 1.5fr);
   gap: 18px;
-  align-items: stretch;
+  align-items: start;
   margin-bottom: 18px;
+  scroll-margin-top: 16px;
+}
+
+.controls-panel,
+.job-panel {
+  scroll-margin-top: 16px;
 }
 
 .action-groups {
@@ -601,7 +607,12 @@ button.danger {
 }
 
 .job-panel {
-  min-height: 520px;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  height: calc(100vh - 32px);
+  min-height: 480px;
+  max-height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
 }
@@ -633,7 +644,7 @@ button.danger {
 
 .log-view {
   flex: 1;
-  min-height: 390px;
+  min-height: 0;
   margin: 0;
   border: 1px solid #252e39;
   background: #090d12;
@@ -709,6 +720,19 @@ button.danger {
 
   .workspace-grid {
     grid-template-columns: 1fr;
+  }
+
+  .job-panel {
+    position: static;
+    top: auto;
+    height: auto;
+    min-height: 520px;
+    max-height: none;
+  }
+
+  .log-view {
+    min-height: 390px;
+    max-height: 60vh;
   }
 }
 
