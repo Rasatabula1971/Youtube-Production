@@ -263,6 +263,21 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "opening frame and scene-change frames, and creates objective timing evidence."
         ),
     },
+    "exp2_visual_retry": {
+        "label": "Retry Visual Structure (Force)",
+        "stage": "ACQ",
+        "command": [
+            sys.executable,
+            "source_acquisition/experiment_02_visual.py",
+            "--mode",
+            "acquire",
+            "--force",
+        ],
+        "description": (
+            "Forces a fresh low-resolution visual-structure pass when the guided "
+            "attempt failed or needs to be rebuilt."
+        ),
+    },
     "fair_doctor": {
         "label": "Run FAIR Doctor",
         "stage": "02",
@@ -554,6 +569,22 @@ def enriched_transcript_ready_ids() -> set[str]:
     return ready
 
 
+def current_visual_report_ids(prepared_ids: set[str]) -> set[str]:
+    attempted: set[str] = set()
+    root = SOURCE_ACQ_OUTPUT / "experiment_02"
+    for video_id in prepared_ids:
+        report_path = root / video_id / "visual_analysis.json"
+        prepared_path = EXP2_PREPARED_DIR / f"{video_id}.json"
+        report = safe_load_json(report_path)
+        if (
+            prepared_path.exists()
+            and isinstance(report, dict)
+            and report.get("profile_sha256") == sha256_file(prepared_path)
+        ):
+            attempted.add(video_id)
+    return attempted
+
+
 def current_visual_ready_ids(prepared_ids: set[str]) -> set[str]:
     ready: set[str] = set()
     root = SOURCE_ACQ_OUTPUT / "experiment_02"
@@ -587,6 +618,7 @@ def current_visual_ready_ids(prepared_ids: set[str]) -> set[str]:
 def exp2_artifact_state() -> dict[str, Any]:
     prepared_ids = json_stems(EXP2_PREPARED_DIR)
     enriched_ids = enriched_transcript_ready_ids()
+    visual_report_ids = current_visual_report_ids(prepared_ids)
     visual_ready_ids = current_visual_ready_ids(prepared_ids)
     request_ids: set[str] = set()
     if EXP2_REQUESTS_DIR.exists():
@@ -650,6 +682,7 @@ def exp2_artifact_state() -> dict[str, Any]:
     return {
         "prepared_ids": sorted(prepared_ids),
         "enriched_ready_ids": sorted(enriched_ids),
+        "visual_attempted_ids": sorted(visual_report_ids),
         "visual_ready_ids": sorted(visual_ready_ids),
         "analysis_request_ids": sorted(request_ids),
         "analyzed_ids": sorted(analyzed_ids),
@@ -657,6 +690,11 @@ def exp2_artifact_state() -> dict[str, Any]:
         "reviewed_ids": sorted(reviewed_ids),
         "prepared_count": len(prepared_ids),
         "evidence_ready_count": len(prepared_ids.intersection(enriched_ids)),
+        "visual_attempted_count": len(
+            prepared_ids.intersection(visual_report_ids)
+        ),
+        "visual_attempted": bool(prepared_ids)
+        and prepared_ids.issubset(visual_report_ids),
         "visual_ready_count": len(prepared_ids.intersection(visual_ready_ids)),
         "visual_complete": bool(prepared_ids)
         and prepared_ids.issubset(visual_ready_ids),
@@ -833,11 +871,16 @@ def stage_statuses() -> list[dict[str, Any]]:
     profiles_prepared = exp2_artifacts["prepared_count"] > 0
     evidence_ready = bool(exp2_artifacts["evidence_complete"])
     visual_ready = bool(exp2_artifacts["visual_complete"])
+    visual_attempted = bool(exp2_artifacts["visual_attempted"])
     visual_available = (
         shutil.which("yt-dlp") is not None
         and shutil.which("ffmpeg") is not None
     )
-    visual_satisfied = visual_ready or not visual_available
+    visual_satisfied = (
+        visual_ready
+        or visual_attempted
+        or not visual_available
+    )
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     analyzed = exp2_artifacts["analyzed_current_count"] > 0
     reviewed = exp2_artifacts["reviewed_current_count"] > 0
@@ -1012,8 +1055,16 @@ def stage_statuses() -> list[dict[str, Any]]:
                 {
                     "label": (
                         "Visual structure sampled"
-                        if visual_available
-                        else "Visual structure skipped (ffmpeg unavailable)"
+                        if visual_ready
+                        else (
+                            "Visual structure attempted; transcript fallback active"
+                            if visual_attempted
+                            else (
+                                "Visual structure skipped (ffmpeg unavailable)"
+                                if not visual_available
+                                else "Visual structure pending"
+                            )
+                        )
                     ),
                     "done": visual_satisfied,
                 },
@@ -1064,6 +1115,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     exp2_artifacts = exp2_artifact_state()
     profiles_prepared = exp2_artifacts["prepared_count"] > 0
     evidence_complete = bool(exp2_artifacts["evidence_complete"])
+    visual_attempted = bool(exp2_artifacts["visual_attempted"])
     visual_complete = bool(exp2_artifacts["visual_complete"])
     requests_complete = bool(exp2_artifacts["requests_complete"])
     analyzed = exp2_artifacts["analyzed_current_count"] > 0
@@ -1075,7 +1127,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
     visual_available = yt_dlp_installed and ffmpeg_installed
-    visual_satisfied = visual_complete or not visual_available
+    visual_satisfied = (
+        visual_complete
+        or visual_attempted
+        or not visual_available
+    )
 
     return {
         "opportunity_research": {
@@ -1224,7 +1280,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 human_gate_ready
                 and evidence_complete
                 and visual_available
-                and not visual_complete
+                and not visual_attempted
             ),
             "reason": (
                 "Transcript-backed evidence is ready for visual structure sampling."
@@ -1232,12 +1288,15 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     human_gate_ready
                     and evidence_complete
                     and visual_available
-                    and not visual_complete
+                    and not visual_attempted
                 )
                 else (
                     "Visual structure evidence is already ready."
                     if visual_complete
                     else (
+                        "Visual structure was attempted; transcript-only analysis may continue. Use Tools & Diagnostics to force a retry."
+                        if visual_attempted
+                        else (
                         "yt-dlp and ffmpeg are required for automatic visual structure sampling."
                         if human_gate_ready and evidence_complete and not visual_available
                         else (
@@ -1247,6 +1306,24 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                         )
                     )
                 )
+            ),
+        },
+        "exp2_visual_retry": {
+            "enabled": (
+                human_gate_ready
+                and evidence_complete
+                and visual_available
+                and visual_attempted
+            ),
+            "reason": (
+                "Force a fresh visual-structure pass for the current approved profiles."
+                if (
+                    human_gate_ready
+                    and evidence_complete
+                    and visual_available
+                    and visual_attempted
+                )
+                else "A completed or failed guided visual attempt is required before force-retry."
             ),
         },
         "fair_doctor": {
