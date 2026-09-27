@@ -63,6 +63,17 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
         self.assertNotIn("--output", command)
         self.assertNotIn("--write-video", command)
 
+    def test_temp_video_command_is_low_resolution_and_bounded(self):
+        command = visual.temp_video_command(
+            "yt-dlp",
+            url="https://www.youtube.com/watch?v=abc123",
+            destination=Path("fallback.mp4"),
+        )
+
+        self.assertIn("best[height<=360]/best", command)
+        self.assertIn("--output", command)
+        self.assertEqual(command[-1], "https://www.youtube.com/watch?v=abc123")
+
     def test_scene_detection_command_has_no_saved_video_output(self):
         command = visual.scene_detection_command(
             "ffmpeg",
@@ -224,6 +235,94 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "WAITING_FOR_TRANSCRIPT")
         stream.assert_not_called()
+
+    def test_stream_failure_uses_temp_video_and_deletes_it(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            profile = visual.PREPARED_DIR / "abc123.json"
+            self.write_profile(profile)
+
+            video_dir = visual.ACQUISITION_ROOT / "abc123"
+            video_dir.mkdir()
+            (video_dir / "abc123.en.vtt").write_text(
+                "WEBVTT\n\n00:00.000 --> 00:01.000\nHello.\n",
+                encoding="utf-8",
+            )
+
+            stack.enter_context(
+                patch.object(
+                    visual,
+                    "resolve_stream_url",
+                    return_value=(
+                        None,
+                        subprocess.CompletedProcess(
+                            args=["yt-dlp"],
+                            returncode=1,
+                            stdout="",
+                            stderr="HTTP Error 429: Too Many Requests",
+                        ),
+                    ),
+                )
+            )
+
+            def fake_temp(yt_dlp, *, url, destination):
+                destination.write_bytes(b"video")
+                return subprocess.CompletedProcess(
+                    args=["yt-dlp"],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                )
+
+            stack.enter_context(
+                patch.object(visual, "acquire_temp_video", side_effect=fake_temp)
+            )
+
+            def fake_ffmpeg(command, **kwargs):
+                command_text = " ".join(str(part) for part in command)
+                if "opening_frame.jpg" in command_text:
+                    (video_dir / "opening_frame.jpg").write_bytes(b"frame")
+                else:
+                    (video_dir / "scene_0001.jpg").write_bytes(b"scene")
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=0,
+                    stdout="",
+                    stderr="[showinfo] pts_time:1.000\n",
+                )
+
+            stack.enter_context(
+                patch.object(visual.subprocess, "run", side_effect=fake_ffmpeg)
+            )
+            stack.enter_context(
+                patch.object(
+                    visual.base,
+                    "run_ingest",
+                    return_value=subprocess.CompletedProcess(
+                        args=["python-test"],
+                        returncode=0,
+                        stdout="ok",
+                        stderr="",
+                    ),
+                )
+            )
+            (visual.ENRICHED_DIR / "abc123.json").write_text(
+                json.dumps({"video_id": "abc123"}),
+                encoding="utf-8",
+            )
+
+            result = visual.acquire_visual_one(
+                profile,
+                yt_dlp="yt-dlp-test",
+                ffmpeg="ffmpeg-test",
+                python_executable="python-test",
+            )
+
+            self.assertEqual(result["status"], "READY")
+            self.assertEqual(result["visual_source_mode"], "temporary_low_res_video")
+            self.assertTrue(result["temporary_video_deleted"])
+            self.assertFalse((video_dir / "abc123.visual_fallback.mp4").exists())
 
     def test_successful_visual_stage_rebuilds_combined_bundle(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
