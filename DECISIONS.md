@@ -674,3 +674,25 @@ Packaging must then express the viewer need and outcome in one clear sentence.
 
 If the idea cannot survive these clarity checks, the correct action is REWORK /
 REFRAME rather than cosmetic title optimization.
+
+
+## D-050 — Downstream framework code does not close M1
+
+**Status:** Accepted
+
+M1 remains **Prove the Opportunity Engine** until its live success criteria are
+demonstrated and the operator has reviewed the resulting opportunities.
+
+Experiment 02, Transformation, Packaging and Research components may exist as
+offline frameworks ahead of M1 closure. Their implementation is preparatory
+work, not evidence that the upstream milestone succeeded.
+
+Repository status documents must distinguish between:
+
+- framework implemented;
+- live evidence demonstrated; and
+- milestone formally closed.
+
+The human opportunity gate between 01.5 and Experiment 02 is part of that
+boundary: machine-generated demand evidence does not automatically authorize
+creative analysis or downstream production work.
