@@ -71,7 +71,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             threshold=0.28,
         )
 
-        self.assertIn("select=gt(scene\,0.2800)", " ".join(command))
+        self.assertIn(r"select=gt(scene\,0.2800)", " ".join(command))
         self.assertIn("scene_%04d.jpg", command[-1])
         self.assertNotIn(".mp4", " ".join(command))
 
@@ -133,6 +133,75 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             self.assertEqual(
                 len(list(root.glob("scene_*.jpg"))),
                 3,
+            )
+
+    def test_visual_report_is_not_current_without_timing_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            profile = visual.PREPARED_DIR / "abc123.json"
+            self.write_profile(profile)
+
+            enriched = visual.ENRICHED_DIR / "abc123.json"
+            enriched.write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Transcript only.",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            report = visual.ACQUISITION_ROOT / "abc123" / "visual_analysis.json"
+            report.parent.mkdir()
+            report.write_text(
+                json.dumps(
+                    {
+                        "status": "READY",
+                        "profile_sha256": visual.base.sha256_file(profile),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertFalse(
+                visual.visual_report_current(report, profile)
+            )
+
+            enriched.write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Transcript.",
+                            },
+                            {
+                                "evidence_id": "timing.scene_change_summary",
+                                "type": "timing_note",
+                                "observation": "Detector summary.",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertTrue(
+                visual.visual_report_current(report, profile)
             )
 
     def test_visual_stage_waits_for_transcript_before_network(self):
