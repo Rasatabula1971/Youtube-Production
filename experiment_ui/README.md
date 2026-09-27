@@ -71,6 +71,17 @@ If the cohort is sufficient, refresh becomes available. Cross-run snapshot
 history is preserved so rebuilding discovery no longer automatically restarts
 the velocity clock.
 
+On Windows, use **Install 01.3 Auto Refresh** once. It registers a two-hour
+Task Scheduler job that calls the self-limiting scheduled refresh runner. The
+runner performs only frozen-cohort refreshes and automatically skips when a
+snapshot is too recent or the current cohort already has enough velocity
+evidence for 01.4.
+
+**Remove 01.3 Auto Refresh** unregisters that task.
+
+The scheduler writes its last state and background log under
+`experiment_01_discovery/output/experiment_01_3/`.
+
 ## Downstream gating
 
 Buttons remain disabled until their upstream data exists.
