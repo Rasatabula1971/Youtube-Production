@@ -174,3 +174,43 @@ thumbnail is registered as provenance but cannot support a creative finding.
 Acquisition is idempotent. A current enriched profile whose ingestion provenance
 matches the prepared-profile SHA-256 and contains transcript evidence is reused
 without another network call.
+
+
+## Visual structure acquisition
+
+After transcript-backed source evidence is ready, an optional visual-structure
+stage can add objective pacing evidence:
+
+`source_acquisition/experiment_02_visual.py`
+
+Run:
+
+~~~powershell
+python .\source_acquisition\experiment_02_visual.py --mode acquire
+~~~
+
+Requirements:
+
+- `yt-dlp`
+- `ffmpeg`
+
+The visual stage asks `yt-dlp` only for a low-resolution stream URL. It does
+not save the full video file. `ffmpeg` streams that rendition and:
+
+- extracts an opening frame around 0.25 seconds;
+- applies a fixed scene-change detector;
+- retains a bounded set of timestamped representative scene frames; and
+- writes timestamped `timing_note` evidence plus a whole-video detector
+  summary.
+
+The scene-change notes are objective detector outputs. They may support pacing
+observations, but they are **not** semantic descriptions of what appears in the
+frame.
+
+The opening frame and retained scene frames are source artifacts for a later
+human or multimodal-vision layer. Until an observation is attached, they do not
+become claim evidence.
+
+If visual acquisition fails after a valid transcript is available, the guided
+workflow may continue with transcript-only analysis. A force-retry remains
+available under **Tools & Diagnostics**.

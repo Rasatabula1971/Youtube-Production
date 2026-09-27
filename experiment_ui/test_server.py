@@ -3,6 +3,7 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -179,6 +180,372 @@ class ExperimentUiTests(unittest.TestCase):
                 self.assertTrue(
                     readiness["analysis_batch_prepare"]["enabled"]
                 )
+
+    def test_experiment_02_visual_structure_is_guided_after_source_evidence(self):
+        self.assertIn("exp2_visual", server.ACTION_DEFS)
+        self.assertIn(
+            "source_acquisition/experiment_02_visual.py",
+            server.ACTION_DEFS["exp2_visual"]["command"][1],
+        )
+        acquire_index = server.WORKFLOW_ACTION_ORDER.index("exp2_acquire")
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[acquire_index + 1],
+            "exp2_visual",
+        )
+
+    def test_visual_structure_blocks_analysis_when_dependencies_are_available(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            model_runs = root / "model_runs"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            source_output = root / "source_output"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                model_runs,
+                review_requests,
+                reviewed,
+                source_output,
+            ):
+                path.mkdir()
+
+            prepared_profile = prepared / "v1.json"
+            prepared_profile.write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            (enriched / "v1.json").write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Evidence.",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with ExitStack() as stack:
+                for context in (
+                    patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                    patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                    patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                    patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                    patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
+                    patch.object(
+                        server,
+                        "EXP2_REVIEW_REQUESTS_DIR",
+                        review_requests,
+                    ),
+                    patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                    patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
+                    patch.object(
+                        server,
+                        "EXP2_SYNTHESIS_FILE",
+                        root / "missing_synthesis.json",
+                    ),
+                    patch.object(
+                        server,
+                        "EXP2_ACQUISITION_SUMMARY",
+                        root / "missing_acquisition.json",
+                    ),
+                    patch.object(
+                        server,
+                        "EXP2_VISUAL_SUMMARY",
+                        root / "missing_visual.json",
+                    ),
+                    patch.object(
+                        server,
+                        "opportunity_gate_snapshot",
+                        return_value={
+                            "ready_for_experiment_02": True,
+                            "opportunities": [],
+                        },
+                    ),
+                    patch.object(
+                        server.shutil,
+                        "which",
+                        side_effect=lambda name: (
+                            f"C:/fake/{name}.exe"
+                            if name in {"yt-dlp", "ffmpeg"}
+                            else None
+                        ),
+                    ),
+                ):
+                    stack.enter_context(context)
+
+                readiness = server.action_readiness()
+                self.assertTrue(readiness["exp2_visual"]["enabled"])
+                self.assertFalse(
+                    readiness["analysis_batch_prepare"]["enabled"]
+                )
+
+                report_dir = source_output / "experiment_02" / "v1"
+                report_dir.mkdir(parents=True)
+                (report_dir / "visual_analysis.json").write_text(
+                    json.dumps(
+                        {
+                            "status": "READY",
+                            "profile_sha256": server.sha256_file(
+                                prepared_profile
+                            ),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (enriched / "v1.json").write_text(
+                    json.dumps(
+                        {
+                            "source_inputs": {
+                                "transcript": {"status": "PROVIDED"}
+                            },
+                            "evidence": [
+                                {
+                                    "evidence_id": "transcript.p0001",
+                                    "type": "transcript",
+                                    "observation": "Evidence.",
+                                },
+                                {
+                                    "evidence_id": "timing.scene_change_summary",
+                                    "type": "timing_note",
+                                    "observation": "Detector summary.",
+                                },
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                readiness = server.action_readiness()
+                self.assertFalse(readiness["exp2_visual"]["enabled"])
+                self.assertTrue(
+                    readiness["analysis_batch_prepare"]["enabled"]
+                )
+
+    def test_failed_visual_attempt_allows_analysis_and_exposes_force_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            model_runs = root / "model_runs"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            source_output = root / "source_output"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                model_runs,
+                review_requests,
+                reviewed,
+                source_output,
+            ):
+                path.mkdir()
+
+            prepared_profile = prepared / "v1.json"
+            prepared_profile.write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            (enriched / "v1.json").write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Evidence.",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report_dir = source_output / "experiment_02" / "v1"
+            report_dir.mkdir(parents=True)
+            (report_dir / "visual_analysis.json").write_text(
+                json.dumps(
+                    {
+                        "status": "SCENE_DETECTION_FAILED",
+                        "profile_sha256": server.sha256_file(
+                            prepared_profile
+                        ),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
+                patch.object(
+                    server,
+                    "EXP2_REVIEW_REQUESTS_DIR",
+                    review_requests,
+                ),
+                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
+                patch.object(
+                    server,
+                    "EXP2_SYNTHESIS_FILE",
+                    root / "missing_synthesis.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_ACQUISITION_SUMMARY",
+                    root / "missing_acquisition.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_VISUAL_SUMMARY",
+                    root / "missing_visual.json",
+                ),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": True,
+                        "opportunities": [],
+                    },
+                ),
+                patch.object(
+                    server.shutil,
+                    "which",
+                    side_effect=lambda name: (
+                        f"C:/fake/{name}.exe"
+                        if name in {"yt-dlp", "ffmpeg"}
+                        else None
+                    ),
+                ),
+            ):
+                readiness = server.action_readiness()
+
+        self.assertFalse(readiness["exp2_visual"]["enabled"])
+        self.assertTrue(readiness["exp2_visual_retry"]["enabled"])
+        self.assertTrue(
+            readiness["analysis_batch_prepare"]["enabled"]
+        )
+
+    def test_missing_ffmpeg_allows_transcript_only_analysis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            model_runs = root / "model_runs"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            source_output = root / "source_output"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                model_runs,
+                review_requests,
+                reviewed,
+                source_output,
+            ):
+                path.mkdir()
+
+            (prepared / "v1.json").write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            (enriched / "v1.json").write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Evidence.",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
+                patch.object(
+                    server,
+                    "EXP2_REVIEW_REQUESTS_DIR",
+                    review_requests,
+                ),
+                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
+                patch.object(
+                    server,
+                    "EXP2_SYNTHESIS_FILE",
+                    root / "missing_synthesis.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_ACQUISITION_SUMMARY",
+                    root / "missing_acquisition.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_VISUAL_SUMMARY",
+                    root / "missing_visual.json",
+                ),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": True,
+                        "opportunities": [],
+                    },
+                ),
+                patch.object(
+                    server.shutil,
+                    "which",
+                    side_effect=lambda name: (
+                        "C:/fake/yt-dlp.exe"
+                        if name == "yt-dlp"
+                        else None
+                    ),
+                ),
+            ):
+                readiness = server.action_readiness()
+
+        self.assertFalse(readiness["exp2_visual"]["enabled"])
+        self.assertTrue(
+            readiness["analysis_batch_prepare"]["enabled"]
+        )
 
     def test_analysis_request_must_match_current_enriched_profile_hash(self):
         with tempfile.TemporaryDirectory() as tmp:

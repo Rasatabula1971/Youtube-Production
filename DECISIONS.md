@@ -805,3 +805,24 @@ Guided Experiment 02 readiness is provenance-aware. Current prepared profiles,
 enriched profiles, analysis requests and analyzed outputs must correspond to the
 current approved video set; stale same-ID artifacts do not advance the workflow
 unless their recorded hashes match the current upstream artifact.
+
+
+## D-057 — Visual structure evidence is objective and non-semantic
+
+**Status:** Accepted
+
+Experiment 02 may stream a low-resolution source rendition through `ffmpeg`
+without saving the full video file.
+
+The automated visual stage may record detector-derived facts such as candidate
+scene-transition timestamps, transition frequency and interval statistics.
+Those are `timing_note` evidence.
+
+Extracted frames are not automatically treated as semantic evidence. An opening
+frame or scene frame becomes claim-supporting visual evidence only after a human
+or a validated multimodal vision layer supplies an observation.
+
+Visual structure is preferred when `yt-dlp` and `ffmpeg` are available, but
+a failed attempt must not deadlock Experiment 02. The workflow may continue with
+transcript-only evidence after an attempted failure, while a force-retry remains
+available as a maintenance action.

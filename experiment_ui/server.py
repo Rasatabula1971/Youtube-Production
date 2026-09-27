@@ -61,11 +61,13 @@ EXP2_REVIEWED_DIR = EXP2_OUTPUT / "profiles_reviewed"
 EXP2_SYNTHESIS_FILE = EXP2_OUTPUT / "synthesis" / "transformation_handoff.json"
 SOURCE_ACQ_OUTPUT = PROJECT_ROOT / "source_acquisition" / "output"
 EXP2_ACQUISITION_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "summary.json"
+EXP2_VISUAL_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "visual_summary.json"
 
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
     "exp2_acquire",
+    "exp2_visual",
     "analysis_batch_prepare",
     "analysis_model_one",
     "human_review_prepare",
@@ -245,6 +247,35 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Uses yt-dlp to acquire English captions, thumbnail and source metadata "
             "for the approved videos. Video media is not downloaded."
+        ),
+    },
+    "exp2_visual": {
+        "label": "Acquire Visual Structure",
+        "stage": "02",
+        "command": [
+            sys.executable,
+            "source_acquisition/experiment_02_visual.py",
+            "--mode",
+            "acquire",
+        ],
+        "description": (
+            "Streams a low-resolution source, saves no full video, extracts an "
+            "opening frame and scene-change frames, and creates objective timing evidence."
+        ),
+    },
+    "exp2_visual_retry": {
+        "label": "Retry Visual Structure (Force)",
+        "stage": "ACQ",
+        "command": [
+            sys.executable,
+            "source_acquisition/experiment_02_visual.py",
+            "--mode",
+            "acquire",
+            "--force",
+        ],
+        "description": (
+            "Forces a fresh low-resolution visual-structure pass when the guided "
+            "attempt failed or needs to be rebuilt."
         ),
     },
     "fair_doctor": {
@@ -538,9 +569,57 @@ def enriched_transcript_ready_ids() -> set[str]:
     return ready
 
 
+def current_visual_report_ids(prepared_ids: set[str]) -> set[str]:
+    attempted: set[str] = set()
+    root = SOURCE_ACQ_OUTPUT / "experiment_02"
+    for video_id in prepared_ids:
+        report_path = root / video_id / "visual_analysis.json"
+        prepared_path = EXP2_PREPARED_DIR / f"{video_id}.json"
+        report = safe_load_json(report_path)
+        if (
+            prepared_path.exists()
+            and isinstance(report, dict)
+            and report.get("profile_sha256") == sha256_file(prepared_path)
+        ):
+            attempted.add(video_id)
+    return attempted
+
+
+def current_visual_ready_ids(prepared_ids: set[str]) -> set[str]:
+    ready: set[str] = set()
+    root = SOURCE_ACQ_OUTPUT / "experiment_02"
+    for video_id in prepared_ids:
+        report_path = root / video_id / "visual_analysis.json"
+        prepared_path = EXP2_PREPARED_DIR / f"{video_id}.json"
+        enriched_path = EXP2_ENRICHED_DIR / f"{video_id}.json"
+        report = safe_load_json(report_path)
+        enriched = safe_load_json(enriched_path)
+        if (
+            not prepared_path.exists()
+            or not isinstance(report, dict)
+            or not isinstance(enriched, dict)
+        ):
+            continue
+        timing_present = any(
+            isinstance(item, dict)
+            and item.get("evidence_id") == "timing.scene_change_summary"
+            and item.get("type") == "timing_note"
+            for item in enriched.get("evidence", [])
+        )
+        if (
+            timing_present
+            and report.get("status") in {"READY", "READY_NO_OPENING_FRAME"}
+            and report.get("profile_sha256") == sha256_file(prepared_path)
+        ):
+            ready.add(video_id)
+    return ready
+
+
 def exp2_artifact_state() -> dict[str, Any]:
     prepared_ids = json_stems(EXP2_PREPARED_DIR)
     enriched_ids = enriched_transcript_ready_ids()
+    visual_report_ids = current_visual_report_ids(prepared_ids)
+    visual_ready_ids = current_visual_ready_ids(prepared_ids)
     request_ids: set[str] = set()
     if EXP2_REQUESTS_DIR.exists():
         for request_path in EXP2_REQUESTS_DIR.glob("*.analysis_request.json"):
@@ -603,12 +682,22 @@ def exp2_artifact_state() -> dict[str, Any]:
     return {
         "prepared_ids": sorted(prepared_ids),
         "enriched_ready_ids": sorted(enriched_ids),
+        "visual_attempted_ids": sorted(visual_report_ids),
+        "visual_ready_ids": sorted(visual_ready_ids),
         "analysis_request_ids": sorted(request_ids),
         "analyzed_ids": sorted(analyzed_ids),
         "review_request_ids": sorted(review_request_ids),
         "reviewed_ids": sorted(reviewed_ids),
         "prepared_count": len(prepared_ids),
         "evidence_ready_count": len(prepared_ids.intersection(enriched_ids)),
+        "visual_attempted_count": len(
+            prepared_ids.intersection(visual_report_ids)
+        ),
+        "visual_attempted": bool(prepared_ids)
+        and prepared_ids.issubset(visual_report_ids),
+        "visual_ready_count": len(prepared_ids.intersection(visual_ready_ids)),
+        "visual_complete": bool(prepared_ids)
+        and prepared_ids.issubset(visual_ready_ids),
         "evidence_complete": evidence_complete,
         "requests_complete": requests_complete,
         "analyzed_current_count": len(prepared_ids.intersection(analyzed_ids)),
@@ -618,6 +707,7 @@ def exp2_artifact_state() -> dict[str, Any]:
         "reviewed_current_count": len(prepared_ids.intersection(reviewed_ids)),
         "synthesis_ready": EXP2_SYNTHESIS_FILE.exists(),
         "acquisition_summary": safe_load_json(EXP2_ACQUISITION_SUMMARY),
+        "visual_summary": safe_load_json(EXP2_VISUAL_SUMMARY),
     }
 
 
@@ -780,6 +870,17 @@ def stage_statuses() -> list[dict[str, Any]]:
     exp2_artifacts = exp2_artifact_state()
     profiles_prepared = exp2_artifacts["prepared_count"] > 0
     evidence_ready = bool(exp2_artifacts["evidence_complete"])
+    visual_ready = bool(exp2_artifacts["visual_complete"])
+    visual_attempted = bool(exp2_artifacts["visual_attempted"])
+    visual_available = (
+        shutil.which("yt-dlp") is not None
+        and shutil.which("ffmpeg") is not None
+    )
+    visual_satisfied = (
+        visual_ready
+        or visual_attempted
+        or not visual_available
+    )
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     analyzed = exp2_artifacts["analyzed_current_count"] > 0
     reviewed = exp2_artifacts["reviewed_current_count"] > 0
@@ -795,6 +896,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif active_action in {
         "exp2_prepare",
         "exp2_acquire",
+        "exp2_visual",
         "analysis_batch_prepare",
         "analysis_model_one",
         "human_review_prepare",
@@ -818,6 +920,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp2_human = "SOURCE EVIDENCE NEEDED"
         exp2_tone = "action"
         exp2_next = "Run Acquire Source Evidence."
+    elif not visual_satisfied:
+        exp2_human = "VISUAL STRUCTURE NEEDED"
+        exp2_tone = "action"
+        exp2_next = "Run Acquire Visual Structure."
     elif reviewed or analyzed:
         exp2_human = "SYNTHESIS NEEDED"
         exp2_tone = "action"
@@ -947,6 +1053,22 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": evidence_ready,
                 },
                 {
+                    "label": (
+                        "Visual structure sampled"
+                        if visual_ready
+                        else (
+                            "Visual structure attempted; transcript fallback active"
+                            if visual_attempted
+                            else (
+                                "Visual structure skipped (ffmpeg unavailable)"
+                                if not visual_available
+                                else "Visual structure pending"
+                            )
+                        )
+                    ),
+                    "done": visual_satisfied,
+                },
+                {
                     "label": "Profiles analyzed",
                     "done": analyzed,
                 },
@@ -993,6 +1115,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     exp2_artifacts = exp2_artifact_state()
     profiles_prepared = exp2_artifacts["prepared_count"] > 0
     evidence_complete = bool(exp2_artifacts["evidence_complete"])
+    visual_attempted = bool(exp2_artifacts["visual_attempted"])
+    visual_complete = bool(exp2_artifacts["visual_complete"])
     requests_complete = bool(exp2_artifacts["requests_complete"])
     analyzed = exp2_artifacts["analyzed_current_count"] > 0
     review_requests = exp2_artifacts["review_requests_current_count"] > 0
@@ -1001,6 +1125,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
+    ffmpeg_installed = shutil.which("ffmpeg") is not None
+    visual_available = yt_dlp_installed and ffmpeg_installed
+    visual_satisfied = (
+        visual_complete
+        or visual_attempted
+        or not visual_available
+    )
 
     return {
         "opportunity_research": {
@@ -1144,6 +1275,64 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "exp2_visual": {
+            "enabled": (
+                human_gate_ready
+                and evidence_complete
+                and visual_available
+                and not visual_attempted
+            ),
+            "reason": (
+                "Transcript-backed evidence is ready for visual structure sampling."
+                if (
+                    human_gate_ready
+                    and evidence_complete
+                    and visual_available
+                    and not visual_attempted
+                )
+                else (
+                    "Visual structure evidence is already ready."
+                    if visual_complete
+                    else (
+                        "Visual structure was attempted; transcript-only analysis may continue. "
+                        "Use Tools & Diagnostics to force a retry."
+                        if visual_attempted
+                        else (
+                            "yt-dlp and ffmpeg are required for automatic visual "
+                            "structure sampling."
+                            if (
+                                human_gate_ready
+                                and evidence_complete
+                                and not visual_available
+                            )
+                            else (
+                                "Acquire transcript-backed source evidence first."
+                                if human_gate_ready and not evidence_complete
+                                else "Human opportunity approval is required first."
+                            )
+                        )
+                    )
+                )
+            ),
+        },
+        "exp2_visual_retry": {
+            "enabled": (
+                human_gate_ready
+                and evidence_complete
+                and visual_available
+                and visual_attempted
+            ),
+            "reason": (
+                "Force a fresh visual-structure pass for the current approved profiles."
+                if (
+                    human_gate_ready
+                    and evidence_complete
+                    and visual_available
+                    and visual_attempted
+                )
+                else "A completed or failed guided visual attempt is required before force-retry."
+            ),
+        },
         "fair_doctor": {
             "enabled": True,
             "reason": "Safe diagnostic; no inference.",
@@ -1152,6 +1341,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "enabled": (
                 human_gate_ready
                 and evidence_complete
+                and visual_satisfied
                 and not requests_complete
             ),
             "reason": (
@@ -1159,6 +1349,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 if (
                     human_gate_ready
                     and evidence_complete
+                    and visual_satisfied
                     and not requests_complete
                 )
                 else (
@@ -1167,7 +1358,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     else (
                         "Human opportunity approval is required first."
                         if not human_gate_ready
-                        else "Acquire transcript-backed source evidence first."
+                        else (
+                            "Acquire transcript-backed source evidence first."
+                            if not evidence_complete
+                            else "Run visual structure sampling before analysis requests."
+                        )
                     )
                 )
             ),
