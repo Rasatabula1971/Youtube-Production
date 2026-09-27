@@ -186,3 +186,29 @@ measurement remain unchanged.
 
 The separate acquisition benchmark remains available as a diagnostic tool, but
 it is not required for routine 01.3 execution.
+
+
+## Guided workflow
+
+The normal creator-facing path is now **Run Opportunity Research** rather than
+manually launching Experiments 01.3, 01.4 and 01.5.
+
+The orchestrator:
+
+1. runs/resumes 01.3 discovery;
+2. freezes the cohort and records the first snapshot;
+3. on Windows, schedules the next velocity measurement automatically every two
+   hours while evidence is pending;
+4. stops automatic retrying after three actual refresh attempts without enough
+   velocity evidence;
+5. when velocity is ready, builds and executes 01.4;
+6. builds 01.5; and
+7. stops at the Human Opportunity Gate.
+
+The scheduled continuation is resume-safe. If 01.4 has already completed, it
+does not repeat depth-expansion searches just because a later step needs to be
+retried.
+
+The main action area shows the current required action in blue and the following
+step in amber. Manual experiment controls, Doctor actions, scheduler controls,
+benchmarks and clean-restart controls are under **Tools & Diagnostics**.

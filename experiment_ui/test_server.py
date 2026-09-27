@@ -32,6 +32,74 @@ class ExperimentUiTests(unittest.TestCase):
             self.assertTrue(action["command"])
             self.assertFalse(any(part in {"cmd", "powershell"} for part in action["command"]))
 
+    def test_guided_opportunity_action_is_present(self):
+        self.assertIn("opportunity_research", server.ACTION_DEFS)
+        self.assertIn(
+            "opportunity_research.py",
+            server.ACTION_DEFS["opportunity_research"]["command"][1],
+        )
+        self.assertIn(
+            "opportunity_research",
+            server.WORKFLOW_ACTION_ORDER,
+        )
+
+    def test_waiting_automatic_velocity_blocks_duplicate_research_start(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / "opportunity_research_state.json"
+            state.write_text(
+                json.dumps(
+                    {
+                        "status": "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
+                        "next_refresh_due_at": "2026-09-27T16:00:00+00:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch.object(server, "OPPORTUNITY_RESEARCH_STATE", state),
+                patch.object(server, "EXP15_DIR", root / "missing_15"),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": False,
+                        "opportunities": [],
+                    },
+                ),
+            ):
+                readiness = server.action_readiness()
+                workflow = server.workflow_guidance(readiness)
+
+        self.assertFalse(readiness["opportunity_research"]["enabled"])
+        self.assertEqual(workflow["state"], "WAITING_AUTOMATIC")
+        self.assertIn("Automatic", workflow["current_title"])
+
+    def test_pending_human_gate_is_current_guided_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp15 = root / "experiment_01_5"
+            exp15.mkdir()
+            (exp15 / "study_set.json").write_text("[]", encoding="utf-8")
+            with (
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": False,
+                        "gate_complete": False,
+                        "opportunities": [{"opportunity_id": "x"}],
+                    },
+                ),
+            ):
+                readiness = server.action_readiness()
+                workflow = server.workflow_guidance(readiness)
+
+        self.assertEqual(workflow["state"], "HUMAN_GATE")
+        self.assertEqual(workflow["current_title"], "Review Opportunity")
+        self.assertEqual(workflow["next_action_id"], "exp2_prepare")
+
     def test_auto_refresh_actions_are_windows_gated(self):
         with patch.object(server, "IS_WINDOWS", False):
             readiness = server.action_readiness()

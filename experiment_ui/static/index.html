@@ -29,6 +29,20 @@
       <span id="lastUpdated"></span>
     </section>
 
+    <section class="panel workflow-focus" id="workflowFocus">
+      <p class="section-kicker">CURRENT STEP</p>
+      <div class="workflow-focus-grid">
+        <div>
+          <h2 id="workflowCurrentTitle">Loading…</h2>
+          <p class="subtitle" id="workflowCurrentDetail"></p>
+        </div>
+        <div class="workflow-next">
+          <span>NEXT</span>
+          <strong id="workflowNextTitle">—</strong>
+        </div>
+      </div>
+    </section>
+
     <section class="panel pipeline-panel">
       <div class="panel-head">
         <div>
@@ -62,6 +76,10 @@
           </div>
         </div>
         <div class="action-groups" id="actionGroups"></div>
+        <details class="tools-drawer">
+          <summary>Tools &amp; Diagnostics</summary>
+          <div class="action-groups tools-actions" id="toolActions"></div>
+        </details>
       </section>
 
       <section class="panel job-panel" id="jobPanel">

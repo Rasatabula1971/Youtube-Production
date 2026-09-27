@@ -36,6 +36,7 @@ EXP13_CONFIG = PROJECT_ROOT / "experiment_01_discovery" / "experiment_01_3_confi
 EXP14_DIR = EXP1_OUTPUT / "experiment_01_4"
 EXP14_CONFIG = PROJECT_ROOT / "experiment_01_discovery" / "experiment_01_4_config.json"
 EXP15_DIR = EXP1_OUTPUT / "experiment_01_5"
+OPPORTUNITY_RESEARCH_STATE = EXP1_OUTPUT / "opportunity_research_state.json"
 
 EXP1_MODULE_DIR = PROJECT_ROOT / "experiment_01_discovery"
 if str(EXP1_MODULE_DIR) not in sys.path:
@@ -50,7 +51,30 @@ EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 EXP2_OUTPUT = EXP2_DIR / "output"
 SOURCE_ACQ_OUTPUT = PROJECT_ROOT / "source_acquisition" / "output"
 
+WORKFLOW_ACTION_ORDER = [
+    "opportunity_research",
+    "exp2_prepare",
+    "analysis_batch_prepare",
+    "analysis_model_one",
+    "human_review_prepare",
+    "synthesis_build",
+]
+
 ACTION_DEFS: dict[str, dict[str, Any]] = {
+    "opportunity_research": {
+        "label": "Run Opportunity Research",
+        "stage": "OPPORTUNITY",
+        "command": [
+            sys.executable,
+            "experiment_01_discovery/opportunity_research.py",
+            "--mode",
+            "start",
+        ],
+        "description": (
+            "Automatically runs discovery, timed velocity validation, "
+            "depth expansion and opportunity handoff, then stops for human review."
+        ),
+    },
     "agent_reach_doctor": {
         "label": "Run Agent Reach Doctor",
         "stage": "ACQ",
@@ -121,7 +145,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": "Fetches current view counts for the same frozen video IDs. No new search discovery.",
     },
     "exp13_auto_refresh_install": {
-        "label": "Install 01.3 Auto Refresh",
+        "label": "Install Opportunity Auto-Continue",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -136,12 +160,12 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             sys.executable,
         ],
         "description": (
-            "Registers a Windows Task Scheduler job every two hours. The "
-            "self-limiting runner skips API work when no refresh is needed."
+            "Registers the Windows continuation task used by automatic "
+            "Opportunity Research while velocity evidence is pending."
         ),
     },
     "exp13_auto_refresh_remove": {
-        "label": "Remove 01.3 Auto Refresh",
+        "label": "Remove Opportunity Auto-Continue",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -151,7 +175,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "-File",
             "scripts/remove_experiment_01_3_auto_refresh.ps1",
         ],
-        "description": "Removes the Windows Task Scheduler auto-refresh job.",
+        "description": "Removes the Windows Opportunity Research continuation task.",
     },
     "exp14_plan": {
         "label": "Build 01.4 Expansion Plan",
@@ -755,6 +779,11 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
     ]
 
+def opportunity_research_state() -> dict[str, Any]:
+    payload = safe_load_json(OPPORTUNITY_RESEARCH_STATE)
+    return payload if isinstance(payload, dict) else {}
+
+
 def action_readiness() -> dict[str, dict[str, Any]]:
     cohort_info = exp13_cohort_readiness()
     exp13_cohort = (
@@ -766,6 +795,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     plan_ready = exp14_plan_status() == "READY"
     exp14_complete = exp14_execution_status() == "COMPLETE"
     study_set = (EXP15_DIR / "study_set.json").exists()
+    research_state = opportunity_research_state()
+    research_status = str(research_state.get("status") or "")
+    research_waiting = research_status in {
+        "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
+        "DISCOVERY_RUNNING",
+    }
     human_gate = opportunity_gate_snapshot()
     human_gate_ready = bool(human_gate.get("ready_for_experiment_02"))
 
@@ -778,6 +813,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     yt_dlp_installed = shutil.which("yt-dlp") is not None
 
     return {
+        "opportunity_research": {
+            "enabled": not study_set and not research_waiting,
+            "reason": (
+                "Opportunity handoff already exists; review it below."
+                if study_set
+                else (
+                    "Automatic velocity measurement is already scheduled."
+                    if research_waiting
+                    else "Run the Opportunity Engine automatically through 01.5."
+                )
+            ),
+        },
         "agent_reach_doctor": {
             "enabled": True,
             "reason": (
@@ -1077,8 +1124,101 @@ class JobManager:
 JOB_MANAGER = JobManager()
 
 
+def workflow_guidance(
+    readiness: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    gate = opportunity_gate_snapshot()
+    study_set = (EXP15_DIR / "study_set.json").exists()
+    human_gate_ready = bool(gate.get("ready_for_experiment_02"))
+    research_state = opportunity_research_state()
+    research_status = str(research_state.get("status") or "")
+
+    if study_set and not human_gate_ready:
+        return {
+            "state": "HUMAN_GATE",
+            "current_action_id": None,
+            "current_title": "Review Opportunity",
+            "current_detail": (
+                "Review the selected topic and examples, then approve, hold or reject."
+            ),
+            "next_action_id": "exp2_prepare",
+            "next_title": "Prepare Experiment 02",
+        }
+
+    if research_status == "DISCOVERY_RUNNING" and not study_set:
+        return {
+            "state": "RUNNING_AUTOMATIC",
+            "current_action_id": None,
+            "current_title": "Opportunity Research running",
+            "current_detail": str(
+                research_state.get("message")
+                or "Discovery and validation are running automatically."
+            ),
+            "next_action_id": None,
+            "next_title": "Automatic velocity validation",
+        }
+
+    if research_status == "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH" and not study_set:
+        return {
+            "state": "WAITING_AUTOMATIC",
+            "current_action_id": None,
+            "current_title": "Automatic velocity measurement scheduled",
+            "current_detail": str(
+                research_state.get("message")
+                or "The system will continue automatically."
+            ),
+            "next_action_id": None,
+            "next_title": "Review Opportunity",
+            "next_due_at": research_state.get("next_refresh_due_at"),
+        }
+
+    for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
+        gate_info = readiness.get(action_id, {})
+        if gate_info.get("enabled"):
+            next_id = (
+                WORKFLOW_ACTION_ORDER[index + 1]
+                if index + 1 < len(WORKFLOW_ACTION_ORDER)
+                else None
+            )
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": action_id,
+                "current_title": ACTION_DEFS[action_id]["label"],
+                "current_detail": gate_info.get("reason"),
+                "next_action_id": next_id,
+                "next_title": (
+                    ACTION_DEFS[next_id]["label"]
+                    if next_id
+                    else "Workflow complete"
+                ),
+            }
+
+    if human_gate_ready:
+        return {
+            "state": "WAITING_FOR_NEXT_STAGE",
+            "current_action_id": None,
+            "current_title": "Waiting for the next ready production step",
+            "current_detail": (
+                "A downstream prerequisite is still missing. "
+                "The next available action will highlight automatically."
+            ),
+            "next_action_id": None,
+            "next_title": "Continue Experiment 02",
+        }
+
+    return {
+        "state": "READY",
+        "current_action_id": "opportunity_research",
+        "current_title": "Run Opportunity Research",
+        "current_detail": "Start automated opportunity discovery and validation.",
+        "next_action_id": None,
+        "next_title": "Review Opportunity",
+    }
+
+
 def status_payload() -> dict[str, Any]:
     readiness = action_readiness()
+    workflow = workflow_guidance(readiness)
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -1090,6 +1230,20 @@ def status_payload() -> dict[str, Any]:
                 "description": definition["description"],
                 "enabled": bool(gate["enabled"]) and not JOB_MANAGER.running(),
                 "reason": gate["reason"],
+                "surface": (
+                    "workflow"
+                    if action_id in WORKFLOW_ACTION_ORDER
+                    else "tools"
+                ),
+                "role": (
+                    "do_now"
+                    if action_id == workflow.get("current_action_id")
+                    else (
+                        "next"
+                        if action_id == workflow.get("next_action_id")
+                        else "normal"
+                    )
+                ),
             }
         )
 
@@ -1103,6 +1257,8 @@ def status_payload() -> dict[str, Any]:
             "status": checkpoint_status(),
         },
         "opportunity_gate": opportunity_gate_snapshot(),
+        "workflow": workflow,
+        "opportunity_research": opportunity_research_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),

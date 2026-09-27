@@ -9,6 +9,11 @@ const logView = document.getElementById("logView");
 const stopJob = document.getElementById("stopJob");
 const toast = document.getElementById("toast");
 const opportunityGate = document.getElementById("opportunityGate");
+const opportunityPanel = document.querySelector(".opportunity-panel");
+const toolActions = document.getElementById("toolActions");
+const workflowCurrentTitle = document.getElementById("workflowCurrentTitle");
+const workflowCurrentDetail = document.getElementById("workflowCurrentDetail");
+const workflowNextTitle = document.getElementById("workflowNextTitle");
 const controlsPanel = document.getElementById("controlsPanel");
 const jobPanel = document.getElementById("jobPanel");
 const backToControls = document.getElementById("backToControls");
@@ -282,41 +287,45 @@ function renderStages(stages) {
   }).join("");
 }
 
-function renderActions(actions) {
+function renderActionCollection(actions, target) {
   const groups = new Map();
-
   actions.forEach(function (action) {
     if (!groups.has(action.stage)) groups.set(action.stage, []);
     groups.get(action.stage).push(action);
   });
-
   let html = "";
   groups.forEach(function (items, stage) {
-    html += '<section class="action-group">' +
-      '<div class="action-group-title">EXPERIMENT ' + escapeHtml(stage) + '</div>';
-
+    html += '<section class="action-group"><div class="action-group-title">' +
+      escapeHtml(stage === "OPPORTUNITY" ? "OPPORTUNITY RESEARCH" : "EXPERIMENT " + stage) +
+      '</div>';
     items.forEach(function (action) {
-      html += '<div class="action-row">' +
-        '<div class="action-copy">' +
-        '<strong>' + escapeHtml(action.label) + '</strong>' +
+      const role = action.role || "normal";
+      html += '<div class="action-row ' + escapeHtml(role) + '">' +
+        '<div class="action-copy"><strong>' + escapeHtml(action.label) + '</strong>' +
         '<p>' + escapeHtml(action.description) + '</p>' +
-        '<p class="reason">' + escapeHtml(action.reason) + '</p>' +
-        '</div>' +
-        '<button class="run-button" data-action="' + escapeHtml(action.id) + '"' +
-        (action.enabled ? "" : " disabled") + '>Run</button>' +
-        '</div>';
+        '<p class="reason">' + escapeHtml(action.reason) + '</p></div>' +
+        '<button class="run-button ' + escapeHtml(role) + '" data-action="' +
+        escapeHtml(action.id) + '"' + (action.enabled ? "" : " disabled") +
+        '>' + (role === "do_now" ? "Run now" : "Run") + '</button></div>';
     });
-
     html += '</section>';
   });
+  target.innerHTML = html || '<p class="gate-empty">No actions here right now.</p>';
+}
 
-  actionGroups.innerHTML = html;
-
+function renderActions(actions) {
+  renderActionCollection(actions.filter(a => a.surface === "workflow"), actionGroups);
+  renderActionCollection(actions.filter(a => a.surface === "tools"), toolActions);
   document.querySelectorAll("[data-action]").forEach(function (button) {
-    button.addEventListener("click", function () {
-      runAction(button.dataset.action);
-    });
+    button.addEventListener("click", function () { runAction(button.dataset.action); });
   });
+}
+
+function renderWorkflow(workflow) {
+  workflowCurrentTitle.textContent = workflow.current_title || "Ready";
+  workflowCurrentDetail.textContent = workflow.current_detail || "";
+  workflowNextTitle.textContent = workflow.next_title || "—";
+  opportunityPanel.classList.toggle("do-now", workflow.state === "HUMAN_GATE");
 }
 
 function currentStageMessage(stages) {
@@ -379,6 +388,7 @@ async function loadStatus() {
     const data = await api("/api/status");
     renderStages(data.stages);
     renderActions(data.actions);
+    renderWorkflow(data.workflow || {});
     renderOpportunityGate(data.opportunity_gate);
     renderJob(data.job);
 
