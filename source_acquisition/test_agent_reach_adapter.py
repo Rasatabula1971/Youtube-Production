@@ -247,5 +247,73 @@ class AgentReachAdapterTests(unittest.TestCase):
         )
 
 
+    def test_extract_urls_handles_mcporter_text(self):
+        urls = adapter.extract_urls(
+            "Title A https://example.com/a\nTitle B https://example.org/b."
+        )
+        self.assertEqual(
+            urls,
+            ["https://example.com/a", "https://example.org/b"],
+        )
+
+    def test_web_search_calls_documented_exa_backend(self):
+        with (
+            patch.object(adapter, "mcporter_path", return_value="/bin/mcporter"),
+            patch.object(
+                adapter.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    ["mcporter"],
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "content": (
+                                "Result https://example.com/a "
+                                "Other https://example.org/b"
+                            )
+                        }
+                    ),
+                    stderr="",
+                ),
+            ) as run,
+        ):
+            result = adapter.search_web("brake temperature", limit=2)
+
+        self.assertEqual(
+            result["result_urls"],
+            ["https://example.com/a", "https://example.org/b"],
+        )
+        command = run.call_args.args[0]
+        self.assertEqual(command[1:3], ["call", "exa.web_search_exa"])
+        self.assertIn("query=brake temperature", command)
+        self.assertIn("numResults=2", command)
+        self.assertFalse(run.call_args.kwargs["shell"])
+
+    def test_web_read_uses_jina_reader_without_shell(self):
+        with (
+            patch.object(adapter, "curl_path", return_value="/bin/curl"),
+            patch.object(
+                adapter.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    ["curl"],
+                    0,
+                    stdout="# Source\nUseful evidence.",
+                    stderr="",
+                ),
+            ) as run,
+        ):
+            result = adapter.read_web_page("https://example.com/source")
+
+        self.assertEqual(result["backend"], "jina_reader")
+        self.assertIn("Useful evidence", result["content"])
+        command = run.call_args.args[0]
+        self.assertIn(
+            "https://r.jina.ai/https://example.com/source",
+            command,
+        )
+        self.assertFalse(run.call_args.kwargs["shell"])
+
+
 if __name__ == "__main__":
     unittest.main()
