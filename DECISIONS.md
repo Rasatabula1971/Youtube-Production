@@ -748,3 +748,22 @@ comparison sample for one source channel.
 Experiment 01.3 uses `topic_channel_confidence` to describe the number of
 independent channels supporting a topic/format cell. Its LOW / MODERATE /
 STRONG thresholds are not reused for channel baseline quality.
+
+
+## D-054 — Opportunity Engine experiments are automated behind a human-facing workflow
+
+**Status:** Accepted
+
+Experiments 01.3, 01.4 and 01.5 remain independently runnable and testable, but
+they are no longer the normal operator workflow.
+
+The creator-facing action is **Run Opportunity Research**. The orchestrator may
+perform discovery, timed frozen-cohort measurement, depth expansion and handoff
+construction automatically. It must stop at the Human Opportunity Gate.
+
+Velocity refreshes may be scheduled automatically at two-hour intervals on
+Windows. The system stops after three actual refresh attempts without sufficient
+evidence and requests human attention instead of polling indefinitely.
+
+Doctor commands, manual experiment actions, clean restart, scheduler management
+and benchmarks are maintenance tools and belong under **Tools & Diagnostics**.
