@@ -315,6 +315,219 @@ button.danger {
   box-shadow: inset 0 0 0 1px rgba(121,192,255,.12);
 }
 
+.opportunity-panel {
+  margin-bottom: 18px;
+}
+
+.opportunity-gate {
+  display: grid;
+  gap: 14px;
+}
+
+.gate-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+}
+
+.gate-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.opportunity-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel-2);
+  padding: 16px;
+}
+
+.opportunity-head,
+.example-topline,
+.topic-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.opportunity-label,
+.example-topline > span:first-child {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .09em;
+}
+
+.opportunity-card h3,
+.example-card h4 {
+  margin: 6px 0 0;
+}
+
+.opportunity-card h3 {
+  font-size: 22px;
+}
+
+.opportunity-head p,
+.example-channel,
+.example-families {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.decision-chip {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+.decision-approve,
+.decision-keep {
+  color: #b7f0c0;
+  border-color: #347b41;
+}
+
+.decision-reject {
+  color: #ffc3bf;
+  border-color: #8b3b36;
+}
+
+.decision-hold,
+.decision-pending {
+  color: #ffe1a6;
+  border-color: #7f641f;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.metric-grid > div {
+  border: 1px solid rgba(42,52,65,.8);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(13,17,23,.32);
+}
+
+.metric-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.metric-grid strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.example-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(13,17,23,.38);
+}
+
+.example-card h4 {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.example-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+  color: #c8d2dd;
+  font-size: 11px;
+}
+
+.example-families {
+  line-height: 1.45;
+}
+
+.example-actions,
+.topic-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.external-button {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.gate-button {
+  padding: 9px 11px;
+  font-size: 12px;
+}
+
+.gate-button.keep,
+.gate-button.approve {
+  background: rgba(63,185,80,.16);
+  border-color: rgba(63,185,80,.55);
+  color: #b7f0c0;
+}
+
+.gate-button.replace,
+.gate-button.hold {
+  background: rgba(210,153,34,.12);
+  border-color: rgba(210,153,34,.5);
+  color: #ffe1a6;
+}
+
+.gate-button.reject {
+  background: rgba(248,81,73,.10);
+  border-color: rgba(248,81,73,.5);
+  color: #ffc3bf;
+}
+
+.topic-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+
+.topic-action-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.topic-action-copy span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(360px, .9fr) minmax(520px, 1.5fr);
@@ -475,8 +688,13 @@ button.danger {
 
 @media (max-width: 1050px) {
   .stage-grid,
-  .guard-grid {
+  .guard-grid,
+  .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .example-grid {
+    grid-template-columns: 1fr;
   }
 
   .workspace-grid {
@@ -495,8 +713,13 @@ button.danger {
   }
 
   .stage-grid,
-  .guard-grid {
+  .guard-grid,
+  .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .topic-actions {
+    flex-direction: column;
   }
 
   .notice {
