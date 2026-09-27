@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 STATIC_DIR = HERE / "static"
+IS_WINDOWS = os.name == "nt"
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
@@ -119,6 +120,39 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "refresh",
         ],
         "description": "Fetches current view counts for the same frozen video IDs. No new search discovery.",
+    },
+    "exp13_auto_refresh_install": {
+        "label": "Install 01.3 Auto Refresh",
+        "stage": "01.3",
+        "command": [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/install_experiment_01_3_auto_refresh.ps1",
+            "-EveryHours",
+            "2",
+            "-PythonPath",
+            sys.executable,
+        ],
+        "description": (
+            "Registers a Windows Task Scheduler job every two hours. The "
+            "self-limiting runner skips API work when no refresh is needed."
+        ),
+    },
+    "exp13_auto_refresh_remove": {
+        "label": "Remove 01.3 Auto Refresh",
+        "stage": "01.3",
+        "command": [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/remove_experiment_01_3_auto_refresh.ps1",
+        ],
+        "description": "Removes the Windows Task Scheduler auto-refresh job.",
     },
     "exp14_plan": {
         "label": "Build 01.4 Expansion Plan",
@@ -787,6 +821,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     "Cohort is missing or insufficient. Rerun 01.3 discovery; "
                     "do not wait for refresh."
                 )
+            ),
+        },
+        "exp13_auto_refresh_install": {
+            "enabled": IS_WINDOWS,
+            "reason": (
+                "Install a self-limiting Windows scheduled refresh every two hours."
+                if IS_WINDOWS
+                else "Windows Task Scheduler automation is available only on Windows."
+            ),
+        },
+        "exp13_auto_refresh_remove": {
+            "enabled": IS_WINDOWS,
+            "reason": (
+                "Remove the Windows scheduled refresh task."
+                if IS_WINDOWS
+                else "Windows Task Scheduler automation is available only on Windows."
             ),
         },
         "exp14_plan": {
