@@ -55,6 +55,7 @@ EXP2_PREPARED_DIR = EXP2_OUTPUT / "profiles_to_complete"
 EXP2_ENRICHED_DIR = EXP2_OUTPUT / "profiles_enriched"
 EXP2_REQUESTS_DIR = EXP2_OUTPUT / "analysis_requests"
 EXP2_ANALYZED_DIR = EXP2_OUTPUT / "profiles_analyzed"
+EXP2_MODEL_RUNS_DIR = EXP2_OUTPUT / "model_runs"
 EXP2_REVIEW_REQUESTS_DIR = EXP2_OUTPUT / "human_review_requests"
 EXP2_REVIEWED_DIR = EXP2_OUTPUT / "profiles_reviewed"
 EXP2_SYNTHESIS_FILE = EXP2_OUTPUT / "synthesis" / "transformation_handoff.json"
@@ -558,11 +559,42 @@ def exp2_artifact_state() -> dict[str, Any]:
                 == sha256_file(enriched_path)
             ):
                 request_ids.add(video_id)
-    analyzed_ids = json_stems(EXP2_ANALYZED_DIR)
-    review_request_ids = suffixed_json_ids(
-        EXP2_REVIEW_REQUESTS_DIR,
-        ".review_request.json",
-    )
+    analyzed_ids: set[str] = set()
+    for video_id in request_ids:
+        analyzed_path = EXP2_ANALYZED_DIR / f"{video_id}.json"
+        request_path = EXP2_REQUESTS_DIR / f"{video_id}.analysis_request.json"
+        report_path = EXP2_MODEL_RUNS_DIR / f"{video_id}.model_run.json"
+        report = safe_load_json(report_path)
+        if (
+            analyzed_path.exists()
+            and request_path.exists()
+            and isinstance(report, dict)
+            and report.get("status") == "APPLIED"
+            and report.get("request_sha256") == sha256_file(request_path)
+        ):
+            analyzed_ids.add(video_id)
+
+    review_request_ids: set[str] = set()
+    if EXP2_REVIEW_REQUESTS_DIR.exists():
+        for request_path in EXP2_REVIEW_REQUESTS_DIR.glob(
+            "*.review_request.json"
+        ):
+            video_id = request_path.name[: -len(".review_request.json")]
+            analyzed_path = EXP2_ANALYZED_DIR / f"{video_id}.json"
+            request = safe_load_json(request_path)
+            if (
+                not analyzed_path.exists()
+                or not isinstance(request, dict)
+            ):
+                continue
+            provenance = request.get("request_provenance", {})
+            if (
+                isinstance(provenance, dict)
+                and provenance.get("profile_sha256")
+                == sha256_file(analyzed_path)
+            ):
+                review_request_ids.add(video_id)
+
     reviewed_ids = json_stems(EXP2_REVIEWED_DIR)
 
     evidence_complete = bool(prepared_ids) and prepared_ids.issubset(enriched_ids)
