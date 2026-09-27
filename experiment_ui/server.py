@@ -72,6 +72,21 @@ SOURCE_ACQ_OUTPUT = PROJECT_ROOT / "source_acquisition" / "output"
 EXP2_ACQUISITION_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "summary.json"
 EXP2_VISUAL_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "visual_summary.json"
 
+TRANSFORM_DIR = PROJECT_ROOT / "transformation_engine"
+if str(TRANSFORM_DIR) not in sys.path:
+    sys.path.insert(0, str(TRANSFORM_DIR))
+
+from concept_review import (  # noqa: E402
+    apply_action as apply_concept_gate_action,
+    snapshot as concept_gate_snapshot,
+)
+
+TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
+TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
+TRANSFORM_RESPONSES_DIR = TRANSFORM_OUTPUT / "concept_responses"
+TRANSFORM_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates.json"
+TRANSFORM_RESEARCH_HANDOFF = TRANSFORM_OUTPUT / "research_handoff.json"
+
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
@@ -82,6 +97,9 @@ WORKFLOW_ACTION_ORDER = [
     "analysis_model_one",
     "human_review_prepare",
     "synthesis_build",
+    "transform_prepare",
+    "concept_generate",
+    "concept_gate_prepare",
 ]
 
 ACTION_DEFS: dict[str, dict[str, Any]] = {
@@ -379,11 +397,55 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": "Builds the mechanism library and Transformation Engine handoff.",
     },
+    "transform_prepare": {
+        "label": "Prepare Concept Requests",
+        "stage": "04",
+        "command": [
+            sys.executable,
+            "transformation_engine/transformation_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Turns human-confirmed Experiment 02 mechanisms into bounded, "
+            "source-independent concept-generation requests."
+        ),
+    },
+    "concept_generate": {
+        "label": "Generate Concept Candidates",
+        "stage": "04",
+        "command": [
+            sys.executable,
+            "transformation_engine/concept_model_runner.py",
+            "--mode",
+            "batch",
+            "--requests-dir",
+            "transformation_engine/output/concept_requests",
+        ],
+        "description": (
+            "Runs the prepared concept requests through FAIR free-only routing, "
+            "then applies deterministic Source Dependency and schema validation."
+        ),
+    },
+    "concept_gate_prepare": {
+        "label": "Prepare Concept Gate",
+        "stage": "04",
+        "command": [
+            sys.executable,
+            "transformation_engine/concept_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the compact human Concept Gate. No concept is selected automatically."
+        ),
+    },
 }
 
 OPEN_TARGETS = {
     "experiment_01_output": EXP1_OUTPUT,
     "experiment_02_output": EXP2_OUTPUT,
+    "transformation_output": TRANSFORM_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
@@ -748,6 +810,80 @@ def exp2_artifact_state() -> dict[str, Any]:
         "synthesis_ready": EXP2_SYNTHESIS_FILE.exists(),
         "acquisition_summary": safe_load_json(EXP2_ACQUISITION_SUMMARY),
         "visual_summary": safe_load_json(EXP2_VISUAL_SUMMARY),
+    }
+
+
+def transformation_artifact_state() -> dict[str, Any]:
+    handoff_hash = (
+        sha256_file(EXP2_SYNTHESIS_FILE)
+        if EXP2_SYNTHESIS_FILE.exists()
+        else None
+    )
+    request_hashes: dict[str, str] = {}
+    if handoff_hash and TRANSFORM_REQUESTS_DIR.exists():
+        for path in TRANSFORM_REQUESTS_DIR.glob("*.concept_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            provenance = payload.get("request_provenance", {})
+            mechanism_id = str(payload.get("mechanism_id") or "").strip()
+            if (
+                mechanism_id
+                and isinstance(provenance, dict)
+                and provenance.get("handoff_sha256") == handoff_hash
+            ):
+                request_hashes[mechanism_id] = sha256_file(path)
+
+    current_response_ids: set[str] = set()
+    if TRANSFORM_RESPONSES_DIR.exists():
+        for path in TRANSFORM_RESPONSES_DIR.glob("*.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            mechanism_id = str(payload.get("mechanism_id") or "").strip()
+            provenance = payload.get("response_provenance", {})
+            if (
+                mechanism_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256")
+                == request_hashes[mechanism_id]
+            ):
+                current_response_ids.add(mechanism_id)
+
+    candidates = safe_load_json(TRANSFORM_CANDIDATES_FILE)
+    candidate_count = (
+        int(candidates.get("count") or 0)
+        if isinstance(candidates, dict)
+        else 0
+    )
+    requests_ready = bool(request_hashes)
+    responses_complete = (
+        requests_ready
+        and set(request_hashes).issubset(current_response_ids)
+    )
+    candidates_ready = responses_complete and candidate_count > 0
+    gate = concept_gate_snapshot() if candidates_ready else {
+        "status": "WAITING_FOR_CONCEPT_CANDIDATES",
+        "complete": False,
+        "concepts": [],
+    }
+    research_handoff = safe_load_json(TRANSFORM_RESEARCH_HANDOFF)
+    research_ready = (
+        isinstance(research_handoff, dict)
+        and research_handoff.get("status") == "READY_FOR_RESEARCH"
+        and bool(gate.get("complete"))
+    )
+    return {
+        "handoff_sha256": handoff_hash,
+        "request_mechanism_ids": sorted(request_hashes),
+        "current_response_mechanism_ids": sorted(current_response_ids),
+        "requests_ready": requests_ready,
+        "responses_complete": responses_complete,
+        "candidate_count": candidate_count,
+        "candidates_ready": candidates_ready,
+        "concept_gate": gate,
+        "concept_gate_complete": bool(gate.get("complete")),
+        "research_ready": research_ready,
     }
 
 
