@@ -27,7 +27,7 @@ SOURCE_STUDY_SET = (
     / "experiment_01_discovery"
     / "output"
     / "experiment_01_5"
-    / "study_set.json"
+    / "approved_study_set.json"
 )
 
 OUTPUT_DIR = HERE / "output"
@@ -533,7 +533,7 @@ def run_prepare() -> None:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         summary = {
             "experiment": "Experiment 02 — Why Did It Work?",
-            "status": "WAITING_FOR_01_5_STUDY_SET",
+            "status": "WAITING_FOR_HUMAN_OPPORTUNITY_GATE",
             "source": str(SOURCE_STUDY_SET),
             "api_calls": 0,
         }
@@ -543,7 +543,7 @@ def run_prepare() -> None:
         )
         print("\nEXPERIMENT 02")
         print("=" * 60)
-        print("Status: WAITING_FOR_01_5_STUDY_SET")
+        print("Status: WAITING_FOR_HUMAN_OPPORTUNITY_GATE")
         print(f"Expected input: {SOURCE_STUDY_SET}")
         return
 
@@ -552,6 +552,11 @@ def run_prepare() -> None:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PREPARED_PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Approval or example replacement can change the study set. Never leave
+    # stale prepared profiles from a previous machine-selected set behind.
+    for stale_profile in PREPARED_PROFILES_DIR.glob("*.json"):
+        stale_profile.unlink()
 
     WORK_PACKETS_FILE.write_text(
         json.dumps(packets, indent=2, ensure_ascii=False),
