@@ -336,6 +336,119 @@ class ExperimentUiTests(unittest.TestCase):
                     readiness["analysis_batch_prepare"]["enabled"]
                 )
 
+    def test_failed_visual_attempt_allows_analysis_and_exposes_force_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            model_runs = root / "model_runs"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            source_output = root / "source_output"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                model_runs,
+                review_requests,
+                reviewed,
+                source_output,
+            ):
+                path.mkdir()
+
+            prepared_profile = prepared / "v1.json"
+            prepared_profile.write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            (enriched / "v1.json").write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Evidence.",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report_dir = source_output / "experiment_02" / "v1"
+            report_dir.mkdir(parents=True)
+            (report_dir / "visual_analysis.json").write_text(
+                json.dumps(
+                    {
+                        "status": "SCENE_DETECTION_FAILED",
+                        "profile_sha256": server.sha256_file(
+                            prepared_profile
+                        ),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
+                patch.object(
+                    server,
+                    "EXP2_REVIEW_REQUESTS_DIR",
+                    review_requests,
+                ),
+                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
+                patch.object(
+                    server,
+                    "EXP2_SYNTHESIS_FILE",
+                    root / "missing_synthesis.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_ACQUISITION_SUMMARY",
+                    root / "missing_acquisition.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_VISUAL_SUMMARY",
+                    root / "missing_visual.json",
+                ),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": True,
+                        "opportunities": [],
+                    },
+                ),
+                patch.object(
+                    server.shutil,
+                    "which",
+                    side_effect=lambda name: (
+                        f"C:/fake/{name}.exe"
+                        if name in {"yt-dlp", "ffmpeg"}
+                        else None
+                    ),
+                ),
+            ):
+                readiness = server.action_readiness()
+
+        self.assertFalse(readiness["exp2_visual"]["enabled"])
+        self.assertTrue(readiness["exp2_visual_retry"]["enabled"])
+        self.assertTrue(
+            readiness["analysis_batch_prepare"]["enabled"]
+        )
+
     def test_missing_ffmpeg_allows_transcript_only_analysis(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
