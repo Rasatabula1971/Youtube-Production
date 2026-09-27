@@ -180,14 +180,22 @@ def evenly_selected_indexes(total: int, maximum: int) -> set[int]:
 def prune_scene_frames(
     directory: Path,
     *,
+    scene_times: list[float],
     maximum: int,
-) -> list[Path]:
+) -> list[dict[str, Any]]:
     paths = sorted(directory.glob("scene_*.jpg"))
-    keep_indexes = evenly_selected_indexes(len(paths), maximum)
-    retained: list[Path] = []
+    pair_count = min(len(paths), len(scene_times))
+    keep_indexes = evenly_selected_indexes(pair_count, maximum)
+    retained: list[dict[str, Any]] = []
+
     for index, path in enumerate(paths):
-        if index in keep_indexes:
-            retained.append(path)
+        if index < pair_count and index in keep_indexes:
+            retained.append(
+                {
+                    "path": str(path),
+                    "timestamp_seconds": round(scene_times[index], 3),
+                }
+            )
         else:
             path.unlink()
     return retained
@@ -374,7 +382,8 @@ def acquire_visual_one(
             "profile_sha256": prepared_hash,
             "message": "Run Acquire Source Evidence before visual analysis.",
         }
-        return write_json(report_path, result) and result
+        write_json(report_path, result)
+        return result
 
     for old in output_dir.glob("scene_*.jpg"):
         old.unlink()
@@ -438,6 +447,7 @@ def acquire_visual_one(
     scene_times = parse_scene_times(scene_result.stderr)
     retained_frames = prune_scene_frames(
         output_dir,
+        scene_times=scene_times,
         maximum=MAX_RETAINED_SCENE_FRAMES,
     )
     duration = info_duration(info_json)
@@ -479,11 +489,12 @@ def acquire_visual_one(
         "duration_seconds": duration,
         "scene_transition_candidate_count": len(scene_times),
         "scene_threshold": SCENE_THRESHOLD,
-        "retained_scene_frames": [
-            str(path) for path in retained_frames
-        ],
+        "retained_scene_frames": retained_frames,
         "opening_frame": (
-            str(opening_frame_value)
+            {
+                "path": str(opening_frame_value),
+                "timestamp_seconds": OPENING_FRAME_SECONDS,
+            }
             if opening_frame_value is not None
             else None
         ),
