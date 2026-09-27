@@ -560,14 +560,24 @@ def current_visual_ready_ids(prepared_ids: set[str]) -> set[str]:
     for video_id in prepared_ids:
         report_path = root / video_id / "visual_analysis.json"
         prepared_path = EXP2_PREPARED_DIR / f"{video_id}.json"
+        enriched_path = EXP2_ENRICHED_DIR / f"{video_id}.json"
         report = safe_load_json(report_path)
+        enriched = safe_load_json(enriched_path)
         if (
             not prepared_path.exists()
             or not isinstance(report, dict)
+            or not isinstance(enriched, dict)
         ):
             continue
+        timing_present = any(
+            isinstance(item, dict)
+            and item.get("evidence_id") == "timing.scene_change_summary"
+            and item.get("type") == "timing_note"
+            for item in enriched.get("evidence", [])
+        )
         if (
-            report.get("status") in {"READY", "READY_NO_OPENING_FRAME"}
+            timing_present
+            and report.get("status") in {"READY", "READY_NO_OPENING_FRAME"}
             and report.get("profile_sha256") == sha256_file(prepared_path)
         ):
             ready.add(video_id)
