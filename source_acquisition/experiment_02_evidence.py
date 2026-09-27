@@ -120,6 +120,21 @@ def find_info_json(directory: Path, video_id: str) -> Path | None:
     return matches[0] if matches else None
 
 
+def clear_generated_files(directory: Path, video_id: str) -> None:
+    if not directory.exists():
+        return
+    prefix = video_id.casefold()
+    for path in directory.iterdir():
+        if not path.is_file():
+            continue
+        name = path.name.casefold()
+        if (
+            name.startswith(prefix)
+            or name in {"evidence_bundle.json", "acquisition.json"}
+        ):
+            path.unlink()
+
+
 def yt_dlp_command(
     yt_dlp: str,
     *,
@@ -261,9 +276,12 @@ def acquire_one(
         result["report"] = str(write_report(output_dir, result))
         return result
 
-    transcript = None if force else find_transcript(output_dir, video_id)
-    thumbnail = None if force else find_thumbnail(output_dir, video_id)
-    info_json = None if force else find_info_json(output_dir, video_id)
+    if force:
+        clear_generated_files(output_dir, video_id)
+
+    transcript = find_transcript(output_dir, video_id)
+    thumbnail = find_thumbnail(output_dir, video_id)
+    info_json = find_info_json(output_dir, video_id)
     network_called = False
     yt_result: subprocess.CompletedProcess[str] | None = None
 
