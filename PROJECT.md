@@ -234,9 +234,14 @@ The collector can search 10 niches × 3 queries. Experiment 01.2 is first being 
 ### Experiment 01.3 — Age-Matched Velocity Validation
 
 Experiment 01.3 controls for publication age before comparing current topic
-momentum. It freezes a same-age cohort, separates Shorts and long-form
-candidates, measures repeated-snapshot velocity, and keeps experiment output
-physically isolated.
+momentum. It freezes a same-age cohort, tags every topic with an explicit niche,
+separates Shorts and long-form candidates, and measures repeated-snapshot
+velocity. The comparison denominator is matched by **niche + format**, so adding
+a second niche cannot silently pool structurally different audience velocities.
+
+Frozen-cohort refresh can be scheduled on Windows. The scheduled runner is
+self-limiting and stops spending API calls once the current cohort has enough
+velocity evidence for Experiment 01.4.
 
 ### Experiment 01.4 — Depth-First Topic Expansion
 
@@ -298,12 +303,15 @@ the formal handoff from M1 into Experiment 02.
 
 - repeated view-count observations;
 - measured view delta over elapsed time;
-- current views/hour and views/day when a prior snapshot exists.
+- current views/hour and views/day when a prior snapshot exists;
+- optional self-limiting Windows scheduled refresh of the frozen cohort.
 
 **Topic evidence**
 
 - topic-level demand/breakout aggregation;
-- separate Shorts and long-form evidence.
+- explicit niche identity;
+- separate niche-and-format velocity baselines;
+- `topic_channel_confidence` for independent-channel breadth.
 
 **Demand**
 
