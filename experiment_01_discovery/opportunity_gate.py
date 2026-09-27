@@ -21,7 +21,7 @@ HANDOFF_PACKETS_FILE = OUTPUT_DIR / "handoff_packets.json"
 DECISION_FILE = OUTPUT_DIR / "human_opportunity_decision.json"
 APPROVED_STUDY_SET_FILE = OUTPUT_DIR / "approved_study_set.json"
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 TOPIC_ACTIONS = {
     "APPROVE_TOPIC",
@@ -54,8 +54,16 @@ def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def opportunity_id(topic: str, fmt: str) -> str:
-    return f"{topic}:{fmt}"
+def opportunity_id(
+    topic: str,
+    fmt: str,
+    niche: str = "",
+) -> str:
+    return (
+        f"{niche}:{topic}:{fmt}"
+        if niche
+        else f"{topic}:{fmt}"
+    )
 
 
 def _group_study_set(study_set: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -64,15 +72,17 @@ def _group_study_set(study_set: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     for item in study_set:
         topic = str(item.get("topic") or "").strip()
+        niche = str(item.get("niche") or "").strip()
         fmt = str(item.get("format_candidate") or "").strip()
         if not topic or not fmt:
             continue
 
-        key = opportunity_id(topic, fmt)
+        key = opportunity_id(topic, fmt, niche)
         if key not in grouped:
             grouped[key] = {
                 "opportunity_id": key,
                 "topic": topic,
+                "niche": niche,
                 "format_candidate": fmt,
                 "items": [],
             }
@@ -93,6 +103,7 @@ def _fresh_state(study_set: list[dict[str, Any]]) -> dict[str, Any]:
         ]
         opportunities[group["opportunity_id"]] = {
             "topic": group["topic"],
+            "niche": group.get("niche", ""),
             "format_candidate": group["format_candidate"],
             "decision": "PENDING",
             "selected_video_ids": selected_ids,
@@ -155,6 +166,7 @@ def _pass_candidates(
     packets: list[dict[str, Any]],
     topic: str,
     fmt: str,
+    niche: str = "",
 ) -> list[dict[str, Any]]:
     candidates = [
         item
@@ -162,6 +174,10 @@ def _pass_candidates(
         if item.get("gate_status") == "PASS"
         and str(item.get("topic")) == topic
         and str(item.get("format_candidate")) == fmt
+        and (
+            not niche
+            or str(item.get("niche") or "") == niche
+        )
         and item.get("video_id")
     ]
 
@@ -206,6 +222,7 @@ def _replacement_candidate(
         packets,
         str(opportunity.get("topic") or ""),
         str(opportunity.get("format_candidate") or ""),
+        str(opportunity.get("niche") or ""),
     ):
         video_id = str(candidate.get("video_id") or "")
         channel_id = str(candidate.get("channel_id") or "")
@@ -361,6 +378,7 @@ def gate_snapshot() -> dict[str, Any]:
             packets,
             str(opportunity.get("topic") or ""),
             str(opportunity.get("format_candidate") or ""),
+            str(opportunity.get("niche") or ""),
         )
         selected_ids = {
             str(video_id)
@@ -379,6 +397,7 @@ def gate_snapshot() -> dict[str, Any]:
             {
                 "opportunity_id": key,
                 "topic": opportunity.get("topic"),
+                "niche": opportunity.get("niche"),
                 "format_candidate": opportunity.get("format_candidate"),
                 "decision": opportunity.get("decision", "PENDING"),
                 "can_approve": _all_examples_kept(opportunity),
