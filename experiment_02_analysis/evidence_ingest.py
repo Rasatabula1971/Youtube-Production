@@ -249,19 +249,38 @@ def parse_notes_file(path: Path) -> list[dict[str, Any]]:
         else:
             locator = f"note {ordinal}"
 
-        evidence.append(
-            {
-                "evidence_id": str(
-                    note.get("evidence_id")
-                    or note_evidence_id(note_type, ordinal, start_seconds)
-                ),
-                "type": note_type,
-                "locator": locator,
-                "observation": observation,
-                "source_file": str(path),
-                "source_sha256": digest,
-            }
-        )
+        source_file = path
+        source_sha256 = digest
+        source_image = note.get("source_image")
+        if source_image:
+            image_path = Path(str(source_image))
+            if not image_path.is_absolute():
+                image_path = (path.parent / image_path).resolve()
+            else:
+                image_path = image_path.resolve()
+            if not image_path.exists() or not image_path.is_file():
+                raise ValueError(
+                    f"Note {ordinal} source_image does not exist: {image_path}"
+                )
+            source_file = image_path
+            source_sha256 = sha256_file(image_path)
+
+        item = {
+            "evidence_id": str(
+                note.get("evidence_id")
+                or note_evidence_id(note_type, ordinal, start_seconds)
+            ),
+            "type": note_type,
+            "locator": locator,
+            "observation": observation,
+            "source_file": str(source_file),
+            "source_sha256": source_sha256,
+        }
+        if source_image:
+            item["note_manifest"] = str(path)
+            item["note_manifest_sha256"] = digest
+
+        evidence.append(item)
 
     return evidence
 

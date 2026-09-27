@@ -826,3 +826,27 @@ Visual structure is preferred when `yt-dlp` and `ffmpeg` are available, but
 a failed attempt must not deadlock Experiment 02. The workflow may continue with
 transcript-only evidence after an attempted failure, while a force-retry remains
 available as a maintenance action.
+
+
+## D-058 — Vision model output requires explicit human acceptance
+
+**Status:** Accepted
+
+Semantic frame descriptions are allowed into Experiment 02 only after a human
+decision.
+
+A local Ollama vision model may generate draft observations for retained source
+frames, but model drafts are not evidence and cannot unlock downstream analysis
+by themselves.
+
+The human reviewer must accept, edit-and-accept, or reject every selected frame.
+Accepted scene observations are stored as `visual_note` evidence with the
+source frame SHA-256. Accepted opening-frame observations are stored as
+`opening_frame` evidence.
+
+The review set is intentionally bounded to avoid review overload: opening frame
+plus at most eight evenly distributed scene frames per video.
+
+The automatic provider is local-first and free/open-source friendly. When no
+local model is configured or available, the workflow falls back to human-only
+review rather than blocking.

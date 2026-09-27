@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -50,6 +50,15 @@ from opportunity_gate import (  # noqa: E402
 )
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
+if str(EXP2_DIR) not in sys.path:
+    sys.path.insert(0, str(EXP2_DIR))
+
+from vision_review import (  # noqa: E402
+    apply_review_action as apply_vision_review_action,
+    frame_path as vision_frame_path,
+    review_snapshot as vision_review_snapshot,
+)
+
 EXP2_OUTPUT = EXP2_DIR / "output"
 EXP2_PREPARED_DIR = EXP2_OUTPUT / "profiles_to_complete"
 EXP2_ENRICHED_DIR = EXP2_OUTPUT / "profiles_enriched"
@@ -68,6 +77,7 @@ WORKFLOW_ACTION_ORDER = [
     "exp2_prepare",
     "exp2_acquire",
     "exp2_visual",
+    "exp2_vision_prepare",
     "analysis_batch_prepare",
     "analysis_model_one",
     "human_review_prepare",
@@ -261,6 +271,36 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Streams a low-resolution source, saves no full video, extracts an "
             "opening frame and scene-change frames, and creates objective timing evidence."
+        ),
+    },
+    "exp2_vision_prepare": {
+        "label": "Prepare Visual Review",
+        "stage": "02",
+        "command": [
+            sys.executable,
+            "experiment_02_analysis/vision_review.py",
+            "--mode",
+            "prepare",
+            "--provider",
+            "auto",
+        ],
+        "description": (
+            "Creates a bounded visual review set. A configured local Ollama "
+            "vision model may propose descriptions, but human approval is required."
+        ),
+    },
+    "vision_doctor": {
+        "label": "Run Vision Doctor",
+        "stage": "ACQ",
+        "command": [
+            sys.executable,
+            "experiment_02_analysis/vision_review.py",
+            "--mode",
+            "doctor",
+        ],
+        "description": (
+            "Checks whether local Ollama visual drafting is configured. "
+            "Human-only review remains available without it."
         ),
     },
     "exp2_visual_retry": {
@@ -872,6 +912,8 @@ def stage_statuses() -> list[dict[str, Any]]:
     evidence_ready = bool(exp2_artifacts["evidence_complete"])
     visual_ready = bool(exp2_artifacts["visual_complete"])
     visual_attempted = bool(exp2_artifacts["visual_attempted"])
+    vision_review = vision_review_snapshot()
+    vision_complete = bool(vision_review.get("complete"))
     visual_available = (
         shutil.which("yt-dlp") is not None
         and shutil.which("ffmpeg") is not None
@@ -881,6 +923,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         or visual_attempted
         or not visual_available
     )
+    vision_satisfied = (not visual_ready) or vision_complete
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     analyzed = exp2_artifacts["analyzed_current_count"] > 0
     reviewed = exp2_artifacts["reviewed_current_count"] > 0
@@ -897,6 +940,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         "exp2_prepare",
         "exp2_acquire",
         "exp2_visual",
+        "exp2_vision_prepare",
         "analysis_batch_prepare",
         "analysis_model_one",
         "human_review_prepare",
@@ -924,6 +968,15 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp2_human = "VISUAL STRUCTURE NEEDED"
         exp2_tone = "action"
         exp2_next = "Run Acquire Visual Structure."
+    elif not vision_satisfied:
+        if vision_review.get("awaiting_human_review"):
+            exp2_human = "VISUAL REVIEW NEEDED"
+            exp2_tone = "action"
+            exp2_next = "Review the retained visual frames in Analyze & Create."
+        else:
+            exp2_human = "PREPARE VISUAL REVIEW"
+            exp2_tone = "action"
+            exp2_next = "Run Prepare Visual Review."
     elif reviewed or analyzed:
         exp2_human = "SYNTHESIS NEEDED"
         exp2_tone = "action"
@@ -1069,6 +1122,14 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": visual_satisfied,
                 },
                 {
+                    "label": (
+                        "Visual observations reviewed"
+                        if visual_ready
+                        else "Visual observations not required"
+                    ),
+                    "done": vision_satisfied,
+                },
+                {
                     "label": "Profiles analyzed",
                     "done": analyzed,
                 },
@@ -1117,6 +1178,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     evidence_complete = bool(exp2_artifacts["evidence_complete"])
     visual_attempted = bool(exp2_artifacts["visual_attempted"])
     visual_complete = bool(exp2_artifacts["visual_complete"])
+    vision_review = vision_review_snapshot()
+    vision_complete = bool(vision_review.get("complete"))
+    vision_awaiting = bool(vision_review.get("awaiting_human_review"))
     requests_complete = bool(exp2_artifacts["requests_complete"])
     analyzed = exp2_artifacts["analyzed_current_count"] > 0
     review_requests = exp2_artifacts["review_requests_current_count"] > 0
@@ -1132,6 +1196,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         or visual_attempted
         or not visual_available
     )
+    vision_satisfied = (not visual_complete) or vision_complete
 
     return {
         "opportunity_research": {
@@ -1333,6 +1398,45 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 else "A completed or failed guided visual attempt is required before force-retry."
             ),
         },
+        "exp2_vision_prepare": {
+            "enabled": (
+                human_gate_ready
+                and evidence_complete
+                and visual_complete
+                and not vision_complete
+                and not vision_awaiting
+            ),
+            "reason": (
+                "Visual structure frames are ready for human-gated observation review."
+                if (
+                    human_gate_ready
+                    and evidence_complete
+                    and visual_complete
+                    and not vision_complete
+                    and not vision_awaiting
+                )
+                else (
+                    "Visual review is waiting for human decisions."
+                    if vision_awaiting
+                    else (
+                        "Visual review is already complete."
+                        if vision_complete
+                        else (
+                            "Successful visual structure evidence is required first."
+                            if human_gate_ready and not visual_complete
+                            else "Human opportunity approval is required first."
+                        )
+                    )
+                )
+            ),
+        },
+        "vision_doctor": {
+            "enabled": True,
+            "reason": (
+                "Checks local Ollama vision configuration. "
+                "Human-only visual review works without a model."
+            ),
+        },
         "fair_doctor": {
             "enabled": True,
             "reason": "Safe diagnostic; no inference.",
@@ -1342,6 +1446,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 human_gate_ready
                 and evidence_complete
                 and visual_satisfied
+                and vision_satisfied
                 and not requests_complete
             ),
             "reason": (
@@ -1350,6 +1455,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     human_gate_ready
                     and evidence_complete
                     and visual_satisfied
+                    and vision_satisfied
                     and not requests_complete
                 )
                 else (
@@ -1361,7 +1467,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                         else (
                             "Acquire transcript-backed source evidence first."
                             if not evidence_complete
-                            else "Run visual structure sampling before analysis requests."
+                            else (
+                                "Run visual structure sampling before analysis requests."
+                                if not visual_satisfied
+                                else "Complete visual observation review before analysis requests."
+                            )
                         )
                     )
                 )
@@ -1631,6 +1741,20 @@ def workflow_guidance(
             "next_due_at": research_state.get("next_refresh_due_at"),
         }
 
+    vision_review = vision_review_snapshot()
+    if vision_review.get("awaiting_human_review"):
+        return {
+            "state": "HUMAN_VISION_GATE",
+            "current_action_id": None,
+            "current_title": "Review Visual Evidence",
+            "current_detail": (
+                "Check each retained frame. Accept or edit only observations "
+                "that are directly visible; reject uncertain or unhelpful frames."
+            ),
+            "next_action_id": "analysis_batch_prepare",
+            "next_title": "Prepare Analysis Requests",
+        }
+
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
         gate_info = readiness.get(action_id, {})
         if gate_info.get("enabled"):
@@ -1719,6 +1843,7 @@ def status_payload() -> dict[str, Any]:
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
+        "vision_review": vision_review_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -1780,6 +1905,20 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/opportunity-gate":
             self._send_json(opportunity_gate_snapshot())
             return
+        if route == "/api/vision-review":
+            self._send_json(vision_review_snapshot())
+            return
+        if route == "/api/vision-frame":
+            query = parse_qs(urlparse(self.path).query)
+            video_id = str((query.get("video_id") or [""])[0])
+            frame_id = str((query.get("frame_id") or [""])[0])
+            try:
+                path = vision_frame_path(video_id, frame_id)
+            except ValueError as exc:
+                self._send_json({"error": str(exc)}, 404)
+                return
+            self._send_static(path, "image/jpeg")
+            return
 
         self.send_error(404)
 
@@ -1812,6 +1951,24 @@ class Handler(BaseHTTPRequestHandler):
                     video_id=(
                         str(body["video_id"])
                         if body.get("video_id") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/vision-review":
+                payload = apply_vision_review_action(
+                    action=str(body.get("action", "")),
+                    video_id=str(body.get("video_id", "")),
+                    frame_id=(
+                        str(body["frame_id"])
+                        if body.get("frame_id") is not None
+                        else None
+                    ),
+                    observation=(
+                        str(body["observation"])
+                        if body.get("observation") is not None
                         else None
                     ),
                 )

@@ -262,3 +262,21 @@ a bounded set of timestamped scene frames for a future vision-analysis layer.
 If the first visual attempt fails, the guided workflow does not deadlock:
 transcript-only analysis becomes available and **Retry Visual Structure (Force)**
 is exposed under Tools & Diagnostics.
+
+
+## Visual evidence review
+
+When visual-structure sampling succeeds, the guided workflow adds:
+
+**Prepare Visual Review → Review Visual Evidence → Prepare Analysis Requests**
+
+The review appears directly inside **Analyze & Create** and shows one retained
+frame at a time. The reviewer can move Previous/Next, edit a model draft when
+one exists, accept the observation, or reject the frame.
+
+Status polling does not overwrite the observation textarea while the user is
+editing.
+
+If no local vision model is configured, the same workflow operates in
+human-only mode. **Vision Doctor** under Tools & Diagnostics reports whether a
+configured local Ollama model is available.

@@ -77,6 +77,43 @@ class EvidenceIngestTests(unittest.TestCase):
         self.assertEqual(evidence[0]["type"], "visual_note")
         self.assertEqual(evidence[0]["locator"], "00:00:01.000-00:00:03.000")
 
+    def test_visual_note_can_cite_source_image_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            frame = root / "scene_0001.jpg"
+            frame.write_bytes(b"frame-bytes")
+            notes = root / "notes.json"
+            notes.write_text(
+                json.dumps(
+                    {
+                        "notes": [
+                            {
+                                "evidence_id": "visual.scene_0001",
+                                "type": "visual_note",
+                                "start_seconds": 3.25,
+                                "end_seconds": 3.25,
+                                "observation": "A tyre fills most of the frame.",
+                                "source_image": str(frame),
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            evidence = parse_notes_file(notes)
+
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["source_file"], str(frame.resolve()))
+        self.assertNotEqual(
+            evidence[0]["source_sha256"],
+            evidence[0]["note_manifest_sha256"],
+        )
+        self.assertEqual(
+            evidence[0]["note_manifest"],
+            str(notes),
+        )
+
     def test_registered_image_without_observation_is_not_claim_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "thumb.jpg"
