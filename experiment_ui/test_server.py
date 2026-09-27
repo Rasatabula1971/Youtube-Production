@@ -29,6 +29,9 @@ class ExperimentUiTests(unittest.TestCase):
             self.assertIn(f'data-view="{view}"', html)
 
         self.assertIn('id="jobDrawer"', html)
+        self.assertIn('id="visionReviewPanel"', html)
+        self.assertIn('id="visionFrameImage"', html)
+        self.assertIn('id="visionObservation"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -37,6 +40,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('"/analysis"', script)
         self.assertIn('"/tools"', script)
         self.assertIn("openJobDrawer", script)
+        self.assertIn("renderVisionReview", script)
+        self.assertIn("/api/vision-review", script)
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
@@ -193,6 +198,18 @@ class ExperimentUiTests(unittest.TestCase):
             "exp2_visual",
         )
 
+    def test_visual_review_is_guided_after_visual_structure(self):
+        self.assertIn("exp2_vision_prepare", server.ACTION_DEFS)
+        self.assertIn(
+            "experiment_02_analysis/vision_review.py",
+            server.ACTION_DEFS["exp2_vision_prepare"]["command"][1],
+        )
+        visual_index = server.WORKFLOW_ACTION_ORDER.index("exp2_visual")
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[visual_index + 1],
+            "exp2_vision_prepare",
+        )
+
     def test_visual_structure_blocks_analysis_when_dependencies_are_available(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -333,8 +350,180 @@ class ExperimentUiTests(unittest.TestCase):
                 readiness = server.action_readiness()
                 self.assertFalse(readiness["exp2_visual"]["enabled"])
                 self.assertTrue(
+                    readiness["exp2_vision_prepare"]["enabled"]
+                )
+                self.assertFalse(
                     readiness["analysis_batch_prepare"]["enabled"]
                 )
+
+    def test_pending_visual_review_becomes_human_workflow_gate(self):
+        with (
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={
+                    "status": "AWAITING_HUMAN_REVIEW",
+                    "awaiting_human_review": True,
+                    "complete": False,
+                    "packets": [],
+                },
+            ),
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={
+                    "ready_for_experiment_02": True,
+                    "opportunities": [],
+                },
+            ),
+        ):
+            workflow = server.workflow_guidance(
+                server.action_readiness()
+            )
+
+        self.assertEqual(workflow["state"], "HUMAN_VISION_GATE")
+        self.assertEqual(
+            workflow["current_title"],
+            "Review Visual Evidence",
+        )
+        self.assertEqual(
+            workflow["next_action_id"],
+            "analysis_batch_prepare",
+        )
+
+    def test_completed_visual_review_can_unlock_analysis_requests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            model_runs = root / "model_runs"
+            review_requests = root / "review_requests"
+            reviewed = root / "reviewed"
+            source_output = root / "source_output"
+            for path in (
+                prepared,
+                enriched,
+                requests,
+                analyzed,
+                model_runs,
+                review_requests,
+                reviewed,
+                source_output,
+            ):
+                path.mkdir()
+
+            prepared_profile = prepared / "v1.json"
+            prepared_profile.write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            (enriched / "v1.json").write_text(
+                json.dumps(
+                    {
+                        "source_inputs": {
+                            "transcript": {"status": "PROVIDED"}
+                        },
+                        "evidence": [
+                            {
+                                "evidence_id": "transcript.p0001",
+                                "type": "transcript",
+                                "observation": "Evidence.",
+                            },
+                            {
+                                "evidence_id": "timing.scene_change_summary",
+                                "type": "timing_note",
+                                "observation": "Detector summary.",
+                            },
+                            {
+                                "evidence_id": "visual.scene_0001",
+                                "type": "visual_note",
+                                "observation": "A tyre fills the frame.",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report_dir = source_output / "experiment_02" / "v1"
+            report_dir.mkdir(parents=True)
+            (report_dir / "visual_analysis.json").write_text(
+                json.dumps(
+                    {
+                        "status": "READY",
+                        "profile_sha256": server.sha256_file(
+                            prepared_profile
+                        ),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
+                patch.object(
+                    server,
+                    "EXP2_REVIEW_REQUESTS_DIR",
+                    review_requests,
+                ),
+                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
+                patch.object(
+                    server,
+                    "EXP2_SYNTHESIS_FILE",
+                    root / "missing_synthesis.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_ACQUISITION_SUMMARY",
+                    root / "missing_acquisition.json",
+                ),
+                patch.object(
+                    server,
+                    "EXP2_VISUAL_SUMMARY",
+                    root / "missing_visual.json",
+                ),
+                patch.object(
+                    server,
+                    "vision_review_snapshot",
+                    return_value={
+                        "status": "COMPLETE",
+                        "complete": True,
+                        "awaiting_human_review": False,
+                        "packets": [],
+                    },
+                ),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "ready_for_experiment_02": True,
+                        "opportunities": [],
+                    },
+                ),
+                patch.object(
+                    server.shutil,
+                    "which",
+                    side_effect=lambda name: (
+                        f"C:/fake/{name}.exe"
+                        if name in {"yt-dlp", "ffmpeg"}
+                        else None
+                    ),
+                ),
+            ):
+                readiness = server.action_readiness()
+
+        self.assertFalse(
+            readiness["exp2_vision_prepare"]["enabled"]
+        )
+        self.assertTrue(
+            readiness["analysis_batch_prepare"]["enabled"]
+        )
 
     def test_failed_visual_attempt_allows_analysis_and_exposes_force_retry(self):
         with tempfile.TemporaryDirectory() as tmp:
