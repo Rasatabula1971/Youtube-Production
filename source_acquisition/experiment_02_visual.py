@@ -314,12 +314,24 @@ def visual_report_current(
 ) -> bool:
     if not report_path.exists():
         return False
+    enriched_path = ENRICHED_DIR / f"{prepared_profile.stem}.json"
+    if not enriched_path.exists():
+        return False
     try:
         report = base.load_json(report_path)
+        enriched = base.load_json(enriched_path)
     except (OSError, ValueError, json.JSONDecodeError):
         return False
+
+    timing_present = any(
+        isinstance(item, dict)
+        and item.get("evidence_id") == "timing.scene_change_summary"
+        and item.get("type") == "timing_note"
+        for item in enriched.get("evidence", [])
+    )
     return (
-        report.get("status") in {"READY", "READY_NO_OPENING_FRAME"}
+        timing_present
+        and report.get("status") in {"READY", "READY_NO_OPENING_FRAME"}
         and report.get("profile_sha256") == base.sha256_file(prepared_profile)
     )
 
