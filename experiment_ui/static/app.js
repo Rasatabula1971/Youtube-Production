@@ -515,7 +515,11 @@ function renderAnalysis(data) {
   renderActionCollection(actions, analysisActions);
 
   const currentId = workflow.current_action_id || "";
-  const activeIndex = currentId === "exp2_prepare" ? 0 :
+  const activeIndex = [
+    "exp2_prepare",
+    "exp2_acquire",
+    "exp2_visual"
+  ].includes(currentId) ? 0 :
     ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId) ? 1 : 0;
   creationTabs.forEach(function (tab, index) {
     tab.classList.toggle("active", index === activeIndex);
