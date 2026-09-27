@@ -200,14 +200,15 @@ class ConceptReviewTests(unittest.TestCase):
                 criteria={key: False for key in self.criteria()},
                 note="",
             )
+            handoff_exists = review.RESEARCH_HANDOFF_FILE.exists()
+            handoff = json.loads(
+                review.RESEARCH_HANDOFF_FILE.read_text(encoding="utf-8")
+            )
 
         self.assertTrue(final["complete"])
         self.assertEqual(final["accepted"], 1)
         self.assertEqual(final["rejected"], 1)
-        self.assertTrue(review.RESEARCH_HANDOFF_FILE.exists())
-        handoff = json.loads(
-            review.RESEARCH_HANDOFF_FILE.read_text(encoding="utf-8")
-        )
+        self.assertTrue(handoff_exists)
         self.assertEqual(handoff["status"], "READY_FOR_RESEARCH")
         self.assertEqual(handoff["concept_count"], 1)
         self.assertEqual(handoff["concepts"][0]["concept_id"], "c1")
