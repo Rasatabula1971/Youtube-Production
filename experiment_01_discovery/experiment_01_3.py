@@ -159,7 +159,8 @@ def classify_topic_relevance(
         "excluded_title_matches": [],
     }
 
-def confidence_from_unique_channels(count: int) -> str:
+def topic_channel_confidence(count: int) -> str:
+    """Describe topic evidence breadth from independent source channels."""
     if count >= 5:
         return "STRONG"
     if count >= 3:
@@ -167,6 +168,32 @@ def confidence_from_unique_channels(count: int) -> str:
     if count >= 1:
         return "LOW"
     return "INSUFFICIENT"
+
+
+def confidence_from_unique_channels(count: int) -> str:
+    """Backward-compatible alias for older callers/tests."""
+    return topic_channel_confidence(count)
+
+
+def topic_niche_map(config: dict[str, Any]) -> dict[str, str]:
+    """Return the configured niche for every globally unique topic ID."""
+    mapping: dict[str, str] = {}
+    for item in config.get("topics", []):
+        topic = str(item.get("topic") or "").strip()
+        niche = str(item.get("niche") or "").strip()
+        if not topic:
+            raise ValueError("Experiment 01.3 topic is missing its topic ID.")
+        if not niche:
+            raise ValueError(
+                f"Experiment 01.3 topic '{topic}' is missing required niche."
+            )
+        existing = mapping.get(topic)
+        if existing is not None and existing != niche:
+            raise ValueError(
+                f"Experiment 01.3 topic '{topic}' is assigned to multiple niches."
+            )
+        mapping[topic] = niche
+    return mapping
 
 
 def dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -180,44 +207,105 @@ def dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def aggregate_age_matched_velocity(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    eligible = dedupe_rows([row for row in rows if row.get("topic_relevance") == "ON_TOPIC"])
+def aggregate_age_matched_velocity(
+    rows: list[dict[str, Any]],
+    topic_niches: dict[str, str],
+) -> dict[str, Any]:
+    """Aggregate velocity against a niche-and-format matched cohort baseline."""
 
-    cohort_values: dict[str, list[float]] = defaultdict(list)
-    for row in eligible:
-        if row.get("current_views_per_day") is not None:
-            cohort_values[str(row.get("format_candidate", "unknown"))].append(
-                float(row["current_views_per_day"])
-            )
-    cohort_medians = {fmt: median_or_none(values) for fmt, values in cohort_values.items()}
+    eligible = dedupe_rows(
+        [
+            row
+            for row in rows
+            if row.get("topic_relevance") == "ON_TOPIC"
+        ]
+    )
 
-    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    cohort_values: dict[tuple[str, str], list[float]] = defaultdict(list)
     for row in eligible:
+        velocity = row.get("current_views_per_day")
+        if velocity is None:
+            continue
+        fmt = str(row.get("format_candidate", "unknown"))
+        row_niches = {
+            topic_niches.get(str(topic), "unknown")
+            for topic in row.get("validated_topics", [])
+        }
+        for niche in row_niches:
+            cohort_values[(niche, fmt)].append(float(velocity))
+
+    cohort_medians = {
+        key: median_or_none(values)
+        for key, values in cohort_values.items()
+    }
+    cohort_medians_nested: dict[str, dict[str, float | None]] = {}
+    for (niche, fmt), value in sorted(cohort_medians.items()):
+        cohort_medians_nested.setdefault(niche, {})[fmt] = value
+
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in eligible:
+        fmt = str(row.get("format_candidate", "unknown"))
         for topic in row.get("validated_topics", []):
-            grouped[(str(topic), str(row.get("format_candidate", "unknown")))].append(row)
+            topic_name = str(topic)
+            niche = topic_niches.get(topic_name, "unknown")
+            grouped[(niche, topic_name, fmt)].append(row)
 
     topics: dict[str, Any] = {}
-    for (topic, fmt), group in sorted(grouped.items()):
+    for (niche, topic, fmt), group in sorted(grouped.items()):
         group = dedupe_rows(group)
-        velocities = [float(r["current_views_per_day"]) for r in group if r.get("current_views_per_day") is not None]
-        ages = [float(r["age_days"]) for r in group if r.get("age_days") is not None]
-        views = [int(r["views"]) for r in group if r.get("views") is not None]
+        velocities = [
+            float(r["current_views_per_day"])
+            for r in group
+            if r.get("current_views_per_day") is not None
+        ]
+        ages = [
+            float(r["age_days"])
+            for r in group
+            if r.get("age_days") is not None
+        ]
+        views = [
+            int(r["views"])
+            for r in group
+            if r.get("views") is not None
+        ]
         trusted = [
             float(r["outlier_ratio"])
             for r in group
-            if r.get("outlier_reliability") == "TRUSTED" and r.get("outlier_ratio") is not None
+            if r.get("outlier_reliability") == "TRUSTED"
+            and r.get("outlier_ratio") is not None
         ]
-        unique_channels = len({r.get("channel_id") for r in group if r.get("channel_id")})
+        unique_channels = len(
+            {
+                r.get("channel_id")
+                for r in group
+                if r.get("channel_id")
+            }
+        )
         topic_median = median_or_none(velocities)
-        cohort_median = cohort_medians.get(fmt)
+        cohort_median = cohort_medians.get((niche, fmt))
         index = None
-        if topic_median is not None and cohort_median is not None and cohort_median > 0:
+        if (
+            topic_median is not None
+            and cohort_median is not None
+            and cohort_median > 0
+        ):
             index = round(topic_median / cohort_median, 3)
 
-        topics.setdefault(topic, {"by_format": {}})["by_format"][fmt] = {
+        topic_payload = topics.setdefault(
+            topic,
+            {
+                "niche": niche,
+                "by_format": {},
+            },
+        )
+        topic_payload["niche"] = niche
+        topic_payload["by_format"][fmt] = {
+            "niche": niche,
             "video_count": len(group),
             "unique_channels": unique_channels,
-            "confidence": confidence_from_unique_channels(unique_channels),
+            "topic_channel_confidence": topic_channel_confidence(
+                unique_channels
+            ),
             "velocity_sample_count": len(velocities),
             "median_age_days": median_or_none(ages),
             "median_views": median_or_none(views),
@@ -228,8 +316,20 @@ def aggregate_age_matched_velocity(rows: list[dict[str, Any]]) -> dict[str, Any]
             "median_trusted_outlier_ratio": median_or_none(trusted),
         }
 
+    legacy_by_format: dict[str, float | None] = {}
+    if len(cohort_medians_nested) == 1:
+        legacy_by_format = dict(
+            next(iter(cohort_medians_nested.values()))
+        )
+
     return {
-        "cohort_median_current_views_per_day_by_format": cohort_medians,
+        "cohort_median_current_views_per_day_by_niche_format":
+            cohort_medians_nested,
+        # Transitional single-niche alias for older consumers. It is empty
+        # once more than one niche is present so cross-niche pooling cannot
+        # silently reappear.
+        "cohort_median_current_views_per_day_by_format":
+            legacy_by_format,
         "topics": topics,
     }
 
@@ -253,6 +353,10 @@ def load_config() -> dict[str, Any]:
     missing = sorted(required - set(config))
     if missing:
         raise SystemExit("Experiment 01.3 config is missing: " + ", ".join(missing))
+    try:
+        topic_niche_map(config)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     return config
 
 
