@@ -165,9 +165,14 @@ def read_http_error(
     reason: str | None = None
     try:
         parsed = json.loads(body)
-        errors = (
-            parsed.get("error", {}).get("errors", [])
+        error_payload = (
+            parsed.get("error")
             if isinstance(parsed, dict)
+            else None
+        )
+        errors = (
+            error_payload.get("errors", [])
+            if isinstance(error_payload, dict)
             else []
         )
         if errors and isinstance(errors[0], dict):
