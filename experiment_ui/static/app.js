@@ -589,14 +589,8 @@ function renderVisionReview(snapshot, force) {
     return;
   }
 
-  const pendingIndex = pendingVisionIndex(items);
-  if (
-    visionCursor >= items.length ||
-    (items[visionCursor] &&
-      items[visionCursor].frame.decision !== "PENDING" &&
-      pendingIndex >= 0)
-  ) {
-    visionCursor = pendingIndex >= 0 ? pendingIndex : 0;
+  if (visionCursor >= items.length) {
+    visionCursor = Math.max(0, items.length - 1);
   }
 
   const entry = items[visionCursor];
