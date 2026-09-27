@@ -26,7 +26,6 @@ if (-not (Test-Path $PythonPath)) {
 }
 
 $TaskName = "YouTube Production - Experiment 01.3 Auto Refresh"
-$StartTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
 $TaskCommand = "`"$PythonPath`" `"$Runner`""
 
 $Arguments = @(
@@ -35,7 +34,6 @@ $Arguments = @(
     "/TR", $TaskCommand,
     "/SC", "HOURLY",
     "/MO", "$EveryHours",
-    "/ST", $StartTime,
     "/RL", "LIMITED",
     "/F"
 )
