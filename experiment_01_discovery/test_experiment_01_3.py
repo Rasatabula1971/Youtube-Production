@@ -12,6 +12,7 @@ from experiment_01_3 import (
     calculate_age_window,
     classify_topic_relevance,
     confidence_from_unique_channels,
+    topic_channel_confidence,
     restore_checkpoint_state,
     search_job_key,
 )
@@ -83,11 +84,15 @@ class Experiment013Tests(unittest.TestCase):
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
         self.assertEqual(result["topic_relevance_reason"], "excluded_title_term")
 
-    def test_confidence_uses_unique_channels(self):
-        self.assertEqual(confidence_from_unique_channels(0), "INSUFFICIENT")
-        self.assertEqual(confidence_from_unique_channels(2), "LOW")
-        self.assertEqual(confidence_from_unique_channels(4), "MODERATE")
-        self.assertEqual(confidence_from_unique_channels(5), "STRONG")
+    def test_topic_channel_confidence_uses_unique_channels(self):
+        self.assertEqual(topic_channel_confidence(0), "INSUFFICIENT")
+        self.assertEqual(topic_channel_confidence(2), "LOW")
+        self.assertEqual(topic_channel_confidence(4), "MODERATE")
+        self.assertEqual(topic_channel_confidence(5), "STRONG")
+        self.assertEqual(
+            confidence_from_unique_channels(5),
+            "STRONG",
+        )
 
 
     def test_search_job_key_separates_phase_and_window(self):
@@ -637,15 +642,23 @@ class Experiment013Tests(unittest.TestCase):
                 "outlier_reliability": "TRUSTED",
             },
         ]
+        niches = {
+            "gearbox_transmission": "automotive_racing",
+            "brakes": "automotive_racing",
+        }
 
-        result = aggregate_age_matched_velocity(rows)
+        result = aggregate_age_matched_velocity(rows, niches)
 
         self.assertEqual(
-            result["cohort_median_current_views_per_day_by_format"]["long_form_candidate"],
+            result[
+                "cohort_median_current_views_per_day_by_niche_format"
+            ]["automotive_racing"]["long_form_candidate"],
             6000.0,
         )
         self.assertEqual(
-            result["cohort_median_current_views_per_day_by_format"]["short_candidate"],
+            result[
+                "cohort_median_current_views_per_day_by_niche_format"
+            ]["automotive_racing"]["short_candidate"],
             50000.0,
         )
         self.assertEqual(
@@ -653,6 +666,100 @@ class Experiment013Tests(unittest.TestCase):
                 "age_matched_velocity_index"
             ],
             1.667,
+        )
+        self.assertEqual(
+            result["topics"]["gearbox_transmission"]["by_format"]["long_form_candidate"][
+                "topic_channel_confidence"
+            ],
+            "LOW",
+        )
+
+    def test_velocity_denominator_never_pools_across_niches(self):
+        rows = [
+            {
+                "video_id": "auto-a",
+                "channel_id": "auto-1",
+                "validated_topics": ["gearbox_transmission"],
+                "topic_relevance": "ON_TOPIC",
+                "format_candidate": "short_candidate",
+                "age_days": 120,
+                "views": 2_000_000,
+                "current_views_per_day": 1_000,
+                "outlier_ratio": 5,
+                "outlier_reliability": "TRUSTED",
+            },
+            {
+                "video_id": "auto-b",
+                "channel_id": "auto-2",
+                "validated_topics": ["brakes"],
+                "topic_relevance": "ON_TOPIC",
+                "format_candidate": "short_candidate",
+                "age_days": 121,
+                "views": 2_000_000,
+                "current_views_per_day": 3_000,
+                "outlier_ratio": 5,
+                "outlier_reliability": "TRUSTED",
+            },
+            {
+                "video_id": "finance-a",
+                "channel_id": "finance-1",
+                "validated_topics": ["credit_cards"],
+                "topic_relevance": "ON_TOPIC",
+                "format_candidate": "short_candidate",
+                "age_days": 119,
+                "views": 2_000_000,
+                "current_views_per_day": 100_000,
+                "outlier_ratio": 5,
+                "outlier_reliability": "TRUSTED",
+            },
+            {
+                "video_id": "finance-b",
+                "channel_id": "finance-2",
+                "validated_topics": ["saving"],
+                "topic_relevance": "ON_TOPIC",
+                "format_candidate": "short_candidate",
+                "age_days": 122,
+                "views": 2_000_000,
+                "current_views_per_day": 300_000,
+                "outlier_ratio": 5,
+                "outlier_reliability": "TRUSTED",
+            },
+        ]
+        niches = {
+            "gearbox_transmission": "automotive_racing",
+            "brakes": "automotive_racing",
+            "credit_cards": "personal_finance",
+            "saving": "personal_finance",
+        }
+
+        result = aggregate_age_matched_velocity(rows, niches)
+
+        baselines = result[
+            "cohort_median_current_views_per_day_by_niche_format"
+        ]
+        self.assertEqual(
+            baselines["automotive_racing"]["short_candidate"],
+            2000.0,
+        )
+        self.assertEqual(
+            baselines["personal_finance"]["short_candidate"],
+            200000.0,
+        )
+        self.assertEqual(
+            result["topics"]["gearbox_transmission"]["by_format"]["short_candidate"][
+                "age_matched_velocity_index"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            result["topics"]["credit_cards"]["by_format"]["short_candidate"][
+                "age_matched_velocity_index"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            result["cohort_median_current_views_per_day_by_format"],
+            {},
         )
 
 
