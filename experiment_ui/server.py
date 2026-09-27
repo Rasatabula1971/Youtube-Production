@@ -976,6 +976,8 @@ class JobManager:
 
             child_env = os.environ.copy()
             child_env["PYTHONUNBUFFERED"] = "1"
+            child_env["PYTHONUTF8"] = "1"
+            child_env["PYTHONIOENCODING"] = "utf-8"
 
             process = subprocess.Popen(
                 action["command"],
