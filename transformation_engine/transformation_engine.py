@@ -10,6 +10,7 @@ No model, network, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,14 @@ RESPONSES_DIR = OUTPUT_DIR / "concept_responses"
 CANDIDATES_FILE = OUTPUT_DIR / "concept_candidates.json"
 REJECTED_FILE = OUTPUT_DIR / "rejected_concepts.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_json(path: Path) -> Any:
@@ -437,6 +446,9 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    for stale_request in REQUESTS_DIR.glob("*.concept_request.json"):
+        stale_request.unlink()
+
     if not handoff_path.exists():
         summary = {
             "status": "WAITING_FOR_EXPERIMENT_02_HANDOFF",
@@ -527,6 +539,20 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
             continue
 
         request = load_json(request_path)
+        provenance = response.get("response_provenance")
+        if isinstance(provenance, dict):
+            expected_hash = sha256_file(request_path)
+            if provenance.get("request_sha256") != expected_hash:
+                rejected.append(
+                    {
+                        "response": str(response_path),
+                        "errors": [
+                            "model response provenance does not match current concept request"
+                        ],
+                    }
+                )
+                continue
+
         try:
             result = validate_response(response, request, config)
         except ValueError as exc:
