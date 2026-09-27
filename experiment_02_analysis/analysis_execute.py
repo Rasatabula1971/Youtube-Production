@@ -900,6 +900,9 @@ def run_batch_prepare(
     paths = sorted(profiles_dir.glob("*.json"))
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    for stale_request in REQUESTS_DIR.glob("*.analysis_request.json"):
+        stale_request.unlink()
+
     created = 0
     for profile_path in paths:
         profile = load_json(profile_path)
