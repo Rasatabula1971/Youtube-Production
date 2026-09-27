@@ -80,7 +80,7 @@ Examples:
 - 01.4 Plan requires measured 01.3 velocity evidence.
 - 01.4 Execute requires a READY expansion plan.
 - 01.5 Build requires completed 01.4 execution.
-- Experiment 02 Prepare requires the 01.5 study set.
+- Experiment 02 Prepare requires the human-approved 01.5 study set.
 - Model analysis requires prepared analysis requests.
 
 The UI does not bypass experiment gates.
