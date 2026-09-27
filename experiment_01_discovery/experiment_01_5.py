@@ -160,6 +160,14 @@ def build_handoff_packets(
         for topic in sorted(candidate.get("validated_topics", [])):
             topic_evidence = topic_cell(topic_velocity, topic, fmt)
             topic_ready, topic_reasons = evaluate_topic_evidence(topic_evidence, config)
+            niche = str(
+                (topic_evidence or {}).get("niche")
+                or (
+                    candidate.get("validated_niches", [""])[0]
+                    if candidate.get("validated_niches")
+                    else ""
+                )
+            )
 
             families = candidate_topic_families(candidate, topic)
             replicated, family_evidence = replicated_families(
@@ -203,6 +211,7 @@ def build_handoff_packets(
                     "age_days": candidate.get("age_days"),
                     "duration_seconds": candidate.get("duration_seconds"),
                     "format_candidate": fmt,
+                    "niche": niche,
                     "views": views,
                     "likes": candidate.get("likes"),
                     "topic": topic,
@@ -300,6 +309,7 @@ CSV_FIELDS = [
     "channel_id",
     "channel_title",
     "format_candidate",
+    "niche",
     "views",
     "likes",
     "topic",
@@ -351,6 +361,7 @@ def write_outputs(
                     "channel_id": packet.get("channel_id"),
                     "channel_title": packet.get("channel_title"),
                     "format_candidate": packet.get("format_candidate"),
+                    "niche": packet.get("niche"),
                     "views": packet.get("views"),
                     "likes": packet.get("likes"),
                     "topic": packet.get("topic"),
