@@ -1122,6 +1122,57 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp2_tone = "action"
         exp2_next = "Run Prepare Analysis Requests."
 
+    transform = transformation_artifact_state()
+    transform_requests = bool(transform["requests_ready"])
+    transform_candidates = bool(transform["candidates_ready"])
+    concept_gate = transform["concept_gate"]
+    concept_gate_status = str(
+        concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
+    )
+    concept_gate_complete = bool(transform["concept_gate_complete"])
+    research_ready = bool(transform["research_ready"])
+
+    if research_ready:
+        transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
+        transform_tone = "complete"
+        transform_next = "Proceed to Packaging / Research."
+    elif active_action in {
+        "transform_prepare",
+        "concept_generate",
+        "concept_gate_prepare",
+    }:
+        transform_human = "CONCEPT WORK RUNNING"
+        transform_tone = "running"
+        transform_next = "Wait for the current Transformation job to finish."
+    elif not synthesis_ready:
+        transform_human = "WAITING FOR EXPERIMENT 02"
+        transform_tone = "blocked"
+        transform_next = "Complete Experiment 02 synthesis first."
+    elif not transform_requests:
+        transform_human = "READY TO PREPARE CONCEPTS"
+        transform_tone = "ready"
+        transform_next = "Run Prepare Concept Requests."
+    elif not transform_candidates:
+        transform_human = "CONCEPT GENERATION NEEDED"
+        transform_tone = "action"
+        transform_next = "Run Generate Concept Candidates."
+    elif concept_gate_status == "READY_TO_PREPARE":
+        transform_human = "PREPARE CONCEPT GATE"
+        transform_tone = "action"
+        transform_next = "Run Prepare Concept Gate."
+    elif concept_gate_status == "AWAITING_HUMAN_DECISION":
+        transform_human = "HUMAN CONCEPT DECISION NEEDED"
+        transform_tone = "action"
+        transform_next = "Review concept candidates in Analyze & Create."
+    elif concept_gate_complete:
+        transform_human = "NO ACCEPTED CONCEPT"
+        transform_tone = "action"
+        transform_next = "Rework or regenerate concepts before research."
+    else:
+        transform_human = "CONCEPT WORK NEEDS ATTENTION"
+        transform_tone = "action"
+        transform_next = "Inspect the Concept Gate state."
+
     return [
         {
             "id": "01.3",
@@ -1282,6 +1333,43 @@ def stage_statuses() -> list[dict[str, Any]]:
             "ready": human_gate_ready,
             "current": human_gate_ready and not synthesis_ready,
         },
+        {
+            "id": "04",
+            "title": "Transformation / Concept",
+            "state": concept_gate_status,
+            "human_status": transform_human,
+            "tone": transform_tone,
+            "detail": (
+                "Turns validated mechanisms into original, source-independent "
+                "video concepts and stops for human selection."
+            ),
+            "next_action": transform_next,
+            "criteria": [
+                {
+                    "label": "Experiment 02 transformation handoff ready",
+                    "done": synthesis_ready,
+                },
+                {
+                    "label": "Concept requests prepared",
+                    "done": transform_requests,
+                },
+                {
+                    "label": "Valid concept candidates generated",
+                    "done": transform_candidates,
+                },
+                {
+                    "label": "Human Concept Gate complete",
+                    "done": concept_gate_complete,
+                },
+                {
+                    "label": "At least one concept accepted for research",
+                    "done": research_ready,
+                },
+            ],
+            "complete": research_ready,
+            "ready": synthesis_ready,
+            "current": synthesis_ready and not research_ready,
+        },
     ]
 
 def opportunity_research_state() -> dict[str, Any]:
@@ -1322,6 +1410,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     review_requests = exp2_artifacts["review_requests_current_count"] > 0
     reviewed = exp2_artifacts["reviewed_current_count"] > 0
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
+    transform = transformation_artifact_state()
+    transform_requests = bool(transform["requests_ready"])
+    transform_candidates = bool(transform["candidates_ready"])
+    concept_gate = transform["concept_gate"]
+    concept_gate_status = str(
+        concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
+    )
+    concept_gate_complete = bool(transform["concept_gate_complete"])
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -1677,6 +1773,56 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "transform_prepare": {
+            "enabled": synthesis_ready and not transform_requests,
+            "reason": (
+                "Experiment 02 synthesis is ready for mechanism-bound concept requests."
+                if synthesis_ready and not transform_requests
+                else (
+                    "Concept requests are already current."
+                    if transform_requests
+                    else "Complete Experiment 02 synthesis first."
+                )
+            ),
+        },
+        "concept_generate": {
+            "enabled": (
+                synthesis_ready
+                and transform_requests
+                and not transform_candidates
+            ),
+            "reason": (
+                "Current concept requests are ready for FAIR free-only generation."
+                if (
+                    synthesis_ready
+                    and transform_requests
+                    and not transform_candidates
+                )
+                else (
+                    "Valid concept candidates already exist."
+                    if transform_candidates
+                    else "Prepare current concept requests first."
+                )
+            ),
+        },
+        "concept_gate_prepare": {
+            "enabled": (
+                transform_candidates
+                and concept_gate_status == "READY_TO_PREPARE"
+            ),
+            "reason": (
+                "Validated concept candidates are ready for human review."
+                if (
+                    transform_candidates
+                    and concept_gate_status == "READY_TO_PREPARE"
+                )
+                else (
+                    "Concept Gate is already prepared or complete."
+                    if transform_candidates
+                    else "Generate valid concept candidates first."
+                )
+            ),
+        },
     }
 
 
@@ -1891,6 +2037,24 @@ def workflow_guidance(
             "next_title": "Prepare Analysis Requests",
         }
 
+    transform = transformation_artifact_state()
+    concept_gate = transform.get("concept_gate", {})
+    if (
+        transform.get("candidates_ready")
+        and concept_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_CONCEPT_GATE",
+            "current_action_id": None,
+            "current_title": "Review Concept Candidates",
+            "current_detail": (
+                "Inspect each original concept against the human acceptance "
+                "criteria. Accept, send for rework, or reject."
+            ),
+            "next_action_id": None,
+            "next_title": "Research / Packaging",
+        }
+
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
         gate_info = readiness.get(action_id, {})
         if gate_info.get("enabled"):
@@ -1980,6 +2144,8 @@ def status_payload() -> dict[str, Any]:
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
         "vision_review": vision_review_snapshot(),
+        "transformation": transformation_artifact_state(),
+        "concept_gate": concept_gate_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -2044,6 +2210,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/vision-review":
             self._send_json(vision_review_snapshot())
             return
+        if route == "/api/concept-gate":
+            self._send_json(concept_gate_snapshot())
+            return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
             video_id = str((query.get("video_id") or [""])[0])
@@ -2105,6 +2274,20 @@ class Handler(BaseHTTPRequestHandler):
                     observation=(
                         str(body["observation"])
                         if body.get("observation") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/concept-gate":
+                payload = apply_concept_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(
+                        str(body["note"])
+                        if body.get("note") is not None
                         else None
                     ),
                 )
