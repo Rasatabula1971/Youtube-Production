@@ -247,3 +247,18 @@ offline evidence-ingestion layer.
 The guided state checks exact current video IDs and artifact provenance. Old
 enriched profiles or analysis requests from a previous approved set do not count
 as current merely because a JSON file exists.
+
+
+## Visual structure step
+
+When both `yt-dlp` and `ffmpeg` are available, Analyze & Create inserts
+**Acquire Visual Structure** after **Acquire Source Evidence** and before
+**Prepare Analysis Requests**.
+
+This step streams a low-resolution rendition, saves no full video, and creates
+objective scene-transition timing evidence. It also retains an opening frame and
+a bounded set of timestamped scene frames for a future vision-analysis layer.
+
+If the first visual attempt fails, the guided workflow does not deadlock:
+transcript-only analysis becomes available and **Retry Visual Structure (Force)**
+is exposed under Tools & Diagnostics.
