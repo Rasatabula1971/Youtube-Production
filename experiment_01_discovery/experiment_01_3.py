@@ -763,7 +763,7 @@ def discover(
 
     for topic in config["topics"]:
         topic_name = str(topic["topic"])
-        topic_niche = str(topic["niche"])
+        topic_niche = str(topic.get("niche") or "unknown")
         target_formats = (
             sorted(topic_format_targets.get(topic_name, set()))
             if topic_format_targets is not None
