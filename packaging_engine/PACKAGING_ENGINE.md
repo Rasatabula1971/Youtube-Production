@@ -7,8 +7,10 @@ title / thumbnail / opening-frame packages before script drafting.
 
 It implements the project's package-before-script rule.
 
-The framework does not call a model or the network itself and does not rank
-package options.
+The deterministic framework does not call a model or the network itself and
+does not rank package options. The guided workflow may invoke the separate
+`package_model_runner.py`, which uses FAIR free-only routing and then returns
+responses to this deterministic validator.
 
 ## Input
 
@@ -59,9 +61,21 @@ Each proposed package must include:
 
 The title and thumbnail are treated as one communication unit.
 
+## Generate with FAIR
+
+The guided workflow can run all current requests through FAIR free-only routing:
+
+~~~powershell
+python .\packaging_engine\package_model_runner.py --mode batch
+~~~
+
+Each generated response is bound to the SHA-256 of its exact package request.
+Requests are bound to the current accepted-concept handoff. Paid inference is
+fail-closed.
+
 ## Apply
 
-Place completed response JSON under:
+For manual/offline use, place completed response JSON under:
 
 ~~~text
 packaging_engine/output/package_responses/
@@ -86,6 +100,9 @@ packaging_engine/output/
 
 Structural acceptance does not approve a package for use. Human Packaging Gate
 approval is still required.
+
+The guided UI uses `package_review.py` to review one package at a time and
+enforces at most one accepted package per concept.
 
 ## Boundary
 
