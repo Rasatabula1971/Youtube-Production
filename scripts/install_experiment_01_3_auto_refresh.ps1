@@ -10,7 +10,7 @@ if ($EveryHours -lt 1) {
 }
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Runner = Join-Path $ProjectRoot "experiment_01_discovery\scheduled_refresh.py"
+$Runner = Join-Path $ProjectRoot "experiment_01_discovery\opportunity_research.py"
 
 if (-not (Test-Path $Runner)) {
     throw "Cannot find scheduled refresh runner: $Runner"
@@ -25,8 +25,8 @@ if (-not (Test-Path $PythonPath)) {
     throw "Cannot find Python executable: $PythonPath"
 }
 
-$TaskName = "YouTube Production - Experiment 01.3 Auto Refresh"
-$TaskCommand = "`"$PythonPath`" `"$Runner`""
+$TaskName = "YouTube Production - Opportunity Research Continue"
+$TaskCommand = "`"$PythonPath`" `"$Runner`" --mode continue"
 
 $Arguments = @(
     "/Create",
@@ -48,7 +48,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "Auto refresh installed."
-Write-Host "The task is self-limiting: it skips when no cohort exists, the cohort"
-Write-Host "is insufficient, a recent snapshot already exists, another refresh is"
-Write-Host "running, or the current cohort already has enough evidence for 01.4."
+Write-Host "Opportunity Research continuation installed."
+Write-Host "The task wakes every $EveryHours hour(s), takes a frozen-cohort snapshot"
+Write-Host "only when due, then automatically advances through 01.4 and 01.5 when"
+Write-Host "velocity evidence becomes ready."
