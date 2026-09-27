@@ -1,6 +1,7 @@
 import unittest
 
 from experiment_02 import (
+    SOURCE_STUDY_SET,
     aggregate_profiles,
     build_profile_from_study_item,
     prepare_work_packets,
@@ -80,6 +81,12 @@ class Experiment02Tests(unittest.TestCase):
                 "transformation_opportunities": [],
             },
         }
+
+    def test_experiment_02_uses_only_human_approved_study_set(self):
+        self.assertEqual(
+            SOURCE_STUDY_SET.name,
+            "approved_study_set.json",
+        )
 
     def test_prepare_is_offline_and_creates_empty_profile(self):
         study = [

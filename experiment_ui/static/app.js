@@ -8,6 +8,7 @@ const jobMeta = document.getElementById("jobMeta");
 const logView = document.getElementById("logView");
 const stopJob = document.getElementById("stopJob");
 const toast = document.getElementById("toast");
+const opportunityGate = document.getElementById("opportunityGate");
 
 let jobTimer = null;
 
@@ -44,6 +45,196 @@ async function api(url, options) {
     throw new Error(payload.error || ("Request failed (" + response.status + ")"));
   }
   return payload;
+}
+
+function compactNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1
+  }).format(number);
+}
+
+function humanizeToken(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, function (match) { return match.toUpperCase(); });
+}
+
+function safeYoutubeUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase();
+    if (
+      url.protocol === "https:" &&
+      (host === "youtube.com" || host === "www.youtube.com" || host === "youtu.be")
+    ) {
+      return url.href;
+    }
+  } catch (_) {}
+  return "";
+}
+
+function renderOpportunityGate(gate) {
+  if (!opportunityGate) return;
+
+  if (!gate || !(gate.opportunities || []).length) {
+    opportunityGate.innerHTML =
+      '<p class="gate-empty">Waiting for Experiment 01.5 to create a study set.</p>';
+    return;
+  }
+
+  const status = escapeHtml(gate.status || "AWAITING_HUMAN_DECISION");
+  let html =
+    '<div class="gate-summary">' +
+    '<span class="status-chip ' +
+    (gate.ready_for_experiment_02 ? "success" : "running") +
+    '">' + status + '</span>' +
+    '<span>' +
+    (gate.ready_for_experiment_02
+      ? "Experiment 02 is unlocked."
+      : "Experiment 02 stays locked until your decision is complete.") +
+    '</span></div>';
+
+  (gate.opportunities || []).forEach(function (opportunity) {
+    const evidence = opportunity.topic_evidence || {};
+    const decision = opportunity.decision || "PENDING";
+
+    html += '<article class="opportunity-card">' +
+      '<div class="opportunity-head">' +
+      '<div>' +
+      '<div class="opportunity-label">OPPORTUNITY</div>' +
+      '<h3>' + escapeHtml(humanizeToken(opportunity.topic)) + '</h3>' +
+      '<p>' + escapeHtml(humanizeToken(opportunity.format_candidate)) + '</p>' +
+      '</div>' +
+      '<span class="decision-chip decision-' +
+      escapeHtml(decision.toLowerCase()) + '">' +
+      escapeHtml(decision) + '</span>' +
+      '</div>' +
+
+      '<div class="metric-grid">' +
+      '<div><span>Velocity index</span><strong>' +
+      escapeHtml(evidence.age_matched_velocity_index == null ? "—" : evidence.age_matched_velocity_index) +
+      '</strong></div>' +
+      '<div><span>Independent channels</span><strong>' +
+      escapeHtml(evidence.unique_channels == null ? "—" : evidence.unique_channels) +
+      '</strong></div>' +
+      '<div><span>Velocity samples</span><strong>' +
+      escapeHtml(evidence.velocity_sample_count == null ? "—" : evidence.velocity_sample_count) +
+      '</strong></div>' +
+      '<div><span>Median views</span><strong>' +
+      escapeHtml(compactNumber(evidence.median_views)) +
+      '</strong></div>' +
+      '<div><span>Current views/day</span><strong>' +
+      escapeHtml(compactNumber(evidence.median_current_views_per_day)) +
+      '</strong></div>' +
+      '<div><span>Confidence</span><strong>' +
+      escapeHtml(evidence.confidence || "—") +
+      '</strong></div>' +
+      '</div>' +
+
+      '<div class="example-grid">';
+
+    (opportunity.selected_examples || []).forEach(function (example, index) {
+      const youtubeUrl = safeYoutubeUrl(example.youtube_url);
+      const kept = example.decision === "KEEP";
+      html += '<section class="example-card">' +
+        '<div class="example-topline">' +
+        '<span>EXAMPLE ' + (index + 1) + '</span>' +
+        '<span class="decision-chip decision-' +
+        escapeHtml(String(example.decision || "PENDING").toLowerCase()) + '">' +
+        escapeHtml(example.decision || "PENDING") + '</span>' +
+        '</div>' +
+        '<img class="example-thumbnail" src="https://i.ytimg.com/vi/' +
+        escapeHtml(encodeURIComponent(example.video_id)) +
+        '/hqdefault.jpg" alt="" loading="lazy">' +
+        '<h4>' + escapeHtml(example.title || example.video_id) + '</h4>' +
+        '<p class="example-channel">' +
+        escapeHtml(example.channel_title || "Unknown channel") + '</p>' +
+        '<div class="example-stats">' +
+        '<span>' + escapeHtml(compactNumber(example.views)) + ' views</span>' +
+        '<span>' + escapeHtml(example.duration_seconds == null ? "—" : example.duration_seconds) + ' sec</span>' +
+        '<span>' + escapeHtml(example.age_days == null ? "—" : Math.round(Number(example.age_days))) + ' days old</span>' +
+        '</div>' +
+        '<p class="example-families"><strong>Matched:</strong> ' +
+        escapeHtml((example.matched_families || []).join(", ") || "—") + '</p>' +
+        '<div class="example-actions">' +
+        (youtubeUrl
+          ? '<a class="external-button" href="' + escapeHtml(youtubeUrl) +
+            '" target="_blank" rel="noopener noreferrer">Open on YouTube</a>'
+          : '') +
+        '<button class="gate-button keep" data-gate-action="KEEP_EXAMPLE"' +
+        ' data-opportunity-id="' + escapeHtml(opportunity.opportunity_id) + '"' +
+        ' data-video-id="' + escapeHtml(example.video_id) + '"' +
+        (kept ? " disabled" : "") + '>' +
+        (kept ? "Kept" : "Keep Example") + '</button>' +
+        '<button class="gate-button replace" data-gate-action="REPLACE_EXAMPLE"' +
+        ' data-opportunity-id="' + escapeHtml(opportunity.opportunity_id) + '"' +
+        ' data-video-id="' + escapeHtml(example.video_id) + '"' +
+        (opportunity.alternatives_available > 0 ? "" : " disabled") +
+        '>Replace Example</button>' +
+        '</div>' +
+        '</section>';
+    });
+
+    html += '</div>' +
+      '<div class="topic-actions">' +
+      '<div class="topic-action-copy">' +
+      '<strong>Your topic decision</strong>' +
+      '<span>Keep or replace every example before approving the topic.</span>' +
+      '</div>' +
+      '<div class="topic-action-buttons">' +
+      '<button class="gate-button approve" data-gate-action="APPROVE_TOPIC"' +
+      ' data-opportunity-id="' + escapeHtml(opportunity.opportunity_id) + '"' +
+      (opportunity.can_approve && decision !== "APPROVE" ? "" : " disabled") +
+      '>Approve Topic</button>' +
+      '<button class="gate-button hold" data-gate-action="HOLD_TOPIC"' +
+      ' data-opportunity-id="' + escapeHtml(opportunity.opportunity_id) + '"' +
+      (decision === "HOLD" ? " disabled" : "") + '>Hold / Review</button>' +
+      '<button class="gate-button reject" data-gate-action="REJECT_TOPIC"' +
+      ' data-opportunity-id="' + escapeHtml(opportunity.opportunity_id) + '"' +
+      (decision === "REJECT" ? " disabled" : "") + '>Reject Topic</button>' +
+      '</div></div>' +
+      '</article>';
+  });
+
+  opportunityGate.innerHTML = html;
+
+  opportunityGate.querySelectorAll("[data-gate-action]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      const action = button.dataset.gateAction;
+      if (
+        action === "REJECT_TOPIC" &&
+        !confirm("Reject this opportunity and keep Experiment 02 locked for it?")
+      ) {
+        return;
+      }
+      submitGateAction(
+        action,
+        button.dataset.opportunityId,
+        button.dataset.videoId || null
+      );
+    });
+  });
+}
+
+async function submitGateAction(action, opportunityId, videoId) {
+  try {
+    const payload = await api("/api/opportunity-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        action: action,
+        opportunity_id: opportunityId,
+        video_id: videoId
+      })
+    });
+    renderOpportunityGate(payload);
+    showToast("Opportunity gate updated.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 function stateClass(stage) {
@@ -174,6 +365,7 @@ async function loadStatus() {
     const data = await api("/api/status");
     renderStages(data.stages);
     renderActions(data.actions);
+    renderOpportunityGate(data.opportunity_gate);
     renderJob(data.job);
 
     currentNotice.querySelector("strong").textContent =

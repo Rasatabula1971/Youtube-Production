@@ -37,6 +37,15 @@ EXP14_DIR = EXP1_OUTPUT / "experiment_01_4"
 EXP14_CONFIG = PROJECT_ROOT / "experiment_01_discovery" / "experiment_01_4_config.json"
 EXP15_DIR = EXP1_OUTPUT / "experiment_01_5"
 
+EXP1_MODULE_DIR = PROJECT_ROOT / "experiment_01_discovery"
+if str(EXP1_MODULE_DIR) not in sys.path:
+    sys.path.insert(0, str(EXP1_MODULE_DIR))
+
+from opportunity_gate import (  # noqa: E402
+    apply_gate_action,
+    gate_snapshot as opportunity_gate_snapshot,
+)
+
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 EXP2_OUTPUT = EXP2_DIR / "output"
 SOURCE_ACQ_OUTPUT = PROJECT_ROOT / "source_acquisition" / "output"
@@ -512,10 +521,23 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp14_next = "Run Build 01.4 Expansion Plan."
 
     study_set_ready = (EXP15_DIR / "study_set.json").exists()
-    if study_set_ready:
-        exp15_human = "STAGE COMPLETE"
+    gate = opportunity_gate_snapshot()
+    human_gate_ready = bool(gate.get("ready_for_experiment_02"))
+    human_gate_complete = bool(gate.get("gate_complete"))
+    human_gate_status = str(gate.get("status") or "WAITING_FOR_01_5")
+
+    if human_gate_ready:
+        exp15_human = "HUMAN APPROVED — STAGE COMPLETE"
         exp15_tone = "complete"
         exp15_next = "Proceed to Experiment 02."
+    elif study_set_ready and human_gate_complete:
+        exp15_human = "TOPIC NOT APPROVED"
+        exp15_tone = "action"
+        exp15_next = "Change the opportunity decision or return to discovery."
+    elif study_set_ready:
+        exp15_human = "AWAITING HUMAN OPPORTUNITY GATE"
+        exp15_tone = "action"
+        exp15_next = "Review the topic and selected videos below."
     elif active_action == "exp15_build":
         exp15_human = "BUILDING HANDOFF"
         exp15_tone = "running"
@@ -558,6 +580,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         exp2_human = "WAITING FOR 01.5"
         exp2_tone = "blocked"
         exp2_next = "Complete Experiment 01.5 first."
+    elif not human_gate_ready:
+        exp2_human = "WAITING FOR HUMAN OPPORTUNITY GATE"
+        exp2_tone = "blocked"
+        exp2_next = "Approve at least one opportunity before Experiment 02."
     elif reviewed or analyzed:
         exp2_human = "SYNTHESIS NEEDED"
         exp2_tone = "action"
@@ -625,11 +651,15 @@ def stage_statuses() -> list[dict[str, Any]]:
         {
             "id": "01.5",
             "title": "Opportunity Handoff",
-            "state": handoff_status
-            or (
-                "READY_TO_BUILD"
-                if exp14_complete
-                else "WAITING_FOR_01_4"
+            "state": (
+                human_gate_status
+                if study_set_ready
+                else handoff_status
+                or (
+                    "READY_TO_BUILD"
+                    if exp14_complete
+                    else "WAITING_FOR_01_4"
+                )
             ),
             "human_status": exp15_human,
             "tone": exp15_tone,
@@ -641,22 +671,33 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": handoff_status is not None,
                 },
                 {
-                    "label": "Experiment 02 study set exists",
+                    "label": "Machine study set exists",
                     "done": study_set_ready,
                 },
+                {
+                    "label": "Human opportunity approved",
+                    "done": human_gate_ready,
+                },
             ],
-            "complete": study_set_ready,
+            "complete": human_gate_ready,
             "ready": exp14_complete,
-            "current": exp14_complete and not study_set_ready,
+            "current": exp14_complete and not human_gate_ready,
         },
         {
             "id": "02",
             "title": "Why Did It Work?",
-            "state": analysis_status
-            or (
-                "READY_TO_PREPARE"
-                if study_set_ready
-                else "WAITING_FOR_01_5"
+            "state": (
+                analysis_status
+                if human_gate_ready and analysis_status
+                else (
+                    "READY_TO_PREPARE"
+                    if human_gate_ready
+                    else (
+                        "WAITING_FOR_HUMAN_OPPORTUNITY_GATE"
+                        if study_set_ready
+                        else "WAITING_FOR_01_5"
+                    )
+                )
             ),
             "human_status": exp2_human,
             "tone": exp2_tone,
@@ -677,8 +718,8 @@ def stage_statuses() -> list[dict[str, Any]]:
                 },
             ],
             "complete": synthesis_ready,
-            "ready": study_set_ready,
-            "current": study_set_ready and not synthesis_ready,
+            "ready": human_gate_ready,
+            "current": human_gate_ready and not synthesis_ready,
         },
     ]
 
@@ -693,6 +734,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     plan_ready = exp14_plan_status() == "READY"
     exp14_complete = exp14_execution_status() == "COMPLETE"
     study_set = (EXP15_DIR / "study_set.json").exists()
+    human_gate = opportunity_gate_snapshot()
+    human_gate_ready = bool(human_gate.get("ready_for_experiment_02"))
 
     enriched = has_json_files(EXP2_OUTPUT / "profiles_enriched")
     requests = has_json_files(EXP2_OUTPUT / "analysis_requests")
@@ -771,11 +814,15 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "exp2_prepare": {
-            "enabled": study_set,
+            "enabled": human_gate_ready,
             "reason": (
-                "01.5 study set available."
-                if study_set
-                else "Waiting for 01.5 study set."
+                "Human-approved opportunity set available."
+                if human_gate_ready
+                else (
+                    "Review and approve the 01.5 opportunity gate first."
+                    if study_set
+                    else "Waiting for 01.5 study set."
+                )
             ),
         },
         "fair_doctor": {
@@ -783,35 +830,51 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "reason": "Safe diagnostic; no inference.",
         },
         "analysis_batch_prepare": {
-            "enabled": enriched,
+            "enabled": human_gate_ready and enriched,
             "reason": (
-                "Enriched profiles available."
-                if enriched
-                else "Evidence ingestion must create enriched profiles first."
+                "Human-approved enriched profiles available."
+                if human_gate_ready and enriched
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Evidence ingestion must create enriched profiles first."
+                )
             ),
         },
         "analysis_model_one": {
-            "enabled": requests,
+            "enabled": human_gate_ready and requests,
             "reason": (
-                "Analysis requests available."
-                if requests
-                else "Prepare analysis requests first."
+                "Human-approved analysis requests available."
+                if human_gate_ready and requests
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Prepare analysis requests first."
+                )
             ),
         },
         "human_review_prepare": {
-            "enabled": analyzed,
+            "enabled": human_gate_ready and analyzed,
             "reason": (
-                "Analyzed profiles available."
-                if analyzed
-                else "Run model or human analysis first."
+                "Human-approved analyzed profiles available."
+                if human_gate_ready and analyzed
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Run model or human analysis first."
+                )
             ),
         },
         "synthesis_build": {
-            "enabled": analyzed or reviewed,
+            "enabled": human_gate_ready and (analyzed or reviewed),
             "reason": (
-                "Analyzed/reviewed profiles available."
-                if analyzed or reviewed
-                else "Waiting for Experiment 02 analyzed profiles."
+                "Human-approved analyzed/reviewed profiles available."
+                if human_gate_ready and (analyzed or reviewed)
+                else (
+                    "Human opportunity approval is required first."
+                    if not human_gate_ready
+                    else "Waiting for Experiment 02 analyzed profiles."
+                )
             ),
         },
     }
@@ -989,6 +1052,7 @@ def status_payload() -> dict[str, Any]:
             "exists": EXP13_CHECKPOINT.exists(),
             "status": checkpoint_status(),
         },
+        "opportunity_gate": opportunity_gate_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -1020,6 +1084,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
@@ -1046,6 +1111,9 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if route == "/api/opportunity-gate":
+            self._send_json(opportunity_gate_snapshot())
+            return
 
         self.send_error(404)
 
@@ -1069,6 +1137,19 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/stop":
                 job = JOB_MANAGER.stop()
                 self._send_json({"job": job})
+                return
+
+            if route == "/api/opportunity-gate":
+                payload = apply_gate_action(
+                    action=str(body.get("action", "")),
+                    opportunity_key=str(body.get("opportunity_id", "")),
+                    video_id=(
+                        str(body["video_id"])
+                        if body.get("video_id") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
                 return
 
             if route == "/api/open":
