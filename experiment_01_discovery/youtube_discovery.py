@@ -290,7 +290,7 @@ def api_get(
                     "YouTube rejected the request "
                     f"(HTTP {exc.code}{detail}). "
                     "Read the API error above."
-                )
+                ) from exc
 
             if attempt == 3:
                 raise
@@ -932,7 +932,7 @@ def main() -> None:
 
         raise SystemExit(
             f"Invalid niches.json: {exc}"
-        )
+        ) from exc
 
     if "niches" not in config:
 
