@@ -122,6 +122,11 @@ def study_set_ready() -> bool:
     return isinstance(payload, list) and bool(payload)
 
 
+def exp14_plan_ready() -> bool:
+    plan = read_json(EXP14_DIR / "expansion_plan.json")
+    return plan.get("status") == "READY"
+
+
 def exp14_complete() -> bool:
     summary = read_json(EXP14_DIR / "summary.json")
     return summary.get("execution_status") == "COMPLETE"
@@ -181,45 +186,46 @@ def advance_downstream(
 
     remove_continuation_task()
 
-    plan_code = run_command(
-        [
-            python_executable,
-            str(EXP14_SCRIPT),
-            "--mode",
-            "plan",
-        ],
-        "AUTOMATIC STEP — BUILD 01.4 EXPANSION PLAN",
-    )
-    if plan_code != 0:
-        return write_state(
-            "FAILED_01_4_PLAN",
-            "Experiment 01.4 planning failed.",
-            refresh_attempts=refresh_attempts,
+    if not exp14_complete() and not exp14_plan_ready():
+        plan_code = run_command(
+            [
+                python_executable,
+                str(EXP14_SCRIPT),
+                "--mode",
+                "plan",
+            ],
+            "AUTOMATIC STEP — BUILD 01.4 EXPANSION PLAN",
         )
+        if plan_code != 0:
+            return write_state(
+                "FAILED_01_4_PLAN",
+                "Experiment 01.4 planning failed.",
+                refresh_attempts=refresh_attempts,
+            )
 
-    plan = read_json(EXP14_DIR / "expansion_plan.json")
-    if plan.get("status") != "READY":
+    if not exp14_complete() and not exp14_plan_ready():
         return write_state(
             "NEEDS_HUMAN_ATTENTION",
             "01.4 plan did not become READY despite velocity evidence.",
             refresh_attempts=refresh_attempts,
         )
 
-    execute_code = run_command(
-        [
-            python_executable,
-            str(EXP14_SCRIPT),
-            "--mode",
-            "execute",
-        ],
-        "AUTOMATIC STEP — EXECUTE 01.4 EXPANSION",
-    )
-    if execute_code != 0 or not exp14_complete():
-        return write_state(
-            "FAILED_01_4_EXECUTION",
-            "Experiment 01.4 did not complete successfully.",
-            refresh_attempts=refresh_attempts,
+    if not exp14_complete():
+        execute_code = run_command(
+            [
+                python_executable,
+                str(EXP14_SCRIPT),
+                "--mode",
+                "execute",
+            ],
+            "AUTOMATIC STEP — EXECUTE 01.4 EXPANSION",
         )
+        if execute_code != 0 or not exp14_complete():
+            return write_state(
+                "FAILED_01_4_EXECUTION",
+                "Experiment 01.4 did not complete successfully.",
+                refresh_attempts=refresh_attempts,
+            )
 
     handoff_code = run_command(
         [
