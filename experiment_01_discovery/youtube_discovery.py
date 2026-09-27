@@ -150,17 +150,39 @@ def load_env_file(path: Path) -> None:
 # API ERROR DISPLAY
 # ============================================================
 
-def display_http_error(
+def read_http_error(
     exc: urllib.error.HTTPError,
-) -> None:
-
+) -> tuple[str, str | None]:
     try:
         body = exc.read().decode(
             "utf-8",
             errors="replace",
         )
     except Exception:
-        body = "<Could not read response body>"
+        return "<Could not read response body>", None
+
+    reason: str | None = None
+    try:
+        parsed = json.loads(body)
+        errors = (
+            parsed.get("error", {}).get("errors", [])
+            if isinstance(parsed, dict)
+            else []
+        )
+        if errors and isinstance(errors[0], dict):
+            value = errors[0].get("reason")
+            if value:
+                reason = str(value)
+    except json.JSONDecodeError:
+        pass
+
+    return body, reason
+
+
+def display_http_error(
+    exc: urllib.error.HTTPError,
+    body: str,
+) -> None:
 
     print()
     print("=" * 60)
@@ -238,17 +260,61 @@ def api_get(
 
         except urllib.error.HTTPError as exc:
 
-            display_http_error(exc)
+            body, youtube_reason = read_http_error(exc)
+            display_http_error(exc, body)
 
-            if 400 <= exc.code < 500:
+            retryable = (
+                500 <= exc.code < 600
+                or exc.code == 429
+                or youtube_reason in {
+                    "rateLimitExceeded",
+                    "userRateLimitExceeded",
+                    "backendError",
+                    "internalError",
+                }
+            )
 
+            if not retryable:
+                detail = (
+                    f" reason={youtube_reason}"
+                    if youtube_reason
+                    else ""
+                )
                 raise SystemExit(
-                    "YouTube rejected the request. "
+                    "YouTube rejected the request "
+                    f"(HTTP {exc.code}{detail}). "
                     "Read the API error above."
                 )
 
             if attempt == 3:
                 raise
+
+            retry_after = None
+            try:
+                retry_after_value = exc.headers.get("Retry-After")
+                if retry_after_value:
+                    retry_after = float(retry_after_value)
+            except (AttributeError, TypeError, ValueError):
+                retry_after = None
+
+            wait_seconds = (
+                max(0.0, retry_after)
+                if retry_after is not None
+                else float(2 ** attempt)
+            )
+
+            print(
+                "Retryable YouTube API error "
+                f"(HTTP {exc.code}"
+                + (
+                    f", reason={youtube_reason}"
+                    if youtube_reason
+                    else ""
+                )
+                + f"). Retrying in {wait_seconds:g}s..."
+            )
+
+            time.sleep(wait_seconds)
 
         except urllib.error.URLError as exc:
 
@@ -1170,6 +1236,12 @@ def main() -> None:
                 "title":
                     snippet.get(
                         "title",
+                        "",
+                    ),
+
+                "description":
+                    snippet.get(
+                        "description",
                         "",
                     ),
 
