@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$TaskName = "YouTube Production - Experiment 01.3 Auto Refresh"
+$TaskName = "YouTube Production - Opportunity Research Continue"
 
 Write-Host "Removing task: $TaskName"
 
