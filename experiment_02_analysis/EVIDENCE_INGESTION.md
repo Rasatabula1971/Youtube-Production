@@ -214,3 +214,53 @@ become claim evidence.
 If visual acquisition fails after a valid transcript is available, the guided
 workflow may continue with transcript-only analysis. A force-retry remains
 available under **Tools & Diagnostics**.
+
+
+## Human-gated visual observation review
+
+After visual-structure sampling, Experiment 02 can prepare a bounded semantic
+review set from the retained opening/scene frames:
+
+`experiment_02_analysis/vision_review.py`
+
+Prepare:
+
+~~~powershell
+python .\experiment_02_analysis\vision_review.py --mode prepare --provider auto
+~~~
+
+The default `auto` mode behaves as follows:
+
+- if `EXPERIMENT_02_VISION_MODEL` names an installed model in local Ollama,
+  the model proposes a factual frame description;
+- otherwise the packet is prepared for human-only review.
+
+The project `.env` may contain:
+
+~~~text
+EXPERIMENT_02_VISION_MODEL=
+OLLAMA_HOST=http://127.0.0.1:11434
+~~~
+
+The Ollama host is intentionally restricted to localhost. No paid/cloud vision
+provider is required.
+
+### Evidence rule
+
+A model proposal is **not evidence**.
+
+Every retained frame remains `PENDING` until a human:
+
+- accepts the proposed observation;
+- edits it and accepts the edited observation; or
+- rejects the frame.
+
+Only accepted observations are written as Experiment 02 evidence.
+
+Accepted scene-frame observations become `visual_note` evidence tied to the
+actual frame file SHA-256. An accepted opening-frame observation becomes
+`opening_frame` evidence. Rejected frames contribute no semantic evidence.
+
+The review set is bounded to the opening frame plus at most eight evenly sampled
+scene frames per source video, preventing the review UI from becoming another
+long scrolling page.
