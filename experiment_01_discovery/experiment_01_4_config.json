@@ -37,41 +37,87 @@
     "ea sports"
   ],
   "duration_filters": {
-    "short_candidate": ["short"],
-    "long_form_candidate": ["medium", "long"]
+    "short_candidate": [
+      "short"
+    ],
+    "long_form_candidate": [
+      "medium",
+      "long"
+    ]
   },
   "topic_definitions": {
     "gearbox_transmission": {
       "query_root": "F1 gearbox",
-      "match_terms": ["gearbox", "transmission", "gear ratio", "gearing"]
+      "match_terms": [
+        "gearbox",
+        "transmission",
+        "gear ratio",
+        "gearing"
+      ],
+      "niche": "automotive_racing"
     },
     "brakes": {
       "query_root": "F1 brakes",
-      "match_terms": ["brake", "brakes"]
+      "match_terms": [
+        "brake",
+        "brakes"
+      ],
+      "niche": "automotive_racing"
     },
     "tyres_tires": {
       "query_root": "F1 tyres",
-      "match_terms": ["tyre", "tyres", "tire", "tires"]
+      "match_terms": [
+        "tyre",
+        "tyres",
+        "tire",
+        "tires"
+      ],
+      "niche": "automotive_racing"
     },
     "steering": {
       "query_root": "F1 steering",
-      "match_terms": ["steering"]
+      "match_terms": [
+        "steering"
+      ],
+      "niche": "automotive_racing"
     },
     "suspension_chassis": {
       "query_root": "F1 suspension",
-      "match_terms": ["suspension", "chassis"]
+      "match_terms": [
+        "suspension",
+        "chassis"
+      ],
+      "niche": "automotive_racing"
     },
     "aerodynamics_downforce": {
       "query_root": "F1 aerodynamics",
-      "match_terms": ["aerodynamic", "aerodynamics", "aero", "downforce", "diffuser", "drs"]
+      "match_terms": [
+        "aerodynamic",
+        "aerodynamics",
+        "aero",
+        "downforce",
+        "diffuser",
+        "drs"
+      ],
+      "niche": "automotive_racing"
     },
     "engine_power_unit": {
       "query_root": "F1 engine",
-      "match_terms": ["engine", "power unit", "turbo", "hybrid"]
+      "match_terms": [
+        "engine",
+        "power unit",
+        "turbo",
+        "hybrid"
+      ],
+      "niche": "automotive_racing"
     },
     "pit_stops": {
       "query_root": "F1 pit stop",
-      "match_terms": ["pit stop", "pitstop"]
+      "match_terms": [
+        "pit stop",
+        "pitstop"
+      ],
+      "niche": "automotive_racing"
     }
   },
   "query_families": [
