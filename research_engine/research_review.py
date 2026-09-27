@@ -153,9 +153,12 @@ def snapshot() -> dict[str, Any]:
 
     pending = sum(item["decision"] == "PENDING" for item in claims)
     verified_statuses = []
+    current_concept_ids = {bundle["concept_id"] for bundle in requests}
     if state.get("status") == "COMPLETE" and VERIFIED_DIR.exists():
         for path in sorted(VERIFIED_DIR.glob("*.verified_research_package.json")):
             payload = load_json(path)
+            if str(payload.get("concept_id", "")) not in current_concept_ids:
+                continue
             verified_statuses.append(
                 {
                     "concept_id": payload.get("concept_id"),
@@ -203,6 +206,16 @@ def finalize_if_complete(
 
     REVIEWED_DIR.mkdir(parents=True, exist_ok=True)
     VERIFIED_DIR.mkdir(parents=True, exist_ok=True)
+    current_concept_ids = {bundle["concept_id"] for bundle in requests}
+    for directory, pattern in (
+        (REVIEWED_DIR, "*.research_gate_reviewed.json"),
+        (VERIFIED_DIR, "*.verified_research_package.json"),
+    ):
+        for stale_path in directory.glob(pattern):
+            payload = load_json(stale_path)
+            if str(payload.get("concept_id", "")) not in current_concept_ids:
+                stale_path.unlink()
+
     summaries = []
     for bundle in requests:
         concept_id = bundle["concept_id"]
