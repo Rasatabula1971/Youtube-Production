@@ -543,12 +543,12 @@ def aggregate_expansion_evidence(
         )
         niche = next(
             (
-                str(item.get("niche"))
-                for item in rows
-                for item in item.get("query_provenance", [])
-                if item.get("topic") == topic
-                and item.get("family") == family
-                and item.get("niche")
+                str(provenance.get("niche"))
+                for row in rows
+                for provenance in row.get("query_provenance", [])
+                if provenance.get("topic") == topic
+                and provenance.get("family") == family
+                and provenance.get("niche")
             ),
             "",
         )
