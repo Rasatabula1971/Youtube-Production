@@ -19,6 +19,7 @@ class OpportunityGateTests(unittest.TestCase):
                 "channel_id": "c1",
                 "channel_title": "Channel 1",
                 "topic": "tyres_tires",
+                "niche": "automotive_racing",
                 "format_candidate": "short_candidate",
                 "views": 2_000_000,
                 "age_days": 120,
@@ -38,6 +39,7 @@ class OpportunityGateTests(unittest.TestCase):
                 "channel_id": "c2",
                 "channel_title": "Channel 2",
                 "topic": "tyres_tires",
+                "niche": "automotive_racing",
                 "format_candidate": "short_candidate",
                 "views": 1_500_000,
                 "age_days": 130,
@@ -60,6 +62,7 @@ class OpportunityGateTests(unittest.TestCase):
                 "channel_id": "c3",
                 "channel_title": "Channel 3",
                 "topic": "tyres_tires",
+                "niche": "automotive_racing",
                 "format_candidate": "short_candidate",
                 "views": 1_000_000,
                 "age_days": 110,
@@ -101,6 +104,10 @@ class OpportunityGateTests(unittest.TestCase):
                 opportunity = snapshot["opportunities"][0]
                 key = opportunity["opportunity_id"]
 
+                self.assertEqual(
+                    opportunity["niche"],
+                    "automotive_racing",
+                )
                 self.assertFalse(opportunity["can_approve"])
                 with self.assertRaisesRegex(ValueError, "Review every selected example"):
                     gate.apply_gate_action(
