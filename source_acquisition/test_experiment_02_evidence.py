@@ -185,6 +185,79 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
         self.assertIn("rate-limited", result["message"].lower())
         ingest.assert_not_called()
 
+    def test_local_fallback_downloads_audio_transcribes_and_deletes_audio(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            output_dir = acquisition.ACQUISITION_ROOT / "abc123"
+            output_dir.mkdir()
+
+            stack.enter_context(
+                patch.object(acquisition, "local_transcription_available", return_value=True)
+            )
+
+            def fake_run(command, **kwargs):
+                audio = output_dir / "abc123.fallback.wav"
+                audio.write_bytes(b"audio")
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                )
+
+            stack.enter_context(
+                patch.object(acquisition.subprocess, "run", side_effect=fake_run)
+            )
+
+            def fake_whisper(audio_path, *, output_dir, model=None):
+                (output_dir / f"{audio_path.stem}.txt").write_text(
+                    "Locally transcribed text.",
+                    encoding="utf-8",
+                )
+                return subprocess.CompletedProcess(
+                    args=["whisper"],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                )
+
+            stack.enter_context(
+                patch.object(acquisition, "run_local_whisper", side_effect=fake_whisper)
+            )
+
+            result = acquisition.transcribe_audio_fallback(
+                yt_dlp="yt-dlp-test",
+                url="https://www.youtube.com/watch?v=abc123",
+                video_id="abc123",
+                output_dir=output_dir,
+            )
+
+            transcript = output_dir / "abc123.fallback.txt"
+            audio = output_dir / "abc123.fallback.wav"
+
+            self.assertEqual(result["status"], "READY")
+            self.assertTrue(transcript.exists())
+            self.assertFalse(audio.exists())
+
+    def test_local_fallback_reports_unavailable_without_whisper(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            output_dir = root / "out"
+            output_dir.mkdir()
+            stack.enter_context(
+                patch.object(acquisition, "local_transcription_available", return_value=False)
+            )
+
+            result = acquisition.transcribe_audio_fallback(
+                yt_dlp="yt-dlp-test",
+                url="https://www.youtube.com/watch?v=abc123",
+                video_id="abc123",
+                output_dir=output_dir,
+            )
+
+        self.assertEqual(result["status"], "LOCAL_TRANSCRIBER_UNAVAILABLE")
+
     def test_existing_transcript_reuses_files_and_skips_ytdlp(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
