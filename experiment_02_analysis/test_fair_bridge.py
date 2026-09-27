@@ -47,6 +47,11 @@ class BrokenFair:
         raise TypeError("constructor contract changed")
 
 
+class CloseFailingFair(FakeFair):
+    async def close(self):
+        raise RuntimeError("close failed")
+
+
 def fake_module(fair_class):
     module = types.ModuleType("fair")
     module.FAIR = fair_class
@@ -91,6 +96,31 @@ class FairBridgeTests(unittest.TestCase):
         self.assertEqual(
             FakeFair.last_kwargs["confirmed_free_providers"],
             {"kilo_free"},
+        )
+
+    def test_doctor_reports_close_failure_instead_of_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with patch.dict(
+                sys.modules,
+                {"fair": fake_module(CloseFailingFair)},
+            ):
+                result = asyncio.run(
+                    fair_bridge.execute(
+                        self.payload(repo, action="doctor")
+                    )
+                )
+
+        self.assertEqual(
+            result["status"],
+            "DOCTOR_CLOSE_FAILED",
+        )
+        self.assertEqual(
+            result["error_type"],
+            "RuntimeError",
+        )
+        self.assertFalse(
+            result["paid_inference_executed"]
         )
 
     def test_analysis_uses_current_fair_solve_contract(self):

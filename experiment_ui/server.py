@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import threading
-import time
 import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -456,7 +455,6 @@ def stage_statuses() -> list[dict[str, Any]]:
         cohort_files_ready
         and bool(cohort_info["sufficient"])
     )
-    valid_velocity_samples = exp13_valid_velocity_samples()
     depth_ready_cells = exp13_depth_ready_cell_count()
     velocity_ready = cohort_sufficient and depth_ready_cells > 0
     cp_status = checkpoint_status()
