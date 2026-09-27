@@ -1001,11 +1001,13 @@ def cohort_discovery_readiness(
         for topic in row.get("validated_topics", []):
             channels[(str(topic), fmt)].add(channel_id)
 
+    topic_niches = topic_niche_map(config)
     cells = []
     for (topic, fmt), channel_ids in sorted(channels.items()):
         cells.append(
             {
                 "topic": topic,
+                "niche": topic_niches.get(topic, "unknown"),
                 "format_candidate": fmt,
                 "unique_channels": len(channel_ids),
                 "refresh_worthy": len(channel_ids) >= required,
