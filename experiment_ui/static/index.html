@@ -54,7 +54,7 @@
     </section>
 
     <section class="workspace-grid">
-      <section class="panel">
+      <section class="panel controls-panel" id="controlsPanel">
         <div class="panel-head">
           <div>
             <p class="section-kicker">CONTROLS</p>
@@ -64,13 +64,14 @@
         <div class="action-groups" id="actionGroups"></div>
       </section>
 
-      <section class="panel job-panel">
+      <section class="panel job-panel" id="jobPanel">
         <div class="panel-head">
           <div>
             <p class="section-kicker">LIVE JOB</p>
             <h2 id="jobTitle">No job running</h2>
           </div>
           <div class="job-actions">
+            <button class="ghost compact" id="backToControls">Back to controls</button>
             <button class="danger" id="stopJob" disabled>Stop</button>
             <button class="ghost compact" data-open="ui_jobs">Open logs</button>
           </div>
