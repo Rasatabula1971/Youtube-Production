@@ -146,6 +146,9 @@ function renderOpportunityGate(gate) {
         escapeHtml(String(example.decision || "PENDING").toLowerCase()) + '">' +
         escapeHtml(example.decision || "PENDING") + '</span>' +
         '</div>' +
+        '<img class="example-thumbnail" src="https://i.ytimg.com/vi/' +
+        escapeHtml(encodeURIComponent(example.video_id)) +
+        '/hqdefault.jpg" alt="" loading="lazy">' +
         '<h4>' + escapeHtml(example.title || example.video_id) + '</h4>' +
         '<p class="example-channel">' +
         escapeHtml(example.channel_title || "Unknown channel") + '</p>' +
