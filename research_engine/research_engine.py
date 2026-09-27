@@ -601,6 +601,7 @@ def run_apply() -> dict[str, Any]:
 
     rejected: list[dict[str, Any]] = []
     drafts: list[str] = []
+    current_destinations: set[Path] = set()
 
     if not RESPONSES_DIR.exists():
         summary = {
@@ -664,11 +665,23 @@ def run_apply() -> dict[str, Any]:
             DRAFTS_DIR
             / f"{safe_slug(concept_id)}.draft_research_package.json"
         )
+        draft["draft_provenance"] = {
+            "plan_source": str(plan_path),
+            "plan_sha256": sha256_file(plan_path),
+            "response_source": str(response_path),
+            "response_sha256": sha256_file(response_path),
+        }
         destination.write_text(
             json.dumps(draft, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        current_destinations.add(destination.resolve())
         drafts.append(str(destination))
+
+    if DRAFTS_DIR.exists():
+        for stale_path in DRAFTS_DIR.glob("*.draft_research_package.json"):
+            if stale_path.resolve() not in current_destinations:
+                stale_path.unlink()
 
     REJECTED_FILE.write_text(
         json.dumps(
