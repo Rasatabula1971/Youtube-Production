@@ -128,10 +128,10 @@ Experiment 01.2 now produces transparent query competition profiles, persistent 
 
 ## Experiment 02 framework
 
-Experiment 02 is offline-first. It prepares evidence profiles from the
-Experiment 01.5 study set, validates creative findings against typed source
-evidence, separates findings from hypotheses, and aggregates repeated
-mechanisms across independent videos/channels.
+Experiment 02 is offline-first. It prepares evidence profiles only from the
+human-approved Experiment 01.5 study set, validates creative findings against
+typed source evidence, separates findings from hypotheses, and aggregates
+repeated mechanisms across independent videos/channels.
 
 It does not fetch transcripts or videos automatically and does not spend
 YouTube API quota.
