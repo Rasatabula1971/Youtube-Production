@@ -3,134 +3,216 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>YouTube Production — Experiment Control</title>
+  <title>YouTube Production</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">YOUTUBE PRODUCTION</p>
-        <h1>Experiment Control</h1>
-        <p class="subtitle">Run the experiment pipeline without PowerShell commands.</p>
-      </div>
-      <div class="top-actions">
-        <button class="ghost" data-open="source_acquisition_output">Open Acquisition Output</button>
-        <button class="ghost" data-open="experiment_01_output">Open 01 Output</button>
-        <button class="ghost" data-open="experiment_02_output">Open 02 Output</button>
-      </div>
-    </header>
-
-    <section class="notice" id="currentNotice">
-      <div>
-        <span class="notice-dot"></span>
-        <strong>Loading experiment state…</strong>
-      </div>
-      <span id="lastUpdated"></span>
-    </section>
-
-    <section class="panel workflow-focus" id="workflowFocus">
-      <p class="section-kicker">CURRENT STEP</p>
-      <div class="workflow-focus-grid">
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">YP</div>
         <div>
-          <h2 id="workflowCurrentTitle">Loading…</h2>
-          <p class="subtitle" id="workflowCurrentDetail"></p>
-        </div>
-        <div class="workflow-next">
-          <span>NEXT</span>
-          <strong id="workflowNextTitle">—</strong>
+          <p>YOUTUBE</p>
+          <strong>Production</strong>
         </div>
       </div>
-    </section>
 
-    <section class="panel pipeline-panel">
-      <div class="panel-head">
-        <div>
-          <p class="section-kicker">PIPELINE</p>
-          <h2>Experiment stages</h2>
-        </div>
-        <button class="icon-button" id="refreshStatus" title="Refresh status">↻</button>
-      </div>
-      <div class="stage-grid" id="stageGrid"></div>
-    </section>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a href="/" data-route="/" class="nav-item">
+          <span class="nav-icon">⌂</span>
+          <span>Home</span>
+        </a>
+        <a href="/opportunity" data-route="/opportunity" class="nav-item">
+          <span class="nav-icon">◎</span>
+          <span>Opportunity</span>
+        </a>
+        <a href="/analysis" data-route="/analysis" class="nav-item">
+          <span class="nav-icon">◫</span>
+          <span>Analyze &amp; Create</span>
+        </a>
+        <a href="/tools" data-route="/tools" class="nav-item">
+          <span class="nav-icon">⚙</span>
+          <span>Tools &amp; Diagnostics</span>
+        </a>
+      </nav>
 
-    <section class="panel opportunity-panel">
-      <div class="panel-head">
-        <div>
-          <p class="section-kicker">HUMAN GATE</p>
-          <h2>Opportunity review</h2>
-          <p class="subtitle">The machine surfaces the opportunity. You decide whether it is worth pursuing.</p>
-        </div>
+      <div class="sidebar-foot">
+        <span class="status-dot" id="sidebarStatusDot"></span>
+        <span id="sidebarStatus">Loading…</span>
       </div>
-      <div id="opportunityGate" class="opportunity-gate">
-        <p class="gate-empty">Waiting for Experiment 01.5 to create a study set.</p>
-      </div>
-    </section>
+    </aside>
 
-    <section class="workspace-grid">
-      <section class="panel controls-panel" id="controlsPanel">
-        <div class="panel-head">
+    <div class="app-main">
+      <header class="app-topbar">
+        <div class="page-heading">
+          <button class="mobile-menu" id="mobileMenu" aria-label="Open navigation">☰</button>
           <div>
-            <p class="section-kicker">CONTROLS</p>
-            <h2>Available actions</h2>
-          </div>
-        </div>
-        <div class="action-groups" id="actionGroups"></div>
-        <details class="tools-drawer">
-          <summary>Tools &amp; Diagnostics</summary>
-          <div class="action-groups tools-actions" id="toolActions"></div>
-        </details>
-      </section>
-
-      <section class="panel job-panel" id="jobPanel">
-        <div class="panel-head">
-          <div>
-            <p class="section-kicker">LIVE JOB</p>
-            <h2 id="jobTitle">No job running</h2>
-          </div>
-          <div class="job-actions">
-            <button class="ghost compact" id="backToControls">Back to controls</button>
-            <button class="danger" id="stopJob" disabled>Stop</button>
-            <button class="ghost compact" data-open="ui_jobs">Open logs</button>
+            <p class="section-kicker" id="pageKicker">WORKFLOW</p>
+            <h1 id="pageTitle">Home</h1>
+            <p class="page-subtitle" id="pageSubtitle">What needs your attention now.</p>
           </div>
         </div>
 
-        <div class="job-meta" id="jobMeta">
-          <span class="status-chip neutral">IDLE</span>
-          <span>Choose an enabled action to start.</span>
-        </div>
+        <button class="job-summary neutral" id="jobSummaryButton" type="button">
+          <span class="job-summary-dot"></span>
+          <span class="job-summary-copy">
+            <strong id="jobSummaryStatus">IDLE</strong>
+            <span id="jobSummaryLabel">No job running</span>
+          </span>
+          <span class="job-summary-arrow">›</span>
+        </button>
+      </header>
 
-        <pre class="log-view" id="logView">No job output yet.</pre>
-      </section>
-    </section>
+      <main class="view-container">
+        <section class="app-view" data-view="home" id="viewHome">
+          <section class="hero-step" id="homeCurrentStep">
+            <div>
+              <p class="section-kicker">CURRENT STEP</p>
+              <h2 id="homeCurrentTitle">Loading…</h2>
+              <p id="homeCurrentDetail" class="muted"></p>
+              <div class="hero-actions" id="homePrimaryAction"></div>
+            </div>
+            <div class="next-step-card">
+              <span>NEXT</span>
+              <strong id="homeNextTitle">—</strong>
+              <p id="homeNextDue"></p>
+            </div>
+          </section>
 
-    <section class="panel safeguards">
-      <div class="panel-head">
-        <div>
-          <p class="section-kicker">SAFEGUARDS</p>
-          <h2>What the UI will not do</h2>
-        </div>
+          <section class="panel compact-panel">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">PROGRESS</p>
+                <h2>Production path</h2>
+              </div>
+              <button class="icon-button" id="refreshStatus" title="Refresh status">↻</button>
+            </div>
+            <div class="progress-strip" id="progressStrip"></div>
+          </section>
+
+          <div class="home-grid">
+            <section class="panel compact-panel">
+              <p class="section-kicker">OPPORTUNITY</p>
+              <div id="homeOpportunitySummary" class="summary-block"></div>
+            </section>
+            <section class="panel compact-panel">
+              <p class="section-kicker">LAST ACTIVITY</p>
+              <div id="homeActivitySummary" class="summary-block"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="app-view" data-view="opportunity" id="viewOpportunity" hidden>
+          <div class="view-head">
+            <div>
+              <p class="section-kicker">HUMAN GATE</p>
+              <h2>Opportunity Review</h2>
+              <p class="muted">The machine finds evidence. You decide whether the direction is worth pursuing.</p>
+            </div>
+            <button class="ghost" data-route="/">Back to Home</button>
+          </div>
+          <section class="panel">
+            <div id="opportunityGate" class="opportunity-gate">
+              <p class="empty-state">Waiting for Opportunity Research to create a study set.</p>
+            </div>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="analysis" id="viewAnalysis" hidden>
+          <div class="view-head">
+            <div>
+              <p class="section-kicker">ANALYZE &amp; CREATE</p>
+              <h2>Turn evidence into an original video</h2>
+              <p class="muted">Work through evidence, analysis, concept, script and packaging without leaving this workspace.</p>
+            </div>
+          </div>
+
+          <div class="creation-tabs" id="creationTabs">
+            <button class="creation-tab active" type="button">Evidence</button>
+            <button class="creation-tab" type="button">Analysis</button>
+            <button class="creation-tab future" type="button" disabled>Concept</button>
+            <button class="creation-tab future" type="button" disabled>Script</button>
+            <button class="creation-tab future" type="button" disabled>Package</button>
+            <button class="creation-tab future" type="button" disabled>Produce</button>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">CURRENT WORK</p>
+                <h2 id="analysisCurrentTitle">Waiting for approval</h2>
+                <p class="muted" id="analysisCurrentDetail"></p>
+              </div>
+            </div>
+            <div class="action-groups" id="analysisActions"></div>
+          </section>
+        </section>
+
+        <section class="app-view" data-view="tools" id="viewTools" hidden>
+          <div class="view-head">
+            <div>
+              <p class="section-kicker">MAINTENANCE</p>
+              <h2>Tools &amp; Diagnostics</h2>
+              <p class="muted">Manual experiment controls, Doctors, logs and raw outputs live here.</p>
+            </div>
+          </div>
+
+          <div class="tool-shortcuts">
+            <button class="ghost" data-open="source_acquisition_output">Acquisition Output</button>
+            <button class="ghost" data-open="experiment_01_output">Experiment 01 Output</button>
+            <button class="ghost" data-open="experiment_02_output">Experiment 02 Output</button>
+            <button class="ghost" data-open="ui_jobs">Job Logs</button>
+          </div>
+
+          <section class="panel">
+            <div class="action-groups tools-grid" id="toolActions"></div>
+          </section>
+
+          <details class="technical-details">
+            <summary>Technical experiment status</summary>
+            <div class="technical-body">
+              <div class="stage-grid compact-stage-grid" id="stageGrid"></div>
+            </div>
+          </details>
+
+          <details class="technical-details">
+            <summary>Safeguards</summary>
+            <div class="technical-body guard-grid">
+              <article><strong>No arbitrary shell</strong><p>Only predefined commands can run.</p></article>
+              <article><strong>No stage skipping</strong><p>Downstream actions stay gated by real outputs.</p></article>
+              <article><strong>One job at a time</strong><p>Overlapping experiment jobs are blocked.</p></article>
+              <article><strong>Localhost only</strong><p>The control UI is not exposed to the network.</p></article>
+            </div>
+          </details>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
+
+  <div class="drawer-scrim" id="drawerScrim"></div>
+  <aside class="job-drawer" id="jobDrawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <p class="section-kicker">LIVE JOB</p>
+        <h2 id="jobTitle">No job running</h2>
       </div>
-      <div class="guard-grid">
-        <article>
-          <strong>No arbitrary shell</strong>
-          <p>Only predefined experiment commands are available.</p>
-        </article>
-        <article>
-          <strong>No stage skipping</strong>
-          <p>Downstream actions remain blocked until their required outputs exist.</p>
-        </article>
-        <article>
-          <strong>One job at a time</strong>
-          <p>Prevents overlapping discovery, refresh, or analysis runs.</p>
-        </article>
-        <article>
-          <strong>Localhost only</strong>
-          <p>The control server binds to your own computer, not the network.</p>
-        </article>
-      </div>
-    </section>
-  </main>
+      <button class="icon-button" id="closeJobDrawer" aria-label="Close live job">×</button>
+    </div>
+
+    <div class="job-meta" id="jobMeta">
+      <span class="status-chip neutral">IDLE</span>
+      <span>Choose an enabled action to start.</span>
+    </div>
+
+    <div class="drawer-actions">
+      <button class="danger" id="stopJob" disabled>Stop</button>
+      <button class="ghost compact" data-open="ui_jobs">Open full logs</button>
+    </div>
+
+    <pre class="log-view" id="logView">No job output yet.</pre>
+  </aside>
 
   <div class="toast" id="toast"></div>
   <script src="/app.js"></script>
