@@ -3,6 +3,7 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -238,54 +239,55 @@ class ExperimentUiTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            common_patches = (
-                patch.object(server, "EXP2_PREPARED_DIR", prepared),
-                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
-                patch.object(server, "EXP2_REQUESTS_DIR", requests),
-                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
-                patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
-                patch.object(
-                    server,
-                    "EXP2_REVIEW_REQUESTS_DIR",
-                    review_requests,
-                ),
-                patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
-                patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
-                patch.object(
-                    server,
-                    "EXP2_SYNTHESIS_FILE",
-                    root / "missing_synthesis.json",
-                ),
-                patch.object(
-                    server,
-                    "EXP2_ACQUISITION_SUMMARY",
-                    root / "missing_acquisition.json",
-                ),
-                patch.object(
-                    server,
-                    "EXP2_VISUAL_SUMMARY",
-                    root / "missing_visual.json",
-                ),
-                patch.object(
-                    server,
-                    "opportunity_gate_snapshot",
-                    return_value={
-                        "ready_for_experiment_02": True,
-                        "opportunities": [],
-                    },
-                ),
-                patch.object(
-                    server.shutil,
-                    "which",
-                    side_effect=lambda name: (
-                        f"C:/fake/{name}.exe"
-                        if name in {"yt-dlp", "ffmpeg"}
-                        else None
+            with ExitStack() as stack:
+                for context in (
+                    patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                    patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                    patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                    patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                    patch.object(server, "EXP2_MODEL_RUNS_DIR", model_runs),
+                    patch.object(
+                        server,
+                        "EXP2_REVIEW_REQUESTS_DIR",
+                        review_requests,
                     ),
-                ),
-            )
+                    patch.object(server, "EXP2_REVIEWED_DIR", reviewed),
+                    patch.object(server, "SOURCE_ACQ_OUTPUT", source_output),
+                    patch.object(
+                        server,
+                        "EXP2_SYNTHESIS_FILE",
+                        root / "missing_synthesis.json",
+                    ),
+                    patch.object(
+                        server,
+                        "EXP2_ACQUISITION_SUMMARY",
+                        root / "missing_acquisition.json",
+                    ),
+                    patch.object(
+                        server,
+                        "EXP2_VISUAL_SUMMARY",
+                        root / "missing_visual.json",
+                    ),
+                    patch.object(
+                        server,
+                        "opportunity_gate_snapshot",
+                        return_value={
+                            "ready_for_experiment_02": True,
+                            "opportunities": [],
+                        },
+                    ),
+                    patch.object(
+                        server.shutil,
+                        "which",
+                        side_effect=lambda name: (
+                            f"C:/fake/{name}.exe"
+                            if name in {"yt-dlp", "ffmpeg"}
+                            else None
+                        ),
+                    ),
+                ):
+                    stack.enter_context(context)
 
-            with common_patches:
                 readiness = server.action_readiness()
                 self.assertTrue(readiness["exp2_visual"]["enabled"])
                 self.assertFalse(
@@ -301,6 +303,28 @@ class ExperimentUiTests(unittest.TestCase):
                             "profile_sha256": server.sha256_file(
                                 prepared_profile
                             ),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (enriched / "v1.json").write_text(
+                    json.dumps(
+                        {
+                            "source_inputs": {
+                                "transcript": {"status": "PROVIDED"}
+                            },
+                            "evidence": [
+                                {
+                                    "evidence_id": "transcript.p0001",
+                                    "type": "transcript",
+                                    "observation": "Evidence.",
+                                },
+                                {
+                                    "evidence_id": "timing.scene_change_summary",
+                                    "type": "timing_note",
+                                    "observation": "Detector summary.",
+                                },
+                            ],
                         }
                     ),
                     encoding="utf-8",
