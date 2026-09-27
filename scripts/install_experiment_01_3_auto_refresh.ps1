@@ -26,6 +26,7 @@ if (-not (Test-Path $PythonPath)) {
 }
 
 $TaskName = "YouTube Production - Opportunity Research Continue"
+$LegacyTaskName = "YouTube Production - Experiment 01.3 Auto Refresh"
 $TaskCommand = "`"$PythonPath`" `"$Runner`" --mode continue"
 
 $Arguments = @(
@@ -37,6 +38,8 @@ $Arguments = @(
     "/RL", "LIMITED",
     "/F"
 )
+
+& schtasks.exe /Delete /TN $LegacyTaskName /F 2>$null | Out-Null
 
 Write-Host "Registering task: $TaskName"
 Write-Host "Schedule: every $EveryHours hour(s)"
