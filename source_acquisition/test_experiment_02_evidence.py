@@ -151,6 +151,40 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
         ingest.assert_not_called()
         self.assertEqual(run.call_count, 1)
 
+    def test_ytdlp_429_is_reported_as_rate_limited(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            profile = acquisition.PREPARED_DIR / "abc123.json"
+            self.write_profile(profile)
+
+            completed = subprocess.CompletedProcess(
+                args=["yt-dlp"],
+                returncode=1,
+                stdout="",
+                stderr="ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests",
+            )
+            stack.enter_context(
+                patch.object(
+                    acquisition.subprocess,
+                    "run",
+                    return_value=completed,
+                )
+            )
+            ingest = stack.enter_context(
+                patch.object(acquisition, "run_ingest")
+            )
+
+            result = acquisition.acquire_one(
+                profile,
+                yt_dlp="yt-dlp-test",
+                python_executable="python-test",
+            )
+
+        self.assertEqual(result["status"], "RATE_LIMITED_429")
+        self.assertIn("rate-limited", result["message"].lower())
+        ingest.assert_not_called()
+
     def test_existing_transcript_reuses_files_and_skips_ytdlp(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
