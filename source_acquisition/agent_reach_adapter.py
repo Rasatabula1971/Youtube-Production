@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -545,6 +546,15 @@ def main() -> None:
         payload["web_read"] = {
             "ready": curl_path() is not None,
             "backend": "jina_reader",
+        }
+        payload["local_transcript_fallback"] = {
+            "ready": (
+                shutil.which("ffmpeg") is not None
+                and shutil.which("whisper") is not None
+            ),
+            "ffmpeg": shutil.which("ffmpeg"),
+            "whisper": shutil.which("whisper"),
+            "model": os.environ.get("YOUTUBE_WHISPER_MODEL", "base"),
         }
         result = payload
     elif args.mode == "youtube-search":
