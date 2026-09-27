@@ -210,6 +210,11 @@ Learnings feed back into Opportunity, Packaging, Retention, Transformation, Stor
 
 Do not build all nine engines at once.
 
+**M1 remains open.** The project has implemented several downstream engines as
+offline frameworks ahead of live milestone closure, but those implementations
+do not count as proof that M1 succeeded. Live Opportunity Engine evidence and
+the human opportunity gate remain the controlling progression criteria.
+
 The immediate goal is to establish whether the discovery system can consistently surface useful source opportunities across multiple niches.
 
 ### Experiment 01.2
