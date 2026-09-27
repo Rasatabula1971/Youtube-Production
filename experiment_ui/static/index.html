@@ -123,7 +123,7 @@
             <div>
               <p class="section-kicker">ANALYZE &amp; CREATE</p>
               <h2>Turn evidence into an original video</h2>
-              <p class="muted">Work through evidence, analysis, concept, script and packaging without leaving this workspace.</p>
+              <p class="muted">Work through evidence, analysis, concept, packaging and script without leaving this workspace.</p>
             </div>
           </div>
 
@@ -131,8 +131,8 @@
             <span class="creation-tab active">Evidence</span>
             <span class="creation-tab">Analysis</span>
             <span class="creation-tab">Concept</span>
+            <span class="creation-tab">Package</span>
             <span class="creation-tab future">Script</span>
-            <span class="creation-tab future">Package</span>
             <span class="creation-tab future">Produce</span>
           </div>
 
@@ -204,6 +204,33 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="packagingReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN PACKAGING GATE</p>
+                <h2 id="packagingReviewTitle">Review package candidate</h2>
+                <p class="muted" id="packagingReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="packagingReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="packagingDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-criteria" id="packagingCriteria"></div>
+                <label class="vision-label" for="packagingNote">Review note</label>
+                <textarea id="packagingNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Required for Rework. Optional for Reject or Accept."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="packagingPrev" type="button">← Previous</button>
+                  <button class="danger" id="packagingReject" type="button">Reject</button>
+                  <button class="ghost" id="packagingRework" type="button">Rework</button>
+                  <button id="packagingAccept" type="button">Accept package</button>
+                  <button class="ghost" id="packagingNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
@@ -220,6 +247,7 @@
             <button class="ghost" data-open="experiment_01_output">Experiment 01 Output</button>
             <button class="ghost" data-open="experiment_02_output">Experiment 02 Output</button>
             <button class="ghost" data-open="transformation_output">Transformation Output</button>
+            <button class="ghost" data-open="packaging_output">Packaging Output</button>
             <button class="ghost" data-open="ui_jobs">Job Logs</button>
           </div>
 

@@ -10,6 +10,7 @@ No model, network, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,10 @@ def safe_slug(value: str) -> str:
         for char in value
     ).strip("._")
     return cleaned or "unknown"
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def build_package_request(
@@ -336,6 +341,7 @@ def run_prepare(
         return summary
 
     handoff = load_json(concept_handoff_path)
+    handoff_sha256 = sha256_file(concept_handoff_path)
     concepts = handoff.get("concepts", [])
     if not isinstance(concepts, list):
         raise ValueError(
@@ -343,10 +349,15 @@ def run_prepare(
         )
 
     paths = []
+    current_destinations: set[Path] = set()
     seen_concept_ids: set[str] = set()
 
     for concept in concepts:
         request = build_package_request(concept, config)
+        request["request_provenance"] = {
+            "concept_handoff_source": str(concept_handoff_path),
+            "concept_handoff_sha256": handoff_sha256,
+        }
         concept_id = str(request["concept_id"])
         if concept_id in seen_concept_ids:
             raise ValueError(
@@ -362,7 +373,12 @@ def run_prepare(
             json.dumps(request, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        current_destinations.add(destination.resolve())
         paths.append(str(destination))
+
+    for stale_path in REQUESTS_DIR.glob("*.package_request.json"):
+        if stale_path.resolve() not in current_destinations:
+            stale_path.unlink()
 
     summary = {
         "status": (
@@ -425,6 +441,22 @@ def run_apply() -> dict[str, Any]:
             continue
 
         request = load_json(request_path)
+        response_provenance = response.get("response_provenance", {})
+        if (
+            not isinstance(response_provenance, dict)
+            or response_provenance.get("request_sha256")
+            != sha256_file(request_path)
+        ):
+            rejected.append(
+                {
+                    "response": str(response_path),
+                    "errors": [
+                        "response provenance does not match current package request"
+                    ],
+                }
+            )
+            continue
+
         try:
             result = validate_response(
                 response,

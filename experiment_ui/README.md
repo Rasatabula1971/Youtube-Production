@@ -305,3 +305,27 @@ Only accepted concepts enter
 
 If every concept is rejected or marked for rework, the current Concept Gate can
 be reopened instead of leaving the workflow deadlocked.
+
+
+## Packaging workflow
+
+After at least one concept is accepted at the Concept Gate, Analyze & Create now
+continues with the package-before-script stage:
+
+**Prepare Package Requests → Generate Package Candidates → Prepare Packaging Gate
+→ Review Package Candidates**
+
+Package generation uses the same FAIR free-only subprocess boundary as
+Experiment 02 and Transformation. Package responses are bound to the exact
+current package-request SHA-256, and package requests are bound to the current
+accepted-concept handoff. Stale requests are pruned and stale responses cannot
+be merged into current candidates.
+
+The Packaging Gate shows one title / thumbnail / opening-frame package at a time.
+ACCEPT requires every configured human criterion. REWORK requires a written
+note. At most one package may be accepted per concept.
+
+Only accepted packages enter
+`packaging_engine/output/research_handoff.json`. The approved package defines
+the promise that downstream Research and Story / Script must support and
+deliver.
