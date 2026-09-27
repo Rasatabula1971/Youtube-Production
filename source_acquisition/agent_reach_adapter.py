@@ -23,7 +23,7 @@ MAX_SEARCH_RESULTS = 100
 MAX_WEB_SEARCH_RESULTS = 20
 WEB_SEARCH_TIMEOUT_SECONDS = 120
 WEB_READ_TIMEOUT_SECONDS = 120
-URL_PATTERN = re.compile(r"https?://[^\\s\\]\[<>{}()\"']+")
+URL_PATTERN = re.compile(r"https?://[^\s\]\[<>{}()\"']+")
 
 
 class AcquisitionError(RuntimeError):
