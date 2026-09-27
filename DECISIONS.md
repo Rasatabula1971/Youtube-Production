@@ -696,3 +696,55 @@ Repository status documents must distinguish between:
 The human opportunity gate between 01.5 and Experiment 02 is part of that
 boundary: machine-generated demand evidence does not automatically authorize
 creative analysis or downstream production work.
+
+
+## D-051 — Age-matched velocity baselines are niche-and-format matched
+
+**Status:** Accepted
+
+Experiment 01.3 topics must declare an explicit niche.
+
+The age-matched velocity index compares a topic median only with the cohort
+median for the **same niche and same format**. A format-only denominator is not
+allowed once more than one niche can exist in the experiment.
+
+A video that validates multiple topics in one niche contributes once to that
+niche/format cohort denominator. This preserves topic comparisons without
+double-counting the same video merely because it matched more than one topic.
+
+The former top-level format-only cohort median remains only as a transitional
+single-niche compatibility alias. It becomes empty when multiple niches are
+present so cross-niche pooling cannot silently return.
+
+
+## D-052 — Frozen-cohort velocity refresh is schedulable and self-limiting
+
+**Status:** Accepted
+
+Repeated-snapshot velocity must not depend on the operator remembering to click
+Refresh at the right time.
+
+On Windows the project may register a recurring Task Scheduler job that invokes
+a project-owned scheduled refresh runner. The runner may call only the existing
+Experiment 01.3 frozen-cohort refresh path; it must never perform discovery.
+
+The runner skips API work when there is no usable cohort, when a recent
+snapshot already exists, when another scheduled refresh is running, or when the
+current cohort already has enough velocity evidence for Experiment 01.4.
+
+Manual refresh remains available as an explicit control and for diagnostics.
+
+
+## D-053 — Confidence labels name the evidence dimension they describe
+
+**Status:** Accepted
+
+`baseline_confidence` and topic replication breadth are different concepts and
+must not be presented as one generic confidence scale.
+
+Channel baseline confidence continues to describe the quality of the historical
+comparison sample for one source channel.
+
+Experiment 01.3 uses `topic_channel_confidence` to describe the number of
+independent channels supporting a topic/format cell. Its LOW / MODERATE /
+STRONG thresholds are not reused for channel baseline quality.
