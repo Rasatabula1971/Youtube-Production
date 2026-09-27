@@ -60,7 +60,63 @@ RAW_FILE = OUTPUT_DIR / "raw_results.json"
 REJECTED_FILE = OUTPUT_DIR / "rejected_candidates.json"
 TOPIC_FILE = OUTPUT_DIR / "topic_velocity.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+REFRESH_LOCK_FILE = OUTPUT_ROOT / "experiment_01_3_refresh.lock"
 EXPERIMENT_ID = "01.3"
+
+
+def acquire_refresh_lock(
+    path: Path = REFRESH_LOCK_FILE,
+    *,
+    stale_minutes: int = 30,
+) -> bool:
+    """Prevent manual and scheduled refreshes from overlapping."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+
+    if path.exists():
+        try:
+            modified = datetime.fromtimestamp(
+                path.stat().st_mtime,
+                tz=timezone.utc,
+            )
+            age_minutes = (now - modified).total_seconds() / 60
+        except OSError:
+            age_minutes = 0
+        if age_minutes >= stale_minutes:
+            try:
+                path.unlink()
+            except OSError:
+                return False
+        else:
+            return False
+
+    try:
+        fd = os.open(
+            path,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+        )
+    except FileExistsError:
+        return False
+
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "created_at": now.isoformat(),
+                }
+            )
+        )
+    return True
+
+
+def release_refresh_lock(
+    path: Path = REFRESH_LOCK_FILE,
+) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def median_or_none(values: list[float | int]) -> float | None:
@@ -1885,35 +1941,56 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     print_completion("discover", summary)
 
 def run_refresh(config: dict[str, Any], api_key: str) -> None:
-    if not MANIFEST_FILE.exists():
-        raise SystemExit("No 01.3 cohort exists. Run --mode discover first.")
-    manifest = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
-    observed_at = datetime.now(timezone.utc).isoformat()
+    if not acquire_refresh_lock():
+        raise SystemExit(
+            "Another Experiment 01.3 refresh is already running."
+        )
 
-    print("\nSTAGE 2 — EXPERIMENT 01.3")
-    print("=" * 60)
-    print("Mode: REFRESH FROZEN COHORT")
-    print(f"Cohort: {manifest.get('cohort_id')}")
-    print(f"Frozen videos: {len(manifest.get('video_ids', [])):,}\n")
+    try:
+        if not MANIFEST_FILE.exists():
+            raise SystemExit(
+                "No 01.3 cohort exists. Run --mode discover first."
+            )
+        manifest = json.loads(
+            MANIFEST_FILE.read_text(encoding="utf-8")
+        )
+        observed_at = datetime.now(timezone.utc).isoformat()
 
-    rows, missing = refresh_rows(manifest, api_key)
-    apply_velocity(rows, observed_at)
-    manifest_topic_niches = manifest.get("topic_niches")
-    topic_niches = (
-        {
-            str(topic): str(niche)
-            for topic, niche in manifest_topic_niches.items()
-        }
-        if isinstance(manifest_topic_niches, dict)
-        else topic_niche_map(config)
-    )
-    topic_velocity = aggregate_age_matched_velocity(
-        rows,
-        topic_niches,
-    )
-    summary = build_summary("refresh", manifest, rows, missing, topic_velocity)
-    write_outputs(rows, topic_velocity, summary)
-    print_completion("refresh", summary)
+        print("\nSTAGE 2 — EXPERIMENT 01.3")
+        print("=" * 60)
+        print("Mode: REFRESH FROZEN COHORT")
+        print(f"Cohort: {manifest.get('cohort_id')}")
+        print(
+            f"Frozen videos: "
+            f"{len(manifest.get('video_ids', [])):,}\n"
+        )
+
+        rows, missing = refresh_rows(manifest, api_key)
+        apply_velocity(rows, observed_at)
+        manifest_topic_niches = manifest.get("topic_niches")
+        topic_niches = (
+            {
+                str(topic): str(niche)
+                for topic, niche in manifest_topic_niches.items()
+            }
+            if isinstance(manifest_topic_niches, dict)
+            else topic_niche_map(config)
+        )
+        topic_velocity = aggregate_age_matched_velocity(
+            rows,
+            topic_niches,
+        )
+        summary = build_summary(
+            "refresh",
+            manifest,
+            rows,
+            missing,
+            topic_velocity,
+        )
+        write_outputs(rows, topic_velocity, summary)
+        print_completion("refresh", summary)
+    finally:
+        release_refresh_lock()
 
 
 def print_completion(mode: str, summary: dict[str, Any]) -> None:
