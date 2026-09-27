@@ -365,6 +365,16 @@ button.danger {
 }
 
 .opportunity-card h3,
+.example-thumbnail {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 9px;
+  margin-top: 10px;
+  background: #090d12;
+}
+
 .example-card h4 {
   margin: 6px 0 0;
 }
