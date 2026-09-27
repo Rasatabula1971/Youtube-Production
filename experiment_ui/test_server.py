@@ -35,6 +35,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="conceptReviewPanel"', html)
         self.assertIn('id="conceptCriteria"', html)
         self.assertIn('id="conceptNote"', html)
+        self.assertIn('id="packagingReviewPanel"', html)
+        self.assertIn('id="packagingCriteria"', html)
+        self.assertIn('id="packagingNote"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -47,6 +50,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/vision-review", script)
         self.assertIn("renderConceptReview", script)
         self.assertIn("/api/concept-gate", script)
+        self.assertIn("renderPackagingReview", script)
+        self.assertIn("/api/packaging-gate", script)
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
@@ -124,6 +129,89 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn(
             "transformation_engine/concept_review.py",
             server.ACTION_DEFS["concept_gate_prepare"]["command"][1],
+        )
+
+    def test_packaging_actions_follow_concept_gate(self):
+        for action_id in (
+            "package_prepare",
+            "package_generate",
+            "package_gate_prepare",
+        ):
+            self.assertIn(action_id, server.ACTION_DEFS)
+
+        concept_index = server.WORKFLOW_ACTION_ORDER.index(
+            "concept_gate_prepare"
+        )
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[concept_index + 1 : concept_index + 4],
+            [
+                "package_prepare",
+                "package_generate",
+                "package_gate_prepare",
+            ],
+        )
+        self.assertIn(
+            "packaging_engine/packaging_engine.py",
+            server.ACTION_DEFS["package_prepare"]["command"][1],
+        )
+        self.assertIn(
+            "packaging_engine/package_model_runner.py",
+            server.ACTION_DEFS["package_generate"]["command"][1],
+        )
+        self.assertIn(
+            "packaging_engine/package_review.py",
+            server.ACTION_DEFS["package_gate_prepare"]["command"][1],
+        )
+
+    def test_pending_packaging_gate_becomes_human_workflow_gate(self):
+        with (
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={
+                    "ready_for_experiment_02": True,
+                    "opportunities": [],
+                },
+            ),
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={
+                    "awaiting_human_review": False,
+                    "complete": True,
+                },
+            ),
+            patch.object(
+                server,
+                "opportunity_research_state",
+                return_value={},
+            ),
+            patch.object(
+                server,
+                "transformation_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "research_ready": True,
+                    "concept_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "packaging_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "packaging_gate": {
+                        "status": "AWAITING_HUMAN_DECISION",
+                    },
+                },
+            ),
+        ):
+            workflow = server.workflow_guidance({})
+
+        self.assertEqual(workflow["state"], "HUMAN_PACKAGING_GATE")
+        self.assertEqual(
+            workflow["current_title"],
+            "Review Package Candidates",
         )
 
     def test_pending_concept_gate_becomes_human_workflow_gate(self):
