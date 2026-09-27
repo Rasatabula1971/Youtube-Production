@@ -57,7 +57,6 @@ from vision_review import (  # noqa: E402
     apply_review_action as apply_vision_review_action,
     frame_path as vision_frame_path,
     review_snapshot as vision_review_snapshot,
-    vision_provider_status,
 )
 
 EXP2_OUTPUT = EXP2_DIR / "output"
@@ -1433,7 +1432,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         },
         "vision_doctor": {
             "enabled": True,
-            "reason": vision_provider_status().get("message", "Vision diagnostic available."),
+            "reason": (
+                "Checks local Ollama vision configuration. "
+                "Human-only visual review works without a model."
+            ),
         },
         "fair_doctor": {
             "enabled": True,
