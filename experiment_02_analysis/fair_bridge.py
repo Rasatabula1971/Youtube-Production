@@ -98,6 +98,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
+            "error_detail": str(exc)[:1200],
             "paid_inference_executed": False,
         }
 
@@ -164,6 +165,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
+            "error_detail": str(exc)[:1200],
             "providers": providers,
             "skipped": skipped,
             "paid_inference_executed": False,
@@ -188,6 +190,7 @@ def main() -> None:
         result = {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
+            "error_detail": str(exc)[:1200],
             "paid_inference_executed": False,
         }
 
