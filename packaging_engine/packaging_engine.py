@@ -349,6 +349,7 @@ def run_prepare(
         )
 
     paths = []
+    current_destinations: set[Path] = set()
     seen_concept_ids: set[str] = set()
 
     for concept in concepts:
@@ -372,7 +373,12 @@ def run_prepare(
             json.dumps(request, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        current_destinations.add(destination.resolve())
         paths.append(str(destination))
+
+    for stale_path in REQUESTS_DIR.glob("*.package_request.json"):
+        if stale_path.resolve() not in current_destinations:
+            stale_path.unlink()
 
     summary = {
         "status": (
@@ -435,6 +441,22 @@ def run_apply() -> dict[str, Any]:
             continue
 
         request = load_json(request_path)
+        response_provenance = response.get("response_provenance", {})
+        if (
+            not isinstance(response_provenance, dict)
+            or response_provenance.get("request_sha256")
+            != sha256_file(request_path)
+        ):
+            rejected.append(
+                {
+                    "response": str(response_path),
+                    "errors": [
+                        "response provenance does not match current package request"
+                    ],
+                }
+            )
+            continue
+
         try:
             result = validate_response(
                 response,
