@@ -41,6 +41,19 @@ const visionReject = document.getElementById("visionReject");
 const visionAccept = document.getElementById("visionAccept");
 const visionNext = document.getElementById("visionNext");
 
+const conceptReviewPanel = document.getElementById("conceptReviewPanel");
+const conceptReviewTitle = document.getElementById("conceptReviewTitle");
+const conceptReviewSummary = document.getElementById("conceptReviewSummary");
+const conceptReviewStatus = document.getElementById("conceptReviewStatus");
+const conceptDetail = document.getElementById("conceptDetail");
+const conceptCriteria = document.getElementById("conceptCriteria");
+const conceptNote = document.getElementById("conceptNote");
+const conceptPrev = document.getElementById("conceptPrev");
+const conceptReject = document.getElementById("conceptReject");
+const conceptRework = document.getElementById("conceptRework");
+const conceptAccept = document.getElementById("conceptAccept");
+const conceptNext = document.getElementById("conceptNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -59,6 +72,9 @@ let renderedPath = null;
 let latestVisionSnapshot = null;
 let visionCursor = 0;
 let visionEditing = false;
+let latestConceptSnapshot = null;
+let conceptCursor = 0;
+let conceptEditing = false;
 
 const ROUTES = {
   "/": {
@@ -219,7 +235,8 @@ function statusTone(workflow) {
   if (
     state === "ACTION_REQUIRED" ||
     state === "HUMAN_GATE" ||
-    state === "HUMAN_VISION_GATE"
+    state === "HUMAN_VISION_GATE" ||
+    state === "HUMAN_CONCEPT_GATE"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -247,6 +264,9 @@ function primaryTargetForWorkflow(workflow) {
   }
   if (workflow.state === "HUMAN_VISION_GATE") {
     return { type: "route", value: "/analysis", label: "Review visual evidence" };
+  }
+  if (workflow.state === "HUMAN_CONCEPT_GATE") {
+    return { type: "route", value: "/analysis", label: "Review concepts" };
   }
   if (workflow.current_action_id === "opportunity_research") {
     return { type: "action", value: "opportunity_research", label: "Run now" };
@@ -295,6 +315,7 @@ function renderProgress(data) {
   const s13 = stageById(stages, "01.3");
   const s14 = stageById(stages, "01.4");
   const s2 = stageById(stages, "02");
+  const s4 = stageById(stages, "04");
   const gate = data.opportunity_gate || {};
   const workflow = data.workflow || {};
 
@@ -303,6 +324,7 @@ function renderProgress(data) {
   const expansionDone = Boolean(s14.complete);
   const reviewDone = Boolean(gate.ready_for_experiment_02);
   const analysisDone = Boolean(s2.complete);
+  const createDone = Boolean(s4.complete);
 
   const currentName =
     workflow.state === "HUMAN_GATE" ? "Review" :
@@ -312,7 +334,8 @@ function renderProgress(data) {
       validationDone ? "Expand" : (discoveryDone ? "Validate" : "Discover")
     ) :
     reviewDone && !analysisDone ? "Analyze" :
-    analysisDone ? "Create" : "";
+    analysisDone && !createDone ? "Create" :
+    createDone ? "" : "";
 
   const steps = [
     { name: "Discover", done: discoveryDone },
@@ -320,7 +343,7 @@ function renderProgress(data) {
     { name: "Expand", done: expansionDone },
     { name: "Review", done: reviewDone },
     { name: "Analyze", done: analysisDone },
-    { name: "Create", done: false }
+    { name: "Create", done: createDone }
   ];
 
   progressStrip.innerHTML = steps.map(function (step) {
@@ -712,10 +735,205 @@ async function submitVisionDecision(action) {
   }
 }
 
+function pendingConceptIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentConceptItem() {
+  const items = (latestConceptSnapshot && latestConceptSnapshot.concepts) || [];
+  if (!items.length) return null;
+  conceptCursor = Math.max(0, Math.min(conceptCursor, items.length - 1));
+  return { item: items[conceptCursor], items: items };
+}
+
+function renderConceptReview(snapshot, force) {
+  latestConceptSnapshot = snapshot || {};
+
+  if (
+    !snapshot ||
+    snapshot.status === "WAITING_FOR_CONCEPT_CANDIDATES" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.concepts || []).length
+  ) {
+    conceptReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    conceptReviewPanel.hidden = false;
+    conceptReviewTitle.textContent = "Concept Gate complete";
+    conceptReviewSummary.textContent =
+      (snapshot.accepted || 0) + " accepted · " +
+      (snapshot.rework || 0) + " rework · " +
+      (snapshot.rejected || 0) + " rejected";
+    conceptReviewStatus.textContent = snapshot.research_status || "COMPLETE";
+    conceptReviewStatus.className =
+      "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
+    conceptDetail.innerHTML =
+      '<div class="concept-complete">' +
+      ((snapshot.accepted || 0) > 0
+        ? "Accepted concepts are ready for the next Research / Packaging stage."
+        : "No concept was accepted. Regenerate or rework before continuing.") +
+      '</div>';
+    conceptCriteria.innerHTML = "";
+    conceptNote.hidden = true;
+    conceptPrev.disabled = true;
+    conceptNext.disabled = true;
+    conceptReject.disabled = true;
+    conceptRework.disabled = true;
+    conceptAccept.disabled = true;
+    return;
+  }
+
+  if (conceptEditing && !force) return;
+
+  const items = snapshot.concepts || [];
+  if (!items.length) {
+    conceptReviewPanel.hidden = true;
+    return;
+  }
+  if (conceptCursor >= items.length) {
+    conceptCursor = Math.max(0, items.length - 1);
+  }
+
+  const concept = items[conceptCursor] || {};
+  const gap = concept.content_gap || {};
+  const fit = concept.channel_fit || {};
+  const titleTest = concept.title_clarity_test || {};
+  const sourceTest = concept.source_dependency_test || {};
+
+  conceptReviewPanel.hidden = false;
+  conceptNote.hidden = false;
+  conceptReviewTitle.textContent =
+    "Concept " + (conceptCursor + 1) + " of " + items.length;
+  conceptReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · reviewer " +
+    escapeHtml(snapshot.reviewer || "local-operator");
+  conceptReviewStatus.textContent = concept.decision || "PENDING";
+  conceptReviewStatus.className =
+    "status-chip " +
+    (concept.decision === "ACCEPT"
+      ? "success"
+      : concept.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  const titles = (titleTest.options || []).map(function (title) {
+    return "<li>" + escapeHtml(title) + "</li>";
+  }).join("");
+  const questions = (concept.research_questions || []).map(function (question) {
+    return "<li>" + escapeHtml(question) + "</li>";
+  }).join("");
+
+  conceptDetail.innerHTML =
+    '<div class="concept-detail-card">' +
+      '<h4>WORKING CONCEPT</h4>' +
+      '<h3>' + escapeHtml(concept.working_title || concept.concept_id) + '</h3>' +
+      '<div class="concept-meta">' +
+        '<span>' + escapeHtml(humanizeToken(concept.mechanism_label || concept.mechanism_id)) + '</span>' +
+        '<span>' + escapeHtml(humanizeToken(concept.format_intent)) + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="concept-detail-card"><h4>PREMISE</h4><p>' +
+      escapeHtml(concept.premise || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>AUDIENCE PROMISE</h4><p>' +
+      escapeHtml(concept.audience_promise || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>VIEWER NEED</h4><p><strong>Problem:</strong> ' +
+      escapeHtml(concept.viewer_problem || "") + '<br><strong>Moment:</strong> ' +
+      escapeHtml(concept.viewer_moment || "") + '<br><strong>Outcome:</strong> ' +
+      escapeHtml(concept.desired_outcome || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>CONTENT GAP / CHANNEL FIT</h4><p>' +
+      '<strong>' + escapeHtml(gap.evidence_status || "UNASSESSED") + ':</strong> ' +
+      escapeHtml(gap.hypothesis || "") + '<br><strong>Fit ' +
+      escapeHtml(fit.status || "UNASSESSED") + ':</strong> ' +
+      escapeHtml(fit.rationale || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>TITLE CLARITY TEST</h4><ul>' +
+      titles + '</ul></div>' +
+    '<div class="concept-detail-card"><h4>RESEARCH QUESTIONS</h4><ul>' +
+      questions + '</ul></div>' +
+    '<div class="concept-detail-card"><h4>SOURCE DEPENDENCY TEST</h4><p>' +
+      escapeHtml(sourceTest.rationale || "") + '</p></div>';
+
+  const criteriaDescriptions = snapshot.criteria || {};
+  const checked = concept.criteria_decisions || {};
+  const required = concept.required_accept_criteria || Object.keys(criteriaDescriptions);
+  conceptCriteria.innerHTML = required.map(function (criterion) {
+    const id = "concept-criterion-" + conceptCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) + '" data-concept-criterion="' +
+      escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  conceptNote.value = concept.note || "";
+  conceptPrev.disabled = conceptCursor <= 0;
+  conceptNext.disabled = conceptCursor >= items.length - 1;
+  conceptReject.disabled = false;
+  conceptRework.disabled = false;
+  conceptAccept.disabled = false;
+  conceptEditing = false;
+}
+
+function moveConceptCursor(delta) {
+  const current = currentConceptItem();
+  if (!current) return;
+  conceptCursor = Math.max(
+    0,
+    Math.min(current.items.length - 1, conceptCursor + delta)
+  );
+  conceptEditing = false;
+  renderConceptReview(latestConceptSnapshot, true);
+}
+
+function collectConceptCriteria() {
+  const values = {};
+  conceptCriteria.querySelectorAll("[data-concept-criterion]").forEach(function (input) {
+    values[input.dataset.conceptCriterion] = Boolean(input.checked);
+  });
+  return values;
+}
+
+async function submitConceptDecision(decision) {
+  const current = currentConceptItem();
+  if (!current) return;
+  const concept = current.item;
+
+  try {
+    const payload = await api("/api/concept-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: concept.concept_id,
+        decision: decision,
+        criteria: collectConceptCriteria(),
+        note: conceptNote.value
+      })
+    });
+    conceptEditing = false;
+    latestConceptSnapshot = payload;
+    const nextPending = pendingConceptIndex(payload.concepts || []);
+    if (nextPending >= 0) conceptCursor = nextPending;
+    renderConceptReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Concept accepted."
+        : decision === "REWORK"
+          ? "Concept sent for rework."
+          : "Concept rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   analysisCurrentTitle.textContent =
-    workflow.state === "HUMAN_VISION_GATE"
+    (workflow.state === "HUMAN_VISION_GATE" || workflow.state === "HUMAN_CONCEPT_GATE")
       ? workflow.current_title
       : (
         workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
@@ -726,7 +944,7 @@ function renderAnalysis(data) {
       );
 
   analysisCurrentDetail.textContent =
-    workflow.state === "HUMAN_VISION_GATE"
+    (workflow.state === "HUMAN_VISION_GATE" || workflow.state === "HUMAN_CONCEPT_GATE")
       ? workflow.current_detail
       : (
         data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
@@ -739,6 +957,7 @@ function renderAnalysis(data) {
   });
   renderActionCollection(actions, analysisActions);
   renderVisionReview(data.vision_review || {}, false);
+  renderConceptReview(data.concept_gate || {}, false);
 
   const currentId = workflow.current_action_id || "";
   const activeIndex = [
@@ -747,7 +966,10 @@ function renderAnalysis(data) {
     "exp2_visual",
     "exp2_vision_prepare"
   ].includes(currentId) || workflow.state === "HUMAN_VISION_GATE" ? 0 :
-    ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId) ? 1 : 0;
+    ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId) ? 1 :
+    ["transform_prepare", "concept_generate", "concept_gate_prepare"].includes(currentId) ||
+      workflow.state === "HUMAN_CONCEPT_GATE" ||
+      (data.transformation && data.transformation.concept_gate_complete) ? 2 : 0;
   creationTabs.forEach(function (tab, index) {
     tab.classList.toggle("active", index === activeIndex);
   });
@@ -1015,6 +1237,27 @@ visionReject.addEventListener("click", function () {
 });
 visionAccept.addEventListener("click", function () {
   submitVisionDecision("ACCEPT_FRAME");
+});
+conceptNote.addEventListener("input", function () {
+  conceptEditing = true;
+});
+conceptCriteria.addEventListener("change", function () {
+  conceptEditing = true;
+});
+conceptPrev.addEventListener("click", function () {
+  moveConceptCursor(-1);
+});
+conceptNext.addEventListener("click", function () {
+  moveConceptCursor(1);
+});
+conceptReject.addEventListener("click", function () {
+  submitConceptDecision("REJECT");
+});
+conceptRework.addEventListener("click", function () {
+  submitConceptDecision("REWORK");
+});
+conceptAccept.addEventListener("click", function () {
+  submitConceptDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });

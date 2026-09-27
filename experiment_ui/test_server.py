@@ -32,6 +32,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="visionReviewPanel"', html)
         self.assertIn('id="visionFrameImage"', html)
         self.assertIn('id="visionObservation"', html)
+        self.assertIn('id="conceptReviewPanel"', html)
+        self.assertIn('id="conceptCriteria"', html)
+        self.assertIn('id="conceptNote"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -42,6 +45,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("openJobDrawer", script)
         self.assertIn("renderVisionReview", script)
         self.assertIn("/api/vision-review", script)
+        self.assertIn("renderConceptReview", script)
+        self.assertIn("/api/concept-gate", script)
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
@@ -87,6 +92,80 @@ class ExperimentUiTests(unittest.TestCase):
                 server.WORKFLOW_ACTION_ORDER.index("exp2_prepare") + 1
             ],
             "exp2_acquire",
+        )
+
+    def test_transformation_concept_actions_follow_synthesis(self):
+        for action_id in (
+            "transform_prepare",
+            "concept_generate",
+            "concept_gate_prepare",
+        ):
+            self.assertIn(action_id, server.ACTION_DEFS)
+
+        synthesis_index = server.WORKFLOW_ACTION_ORDER.index(
+            "synthesis_build"
+        )
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 4],
+            [
+                "transform_prepare",
+                "concept_generate",
+                "concept_gate_prepare",
+            ],
+        )
+        self.assertIn(
+            "transformation_engine/transformation_engine.py",
+            server.ACTION_DEFS["transform_prepare"]["command"][1],
+        )
+        self.assertIn(
+            "transformation_engine/concept_model_runner.py",
+            server.ACTION_DEFS["concept_generate"]["command"][1],
+        )
+        self.assertIn(
+            "transformation_engine/concept_review.py",
+            server.ACTION_DEFS["concept_gate_prepare"]["command"][1],
+        )
+
+    def test_pending_concept_gate_becomes_human_workflow_gate(self):
+        with (
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={
+                    "ready_for_experiment_02": True,
+                    "opportunities": [],
+                },
+            ),
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={
+                    "awaiting_human_review": False,
+                    "complete": True,
+                },
+            ),
+            patch.object(
+                server,
+                "opportunity_research_state",
+                return_value={},
+            ),
+            patch.object(
+                server,
+                "transformation_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "concept_gate": {
+                        "status": "AWAITING_HUMAN_DECISION",
+                    },
+                },
+            ),
+        ):
+            workflow = server.workflow_guidance({})
+
+        self.assertEqual(workflow["state"], "HUMAN_CONCEPT_GATE")
+        self.assertEqual(
+            workflow["current_title"],
+            "Review Concept Candidates",
         )
 
     def test_exp2_acquisition_requires_prepared_profiles_and_transcript_evidence(self):

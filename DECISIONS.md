@@ -850,3 +850,26 @@ plus at most eight evenly distributed scene frames per video.
 The automatic provider is local-first and free/open-source friendly. When no
 local model is configured or available, the workflow falls back to human-only
 review rather than blocking.
+
+
+## D-059 — Concept generation is automated; concept selection remains human
+
+**Status:** Accepted
+
+After Experiment 02 produces a human-confirmed transformation handoff, the
+Transformation Engine may use FAIR free-only routing to generate multiple
+concept candidates.
+
+Generated concepts must still pass the deterministic Transformation schema and
+Source Dependency Test before appearing in the Concept Gate.
+
+No concept score, ranking, predicted virality, or automatic winner selection is
+introduced.
+
+Every runner-produced response is bound to the SHA-256 of the exact concept
+request that produced it. Every concept request is bound to the SHA-256 of the
+current Experiment 02 transformation handoff.
+
+The human Concept Gate remains mandatory. ACCEPT requires every configured
+human criterion to be affirmed. Only accepted concepts may enter the Research
+Engine handoff.

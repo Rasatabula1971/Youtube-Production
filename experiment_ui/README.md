@@ -280,3 +280,28 @@ editing.
 If no local vision model is configured, the same workflow operates in
 human-only mode. **Vision Doctor** under Tools & Diagnostics reports whether a
 configured local Ollama model is available.
+
+
+## Transformation / Concept workflow
+
+After Experiment 02 synthesis, Analyze & Create now continues automatically into
+the Transformation Engine:
+
+**Prepare Concept Requests → Generate Concept Candidates → Prepare Concept Gate
+→ Review Concept Candidates**
+
+The Concept tab is now active.
+
+The Concept Gate displays one concept at a time to avoid a long scrolling page.
+It shows the premise, audience promise, viewer problem / moment / outcome,
+content-gap state, channel-fit state, title-clarity options, research questions
+and Source Dependency Test.
+
+ACCEPT requires all configured human criteria to be checked. REWORK requires a
+written note. REJECT records the decision but does not pass the concept forward.
+
+Only accepted concepts enter
+`transformation_engine/output/research_handoff.json`.
+
+If every concept is rejected or marked for rework, the current Concept Gate can
+be reopened instead of leaving the workflow deadlocked.

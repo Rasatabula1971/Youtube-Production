@@ -130,7 +130,7 @@
           <div class="creation-tabs" id="creationTabs">
             <span class="creation-tab active">Evidence</span>
             <span class="creation-tab">Analysis</span>
-            <span class="creation-tab future">Concept</span>
+            <span class="creation-tab">Concept</span>
             <span class="creation-tab future">Script</span>
             <span class="creation-tab future">Package</span>
             <span class="creation-tab future">Produce</span>
@@ -177,6 +177,33 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="conceptReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN CONCEPT GATE</p>
+                <h2 id="conceptReviewTitle">Review concept candidate</h2>
+                <p class="muted" id="conceptReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="conceptReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="conceptDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-criteria" id="conceptCriteria"></div>
+                <label class="vision-label" for="conceptNote">Review note</label>
+                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Required for Rework. Optional for Reject or Accept."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="conceptPrev" type="button">← Previous</button>
+                  <button class="danger" id="conceptReject" type="button">Reject</button>
+                  <button class="ghost" id="conceptRework" type="button">Rework</button>
+                  <button id="conceptAccept" type="button">Accept concept</button>
+                  <button class="ghost" id="conceptNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
@@ -192,6 +219,7 @@
             <button class="ghost" data-open="source_acquisition_output">Acquisition Output</button>
             <button class="ghost" data-open="experiment_01_output">Experiment 01 Output</button>
             <button class="ghost" data-open="experiment_02_output">Experiment 02 Output</button>
+            <button class="ghost" data-open="transformation_output">Transformation Output</button>
             <button class="ghost" data-open="ui_jobs">Job Logs</button>
           </div>
 

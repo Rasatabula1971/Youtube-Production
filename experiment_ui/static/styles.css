@@ -895,6 +895,117 @@ button.danger {
   font-size: 12px;
 }
 
+/* Human Concept Gate */
+.concept-review-panel {
+  margin-top: 14px;
+}
+
+.concept-review-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.08fr) minmax(320px, .92fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.concept-detail {
+  display: grid;
+  gap: 10px;
+}
+
+.concept-detail-card {
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(13,17,23,.34);
+}
+
+.concept-detail-card h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.concept-detail-card h4 {
+  margin: 0 0 5px;
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: .07em;
+}
+
+.concept-detail-card p {
+  margin: 0;
+  color: #d0d9e3;
+  font-size: 11px;
+  line-height: 1.48;
+}
+
+.concept-detail-card ul {
+  margin: 6px 0 0 17px;
+  padding: 0;
+  color: #d0d9e3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.concept-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.concept-decision-pane {
+  min-width: 0;
+}
+
+.concept-criteria {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.concept-criterion {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(13,17,23,.28);
+  color: #d4dde7;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.concept-criterion input {
+  margin-top: 1px;
+}
+
+.concept-criterion strong {
+  display: block;
+  color: #fff;
+  font-size: 10px;
+}
+
+.concept-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.concept-complete {
+  padding: 16px;
+  border: 1px solid rgba(63,185,80,.42);
+  border-radius: 10px;
+  background: rgba(63,185,80,.06);
+  color: #c9f3cf;
+  font-size: 12px;
+}
+
 /* Tools */
 .tool-shortcuts {
   margin-bottom: 14px;
@@ -1116,7 +1227,8 @@ button.danger {
 }
 
 @media (max-width: 980px) {
-  .vision-review-layout {
+  .vision-review-layout,
+  .concept-review-layout {
     grid-template-columns: 1fr;
   }
 }

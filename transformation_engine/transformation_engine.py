@@ -10,6 +10,7 @@ No model, network, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,14 @@ RESPONSES_DIR = OUTPUT_DIR / "concept_responses"
 CANDIDATES_FILE = OUTPUT_DIR / "concept_candidates.json"
 REJECTED_FILE = OUTPUT_DIR / "rejected_concepts.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_json(path: Path) -> Any:
@@ -437,6 +446,9 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    for stale_request in REQUESTS_DIR.glob("*.concept_request.json"):
+        stale_request.unlink()
+
     if not handoff_path.exists():
         summary = {
             "status": "WAITING_FOR_EXPERIMENT_02_HANDOFF",
@@ -451,6 +463,23 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         return summary
 
     handoff = load_json(handoff_path)
+    handoff_hash = sha256_file(handoff_path)
+
+    previous_summary = load_json(SUMMARY_FILE) if SUMMARY_FILE.exists() else {}
+    if previous_summary.get("handoff_sha256") not in {None, handoff_hash}:
+        for stale_name in (
+            "concept_candidates.json",
+            "rejected_concepts.json",
+            "concept_gate_request.json",
+            "concept_gate_reviewed.json",
+            "research_handoff.json",
+            "concept_gate_summary.json",
+            "concept_gate_ui_state.json",
+        ):
+            stale_path = OUTPUT_DIR / stale_name
+            if stale_path.exists():
+                stale_path.unlink()
+
     entries = ready_entries(handoff, config)
 
     if not entries:
@@ -474,6 +503,10 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     requests = []
     for entry in entries:
         request = build_concept_request(entry, config)
+        request["request_provenance"] = {
+            "handoff_source": str(handoff_path.resolve()),
+            "handoff_sha256": handoff_hash,
+        }
         destination = (
             REQUESTS_DIR
             / f"{safe_slug(request['mechanism_id'])}.concept_request.json"
@@ -487,6 +520,7 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     summary = {
         "status": "CONCEPT_REQUESTS_PREPARED",
         "handoff_status": handoff.get("status"),
+        "handoff_sha256": handoff_hash,
         "ready_mechanisms": len(entries),
         "requests_created": len(requests),
         "requests": requests,
@@ -527,6 +561,20 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
             continue
 
         request = load_json(request_path)
+        provenance = response.get("response_provenance")
+        if isinstance(provenance, dict):
+            expected_hash = sha256_file(request_path)
+            if provenance.get("request_sha256") != expected_hash:
+                rejected.append(
+                    {
+                        "response": str(response_path),
+                        "errors": [
+                            "model response provenance does not match current concept request"
+                        ],
+                    }
+                )
+                continue
+
         try:
             result = validate_response(response, request, config)
         except ValueError as exc:
