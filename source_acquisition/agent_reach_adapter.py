@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 from typing import Any
@@ -19,6 +20,10 @@ from typing import Any
 DOCTOR_TIMEOUT_SECONDS = 90
 SEARCH_TIMEOUT_SECONDS = 900
 MAX_SEARCH_RESULTS = 100
+MAX_WEB_SEARCH_RESULTS = 20
+WEB_SEARCH_TIMEOUT_SECONDS = 120
+WEB_READ_TIMEOUT_SECONDS = 120
+URL_PATTERN = re.compile(r"https?://[^\\s\\]\[<>{}()\"']+")
 
 
 class AcquisitionError(RuntimeError):
@@ -352,13 +357,173 @@ def search_youtube(
     }
 
 
+
+def mcporter_path() -> str | None:
+    return shutil.which("mcporter")
+
+
+def curl_path() -> str | None:
+    return shutil.which("curl")
+
+
+def extract_urls(value: Any) -> list[str]:
+    """Extract unique HTTP(S) URLs from arbitrary Exa/mcporter output."""
+    text = (
+        json.dumps(value, ensure_ascii=False)
+        if not isinstance(value, str)
+        else value
+    )
+    seen: set[str] = set()
+    urls: list[str] = []
+    for raw in URL_PATTERN.findall(text):
+        url = raw.rstrip(".,;:")
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def search_web(
+    query: str,
+    *,
+    limit: int = 5,
+    timeout_seconds: int = WEB_SEARCH_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Search the web through Agent Reach's documented Exa/mcporter backend."""
+    query = str(query).strip()
+    if not query:
+        raise ValueError("query is required")
+    if limit < 1 or limit > MAX_WEB_SEARCH_RESULTS:
+        raise ValueError(
+            f"limit must be between 1 and {MAX_WEB_SEARCH_RESULTS}"
+        )
+
+    executable = mcporter_path()
+    if not executable:
+        raise AcquisitionError(
+            "mcporter is not available on PATH; Agent Reach web search is unavailable"
+        )
+
+    command = [
+        executable,
+        "call",
+        "exa.web_search_exa",
+        f"query={query}",
+        f"numResults={limit}",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AcquisitionError(
+            f"Exa web search timed out after {timeout_seconds}s"
+        ) from exc
+    except OSError as exc:
+        raise AcquisitionError(
+            f"Exa web search failed to start: {exc}"
+        ) from exc
+
+    if completed.returncode != 0:
+        raise AcquisitionError(
+            (
+                completed.stderr.strip()
+                or completed.stdout.strip()
+                or "Exa web search failed"
+            )[:1600]
+        )
+
+    raw = completed.stdout.strip()
+    try:
+        parsed: Any = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = raw
+
+    urls = extract_urls(parsed)
+    return {
+        "status": "COMPLETE",
+        "query": query,
+        "requested_limit": limit,
+        "result_urls": urls[:limit],
+        "raw_result": parsed,
+        "backend": "exa.web_search_exa",
+    }
+
+
+def read_web_page(
+    url: str,
+    *,
+    timeout_seconds: int = WEB_READ_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Read one public web page through Agent Reach's documented Jina Reader path."""
+    url = str(url).strip()
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("url must be an absolute HTTP(S) URL")
+
+    executable = curl_path()
+    if not executable:
+        raise AcquisitionError(
+            "curl is not available on PATH; Jina Reader web reading is unavailable"
+        )
+
+    reader_url = "https://r.jina.ai/" + url
+    try:
+        completed = subprocess.run(
+            [
+                executable,
+                "-L",
+                "-sS",
+                "--max-time",
+                str(int(timeout_seconds)),
+                reader_url,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds + 10,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AcquisitionError(
+            f"Jina Reader timed out after {timeout_seconds}s"
+        ) from exc
+    except OSError as exc:
+        raise AcquisitionError(
+            f"Jina Reader failed to start: {exc}"
+        ) from exc
+
+    content = completed.stdout.strip()
+    if completed.returncode != 0 or not content:
+        raise AcquisitionError(
+            (
+                completed.stderr.strip()
+                or "Jina Reader returned no content"
+            )[:1600]
+        )
+
+    return {
+        "status": "COMPLETE",
+        "url": url,
+        "reader_url": reader_url,
+        "backend": "jina_reader",
+        "content": content,
+        "content_chars": len(content),
+    }
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Agent Reach source-acquisition adapter"
     )
     parser.add_argument(
         "--mode",
-        choices=("doctor", "youtube-search"),
+        choices=("doctor", "youtube-search", "web-search", "web-read"),
         required=True,
     )
     parser.add_argument("--query", default=None)
@@ -373,17 +538,31 @@ def main() -> None:
     if args.mode == "doctor":
         payload = doctor()
         payload["youtube"] = youtube_health(payload)
+        payload["web_search"] = {
+            "ready": mcporter_path() is not None,
+            "backend": "exa.web_search_exa",
+        }
+        payload["web_read"] = {
+            "ready": curl_path() is not None,
+            "backend": "jina_reader",
+        }
         result = payload
-    else:
+    elif args.mode == "youtube-search":
         if not args.query:
-            raise SystemExit(
-                "--query is required for youtube-search"
-            )
+            raise SystemExit("--query is required for youtube-search")
         result = search_youtube(
             args.query,
             limit=args.limit,
             strategy=args.strategy,
         )
+    elif args.mode == "web-search":
+        if not args.query:
+            raise SystemExit("--query is required for web-search")
+        result = search_web(args.query, limit=args.limit)
+    else:
+        if not args.query:
+            raise SystemExit("--query must contain the URL for web-read")
+        result = read_web_page(args.query)
 
     print(render_console_json(result))
 
