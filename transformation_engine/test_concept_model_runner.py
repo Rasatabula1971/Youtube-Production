@@ -174,6 +174,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
                         encoding="utf-8"
                     )
                 )
+                expected_request_hash = engine.sha256_file(request_path)
             finally:
                 runner.MODEL_RUNS_DIR = old_runs
                 runner.RAW_OUTPUTS_DIR = old_raw
@@ -183,7 +184,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["structurally_accepted"], 1)
         self.assertEqual(
             response["response_provenance"]["request_sha256"],
-            engine.sha256_file(request_path),
+            expected_request_hash,
         )
 
     @patch("concept_model_runner.resolve_fair_paths")
