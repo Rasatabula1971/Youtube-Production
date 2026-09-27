@@ -42,6 +42,7 @@ const toast = document.getElementById("toast");
 
 let jobTimer = null;
 let latestStatus = null;
+let renderedPath = null;
 
 const ROUTES = {
   "/": {
@@ -140,9 +141,10 @@ function normalizedPath() {
     : "/";
 }
 
-function renderRoute() {
+function renderRoute(options) {
   const path = normalizedPath();
   const route = ROUTES[path];
+  const shouldScroll = Boolean(options && options.scroll) || renderedPath === null;
 
   views.forEach(function (view) {
     view.hidden = view.dataset.view !== route.view;
@@ -160,7 +162,10 @@ function renderRoute() {
     : route.title + " — YouTube Production";
 
   closeSidebar();
-  window.scrollTo({ top: 0, behavior: "instant" });
+  if (shouldScroll && renderedPath !== path) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+  renderedPath = path;
 }
 
 function navigate(path) {
@@ -168,7 +173,7 @@ function navigate(path) {
   if (window.location.pathname !== target) {
     history.pushState({}, "", target);
   }
-  renderRoute();
+  renderRoute({ scroll: true });
 }
 
 function openSidebar() {
@@ -610,7 +615,7 @@ function renderAll(data) {
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});
-  renderRoute();
+  renderRoute({ scroll: false });
 }
 
 async function loadStatus() {
@@ -755,7 +760,9 @@ document.addEventListener("click", function (event) {
   }
 });
 
-window.addEventListener("popstate", renderRoute);
+window.addEventListener("popstate", function () {
+  renderRoute({ scroll: true });
+});
 refreshStatus.addEventListener("click", loadStatus);
 jobSummaryButton.addEventListener("click", openJobDrawer);
 closeJobDrawer.addEventListener("click", closeJob);
@@ -764,6 +771,6 @@ stopJob.addEventListener("click", stopCurrentJob);
 mobileMenu.addEventListener("click", openSidebar);
 sidebarScrim.addEventListener("click", closeSidebar);
 
-renderRoute();
+renderRoute({ scroll: true });
 loadStatus();
 setInterval(loadStatus, 5000);
