@@ -9,6 +9,9 @@ const logView = document.getElementById("logView");
 const stopJob = document.getElementById("stopJob");
 const toast = document.getElementById("toast");
 const opportunityGate = document.getElementById("opportunityGate");
+const controlsPanel = document.getElementById("controlsPanel");
+const jobPanel = document.getElementById("jobPanel");
+const backToControls = document.getElementById("backToControls");
 
 let jobTimer = null;
 
@@ -423,6 +426,30 @@ async function loadJob() {
   }
 }
 
+function elementMostlyVisible(element) {
+  if (!element) return true;
+  const rect = element.getBoundingClientRect();
+  const viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight;
+  return rect.top >= 0 && rect.top <= viewportHeight * 0.35;
+}
+
+function focusJobPanel() {
+  if (!jobPanel || elementMostlyVisible(jobPanel)) return;
+  jobPanel.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+function focusControlsPanel() {
+  if (!controlsPanel) return;
+  controlsPanel.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
 async function runAction(actionId) {
   try {
     const data = await api("/api/run", {
@@ -431,6 +458,7 @@ async function runAction(actionId) {
     });
     renderJob(data.job, "");
     showToast("Started: " + data.job.label, false);
+    focusJobPanel();
     startJobPolling();
     await loadStatus();
   } catch (error) {
@@ -480,6 +508,7 @@ function stopJobPolling() {
 
 refreshStatus.addEventListener("click", loadStatus);
 stopJob.addEventListener("click", stopCurrentJob);
+backToControls.addEventListener("click", focusControlsPanel);
 
 document.querySelectorAll("[data-open]").forEach(function (button) {
   button.addEventListener("click", function () {
