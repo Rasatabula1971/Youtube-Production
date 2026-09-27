@@ -10,6 +10,7 @@ No model, network, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,10 @@ def safe_slug(value: str) -> str:
         for char in value
     ).strip("._")
     return cleaned or "unknown"
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def build_package_request(
@@ -336,6 +341,7 @@ def run_prepare(
         return summary
 
     handoff = load_json(concept_handoff_path)
+    handoff_sha256 = sha256_file(concept_handoff_path)
     concepts = handoff.get("concepts", [])
     if not isinstance(concepts, list):
         raise ValueError(
@@ -347,6 +353,10 @@ def run_prepare(
 
     for concept in concepts:
         request = build_package_request(concept, config)
+        request["request_provenance"] = {
+            "concept_handoff_source": str(concept_handoff_path),
+            "concept_handoff_sha256": handoff_sha256,
+        }
         concept_id = str(request["concept_id"])
         if concept_id in seen_concept_ids:
             raise ValueError(
