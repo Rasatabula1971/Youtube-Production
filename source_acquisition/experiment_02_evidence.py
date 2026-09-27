@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -33,6 +34,20 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".avif"}
 TRANSCRIPT_SUFFIXES = {".vtt", ".srt", ".txt", ".md"}
 
 RATE_LIMIT_PATTERNS = ("HTTP Error 429", "Too Many Requests")
+AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".opus", ".webm"}
+DEFAULT_WHISPER_MODEL = "base"
+
+
+def whisper_path() -> str | None:
+    return shutil.which("whisper")
+
+
+def ffmpeg_path() -> str | None:
+    return shutil.which("ffmpeg")
+
+
+def local_transcription_available() -> bool:
+    return whisper_path() is not None and ffmpeg_path() is not None
 
 
 def classify_ytdlp_failure(stderr: str) -> str | None:
@@ -168,6 +183,131 @@ def yt_dlp_command(
         template,
         url,
     ]
+
+
+def yt_dlp_audio_command(
+    yt_dlp: str,
+    *,
+    url: str,
+    directory: Path,
+) -> list[str]:
+    template = str(directory / "%(id)s.fallback.%(ext)s")
+    return [
+        yt_dlp,
+        "--no-playlist",
+        "--restrict-filenames",
+        "-f",
+        "bestaudio/best",
+        "-x",
+        "--audio-format",
+        "wav",
+        "--output",
+        template,
+        url,
+    ]
+
+
+def find_fallback_audio(directory: Path, video_id: str) -> Path | None:
+    if not directory.exists():
+        return None
+    candidates = [
+        path
+        for path in directory.iterdir()
+        if path.is_file()
+        and path.suffix.casefold() in AUDIO_SUFFIXES
+        and path.name.casefold().startswith(f"{video_id.casefold()}.fallback")
+    ]
+    return sorted(candidates)[0] if candidates else None
+
+
+def run_local_whisper(
+    audio_path: Path,
+    *,
+    output_dir: Path,
+    model: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    executable = whisper_path()
+    if not executable:
+        raise RuntimeError("Local Whisper CLI is not available on PATH.")
+    selected_model = (
+        model
+        or os.environ.get("YOUTUBE_WHISPER_MODEL")
+        or DEFAULT_WHISPER_MODEL
+    )
+    return subprocess.run(
+        [
+            executable,
+            str(audio_path),
+            "--model",
+            selected_model,
+            "--language",
+            "en",
+            "--task",
+            "transcribe",
+            "--output_format",
+            "txt",
+            "--output_dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def transcribe_audio_fallback(
+    *,
+    yt_dlp: str,
+    url: str,
+    video_id: str,
+    output_dir: Path,
+) -> dict[str, Any]:
+    if not local_transcription_available():
+        return {
+            "status": "LOCAL_TRANSCRIBER_UNAVAILABLE",
+            "message": "Local fallback requires ffmpeg and the Whisper CLI on PATH.",
+        }
+
+    audio_result = subprocess.run(
+        yt_dlp_audio_command(yt_dlp, url=url, directory=output_dir),
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    audio_path = find_fallback_audio(output_dir, video_id)
+    if audio_result.returncode != 0 or audio_path is None:
+        return {
+            "status": "AUDIO_ACQUISITION_FAILED",
+            "yt_dlp_return_code": audio_result.returncode,
+            "stderr_tail": audio_result.stderr[-4000:],
+        }
+
+    try:
+        whisper_result = run_local_whisper(audio_path, output_dir=output_dir)
+        produced = output_dir / f"{audio_path.stem}.txt"
+        transcript_path = output_dir / f"{video_id}.fallback.txt"
+        if whisper_result.returncode == 0 and produced.exists():
+            produced.replace(transcript_path)
+            return {
+                "status": "READY",
+                "transcript": str(transcript_path),
+                "model": (
+                    os.environ.get("YOUTUBE_WHISPER_MODEL")
+                    or DEFAULT_WHISPER_MODEL
+                ),
+            }
+        return {
+            "status": "TRANSCRIPTION_FAILED",
+            "return_code": whisper_result.returncode,
+            "stderr_tail": whisper_result.stderr[-4000:],
+        }
+    finally:
+        try:
+            audio_path.unlink()
+        except OSError:
+            pass
 
 
 def enriched_profile_ready(
@@ -307,6 +447,16 @@ def acquire_one(
         thumbnail = find_thumbnail(output_dir, video_id)
         info_json = find_info_json(output_dir, video_id)
 
+    fallback_result: dict[str, Any] | None = None
+    if transcript is None:
+        fallback_result = transcribe_audio_fallback(
+            yt_dlp=yt_dlp,
+            url=url,
+            video_id=video_id,
+            output_dir=output_dir,
+        )
+        transcript = find_transcript(output_dir, video_id)
+
     if transcript is None:
         failure_status = (
             classify_ytdlp_failure(yt_result.stderr)
@@ -323,6 +473,7 @@ def acquire_one(
             ),
             "thumbnail": str(thumbnail) if thumbnail else None,
             "info_json": str(info_json) if info_json else None,
+            "fallback": fallback_result,
             "message": (
                 "YouTube rate-limited subtitle acquisition (HTTP 429). "
                 "Do not immediately retry; preserve this job and retry after the "
@@ -366,6 +517,12 @@ def acquire_one(
         "transcript": str(transcript),
         "thumbnail": str(thumbnail) if thumbnail else None,
         "info_json": str(info_json) if info_json else None,
+        "transcript_origin": (
+            "local_whisper_fallback"
+            if transcript.name.endswith(".fallback.txt")
+            else "youtube_captions"
+        ),
+        "fallback": fallback_result,
         "bundle": str(bundle_path),
         "ingest_return_code": ingest.returncode,
         "enriched_profile": str(enriched_path) if enriched_path.exists() else None,
@@ -456,6 +613,13 @@ def main() -> None:
         result = {
             "status": "READY" if yt_dlp else "MISSING_YT_DLP",
             "yt_dlp": yt_dlp,
+            "ffmpeg": ffmpeg_path(),
+            "whisper": whisper_path(),
+            "local_transcription_fallback": local_transcription_available(),
+            "whisper_model": (
+                os.environ.get("YOUTUBE_WHISPER_MODEL")
+                or DEFAULT_WHISPER_MODEL
+            ),
             "prepared_profiles": len(current_prepared_profiles()),
         }
         print(json.dumps(result, indent=2, ensure_ascii=False))
