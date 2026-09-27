@@ -75,6 +75,7 @@ OUTPUT_ROOT = HERE / "output"
 # contaminate one another.
 EXPERIMENT_OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_2"
 SNAPSHOT_FILE = EXPERIMENT_OUTPUT_DIR / "video_snapshots.jsonl"
+SEARCH_CHECKPOINT_FILE = EXPERIMENT_OUTPUT_DIR / "search_checkpoint.json"
 
 
 # ============================================================
@@ -150,17 +151,44 @@ def load_env_file(path: Path) -> None:
 # API ERROR DISPLAY
 # ============================================================
 
-def display_http_error(
+def read_http_error(
     exc: urllib.error.HTTPError,
-) -> None:
-
+) -> tuple[str, str | None]:
     try:
         body = exc.read().decode(
             "utf-8",
             errors="replace",
         )
     except Exception:
-        body = "<Could not read response body>"
+        return "<Could not read response body>", None
+
+    reason: str | None = None
+    try:
+        parsed = json.loads(body)
+        error_payload = (
+            parsed.get("error")
+            if isinstance(parsed, dict)
+            else None
+        )
+        errors = (
+            error_payload.get("errors", [])
+            if isinstance(error_payload, dict)
+            else []
+        )
+        if errors and isinstance(errors[0], dict):
+            value = errors[0].get("reason")
+            if value:
+                reason = str(value)
+    except json.JSONDecodeError:
+        pass
+
+    return body, reason
+
+
+def display_http_error(
+    exc: urllib.error.HTTPError,
+    body: str,
+) -> None:
 
     print()
     print("=" * 60)
@@ -238,17 +266,61 @@ def api_get(
 
         except urllib.error.HTTPError as exc:
 
-            display_http_error(exc)
+            body, youtube_reason = read_http_error(exc)
+            display_http_error(exc, body)
 
-            if 400 <= exc.code < 500:
+            retryable = (
+                500 <= exc.code < 600
+                or exc.code == 429
+                or youtube_reason in {
+                    "rateLimitExceeded",
+                    "userRateLimitExceeded",
+                    "backendError",
+                    "internalError",
+                }
+            )
 
+            if not retryable:
+                detail = (
+                    f" reason={youtube_reason}"
+                    if youtube_reason
+                    else ""
+                )
                 raise SystemExit(
-                    "YouTube rejected the request. "
+                    "YouTube rejected the request "
+                    f"(HTTP {exc.code}{detail}). "
                     "Read the API error above."
                 )
 
             if attempt == 3:
                 raise
+
+            retry_after = None
+            try:
+                retry_after_value = exc.headers.get("Retry-After")
+                if retry_after_value:
+                    retry_after = float(retry_after_value)
+            except (AttributeError, TypeError, ValueError):
+                retry_after = None
+
+            wait_seconds = (
+                max(0.0, retry_after)
+                if retry_after is not None
+                else float(2 ** attempt)
+            )
+
+            print(
+                "Retryable YouTube API error "
+                f"(HTTP {exc.code}"
+                + (
+                    f", reason={youtube_reason}"
+                    if youtube_reason
+                    else ""
+                )
+                + f"). Retrying in {wait_seconds:g}s..."
+            )
+
+            time.sleep(wait_seconds)
 
         except urllib.error.URLError as exc:
 
@@ -688,6 +760,76 @@ def calculate_channel_baseline(
     )
 
 
+def discovery_checkpoint_signature(
+    config: dict[str, Any],
+    *,
+    published_after: str | None,
+    region_code: str | None,
+    language: str | None,
+) -> dict[str, Any]:
+    return {
+        "queries": [
+            {
+                "niche": str(niche.get("name", "")),
+                "queries": list(niche.get("queries", [])),
+            }
+            for niche in config.get("niches", [])
+        ],
+        "published_after": published_after,
+        "region_code": region_code,
+        "language": language,
+    }
+
+
+def load_search_checkpoint(
+    path: Path,
+    signature: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != 1
+        or payload.get("signature") != signature
+    ):
+        return None
+    return payload
+
+
+def save_search_checkpoint(
+    path: Path,
+    *,
+    signature: dict[str, Any],
+    discovered: dict[str, set[str]],
+    query_matches: dict[str, list[dict[str, Any]]],
+    query_search_results: list[dict[str, Any]],
+    completed_jobs: set[str],
+    search_calls: int,
+) -> None:
+    payload = {
+        "version": 1,
+        "signature": signature,
+        "search_calls": search_calls,
+        "completed_jobs": sorted(completed_jobs),
+        "discovered": {
+            video_id: sorted(niches)
+            for video_id, niches in discovered.items()
+        },
+        "query_matches": query_matches,
+        "query_search_results": query_search_results,
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -827,7 +969,58 @@ def main() -> None:
         dict[str, Any]
     ] = []
 
-    search_calls = 0
+    signature = discovery_checkpoint_signature(
+        config,
+        published_after=args.published_after,
+        region_code=args.region_code,
+        language=args.language,
+    )
+    checkpoint = load_search_checkpoint(
+        SEARCH_CHECKPOINT_FILE,
+        signature,
+    )
+    completed_jobs: set[str] = set()
+
+    if checkpoint is not None:
+        discovered = {
+            str(video_id): set(niches)
+            for video_id, niches in checkpoint.get(
+                "discovered",
+                {},
+            ).items()
+        }
+        query_matches = {
+            str(video_id): list(matches)
+            for video_id, matches in checkpoint.get(
+                "query_matches",
+                {},
+            ).items()
+        }
+        query_search_results = list(
+            checkpoint.get(
+                "query_search_results",
+                [],
+            )
+        )
+        completed_jobs = set(
+            checkpoint.get(
+                "completed_jobs",
+                [],
+            )
+        )
+        search_calls = int(
+            checkpoint.get(
+                "search_calls",
+                0,
+            )
+        )
+        print(
+            "Resuming Experiment 01.2 search checkpoint: "
+            f"{len(completed_jobs):,} completed queries, "
+            f"{search_calls:,} search calls."
+        )
+    else:
+        search_calls = 0
 
     print()
     print(
@@ -856,6 +1049,13 @@ def main() -> None:
         for query in niche[
             "queries"
         ]:
+
+            job_key = f"{niche_name}::{query}"
+            if job_key in completed_jobs:
+                print(
+                    f"  Already checkpointed: {query}"
+                )
+                continue
 
             if (
                 search_calls
@@ -959,6 +1159,16 @@ def main() -> None:
                     "query": query,
                     "video_ids": query_video_ids,
                 }
+            )
+            completed_jobs.add(job_key)
+            save_search_checkpoint(
+                SEARCH_CHECKPOINT_FILE,
+                signature=signature,
+                discovered=discovered,
+                query_matches=query_matches,
+                query_search_results=query_search_results,
+                completed_jobs=completed_jobs,
+                search_calls=search_calls,
             )
 
         if (
@@ -1170,6 +1380,12 @@ def main() -> None:
                 "title":
                     snippet.get(
                         "title",
+                        "",
+                    ),
+
+                "description":
+                    snippet.get(
+                        "description",
                         "",
                     ),
 
@@ -2096,6 +2312,9 @@ def main() -> None:
     print(
         f"  {summary_file}"
     )
+
+    if SEARCH_CHECKPOINT_FILE.exists():
+        SEARCH_CHECKPOINT_FILE.unlink()
 
     print(
         f"  {query_profiles_file}"

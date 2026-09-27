@@ -54,12 +54,14 @@ def _matching_terms(text: str, terms: Iterable[str]) -> list[str]:
 def classify_relevance(
     title: str,
     profile: dict[str, Any] | None,
+    description: str = "",
 ) -> dict[str, Any]:
-    """Classify title relevance from explicit niche configuration.
+    """Classify relevance from explicit niche configuration.
 
-    The classifier is intentionally conservative and deterministic:
-    exclusion terms win first; strong technical terms qualify as ON_INTENT;
-    context-only terms are ADJACENT; otherwise the result is OFF_INTENT.
+    Title evidence remains primary. Description text is used only as a
+    conservative rescue signal when the title itself has no configured niche
+    signal. A description must contain both a strong term and a context term
+    to qualify as ON_INTENT; a single description-side signal is ADJACENT.
     """
 
     if not profile:
@@ -70,6 +72,7 @@ def classify_relevance(
         }
 
     text = _normalize(title)
+    description_text = _normalize(description)
 
     exclusions = _matching_terms(
         text,
@@ -108,6 +111,38 @@ def classify_relevance(
                 "context_only:" + ",".join(context)
             ),
             "relevance_matches": context,
+        }
+
+    description_strong = _matching_terms(
+        description_text,
+        profile.get("strong_terms", []),
+    )
+    description_context = _matching_terms(
+        description_text,
+        profile.get("context_terms", []),
+    )
+    description_matches = sorted(
+        set(description_strong + description_context)
+    )
+
+    if description_strong and description_context:
+        return {
+            "relevance": RELEVANCE_ON_INTENT,
+            "relevance_reason": (
+                "description_strong_and_context:"
+                + ",".join(description_matches)
+            ),
+            "relevance_matches": description_matches,
+        }
+
+    if description_matches:
+        return {
+            "relevance": RELEVANCE_ADJACENT,
+            "relevance_reason": (
+                "description_signal:"
+                + ",".join(description_matches)
+            ),
+            "relevance_matches": description_matches,
         }
 
     return {
@@ -225,6 +260,7 @@ def annotate_evidence_quality(
     relevance = classify_relevance(
         row.get("title", ""),
         profile,
+        row.get("description", ""),
     )
 
     reliability = classify_outlier_reliability(

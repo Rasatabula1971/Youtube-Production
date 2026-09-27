@@ -73,12 +73,18 @@ All files are isolated under:
 
 `output\experiment_01_5\`
 
-Generated files:
+Machine-generated files:
 
 - `handoff_packets.json`
 - `handoff_candidates.csv`
 - `study_set.json`
 - `summary.json`
+
+The human opportunity gate writes:
+
+- `human_opportunity_decision.json` — auditable creator decisions;
+- `approved_study_set.json` — created only when at least one opportunity is
+  explicitly approved and all selected examples are kept.
 
 ## Handoff packet
 
@@ -116,11 +122,17 @@ Absolute views are used only as a tie-breaker.
 This is a coverage-constrained handoff, not a claim that the first video is
 universally "best."
 
+## Human opportunity gate
+
+A non-empty machine study set does **not** automatically enter Experiment 02.
+The operator reviews the surfaced topic and selected videos, may keep or replace
+examples, and then chooses APPROVE / HOLD / REJECT for the topic.
+
+Experiment 02 reads only `approved_study_set.json`.
+
 ## M1 boundary
 
-When 01.5 produces a non-empty study set, the Opportunity Engine has a concrete
-handoff artifact for Experiment 02.
-
-Experiment 02 should then analyze why those successful examples worked across
-packaging, hook, story, emotion, pacing, visual language, audience promise and
-payoff.
+A machine study set proves the Opportunity Engine can surface a candidate
+handoff. Human approval determines whether that opportunity is relevant to the
+channel the operator actually wants to build. M1 remains open until the broader
+live success criteria in PROJECT.md are demonstrated.

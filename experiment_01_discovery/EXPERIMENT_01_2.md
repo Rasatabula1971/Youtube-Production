@@ -16,10 +16,17 @@ Experiment 01.2 adds auditable annotations without changing the raw measurements
 
 ### Relevance
 
-- `ON_INTENT` — title contains a configured strong technical/mechanical signal
-- `ADJACENT` — title contains motorsport/F1 context but not a strong technical signal
-- `OFF_INTENT` — explicit exclusion signal or no configured niche signal
-- `UNREVIEWED` — niche has no intent profile yet
+Title evidence remains primary.
+
+- `ON_INTENT` — title contains a configured strong technical/mechanical signal;
+- `ADJACENT` — title contains context but not a strong technical signal;
+- `OFF_INTENT` — explicit title exclusion or no configured niche signal;
+- `UNREVIEWED` — niche has no intent profile yet.
+
+When a title contains no configured niche signal, the already-fetched YouTube
+description may rescue recall conservatively: both a strong term and a context
+term are required for `ON_INTENT`; a single description-side signal is only
+`ADJACENT`. Experiment 01.3 keeps its stricter title-only topic gate.
 
 Every label includes `relevance_reason` and `relevance_matches`.
 
@@ -66,13 +73,20 @@ From the repository root in PowerShell:
 python .\experiment_01_discovery\youtube_discovery.py --max-searches 3
 ```
 
-The existing files are regenerated:
+The experiment writes under `output/experiment_01_2/`.
 
-- `output/raw_results.json`
-- `output/candidates.csv`
-- `output/summary.json`
+Search progress is checkpointed after each completed query in
+`search_checkpoint.json`. If a later API/metadata step fails, a rerun can reuse
+the completed search work instead of spending the same search quota again. The
+checkpoint is removed only after the full run completes successfully.
 
-They now include Experiment 01.2 annotations.
+The generated result files include:
+
+- `output/experiment_01_2/raw_results.json`
+- `output/experiment_01_2/candidates.csv`
+- `output/experiment_01_2/summary.json`
+
+They include Experiment 01.2 annotations.
 
 ## Decision gate
 
@@ -114,7 +128,7 @@ No query competition score is calculated.
 
 ### Repeated snapshots / current velocity
 
-`output/video_snapshots.jsonl` stores immutable view-count observations over time.
+`output/experiment_01_2/video_snapshots.jsonl` stores immutable view-count observations over time.
 
 On later runs, the system compares the current observation with the most recent prior snapshot at least one hour old and records:
 
@@ -166,11 +180,11 @@ OFF_INTENT videos do not contribute to topic evidence.
 
 The generated output set is now:
 
-- `output/raw_results.json`
-- `output/candidates.csv`
-- `output/summary.json`
-- `output/query_profiles.json`
-- `output/topic_evidence.json`
-- `output/video_snapshots.jsonl`
+- `output/experiment_01_2/raw_results.json`
+- `output/experiment_01_2/candidates.csv`
+- `output/experiment_01_2/summary.json`
+- `output/experiment_01_2/query_profiles.json`
+- `output/experiment_01_2/topic_evidence.json`
+- `output/experiment_01_2/video_snapshots.jsonl`
 
 All remain outside Git.

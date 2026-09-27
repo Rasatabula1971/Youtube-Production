@@ -18,10 +18,10 @@ performance. Public source-video observation is not a controlled causal test.
 
 The formal candidate input is:
 
-`experiment_01_discovery/output/experiment_01_5/study_set.json`
+`experiment_01_discovery/output/experiment_01_5/approved_study_set.json`
 
-Only the evidence-backed study set from Experiment 01.5 should automatically
-enter Experiment 02.
+The machine-generated `study_set.json` is an audit artifact. Only examples
+explicitly approved by the human opportunity gate enter Experiment 02.
 
 ## Offline-first boundary
 

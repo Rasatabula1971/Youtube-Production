@@ -134,6 +134,32 @@ class RelevanceTests(unittest.TestCase):
         )
 
 
+    def test_description_can_rescue_vague_title_with_strong_and_context_signals(self) -> None:
+        result = classify_relevance(
+            "This Changed Everything",
+            PROFILE,
+            "Formula 1 engineering explained with an F1 gearbox teardown.",
+        )
+        self.assertEqual(
+            result["relevance"],
+            RELEVANCE_ON_INTENT,
+        )
+        self.assertIn(
+            "description_strong_and_context",
+            result["relevance_reason"],
+        )
+
+    def test_description_single_signal_is_only_adjacent(self) -> None:
+        result = classify_relevance(
+            "This Changed Everything",
+            PROFILE,
+            "A detailed engineering breakdown.",
+        )
+        self.assertEqual(
+            result["relevance"],
+            RELEVANCE_ADJACENT,
+        )
+
     def test_mechanic_vibe_clip_is_adjacent_not_on_intent(self) -> None:
         result = classify_relevance(
             "McLaren Mechanic has unlimited Aura",

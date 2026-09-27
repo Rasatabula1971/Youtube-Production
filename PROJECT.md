@@ -210,6 +210,11 @@ Learnings feed back into Opportunity, Packaging, Retention, Transformation, Stor
 
 Do not build all nine engines at once.
 
+**M1 remains open.** The project has implemented several downstream engines as
+offline frameworks ahead of live milestone closure, but those implementations
+do not count as proof that M1 succeeded. Live Opportunity Engine evidence and
+the human opportunity gate remain the controlling progression criteria.
+
 The immediate goal is to establish whether the discovery system can consistently surface useful source opportunities across multiple niches.
 
 ### Experiment 01.2
@@ -344,16 +349,17 @@ The 30-query dataset will be used to determine whether these assumptions survive
 
 ### Experiment 02 — Why Did It Work? Framework
 
-The Experiment 02 framework is now implemented offline. It consumes the
-Experiment 01.5 study set, prepares evidence profiles, validates supported
-creative findings against typed evidence, separates findings from hypotheses,
+The Experiment 02 framework is now implemented offline. It consumes only the
+human-approved Experiment 01.5 study set, prepares evidence profiles, validates
+supported creative findings against typed evidence, separates findings from hypotheses,
 and aggregates repeated mechanisms across independent videos/channels.
 
 The framework itself does not download videos, fetch transcripts, call an LLM,
 or spend YouTube API quota.
 
-Actual source analysis begins only after the Experiment 01.5 study set exists
-and transcript/thumbnail/visual evidence has been supplied.
+Actual source analysis begins only after the Experiment 01.5 study set exists,
+the human opportunity gate approves at least one opportunity, and
+transcript/thumbnail/visual evidence has been supplied.
 
 ### Experiment 02 — Why Did It Work?
 

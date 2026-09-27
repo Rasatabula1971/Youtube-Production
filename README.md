@@ -16,10 +16,15 @@ Transformation, research/story/script, format selection, production, quality con
 
 ## Current status
 
-**Milestone M1 — Prove the Opportunity Engine / prepare the Experiment 02 handoff**
+**Milestone M1 — Prove the Opportunity Engine**
 
-The repository now contains Experiments 01.2 through 01.5 plus the offline
-Experiment 02 why-it-worked analysis framework.
+M1 is **not yet formally closed**. The Opportunity Engine has now produced a
+real 01.3 → 01.4 → 01.5 handoff, but the multi-niche success criteria in
+PROJECT.md have not yet all been demonstrated on live data.
+
+Later-stage Transformation, Packaging, Research and Experiment 02 components
+have been implemented ahead as offline frameworks. Their presence in the repo
+does not mean those milestones are complete or that M1 has been bypassed.
 
 The experiment collects independent signals rather than calculating a final opportunity score:
 
@@ -88,6 +93,18 @@ Learning
     └── youtube_discovery_benchmark.py
 ```
 
+## Runtime requirements
+
+The project-owned Python code is intentionally **standard-library only**; there
+is no root Python package manifest because the repository itself has no
+third-party Python package dependency. External tools such as yt-dlp / Agent
+Reach and the separate FAIR repository are invoked as external executables or
+subprocesses rather than imported as project dependencies.
+
+Copy `.env.example` to `.env` and add only the local values you need.
+The FAIR subprocess coupling and override variables are documented in
+`experiment_02_analysis/ANALYSIS_MODEL_RUNNER.md`.
+
 Generated experiment output and secrets remain outside Git:
 
 - `.env`
@@ -111,10 +128,10 @@ Experiment 01.2 now produces transparent query competition profiles, persistent 
 
 ## Experiment 02 framework
 
-Experiment 02 is offline-first. It prepares evidence profiles from the
-Experiment 01.5 study set, validates creative findings against typed source
-evidence, separates findings from hypotheses, and aggregates repeated
-mechanisms across independent videos/channels.
+Experiment 02 is offline-first. It prepares evidence profiles only from the
+human-approved Experiment 01.5 study set, validates creative findings against
+typed source evidence, separates findings from hypotheses, and aggregates
+repeated mechanisms across independent videos/channels.
 
 It does not fetch transcripts or videos automatically and does not spend
 YouTube API quota.
