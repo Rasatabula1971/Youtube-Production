@@ -2102,6 +2102,7 @@ def workflow_guidance(
 def status_payload() -> dict[str, Any]:
     readiness = action_readiness()
     workflow = workflow_guidance(readiness)
+    transformation = transformation_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -2144,8 +2145,8 @@ def status_payload() -> dict[str, Any]:
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
         "vision_review": vision_review_snapshot(),
-        "transformation": transformation_artifact_state(),
-        "concept_gate": concept_gate_snapshot(),
+        "transformation": transformation,
+        "concept_gate": transformation["concept_gate"],
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
