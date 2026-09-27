@@ -35,6 +35,8 @@ PACKETS_FILE = OUTPUT_DIR / "handoff_packets.json"
 STUDY_SET_FILE = OUTPUT_DIR / "study_set.json"
 CSV_FILE = OUTPUT_DIR / "handoff_candidates.csv"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+HUMAN_DECISION_FILE = OUTPUT_DIR / "human_opportunity_decision.json"
+APPROVED_STUDY_SET_FILE = OUTPUT_DIR / "approved_study_set.json"
 
 EXPERIMENT_ID = "01.5"
 
@@ -320,6 +322,11 @@ def write_outputs(
 ) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    # A rebuilt machine handoff invalidates any earlier human decision.
+    for stale_gate_file in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE):
+        if stale_gate_file.exists():
+            stale_gate_file.unlink()
+
     PACKETS_FILE.write_text(
         json.dumps(packets, indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -364,7 +371,11 @@ def write_outputs(
     summary = {
         "experiment": "Stage 2 Experiment 01.5",
         "purpose": "opportunity_handoff_gate",
-        "status": "READY_FOR_EXPERIMENT_02" if study_set else "NO_PASSING_STUDY_SET",
+        "status": (
+            "AWAITING_HUMAN_OPPORTUNITY_GATE"
+            if study_set
+            else "NO_PASSING_STUDY_SET"
+        ),
         "source_01_3_cohort_id": summary_01_3.get("cohort_id"),
         "source_01_3_mode": summary_01_3.get("mode"),
         "source_01_4_execution_status": summary_01_4.get("execution_status"),
@@ -383,6 +394,7 @@ def write_outputs(
             "The study set uses age-matched velocity as the primary ordering metric.",
             "Absolute views are a tie-breaker only.",
             "Topic/format and channel caps preserve diversity.",
+            "Human opportunity approval is required before Experiment 02.",
             "No composite opportunity score is calculated.",
         ],
     }
