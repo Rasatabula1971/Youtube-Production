@@ -150,3 +150,32 @@ the next implementation should:
 4. preserve discovery provenance in every candidate.
 
 This keeps acquisition replaceable while keeping measurement evidence stable.
+
+
+## Experiment 02 transcript fallback
+
+Experiment 02 now uses a bounded transcript fallback chain:
+
+~~~text
+YouTube English captions through yt-dlp
+  ↓ if unavailable / rate-limited
+temporary best-audio acquisition through yt-dlp
+  ↓
+local Whisper CLI transcription
+  ↓
+saved text transcript
+  ↓
+temporary audio deleted
+~~~
+
+The fallback is only attempted after direct caption acquisition fails. It requires
+`ffmpeg` and the open-source `whisper` CLI on PATH. The default local model is
+`base`; set `YOUTUBE_WHISPER_MODEL` to choose another installed/supported model.
+
+The acquisition doctor reports whether this local fallback is ready. A YouTube
+HTTP 429 is preserved as `RATE_LIMITED_429` when the fallback cannot complete,
+rather than being misreported as a missing transcript.
+
+The saved acquisition report records whether the transcript originated from
+YouTube captions or local Whisper. Temporary audio is deleted after transcription,
+including failure paths.
