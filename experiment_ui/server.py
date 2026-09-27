@@ -87,6 +87,21 @@ TRANSFORM_RESPONSES_DIR = TRANSFORM_OUTPUT / "concept_responses"
 TRANSFORM_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates.json"
 TRANSFORM_RESEARCH_HANDOFF = TRANSFORM_OUTPUT / "research_handoff.json"
 
+PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
+if str(PACKAGING_DIR) not in sys.path:
+    sys.path.insert(0, str(PACKAGING_DIR))
+
+from package_review import (  # noqa: E402
+    apply_action as apply_packaging_gate_action,
+    snapshot as packaging_gate_snapshot,
+)
+
+PACKAGING_OUTPUT = PACKAGING_DIR / "output"
+PACKAGING_REQUESTS_DIR = PACKAGING_OUTPUT / "package_requests"
+PACKAGING_RESPONSES_DIR = PACKAGING_OUTPUT / "package_responses"
+PACKAGING_CANDIDATES_FILE = PACKAGING_OUTPUT / "package_candidates.json"
+PACKAGING_RESEARCH_HANDOFF = PACKAGING_OUTPUT / "research_handoff.json"
+
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
@@ -100,6 +115,9 @@ WORKFLOW_ACTION_ORDER = [
     "transform_prepare",
     "concept_generate",
     "concept_gate_prepare",
+    "package_prepare",
+    "package_generate",
+    "package_gate_prepare",
 ]
 
 ACTION_DEFS: dict[str, dict[str, Any]] = {
@@ -440,12 +458,54 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Prepares the compact human Concept Gate. No concept is selected automatically."
         ),
     },
+    "package_prepare": {
+        "label": "Prepare Package Requests",
+        "stage": "05",
+        "command": [
+            sys.executable,
+            "packaging_engine/packaging_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Turns human-accepted concepts into bounded title, thumbnail and opening-frame requests."
+        ),
+    },
+    "package_generate": {
+        "label": "Generate Package Candidates",
+        "stage": "05",
+        "command": [
+            sys.executable,
+            "packaging_engine/package_model_runner.py",
+            "--mode",
+            "batch",
+            "--requests-dir",
+            "packaging_engine/output/package_requests",
+        ],
+        "description": (
+            "Runs package requests through FAIR free-only routing and validates the package contract."
+        ),
+    },
+    "package_gate_prepare": {
+        "label": "Prepare Packaging Gate",
+        "stage": "05",
+        "command": [
+            sys.executable,
+            "packaging_engine/package_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the compact human Packaging Gate. No package is selected automatically."
+        ),
+    },
 }
 
 OPEN_TARGETS = {
     "experiment_01_output": EXP1_OUTPUT,
     "experiment_02_output": EXP2_OUTPUT,
     "transformation_output": TRANSFORM_OUTPUT,
+    "packaging_output": PACKAGING_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
@@ -887,6 +947,79 @@ def transformation_artifact_state() -> dict[str, Any]:
     }
 
 
+def packaging_artifact_state() -> dict[str, Any]:
+    handoff_hash = (
+        sha256_file(TRANSFORM_RESEARCH_HANDOFF)
+        if TRANSFORM_RESEARCH_HANDOFF.exists()
+        else None
+    )
+    request_hashes: dict[str, str] = {}
+    if handoff_hash and PACKAGING_REQUESTS_DIR.exists():
+        for path in PACKAGING_REQUESTS_DIR.glob("*.package_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            provenance = payload.get("request_provenance", {})
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if (
+                concept_id
+                and isinstance(provenance, dict)
+                and provenance.get("concept_handoff_sha256") == handoff_hash
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    current_response_ids: set[str] = set()
+    if PACKAGING_RESPONSES_DIR.exists():
+        for path in PACKAGING_RESPONSES_DIR.glob("*.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("response_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256") == request_hashes[concept_id]
+            ):
+                current_response_ids.add(concept_id)
+
+    candidates = safe_load_json(PACKAGING_CANDIDATES_FILE)
+    candidate_count = (
+        int(candidates.get("count") or 0)
+        if isinstance(candidates, dict)
+        else 0
+    )
+    requests_ready = bool(request_hashes)
+    responses_complete = (
+        requests_ready
+        and set(request_hashes).issubset(current_response_ids)
+    )
+    candidates_ready = responses_complete and candidate_count > 0
+    gate = packaging_gate_snapshot() if candidates_ready else {
+        "status": "WAITING_FOR_PACKAGE_CANDIDATES",
+        "complete": False,
+        "packages": [],
+    }
+    research_handoff = safe_load_json(PACKAGING_RESEARCH_HANDOFF)
+    research_ready = (
+        isinstance(research_handoff, dict)
+        and research_handoff.get("status") == "READY_FOR_RESEARCH"
+        and bool(gate.get("complete"))
+    )
+    return {
+        "handoff_sha256": handoff_hash,
+        "request_concept_ids": sorted(request_hashes),
+        "current_response_concept_ids": sorted(current_response_ids),
+        "requests_ready": requests_ready,
+        "responses_complete": responses_complete,
+        "candidate_count": candidate_count,
+        "candidates_ready": candidates_ready,
+        "packaging_gate": gate,
+        "packaging_gate_complete": bool(gate.get("complete")),
+        "research_ready": research_ready,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -1132,6 +1265,16 @@ def stage_statuses() -> list[dict[str, Any]]:
     concept_gate_complete = bool(transform["concept_gate_complete"])
     research_ready = bool(transform["research_ready"])
 
+    packaging = packaging_artifact_state()
+    package_requests = bool(packaging["requests_ready"])
+    package_candidates = bool(packaging["candidates_ready"])
+    packaging_gate = packaging["packaging_gate"]
+    packaging_gate_status = str(
+        packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
+    )
+    packaging_gate_complete = bool(packaging["packaging_gate_complete"])
+    packaging_research_ready = bool(packaging["research_ready"])
+
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
         transform_tone = "complete"
@@ -1172,6 +1315,47 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_human = "CONCEPT WORK NEEDS ATTENTION"
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
+
+    if packaging_research_ready:
+        package_human = "PACKAGE ACCEPTED — STAGE COMPLETE"
+        package_tone = "complete"
+        package_next = "Proceed to Research."
+    elif active_action in {
+        "package_prepare",
+        "package_generate",
+        "package_gate_prepare",
+    }:
+        package_human = "PACKAGING WORK RUNNING"
+        package_tone = "running"
+        package_next = "Wait for the current Packaging job to finish."
+    elif not research_ready:
+        package_human = "WAITING FOR ACCEPTED CONCEPT"
+        package_tone = "blocked"
+        package_next = "Accept a concept first."
+    elif not package_requests:
+        package_human = "READY TO PREPARE PACKAGES"
+        package_tone = "ready"
+        package_next = "Run Prepare Package Requests."
+    elif not package_candidates:
+        package_human = "PACKAGE GENERATION NEEDED"
+        package_tone = "action"
+        package_next = "Run Generate Package Candidates."
+    elif packaging_gate_status == "READY_TO_PREPARE":
+        package_human = "PREPARE PACKAGING GATE"
+        package_tone = "action"
+        package_next = "Run Prepare Packaging Gate."
+    elif packaging_gate_status == "AWAITING_HUMAN_DECISION":
+        package_human = "HUMAN PACKAGE DECISION NEEDED"
+        package_tone = "action"
+        package_next = "Review package candidates in Analyze & Create."
+    elif packaging_gate_complete:
+        package_human = "NO APPROVED PACKAGE"
+        package_tone = "action"
+        package_next = "Rework or regenerate packages before research."
+    else:
+        package_human = "PACKAGING NEEDS ATTENTION"
+        package_tone = "action"
+        package_next = "Inspect the Packaging Gate state."
 
     return [
         {
@@ -1362,13 +1546,50 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": concept_gate_complete,
                 },
                 {
-                    "label": "At least one concept accepted for research",
+                    "label": "At least one concept accepted for packaging",
                     "done": research_ready,
                 },
             ],
             "complete": research_ready,
             "ready": synthesis_ready,
             "current": synthesis_ready and not research_ready,
+        },
+        {
+            "id": "05",
+            "title": "Packaging",
+            "state": packaging_gate_status,
+            "human_status": package_human,
+            "tone": package_tone,
+            "detail": (
+                "Builds title, thumbnail and opening-frame options before script "
+                "drafting, then stops for human package selection."
+            ),
+            "next_action": package_next,
+            "criteria": [
+                {
+                    "label": "Accepted concept handoff ready",
+                    "done": research_ready,
+                },
+                {
+                    "label": "Package requests prepared",
+                    "done": package_requests,
+                },
+                {
+                    "label": "Valid package candidates generated",
+                    "done": package_candidates,
+                },
+                {
+                    "label": "Human Packaging Gate complete",
+                    "done": packaging_gate_complete,
+                },
+                {
+                    "label": "At least one package approved for research",
+                    "done": packaging_research_ready,
+                },
+            ],
+            "complete": packaging_research_ready,
+            "ready": research_ready,
+            "current": research_ready and not packaging_research_ready,
         },
     ]
 
@@ -1418,6 +1639,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
     )
     concept_gate_complete = bool(transform["concept_gate_complete"])
+    packaging = packaging_artifact_state()
+    package_requests = bool(packaging["requests_ready"])
+    package_candidates = bool(packaging["candidates_ready"])
+    packaging_gate = packaging["packaging_gate"]
+    packaging_gate_status = str(
+        packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
+    )
+    packaging_gate_complete = bool(packaging["packaging_gate_complete"])
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -1837,6 +2066,59 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "package_prepare": {
+            "enabled": bool(transform["research_ready"]) and not package_requests,
+            "reason": (
+                "Accepted concepts are ready for packaging requests."
+                if bool(transform["research_ready"]) and not package_requests
+                else (
+                    "Package requests are already current."
+                    if package_requests
+                    else "Accept at least one concept first."
+                )
+            ),
+        },
+        "package_generate": {
+            "enabled": package_requests and not package_candidates,
+            "reason": (
+                "Current package requests are ready for FAIR free-only generation."
+                if package_requests and not package_candidates
+                else (
+                    "Valid package candidates already exist."
+                    if package_candidates
+                    else "Prepare current package requests first."
+                )
+            ),
+        },
+        "package_gate_prepare": {
+            "enabled": (
+                package_candidates
+                and (
+                    packaging_gate_status == "READY_TO_PREPARE"
+                    or (
+                        packaging_gate_complete
+                        and not bool(packaging["research_ready"])
+                    )
+                )
+            ),
+            "reason": (
+                "Validated package candidates are ready for human review."
+                if package_candidates and packaging_gate_status == "READY_TO_PREPARE"
+                else (
+                    "No package was accepted; reopen the current Packaging Gate."
+                    if (
+                        package_candidates
+                        and packaging_gate_complete
+                        and not bool(packaging["research_ready"])
+                    )
+                    else (
+                        "Packaging Gate is already prepared or complete."
+                        if package_candidates
+                        else "Generate valid package candidates first."
+                    )
+                )
+            ),
+        },
     }
 
 
@@ -2066,7 +2348,25 @@ def workflow_guidance(
                 "criteria. Accept, send for rework, or reject."
             ),
             "next_action_id": None,
-            "next_title": "Research / Packaging",
+            "next_title": "Packaging",
+        }
+
+    packaging = packaging_artifact_state()
+    packaging_gate = packaging.get("packaging_gate", {})
+    if (
+        packaging.get("candidates_ready")
+        and packaging_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_PACKAGING_GATE",
+            "current_action_id": None,
+            "current_title": "Review Package Candidates",
+            "current_detail": (
+                "Review title, thumbnail and opening-frame packages. Approve at "
+                "most one package per concept, send it for rework, or reject it."
+            ),
+            "next_action_id": None,
+            "next_title": "Research",
         }
 
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
@@ -2117,6 +2417,7 @@ def status_payload() -> dict[str, Any]:
     readiness = action_readiness()
     workflow = workflow_guidance(readiness)
     transformation = transformation_artifact_state()
+    packaging = packaging_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -2161,6 +2462,8 @@ def status_payload() -> dict[str, Any]:
         "vision_review": vision_review_snapshot(),
         "transformation": transformation,
         "concept_gate": transformation["concept_gate"],
+        "packaging": packaging,
+        "packaging_gate": packaging["packaging_gate"],
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -2227,6 +2530,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/concept-gate":
             self._send_json(concept_gate_snapshot())
+            return
+        if route == "/api/packaging-gate":
+            self._send_json(packaging_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -2298,6 +2604,20 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/concept-gate":
                 payload = apply_concept_gate_action(
                     concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(
+                        str(body["note"])
+                        if body.get("note") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/packaging-gate":
+                payload = apply_packaging_gate_action(
+                    package_id=str(body.get("package_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(
