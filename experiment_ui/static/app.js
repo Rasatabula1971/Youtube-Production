@@ -315,6 +315,7 @@ function renderProgress(data) {
   const s13 = stageById(stages, "01.3");
   const s14 = stageById(stages, "01.4");
   const s2 = stageById(stages, "02");
+  const s4 = stageById(stages, "04");
   const gate = data.opportunity_gate || {};
   const workflow = data.workflow || {};
 
@@ -323,6 +324,7 @@ function renderProgress(data) {
   const expansionDone = Boolean(s14.complete);
   const reviewDone = Boolean(gate.ready_for_experiment_02);
   const analysisDone = Boolean(s2.complete);
+  const createDone = Boolean(s4.complete);
 
   const currentName =
     workflow.state === "HUMAN_GATE" ? "Review" :
@@ -332,7 +334,8 @@ function renderProgress(data) {
       validationDone ? "Expand" : (discoveryDone ? "Validate" : "Discover")
     ) :
     reviewDone && !analysisDone ? "Analyze" :
-    analysisDone ? "Create" : "";
+    analysisDone && !createDone ? "Create" :
+    createDone ? "" : "";
 
   const steps = [
     { name: "Discover", done: discoveryDone },
@@ -340,7 +343,7 @@ function renderProgress(data) {
     { name: "Expand", done: expansionDone },
     { name: "Review", done: reviewDone },
     { name: "Analyze", done: analysisDone },
-    { name: "Create", done: false }
+    { name: "Create", done: createDone }
   ];
 
   progressStrip.innerHTML = steps.map(function (step) {
@@ -965,7 +968,8 @@ function renderAnalysis(data) {
   ].includes(currentId) || workflow.state === "HUMAN_VISION_GATE" ? 0 :
     ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId) ? 1 :
     ["transform_prepare", "concept_generate", "concept_gate_prepare"].includes(currentId) ||
-      workflow.state === "HUMAN_CONCEPT_GATE" ? 2 : 0;
+      workflow.state === "HUMAN_CONCEPT_GATE" ||
+      (data.transformation && data.transformation.concept_gate_complete) ? 2 : 0;
   creationTabs.forEach(function (tab, index) {
     tab.classList.toggle("active", index === activeIndex);
   });
