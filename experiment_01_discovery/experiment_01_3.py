@@ -445,6 +445,46 @@ def _yt_dlp_query_variants(
     )
 
 
+def _topic_queries(
+    topic: dict[str, Any],
+    *,
+    search_phase: str,
+    format_target: str,
+) -> list[str]:
+    """Return auditable query families without weakening acceptance gates."""
+
+    if search_phase == "expanded":
+        keys = ["expansion_queries"]
+        if format_target == "short_candidate":
+            keys.append("short_expansion_queries")
+        elif format_target == "long_form_candidate":
+            keys.append("long_expansion_queries")
+    else:
+        keys = ["queries"]
+        if format_target == "short_candidate":
+            keys.append("short_queries")
+        elif format_target == "long_form_candidate":
+            keys.append("long_queries")
+
+    queries: list[str] = []
+    for key in keys:
+        values = topic.get(key, [])
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            query = str(value).strip()
+            if query and query not in queries:
+                queries.append(query)
+
+    if not queries:
+        for value in topic.get("queries", []):
+            query = str(value).strip()
+            if query and query not in queries:
+                queries.append(query)
+
+    return queries
+
+
 def _yt_dlp_pool(
     query: str,
     age_window: dict[str, Any],
@@ -512,9 +552,14 @@ def _yt_dlp_ids(
     query: str,
     age_window: dict[str, Any],
     format_target: str,
+    video_duration_filter: str,
     minimum_views: int,
     cache: dict[str, list[dict[str, Any]]],
 ) -> list[str]:
+    if video_duration_filter not in {"short", "medium", "long"}:
+        raise ValueError(
+            "video_duration_filter must be short, medium, or long"
+        )
     pool = _yt_dlp_pool(
         query,
         age_window,
@@ -543,9 +588,18 @@ def _yt_dlp_ids(
             except (TypeError, ValueError):
                 duration = 0.0
             if duration > 0:
-                if format_target == "short_candidate" and duration > 180:
+                # Keep the fallback's branches distinct. The project uses
+                # <=180 seconds as the short-candidate boundary, then splits
+                # long-form discovery at 20 minutes so "medium" and "long"
+                # jobs do not recycle the same videos.
+                if video_duration_filter == "short" and duration > 180:
                     continue
-                if format_target == "long_form_candidate" and duration <= 180:
+                if (
+                    video_duration_filter == "medium"
+                    and not (180 < duration <= 1200)
+                ):
+                    continue
+                if video_duration_filter == "long" and duration <= 1200:
                     continue
 
         views_raw = item.get("view_count")
@@ -600,6 +654,7 @@ def discover(
     api_search_available = discovery_backend != "yt_dlp"
     fallback_health_checked = False
     fallback_ready = False
+    api_fallback_reason: str | None = None
     fallback_cache = yt_dlp_cache if yt_dlp_cache is not None else {}
 
     for topic in config["topics"]:
@@ -612,8 +667,13 @@ def discover(
         if not target_formats:
             continue
 
-        for query in topic["queries"]:
-            for format_target in target_formats:
+        for format_target in target_formats:
+            topic_queries = _topic_queries(
+                topic,
+                search_phase=search_phase,
+                format_target=format_target,
+            )
+            for query in topic_queries:
                 duration_filters = list(search_profiles.get(format_target, []))
                 for video_duration in duration_filters:
                     for order in orders:
@@ -635,6 +695,9 @@ def discover(
                         ):
                             if discovery_backend == "auto":
                                 api_search_available = False
+                                api_fallback_reason = (
+                                    "YOUTUBE_API_SEARCH_BUDGET_REACHED"
+                                )
                                 print(
                                     "  YouTube API search budget reached; "
                                     "switching remaining discovery jobs to Agent Reach / yt-dlp."
@@ -683,7 +746,8 @@ def discover(
                                     if video_id:
                                         ids.append(str(video_id))
                                 backend_used = "youtube_api_v3"
-                            except SystemExit:
+                            except SystemExit as exc:
+                                api_fallback_reason = str(exc)
                                 if discovery_backend == "youtube_api":
                                     return (
                                         discovered,
@@ -697,6 +761,10 @@ def discover(
                                 print(
                                     "  YouTube search API unavailable; "
                                     "switching remaining discovery jobs to Agent Reach / yt-dlp."
+                                )
+                                print(
+                                    "    API fallback reason: "
+                                    f"{api_fallback_reason}"
                                 )
 
                         if not backend_used:
@@ -730,6 +798,7 @@ def discover(
                                     query,
                                     age_window,
                                     format_target,
+                                    video_duration,
                                     int(config["minimum_views"]),
                                     fallback_cache,
                                 )
@@ -780,6 +849,11 @@ def discover(
                                 "video_duration_filter": video_duration,
                                 "discovery_backend": backend_used,
                                 "backend_search_strategy": backend_strategy,
+                                "api_fallback_reason": (
+                                    api_fallback_reason
+                                    if backend_used == "agent_reach_yt_dlp"
+                                    else None
+                                ),
                                 "results_returned": len(ids),
                                 "video_ids": ids,
                             }
