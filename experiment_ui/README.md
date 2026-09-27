@@ -349,3 +349,16 @@ requires a note, and conflicted claims require an explicit resolution note.
 
 Only verified packages with every research question resolved become
 `READY_FOR_STORY_SCRIPT`.
+
+
+### Visual acquisition fallback
+
+Experiment 02 visual acquisition now prefers direct low-resolution streaming. If
+yt-dlp cannot resolve a direct stream URL, the collector may download one
+temporary low-resolution video file (360p or lower), run the same ffmpeg opening
+frame and scene-change analysis locally, and delete the temporary video before
+the job completes.
+
+The saved visual report records `visual_source_mode` so downstream review can
+distinguish direct-stream evidence from temporary-file fallback. The temporary
+file is not retained as a project artifact.
