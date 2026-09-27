@@ -157,7 +157,7 @@ The collector uses `yt-dlp` only for:
 - the video thumbnail; and
 - source metadata (`.info.json`).
 
-It always passes `--skip-download`; video media is not downloaded.
+Normal caption acquisition passes `--skip-download`. If captions fail, the source-acquisition layer may temporarily download best-audio only, transcribe it locally with Whisper, and delete the temporary audio immediately after transcription.
 
 A transcript/caption file is required before the collector calls the offline
 ingestion layer. Thumbnail-only acquisition does **not** create an enriched
