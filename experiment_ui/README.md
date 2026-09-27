@@ -233,3 +233,17 @@ views.
 
 The local server serves the same application shell at all four routes, so a
 view can be refreshed or bookmarked directly without returning a 404.
+
+
+## Experiment 02 evidence step
+
+After **Prepare Experiment 02 Profiles**, the guided Analyze & Create workflow
+now exposes **Acquire Source Evidence**.
+
+That action acquires English captions, thumbnail and source metadata through
+`yt-dlp` without downloading video media, then sends the files through the
+offline evidence-ingestion layer.
+
+The guided state checks exact current video IDs and artifact provenance. Old
+enriched profiles or analysis requests from a previous approved set do not count
+as current merely because a JSON file exists.
