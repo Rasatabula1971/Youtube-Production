@@ -149,14 +149,19 @@ Refresh mode:
 Manual refresh remains available, but it is no longer the normal operational
 dependency.
 
-The Experiment Control UI provides:
+The normal guided workflow no longer requires installing refresh separately.
+**Run Opportunity Research** arms the Windows continuation task automatically
+when elapsed-time velocity evidence is needed.
 
-- **Install 01.3 Auto Refresh**
-- **Remove 01.3 Auto Refresh**
+Manual maintenance controls remain under **Tools & Diagnostics**:
 
-The installer registers a Windows Task Scheduler job every two hours. The
-scheduled job runs `scheduled_refresh.py`, which is deliberately self-limiting.
-It skips API work when:
+- **Install Opportunity Auto-Continue**
+- **Remove Opportunity Auto-Continue**
+
+The continuation task wakes every two hours and runs
+`opportunity_research.py --mode continue`. That orchestrator calls the
+self-limiting frozen-cohort refresh only when another snapshot is due. It skips
+API work when:
 
 - no frozen cohort exists;
 - the frozen cohort is structurally insufficient;
@@ -165,11 +170,11 @@ It skips API work when:
 - the current cohort already has enough independent-channel and velocity
   evidence to unlock Experiment 01.4.
 
-When a refresh is due, the task invokes only:
-
-`experiment_01_3.py --mode refresh`
-
-It never performs discovery and therefore never spends `search.list` quota.
+When a refresh is due, the continuation invokes only the existing frozen-cohort
+refresh path. Once velocity evidence is sufficient, the same continuation may
+advance through 01.4 and 01.5. It never performs fresh 01.3 discovery while
+running as a scheduled continuation, so the timed measurement step does not
+spend `search.list` quota.
 
 Scheduler status and logs are written under:
 
