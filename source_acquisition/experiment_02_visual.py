@@ -93,6 +93,38 @@ def resolve_stream_url(
     return None, completed
 
 
+def temp_video_command(
+    yt_dlp: str,
+    *,
+    url: str,
+    destination: Path,
+) -> list[str]:
+    return [
+        yt_dlp,
+        "--no-playlist",
+        "--format",
+        "best[height<=360]/best",
+        "--output",
+        str(destination),
+        url,
+    ]
+
+
+def acquire_temp_video(
+    yt_dlp: str,
+    *,
+    url: str,
+    destination: Path,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        temp_video_command(yt_dlp, url=url, destination=destination),
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def opening_frame_command(
     ffmpeg: str,
     *,
@@ -404,21 +436,48 @@ def acquire_visual_one(
         opening_frame.unlink()
 
     stream_url, stream_result = resolve_stream_url(yt_dlp, url)
-    if stream_url is None:
-        result = {
-            "video_id": video_id,
-            "status": "STREAM_URL_FAILED",
-            "profile_sha256": prepared_hash,
-            "yt_dlp_return_code": stream_result.returncode,
-            "error_tail": redact_urls(stream_result.stderr[-4000:]),
-        }
-        write_json(report_path, result)
-        return result
+    input_source = stream_url
+    source_mode = "direct_stream"
+    temp_video = output_dir / f"{video_id}.visual_fallback.mp4"
+    fallback_result: subprocess.CompletedProcess[str] | None = None
+
+    if input_source is None:
+        fallback_result = acquire_temp_video(
+            yt_dlp,
+            url=url,
+            destination=temp_video,
+        )
+        if fallback_result.returncode == 0 and temp_video.exists():
+            input_source = str(temp_video)
+            source_mode = "temporary_low_res_video"
+        else:
+            result = {
+                "video_id": video_id,
+                "status": "VISUAL_SOURCE_FAILED",
+                "profile_sha256": prepared_hash,
+                "stream_yt_dlp_return_code": stream_result.returncode,
+                "stream_error_tail": redact_urls(stream_result.stderr[-4000:]),
+                "fallback_yt_dlp_return_code": (
+                    fallback_result.returncode
+                    if fallback_result is not None
+                    else None
+                ),
+                "fallback_error_tail": (
+                    redact_urls(fallback_result.stderr[-4000:])
+                    if fallback_result is not None
+                    else None
+                ),
+                "full_video_saved": False,
+            }
+            if temp_video.exists():
+                temp_video.unlink()
+            write_json(report_path, result)
+            return result
 
     opening_result = subprocess.run(
         opening_frame_command(
             ffmpeg,
-            stream_url=stream_url,
+            stream_url=input_source,
             destination=opening_frame,
         ),
         cwd=PROJECT_ROOT,
@@ -436,7 +495,7 @@ def acquire_visual_one(
     scene_result = subprocess.run(
         scene_detection_command(
             ffmpeg,
-            stream_url=stream_url,
+            stream_url=input_source,
             destination_pattern=output_dir / "scene_%04d.jpg",
             threshold=SCENE_THRESHOLD,
         ),
@@ -446,6 +505,8 @@ def acquire_visual_one(
         check=False,
     )
     if scene_result.returncode != 0:
+        if temp_video.exists():
+            temp_video.unlink()
         result = {
             "video_id": video_id,
             "status": "SCENE_DETECTION_FAILED",
@@ -518,6 +579,11 @@ def acquire_visual_one(
             if enriched_path.exists()
             else None
         ),
+        "visual_source_mode": source_mode,
+        "temporary_video_deleted": (
+            source_mode != "temporary_low_res_video"
+            or not temp_video.exists()
+        ),
         "full_video_saved": False,
     }
     if opening_result.returncode != 0:
@@ -526,6 +592,9 @@ def acquire_visual_one(
         )
     if ingest.returncode != 0:
         result["ingest_error_tail"] = redact_urls(ingest.stderr[-4000:])
+    if temp_video.exists():
+        temp_video.unlink()
+        result["temporary_video_deleted"] = True
     write_json(report_path, result)
     return result
 
