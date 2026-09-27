@@ -1808,7 +1808,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "concept_gate_prepare": {
             "enabled": (
                 transform_candidates
-                and concept_gate_status == "READY_TO_PREPARE"
+                and (
+                    concept_gate_status == "READY_TO_PREPARE"
+                    or (
+                        concept_gate_complete
+                        and not bool(transform["research_ready"])
+                    )
+                )
             ),
             "reason": (
                 "Validated concept candidates are ready for human review."
@@ -1817,9 +1823,17 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     and concept_gate_status == "READY_TO_PREPARE"
                 )
                 else (
-                    "Concept Gate is already prepared or complete."
-                    if transform_candidates
-                    else "Generate valid concept candidates first."
+                    "No concept was accepted; reopen the current Concept Gate."
+                    if (
+                        transform_candidates
+                        and concept_gate_complete
+                        and not bool(transform["research_ready"])
+                    )
+                    else (
+                        "Concept Gate is already prepared or complete."
+                        if transform_candidates
+                        else "Generate valid concept candidates first."
+                    )
                 )
             ),
         },
