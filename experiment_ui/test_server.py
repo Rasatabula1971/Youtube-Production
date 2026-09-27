@@ -424,5 +424,54 @@ class ExperimentUiTests(unittest.TestCase):
             manager.start("not_real")
 
 
+    def test_experiment_02_prepare_requires_human_opportunity_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp15 = root / "experiment_01_5"
+            exp2 = root / "experiment_02"
+            exp15.mkdir()
+            (exp15 / "study_set.json").write_text("[]", encoding="utf-8")
+
+            with (
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(server, "EXP2_OUTPUT", exp2),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "status": "AWAITING_HUMAN_DECISION",
+                        "ready_for_experiment_02": False,
+                        "gate_complete": False,
+                        "opportunities": [],
+                    },
+                ),
+            ):
+                readiness = server.action_readiness()
+
+            self.assertFalse(readiness["exp2_prepare"]["enabled"])
+            self.assertIn(
+                "approve",
+                readiness["exp2_prepare"]["reason"].lower(),
+            )
+
+            with (
+                patch.object(server, "EXP15_DIR", exp15),
+                patch.object(server, "EXP2_OUTPUT", exp2),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={
+                        "status": "APPROVED",
+                        "ready_for_experiment_02": True,
+                        "gate_complete": True,
+                        "opportunities": [],
+                    },
+                ),
+            ):
+                readiness = server.action_readiness()
+
+            self.assertTrue(readiness["exp2_prepare"]["enabled"])
+
+
 if __name__ == "__main__":
     unittest.main()
