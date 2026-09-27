@@ -123,7 +123,7 @@
             <div>
               <p class="section-kicker">ANALYZE &amp; CREATE</p>
               <h2>Turn evidence into an original video</h2>
-              <p class="muted">Work through evidence, analysis, concept, packaging and script without leaving this workspace.</p>
+              <p class="muted">Work through evidence, analysis, concept, packaging, research and script without leaving this workspace.</p>
             </div>
           </div>
 
@@ -132,6 +132,7 @@
             <span class="creation-tab">Analysis</span>
             <span class="creation-tab">Concept</span>
             <span class="creation-tab">Package</span>
+            <span class="creation-tab">Research</span>
             <span class="creation-tab future">Script</span>
             <span class="creation-tab future">Produce</span>
           </div>
@@ -231,6 +232,33 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="researchReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN RESEARCH GATE</p>
+                <h2 id="researchReviewTitle">Review research claim</h2>
+                <p class="muted" id="researchReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="researchReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="researchDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-criteria" id="researchCriteria"></div>
+                <label class="vision-label" for="researchNote">Review note</label>
+                <textarea id="researchNote" class="vision-observation" rows="4" maxlength="1200" placeholder="Required for Rework and for accepting a conflicted claim."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="researchPrev" type="button">← Previous</button>
+                  <button class="danger" id="researchReject" type="button">Reject</button>
+                  <button class="ghost" id="researchRework" type="button">Rework</button>
+                  <button id="researchAccept" type="button">Accept claim</button>
+                  <button class="ghost" id="researchNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
@@ -248,6 +276,7 @@
             <button class="ghost" data-open="experiment_02_output">Experiment 02 Output</button>
             <button class="ghost" data-open="transformation_output">Transformation Output</button>
             <button class="ghost" data-open="packaging_output">Packaging Output</button>
+            <button class="ghost" data-open="research_output">Research Output</button>
             <button class="ghost" data-open="ui_jobs">Job Logs</button>
           </div>
 
