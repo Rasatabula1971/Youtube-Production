@@ -82,15 +82,6 @@ def load_config() -> dict[str, Any]:
     return config
 
 
-def confidence_rank(value: str) -> int:
-    return {
-        "INSUFFICIENT": 0,
-        "LOW": 1,
-        "MODERATE": 2,
-        "STRONG": 3,
-    }.get(str(value).upper(), 0)
-
-
 def extract_topic_cells(topic_velocity: dict[str, Any]) -> list[dict[str, Any]]:
     cells: list[dict[str, Any]] = []
     for topic, payload in topic_velocity.get("topics", {}).items():
