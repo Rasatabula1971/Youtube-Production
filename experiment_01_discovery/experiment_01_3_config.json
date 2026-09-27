@@ -44,7 +44,8 @@
       ],
       "short_expansion_queries": [
         "F1 gearbox #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "brakes",
@@ -60,7 +61,8 @@
       ],
       "short_expansion_queries": [
         "F1 brakes #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "tyres_tires",
@@ -80,7 +82,8 @@
       "short_expansion_queries": [
         "F1 tyres #shorts",
         "F1 tires #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "steering",
@@ -95,7 +98,8 @@
       ],
       "short_expansion_queries": [
         "F1 steering #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "suspension_chassis",
@@ -111,7 +115,8 @@
       ],
       "short_expansion_queries": [
         "F1 suspension #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "aerodynamics_downforce",
@@ -131,7 +136,8 @@
       ],
       "short_expansion_queries": [
         "F1 aerodynamics #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "engine_power_unit",
@@ -149,7 +155,8 @@
       ],
       "short_expansion_queries": [
         "F1 engine #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     },
     {
       "topic": "pit_stops",
@@ -165,7 +172,8 @@
       ],
       "short_expansion_queries": [
         "F1 pit stop #shorts"
-      ]
+      ],
+      "niche": "automotive_racing"
     }
   ],
   "wide_age_tolerance_days": 30,
