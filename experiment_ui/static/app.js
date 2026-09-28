@@ -1234,6 +1234,7 @@ function collectConceptCriteria() {
 
 async function saveConceptIdea(conceptId, note) {
   if (!conceptId) return;
+  const preservedNote = note || "";
   try {
     const payload = await api("/api/concept-gate", {
       method: "POST",
@@ -1241,11 +1242,21 @@ async function saveConceptIdea(conceptId, note) {
         concept_id: conceptId,
         decision: "SAVE_IDEA",
         criteria: {},
-        note: note || ""
+        note: preservedNote
       })
     });
     latestConceptSnapshot = payload;
     renderConceptReview(payload, true);
+    const current = currentConceptItem();
+    if (
+      !payload.complete &&
+      current &&
+      current.item.concept_id === conceptId &&
+      preservedNote
+    ) {
+      conceptNote.value = preservedNote;
+      conceptEditing = true;
+    }
     showToast("Idea saved to the Title Bank.", false);
     await loadStatus();
   } catch (error) {
