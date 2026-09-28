@@ -221,15 +221,20 @@
                   <summary>Other triaged concepts</summary>
                   <div class="technical-body" id="conceptOverrides"></div>
                 </details>
+                <details class="technical-details" id="savedIdeasPanel" hidden>
+                  <summary id="savedIdeasSummary">Saved Ideas / Title Bank</summary>
+                  <div class="technical-body" id="savedIdeas"></div>
+                </details>
               </div>
               <div class="concept-decision-pane">
                 <div class="concept-criteria" id="conceptCriteria"></div>
                 <label class="vision-label" for="conceptNote">Review note</label>
-                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Required for Rework. Optional for Reject or Accept."></textarea>
+                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Required for Rework. Optional for Save Idea, Reject or Accept."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="conceptPrev" type="button">← Previous</button>
                   <button class="danger" id="conceptReject" type="button">Reject</button>
                   <button class="ghost" id="conceptRework" type="button">Rework</button>
+                  <button class="ghost" id="conceptSaveIdea" type="button">Save idea</button>
                   <button id="conceptAccept" type="button">Accept concept</button>
                   <button class="ghost" id="conceptNext" type="button">Next →</button>
                 </div>
