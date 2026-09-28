@@ -121,7 +121,7 @@ def find_transcript(directory: Path, video_id: str) -> Path | None:
     )
     if not candidates:
         return None
-    return sorted(candidates, key=lambda path: transcript_rank(path, video_id))[0]
+    return min(candidates, key=lambda path: transcript_rank(path, video_id))
 
 
 def find_thumbnail(directory: Path, video_id: str) -> Path | None:
@@ -139,10 +139,10 @@ def find_thumbnail(directory: Path, video_id: str) -> Path | None:
     if not candidates:
         return None
     preferred = {".jpg": 0, ".jpeg": 1, ".png": 2, ".webp": 3, ".avif": 4}
-    return sorted(
+    return min(
         candidates,
         key=lambda path: (preferred.get(path.suffix.casefold(), 9), path.name),
-    )[0]
+    )
 
 
 def find_info_json(directory: Path, video_id: str) -> Path | None:
@@ -226,7 +226,7 @@ def find_fallback_audio(directory: Path, video_id: str) -> Path | None:
         and path.suffix.casefold() in AUDIO_SUFFIXES
         and path.name.casefold().startswith(f"{video_id.casefold()}.fallback")
     ]
-    return sorted(candidates)[0] if candidates else None
+    return min(candidates) if candidates else None
 
 
 def run_local_whisper(
