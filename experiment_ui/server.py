@@ -656,6 +656,7 @@ OPEN_TARGETS = {
     "transformation_output": TRANSFORM_OUTPUT,
     "packaging_output": PACKAGING_OUTPUT,
     "research_output": RESEARCH_OUTPUT,
+    "story_script_output": STORY_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
