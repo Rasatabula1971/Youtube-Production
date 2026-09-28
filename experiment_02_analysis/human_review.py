@@ -597,7 +597,17 @@ def review_snapshot() -> dict[str, Any]:
     for request_path in sorted(REVIEW_REQUESTS_DIR.glob("*.review_request.json")):
         request = load_json(request_path)
         video_id = str(request.get("video_id") or request_path.stem)
-        response = _load_partial_response(video_id, request=request)
+        profile_path = DEFAULT_ANALYZED_DIR / f"{safe_filename(video_id)}.json"
+        current_packet = (
+            profile_path.exists()
+            and request.get("request_provenance", {}).get("profile_sha256")
+            == sha256_file(profile_path)
+        )
+        response = (
+            _load_partial_response(video_id, request=request)
+            if current_packet
+            else _blank_response(video_id)
+        )
         decisions = {
             str(item.get("item_id")): item
             for item in response.get("decisions", [])
@@ -605,6 +615,7 @@ def review_snapshot() -> dict[str, Any]:
         }
         reviewed_path = REVIEWED_PROFILES_DIR / f"{safe_filename(video_id)}.json"
         packet_items: list[dict[str, Any]] = []
+        packet_pending = 0
 
         for item in request.get("items", []):
             item_id = str(item.get("item_id") or "")
@@ -624,20 +635,41 @@ def review_snapshot() -> dict[str, Any]:
                 total_rejected += 1
             else:
                 total_pending += 1
+                packet_pending += 1
 
         packets.append(
             {
                 "video_id": video_id,
                 "source": request.get("source", {}),
                 "reviewable_item_count": len(packet_items),
-                "complete": reviewed_path.exists() and total_pending == 0,
+                "complete": current_packet and reviewed_path.exists() and packet_pending == 0,
                 "items": packet_items,
             }
         )
 
     complete = bool(packets) and all(packet["complete"] for packet in packets)
+    stale = any(
+        not (
+            (DEFAULT_ANALYZED_DIR / f"{safe_filename(packet['video_id'])}.json").exists()
+            and load_json(
+                REVIEW_REQUESTS_DIR
+                / f"{safe_filename(packet['video_id'])}.review_request.json"
+            ).get("request_provenance", {}).get("profile_sha256")
+            == sha256_file(
+                DEFAULT_ANALYZED_DIR
+                / f"{safe_filename(packet['video_id'])}.json"
+            )
+        )
+        for packet in packets
+    )
     return {
-        "status": "COMPLETE" if complete else "AWAITING_HUMAN_DECISION",
+        "status": (
+            "STALE_REVIEW_REQUEST"
+            if stale
+            else "COMPLETE"
+            if complete
+            else "AWAITING_HUMAN_DECISION"
+        ),
         "complete": complete,
         "pending": total_pending,
         "accepted": total_accepted,
