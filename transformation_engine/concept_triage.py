@@ -376,6 +376,15 @@ def validate_triage(
         raise ValueError("shortlist contains unknown concept_id")
     if len(shortlist) > min(MAX_SHORTLIST, len(expected)):
         raise ValueError("shortlist size is outside configured bounds")
+    decision_shortlist = {
+        cid
+        for cid, item in mapped.items()
+        if str(item.get("decision", "")).upper() == "SHORTLIST"
+    }
+    if set(shortlist) != decision_shortlist:
+        raise ValueError(
+            "shortlist_ids must exactly match concepts classified SHORTLIST"
+        )
 
     return {
         "decisions": [mapped[cid] for cid in sorted(mapped)],
@@ -711,6 +720,32 @@ def merge_full_audit(
     return merged
 
 
+def run_first_pass(
+    chunks: list[list[dict[str, Any]]],
+    *,
+    source_hash: str,
+    config: dict[str, Any],
+    force: bool,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[int]]:
+    chunk_results: list[dict[str, Any]] = []
+    chunk_triages: list[dict[str, Any]] = []
+    failed_chunks: list[int] = []
+    for index, chunk in enumerate(chunks, start=1):
+        result, triage = run_chunk(
+            chunk,
+            index=index,
+            source_hash=source_hash,
+            config=config,
+            force=force,
+        )
+        chunk_results.append(result)
+        if triage is None:
+            failed_chunks.append(index)
+            continue
+        chunk_triages.append(triage)
+    return chunk_results, chunk_triages, failed_chunks
+
+
 def run(*, force: bool = False) -> dict[str, Any]:
     if not CANDIDATES_FILE.exists():
         return {
@@ -746,22 +781,12 @@ def run(*, force: bool = False) -> dict[str, Any]:
 
     config = load_runner_config()
     chunks = chunk_concepts(concepts)
-    chunk_results = []
-    chunk_triages = []
-    failed_chunks: list[int] = []
-    for index, chunk in enumerate(chunks, start=1):
-        result, triage = run_chunk(
-            chunk,
-            index=index,
-            source_hash=source_hash,
-            config=config,
-            force=force,
-        )
-        chunk_results.append(result)
-        if triage is None:
-            failed_chunks.append(index)
-            continue
-        chunk_triages.append(triage)
+    chunk_results, chunk_triages, failed_chunks = run_first_pass(
+        chunks,
+        source_hash=source_hash,
+        config=config,
+        force=force,
+    )
 
     if failed_chunks:
         report = {
