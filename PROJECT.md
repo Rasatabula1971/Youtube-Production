@@ -179,6 +179,9 @@ Visuals should support the narration or story rather than exist only to create m
 
 OpenMontage and related production tooling belong here. Production tooling is the backend, not the creative decision-maker.
 
+Narration is planned by the Voice Performance Layer and rendered by Higgsfield.
+See D-061.
+
 ### 08 — Quality Gates
 
 Human review remains part of the system.

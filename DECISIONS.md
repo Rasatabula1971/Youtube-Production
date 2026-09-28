@@ -908,3 +908,71 @@ The Human Format Gate remains mandatory. ACCEPT requires every configured human
 criterion to be affirmed, and each review request is bound to the SHA-256 of the
 exact format plan it was prepared from. Only accepted format plans may enter the
 Production Engine.
+
+
+## D-061 — Voice performance is planned by the system and rendered by Higgsfield
+
+**Status:** Accepted
+
+The Voice Performance Layer is the first sub-stage of the Production Engine
+(07). It consumes Format Gate approved plans and produces one performance
+specification per production branch, because a performance curve belongs to a
+branch, not to a script.
+
+### What the layer owns and what it does not
+
+The layer annotates approved beats with performance direction. It never
+rewrites what is said. The approved script and its accepted claims are the
+input; the layer adds only how each beat is delivered.
+
+Higgsfield is the single production provider for narration and generated
+video. Provider independence, as proposed in the original design note, is
+consciously deferred in favour of simplicity. The performance specification
+remains a JSON artifact so that a later provider change is a data migration
+rather than a rebuild, but the control vocabulary is Higgsfield's own exposed
+controls (emotion, speed, pauses, emphasis), read from its API at build time.
+
+### Performance vocabulary
+
+Six core emotions: `neutral`, `curious`, `serious`, `concerned`, `tense`,
+`reflective`. `surprised` is permitted only on a reveal beat. The range is
+deliberately narrow because the channel is faceless: with no visual affect
+channel, large vocal swings read as performed rather than felt. Expressive work
+sits in pace, pause placement and emphasis rather than emotional amplitude.
+
+An intensity ceiling and a maximum change between adjacent beats are
+configuration. They are enforced by deterministic validation before the human
+gate. Their starting values are hypotheses, not validated rules.
+
+### Voice identity
+
+The project renders with a licensed voice, not a clone. Cloning is not enabled
+at the adapter. The voice identity (`provider`, `voice_id`, licence reference)
+is recorded in artifact provenance. Calibration is one human listening pass
+across the emotion range with the chosen voice, recorded as a config artifact
+bound to the voice identity; a change of voice invalidates it.
+
+### Free and paid channels
+
+Performance annotation runs through FAIR free-only routing under the existing
+cost policy. Rendering is paid and runs through a separate metered channel
+that is never routed through the FAIR bridge. A dry-run estimate quotes the
+worst case (one render plus two regenerations per segment) before any paid
+call, and the Human Performance Gate must accept the specification before any
+credit is spent.
+
+### Audio QC and regeneration
+
+Audio QC is deterministic only: expected duration, unexpected silence,
+clipping, and missing segments, checked locally with `ffmpeg`. A failed
+segment may be regenerated at most twice; a third failure escalates to a
+human. No acoustic emotion verification is attempted.
+
+### Accepted provider facts
+
+A paid Higgsfield plan is required; free-tier output is watermarked and
+carries no commercial licence. Higgsfield trains on inputs and outputs by
+default for non-enterprise accounts. Both are accepted knowingly.
+
+No performance score, predicted retention, or automatic take selection is
+introduced. The human rough-cut gate (08) remains mandatory before publish.
