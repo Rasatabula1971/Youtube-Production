@@ -645,9 +645,16 @@ def merge_full_audit(
                 "dimension_scores": first.get("dimension_scores", {}),
                 "rationale": first.get("rationale"),
             }
+            final["final_selection"] = (
+                "FINAL_SHORTLIST"
+                if concept_id in set(final_triage.get("shortlist_ids", []))
+                else "FINALIST_NOT_SHORTLISTED"
+            )
             final["triage_stage"] = "FINALIST"
             merged.append(final)
         else:
+            first["first_pass_decision"] = first.get("decision")
+            first["final_selection"] = "NOT_FINALIST"
             first["triage_stage"] = "FIRST_PASS_ONLY"
             merged.append(first)
     return merged
