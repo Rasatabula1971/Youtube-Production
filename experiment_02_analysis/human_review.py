@@ -510,18 +510,34 @@ def _response_path(video_id: str) -> Path:
     return REVIEW_RESPONSES_DIR / f"{safe_filename(video_id)}.review_response.json"
 
 
-def _load_partial_response(video_id: str) -> dict[str, Any]:
+def _blank_response(video_id: str) -> dict[str, Any]:
+    return {
+        "video_id": video_id,
+        "reviewer": UI_REVIEWER,
+        "decisions": [],
+        "overall_note": "",
+    }
+
+
+def _load_partial_response(
+    video_id: str,
+    *,
+    request_path: Path | None = None,
+    profile_path: Path | None = None,
+) -> dict[str, Any]:
     path = _response_path(video_id)
     if not path.exists():
-        return {
-            "video_id": video_id,
-            "reviewer": UI_REVIEWER,
-            "decisions": [],
-            "overall_note": "",
-        }
+        return _blank_response(video_id)
     payload = load_json(path)
     if not isinstance(payload, dict):
         raise ValueError("Saved human review response must be a JSON object")
+
+    if request_path is not None and profile_path is not None:
+        if (
+            payload.get("request_sha256") != sha256_file(request_path)
+            or payload.get("profile_sha256") != sha256_file(profile_path)
+        ):
+            return _blank_response(video_id)
     return payload
 
 
@@ -544,23 +560,38 @@ def review_snapshot() -> dict[str, Any]:
     for request_path in sorted(REVIEW_REQUESTS_DIR.glob("*.review_request.json")):
         request = load_json(request_path)
         video_id = str(request.get("video_id") or request_path.stem)
-        response = _load_partial_response(video_id)
+        profile_path = DEFAULT_ANALYZED_DIR / f"{safe_filename(video_id)}.json"
+        response = (
+            _load_partial_response(
+                video_id,
+                request_path=request_path,
+                profile_path=profile_path,
+            )
+            if profile_path.exists()
+            else _blank_response(video_id)
+        )
         decisions = {
             str(item.get("item_id")): item
             for item in response.get("decisions", [])
             if isinstance(item, dict) and item.get("item_id")
         }
         reviewed_path = REVIEWED_PROFILES_DIR / f"{safe_filename(video_id)}.json"
+        report_path = REVIEW_REPORTS_DIR / f"{safe_filename(video_id)}.human_review.json"
+        report = load_json(report_path) if report_path.exists() else {}
+        current_complete = (
+            reviewed_path.exists()
+            and profile_path.exists()
+            and isinstance(report, dict)
+            and report.get("status") == "REVIEW_COMPLETED"
+            and report.get("profile_sha256") == sha256_file(profile_path)
+            and report.get("request_sha256") == sha256_file(request_path)
+        )
         packet_items: list[dict[str, Any]] = []
 
         for item in request.get("items", []):
             item_id = str(item.get("item_id") or "")
             saved = decisions.get(item_id, {})
-            decision = (
-                "ACCEPT"
-                if reviewed_path.exists() and not saved.get("decision")
-                else str(saved.get("decision") or "PENDING").upper()
-            )
+            decision = str(saved.get("decision") or "PENDING").upper()
             row = {
                 **item,
                 "video_id": video_id,
@@ -581,7 +612,7 @@ def review_snapshot() -> dict[str, Any]:
                 "video_id": video_id,
                 "source": request.get("source", {}),
                 "reviewable_item_count": len(packet_items),
-                "complete": reviewed_path.exists(),
+                "complete": current_complete,
                 "items": packet_items,
             }
         )
@@ -625,7 +656,11 @@ def apply_review_action(
     if item_id not in expected_ids:
         raise ValueError("Unknown human review item")
 
-    response = _load_partial_response(video_id)
+    response = _load_partial_response(
+        video_id,
+        request_path=request_path,
+        profile_path=profile_path,
+    )
     mapped = {
         str(item.get("item_id")): dict(item)
         for item in response.get("decisions", [])
@@ -640,6 +675,8 @@ def apply_review_action(
     response["reviewer"] = str(response.get("reviewer") or UI_REVIEWER)
     response["decisions"] = [mapped[key] for key in sorted(mapped)]
     response["overall_note"] = str(response.get("overall_note") or "")
+    response["request_sha256"] = sha256_file(request_path)
+    response["profile_sha256"] = sha256_file(profile_path)
 
     REVIEW_RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
     response_path = _response_path(video_id)
