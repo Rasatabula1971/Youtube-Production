@@ -107,6 +107,7 @@ def build_review_request(
                     "source_dependency_test", {}
                 ),
                 "llm_triage": concept.get("llm_triage", {}),
+                "source_overlap": concept.get("source_overlap", {}),
                 "required_accept_criteria": list(
                     config["required_accept_criteria"]
                 ),
