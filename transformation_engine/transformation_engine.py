@@ -545,6 +545,7 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         "requests_created": len(requests),
         "requests": requests,
         "model_calls": 0,
+        "handoff_sha256": current_handoff_sha256,
     }
     SUMMARY_FILE.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
@@ -632,6 +633,22 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
 def run_apply() -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     accepted, rejected = merge_candidate_files()
+
+    handoff_hashes = set()
+    if REQUESTS_DIR.exists():
+        for request_path in REQUESTS_DIR.glob("*.concept_request.json"):
+            try:
+                request = load_json(request_path)
+            except Exception:
+                continue
+            provenance = request.get("request_provenance", {})
+            if isinstance(provenance, dict) and provenance.get("handoff_sha256"):
+                handoff_hashes.add(str(provenance["handoff_sha256"]))
+    current_handoff_sha256 = (
+        next(iter(handoff_hashes))
+        if len(handoff_hashes) == 1
+        else None
+    )
 
     CANDIDATES_FILE.write_text(
         json.dumps(
