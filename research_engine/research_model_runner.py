@@ -389,7 +389,7 @@ def run_one(
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
         "attempts": safe_attempts(bridge_result),
     }
-    if bridge_result.not inference_cost_authorized(bridge_result):
+    if not inference_cost_authorized(bridge_result):
         report = {**base, "status": "COST_POLICY_VIOLATION"}
         atomic_write_json(report_path, report)
         return report
