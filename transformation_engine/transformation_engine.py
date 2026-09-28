@@ -12,8 +12,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+_OVERLAP_ROOT = Path(__file__).resolve().parent.parent
+if str(_OVERLAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_OVERLAP_ROOT))
 
 from source_overlap import check_texts
 
