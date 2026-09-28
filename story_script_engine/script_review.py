@@ -10,6 +10,7 @@ REVIEW_REQUESTS_DIR=OUTPUT_DIR/"script_review_requests"
 RESPONSES_DIR=OUTPUT_DIR/"script_review_responses"
 APPROVED_DIR=OUTPUT_DIR/"approved_scripts"
 SUMMARY_FILE=OUTPUT_DIR/"script_gate_summary.json"
+UI_REVIEWER="local-operator"
 CRITERIA=("package_promise_delivered","facts_within_verified_claims","claim_mapping_reasonable","original_source_independent","structure_and_payoff_clear")
 
 def build_review_request(draft:dict[str,Any],draft_path:Path)->dict[str,Any]:
@@ -59,6 +60,35 @@ def apply(request_path:Path,response_path:Path)->dict[str,Any]:
         draft["approved_provenance"]={"script_review_request_sha256":sha256_file(request_path),"script_draft_sha256":sha256_file(source)}
         dest.write_text(json.dumps(draft,indent=2,ensure_ascii=False),encoding="utf-8"); summary["approved_script"]=str(dest)
     SUMMARY_FILE.parent.mkdir(parents=True,exist_ok=True); SUMMARY_FILE.write_text(json.dumps(summary,indent=2,ensure_ascii=False),encoding="utf-8"); return summary
+
+
+def response_path(concept_id:str)->Path:
+    return RESPONSES_DIR/f"{safe_slug(concept_id)}.script_review_response.json"
+
+def snapshot()->dict[str,Any]:
+    if not REVIEW_REQUESTS_DIR.exists():
+        return {"status":"READY_TO_PREPARE","complete":False,"scripts":[],"pending":0,"accepted":0,"rework":0,"rejected":0}
+    scripts=[]; counts={"pending":0,"accepted":0,"rework":0,"rejected":0}
+    for path in sorted(REVIEW_REQUESTS_DIR.glob("*.script_review_request.json")):
+        req=load_json(path); cid=str(req.get("concept_id",""))
+        rpath=response_path(cid)
+        saved=load_json(rpath) if rpath.exists() else {}
+        decision=str(saved.get("decision") or "PENDING").upper()
+        key=decision.lower() if decision in {"ACCEPT","REWORK","REJECT"} else "pending"
+        counts[key]+=1
+        scripts.append({**req,"decision":decision,"criteria_decisions":saved.get("criteria",{}),"note":saved.get("note","")})
+    complete=bool(scripts) and counts["pending"]==0
+    return {"status":"COMPLETE" if complete else "AWAITING_HUMAN_DECISION","complete":complete,"scripts":scripts,**counts}
+
+def apply_action(*,concept_id:str,decision:str,criteria:dict[str,Any],note:str|None=None)->dict[str,Any]:
+    request_path=REVIEW_REQUESTS_DIR/f"{safe_slug(concept_id)}.script_review_request.json"
+    if not request_path.exists(): raise ValueError("Script review request not found")
+    RESPONSES_DIR.mkdir(parents=True,exist_ok=True)
+    payload={"concept_id":concept_id,"reviewer":UI_REVIEWER,"decision":decision,"criteria":criteria,"note":str(note or "")}
+    dest=response_path(concept_id)
+    dest.write_text(json.dumps(payload,indent=2,ensure_ascii=False),encoding="utf-8")
+    apply(request_path,dest)
+    return snapshot()
 
 def main()->None:
     p=argparse.ArgumentParser(description="Human Script Gate"); p.add_argument("--mode",choices=("prepare","apply"),required=True); p.add_argument("--request",type=Path); p.add_argument("--response",type=Path); a=p.parse_args()
