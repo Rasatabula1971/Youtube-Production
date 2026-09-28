@@ -167,11 +167,7 @@ def scene_detection_command(
         "-i",
         stream_url,
         "-vf",
-        (
-            "scale=640:-2,"
-            f"select=gt(scene\\,{threshold:.4f}),"
-            "showinfo"
-        ),
+        ("scale=640:-2," f"select=gt(scene\\,{threshold:.4f})," "showinfo"),
         "-fps_mode",
         "vfr",
         "-q:v",
@@ -203,10 +199,7 @@ def evenly_selected_indexes(total: int, maximum: int) -> set[int]:
         return set(range(total))
     if maximum == 1:
         return {0}
-    return {
-        round(index * (total - 1) / (maximum - 1))
-        for index in range(maximum)
-    }
+    return {round(index * (total - 1) / (maximum - 1)) for index in range(maximum)}
 
 
 def prune_scene_frames(
@@ -458,9 +451,7 @@ def acquire_visual_one(
                 "stream_yt_dlp_return_code": stream_result.returncode,
                 "stream_error_tail": redact_urls(stream_result.stderr[-4000:]),
                 "fallback_yt_dlp_return_code": (
-                    fallback_result.returncode
-                    if fallback_result is not None
-                    else None
+                    fallback_result.returncode if fallback_result is not None else None
                 ),
                 "fallback_error_tail": (
                     redact_urls(fallback_result.stderr[-4000:])
@@ -551,9 +542,7 @@ def acquire_visual_one(
     status = (
         "READY"
         if ingest.returncode == 0 and opening_frame_value is not None
-        else "READY_NO_OPENING_FRAME"
-        if ingest.returncode == 0
-        else "INGEST_FAILED"
+        else "READY_NO_OPENING_FRAME" if ingest.returncode == 0 else "INGEST_FAILED"
     )
     result = {
         "video_id": video_id,
@@ -574,22 +563,15 @@ def acquire_visual_one(
         "timing_notes": str(notes_path),
         "bundle": str(bundle),
         "ingest_return_code": ingest.returncode,
-        "enriched_profile": (
-            str(enriched_path)
-            if enriched_path.exists()
-            else None
-        ),
+        "enriched_profile": (str(enriched_path) if enriched_path.exists() else None),
         "visual_source_mode": source_mode,
         "temporary_video_deleted": (
-            source_mode != "temporary_low_res_video"
-            or not temp_video.exists()
+            source_mode != "temporary_low_res_video" or not temp_video.exists()
         ),
         "full_video_saved": False,
     }
     if opening_result.returncode != 0:
-        result["opening_frame_error_tail"] = redact_urls(
-            opening_result.stderr[-2000:]
-        )
+        result["opening_frame_error_tail"] = redact_urls(opening_result.stderr[-2000:])
     if ingest.returncode != 0:
         result["ingest_error_tail"] = redact_urls(ingest.stderr[-4000:])
     if temp_video.exists():
@@ -651,11 +633,7 @@ def main() -> None:
 
     if args.mode == "doctor":
         result = {
-            "status": (
-                "READY"
-                if yt_dlp and ffmpeg
-                else "MISSING_DEPENDENCY"
-            ),
+            "status": ("READY" if yt_dlp and ffmpeg else "MISSING_DEPENDENCY"),
             "yt_dlp": yt_dlp,
             "ffmpeg": ffmpeg,
             "prepared_profiles": len(base.current_prepared_profiles()),

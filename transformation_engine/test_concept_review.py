@@ -95,7 +95,10 @@ class ConceptReviewTests(unittest.TestCase):
                     "format_intent": "short",
                     "mechanism_application": "Reveal the hidden thermal purpose.",
                     "transformation_method": "Independent topic and research.",
-                    "research_questions": ["What temperature target?", "What happens if cold?"],
+                    "research_questions": [
+                        "What temperature target?",
+                        "What happens if cold?",
+                    ],
                     "source_dependency_test": {
                         "passes": True,
                         "source_assets_required": False,

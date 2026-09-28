@@ -25,9 +25,10 @@ RESEARCH_HANDOFF_FILE = OUTPUT_DIR / "research_handoff.json"
 SUMMARY_FILE = OUTPUT_DIR / "packaging_gate_summary.json"
 
 
-
 def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -49,10 +50,7 @@ def load_config() -> dict[str, Any]:
     }
     missing = sorted(required - set(config))
     if missing:
-        raise SystemExit(
-            "Packaging Gate config is missing: "
-            + ", ".join(missing)
-        )
+        raise SystemExit("Packaging Gate config is missing: " + ", ".join(missing))
     return config
 
 
@@ -62,33 +60,21 @@ def build_review_request(
 ) -> dict[str, Any]:
     packages = candidates_payload.get("packages", [])
     if not isinstance(packages, list):
-        raise ValueError(
-            "package_candidates packages must be a list"
-        )
+        raise ValueError("package_candidates packages must be a list")
 
     seen_ids: set[str] = set()
     items = []
 
     for package in packages:
-        package_id = str(
-            package.get("package_id", "")
-        ).strip()
-        concept_id = str(
-            package.get("concept_id", "")
-        ).strip()
+        package_id = str(package.get("package_id", "")).strip()
+        concept_id = str(package.get("concept_id", "")).strip()
 
         if not package_id:
-            raise ValueError(
-                "Every package candidate requires package_id"
-            )
+            raise ValueError("Every package candidate requires package_id")
         if package_id in seen_ids:
-            raise ValueError(
-                f"Duplicate package_id in candidates: {package_id}"
-            )
+            raise ValueError(f"Duplicate package_id in candidates: {package_id}")
         if not concept_id:
-            raise ValueError(
-                f"Package {package_id} requires concept_id"
-            )
+            raise ValueError(f"Package {package_id} requires concept_id")
         seen_ids.add(package_id)
 
         items.append(
@@ -97,58 +83,26 @@ def build_review_request(
                 "concept_id": concept_id,
                 "title": package.get("title"),
                 "thumbnail": package.get("thumbnail"),
-                "opening_frame": package.get(
-                    "opening_frame"
-                ),
-                "expected_viewer": package.get(
-                    "expected_viewer"
-                ),
-                "awareness_level": package.get(
-                    "awareness_level"
-                ),
-                "viewer_problem": package.get(
-                    "viewer_problem"
-                ),
-                "viewer_moment": package.get(
-                    "viewer_moment"
-                ),
-                "desired_outcome": package.get(
-                    "desired_outcome"
-                ),
-                "one_sentence_promise": package.get(
-                    "one_sentence_promise"
-                ),
-                "gap_positioning": package.get(
-                    "gap_positioning"
-                ),
-                "channel_fit_alignment": package.get(
-                    "channel_fit_alignment"
-                ),
-                "core_promise": package.get(
-                    "core_promise"
-                ),
-                "curiosity_gap": package.get(
-                    "curiosity_gap"
-                ),
-                "expected_payoff": package.get(
-                    "expected_payoff"
-                ),
-                "format_intent": package.get(
-                    "format_intent"
-                ),
+                "opening_frame": package.get("opening_frame"),
+                "expected_viewer": package.get("expected_viewer"),
+                "awareness_level": package.get("awareness_level"),
+                "viewer_problem": package.get("viewer_problem"),
+                "viewer_moment": package.get("viewer_moment"),
+                "desired_outcome": package.get("desired_outcome"),
+                "one_sentence_promise": package.get("one_sentence_promise"),
+                "gap_positioning": package.get("gap_positioning"),
+                "channel_fit_alignment": package.get("channel_fit_alignment"),
+                "core_promise": package.get("core_promise"),
+                "curiosity_gap": package.get("curiosity_gap"),
+                "expected_payoff": package.get("expected_payoff"),
+                "format_intent": package.get("format_intent"),
                 "title_thumbnail_relationship": package.get(
                     "title_thumbnail_relationship"
                 ),
-                "research_dependencies": package.get(
-                    "research_dependencies", []
-                ),
-                "concept_context": package.get(
-                    "concept_context", {}
-                ),
+                "research_dependencies": package.get("research_dependencies", []),
+                "concept_context": package.get("concept_context", {}),
                 "source_overlap": package.get("source_overlap", {}),
-                "required_accept_criteria": list(
-                    config["required_accept_criteria"]
-                ),
+                "required_accept_criteria": list(config["required_accept_criteria"]),
             }
         )
 
@@ -205,13 +159,9 @@ def build_review_request(
                     "decision": "ACCEPT|REWORK|REJECT",
                     "criteria": {
                         criterion: True
-                        for criterion in config[
-                            "required_accept_criteria"
-                        ]
+                        for criterion in config["required_accept_criteria"]
                     },
-                    "note": (
-                        "required for REWORK; optional otherwise"
-                    ),
+                    "note": ("required for REWORK; optional otherwise"),
                 }
             ],
             "overall_note": "optional",
@@ -230,122 +180,76 @@ def validate_decisions(
     response: dict[str, Any],
     config: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    reviewer = str(
-        response.get("reviewer", "")
-    ).strip()
+    reviewer = str(response.get("reviewer", "")).strip()
     if config["require_reviewer_name"] and not reviewer:
-        raise ValueError(
-            "Packaging Gate response requires reviewer"
-        )
+        raise ValueError("Packaging Gate response requires reviewer")
 
     decisions = response.get("decisions")
     if not isinstance(decisions, list):
-        raise ValueError(
-            "Packaging Gate decisions must be a list"
-        )
+        raise ValueError("Packaging Gate decisions must be a list")
 
-    items = {
-        str(item["package_id"]): item
-        for item in request.get("items", [])
-    }
+    items = {str(item["package_id"]): item for item in request.get("items", [])}
     expected = set(items)
     mapped: dict[str, dict[str, Any]] = {}
 
     for index, decision in enumerate(decisions):
         if not isinstance(decision, dict):
-            raise ValueError(
-                f"Decision {index} must be an object"
-            )
+            raise ValueError(f"Decision {index} must be an object")
 
-        package_id = str(
-            decision.get("package_id", "")
-        ).strip()
+        package_id = str(decision.get("package_id", "")).strip()
         if package_id not in expected:
-            raise ValueError(
-                f"Unknown package_id: {package_id}"
-            )
+            raise ValueError(f"Unknown package_id: {package_id}")
         if package_id in mapped:
-            raise ValueError(
-                f"Duplicate package decision: {package_id}"
-            )
+            raise ValueError(f"Duplicate package decision: {package_id}")
 
-        value = str(
-            decision.get("decision", "")
-        ).strip().upper()
+        value = str(decision.get("decision", "")).strip().upper()
         if value not in {
             "ACCEPT",
             "REWORK",
             "REJECT",
         }:
-            raise ValueError(
-                f"Invalid decision for {package_id}: {value!r}"
-            )
+            raise ValueError(f"Invalid decision for {package_id}: {value!r}")
 
         criteria = decision.get("criteria")
         if not isinstance(criteria, dict):
-            raise ValueError(
-                f"Decision criteria are required for {package_id}"
-            )
+            raise ValueError(f"Decision criteria are required for {package_id}")
 
-        required = config[
-            "required_accept_criteria"
-        ]
-        missing = [
-            criterion
-            for criterion in required
-            if criterion not in criteria
-        ]
+        required = config["required_accept_criteria"]
+        missing = [criterion for criterion in required if criterion not in criteria]
         if missing:
             raise ValueError(
-                f"Missing criteria for {package_id}: "
-                + ", ".join(missing)
+                f"Missing criteria for {package_id}: " + ", ".join(missing)
             )
 
         normalized = {
-            criterion: (
-                criteria.get(criterion) is True
-            )
-            for criterion in required
+            criterion: (criteria.get(criterion) is True) for criterion in required
         }
-        note = str(
-            decision.get("note", "") or ""
-        ).strip()
+        note = str(decision.get("note", "") or "").strip()
 
-        if value == "ACCEPT" and not all(
-            normalized.values()
-        ):
-            raise ValueError(
-                f"ACCEPT requires all criteria true for {package_id}"
-            )
+        if value == "ACCEPT" and not all(normalized.values()):
+            raise ValueError(f"ACCEPT requires all criteria true for {package_id}")
         if value == "REWORK" and not note:
-            raise ValueError(
-                f"REWORK requires a note for {package_id}"
-            )
+            raise ValueError(f"REWORK requires a note for {package_id}")
 
         mapped[package_id] = {
             "package_id": package_id,
             "decision": value,
             "criteria": normalized,
             "note": note,
-            "concept_id": items[package_id][
-                "concept_id"
-            ],
+            "concept_id": items[package_id]["concept_id"],
         }
 
     missing = sorted(expected - set(mapped))
     if missing:
         raise ValueError(
-            "Packaging Gate is incomplete; missing decisions for: "
-            + ", ".join(missing)
+            "Packaging Gate is incomplete; missing decisions for: " + ", ".join(missing)
         )
 
     accepted_by_concept: dict[str, list[str]] = {}
     for package_id, decision in mapped.items():
         if decision["decision"] != "ACCEPT":
             continue
-        accepted_by_concept.setdefault(
-            decision["concept_id"], []
-        ).append(package_id)
+        accepted_by_concept.setdefault(decision["concept_id"], []).append(package_id)
 
     conflicts = {
         concept_id: package_ids
@@ -355,14 +259,9 @@ def validate_decisions(
     if conflicts:
         details = "; ".join(
             f"{concept_id}: {', '.join(ids)}"
-            for concept_id, ids in sorted(
-                conflicts.items()
-            )
+            for concept_id, ids in sorted(conflicts.items())
         )
-        raise ValueError(
-            "Only one package may be ACCEPTED per concept: "
-            + details
-        )
+        raise ValueError("Only one package may be ACCEPTED per concept: " + details)
 
     return mapped
 
@@ -378,20 +277,11 @@ def apply_gate(
         response,
         config,
     )
-    packages = candidates_payload.get(
-        "packages", []
-    )
-    by_id = {
-        str(package["package_id"]): package
-        for package in packages
-    }
+    packages = candidates_payload.get("packages", [])
+    by_id = {str(package["package_id"]): package for package in packages}
 
-    reviewer = str(
-        response.get("reviewer", "")
-    ).strip()
-    reviewed_at = datetime.now(
-        timezone.utc
-    ).isoformat()
+    reviewer = str(response.get("reviewer", "")).strip()
+    reviewed_at = datetime.now(timezone.utc).isoformat()
 
     buckets = {
         "accepted": [],
@@ -421,26 +311,17 @@ def apply_gate(
         "artifact": "packaging_gate_reviewed",
         "reviewer": reviewer,
         "reviewed_at": reviewed_at,
-        "overall_note": str(
-            response.get("overall_note", "") or ""
-        ),
+        "overall_note": str(response.get("overall_note", "") or ""),
         "accepted": buckets["accepted"],
         "rework": buckets["rework"],
         "rejected": buckets["rejected"],
-        "counts": {
-            key: len(value)
-            for key, value in buckets.items()
-        },
+        "counts": {key: len(value) for key, value in buckets.items()},
     }
 
     handoff_concepts = []
     for package in buckets["accepted"]:
-        concept = dict(
-            package.get("concept_context", {})
-        )
-        concept["concept_id"] = package[
-            "concept_id"
-        ]
+        concept = dict(package.get("concept_context", {}))
+        concept["concept_id"] = package["concept_id"]
         concept["packaging"] = {
             key: package.get(key)
             for key in (
@@ -470,13 +351,9 @@ def apply_gate(
     research_handoff = {
         "artifact": "packaging_research_handoff",
         "status": (
-            "READY_FOR_RESEARCH"
-            if handoff_concepts
-            else "NO_APPROVED_PACKAGES"
+            "READY_FOR_RESEARCH" if handoff_concepts else "NO_APPROVED_PACKAGES"
         ),
-        "concept_count": len(
-            handoff_concepts
-        ),
+        "concept_count": len(handoff_concepts),
         "concepts": handoff_concepts,
         "notes": [
             "Only concepts with one human-approved package are included.",
@@ -511,18 +388,18 @@ def run_prepare(
         )
         return summary
 
-    candidates = load_json(
-        candidates_path
-    )
+    candidates = load_json(candidates_path)
     config = load_config()
     request = build_review_request(
         candidates,
         config,
     )
-    request["request_provenance"].update({
-        "candidates_source": str(candidates_path.resolve()),
-        "candidates_sha256": file_sha256(candidates_path),
-    })
+    request["request_provenance"].update(
+        {
+            "candidates_source": str(candidates_path.resolve()),
+            "candidates_sha256": file_sha256(candidates_path),
+        }
+    )
     REVIEW_REQUEST_FILE.write_text(
         json.dumps(
             request,
@@ -538,12 +415,8 @@ def run_prepare(
             if request["package_count"]
             else "NO_PACKAGES_TO_REVIEW"
         ),
-        "reviewable_packages": request[
-            "package_count"
-        ],
-        "request": str(
-            REVIEW_REQUEST_FILE
-        ),
+        "reviewable_packages": request["package_count"],
+        "request": str(REVIEW_REQUEST_FILE),
     }
     SUMMARY_FILE.write_text(
         json.dumps(
@@ -560,15 +433,9 @@ def run_apply(
     candidates_path: Path,
     response_path: Path,
 ) -> dict[str, Any]:
-    candidates = load_json(
-        candidates_path
-    )
-    request = load_json(
-        REVIEW_REQUEST_FILE
-    )
-    response = load_json(
-        response_path
-    )
+    candidates = load_json(candidates_path)
+    request = load_json(REVIEW_REQUEST_FILE)
+    response = load_json(response_path)
     config = load_config()
 
     reviewed, research_handoff = apply_gate(
@@ -590,12 +457,8 @@ def run_apply(
         json.dumps(
             {
                 "artifact": "approved_packages",
-                "count": reviewed["counts"][
-                    "accepted"
-                ],
-                "packages": reviewed[
-                    "accepted"
-                ],
+                "count": reviewed["counts"]["accepted"],
+                "packages": reviewed["accepted"],
             },
             indent=2,
             ensure_ascii=False,
@@ -612,21 +475,11 @@ def run_apply(
     )
 
     summary = {
-        "status": research_handoff[
-            "status"
-        ],
-        "accepted": reviewed["counts"][
-            "accepted"
-        ],
-        "rework": reviewed["counts"][
-            "rework"
-        ],
-        "rejected": reviewed["counts"][
-            "rejected"
-        ],
-        "research_handoff": str(
-            RESEARCH_HANDOFF_FILE
-        ),
+        "status": research_handoff["status"],
+        "accepted": reviewed["counts"]["accepted"],
+        "rework": reviewed["counts"]["rework"],
+        "rejected": reviewed["counts"]["rejected"],
+        "research_handoff": str(RESEARCH_HANDOFF_FILE),
     }
     SUMMARY_FILE.write_text(
         json.dumps(
@@ -640,9 +493,7 @@ def run_apply(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Human Packaging Gate"
-    )
+    parser = argparse.ArgumentParser(description="Human Packaging Gate")
     parser.add_argument(
         "--mode",
         choices=("prepare", "apply"),
@@ -661,24 +512,22 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.mode == "prepare":
-        result = run_prepare(
-            args.candidates.resolve()
-        )
+        result = run_prepare(args.candidates.resolve())
     else:
         if args.response is None:
-            raise SystemExit(
-                "--response is required for Packaging Gate apply"
-            )
+            raise SystemExit("--response is required for Packaging Gate apply")
         result = run_apply(
             args.candidates.resolve(),
             args.response.resolve(),
         )
 
-    print(json.dumps(
-        result,
-        indent=2,
-        ensure_ascii=False,
-    ))
+    print(
+        json.dumps(
+            result,
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -73,12 +73,7 @@ def topic_cell(
     topic: str,
     fmt: str,
 ) -> dict[str, Any] | None:
-    return (
-        topic_velocity.get("topics", {})
-        .get(topic, {})
-        .get("by_format", {})
-        .get(fmt)
-    )
+    return topic_velocity.get("topics", {}).get(topic, {}).get("by_format", {}).get(fmt)
 
 
 def family_cell(
@@ -87,12 +82,7 @@ def family_cell(
     fmt: str,
     family: str,
 ) -> dict[str, Any] | None:
-    return (
-        expansion_evidence.get("topics", {})
-        .get(topic, {})
-        .get(fmt, {})
-        .get(family)
-    )
+    return expansion_evidence.get("topics", {}).get(topic, {}).get(fmt, {}).get(family)
 
 
 def candidate_topic_families(candidate: dict[str, Any], topic: str) -> list[str]:
@@ -112,9 +102,13 @@ def evaluate_topic_evidence(
     if not cell:
         return False, ["missing_topic_evidence"]
 
-    if int(cell.get("unique_channels") or 0) < int(config["minimum_topic_unique_channels"]):
+    if int(cell.get("unique_channels") or 0) < int(
+        config["minimum_topic_unique_channels"]
+    ):
         reasons.append("insufficient_topic_unique_channels")
-    if int(cell.get("velocity_sample_count") or 0) < int(config["minimum_topic_velocity_samples"]):
+    if int(cell.get("velocity_sample_count") or 0) < int(
+        config["minimum_topic_velocity_samples"]
+    ):
         reasons.append("insufficient_topic_velocity_samples")
     if cell.get("age_matched_velocity_index") is None:
         reasons.append("missing_age_matched_velocity_index")
@@ -137,9 +131,10 @@ def replicated_families(
         if cell is None:
             continue
         evidence[family] = cell
-        if (
-            int(cell.get("unique_channels") or 0) >= int(config["minimum_family_unique_channels"])
-            and int(cell.get("video_count") or 0) >= int(config["minimum_family_video_count"])
+        if int(cell.get("unique_channels") or 0) >= int(
+            config["minimum_family_unique_channels"]
+        ) and int(cell.get("video_count") or 0) >= int(
+            config["minimum_family_video_count"]
         ):
             replicated.append(family)
 
@@ -366,11 +361,19 @@ def write_outputs(
                     "likes": packet.get("likes"),
                     "topic": packet.get("topic"),
                     "matched_families": "|".join(packet.get("matched_families", [])),
-                    "replicated_families": "|".join(packet.get("replicated_families", [])),
-                    "candidate_view_reference_met": packet.get("candidate_view_reference_met"),
-                    "age_matched_velocity_index": topic_evidence.get("age_matched_velocity_index"),
+                    "replicated_families": "|".join(
+                        packet.get("replicated_families", [])
+                    ),
+                    "candidate_view_reference_met": packet.get(
+                        "candidate_view_reference_met"
+                    ),
+                    "age_matched_velocity_index": topic_evidence.get(
+                        "age_matched_velocity_index"
+                    ),
                     "topic_unique_channels": topic_evidence.get("unique_channels"),
-                    "topic_velocity_sample_count": topic_evidence.get("velocity_sample_count"),
+                    "topic_velocity_sample_count": topic_evidence.get(
+                        "velocity_sample_count"
+                    ),
                     "gate_reasons": "|".join(packet.get("gate_reasons", [])),
                 }
             )
@@ -383,9 +386,7 @@ def write_outputs(
         "experiment": "Stage 2 Experiment 01.5",
         "purpose": "opportunity_handoff_gate",
         "status": (
-            "AWAITING_HUMAN_OPPORTUNITY_GATE"
-            if study_set
-            else "NO_PASSING_STUDY_SET"
+            "AWAITING_HUMAN_OPPORTUNITY_GATE" if study_set else "NO_PASSING_STUDY_SET"
         ),
         "source_01_3_cohort_id": summary_01_3.get("cohort_id"),
         "source_01_3_mode": summary_01_3.get("mode"),
@@ -493,9 +494,15 @@ def run_build() -> None:
     print("=" * 60)
     print("Mode: BUILD HANDOFF (zero API calls)")
     print(f"Packets:               {len(packets):,}")
-    print(f"PASS:                  {sum(p.get('gate_status') == 'PASS' for p in packets):,}")
-    print(f"REVIEW:                {sum(p.get('gate_status') == 'REVIEW' for p in packets):,}")
-    print(f"HOLD:                  {sum(p.get('gate_status') == 'HOLD' for p in packets):,}")
+    print(
+        f"PASS:                  {sum(p.get('gate_status') == 'PASS' for p in packets):,}"
+    )
+    print(
+        f"REVIEW:                {sum(p.get('gate_status') == 'REVIEW' for p in packets):,}"
+    )
+    print(
+        f"HOLD:                  {sum(p.get('gate_status') == 'HOLD' for p in packets):,}"
+    )
     print(f"Experiment 02 study set: {len(study_set):,}")
     print(f"Study set:             {STUDY_SET_FILE}")
 

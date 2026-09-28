@@ -27,9 +27,10 @@ RESEARCH_HANDOFF_FILE = OUTPUT_DIR / "research_handoff.json"
 SUMMARY_FILE = OUTPUT_DIR / "concept_gate_summary.json"
 
 
-
 def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -51,9 +52,7 @@ def load_config() -> dict[str, Any]:
     }
     missing = sorted(required - set(config))
     if missing:
-        raise SystemExit(
-            "Concept Gate config is missing: " + ", ".join(missing)
-        )
+        raise SystemExit("Concept Gate config is missing: " + ", ".join(missing))
     return config
 
 
@@ -68,9 +67,7 @@ def build_review_request(
     if not isinstance(overrides, list):
         raise ValueError("concept_candidates override_concepts must be a list")
     default_ids = {
-        str(item.get("concept_id"))
-        for item in concepts
-        if isinstance(item, dict)
+        str(item.get("concept_id")) for item in concepts if isinstance(item, dict)
     }
     concepts = list(concepts) + list(overrides)
 
@@ -81,9 +78,7 @@ def build_review_request(
         if not concept_id:
             raise ValueError("Every concept candidate requires concept_id")
         if concept_id in seen_ids:
-            raise ValueError(
-                f"Duplicate concept_id in candidates: {concept_id}"
-            )
+            raise ValueError(f"Duplicate concept_id in candidates: {concept_id}")
         seen_ids.add(concept_id)
 
         items.append(
@@ -99,28 +94,16 @@ def build_review_request(
                 "desired_outcome": concept.get("desired_outcome"),
                 "content_gap": concept.get("content_gap"),
                 "channel_fit": concept.get("channel_fit"),
-                "title_clarity_test": concept.get(
-                    "title_clarity_test"
-                ),
+                "title_clarity_test": concept.get("title_clarity_test"),
                 "format_intent": concept.get("format_intent"),
-                "mechanism_application": concept.get(
-                    "mechanism_application"
-                ),
-                "transformation_method": concept.get(
-                    "transformation_method"
-                ),
-                "research_questions": concept.get(
-                    "research_questions", []
-                ),
-                "source_dependency_test": concept.get(
-                    "source_dependency_test", {}
-                ),
+                "mechanism_application": concept.get("mechanism_application"),
+                "transformation_method": concept.get("transformation_method"),
+                "research_questions": concept.get("research_questions", []),
+                "source_dependency_test": concept.get("source_dependency_test", {}),
                 "llm_triage": concept.get("llm_triage", {}),
                 "triage_default": concept_id in default_ids,
                 "source_overlap": concept.get("source_overlap", {}),
-                "required_accept_criteria": list(
-                    config["required_accept_criteria"]
-                ),
+                "required_accept_criteria": list(config["required_accept_criteria"]),
             }
         )
 
@@ -174,9 +157,7 @@ def build_review_request(
                     "decision": "ACCEPT|REWORK|REJECT",
                     "criteria": {
                         criterion: True
-                        for criterion in config[
-                            "required_accept_criteria"
-                        ]
+                        for criterion in config["required_accept_criteria"]
                     },
                     "note": "required when REWORK, optional otherwise",
                 }
@@ -205,52 +186,34 @@ def validate_decisions(
     if not isinstance(decisions, list):
         raise ValueError("Concept Gate decisions must be a list")
 
-    expected = {
-        str(item["concept_id"])
-        for item in request.get("items", [])
-    }
+    expected = {str(item["concept_id"]) for item in request.get("items", [])}
     mapped: dict[str, dict[str, Any]] = {}
 
     for index, decision in enumerate(decisions):
         if not isinstance(decision, dict):
             raise ValueError(f"Decision {index} must be an object")
 
-        concept_id = str(
-            decision.get("concept_id", "")
-        ).strip()
+        concept_id = str(decision.get("concept_id", "")).strip()
         if concept_id not in expected:
-            raise ValueError(
-                f"Unknown concept_id in gate response: {concept_id}"
-            )
+            raise ValueError(f"Unknown concept_id in gate response: {concept_id}")
         if concept_id in mapped:
-            raise ValueError(
-                f"Duplicate decision for concept_id: {concept_id}"
-            )
+            raise ValueError(f"Duplicate decision for concept_id: {concept_id}")
 
-        value = str(
-            decision.get("decision", "")
-        ).strip().upper()
+        value = str(decision.get("decision", "")).strip().upper()
         if value not in {"ACCEPT", "REWORK", "REJECT"}:
-            raise ValueError(
-                f"Invalid decision for {concept_id}: {value!r}"
-            )
+            raise ValueError(f"Invalid decision for {concept_id}: {value!r}")
 
         criteria = decision.get("criteria")
         if not isinstance(criteria, dict):
-            raise ValueError(
-                f"Decision criteria are required for {concept_id}"
-            )
+            raise ValueError(f"Decision criteria are required for {concept_id}")
 
         required_criteria = config["required_accept_criteria"]
         missing_criteria = [
-            criterion
-            for criterion in required_criteria
-            if criterion not in criteria
+            criterion for criterion in required_criteria if criterion not in criteria
         ]
         if missing_criteria:
             raise ValueError(
-                f"Missing criteria for {concept_id}: "
-                + ", ".join(missing_criteria)
+                f"Missing criteria for {concept_id}: " + ", ".join(missing_criteria)
             )
 
         normalized_criteria = {
@@ -259,16 +222,10 @@ def validate_decisions(
         }
 
         note = str(decision.get("note", "") or "").strip()
-        if value == "ACCEPT" and not all(
-            normalized_criteria.values()
-        ):
-            raise ValueError(
-                f"ACCEPT requires every criterion true for {concept_id}"
-            )
+        if value == "ACCEPT" and not all(normalized_criteria.values()):
+            raise ValueError(f"ACCEPT requires every criterion true for {concept_id}")
         if value == "REWORK" and not note:
-            raise ValueError(
-                f"REWORK requires a note for {concept_id}"
-            )
+            raise ValueError(f"REWORK requires a note for {concept_id}")
 
         mapped[concept_id] = {
             "concept_id": concept_id,
@@ -280,8 +237,7 @@ def validate_decisions(
     missing = sorted(expected - set(mapped))
     if missing:
         raise ValueError(
-            "Concept Gate is incomplete; missing decisions for: "
-            + ", ".join(missing)
+            "Concept Gate is incomplete; missing decisions for: " + ", ".join(missing)
         )
 
     return mapped
@@ -293,17 +249,18 @@ def apply_gate(
     response: dict[str, Any],
     config: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    expected_hash = request.get("request_provenance", {}).get("candidates_content_sha256")
+    expected_hash = request.get("request_provenance", {}).get(
+        "candidates_content_sha256"
+    )
     if not expected_hash or expected_hash != content_sha256(candidates_payload):
-        raise ValueError("STALE_REVIEW_REQUEST: concept candidates changed after review preparation")
+        raise ValueError(
+            "STALE_REVIEW_REQUEST: concept candidates changed after review preparation"
+        )
     mapped = validate_decisions(request, response, config)
     concepts = list(candidates_payload.get("concepts", [])) + list(
         candidates_payload.get("override_concepts", [])
     )
-    by_id = {
-        str(concept["concept_id"]): concept
-        for concept in concepts
-    }
+    by_id = {str(concept["concept_id"]): concept for concept in concepts}
 
     reviewer = str(response.get("reviewer", "")).strip()
     reviewed_at = datetime.now(timezone.utc).isoformat()
@@ -336,16 +293,11 @@ def apply_gate(
         "artifact": "concept_gate_reviewed",
         "reviewer": reviewer,
         "reviewed_at": reviewed_at,
-        "overall_note": str(
-            response.get("overall_note", "") or ""
-        ),
+        "overall_note": str(response.get("overall_note", "") or ""),
         "accepted": buckets["accepted"],
         "rework": buckets["rework"],
         "rejected": buckets["rejected"],
-        "counts": {
-            key: len(value)
-            for key, value in buckets.items()
-        },
+        "counts": {key: len(value) for key, value in buckets.items()},
         "notes": [
             "No concept ranking or composite score is calculated.",
             "Only ACCEPT concepts are eligible for the Research Engine handoff.",
@@ -355,54 +307,28 @@ def apply_gate(
     research_handoff = {
         "artifact": "research_handoff",
         "status": (
-            "READY_FOR_RESEARCH"
-            if buckets["accepted"]
-            else "NO_ACCEPTED_CONCEPTS"
+            "READY_FOR_RESEARCH" if buckets["accepted"] else "NO_ACCEPTED_CONCEPTS"
         ),
         "concept_count": len(buckets["accepted"]),
         "concepts": [
             {
                 "concept_id": concept["concept_id"],
                 "mechanism_id": concept.get("mechanism_id"),
-                "mechanism_label": concept.get(
-                    "mechanism_label"
-                ),
+                "mechanism_label": concept.get("mechanism_label"),
                 "working_title": concept.get("working_title"),
                 "premise": concept.get("premise"),
-                "audience_promise": concept.get(
-                    "audience_promise"
-                ),
-                "viewer_problem": concept.get(
-                    "viewer_problem"
-                ),
-                "viewer_moment": concept.get(
-                    "viewer_moment"
-                ),
-                "desired_outcome": concept.get(
-                    "desired_outcome"
-                ),
-                "content_gap": concept.get(
-                    "content_gap", {}
-                ),
-                "channel_fit": concept.get(
-                    "channel_fit", {}
-                ),
-                "title_clarity_test": concept.get(
-                    "title_clarity_test", {}
-                ),
+                "audience_promise": concept.get("audience_promise"),
+                "viewer_problem": concept.get("viewer_problem"),
+                "viewer_moment": concept.get("viewer_moment"),
+                "desired_outcome": concept.get("desired_outcome"),
+                "content_gap": concept.get("content_gap", {}),
+                "channel_fit": concept.get("channel_fit", {}),
+                "title_clarity_test": concept.get("title_clarity_test", {}),
                 "format_intent": concept.get("format_intent"),
-                "mechanism_application": concept.get(
-                    "mechanism_application"
-                ),
-                "transformation_method": concept.get(
-                    "transformation_method"
-                ),
-                "research_questions": concept.get(
-                    "research_questions", []
-                ),
-                "source_dependency_test": concept.get(
-                    "source_dependency_test", {}
-                ),
+                "mechanism_application": concept.get("mechanism_application"),
+                "transformation_method": concept.get("transformation_method"),
+                "research_questions": concept.get("research_questions", []),
+                "source_dependency_test": concept.get("source_dependency_test", {}),
                 "concept_gate": concept["concept_gate"],
             }
             for concept in buckets["accepted"]
@@ -434,10 +360,12 @@ def run_prepare(candidates_path: Path) -> dict[str, Any]:
     candidates = load_json(candidates_path)
     config = load_config()
     request = build_review_request(candidates, config)
-    request["request_provenance"].update({
-        "candidates_source": str(candidates_path.resolve()),
-        "candidates_sha256": file_sha256(candidates_path),
-    })
+    request["request_provenance"].update(
+        {
+            "candidates_source": str(candidates_path.resolve()),
+            "candidates_sha256": file_sha256(candidates_path),
+        }
+    )
     REVIEW_REQUEST_FILE.write_text(
         json.dumps(request, indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -504,9 +432,7 @@ def run_apply(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Human Concept Gate"
-    )
+    parser = argparse.ArgumentParser(description="Human Concept Gate")
     parser.add_argument(
         "--mode",
         choices=("prepare", "apply"),
@@ -528,9 +454,7 @@ def main() -> None:
         result = run_prepare(args.candidates.resolve())
     else:
         if args.response is None:
-            raise SystemExit(
-                "--response is required for Concept Gate apply"
-            )
+            raise SystemExit("--response is required for Concept Gate apply")
         result = run_apply(
             args.candidates.resolve(),
             args.response.resolve(),

@@ -59,11 +59,7 @@ def opportunity_id(
     fmt: str,
     niche: str = "",
 ) -> str:
-    return (
-        f"{niche}:{topic}:{fmt}"
-        if niche
-        else f"{topic}:{fmt}"
-    )
+    return f"{niche}:{topic}:{fmt}" if niche else f"{topic}:{fmt}"
 
 
 def _group_study_set(study_set: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -97,9 +93,7 @@ def _fresh_state(study_set: list[dict[str, Any]]) -> dict[str, Any]:
 
     for group in _group_study_set(study_set):
         selected_ids = [
-            str(item.get("video_id"))
-            for item in group["items"]
-            if item.get("video_id")
+            str(item.get("video_id")) for item in group["items"] if item.get("video_id")
         ]
         opportunities[group["opportunity_id"]] = {
             "topic": group["topic"],
@@ -107,10 +101,7 @@ def _fresh_state(study_set: list[dict[str, Any]]) -> dict[str, Any]:
             "format_candidate": group["format_candidate"],
             "decision": "PENDING",
             "selected_video_ids": selected_ids,
-            "video_decisions": {
-                video_id: "PENDING"
-                for video_id in selected_ids
-            },
+            "video_decisions": {video_id: "PENDING" for video_id in selected_ids},
             "replacement_history": [],
         }
 
@@ -174,10 +165,7 @@ def _pass_candidates(
         if item.get("gate_status") == "PASS"
         and str(item.get("topic")) == topic
         and str(item.get("format_candidate")) == fmt
-        and (
-            not niche
-            or str(item.get("niche") or "") == niche
-        )
+        and (not niche or str(item.get("niche") or "") == niche)
         and item.get("video_id")
     ]
 
@@ -208,9 +196,7 @@ def _replacement_candidate(
     used_ids.update(str(value) for value in opportunity.get("replacement_history", []))
 
     lookup = {
-        str(item.get("video_id")): item
-        for item in packets
-        if item.get("video_id")
+        str(item.get("video_id")): item for item in packets if item.get("video_id")
     }
     used_channels = {
         str(lookup[video_id].get("channel_id"))
@@ -235,14 +221,10 @@ def _replacement_candidate(
 
 
 def _all_examples_kept(opportunity: dict[str, Any]) -> bool:
-    selected = [
-        str(video_id)
-        for video_id in opportunity.get("selected_video_ids", [])
-    ]
+    selected = [str(video_id) for video_id in opportunity.get("selected_video_ids", [])]
     decisions = opportunity.get("video_decisions", {})
     return bool(selected) and all(
-        decisions.get(video_id) == "KEEP"
-        for video_id in selected
+        decisions.get(video_id) == "KEEP" for video_id in selected
     )
 
 
@@ -258,8 +240,7 @@ def _materialize_approved(
         if isinstance(item, dict)
     ]
     gate_complete = bool(decisions) and all(
-        decision in {"APPROVE", "REJECT", "HOLD"}
-        for decision in decisions
+        decision in {"APPROVE", "REJECT", "HOLD"} for decision in decisions
     )
 
     lookup = _packet_lookup(study_set, packets)
@@ -328,11 +309,7 @@ def gate_snapshot() -> dict[str, Any]:
             "opportunities": [],
         }
 
-    packets = (
-        load_json(HANDOFF_PACKETS_FILE)
-        if HANDOFF_PACKETS_FILE.exists()
-        else []
-    )
+    packets = load_json(HANDOFF_PACKETS_FILE) if HANDOFF_PACKETS_FILE.exists() else []
     if not isinstance(packets, list):
         packets = []
 
@@ -381,12 +358,10 @@ def gate_snapshot() -> dict[str, Any]:
             str(opportunity.get("niche") or ""),
         )
         selected_ids = {
-            str(video_id)
-            for video_id in opportunity.get("selected_video_ids", [])
+            str(video_id) for video_id in opportunity.get("selected_video_ids", [])
         }
         alternative_count = sum(
-            str(item.get("video_id")) not in selected_ids
-            for item in alternatives
+            str(item.get("video_id")) not in selected_ids for item in alternatives
         )
 
         first = selected_examples[0] if selected_examples else {}
@@ -413,8 +388,7 @@ def gate_snapshot() -> dict[str, Any]:
         if isinstance(item, dict)
     ]
     gate_complete = bool(decisions) and all(
-        decision in {"APPROVE", "REJECT", "HOLD"}
-        for decision in decisions
+        decision in {"APPROVE", "REJECT", "HOLD"} for decision in decisions
     )
 
     if ready:
@@ -449,11 +423,7 @@ def apply_gate_action(
     if not isinstance(study_set, list) or not study_set:
         raise ValueError("Experiment 01.5 study set is missing or empty.")
 
-    packets = (
-        load_json(HANDOFF_PACKETS_FILE)
-        if HANDOFF_PACKETS_FILE.exists()
-        else []
-    )
+    packets = load_json(HANDOFF_PACKETS_FILE) if HANDOFF_PACKETS_FILE.exists() else []
     if not isinstance(packets, list):
         packets = []
 

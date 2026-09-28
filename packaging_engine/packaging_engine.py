@@ -27,10 +27,7 @@ PROJECT_ROOT = HERE.parent
 
 CONFIG_FILE = HERE / "packaging_config.json"
 DEFAULT_CONCEPT_HANDOFF = (
-    PROJECT_ROOT
-    / "transformation_engine"
-    / "output"
-    / "research_handoff.json"
+    PROJECT_ROOT / "transformation_engine" / "output" / "research_handoff.json"
 )
 
 OUTPUT_DIR = HERE / "output"
@@ -56,16 +53,13 @@ def load_config() -> dict[str, Any]:
     }
     missing = sorted(required - set(config))
     if missing:
-        raise SystemExit(
-            "Packaging config is missing: " + ", ".join(missing)
-        )
+        raise SystemExit("Packaging config is missing: " + ", ".join(missing))
     return config
 
 
 def safe_slug(value: str) -> str:
     cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_"
-        for char in value
+        char if char.isalnum() or char in "-_." else "_" for char in value
     ).strip("._")
     return cleaned or "unknown"
 
@@ -94,32 +88,18 @@ def build_package_request(
             "desired_outcome": concept.get("desired_outcome"),
             "content_gap": concept.get("content_gap", {}),
             "channel_fit": concept.get("channel_fit", {}),
-            "title_clarity_test": concept.get(
-                "title_clarity_test", {}
-            ),
+            "title_clarity_test": concept.get("title_clarity_test", {}),
             "format_intent": concept.get("format_intent"),
             "mechanism_id": concept.get("mechanism_id"),
             "mechanism_label": concept.get("mechanism_label"),
-            "mechanism_application": concept.get(
-                "mechanism_application"
-            ),
-            "transformation_method": concept.get(
-                "transformation_method"
-            ),
-            "research_questions": concept.get(
-                "research_questions", []
-            ),
-            "source_dependency_test": concept.get(
-                "source_dependency_test", {}
-            ),
+            "mechanism_application": concept.get("mechanism_application"),
+            "transformation_method": concept.get("transformation_method"),
+            "research_questions": concept.get("research_questions", []),
+            "source_dependency_test": concept.get("source_dependency_test", {}),
             "concept_gate": concept.get("concept_gate", {}),
         },
-        "package_count_requested": int(
-            config["packages_per_concept"]
-        ),
-        "allowed_format_intents": list(
-            config["allowed_format_intents"]
-        ),
+        "package_count_requested": int(config["packages_per_concept"]),
+        "allowed_format_intents": list(config["allowed_format_intents"]),
         "instructions": [
             "Create package options before script drafting.",
             "Treat title and thumbnail as one communication unit.",
@@ -215,45 +195,29 @@ def validate_package(
     else:
         if not str(thumbnail.get("message", "")).strip():
             errors.append("thumbnail.message is required")
-        if not str(
-            thumbnail.get("visual_concept", "")
-        ).strip():
-            errors.append(
-                "thumbnail.visual_concept is required"
-            )
+        if not str(thumbnail.get("visual_concept", "")).strip():
+            errors.append("thumbnail.visual_concept is required")
 
     opening_frame = package.get("opening_frame")
     if not isinstance(opening_frame, dict):
         errors.append("opening_frame must be an object")
     else:
-        if not str(
-            opening_frame.get("purpose", "")
-        ).strip():
+        if not str(opening_frame.get("purpose", "")).strip():
             errors.append("opening_frame.purpose is required")
-        if not str(
-            opening_frame.get("visual_concept", "")
-        ).strip():
-            errors.append(
-                "opening_frame.visual_concept is required"
-            )
+        if not str(opening_frame.get("visual_concept", "")).strip():
+            errors.append("opening_frame.visual_concept is required")
 
     dependencies = package.get("research_dependencies")
     if not isinstance(dependencies, list):
         errors.append("research_dependencies must be a list")
     else:
-        invalid = [
-            value
-            for value in dependencies
-            if not str(value).strip()
-        ]
+        invalid = [value for value in dependencies if not str(value).strip()]
         if invalid:
             errors.append(
                 "research_dependencies may be empty, but listed items must be non-empty"
             )
 
-    declared_concept_id = str(
-        package.get("concept_id", concept_id)
-    ).strip()
+    declared_concept_id = str(package.get("concept_id", concept_id)).strip()
     if declared_concept_id not in {"", concept_id}:
         errors.append("package concept_id does not match request")
 
@@ -267,9 +231,7 @@ def validate_response(
 ) -> dict[str, Any]:
     concept_id = str(request["concept_id"])
     if str(response.get("concept_id", "")) != concept_id:
-        raise ValueError(
-            "Packaging response concept_id does not match request"
-        )
+        raise ValueError("Packaging response concept_id does not match request")
 
     packages = response.get("packages")
     if not isinstance(packages, list):
@@ -296,33 +258,39 @@ def validate_response(
             config=config,
         )
 
-        package_id = str(
-            package.get("package_id", "")
-        ).strip()
+        package_id = str(package.get("package_id", "")).strip()
         if package_id and package_id in seen_ids:
-            errors.append(
-                "package_id must be unique within response"
-            )
+            errors.append("package_id must be unique within response")
         if package_id:
             seen_ids.add(package_id)
 
         normalized = dict(package)
         normalized["concept_id"] = concept_id
         normalized["concept_context"] = request["concept"]
-        overlap = check_texts([
-            {"field": "title", "text": normalized.get("title", "")},
-            {"field": "one_sentence_promise", "text": normalized.get("one_sentence_promise", "")},
-            {"field": "core_promise", "text": normalized.get("core_promise", "")},
-            {"field": "curiosity_gap", "text": normalized.get("curiosity_gap", "")},
-            {"field": "thumbnail.message", "text": (normalized.get("thumbnail") or {}).get("message", "")},
-            {"field": "opening_frame.purpose", "text": (normalized.get("opening_frame") or {}).get("purpose", "")},
-        ])
+        overlap = check_texts(
+            [
+                {"field": "title", "text": normalized.get("title", "")},
+                {
+                    "field": "one_sentence_promise",
+                    "text": normalized.get("one_sentence_promise", ""),
+                },
+                {"field": "core_promise", "text": normalized.get("core_promise", "")},
+                {"field": "curiosity_gap", "text": normalized.get("curiosity_gap", "")},
+                {
+                    "field": "thumbnail.message",
+                    "text": (normalized.get("thumbnail") or {}).get("message", ""),
+                },
+                {
+                    "field": "opening_frame.purpose",
+                    "text": (normalized.get("opening_frame") or {}).get("purpose", ""),
+                },
+            ]
+        )
         normalized["source_overlap"] = overlap
         if overlap.get("blocking"):
             match = overlap.get("matches", [{}])[0]
             errors.append(
-                "source overlap block: "
-                + str(match.get("overlap_text") or "")
+                "source overlap block: " + str(match.get("overlap_text") or "")
             )
 
         if errors:
@@ -366,9 +334,7 @@ def run_prepare(
     handoff_sha256 = sha256_file(concept_handoff_path)
     concepts = handoff.get("concepts", [])
     if not isinstance(concepts, list):
-        raise ValueError(
-            "Accepted concept handoff concepts must be a list"
-        )
+        raise ValueError("Accepted concept handoff concepts must be a list")
 
     paths = []
     current_destinations: set[Path] = set()
@@ -387,10 +353,7 @@ def run_prepare(
             )
         seen_concept_ids.add(concept_id)
 
-        destination = (
-            REQUESTS_DIR
-            / f"{safe_slug(concept_id)}.package_request.json"
-        )
+        destination = REQUESTS_DIR / f"{safe_slug(concept_id)}.package_request.json"
         destination.write_text(
             json.dumps(request, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -403,11 +366,7 @@ def run_prepare(
             stale_path.unlink()
 
     summary = {
-        "status": (
-            "PACKAGE_REQUESTS_READY"
-            if paths
-            else "NO_ACCEPTED_CONCEPTS"
-        ),
+        "status": ("PACKAGE_REQUESTS_READY" if paths else "NO_ACCEPTED_CONCEPTS"),
         "requests_created": len(paths),
         "requests": paths,
         "network_calls": 0,
@@ -440,35 +399,24 @@ def run_apply() -> dict[str, Any]:
         )
         return summary
 
-    for response_path in sorted(
-        RESPONSES_DIR.glob("*.json")
-    ):
+    for response_path in sorted(RESPONSES_DIR.glob("*.json")):
         response = load_json(response_path)
-        concept_id = str(
-            response.get("concept_id", "")
-        ).strip()
-        request_path = (
-            REQUESTS_DIR
-            / f"{safe_slug(concept_id)}.package_request.json"
-        )
+        concept_id = str(response.get("concept_id", "")).strip()
+        request_path = REQUESTS_DIR / f"{safe_slug(concept_id)}.package_request.json"
         if not request_path.exists():
             rejected.append(
                 {
                     "response": str(response_path),
-                    "errors": [
-                        "matching package request not found"
-                    ],
+                    "errors": ["matching package request not found"],
                 }
             )
             continue
 
         request = load_json(request_path)
         response_provenance = response.get("response_provenance", {})
-        if (
-            not isinstance(response_provenance, dict)
-            or response_provenance.get("request_sha256")
-            != sha256_file(request_path)
-        ):
+        if not isinstance(response_provenance, dict) or response_provenance.get(
+            "request_sha256"
+        ) != sha256_file(request_path):
             rejected.append(
                 {
                     "response": str(response_path),
@@ -501,16 +449,12 @@ def run_apply() -> dict[str, Any]:
                     {
                         "response": str(response_path),
                         "package": package,
-                        "errors": [
-                            "package_id must be globally unique"
-                        ],
+                        "errors": ["package_id must be globally unique"],
                     }
                 )
                 continue
             global_package_ids.add(package_id)
-            package["response_source"] = str(
-                response_path
-            )
+            package["response_source"] = str(response_path)
             accepted.append(package)
 
         for item in result["rejected"]:
@@ -549,9 +493,7 @@ def run_apply() -> dict[str, Any]:
 
     summary = {
         "status": (
-            "PACKAGE_CANDIDATES_READY"
-            if accepted
-            else "NO_VALID_PACKAGE_CANDIDATES"
+            "PACKAGE_CANDIDATES_READY" if accepted else "NO_VALID_PACKAGE_CANDIDATES"
         ),
         "accepted_packages": len(accepted),
         "rejected_packages": len(rejected),
@@ -568,9 +510,7 @@ def run_apply() -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Packaging Engine framework"
-    )
+    parser = argparse.ArgumentParser(description="Packaging Engine framework")
     parser.add_argument(
         "--mode",
         choices=("prepare", "apply"),
@@ -584,9 +524,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.mode == "prepare":
-        result = run_prepare(
-            args.concept_handoff.resolve()
-        )
+        result = run_prepare(args.concept_handoff.resolve())
     else:
         result = run_apply()
 

@@ -21,7 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from evidence_quality import classify_outlier_reliability
-from market_intelligence import append_snapshots, calculate_snapshot_velocity, load_snapshot_history
+from market_intelligence import (
+    append_snapshots,
+    calculate_snapshot_velocity,
+    load_snapshot_history,
+)
 from youtube_discovery import (
     age_days,
     api_get,
@@ -145,7 +149,12 @@ def matching_terms(text: str, terms: list[str]) -> list[str]:
 
 
 def format_rfc3339(value: datetime) -> str:
-    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        value.astimezone(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def calculate_age_window(
@@ -215,6 +224,7 @@ def classify_topic_relevance(
         "excluded_title_matches": [],
     }
 
+
 def topic_channel_confidence(count: int) -> str:
     """Describe topic evidence breadth from independent source channels."""
     if count >= 5:
@@ -270,11 +280,7 @@ def aggregate_age_matched_velocity(
     """Aggregate velocity against a niche-and-format matched cohort baseline."""
 
     eligible = dedupe_rows(
-        [
-            row
-            for row in rows
-            if row.get("topic_relevance") == "ON_TOPIC"
-        ]
+        [row for row in rows if row.get("topic_relevance") == "ON_TOPIC"]
     )
 
     cohort_values: dict[tuple[str, str], list[float]] = defaultdict(list)
@@ -291,8 +297,7 @@ def aggregate_age_matched_velocity(
             cohort_values[(niche, fmt)].append(float(velocity))
 
     cohort_medians = {
-        key: median_or_none(values)
-        for key, values in cohort_values.items()
+        key: median_or_none(values) for key, values in cohort_values.items()
     }
     cohort_medians_nested: dict[str, dict[str, float | None]] = {}
     for (niche, fmt), value in sorted(cohort_medians.items()):
@@ -314,16 +319,8 @@ def aggregate_age_matched_velocity(
             for r in group
             if r.get("current_views_per_day") is not None
         ]
-        ages = [
-            float(r["age_days"])
-            for r in group
-            if r.get("age_days") is not None
-        ]
-        views = [
-            int(r["views"])
-            for r in group
-            if r.get("views") is not None
-        ]
+        ages = [float(r["age_days"]) for r in group if r.get("age_days") is not None]
+        views = [int(r["views"]) for r in group if r.get("views") is not None]
         trusted = [
             float(r["outlier_ratio"])
             for r in group
@@ -331,20 +328,12 @@ def aggregate_age_matched_velocity(
             and r.get("outlier_ratio") is not None
         ]
         unique_channels = len(
-            {
-                r.get("channel_id")
-                for r in group
-                if r.get("channel_id")
-            }
+            {r.get("channel_id") for r in group if r.get("channel_id")}
         )
         topic_median = median_or_none(velocities)
         cohort_median = cohort_medians.get((niche, fmt))
         index = None
-        if (
-            topic_median is not None
-            and cohort_median is not None
-            and cohort_median > 0
-        ):
+        if topic_median is not None and cohort_median is not None and cohort_median > 0:
             index = round(topic_median / cohort_median, 3)
 
         topic_payload = topics.setdefault(
@@ -359,9 +348,7 @@ def aggregate_age_matched_velocity(
             "niche": niche,
             "video_count": len(group),
             "unique_channels": unique_channels,
-            "topic_channel_confidence": topic_channel_confidence(
-                unique_channels
-            ),
+            "topic_channel_confidence": topic_channel_confidence(unique_channels),
             "velocity_sample_count": len(velocities),
             "median_age_days": median_or_none(ages),
             "median_views": median_or_none(views),
@@ -374,18 +361,14 @@ def aggregate_age_matched_velocity(
 
     legacy_by_format: dict[str, float | None] = {}
     if len(cohort_medians_nested) == 1:
-        legacy_by_format = dict(
-            next(iter(cohort_medians_nested.values()))
-        )
+        legacy_by_format = dict(next(iter(cohort_medians_nested.values())))
 
     return {
-        "cohort_median_current_views_per_day_by_niche_format":
-            cohort_medians_nested,
+        "cohort_median_current_views_per_day_by_niche_format": cohort_medians_nested,
         # Transitional single-niche alias for older consumers. It is empty
         # once more than one niche is present so cross-niche pooling cannot
         # silently reappear.
-        "cohort_median_current_views_per_day_by_format":
-            legacy_by_format,
+        "cohort_median_current_views_per_day_by_format": legacy_by_format,
         "topics": topics,
     }
 
@@ -459,8 +442,7 @@ def save_discovery_checkpoint(
         "wide_window": wide_window,
         "completed_search_jobs": sorted(completed_jobs),
         "discovered": {
-            video_id: sorted(topics)
-            for video_id, topics in discovered.items()
+            video_id: sorted(topics) for video_id, topics in discovered.items()
         },
         "matches": matches,
         "audit": audit,
@@ -487,10 +469,7 @@ def restore_checkpoint_state(
         str(video_id): [dict(item) for item in items]
         for video_id, items in checkpoint.get("matches", {}).items()
     }
-    audit = [
-        dict(item)
-        for item in checkpoint.get("audit", [])
-    ]
+    audit = [dict(item) for item in checkpoint.get("audit", [])]
 
     # Checkpoints created before automatic backend routing could only have
     # come from YouTube Data API v3 search. Backfill provenance so a resumed
@@ -543,14 +522,10 @@ def search_job_key(
     )
 
 
-
-
 def discovery_backend_counts(audit: list[dict[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for item in audit:
-        backend = str(
-            item.get("discovery_backend", "unknown")
-        )
+        backend = str(item.get("discovery_backend", "unknown"))
         counts[backend] = counts.get(backend, 0) + 1
     return dict(sorted(counts.items()))
 
@@ -596,13 +571,7 @@ def _yt_dlp_query_variants(
     for year in range(after.year, before.year + 1):
         variants.append(f"{str(query).strip()} {year}")
 
-    return list(
-        dict.fromkeys(
-            value
-            for value in variants
-            if value
-        )
-    )
+    return list(dict.fromkeys(value for value in variants if value))
 
 
 def _topic_queries(
@@ -656,10 +625,7 @@ def _yt_dlp_pool(
     )
     cache_key = "||".join(variants)
     if cache_key in cache:
-        return [
-            dict(item)
-            for item in cache[cache_key]
-        ]
+        return [dict(item) for item in cache[cache_key]]
 
     merged: dict[str, dict[str, Any]] = {}
 
@@ -671,9 +637,7 @@ def _yt_dlp_pool(
             require_agent_reach_health=False,
         )
         for raw in result.get("results", []):
-            video_id = str(
-                raw.get("video_id", "")
-            ).strip()
+            video_id = str(raw.get("video_id", "")).strip()
             if not video_id:
                 continue
 
@@ -695,17 +659,11 @@ def _yt_dlp_pool(
             existing["discovery_queries"] = queries
 
             for key, value in raw.items():
-                if (
-                    existing.get(key) in (None, "")
-                    and value not in (None, "")
-                ):
+                if existing.get(key) in (None, "") and value not in (None, ""):
                     existing[key] = value
 
     cache[cache_key] = list(merged.values())
-    return [
-        dict(item)
-        for item in cache[cache_key]
-    ]
+    return [dict(item) for item in cache[cache_key]]
 
 
 def _yt_dlp_ids(
@@ -717,9 +675,7 @@ def _yt_dlp_ids(
     cache: dict[str, list[dict[str, Any]]],
 ) -> list[str]:
     if video_duration_filter not in {"short", "medium", "long"}:
-        raise ValueError(
-            "video_duration_filter must be short, medium, or long"
-        )
+        raise ValueError("video_duration_filter must be short, medium, or long")
     pool = _yt_dlp_pool(
         query,
         age_window,
@@ -754,10 +710,7 @@ def _yt_dlp_ids(
                 # jobs do not recycle the same videos.
                 if video_duration_filter == "short" and duration > 180:
                     continue
-                if (
-                    video_duration_filter == "medium"
-                    and not (180 < duration <= 1200)
-                ):
+                if video_duration_filter == "medium" and not (180 < duration <= 1200):
                     continue
                 if video_duration_filter == "long" and duration <= 1200:
                     continue
@@ -775,6 +728,7 @@ def _yt_dlp_ids(
             ids.append(video_id)
 
     return ids
+
 
 def discover(
     config: dict[str, Any],
@@ -924,8 +878,7 @@ def discover(
                                     "switching remaining discovery jobs to Agent Reach / yt-dlp."
                                 )
                                 print(
-                                    "    API fallback reason: "
-                                    f"{api_fallback_reason}"
+                                    "    API fallback reason: " f"{api_fallback_reason}"
                                 )
 
                         if not backend_used:
@@ -964,10 +917,7 @@ def discover(
                                     fallback_cache,
                                 )
                             except AcquisitionError as exc:
-                                print(
-                                    "  Agent Reach / yt-dlp search failed: "
-                                    f"{exc}"
-                                )
+                                print("  Agent Reach / yt-dlp search failed: " f"{exc}")
                                 return (
                                     discovered,
                                     matches,
@@ -1025,6 +975,7 @@ def discover(
 
     return discovered, matches, audit, completed_jobs, calls, "COMPLETE"
 
+
 def merge_discovery(
     base_discovered: dict[str, set[str]],
     base_matches: dict[str, list[dict[str, Any]]],
@@ -1044,9 +995,7 @@ def cohort_discovery_readiness(
     rows: list[dict[str, Any]],
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    required = int(
-        config["minimum_unique_channels_per_topic_format"]
-    )
+    required = int(config["minimum_unique_channels_per_topic_format"])
     channels: dict[tuple[str, str], set[str]] = defaultdict(set)
 
     for row in rows:
@@ -1070,20 +1019,13 @@ def cohort_discovery_readiness(
             }
         )
 
-    ready = [
-        cell
-        for cell in cells
-        if cell["refresh_worthy"]
-    ]
+    ready = [cell for cell in cells if cell["refresh_worthy"]]
     return {
         "required_unique_channels_per_topic_format": required,
         "refresh_worthy": bool(ready),
         "refresh_worthy_cell_count": len(ready),
         "maximum_unique_channels_in_any_cell": max(
-            (
-                int(cell["unique_channels"])
-                for cell in cells
-            ),
+            (int(cell["unique_channels"]) for cell in cells),
             default=0,
         ),
         "cells": cells,
@@ -1102,7 +1044,9 @@ def deficient_topic_formats(
         if not channel_id:
             continue
         for topic in row.get("validated_topics", []):
-            channels[(str(topic), str(row.get("format_candidate", "unknown")))].add(channel_id)
+            channels[(str(topic), str(row.get("format_candidate", "unknown")))].add(
+                channel_id
+            )
 
     deficient: dict[str, set[str]] = {}
     for topic in config["topics"]:
@@ -1131,6 +1075,7 @@ def archive_existing_output() -> Path | None:
 
     shutil.move(str(OUTPUT_DIR), str(destination))
     return destination
+
 
 def build_rows(
     discovered: dict[str, set[str]],
@@ -1246,13 +1191,17 @@ def build_rows(
             ),
             "query_matches": query_matches.get(video_id, []),
             "search_phases": search_phases,
-            "cohort_window_source": "strict" if "strict" in search_phases else "expanded",
+            "cohort_window_source": (
+                "strict" if "strict" in search_phases else "expanded"
+            ),
             "published_at": published_at,
             "age_days": round(days, 2),
             "duration_seconds": duration,
             "format_candidate": fmt,
             "views": views,
-            "likes": int(stats["likeCount"]) if stats.get("likeCount") is not None else None,
+            "likes": (
+                int(stats["likeCount"]) if stats.get("likeCount") is not None else None
+            ),
             "channel_subscribers": subscribers,
             "topic_validation": validation,
         }
@@ -1280,12 +1229,20 @@ def build_rows(
 
         if channel_id not in history_cache:
             upload_ids = get_recent_upload_ids(channel, api_key, maximum=25)
-            history_cache[channel_id] = list(get_video_details(upload_ids, api_key).values())
+            history_cache[channel_id] = list(
+                get_video_details(upload_ids, api_key).values()
+            )
 
-        baseline, sample_size = calculate_channel_baseline(row, history_cache[channel_id])
+        baseline, sample_size = calculate_channel_baseline(
+            row, history_cache[channel_id]
+        )
         confidence = baseline_confidence(sample_size)
         warning = baseline_warning(baseline, sample_size)
-        ratio = round(views / baseline, 2) if baseline is not None and baseline > 0 else None
+        ratio = (
+            round(views / baseline, 2)
+            if baseline is not None and baseline > 0
+            else None
+        )
         row.update(
             {
                 "topic_relevance": "ON_TOPIC",
@@ -1304,18 +1261,38 @@ def build_rows(
         )
         eligible.append(row)
 
-    eligible.sort(key=lambda r: (r["format_candidate"], r["validated_topics"], -r["views"]))
+    eligible.sort(
+        key=lambda r: (r["format_candidate"], r["validated_topics"], -r["views"])
+    )
     return eligible, rejected
 
+
 STATIC_KEYS = (
-    "experiment_id", "video_id", "youtube_url", "title", "channel_id",
-    "channel_title", "searched_topics", "searched_niches", "validated_topics",
-    "validated_niches", "query_matches",
-    "search_phases", "cohort_window_source",
-    "published_at", "duration_seconds", "format_candidate",
-    "channel_subscribers", "topic_relevance", "topic_relevance_reason",
-    "channel_baseline_median", "baseline_sample_size", "baseline_confidence",
-    "baseline_warning", "outlier_ratio", "outlier_reliability",
+    "experiment_id",
+    "video_id",
+    "youtube_url",
+    "title",
+    "channel_id",
+    "channel_title",
+    "searched_topics",
+    "searched_niches",
+    "validated_topics",
+    "validated_niches",
+    "query_matches",
+    "search_phases",
+    "cohort_window_source",
+    "published_at",
+    "duration_seconds",
+    "format_candidate",
+    "channel_subscribers",
+    "topic_relevance",
+    "topic_relevance_reason",
+    "channel_baseline_median",
+    "baseline_sample_size",
+    "baseline_confidence",
+    "baseline_warning",
+    "outlier_ratio",
+    "outlier_reliability",
     "outlier_reliability_reason",
 )
 
@@ -1337,9 +1314,7 @@ def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
         if key in seen:
             return
         try:
-            datetime.fromisoformat(
-                str(observed_at).replace("Z", "+00:00")
-            )
+            datetime.fromisoformat(str(observed_at).replace("Z", "+00:00"))
         except ValueError:
             return
         seen.add(key)
@@ -1358,12 +1333,9 @@ def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
     archive_root = OUTPUT_ROOT / "archive"
     archive_dirs: list[Path] = []
     if archive_root.exists():
-        archive_dirs = sorted(
-            archive_root.glob("experiment_01_3_*")
-        )
+        archive_dirs = sorted(archive_root.glob("experiment_01_3_*"))
         paths.extend(
-            archive_dir / "video_snapshots.jsonl"
-            for archive_dir in archive_dirs
+            archive_dir / "video_snapshots.jsonl" for archive_dir in archive_dirs
         )
 
     for path in paths:
@@ -1382,15 +1354,11 @@ def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
     for archive_dir in archive_dirs:
         summary_path = archive_dir / "summary.json"
         try:
-            summary = json.loads(
-                summary_path.read_text(encoding="utf-8")
-            )
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
 
-        observed_at = str(
-            summary.get("cohort_created_at") or ""
-        ).strip()
+        observed_at = str(summary.get("cohort_created_at") or "").strip()
         if not observed_at:
             continue
 
@@ -1400,9 +1368,7 @@ def load_velocity_history() -> dict[str, list[dict[str, Any]]]:
         ):
             path = archive_dir / name
             try:
-                rows = json.loads(
-                    path.read_text(encoding="utf-8")
-                )
+                rows = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
             if not isinstance(rows, list):
@@ -1482,8 +1448,14 @@ def apply_velocity(rows: list[dict[str, Any]], observed_at: str) -> None:
     append_snapshots(PERSISTENT_SNAPSHOT_FILE, rows, observed_at)
 
 
-def refresh_rows(manifest: dict[str, Any], api_key: str) -> tuple[list[dict[str, Any]], list[str]]:
-    static_rows = {str(r["video_id"]): r for r in manifest.get("candidates", []) if r.get("video_id")}
+def refresh_rows(
+    manifest: dict[str, Any], api_key: str
+) -> tuple[list[dict[str, Any]], list[str]]:
+    static_rows = {
+        str(r["video_id"]): r
+        for r in manifest.get("candidates", [])
+        if r.get("video_id")
+    }
     details = get_video_details(list(static_rows), api_key)
     rows, missing = [], []
 
@@ -1501,8 +1473,14 @@ def refresh_rows(manifest: dict[str, Any], api_key: str) -> tuple[list[dict[str,
                 "title": snippet.get("title", row.get("title")),
                 "channel_title": snippet.get("channelTitle", row.get("channel_title")),
                 "views": views,
-                "likes": int(stats["likeCount"]) if stats.get("likeCount") is not None else None,
-                "age_days": round(age_days(str(snippet.get("publishedAt", row["published_at"]))), 2),
+                "likes": (
+                    int(stats["likeCount"])
+                    if stats.get("likeCount") is not None
+                    else None
+                ),
+                "age_days": round(
+                    age_days(str(snippet.get("publishedAt", row["published_at"]))), 2
+                ),
             }
         )
         baseline = row.get("channel_baseline_median")
@@ -1511,7 +1489,9 @@ def refresh_rows(manifest: dict[str, Any], api_key: str) -> tuple[list[dict[str,
             row.update(
                 classify_outlier_reliability(
                     outlier_ratio=row["outlier_ratio"],
-                    baseline_confidence=str(row.get("baseline_confidence", "no_baseline")),
+                    baseline_confidence=str(
+                        row.get("baseline_confidence", "no_baseline")
+                    ),
                     baseline_warning=str(row.get("baseline_warning", "")),
                 )
             )
@@ -1574,10 +1554,14 @@ def build_summary(
                 key=lambda item: (-item[1], item[0]),
             )
         ),
-        "topic_counts": dict(sorted(topic_counts.items(), key=lambda item: (-item[1], item[0]))),
+        "topic_counts": dict(
+            sorted(topic_counts.items(), key=lambda item: (-item[1], item[0]))
+        ),
         "velocity_analysis": {
             "valid_velocity_samples": len(valid),
-            "no_prior_snapshot": sum(r.get("velocity_status") == "NO_PRIOR" for r in rows),
+            "no_prior_snapshot": sum(
+                r.get("velocity_status") == "NO_PRIOR" for r in rows
+            ),
             "negative_view_adjustments": sum(
                 r.get("velocity_status") == "NEGATIVE_ADJUSTMENT" for r in rows
             ),
@@ -1602,25 +1586,58 @@ def build_summary(
 
 
 CSV_FIELDS = [
-    "experiment_id", "video_id", "youtube_url", "title", "channel_id",
-    "channel_title", "searched_topics", "searched_niches", "validated_topics",
-    "validated_niches", "query_matches",
-    "search_phases", "cohort_window_source",
-    "published_at", "age_days", "duration_seconds", "format_candidate",
-    "views", "likes", "channel_subscribers", "channel_baseline_median",
-    "baseline_sample_size", "baseline_confidence", "baseline_warning",
-    "outlier_ratio", "outlier_reliability", "outlier_reliability_reason",
-    "topic_relevance", "topic_relevance_reason", "velocity_status",
-    "velocity_previous_at", "velocity_previous_views", "velocity_interval_hours",
-    "view_delta_since_snapshot", "current_views_per_hour", "current_views_per_day",
+    "experiment_id",
+    "video_id",
+    "youtube_url",
+    "title",
+    "channel_id",
+    "channel_title",
+    "searched_topics",
+    "searched_niches",
+    "validated_topics",
+    "validated_niches",
+    "query_matches",
+    "search_phases",
+    "cohort_window_source",
+    "published_at",
+    "age_days",
+    "duration_seconds",
+    "format_candidate",
+    "views",
+    "likes",
+    "channel_subscribers",
+    "channel_baseline_median",
+    "baseline_sample_size",
+    "baseline_confidence",
+    "baseline_warning",
+    "outlier_ratio",
+    "outlier_reliability",
+    "outlier_reliability_reason",
+    "topic_relevance",
+    "topic_relevance_reason",
+    "velocity_status",
+    "velocity_previous_at",
+    "velocity_previous_views",
+    "velocity_interval_hours",
+    "view_delta_since_snapshot",
+    "current_views_per_hour",
+    "current_views_per_day",
 ]
 
 
-def write_outputs(rows: list[dict[str, Any]], topic_velocity: dict[str, Any], summary: dict[str, Any]) -> None:
+def write_outputs(
+    rows: list[dict[str, Any]], topic_velocity: dict[str, Any], summary: dict[str, Any]
+) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    RAW_FILE.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
-    TOPIC_FILE.write_text(json.dumps(topic_velocity, indent=2, ensure_ascii=False), encoding="utf-8")
-    SUMMARY_FILE.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    RAW_FILE.write_text(
+        json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    TOPIC_FILE.write_text(
+        json.dumps(topic_velocity, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    SUMMARY_FILE.write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     with CANDIDATES_FILE.open("w", newline="", encoding="utf-8-sig") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
@@ -1631,12 +1648,16 @@ def write_outputs(rows: list[dict[str, Any]], topic_velocity: dict[str, Any], su
             flat["searched_niches"] = "|".join(row.get("searched_niches", []))
             flat["validated_topics"] = "|".join(row.get("validated_topics", []))
             flat["validated_niches"] = "|".join(row.get("validated_niches", []))
-            flat["query_matches"] = json.dumps(row.get("query_matches", []), ensure_ascii=False)
+            flat["query_matches"] = json.dumps(
+                row.get("query_matches", []), ensure_ascii=False
+            )
             flat["search_phases"] = "|".join(row.get("search_phases", []))
             writer.writerow({field: flat.get(field) for field in CSV_FIELDS})
 
 
-def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str) -> None:
+def run_discover(
+    args: argparse.Namespace, config: dict[str, Any], api_key: str
+) -> None:
     checkpoint = None if args.restart_discovery else load_discovery_checkpoint()
 
     if checkpoint is not None:
@@ -1647,7 +1668,9 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         wide_tolerance = int(checkpoint["wide_age_tolerance_days"])
         strict_window = dict(checkpoint["strict_window"])
         wide_window = dict(checkpoint["wide_window"])
-        discovered, matches, audit, completed_jobs = restore_checkpoint_state(checkpoint)
+        discovered, matches, audit, completed_jobs = restore_checkpoint_state(
+            checkpoint
+        )
         print(f"Resuming saved Experiment 01.3 discovery checkpoint: {CHECKPOINT_FILE}")
         print(f"Completed search jobs already saved: {len(completed_jobs):,}")
     else:
@@ -1778,12 +1801,8 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
     expansion_calls = 0
     expansion_status = "COMPLETE"
     expansion_backend = args.discovery_backend
-    if (
-        args.discovery_backend == "auto"
-        and any(
-            item.get("discovery_backend") == "agent_reach_yt_dlp"
-            for item in audit
-        )
+    if args.discovery_backend == "auto" and any(
+        item.get("discovery_backend") == "agent_reach_yt_dlp" for item in audit
     ):
         expansion_backend = "yt_dlp"
 
@@ -1836,7 +1855,9 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
             print("\nExperiment 01.3 discovery paused safely.")
             print(f"Reason: {expansion_status}")
             print(f"Checkpoint: {CHECKPOINT_FILE}")
-            print("Rerun the same discover command; completed searches will be skipped.")
+            print(
+                "Rerun the same discover command; completed searches will be skipped."
+            )
             return
 
     calls_this_run = strict_calls + expansion_calls
@@ -1882,9 +1903,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
 
     manifest = {
         "experiment_id": EXPERIMENT_ID,
-        "cohort_id": (
-            f"day{target}_adaptive_{observed_dt.strftime('%Y%m%dT%H%M%SZ')}"
-        ),
+        "cohort_id": (f"day{target}_adaptive_{observed_dt.strftime('%Y%m%dT%H%M%SZ')}"),
         "created_at": observed_at,
         "target_age_days": target,
         "age_tolerance_days": tolerance,
@@ -1910,8 +1929,7 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
         "discovery_backend_counts": discovery_backend_counts(audit),
         "completed_search_jobs_total": len(completed_jobs),
         "adaptive_expansion": {
-            topic: sorted(formats)
-            for topic, formats in sorted(deficient.items())
+            topic: sorted(formats) for topic, formats in sorted(deficient.items())
         },
         "search_audit": audit,
         "rejected_during_discovery": len(rejected),
@@ -1940,39 +1958,28 @@ def run_discover(args: argparse.Namespace, config: dict[str, Any], api_key: str)
 
     print_completion("discover", summary)
 
+
 def run_refresh(config: dict[str, Any], api_key: str) -> None:
     if not acquire_refresh_lock():
-        raise SystemExit(
-            "Another Experiment 01.3 refresh is already running."
-        )
+        raise SystemExit("Another Experiment 01.3 refresh is already running.")
 
     try:
         if not MANIFEST_FILE.exists():
-            raise SystemExit(
-                "No 01.3 cohort exists. Run --mode discover first."
-            )
-        manifest = json.loads(
-            MANIFEST_FILE.read_text(encoding="utf-8")
-        )
+            raise SystemExit("No 01.3 cohort exists. Run --mode discover first.")
+        manifest = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
         observed_at = datetime.now(timezone.utc).isoformat()
 
         print("\nSTAGE 2 — EXPERIMENT 01.3")
         print("=" * 60)
         print("Mode: REFRESH FROZEN COHORT")
         print(f"Cohort: {manifest.get('cohort_id')}")
-        print(
-            f"Frozen videos: "
-            f"{len(manifest.get('video_ids', [])):,}\n"
-        )
+        print(f"Frozen videos: " f"{len(manifest.get('video_ids', [])):,}\n")
 
         rows, missing = refresh_rows(manifest, api_key)
         apply_velocity(rows, observed_at)
         manifest_topic_niches = manifest.get("topic_niches")
         topic_niches = (
-            {
-                str(topic): str(niche)
-                for topic, niche in manifest_topic_niches.items()
-            }
+            {str(topic): str(niche) for topic, niche in manifest_topic_niches.items()}
             if isinstance(manifest_topic_niches, dict)
             else topic_niche_map(config)
         )
@@ -2006,8 +2013,14 @@ def print_completion(mode: str, summary: dict[str, Any]) -> None:
     )
     print("\nResults:")
     for path in (
-        MANIFEST_FILE, CANDIDATES_FILE, RAW_FILE, REJECTED_FILE,
-        TOPIC_FILE, SUMMARY_FILE, SNAPSHOT_FILE, PERSISTENT_SNAPSHOT_FILE,
+        MANIFEST_FILE,
+        CANDIDATES_FILE,
+        RAW_FILE,
+        REJECTED_FILE,
+        TOPIC_FILE,
+        SUMMARY_FILE,
+        SNAPSHOT_FILE,
+        PERSISTENT_SNAPSHOT_FILE,
     ):
         print(f"  {path}")
     if mode == "discover":
@@ -2036,7 +2049,9 @@ def print_completion(mode: str, summary: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stage 2 Experiment 01.3 age-matched velocity validation")
+    parser = argparse.ArgumentParser(
+        description="Stage 2 Experiment 01.3 age-matched velocity validation"
+    )
     parser.add_argument("--mode", choices=("discover", "refresh"), required=True)
     parser.add_argument("--max-searches", type=int, default=60)
     parser.add_argument("--target-age-days", type=int, default=None)

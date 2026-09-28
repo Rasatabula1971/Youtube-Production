@@ -202,9 +202,7 @@ class OpportunityResearchTests(unittest.TestCase):
                     return_value=expected,
                 )
             )
-            stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
+            stack.enter_context(patch.object(research, "remove_continuation_task"))
 
             result = research.start_research(
                 python_executable="python-test",

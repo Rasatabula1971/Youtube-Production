@@ -26,8 +26,7 @@ SOURCE_DIR = PROJECT_ROOT / "source_acquisition"
 if str(SOURCE_DIR) not in sys.path:
     sys.path.insert(0, str(SOURCE_DIR))
 
-from agent_reach_adapter import (  # noqa: E402
-    AcquisitionError,
+from agent_reach_adapter import (
     read_web_page,
     search_web,
 )
@@ -48,8 +47,7 @@ def sha256_file(path: Path) -> str:
 
 def safe_slug(value: str) -> str:
     cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_"
-        for char in value
+        char if char.isalnum() or char in "-_." else "_" for char in value
     ).strip("._")
     return cleaned or "unknown"
 
@@ -192,15 +190,11 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         for page in pages
         for question_id in page.get("question_ids", [])
     }
-    unresolved_question_ids = sorted(
-        required_question_ids - covered_question_ids
-    )
+    unresolved_question_ids = sorted(required_question_ids - covered_question_ids)
     status = (
         "COMPLETE"
         if pages and not errors and not unresolved_question_ids
-        else "PARTIAL"
-        if pages
-        else "FAILED"
+        else "PARTIAL" if pages else "FAILED"
     )
     payload = {
         "artifact": "research_acquired_evidence",
@@ -251,15 +245,12 @@ def run_batch(*, force: bool = False) -> dict[str, Any]:
         for item in results
     )
     complete = sum(
-        item.get("status") in {"COMPLETE", "SKIPPED_CURRENT"}
-        for item in results
+        item.get("status") in {"COMPLETE", "SKIPPED_CURRENT"} for item in results
     )
     status = (
         "COMPLETE"
         if results and complete == len(results)
-        else "FAILED"
-        if results and usable == 0
-        else "PARTIAL"
+        else "FAILED" if results and usable == 0 else "PARTIAL"
     )
     summary = {
         "status": status,

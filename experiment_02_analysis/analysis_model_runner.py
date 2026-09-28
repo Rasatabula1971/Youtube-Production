@@ -24,6 +24,7 @@ from analysis_execute import merge_analysis_response
 from evidence_ingest import sha256_file
 from experiment_02 import load_config as load_experiment_config
 from experiment_02 import load_json, safe_filename
+
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
@@ -33,7 +34,6 @@ from pipeline_integrity import (
     atomic_write_text,
     batch_status,
     exit_code_for_status,
-    tolerant_load_json,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -134,11 +134,7 @@ def confirmed_free_providers(
         "FAIR_CONFIRMED_FREE_PROVIDERS",
         env_values.get("FAIR_CONFIRMED_FREE_PROVIDERS", ""),
     )
-    confirmed.update(
-        item.strip()
-        for item in raw.split(",")
-        if item.strip()
-    )
+    confirmed.update(item.strip() for item in raw.split(",") if item.strip())
     return sorted(confirmed)
 
 
@@ -283,10 +279,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "type": "object",
                 "additionalProperties": False,
                 "required": dimensions,
-                "properties": {
-                    dimension: dimension_schema
-                    for dimension in dimensions
-                },
+                "properties": {dimension: dimension_schema for dimension in dimensions},
             },
             "working_hypotheses": {
                 "type": "array",
@@ -398,9 +391,7 @@ def restrict_response_to_request(
             restrict(item, f"analysis.{dimension}.findings[{index}]")
 
     for key in ("transferable_mechanisms", "source_specific_elements"):
-        for index, item in enumerate(
-            result.get("transfer", {}).get(key, []) or []
-        ):
+        for index, item in enumerate(result.get("transfer", {}).get(key, []) or []):
             restrict(item, f"transfer.{key}[{index}]")
 
     for index, item in enumerate(
@@ -428,11 +419,7 @@ def safe_attempts(bridge_result: dict[str, Any]) -> list[dict[str, Any]]:
         "role",
     }
     return [
-        {
-            key: value
-            for key, value in attempt.items()
-            if key in allowed_keys
-        }
+        {key: value for key, value in attempt.items() if key in allowed_keys}
         for attempt in bridge_result.get("attempts", [])
         if isinstance(attempt, dict)
     ]
@@ -597,9 +584,7 @@ def run_one(
                 "report": str(report_path),
             }
 
-    maximum_prompt_chars = int(
-        runner_config["runner"].get("max_prompt_chars", 95000)
-    )
+    maximum_prompt_chars = int(runner_config["runner"].get("max_prompt_chars", 95000))
     prompt = build_model_prompt(request, maximum_chars=maximum_prompt_chars)
     schema = response_schema(request)
     schema_chars = len(json.dumps(schema, separators=(",", ":")))
@@ -738,15 +723,9 @@ def run_one(
             "scope_removals": scope_removals,
             "apply": {
                 "accepted_findings": apply_report.get("accepted_findings"),
-                "accepted_transfer_items": apply_report.get(
-                    "accepted_transfer_items"
-                ),
-                "routed_to_hypotheses": apply_report.get(
-                    "routed_to_hypotheses"
-                ),
-                "final_validation_errors": apply_report.get(
-                    "final_validation_errors"
-                ),
+                "accepted_transfer_items": apply_report.get("accepted_transfer_items"),
+                "routed_to_hypotheses": apply_report.get("routed_to_hypotheses"),
+                "final_validation_errors": apply_report.get("final_validation_errors"),
                 "final_validation_warnings": apply_report.get(
                     "final_validation_warnings"
                 ),

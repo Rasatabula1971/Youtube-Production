@@ -30,9 +30,7 @@ INGESTION_REPORTS_DIR = OUTPUT_DIR / "ingestion_reports"
 TIMECODE_HMS_RE = re.compile(
     r"^(?P<h>\d{1,2}):(?P<m>\d{2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$"
 )
-TIMECODE_MS_RE = re.compile(
-    r"^(?P<m>\d{1,2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$"
-)
+TIMECODE_MS_RE = re.compile(r"^(?P<m>\d{1,2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$")
 TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -135,9 +133,7 @@ def parse_subtitle_file(path: Path) -> list[dict[str, Any]]:
 
         observation = " ".join(
             stripped
-            for stripped in (
-                strip_subtitle_markup(item) for item in text_lines
-            )
+            for stripped in (strip_subtitle_markup(item) for item in text_lines)
             if stripped
         ).strip()
         if not observation:
@@ -207,7 +203,9 @@ def parse_notes_file(path: Path) -> list[dict[str, Any]]:
     payload = load_json(path)
     notes = payload.get("notes") if isinstance(payload, dict) else payload
     if not isinstance(notes, list):
-        raise ValueError("Notes file must be a JSON list or an object with a 'notes' list")
+        raise ValueError(
+            "Notes file must be a JSON list or an object with a 'notes' list"
+        )
 
     digest = sha256_file(path)
     evidence: list[dict[str, Any]] = []
@@ -297,7 +295,11 @@ def register_image(
     digest = sha256_file(path)
     mime_type, _ = mimetypes.guess_type(path.name)
     source_input = {
-        "status": "PROVIDED" if observation and observation.strip() else "REGISTERED_UNOBSERVED",
+        "status": (
+            "PROVIDED"
+            if observation and observation.strip()
+            else "REGISTERED_UNOBSERVED"
+        ),
         "source": str(path),
         "sha256": digest,
         "mime_type": mime_type,

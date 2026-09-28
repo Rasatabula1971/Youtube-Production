@@ -109,7 +109,9 @@ class OpportunityGateTests(unittest.TestCase):
                     "automotive_racing",
                 )
                 self.assertFalse(opportunity["can_approve"])
-                with self.assertRaisesRegex(ValueError, "Review every selected example"):
+                with self.assertRaisesRegex(
+                    ValueError, "Review every selected example"
+                ):
                     gate.apply_gate_action(
                         action="APPROVE_TOPIC",
                         opportunity_key=key,

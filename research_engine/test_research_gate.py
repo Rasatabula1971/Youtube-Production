@@ -108,9 +108,7 @@ class ResearchGateTests(unittest.TestCase):
                     "decision": "ACCEPT",
                     "criteria": {
                         criterion: True
-                        for criterion in self.config[
-                            "required_accept_criteria"
-                        ]
+                        for criterion in self.config["required_accept_criteria"]
                     },
                     "note": (
                         "Conflict resolved by limiting wording to the regulation."
@@ -131,12 +129,9 @@ class ResearchGateTests(unittest.TestCase):
 
         self.assertEqual(request["claim_count"], 2)
         self.assertEqual(
-            request["items"][0]["evidence"][0]["source"][
-                "publisher"
-            ],
+            request["items"][0]["evidence"][0]["source"]["publisher"],
             "Journal",
         )
-
 
     def test_duplicate_claim_ids_are_rejected(self):
         package = dict(self.package)
@@ -157,9 +152,7 @@ class ResearchGateTests(unittest.TestCase):
             self.config,
         )
         response = self.response(request)
-        response["decisions"][0]["criteria"][
-            "safe_for_script"
-        ] = False
+        response["decisions"][0]["criteria"]["safe_for_script"] = False
 
         with self.assertRaises(ValueError):
             validate_decisions(

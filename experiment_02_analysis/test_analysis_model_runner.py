@@ -116,7 +116,6 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             },
         }
 
-
     def experiment_config(self):
         return {
             "required_dimensions": ["packaging", "opening_hook"],
@@ -182,11 +181,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             schema["properties"]["video_id"]["const"],
             "v1",
         )
-        mechanism_enum = (
-            schema["properties"]["analysis"]["properties"]["opening_hook"]
-            ["properties"]["findings"]["items"]["properties"]
-            ["mechanism_ids"]["items"]["enum"]
-        )
+        mechanism_enum = schema["properties"]["analysis"]["properties"]["opening_hook"][
+            "properties"
+        ]["findings"]["items"]["properties"]["mechanism_ids"]["items"]["enum"]
         self.assertEqual(
             mechanism_enum,
             ["curiosity_gap", "hidden_mechanism"],
@@ -216,9 +213,10 @@ class AnalysisModelRunnerTests(unittest.TestCase):
 
     def test_response_scope_removes_unseen_evidence_refs(self):
         response = self.valid_response()
-        response["analysis"]["opening_hook"]["findings"][0][
-            "evidence_refs"
-        ] = ["transcript.open", "transcript.hidden"]
+        response["analysis"]["opening_hook"]["findings"][0]["evidence_refs"] = [
+            "transcript.open",
+            "transcript.hidden",
+        ]
 
         restricted, removals = restrict_response_to_request(
             response,
@@ -226,9 +224,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            restricted["analysis"]["opening_hook"]["findings"][0][
-                "evidence_refs"
-            ],
+            restricted["analysis"]["opening_hook"]["findings"][0]["evidence_refs"],
             ["transcript.open"],
         )
         self.assertEqual(len(removals), 1)
@@ -241,9 +237,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             config = self.runner_config()
-            config["fair"]["confirmed_free_providers"] = [
-                "google_gemini_api"
-            ]
+            config["fair"]["confirmed_free_providers"] = ["google_gemini_api"]
             with patch.dict("os.environ", {}, clear=True):
                 providers = confirmed_free_providers(
                     config,
@@ -328,7 +322,6 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "APPLIED")
         self.assertEqual(result["provider_id"], "kilo_free")
         self.assertEqual(result["apply"]["accepted_findings"], 1)
-
 
     @patch("analysis_model_runner.load_experiment_config")
     @patch("analysis_model_runner.resolve_fair_paths")

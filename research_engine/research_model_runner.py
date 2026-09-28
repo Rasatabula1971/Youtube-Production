@@ -12,12 +12,20 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
-from pipeline_integrity import atomic_write_text, atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
+
+from pipeline_integrity import (
+    atomic_write_json,
+    atomic_write_text,
+    batch_status,
+    exit_code_for_status,
+    tolerant_load_json,
+)
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -25,7 +33,7 @@ EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
     sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (  # noqa: E402
+from analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     load_runner_config,
@@ -34,7 +42,7 @@ from analysis_model_runner import (  # noqa: E402
     safe_attempts,
 )
 
-from research_engine import (  # noqa: E402
+from research_engine import (
     PLANS_DIR,
     RESPONSES_DIR,
     load_config,
@@ -57,8 +65,7 @@ def sha256_file(path: Path) -> str:
 def response_schema(plan: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
     concept_id = str(plan["concept_id"])
     question_ids = [
-        str(item["question_id"])
-        for item in plan.get("research_questions", [])
+        str(item["question_id"]) for item in plan.get("research_questions", [])
     ]
     acquired_urls = [
         str(page["url"])
@@ -250,10 +257,7 @@ def validate_acquired_source_boundary(
         for page in evidence.get("pages", [])
         if isinstance(page, dict) and page.get("source_id")
     }
-    allowed = {
-        (source_id, str(page.get("url")))
-        for source_id, page in pages.items()
-    }
+    allowed = {(source_id, str(page.get("url"))) for source_id, page in pages.items()}
     for source in response.get("sources", []):
         pair = (str(source.get("source_id")), str(source.get("url")))
         if pair not in allowed:
@@ -457,10 +461,12 @@ def run_batch(*, force: bool, maximum_requests: int | None) -> dict[str, Any]:
         concept_id = str(plan.get("concept_id", "")).strip()
         evidence_path = EVIDENCE_DIR / f"{safe_slug(concept_id)}.research_evidence.json"
         if not evidence_path.exists():
-            results.append({
-                "status": "WAITING_FOR_ACQUIRED_EVIDENCE",
-                "concept_id": concept_id,
-            })
+            results.append(
+                {
+                    "status": "WAITING_FOR_ACQUIRED_EVIDENCE",
+                    "concept_id": concept_id,
+                }
+            )
             continue
         result = run_one(
             plan_path,

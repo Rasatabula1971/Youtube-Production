@@ -3,18 +3,17 @@ from __future__ import annotations
 import unittest
 
 from experiment_01_discovery.evidence_quality import (
-    RELIABILITY_CAUTION,
-    RELIABILITY_TRUSTED,
-    RELIABILITY_UNAVAILABLE,
     RELEVANCE_ADJACENT,
     RELEVANCE_OFF_INTENT,
     RELEVANCE_ON_INTENT,
+    RELIABILITY_CAUTION,
+    RELIABILITY_TRUSTED,
+    RELIABILITY_UNAVAILABLE,
     classify_outlier_reliability,
     classify_relevance,
     classify_themes,
     classify_topics,
 )
-
 
 PROFILE = {
     "exclude_terms": [
@@ -133,8 +132,9 @@ class RelevanceTests(unittest.TestCase):
             RELEVANCE_ON_INTENT,
         )
 
-
-    def test_description_can_rescue_vague_title_with_strong_and_context_signals(self) -> None:
+    def test_description_can_rescue_vague_title_with_strong_and_context_signals(
+        self,
+    ) -> None:
         result = classify_relevance(
             "This Changed Everything",
             PROFILE,

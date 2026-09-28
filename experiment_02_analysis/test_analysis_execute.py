@@ -126,19 +126,13 @@ class AnalysisExecutionTests(unittest.TestCase):
                 run_batch_prepare(profiles)
 
             self.assertFalse(stale.exists())
-            self.assertTrue(
-                (requests / "v1.analysis_request.json").exists()
-            )
+            self.assertTrue((requests / "v1.analysis_request.json").exists())
 
     def test_request_filters_evidence_by_dimension(self):
         request = build_analysis_request(self.profile(), self.config)
 
-        packaging_ids = set(
-            request["dimensions"]["packaging"]["evidence_refs"]
-        )
-        hook_ids = set(
-            request["dimensions"]["opening_hook"]["evidence_refs"]
-        )
+        packaging_ids = set(request["dimensions"]["packaging"]["evidence_refs"])
+        hook_ids = set(request["dimensions"]["opening_hook"]["evidence_refs"])
 
         self.assertEqual(packaging_ids, {"metadata.title"})
         self.assertEqual(
@@ -148,7 +142,6 @@ class AnalysisExecutionTests(unittest.TestCase):
                 "transcript.t000005000_000010000_0002",
             },
         )
-
 
     def test_request_uses_single_compact_evidence_library(self):
         request = build_analysis_request(self.profile(), self.config)
@@ -275,9 +268,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                         {
                             "finding": "This question made it viral.",
                             "mechanism_ids": ["curiosity_gap"],
-                            "evidence_refs": [
-                                "transcript.t000000000_000005000_0001"
-                            ],
+                            "evidence_refs": ["transcript.t000000000_000005000_0001"],
                             "confidence": "LOW",
                         }
                     ]
@@ -315,7 +306,6 @@ class AnalysisExecutionTests(unittest.TestCase):
                 self.config,
             )
 
-
     def test_partial_response_preserves_omitted_dimension(self):
         profile = self.profile()
         profile["analysis"]["packaging"]["findings"] = [
@@ -335,9 +325,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                         {
                             "finding": "The opening asks a direct question.",
                             "mechanism_ids": ["curiosity_gap"],
-                            "evidence_refs": [
-                                "transcript.t000000000_000005000_0001"
-                            ],
+                            "evidence_refs": ["transcript.t000000000_000005000_0001"],
                             "confidence": "MODERATE",
                         }
                     ]
@@ -371,9 +359,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                         {
                             "finding": "This question made it viral.",
                             "mechanism_ids": ["curiosity_gap"],
-                            "evidence_refs": [
-                                "transcript.t000000000_000005000_0001"
-                            ],
+                            "evidence_refs": ["transcript.t000000000_000005000_0001"],
                             "confidence": "LOW",
                         }
                     ]
@@ -409,9 +395,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                     {
                         "mechanism_id": "hidden_mechanism",
                         "new_direction": "Use the exact source animation with new narration.",
-                        "evidence_refs": [
-                            "transcript.t000005000_000010000_0002"
-                        ],
+                        "evidence_refs": ["transcript.t000005000_000010000_0002"],
                         "source_dependency_test": {
                             "passes": False,
                             "rationale": "The idea depends on the source animation.",

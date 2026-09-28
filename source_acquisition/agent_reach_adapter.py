@@ -63,9 +63,7 @@ def doctor(
             "status": "NOT_INSTALLED",
             "installed": False,
             "channels": {},
-            "message": (
-                "agent-reach is not installed or is not on PATH"
-            ),
+            "message": ("agent-reach is not installed or is not on PATH"),
         }
 
     try:
@@ -83,10 +81,7 @@ def doctor(
             "status": "TIMEOUT",
             "installed": True,
             "channels": {},
-            "message": (
-                f"agent-reach doctor timed out after "
-                f"{timeout_seconds}s"
-            ),
+            "message": (f"agent-reach doctor timed out after " f"{timeout_seconds}s"),
         }
     except OSError as exc:
         return {
@@ -116,15 +111,11 @@ def doctor(
             "status": "INVALID_JSON",
             "installed": True,
             "channels": {},
-            "message": (
-                "agent-reach doctor did not return valid JSON"
-            ),
+            "message": ("agent-reach doctor did not return valid JSON"),
             "raw_output": completed.stdout[:1200],
         }
 
-    if isinstance(payload, dict) and isinstance(
-        payload.get("channels"), dict
-    ):
+    if isinstance(payload, dict) and isinstance(payload.get("channels"), dict):
         channels = payload["channels"]
     elif isinstance(payload, dict):
         channels = payload
@@ -153,11 +144,7 @@ def channel_status(
 def youtube_health(
     doctor_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    payload = (
-        doctor_payload
-        if doctor_payload is not None
-        else doctor()
-    )
+    payload = doctor_payload if doctor_payload is not None else doctor()
     channel = channel_status(payload, "youtube")
 
     if payload.get("status") != "READY":
@@ -175,9 +162,7 @@ def youtube_health(
             "doctor_status": "READY",
             "channel_status": None,
             "active_backend": None,
-            "message": (
-                "Agent Reach doctor did not report a YouTube channel"
-            ),
+            "message": ("Agent Reach doctor did not report a YouTube channel"),
         }
 
     status = str(channel.get("status", ""))
@@ -204,9 +189,7 @@ def _search_prefix(strategy: str) -> str:
         # Keep "date" as a compatibility request but execute the
         # supported ytsearch path and report the effective strategy.
         return "ytsearch"
-    raise ValueError(
-        "strategy must be relevance or date"
-    )
+    raise ValueError("strategy must be relevance or date")
 
 
 def search_youtube(
@@ -221,9 +204,7 @@ def search_youtube(
     if not query:
         raise ValueError("query is required")
     if limit < 1 or limit > MAX_SEARCH_RESULTS:
-        raise ValueError(
-            f"limit must be between 1 and {MAX_SEARCH_RESULTS}"
-        )
+        raise ValueError(f"limit must be between 1 and {MAX_SEARCH_RESULTS}")
 
     if require_agent_reach_health:
         health = youtube_health()
@@ -244,18 +225,10 @@ def search_youtube(
 
     executable = yt_dlp_path()
     if not executable:
-        raise AcquisitionError(
-            "yt-dlp is not available on PATH"
-        )
+        raise AcquisitionError("yt-dlp is not available on PATH")
 
-    effective_strategy = (
-        "relevance"
-        if strategy == "date"
-        else strategy
-    )
-    search_target = (
-        f"{_search_prefix(strategy)}{limit}:{query}"
-    )
+    effective_strategy = "relevance" if strategy == "date" else strategy
+    search_target = f"{_search_prefix(strategy)}{limit}:{query}"
     command = [
         executable,
         "--dump-json",
@@ -278,13 +251,10 @@ def search_youtube(
         )
     except subprocess.TimeoutExpired as exc:
         raise AcquisitionError(
-            f"yt-dlp search timed out after "
-            f"{timeout_seconds}s"
+            f"yt-dlp search timed out after " f"{timeout_seconds}s"
         ) from exc
     except OSError as exc:
-        raise AcquisitionError(
-            f"yt-dlp search failed to start: {exc}"
-        ) from exc
+        raise AcquisitionError(f"yt-dlp search failed to start: {exc}") from exc
 
     results: list[dict[str, Any]] = []
     parse_errors = 0
@@ -307,14 +277,8 @@ def search_youtube(
             {
                 "video_id": video_id,
                 "title": item.get("title"),
-                "channel": (
-                    item.get("channel")
-                    or item.get("uploader")
-                ),
-                "channel_id": (
-                    item.get("channel_id")
-                    or item.get("uploader_id")
-                ),
+                "channel": (item.get("channel") or item.get("uploader")),
+                "channel_id": (item.get("channel_id") or item.get("uploader_id")),
                 "upload_date": item.get("upload_date"),
                 "timestamp": item.get("timestamp"),
                 "duration_seconds": item.get("duration"),
@@ -329,10 +293,9 @@ def search_youtube(
     status = "COMPLETE"
     if completed.returncode != 0 and not results:
         raise AcquisitionError(
-            (
-                completed.stderr.strip()
-                or "yt-dlp returned no usable search results"
-            )[:1200]
+            (completed.stderr.strip() or "yt-dlp returned no usable search results")[
+                :1200
+            ]
         )
     if completed.returncode != 0:
         status = "PARTIAL"
@@ -350,13 +313,10 @@ def search_youtube(
         "requested_limit": limit,
         "result_count": len(results),
         "parse_errors": parse_errors,
-        "active_backend": health.get(
-            "active_backend"
-        ),
+        "active_backend": health.get("active_backend"),
         "results": results,
         "stderr": completed.stderr.strip()[:1200],
     }
-
 
 
 def mcporter_path() -> str | None:
@@ -370,9 +330,7 @@ def curl_path() -> str | None:
 def extract_urls(value: Any) -> list[str]:
     """Extract unique HTTP(S) URLs from arbitrary Exa/mcporter output."""
     text = (
-        json.dumps(value, ensure_ascii=False)
-        if not isinstance(value, str)
-        else value
+        json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
     )
     seen: set[str] = set()
     urls: list[str] = []
@@ -395,9 +353,7 @@ def search_web(
     if not query:
         raise ValueError("query is required")
     if limit < 1 or limit > MAX_WEB_SEARCH_RESULTS:
-        raise ValueError(
-            f"limit must be between 1 and {MAX_WEB_SEARCH_RESULTS}"
-        )
+        raise ValueError(f"limit must be between 1 and {MAX_WEB_SEARCH_RESULTS}")
 
     executable = mcporter_path()
     if not executable:
@@ -427,9 +383,7 @@ def search_web(
             f"Exa web search timed out after {timeout_seconds}s"
         ) from exc
     except OSError as exc:
-        raise AcquisitionError(
-            f"Exa web search failed to start: {exc}"
-        ) from exc
+        raise AcquisitionError(f"Exa web search failed to start: {exc}") from exc
 
     if completed.returncode != 0:
         raise AcquisitionError(
@@ -496,17 +450,12 @@ def read_web_page(
             f"Jina Reader timed out after {timeout_seconds}s"
         ) from exc
     except OSError as exc:
-        raise AcquisitionError(
-            f"Jina Reader failed to start: {exc}"
-        ) from exc
+        raise AcquisitionError(f"Jina Reader failed to start: {exc}") from exc
 
     content = completed.stdout.strip()
     if completed.returncode != 0 or not content:
         raise AcquisitionError(
-            (
-                completed.stderr.strip()
-                or "Jina Reader returned no content"
-            )[:1600]
+            (completed.stderr.strip() or "Jina Reader returned no content")[:1600]
         )
 
     return {
@@ -517,6 +466,7 @@ def read_web_page(
         "content": content,
         "content_chars": len(content),
     }
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

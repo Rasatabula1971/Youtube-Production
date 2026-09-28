@@ -32,9 +32,7 @@ class ResearchModelRunnerTests(unittest.TestCase):
 
     def test_schema_limits_sources_to_acquired_pages(self):
         schema = runner.response_schema(self.plan(), self.evidence())
-        source_schema = (
-            schema["properties"]["sources"]["items"]["properties"]
-        )
+        source_schema = schema["properties"]["sources"]["items"]["properties"]
 
         self.assertEqual(
             source_schema["source_id"]["enum"],
@@ -53,13 +51,17 @@ class ResearchModelRunnerTests(unittest.TestCase):
                     "url": "https://example.com/source",
                 }
             ],
-            "claims": [{
-                "claim_id": "clm001",
-                "evidence_links": [{
-                    "source_id": "web001",
-                    "evidence_quote": "mechanism is caused by heat",
-                }],
-            }],
+            "claims": [
+                {
+                    "claim_id": "clm001",
+                    "evidence_links": [
+                        {
+                            "source_id": "web001",
+                            "evidence_quote": "mechanism is caused by heat",
+                        }
+                    ],
+                }
+            ],
         }
 
         runner.validate_acquired_source_boundary(
@@ -103,17 +105,20 @@ class ResearchModelRunnerTests(unittest.TestCase):
             prompt,
         )
 
-
     def test_source_boundary_rejects_fabricated_quote(self):
         response = {
             "sources": [{"source_id": "web001", "url": "https://example.com/source"}],
-            "claims": [{
-                "claim_id": "clm001",
-                "evidence_links": [{
-                    "source_id": "web001",
-                    "evidence_quote": "This wording never appears in the source",
-                }],
-            }],
+            "claims": [
+                {
+                    "claim_id": "clm001",
+                    "evidence_links": [
+                        {
+                            "source_id": "web001",
+                            "evidence_quote": "This wording never appears in the source",
+                        }
+                    ],
+                }
+            ],
         }
         with self.assertRaisesRegex(ValueError, "not present"):
             runner.validate_acquired_source_boundary(response, self.evidence())

@@ -21,12 +21,8 @@ class ExperimentUiTests(unittest.TestCase):
         )
 
     def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
-        html = (server.STATIC_DIR / "index.html").read_text(
-            encoding="utf-8"
-        )
-        script = (server.STATIC_DIR / "app.js").read_text(
-            encoding="utf-8"
-        )
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
         for view in ("home", "opportunity", "analysis", "tools"):
             self.assertIn(f'data-view="{view}"', html)
@@ -81,7 +77,9 @@ class ExperimentUiTests(unittest.TestCase):
         for action in server.ACTION_DEFS.values():
             self.assertIsInstance(action["command"], list)
             self.assertTrue(action["command"])
-            self.assertFalse(any(part in {"cmd", "powershell"} for part in action["command"]))
+            self.assertFalse(
+                any(part in {"cmd", "powershell"} for part in action["command"])
+            )
 
     def test_guided_opportunity_action_is_present(self):
         self.assertIn("opportunity_research", server.ACTION_DEFS)
@@ -115,9 +113,7 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        synthesis_index = server.WORKFLOW_ACTION_ORDER.index(
-            "synthesis_build"
-        )
+        synthesis_index = server.WORKFLOW_ACTION_ORDER.index("synthesis_build")
         self.assertEqual(
             server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 5],
             [
@@ -148,9 +144,7 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        concept_index = server.WORKFLOW_ACTION_ORDER.index(
-            "concept_gate_prepare"
-        )
+        concept_index = server.WORKFLOW_ACTION_ORDER.index("concept_gate_prepare")
         self.assertEqual(
             server.WORKFLOW_ACTION_ORDER[concept_index + 1 : concept_index + 4],
             [
@@ -181,13 +175,9 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        packaging_index = server.WORKFLOW_ACTION_ORDER.index(
-            "package_gate_prepare"
-        )
+        packaging_index = server.WORKFLOW_ACTION_ORDER.index("package_gate_prepare")
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[
-                packaging_index + 1 : packaging_index + 5
-            ],
+            server.WORKFLOW_ACTION_ORDER[packaging_index + 1 : packaging_index + 5],
             [
                 "research_prepare",
                 "research_acquire",
@@ -423,9 +413,7 @@ class ExperimentUiTests(unittest.TestCase):
                     server.shutil,
                     "which",
                     side_effect=lambda name: (
-                        "C:/fake/yt-dlp.exe"
-                        if name == "yt-dlp"
-                        else None
+                        "C:/fake/yt-dlp.exe" if name == "yt-dlp" else None
                     ),
                 ),
             ):
@@ -433,17 +421,13 @@ class ExperimentUiTests(unittest.TestCase):
 
                 self.assertFalse(readiness["exp2_prepare"]["enabled"])
                 self.assertTrue(readiness["exp2_acquire"]["enabled"])
-                self.assertFalse(
-                    readiness["analysis_batch_prepare"]["enabled"]
-                )
+                self.assertFalse(readiness["analysis_batch_prepare"]["enabled"])
 
                 enriched_profile = enriched / "v1.json"
                 enriched_profile.write_text(
                     json.dumps(
                         {
-                            "source_inputs": {
-                                "transcript": {"status": "PROVIDED"}
-                            },
+                            "source_inputs": {"transcript": {"status": "PROVIDED"}},
                             "evidence": [
                                 {
                                     "evidence_id": "transcript.p0001",
@@ -458,9 +442,7 @@ class ExperimentUiTests(unittest.TestCase):
 
                 readiness = server.action_readiness()
                 self.assertFalse(readiness["exp2_acquire"]["enabled"])
-                self.assertTrue(
-                    readiness["analysis_batch_prepare"]["enabled"]
-                )
+                self.assertTrue(readiness["analysis_batch_prepare"]["enabled"])
 
     def test_experiment_02_visual_structure_is_guided_after_source_evidence(self):
         self.assertIn("exp2_visual", server.ACTION_DEFS)
@@ -517,9 +499,7 @@ class ExperimentUiTests(unittest.TestCase):
             (enriched / "v1.json").write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -583,9 +563,7 @@ class ExperimentUiTests(unittest.TestCase):
 
                 readiness = server.action_readiness()
                 self.assertTrue(readiness["exp2_visual"]["enabled"])
-                self.assertFalse(
-                    readiness["analysis_batch_prepare"]["enabled"]
-                )
+                self.assertFalse(readiness["analysis_batch_prepare"]["enabled"])
 
                 report_dir = source_output / "experiment_02" / "v1"
                 report_dir.mkdir(parents=True)
@@ -593,9 +571,7 @@ class ExperimentUiTests(unittest.TestCase):
                     json.dumps(
                         {
                             "status": "READY",
-                            "profile_sha256": server.sha256_file(
-                                prepared_profile
-                            ),
+                            "profile_sha256": server.sha256_file(prepared_profile),
                         }
                     ),
                     encoding="utf-8",
@@ -603,9 +579,7 @@ class ExperimentUiTests(unittest.TestCase):
                 (enriched / "v1.json").write_text(
                     json.dumps(
                         {
-                            "source_inputs": {
-                                "transcript": {"status": "PROVIDED"}
-                            },
+                            "source_inputs": {"transcript": {"status": "PROVIDED"}},
                             "evidence": [
                                 {
                                     "evidence_id": "transcript.p0001",
@@ -625,12 +599,8 @@ class ExperimentUiTests(unittest.TestCase):
 
                 readiness = server.action_readiness()
                 self.assertFalse(readiness["exp2_visual"]["enabled"])
-                self.assertTrue(
-                    readiness["exp2_vision_prepare"]["enabled"]
-                )
-                self.assertFalse(
-                    readiness["analysis_batch_prepare"]["enabled"]
-                )
+                self.assertTrue(readiness["exp2_vision_prepare"]["enabled"])
+                self.assertFalse(readiness["analysis_batch_prepare"]["enabled"])
 
     def test_pending_visual_review_becomes_human_workflow_gate(self):
         with (
@@ -653,9 +623,7 @@ class ExperimentUiTests(unittest.TestCase):
                 },
             ),
         ):
-            workflow = server.workflow_guidance(
-                server.action_readiness()
-            )
+            workflow = server.workflow_guidance(server.action_readiness())
 
         self.assertEqual(workflow["state"], "HUMAN_VISION_GATE")
         self.assertEqual(
@@ -698,9 +666,7 @@ class ExperimentUiTests(unittest.TestCase):
             (enriched / "v1.json").write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -728,9 +694,7 @@ class ExperimentUiTests(unittest.TestCase):
                 json.dumps(
                     {
                         "status": "READY",
-                        "profile_sha256": server.sha256_file(
-                            prepared_profile
-                        ),
+                        "profile_sha256": server.sha256_file(prepared_profile),
                     }
                 ),
                 encoding="utf-8",
@@ -786,20 +750,14 @@ class ExperimentUiTests(unittest.TestCase):
                     server.shutil,
                     "which",
                     side_effect=lambda name: (
-                        f"C:/fake/{name}.exe"
-                        if name in {"yt-dlp", "ffmpeg"}
-                        else None
+                        f"C:/fake/{name}.exe" if name in {"yt-dlp", "ffmpeg"} else None
                     ),
                 ),
             ):
                 readiness = server.action_readiness()
 
-        self.assertFalse(
-            readiness["exp2_vision_prepare"]["enabled"]
-        )
-        self.assertTrue(
-            readiness["analysis_batch_prepare"]["enabled"]
-        )
+        self.assertFalse(readiness["exp2_vision_prepare"]["enabled"])
+        self.assertTrue(readiness["analysis_batch_prepare"]["enabled"])
 
     def test_failed_visual_attempt_allows_analysis_and_exposes_force_retry(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -832,9 +790,7 @@ class ExperimentUiTests(unittest.TestCase):
             (enriched / "v1.json").write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -852,9 +808,7 @@ class ExperimentUiTests(unittest.TestCase):
                 json.dumps(
                     {
                         "status": "SCENE_DETECTION_FAILED",
-                        "profile_sha256": server.sha256_file(
-                            prepared_profile
-                        ),
+                        "profile_sha256": server.sha256_file(prepared_profile),
                     }
                 ),
                 encoding="utf-8",
@@ -900,9 +854,7 @@ class ExperimentUiTests(unittest.TestCase):
                     server.shutil,
                     "which",
                     side_effect=lambda name: (
-                        f"C:/fake/{name}.exe"
-                        if name in {"yt-dlp", "ffmpeg"}
-                        else None
+                        f"C:/fake/{name}.exe" if name in {"yt-dlp", "ffmpeg"} else None
                     ),
                 ),
             ):
@@ -910,9 +862,7 @@ class ExperimentUiTests(unittest.TestCase):
 
         self.assertFalse(readiness["exp2_visual"]["enabled"])
         self.assertTrue(readiness["exp2_visual_retry"]["enabled"])
-        self.assertTrue(
-            readiness["analysis_batch_prepare"]["enabled"]
-        )
+        self.assertTrue(readiness["analysis_batch_prepare"]["enabled"])
 
     def test_missing_ffmpeg_allows_transcript_only_analysis(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -944,9 +894,7 @@ class ExperimentUiTests(unittest.TestCase):
             (enriched / "v1.json").write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -999,18 +947,14 @@ class ExperimentUiTests(unittest.TestCase):
                     server.shutil,
                     "which",
                     side_effect=lambda name: (
-                        "C:/fake/yt-dlp.exe"
-                        if name == "yt-dlp"
-                        else None
+                        "C:/fake/yt-dlp.exe" if name == "yt-dlp" else None
                     ),
                 ),
             ):
                 readiness = server.action_readiness()
 
         self.assertFalse(readiness["exp2_visual"]["enabled"])
-        self.assertTrue(
-            readiness["analysis_batch_prepare"]["enabled"]
-        )
+        self.assertTrue(readiness["analysis_batch_prepare"]["enabled"])
 
     def test_analysis_request_must_match_current_enriched_profile_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1039,9 +983,7 @@ class ExperimentUiTests(unittest.TestCase):
             enriched_path.write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -1055,13 +997,7 @@ class ExperimentUiTests(unittest.TestCase):
             )
             request_path = requests / "v1.analysis_request.json"
             request_path.write_text(
-                json.dumps(
-                    {
-                        "request_provenance": {
-                            "profile_sha256": "stale"
-                        }
-                    }
-                ),
+                json.dumps({"request_provenance": {"profile_sha256": "stale"}}),
                 encoding="utf-8",
             )
 
@@ -1094,9 +1030,7 @@ class ExperimentUiTests(unittest.TestCase):
                     json.dumps(
                         {
                             "request_provenance": {
-                                "profile_sha256": server.sha256_file(
-                                    enriched_path
-                                )
+                                "profile_sha256": server.sha256_file(enriched_path)
                             }
                         }
                     ),
@@ -1165,21 +1099,13 @@ class ExperimentUiTests(unittest.TestCase):
     def test_auto_refresh_actions_are_windows_gated(self):
         with patch.object(server, "IS_WINDOWS", False):
             readiness = server.action_readiness()
-        self.assertFalse(
-            readiness["exp13_auto_refresh_install"]["enabled"]
-        )
-        self.assertFalse(
-            readiness["exp13_auto_refresh_remove"]["enabled"]
-        )
+        self.assertFalse(readiness["exp13_auto_refresh_install"]["enabled"])
+        self.assertFalse(readiness["exp13_auto_refresh_remove"]["enabled"])
 
         with patch.object(server, "IS_WINDOWS", True):
             readiness = server.action_readiness()
-        self.assertTrue(
-            readiness["exp13_auto_refresh_install"]["enabled"]
-        )
-        self.assertTrue(
-            readiness["exp13_auto_refresh_remove"]["enabled"]
-        )
+        self.assertTrue(readiness["exp13_auto_refresh_install"]["enabled"])
+        self.assertTrue(readiness["exp13_auto_refresh_remove"]["enabled"])
 
     def test_job_manager_sets_unbuffered_python_output(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1347,7 +1273,6 @@ class ExperimentUiTests(unittest.TestCase):
                 self.assertEqual(final["status"], "SUCCEEDED")
                 self.assertIn("hello-ui", manager.log_text())
 
-
     def test_current_job_state_is_json_serializable_while_running(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1392,7 +1317,6 @@ class ExperimentUiTests(unittest.TestCase):
                 json.dumps(current)
 
                 manager.stop()
-
 
     def test_checkpoint_complete_is_not_stage_complete_without_cohort(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1517,10 +1441,7 @@ class ExperimentUiTests(unittest.TestCase):
                 stage["human_status"],
                 "STAGE COMPLETE",
             )
-            self.assertTrue(
-                all(item["done"] for item in stage["criteria"])
-            )
-
+            self.assertTrue(all(item["done"] for item in stage["criteria"]))
 
     def test_insufficient_cohort_tells_user_to_rerun_not_wait(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1620,9 +1541,7 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             readiness = server.action_readiness()
 
-        self.assertFalse(
-            readiness["exp13_refresh"]["enabled"]
-        )
+        self.assertFalse(readiness["exp13_refresh"]["enabled"])
         self.assertIn(
             "do not wait",
             readiness["exp13_refresh"]["reason"].lower(),
@@ -1632,7 +1551,6 @@ class ExperimentUiTests(unittest.TestCase):
         manager = server.JobManager()
         with self.assertRaises(ValueError):
             manager.start("not_real")
-
 
     def test_experiment_02_prepare_requires_human_opportunity_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1682,7 +1600,6 @@ class ExperimentUiTests(unittest.TestCase):
 
             self.assertTrue(readiness["exp2_prepare"]["enabled"])
 
-
     def test_remaining_analysis_action_is_in_guided_workflow(self):
         self.assertIn("analysis_model_remaining", server.WORKFLOW_ACTION_ORDER)
         one_index = server.WORKFLOW_ACTION_ORDER.index("analysis_model_one")
@@ -1692,7 +1609,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertLess(remaining_index, review_index)
 
         command = server.ACTION_DEFS["analysis_model_remaining"]["command"]
-        self.assertIn("analysis_model_runner.py", " ".join(str(part) for part in command))
+        self.assertIn(
+            "analysis_model_runner.py", " ".join(str(part) for part in command)
+        )
         self.assertIn("--mode", command)
         self.assertIn("batch", command)
         self.assertNotIn("--max-requests", command)
@@ -1710,34 +1629,44 @@ class ExperimentUiTests(unittest.TestCase):
 
             for video_id in ("v1", "v2"):
                 prepared_path = prepared / f"{video_id}.json"
-                prepared_path.write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+                prepared_path.write_text(
+                    json.dumps({"video_id": video_id}), encoding="utf-8"
+                )
                 enriched_path = enriched / f"{video_id}.json"
                 enriched_path.write_text(
-                    json.dumps({
-                        "video_id": video_id,
-                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
-                        "evidence": [{"type": "transcript"}],
-                    }),
+                    json.dumps(
+                        {
+                            "video_id": video_id,
+                            "source_inputs": {"transcript": {"status": "PROVIDED"}},
+                            "evidence": [{"type": "transcript"}],
+                        }
+                    ),
                     encoding="utf-8",
                 )
                 request_path = requests / f"{video_id}.analysis_request.json"
                 request_path.write_text(
-                    json.dumps({
-                        "video_id": video_id,
-                        "request_provenance": {
-                            "profile_sha256": server.sha256_file(enriched_path)
-                        },
-                    }),
+                    json.dumps(
+                        {
+                            "video_id": video_id,
+                            "request_provenance": {
+                                "profile_sha256": server.sha256_file(enriched_path)
+                            },
+                        }
+                    ),
                     encoding="utf-8",
                 )
 
             first_request = requests / "v1.analysis_request.json"
-            (analyzed / "v1.json").write_text(json.dumps({"video_id": "v1"}), encoding="utf-8")
+            (analyzed / "v1.json").write_text(
+                json.dumps({"video_id": "v1"}), encoding="utf-8"
+            )
             (runs / "v1.model_run.json").write_text(
-                json.dumps({
-                    "status": "APPLIED",
-                    "request_sha256": server.sha256_file(first_request),
-                }),
+                json.dumps(
+                    {
+                        "status": "APPLIED",
+                        "request_sha256": server.sha256_file(first_request),
+                    }
+                ),
                 encoding="utf-8",
             )
 
@@ -1747,7 +1676,9 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "EXP2_REQUESTS_DIR", requests),
                 patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
                 patch.object(server, "EXP2_MODEL_RUNS_DIR", runs),
-                patch.object(server, "EXP2_REVIEW_REQUESTS_DIR", root / "review_requests"),
+                patch.object(
+                    server, "EXP2_REVIEW_REQUESTS_DIR", root / "review_requests"
+                ),
                 patch.object(server, "EXP2_REVIEWED_DIR", root / "reviewed"),
                 patch.object(server, "EXP2_SYNTHESIS_FILE", root / "synthesis.json"),
                 patch.object(server, "EXP2_ACQUISITION_SUMMARY", root / "acq.json"),
@@ -1760,7 +1691,6 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertEqual(state["analyzed_ids"], ["v1"])
         self.assertEqual(state["analyzed_current_count"], 1)
 
-
     def test_concept_triage_precedes_human_concept_gate(self):
         self.assertIn("concept_triage", server.WORKFLOW_ACTION_ORDER)
         generate_index = server.WORKFLOW_ACTION_ORDER.index("concept_generate")
@@ -1770,10 +1700,12 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertLess(triage_index, gate_index)
 
         command = server.ACTION_DEFS["concept_triage"]["command"]
-        self.assertIn("transformation_engine/concept_triage.py", " ".join(str(part) for part in command))
+        self.assertIn(
+            "transformation_engine/concept_triage.py",
+            " ".join(str(part) for part in command),
+        )
         self.assertIn("--mode", command)
         self.assertIn("run", command)
-
 
     def test_state_changing_posts_require_same_origin_json_and_csrf(self):
         httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

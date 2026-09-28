@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import concept_model_runner as runner
+
 import transformation_engine as engine
 
 
@@ -26,9 +27,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
                 {"description": "Open with a concrete unanswered question."}
             ],
             "observed_examples": [],
-            "source_specific_elements_to_avoid": [
-                {"element": "Exact source wording."}
-            ],
+            "source_specific_elements_to_avoid": [{"element": "Exact source wording."}],
             "existing_transformation_directions": [],
             "source_video_ids": ["source1", "source2"],
             "concept_count_requested": 5,
@@ -108,10 +107,9 @@ class ConceptModelRunnerTests(unittest.TestCase):
             schema["properties"]["mechanism_id"]["const"],
             "curiosity_gap",
         )
-        dependency = (
-            schema["properties"]["concepts"]["items"]["properties"]
-            ["source_dependency_test"]["properties"]
-        )
+        dependency = schema["properties"]["concepts"]["items"]["properties"][
+            "source_dependency_test"
+        ]["properties"]
         self.assertTrue(dependency["passes"]["const"])
         self.assertFalse(dependency["source_assets_required"]["const"])
 

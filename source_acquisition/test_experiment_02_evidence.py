@@ -89,9 +89,7 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                         "evidence_ingestion": {
                             "profile_source_sha256": acquisition.sha256_file(prepared),
                         },
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -104,17 +102,13 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.assertTrue(
-                acquisition.enriched_profile_ready(enriched, prepared)
-            )
+            self.assertTrue(acquisition.enriched_profile_ready(enriched, prepared))
 
             prepared.write_text(
                 prepared.read_text(encoding="utf-8") + "\n",
                 encoding="utf-8",
             )
-            self.assertFalse(
-                acquisition.enriched_profile_ready(enriched, prepared)
-            )
+            self.assertFalse(acquisition.enriched_profile_ready(enriched, prepared))
 
     def test_missing_transcript_does_not_run_offline_ingest(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -136,9 +130,7 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                     return_value=completed,
                 )
             )
-            ingest = stack.enter_context(
-                patch.object(acquisition, "run_ingest")
-            )
+            ingest = stack.enter_context(patch.object(acquisition, "run_ingest"))
 
             result = acquisition.acquire_one(
                 profile,
@@ -171,9 +163,7 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                     return_value=completed,
                 )
             )
-            ingest = stack.enter_context(
-                patch.object(acquisition, "run_ingest")
-            )
+            ingest = stack.enter_context(patch.object(acquisition, "run_ingest"))
 
             result = acquisition.acquire_one(
                 profile,
@@ -193,7 +183,9 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
             output_dir.mkdir()
 
             stack.enter_context(
-                patch.object(acquisition, "local_transcription_available", return_value=True)
+                patch.object(
+                    acquisition, "local_transcription_available", return_value=True
+                )
             )
 
             def fake_run(command, **kwargs):
@@ -246,7 +238,9 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
             output_dir = root / "out"
             output_dir.mkdir()
             stack.enter_context(
-                patch.object(acquisition, "local_transcription_available", return_value=False)
+                patch.object(
+                    acquisition, "local_transcription_available", return_value=False
+                )
             )
 
             result = acquisition.transcribe_audio_fallback(
@@ -279,11 +273,11 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                     json.dumps(
                         {
                             "evidence_ingestion": {
-                                "profile_source_sha256": acquisition.sha256_file(profile),
+                                "profile_source_sha256": acquisition.sha256_file(
+                                    profile
+                                ),
                             },
-                            "source_inputs": {
-                                "transcript": {"status": "PROVIDED"}
-                            },
+                            "source_inputs": {"transcript": {"status": "PROVIDED"}},
                             "evidence": [
                                 {
                                     "evidence_id": "transcript.t1",
@@ -302,9 +296,7 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                     stderr="",
                 )
 
-            network = stack.enter_context(
-                patch.object(acquisition.subprocess, "run")
-            )
+            network = stack.enter_context(patch.object(acquisition.subprocess, "run"))
             stack.enter_context(
                 patch.object(
                     acquisition,
@@ -336,9 +328,7 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                         "evidence_ingestion": {
                             "profile_source_sha256": acquisition.sha256_file(profile),
                         },
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -351,12 +341,8 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            network = stack.enter_context(
-                patch.object(acquisition.subprocess, "run")
-            )
-            ingest = stack.enter_context(
-                patch.object(acquisition, "run_ingest")
-            )
+            network = stack.enter_context(patch.object(acquisition.subprocess, "run"))
+            ingest = stack.enter_context(patch.object(acquisition, "run_ingest"))
 
             result = acquisition.acquire_one(
                 profile,

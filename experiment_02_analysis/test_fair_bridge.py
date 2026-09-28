@@ -29,9 +29,7 @@ class FakeFair:
             provider_id="schema-provider",
             models=[model],
         )
-        self._registry = SimpleNamespace(
-            providers={"schema-provider": provider}
-        )
+        self._registry = SimpleNamespace(providers={"schema-provider": provider})
 
     def providers(self):
         return ["kilo_free"]
@@ -117,9 +115,7 @@ class FairBridgeTests(unittest.TestCase):
             FakeFair.last_kwargs["application_id"],
             "youtube-production",
         )
-        self.assertTrue(
-            result["compatibility"]["compatible_route_available"]
-        )
+        self.assertTrue(result["compatibility"]["compatible_route_available"])
         self.assertEqual(
             FakeFair.last_kwargs["confirmed_free_providers"],
             {"kilo_free"},
@@ -133,9 +129,7 @@ class FairBridgeTests(unittest.TestCase):
                 {"fair": fake_module(CloseFailingFair)},
             ):
                 result = asyncio.run(
-                    fair_bridge.execute(
-                        self.payload(repo, action="doctor")
-                    )
+                    fair_bridge.execute(self.payload(repo, action="doctor"))
                 )
 
         self.assertEqual(
@@ -146,17 +140,13 @@ class FairBridgeTests(unittest.TestCase):
             result["error_type"],
             "RuntimeError",
         )
-        self.assertFalse(
-            result["paid_inference_executed"]
-        )
+        self.assertFalse(result["paid_inference_executed"])
 
     def test_analysis_uses_current_fair_solve_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             with patch.dict(sys.modules, {"fair": fake_module(FakeFair)}):
-                result = asyncio.run(
-                    fair_bridge.execute(self.payload(repo))
-                )
+                result = asyncio.run(fair_bridge.execute(self.payload(repo)))
 
         self.assertEqual(result["status"], "ACCEPTED")
         self.assertEqual(result["provider_id"], "kilo_free")
@@ -178,14 +168,11 @@ class FairBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             with patch.dict(sys.modules, {"fair": fake_module(BrokenFair)}):
-                result = asyncio.run(
-                    fair_bridge.execute(self.payload(repo))
-                )
+                result = asyncio.run(fair_bridge.execute(self.payload(repo)))
 
         self.assertEqual(result["status"], "BRIDGE_ERROR")
         self.assertEqual(result["error_type"], "TypeError")
         self.assertFalse(result["paid_inference_executed"])
-
 
     def test_solve_exception_after_dispatch_has_unknown_cost_state(self):
         with tempfile.TemporaryDirectory() as tmp:

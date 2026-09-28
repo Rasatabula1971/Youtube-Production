@@ -6,15 +6,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import experiment_01_3 as exp13
-
 from experiment_01_3 import (
     aggregate_age_matched_velocity,
     calculate_age_window,
     classify_topic_relevance,
     confidence_from_unique_channels,
-    topic_channel_confidence,
     restore_checkpoint_state,
     search_job_key,
+    topic_channel_confidence,
 )
 
 
@@ -35,7 +34,9 @@ class Experiment013Tests(unittest.TestCase):
             ["f1", "formula 1", "motorsport"],
         )
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
-        self.assertEqual(result["topic_relevance_reason"], "missing_motorsport_context_in_title")
+        self.assertEqual(
+            result["topic_relevance_reason"], "missing_motorsport_context_in_title"
+        )
 
     def test_formula_1_gearbox_is_on_topic(self):
         result = classify_topic_relevance(
@@ -45,7 +46,6 @@ class Experiment013Tests(unittest.TestCase):
         )
         self.assertEqual(result["topic_relevance"], "ON_TOPIC")
 
-
     def test_sim_racing_title_does_not_become_steering_topic(self):
         result = classify_topic_relevance(
             "ULTRA REALISTIC F1 2026 - Charles Leclerc Ferrari Monaco GP",
@@ -54,7 +54,9 @@ class Experiment013Tests(unittest.TestCase):
             ["sim racing", "simracing", "gameplay"],
         )
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
-        self.assertEqual(result["topic_relevance_reason"], "missing_topic_term_in_title")
+        self.assertEqual(
+            result["topic_relevance_reason"], "missing_topic_term_in_title"
+        )
 
     def test_corvette_short_does_not_become_aerodynamics_topic(self):
         result = classify_topic_relevance(
@@ -63,7 +65,9 @@ class Experiment013Tests(unittest.TestCase):
             ["f1", "formula 1", "motorsport"],
         )
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
-        self.assertEqual(result["topic_relevance_reason"], "missing_topic_term_in_title")
+        self.assertEqual(
+            result["topic_relevance_reason"], "missing_topic_term_in_title"
+        )
 
     def test_description_terms_cannot_rescue_title_only_validation(self):
         result = classify_topic_relevance(
@@ -72,7 +76,9 @@ class Experiment013Tests(unittest.TestCase):
             ["f1", "formula 1", "motorsport"],
         )
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
-        self.assertEqual(result["topic_relevance_reason"], "missing_topic_term_in_title")
+        self.assertEqual(
+            result["topic_relevance_reason"], "missing_topic_term_in_title"
+        )
 
     def test_excluded_sim_racing_title_is_rejected_even_with_topic_term(self):
         result = classify_topic_relevance(
@@ -93,7 +99,6 @@ class Experiment013Tests(unittest.TestCase):
             confidence_from_unique_channels(5),
             "STRONG",
         )
-
 
     def test_refresh_lock_blocks_overlap_and_releases(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -167,8 +172,6 @@ class Experiment013Tests(unittest.TestCase):
             "youtube_api_v3",
         )
         self.assertEqual(completed, {"job-1"})
-
-
 
     def test_yt_dlp_pool_uses_supported_base_and_year_hint_queries(self):
         base_result = {
@@ -254,10 +257,7 @@ class Experiment013Tests(unittest.TestCase):
             {item["video_id"] for item in first},
             {"base-only", "shared", "year-only"},
         )
-        shared = next(
-            item for item in first
-            if item["video_id"] == "shared"
-        )
+        shared = next(item for item in first if item["video_id"] == "shared")
         self.assertEqual(
             shared["discovery_queries"],
             [
@@ -266,7 +266,6 @@ class Experiment013Tests(unittest.TestCase):
             ],
         )
         self.assertEqual(first, second)
-
 
     def test_yt_dlp_ids_prefilter_age_format_and_views(self):
         pool = [
@@ -408,11 +407,7 @@ class Experiment013Tests(unittest.TestCase):
     def test_velocity_history_reads_archived_snapshots(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            archive = (
-                root
-                / "archive"
-                / "experiment_01_3_20260926T190000Z"
-            )
+            archive = root / "archive" / "experiment_01_3_20260926T190000Z"
             archive.mkdir(parents=True)
             archived_snapshot = archive / "video_snapshots.jsonl"
             archived_snapshot.write_text(
@@ -528,7 +523,6 @@ class Experiment013Tests(unittest.TestCase):
             "ytsearch_relevance+year_hint",
         )
         self.assertEqual(len(completed), 1)
-
 
     def test_auto_mode_uses_fallback_when_api_budget_is_zero(self):
         config = {
@@ -678,27 +672,27 @@ class Experiment013Tests(unittest.TestCase):
         result = aggregate_age_matched_velocity(rows, niches)
 
         self.assertEqual(
-            result[
-                "cohort_median_current_views_per_day_by_niche_format"
-            ]["automotive_racing"]["long_form_candidate"],
+            result["cohort_median_current_views_per_day_by_niche_format"][
+                "automotive_racing"
+            ]["long_form_candidate"],
             6000.0,
         )
         self.assertEqual(
-            result[
-                "cohort_median_current_views_per_day_by_niche_format"
-            ]["automotive_racing"]["short_candidate"],
+            result["cohort_median_current_views_per_day_by_niche_format"][
+                "automotive_racing"
+            ]["short_candidate"],
             50000.0,
         )
         self.assertEqual(
-            result["topics"]["gearbox_transmission"]["by_format"]["long_form_candidate"][
-                "age_matched_velocity_index"
-            ],
+            result["topics"]["gearbox_transmission"]["by_format"][
+                "long_form_candidate"
+            ]["age_matched_velocity_index"],
             1.667,
         )
         self.assertEqual(
-            result["topics"]["gearbox_transmission"]["by_format"]["long_form_candidate"][
-                "topic_channel_confidence"
-            ],
+            result["topics"]["gearbox_transmission"]["by_format"][
+                "long_form_candidate"
+            ]["topic_channel_confidence"],
             "LOW",
         )
 
@@ -762,9 +756,7 @@ class Experiment013Tests(unittest.TestCase):
 
         result = aggregate_age_matched_velocity(rows, niches)
 
-        baselines = result[
-            "cohort_median_current_views_per_day_by_niche_format"
-        ]
+        baselines = result["cohort_median_current_views_per_day_by_niche_format"]
         self.assertEqual(
             baselines["automotive_racing"]["short_candidate"],
             2000.0,

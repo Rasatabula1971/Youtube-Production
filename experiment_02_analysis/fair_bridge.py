@@ -46,11 +46,7 @@ def safe_attempt(attempt: Any) -> dict[str, Any]:
         "error_detail",
         "role",
     }
-    safe = {
-        key: value
-        for key, value in payload.items()
-        if key in allowed
-    }
+    safe = {key: value for key, value in payload.items() if key in allowed}
     quality = payload.get("quality")
     if isinstance(quality, dict):
         safe["quality"] = {
@@ -76,7 +72,9 @@ def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any
             capabilities = set(getattr(model, "capabilities", set()) or set())
             max_output = getattr(model, "max_output_tokens", None)
             output_ok = max_output is None or requested_output <= int(max_output)
-            structured_ok = (not expected_schema) or ("structured_output" in capabilities)
+            structured_ok = (not expected_schema) or (
+                "structured_output" in capabilities
+            )
             active = bool(getattr(model, "active", True))
             eligible = active and output_ok and structured_ok
             structured_ready = structured_ready or eligible
@@ -128,19 +126,11 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             confirmed_free_providers=confirmed,
             quality_level=str(settings.get("quality_level", "standard")),
             max_attempts=int(settings.get("max_attempts", 3)),
-            max_unanswered_attempts=int(
-                settings.get("max_unanswered_attempts", 6)
-            ),
-            max_verification_attempts=int(
-                settings.get("max_verification_attempts", 1)
-            ),
+            max_unanswered_attempts=int(settings.get("max_unanswered_attempts", 6)),
+            max_verification_attempts=int(settings.get("max_verification_attempts", 1)),
             timeout_seconds=float(settings.get("timeout_seconds", 45)),
-            cross_check_required=bool(
-                settings.get("cross_check_required", False)
-            ),
-            application_id=str(
-                settings.get("application_id", "youtube-production")
-            ),
+            cross_check_required=bool(settings.get("cross_check_required", False)),
+            application_id=str(settings.get("application_id", "youtube-production")),
         )
     except Exception as exc:
         return {
@@ -182,17 +172,11 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
         solve_dispatched = True
         result = await fair.solve(
             str(payload.get("prompt") or ""),
-            task_type=str(
-                settings.get("task_type", "youtube_structured_pipeline")
-            ),
+            task_type=str(settings.get("task_type", "youtube_structured_pipeline")),
             expected_schema=payload.get("expected_schema"),
             quality_level=str(settings.get("quality_level", "standard")),
-            cross_check_required=bool(
-                settings.get("cross_check_required", False)
-            ),
-            max_output_tokens=int(
-                settings.get("max_output_tokens", 4096)
-            ),
+            cross_check_required=bool(settings.get("cross_check_required", False)),
+            max_output_tokens=int(settings.get("max_output_tokens", 4096)),
             client_id=str(
                 settings.get(
                     "client_id",
@@ -213,10 +197,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "best_quality_score": result.best_quality_score,
             "verification_state": result.verification_state,
             "paid_inference_executed": result.paid_inference_executed,
-            "attempts": [
-                safe_attempt(attempt)
-                for attempt in result.attempts
-            ],
+            "attempts": [safe_attempt(attempt) for attempt in result.attempts],
             "providers": providers,
             "skipped": skipped,
             "compatibility": compatibility,
@@ -229,9 +210,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "providers": providers,
             "skipped": skipped,
             "compatibility": compatibility,
-            "paid_inference_executed": (
-                None if solve_dispatched else False
-            ),
+            "paid_inference_executed": (None if solve_dispatched else False),
             "cost_state": (
                 "UNKNOWN_AFTER_DISPATCH"
                 if solve_dispatched

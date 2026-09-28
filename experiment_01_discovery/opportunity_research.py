@@ -34,7 +34,9 @@ EXP13_SCRIPT = HERE / "experiment_01_3.py"
 EXP14_SCRIPT = HERE / "experiment_01_4.py"
 EXP15_SCRIPT = HERE / "experiment_01_5.py"
 EXP14_CONFIG = HERE / "experiment_01_4_config.json"
-INSTALL_SCHEDULER = PROJECT_ROOT / "scripts" / "install_experiment_01_3_auto_refresh.ps1"
+INSTALL_SCHEDULER = (
+    PROJECT_ROOT / "scripts" / "install_experiment_01_3_auto_refresh.ps1"
+)
 REMOVE_SCHEDULER = PROJECT_ROOT / "scripts" / "remove_experiment_01_3_auto_refresh.ps1"
 
 DEFAULT_REFRESH_INTERVAL_HOURS = 2
@@ -321,9 +323,7 @@ def continue_research(
             refresh_attempts=refresh_attempts,
         )
 
-    due_at = (
-        utc_now() + timedelta(hours=DEFAULT_REFRESH_INTERVAL_HOURS)
-    ).isoformat()
+    due_at = (utc_now() + timedelta(hours=DEFAULT_REFRESH_INTERVAL_HOURS)).isoformat()
     scheduler_armed = False
     if schedule_if_waiting:
         scheduler_armed = schedule_continuation(

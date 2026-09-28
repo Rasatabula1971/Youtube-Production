@@ -96,11 +96,7 @@ def extract_topic_cells(topic_velocity: dict[str, Any]) -> list[dict[str, Any]]:
         for fmt, evidence in payload.get("by_format", {}).items():
             row = dict(evidence)
             row["topic"] = str(topic)
-            row["niche"] = str(
-                evidence.get("niche")
-                or payload.get("niche")
-                or ""
-            )
+            row["niche"] = str(evidence.get("niche") or payload.get("niche") or "")
             row["format_candidate"] = str(fmt)
             cells.append(row)
     return cells
@@ -166,11 +162,7 @@ def build_tasks_for_cell(
     if not topic_def:
         return []
 
-    niche = str(
-        cell.get("niche")
-        or topic_def.get("niche")
-        or ""
-    )
+    niche = str(cell.get("niche") or topic_def.get("niche") or "")
     root = str(topic_def["query_root"])
     duration_filters = list(config["duration_filters"].get(fmt, []))
     tasks: list[dict[str, Any]] = []
@@ -189,7 +181,9 @@ def build_tasks_for_cell(
                 "query": query,
                 "video_duration_filter": duration_filter,
                 "search_order": str(config["search_order"]),
-                "source_age_matched_velocity_index": cell.get("age_matched_velocity_index"),
+                "source_age_matched_velocity_index": cell.get(
+                    "age_matched_velocity_index"
+                ),
                 "source_unique_channels": int(cell.get("unique_channels") or 0),
                 "source_velocity_samples": int(cell.get("velocity_sample_count") or 0),
             }
@@ -256,8 +250,11 @@ def build_plan(
     created_at = datetime.now(timezone.utc)
     lookback_days = int(config["lookback_days"])
     published_after = (
-        created_at - timedelta(days=lookback_days)
-    ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        (created_at - timedelta(days=lookback_days))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
     status = "READY" if tasks else "WAITING_FOR_01_3_EVIDENCE"
     return {
@@ -283,11 +280,12 @@ def build_plan(
                 "unique_channels": cell.get("unique_channels"),
                 "velocity_sample_count": cell.get("velocity_sample_count"),
                 "topic_channel_confidence": (
-                    cell.get("topic_channel_confidence")
-                    or cell.get("confidence")
+                    cell.get("topic_channel_confidence") or cell.get("confidence")
                 ),
                 "age_matched_velocity_index": cell.get("age_matched_velocity_index"),
-                "median_current_views_per_day": cell.get("median_current_views_per_day"),
+                "median_current_views_per_day": cell.get(
+                    "median_current_views_per_day"
+                ),
             }
             for cell in sorted(ready, key=topic_priority_key)
         ],
@@ -487,7 +485,11 @@ def build_candidates(
             "format_candidate": fmt,
             "validated_niches": validated_niches,
             "views": views,
-            "likes": int(statistics["likeCount"]) if statistics.get("likeCount") is not None else None,
+            "likes": (
+                int(statistics["likeCount"])
+                if statistics.get("likeCount") is not None
+                else None
+            ),
             "validated_topics": sorted(set(valid_topics)),
             "matched_families": sorted({m["family"] for m in valid_provenance}),
             "query_provenance": valid_provenance,
@@ -529,16 +531,10 @@ def aggregate_expansion_evidence(
         values = list(deduped.values())
         views = [int(row["views"]) for row in values]
         ages = [
-            float(row["age_days"])
-            for row in values
-            if row.get("age_days") is not None
+            float(row["age_days"]) for row in values if row.get("age_days") is not None
         ]
         unique_channels = len(
-            {
-                row.get("channel_id")
-                for row in values
-                if row.get("channel_id")
-            }
+            {row.get("channel_id") for row in values if row.get("channel_id")}
         )
         niche = next(
             (

@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 VELOCITY_NO_PRIOR = "NO_PRIOR"
 VELOCITY_VALID = "VALID"
 VELOCITY_NEGATIVE_ADJUSTMENT = "NEGATIVE_ADJUSTMENT"
@@ -93,33 +92,31 @@ def build_query_competition_profile(
         "query": query,
         "search_order": "viewCount",
         "result_position_semantics": (
-            "position_in_viewCount_ordered_API_results;"
-            "not_organic_relevance_rank"
+            "position_in_viewCount_ordered_API_results;" "not_organic_relevance_rank"
         ),
         "results_returned": len(video_ids),
         "results_with_details": detail_count,
         "unique_channels": len(channel_counts),
         "unique_channel_ratio": (
-            round(len(channel_counts) / detail_count, 4)
-            if detail_count else None
+            round(len(channel_counts) / detail_count, 4) if detail_count else None
         ),
         "top_channel_share": (
             round(top_counts[0] / detail_count, 4)
-            if detail_count and top_counts else None
+            if detail_count and top_counts
+            else None
         ),
         "top3_channel_share": (
             round(sum(top_counts[:3]) / detail_count, 4)
-            if detail_count and top_counts else None
+            if detail_count and top_counts
+            else None
         ),
         "median_views": _median_or_none(views),
         "median_channel_subscribers": _median_or_none(subscribers),
         "large_channel_share": (
-            round(large_channel_count / detail_count, 4)
-            if detail_count else None
+            round(large_channel_count / detail_count, 4) if detail_count else None
         ),
         "recent_result_share": (
-            round(recent_count / detail_count, 4)
-            if detail_count else None
+            round(recent_count / detail_count, 4) if detail_count else None
         ),
         "profile_parameters": {
             "recent_days": recent_days,
@@ -159,24 +156,19 @@ def enrich_query_profiles_with_evidence(
                 **profile,
                 "analyzed_500k_plus": len(matched),
                 "on_intent_500k_plus": sum(
-                    row.get("relevance") == "ON_INTENT"
-                    for row in matched
+                    row.get("relevance") == "ON_INTENT" for row in matched
                 ),
                 "adjacent_500k_plus": sum(
-                    row.get("relevance") == "ADJACENT"
-                    for row in matched
+                    row.get("relevance") == "ADJACENT" for row in matched
                 ),
                 "off_intent_500k_plus": sum(
-                    row.get("relevance") == "OFF_INTENT"
-                    for row in matched
+                    row.get("relevance") == "OFF_INTENT" for row in matched
                 ),
                 "trusted_outlier_observations": sum(
-                    row.get("outlier_reliability") == "TRUSTED"
-                    for row in matched
+                    row.get("outlier_reliability") == "TRUSTED" for row in matched
                 ),
                 "caution_outlier_observations": sum(
-                    row.get("outlier_reliability") == "CAUTION"
-                    for row in matched
+                    row.get("outlier_reliability") == "CAUTION" for row in matched
                 ),
                 "median_trusted_outlier_ratio": _median_or_none(trusted_ratios),
             }
@@ -328,27 +320,15 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "video_count": len(rows),
         "unique_channels": len(
-            {
-                row.get("channel_id")
-                for row in rows
-                if row.get("channel_id")
-            }
+            {row.get("channel_id") for row in rows if row.get("channel_id")}
         ),
-        "on_intent_count": sum(
-            row.get("relevance") == "ON_INTENT"
-            for row in rows
-        ),
-        "adjacent_count": sum(
-            row.get("relevance") == "ADJACENT"
-            for row in rows
-        ),
+        "on_intent_count": sum(row.get("relevance") == "ON_INTENT" for row in rows),
+        "adjacent_count": sum(row.get("relevance") == "ADJACENT" for row in rows),
         "trusted_outlier_count": sum(
-            row.get("outlier_reliability") == "TRUSTED"
-            for row in rows
+            row.get("outlier_reliability") == "TRUSTED" for row in rows
         ),
         "caution_outlier_count": sum(
-            row.get("outlier_reliability") == "CAUTION"
-            for row in rows
+            row.get("outlier_reliability") == "CAUTION" for row in rows
         ),
         "median_views": _median_or_none(views),
         "median_outlier_ratio": _median_or_none(all_outliers),
@@ -371,7 +351,9 @@ def aggregate_topic_evidence(
             continue
         for topic in row.get("topics", []):
             topic_rows[topic].append(row)
-            topic_format_rows[(topic, row.get("format_candidate", "unknown"))].append(row)
+            topic_format_rows[(topic, row.get("format_candidate", "unknown"))].append(
+                row
+            )
 
     result: dict[str, Any] = {}
     for topic in sorted(topic_rows):

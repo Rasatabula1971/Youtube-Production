@@ -20,6 +20,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from evidence_ingest import sha256_file
 from experiment_02 import (
     OUTPUT_DIR,
     evidence_index,
@@ -29,7 +30,6 @@ from experiment_02 import (
     validate_profile,
     validate_supported_item,
 )
-from evidence_ingest import sha256_file
 
 REQUESTS_DIR = OUTPUT_DIR / "analysis_requests"
 ANALYZED_DIR = OUTPUT_DIR / "profiles_analyzed"
@@ -178,8 +178,7 @@ def evenly_sample(
         return [items[0]]
 
     indexes = {
-        round(index * (len(items) - 1) / (maximum - 1))
-        for index in range(maximum)
+        round(index * (len(items) - 1) / (maximum - 1)) for index in range(maximum)
     }
     return [items[index] for index in sorted(indexes)]
 
@@ -191,9 +190,7 @@ def select_dimension_evidence(
     *,
     maximum: int,
 ) -> list[dict[str, Any]]:
-    allowed_types = set(
-        config["dimension_evidence_types"].get(dimension, [])
-    )
+    allowed_types = set(config["dimension_evidence_types"].get(dimension, []))
     indexed = [
         (index, item)
         for index, item in enumerate(profile.get("evidence", []))
@@ -212,12 +209,8 @@ def select_dimension_evidence(
         return ordered
 
     if dimension == "opening_hook":
-        static = [
-            item for item in ordered if item.get("type") == "opening_frame"
-        ]
-        timed = [
-            item for item in ordered if item.get("type") != "opening_frame"
-        ]
+        static = [item for item in ordered if item.get("type") == "opening_frame"]
+        timed = [item for item in ordered if item.get("type") != "opening_frame"]
         selected = static[:maximum]
         selected.extend(timed[: max(0, maximum - len(selected))])
         return selected[:maximum]
@@ -278,9 +271,7 @@ def dimension_packet(
     *,
     max_evidence_items: int,
 ) -> dict[str, Any]:
-    allowed_types = set(
-        config["dimension_evidence_types"].get(dimension, [])
-    )
+    allowed_types = set(config["dimension_evidence_types"].get(dimension, []))
     all_matching = [
         item
         for item in profile.get("evidence", [])
@@ -300,19 +291,21 @@ def dimension_packet(
         "evidence_available": bool(all_matching),
         "evidence_item_count": len(all_matching),
         "evidence_refs": [
-            str(item.get("evidence_id"))
-            for item in selected
-            if item.get("evidence_id")
+            str(item.get("evidence_id")) for item in selected if item.get("evidence_id")
         ],
         "evidence_truncated": len(all_matching) > len(selected),
         "selection_strategy": (
             "early"
             if dimension in {"opening_hook", "audience_promise"}
-            else "late"
-            if dimension == "payoff"
-            else "early_and_late"
-            if dimension == "promise_payoff_alignment"
-            else "distributed"
+            else (
+                "late"
+                if dimension == "payoff"
+                else (
+                    "early_and_late"
+                    if dimension == "promise_payoff_alignment"
+                    else "distributed"
+                )
+            )
         ),
         "response_schema": {
             "findings": [
@@ -327,20 +320,15 @@ def dimension_packet(
         },
     }
 
+
 def build_analysis_request(
     profile: dict[str, Any],
     config: dict[str, Any],
 ) -> dict[str, Any]:
     execution = config.get("analysis_execution", {})
-    opening_window_seconds = float(
-        execution.get("opening_window_seconds", 30)
-    )
-    max_evidence_items = int(
-        execution.get("max_evidence_items_per_dimension", 60)
-    )
-    max_observation_chars = int(
-        execution.get("max_observation_chars", 1200)
-    )
+    opening_window_seconds = float(execution.get("opening_window_seconds", 30))
+    max_evidence_items = int(execution.get("max_evidence_items_per_dimension", 60))
+    max_observation_chars = int(execution.get("max_observation_chars", 1200))
 
     dimensions = {
         dimension: dimension_packet(
@@ -353,9 +341,7 @@ def build_analysis_request(
     }
 
     used_refs = {
-        ref
-        for packet in dimensions.values()
-        for ref in packet["evidence_refs"]
+        ref for packet in dimensions.values() for ref in packet["evidence_refs"]
     }
     library = {
         str(item["evidence_id"]): compact_evidence_item(
@@ -402,8 +388,8 @@ def build_analysis_request(
                     "evidence_refs": ["evidence.id"],
                     "source_dependency_test": {
                         "passes": True,
-                        "rationale": "Why the new concept keeps its value without the source expression"
-                    }
+                        "rationale": "Why the new concept keeps its value without the source expression",
+                    },
                 }
             ],
         },
@@ -426,6 +412,7 @@ def build_analysis_request(
         ],
     }
 
+
 def supported_finding_or_hypothesis(
     finding: dict[str, Any],
     *,
@@ -433,9 +420,7 @@ def supported_finding_or_hypothesis(
     evidence: dict[str, dict[str, Any]],
     config: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
-    allowed_types = set(
-        config["dimension_evidence_types"].get(dimension, [])
-    )
+    allowed_types = set(config["dimension_evidence_types"].get(dimension, []))
     errors, warnings = validate_supported_item(
         finding,
         path=f"analysis.{dimension}",
@@ -445,17 +430,19 @@ def supported_finding_or_hypothesis(
     )
 
     if not errors and not warnings:
-        return finding, None, {
-            "status": "ACCEPTED_FINDING",
-            "errors": [],
-            "warnings": [],
-        }
+        return (
+            finding,
+            None,
+            {
+                "status": "ACCEPTED_FINDING",
+                "errors": [],
+                "warnings": [],
+            },
+        )
 
     statement = str(finding.get("finding", "")).strip()
     valid_refs = [
-        str(ref)
-        for ref in finding.get("evidence_refs", [])
-        if str(ref) in evidence
+        str(ref) for ref in finding.get("evidence_refs", []) if str(ref) in evidence
     ]
     reasons = errors + warnings
     hypothesis = {
@@ -465,11 +452,15 @@ def supported_finding_or_hypothesis(
         "evidence_refs": valid_refs,
         "routed_from": "analysis_response.finding",
     }
-    return None, hypothesis, {
-        "status": "ROUTED_TO_HYPOTHESIS",
-        "errors": errors,
-        "warnings": warnings,
-    }
+    return (
+        None,
+        hypothesis,
+        {
+            "status": "ROUTED_TO_HYPOTHESIS",
+            "errors": errors,
+            "warnings": warnings,
+        },
+    )
 
 
 def supported_transfer_or_hypothesis(
@@ -500,17 +491,19 @@ def supported_transfer_or_hypothesis(
     )
 
     if not errors and not warnings:
-        return item, None, {
-            "status": "ACCEPTED",
-            "errors": [],
-            "warnings": [],
-        }
+        return (
+            item,
+            None,
+            {
+                "status": "ACCEPTED",
+                "errors": [],
+                "warnings": [],
+            },
+        )
 
     statement = str(item.get(statement_key, "")).strip()
     valid_refs = [
-        str(ref)
-        for ref in item.get("evidence_refs", [])
-        if str(ref) in evidence
+        str(ref) for ref in item.get("evidence_refs", []) if str(ref) in evidence
     ]
     hypothesis = {
         "hypothesis": statement or "Unsupported transfer interpretation",
@@ -520,11 +513,15 @@ def supported_transfer_or_hypothesis(
         "evidence_refs": valid_refs,
         "routed_from": path,
     }
-    return None, hypothesis, {
-        "status": "ROUTED_TO_HYPOTHESIS",
-        "errors": errors,
-        "warnings": warnings,
-    }
+    return (
+        None,
+        hypothesis,
+        {
+            "status": "ROUTED_TO_HYPOTHESIS",
+            "errors": errors,
+            "warnings": warnings,
+        },
+    )
 
 
 def validate_transformation_opportunity(
@@ -750,9 +747,7 @@ def merge_analysis_response(
                     "path": f"working_hypotheses[{ordinal}]",
                     "statement": statement,
                     "status": "REJECTED_MALFORMED_HYPOTHESIS",
-                    "errors": [
-                        "hypothesis and limitation are both required"
-                    ],
+                    "errors": ["hypothesis and limitation are both required"],
                     "warnings": [],
                 }
             )
@@ -783,16 +778,13 @@ def merge_analysis_response(
     result["analysis_execution"] = {
         "response_video_id": response_video_id,
         "accepted_findings": sum(
-            decision["status"] == "ACCEPTED_FINDING"
-            for decision in decisions
+            decision["status"] == "ACCEPTED_FINDING" for decision in decisions
         ),
         "accepted_transfer_items": sum(
-            decision["status"] == "ACCEPTED"
-            for decision in decisions
+            decision["status"] == "ACCEPTED" for decision in decisions
         ),
         "routed_to_hypotheses": sum(
-            decision["status"] == "ROUTED_TO_HYPOTHESIS"
-            for decision in decisions
+            decision["status"] == "ROUTED_TO_HYPOTHESIS" for decision in decisions
         ),
         "decisions": decisions,
     }
@@ -807,9 +799,7 @@ def merge_analysis_response(
         "accepted_transfer_items": result["analysis_execution"][
             "accepted_transfer_items"
         ],
-        "routed_to_hypotheses": result["analysis_execution"][
-            "routed_to_hypotheses"
-        ],
+        "routed_to_hypotheses": result["analysis_execution"]["routed_to_hypotheses"],
         "decisions": decisions,
     }
     return result, report
@@ -948,9 +938,7 @@ def main() -> None:
         run_prepare(args.profile.resolve(), args.output)
     elif args.mode == "apply":
         if args.profile is None or args.response is None:
-            raise SystemExit(
-                "--profile and --response are required for apply mode"
-            )
+            raise SystemExit("--profile and --response are required for apply mode")
         run_apply(
             args.profile.resolve(),
             args.response.resolve(),

@@ -66,16 +66,13 @@ def load_config() -> dict[str, Any]:
     }
     missing = sorted(required - set(config))
     if missing:
-        raise SystemExit(
-            "Transformation config is missing: " + ", ".join(missing)
-        )
+        raise SystemExit("Transformation config is missing: " + ", ".join(missing))
     return config
 
 
 def safe_slug(value: str) -> str:
     cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_"
-        for char in value
+        char if char.isalnum() or char in "-_." else "_" for char in value
     ).strip("._")
     return cleaned or "unknown"
 
@@ -94,8 +91,7 @@ def ready_entries(
     return [
         entry
         for entry in entries
-        if entry.get("handoff_status")
-        == "READY_FOR_TRANSFORMATION_ENGINE"
+        if entry.get("handoff_status") == "READY_FOR_TRANSFORMATION_ENGINE"
     ]
 
 
@@ -107,9 +103,7 @@ def build_concept_request(
     if not mechanism_id:
         raise ValueError("Transformation handoff entry requires mechanism_id")
 
-    source_video_ids = list(
-        entry.get("replication", {}).get("video_ids", [])
-    )
+    source_video_ids = list(entry.get("replication", {}).get("video_ids", []))
 
     return {
         "request_type": "transformation_concept_generation",
@@ -118,9 +112,7 @@ def build_concept_request(
         "pattern_state": entry.get("pattern_state"),
         "replication": entry.get("replication", {}),
         "scope": entry.get("scope", {}),
-        "transferable_descriptions": entry.get(
-            "transferable_descriptions", []
-        ),
+        "transferable_descriptions": entry.get("transferable_descriptions", []),
         "observed_examples": entry.get("observed_examples", []),
         "source_specific_elements_to_avoid": entry.get(
             "source_specific_elements_to_avoid", []
@@ -129,12 +121,8 @@ def build_concept_request(
             "existing_transformation_directions", []
         ),
         "source_video_ids": source_video_ids,
-        "concept_count_requested": int(
-            config["concepts_per_mechanism"]
-        ),
-        "allowed_format_intents": list(
-            config["allowed_format_intents"]
-        ),
+        "concept_count_requested": int(config["concepts_per_mechanism"]),
+        "allowed_format_intents": list(config["allowed_format_intents"]),
         "instructions": [
             "Generate genuinely new video concepts that use the transferable mechanism without copying source expression.",
             "Do not reuse source titles, scripts, footage, story sequences, personalities, or exact examples.",
@@ -162,20 +150,20 @@ def build_concept_request(
                     "content_gap": {
                         "hypothesis": "what existing content may leave unanswered, too broad, outdated, or poorly served",
                         "evidence_status": "SUPPORTED|HYPOTHESIS|UNASSESSED",
-                        "evidence_basis": []
+                        "evidence_basis": [],
                     },
                     "channel_fit": {
                         "status": "FIT|REVIEW|UNASSESSED",
-                        "rationale": "why this concept does or does not fit the audience/channel being built"
+                        "rationale": "why this concept does or does not fit the audience/channel being built",
                     },
                     "title_clarity_test": {
                         "options": [
                             "title option 1",
                             "title option 2",
-                            "title option 3"
+                            "title option 3",
                         ],
                         "result": "PASS|REFRAME",
-                        "rationale": "whether three distinct clear titles can express the idea"
+                        "rationale": "whether three distinct clear titles can express the idea",
                     },
                     "format_intent": "long_form|short|either",
                     "mechanism_application": "how the mechanism is used in the new concept",
@@ -227,9 +215,7 @@ def validate_concept(
     else:
         if not str(content_gap.get("hypothesis", "")).strip():
             errors.append("content_gap.hypothesis is required")
-        gap_status = str(
-            content_gap.get("evidence_status", "")
-        ).strip().upper()
+        gap_status = str(content_gap.get("evidence_status", "")).strip().upper()
         if gap_status not in {
             "SUPPORTED",
             "HYPOTHESIS",
@@ -241,33 +227,23 @@ def validate_concept(
             )
         evidence_basis = content_gap.get("evidence_basis")
         if not isinstance(evidence_basis, list):
-            errors.append(
-                "content_gap.evidence_basis must be a list"
-            )
+            errors.append("content_gap.evidence_basis must be a list")
         elif gap_status == "SUPPORTED" and not [
-            item
-            for item in evidence_basis
-            if str(item).strip()
+            item for item in evidence_basis if str(item).strip()
         ]:
-            errors.append(
-                "SUPPORTED content_gap requires evidence_basis"
-            )
+            errors.append("SUPPORTED content_gap requires evidence_basis")
 
     channel_fit = concept.get("channel_fit")
     if not isinstance(channel_fit, dict):
         errors.append("channel_fit must be an object")
     else:
-        fit_status = str(
-            channel_fit.get("status", "")
-        ).strip().upper()
+        fit_status = str(channel_fit.get("status", "")).strip().upper()
         if fit_status not in {
             "FIT",
             "REVIEW",
             "UNASSESSED",
         }:
-            errors.append(
-                "channel_fit.status must be FIT, REVIEW, or UNASSESSED"
-            )
+            errors.append("channel_fit.status must be FIT, REVIEW, or UNASSESSED")
         if not str(channel_fit.get("rationale", "")).strip():
             errors.append("channel_fit.rationale is required")
 
@@ -277,30 +253,20 @@ def validate_concept(
     else:
         options = title_test.get("options")
         if not isinstance(options, list):
-            errors.append(
-                "title_clarity_test.options must be a list"
-            )
+            errors.append("title_clarity_test.options must be a list")
         else:
             valid_options = [
-                str(option).strip()
-                for option in options
-                if str(option).strip()
+                str(option).strip() for option in options if str(option).strip()
             ]
             if len(valid_options) < 3:
                 errors.append(
                     "title_clarity_test.options must contain at least 3 non-empty titles"
                 )
-        result = str(
-            title_test.get("result", "")
-        ).strip().upper()
+        result = str(title_test.get("result", "")).strip().upper()
         if result not in {"PASS", "REFRAME"}:
-            errors.append(
-                "title_clarity_test.result must be PASS or REFRAME"
-            )
+            errors.append("title_clarity_test.result must be PASS or REFRAME")
         if not str(title_test.get("rationale", "")).strip():
-            errors.append(
-                "title_clarity_test.rationale is required"
-            )
+            errors.append("title_clarity_test.rationale is required")
 
     format_intent = str(concept.get("format_intent", "")).strip()
     if format_intent not in config["allowed_format_intents"]:
@@ -314,13 +280,9 @@ def validate_concept(
         errors.append("research_questions must be a list")
     else:
         valid_questions = [
-            str(question).strip()
-            for question in questions
-            if str(question).strip()
+            str(question).strip() for question in questions if str(question).strip()
         ]
-        if len(valid_questions) < int(
-            config["minimum_research_questions"]
-        ):
+        if len(valid_questions) < int(config["minimum_research_questions"]):
             errors.append(
                 "research_questions must contain at least "
                 f"{config['minimum_research_questions']} non-empty item(s)"
@@ -341,13 +303,9 @@ def validate_concept(
         if dependency.get("passes") is not True:
             errors.append("source_dependency_test.passes must be true")
         if dependency.get("source_assets_required") is not False:
-            errors.append(
-                "source_dependency_test.source_assets_required must be false"
-            )
+            errors.append("source_dependency_test.source_assets_required must be false")
         if not str(dependency.get("rationale", "")).strip():
-            errors.append(
-                "source_dependency_test.rationale is required"
-            )
+            errors.append("source_dependency_test.rationale is required")
 
     serialized = json.dumps(concept, ensure_ascii=False)
     referenced_sources = [
@@ -377,18 +335,14 @@ def validate_response(
 ) -> dict[str, Any]:
     mechanism_id = str(request["mechanism_id"])
     if str(response.get("mechanism_id", "")) != mechanism_id:
-        raise ValueError(
-            "Response mechanism_id does not match concept request"
-        )
+        raise ValueError("Response mechanism_id does not match concept request")
 
     concepts = response.get("concepts")
     if not isinstance(concepts, list):
         raise ValueError("Response concepts must be a list")
 
     source_video_ids = {
-        str(value)
-        for value in request.get("source_video_ids", [])
-        if str(value)
+        str(value) for value in request.get("source_video_ids", []) if str(value)
     }
 
     accepted: list[dict[str, Any]] = []
@@ -420,28 +374,36 @@ def validate_response(
 
         normalized = dict(concept)
         normalized["mechanism_id"] = mechanism_id
-        normalized["mechanism_label"] = request.get(
-            "mechanism_label"
-        )
+        normalized["mechanism_label"] = request.get("mechanism_label")
         normalized["pattern_state"] = request.get("pattern_state")
         normalized["mechanism_scope"] = request.get("scope", {})
         normalized["source_dependency_rule"] = (
             "Concept must retain its main value without source wording, "
             "footage, story, personality, or exact execution."
         )
-        overlap = check_texts([
-            {"field": "working_title", "text": normalized.get("working_title", "")},
-            {"field": "premise", "text": normalized.get("premise", "")},
-            {"field": "audience_promise", "text": normalized.get("audience_promise", "")},
-            {"field": "mechanism_application", "text": normalized.get("mechanism_application", "")},
-            {"field": "transformation_method", "text": normalized.get("transformation_method", "")},
-        ])
+        overlap = check_texts(
+            [
+                {"field": "working_title", "text": normalized.get("working_title", "")},
+                {"field": "premise", "text": normalized.get("premise", "")},
+                {
+                    "field": "audience_promise",
+                    "text": normalized.get("audience_promise", ""),
+                },
+                {
+                    "field": "mechanism_application",
+                    "text": normalized.get("mechanism_application", ""),
+                },
+                {
+                    "field": "transformation_method",
+                    "text": normalized.get("transformation_method", ""),
+                },
+            ]
+        )
         normalized["source_overlap"] = overlap
         if overlap.get("blocking"):
             match = overlap.get("matches", [{}])[0]
             errors.append(
-                "source overlap block: "
-                + str(match.get("overlap_text") or "")
+                "source overlap block: " + str(match.get("overlap_text") or "")
             )
 
         if errors:
@@ -533,8 +495,7 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
             "handoff_sha256": handoff_hash,
         }
         destination = (
-            REQUESTS_DIR
-            / f"{safe_slug(request['mechanism_id'])}.concept_request.json"
+            REQUESTS_DIR / f"{safe_slug(request['mechanism_id'])}.concept_request.json"
         )
         destination.write_text(
             json.dumps(request, indent=2, ensure_ascii=False),
@@ -570,17 +531,12 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
     for response_path in sorted(RESPONSES_DIR.glob("*.json")):
         response = load_json(response_path)
         mechanism_id = str(response.get("mechanism_id", ""))
-        request_path = (
-            REQUESTS_DIR
-            / f"{safe_slug(mechanism_id)}.concept_request.json"
-        )
+        request_path = REQUESTS_DIR / f"{safe_slug(mechanism_id)}.concept_request.json"
         if not request_path.exists():
             rejected.append(
                 {
                     "response": str(response_path),
-                    "errors": [
-                        "matching concept request not found"
-                    ],
+                    "errors": ["matching concept request not found"],
                 }
             )
             continue
@@ -649,9 +605,7 @@ def run_apply() -> dict[str, Any]:
             if isinstance(provenance, dict) and provenance.get("handoff_sha256"):
                 handoff_hashes.add(str(provenance["handoff_sha256"]))
     current_handoff_sha256 = (
-        next(iter(handoff_hashes))
-        if len(handoff_hashes) == 1
-        else None
+        next(iter(handoff_hashes)) if len(handoff_hashes) == 1 else None
     )
 
     CANDIDATES_FILE.write_text(
@@ -686,9 +640,7 @@ def run_apply() -> dict[str, Any]:
 
     summary = {
         "status": (
-            "CONCEPT_CANDIDATES_READY"
-            if accepted
-            else "NO_VALID_CONCEPT_CANDIDATES"
+            "CONCEPT_CANDIDATES_READY" if accepted else "NO_VALID_CONCEPT_CANDIDATES"
         ),
         "accepted_concepts": len(accepted),
         "rejected_concepts": len(rejected),
@@ -705,9 +657,7 @@ def run_apply() -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Transformation Engine framework"
-    )
+    parser = argparse.ArgumentParser(description="Transformation Engine framework")
     parser.add_argument(
         "--mode",
         choices=("prepare", "apply"),

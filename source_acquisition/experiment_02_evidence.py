@@ -86,10 +86,11 @@ def youtube_url(profile: dict[str, Any]) -> str:
 
     parsed = urlparse(value)
     host = parsed.hostname.casefold() if parsed.hostname else ""
-    if (
-        parsed.scheme != "https"
-        or host not in {"youtube.com", "www.youtube.com", "youtu.be"}
-    ):
+    if parsed.scheme != "https" or host not in {
+        "youtube.com",
+        "www.youtube.com",
+        "youtu.be",
+    }:
         raise ValueError("Experiment 02 profile requires a valid HTTPS YouTube URL")
     return value
 
@@ -107,26 +108,34 @@ def transcript_rank(path: Path, video_id: str) -> tuple[int, str]:
 
 
 def find_transcript(directory: Path, video_id: str) -> Path | None:
-    candidates = [
-        path
-        for path in directory.iterdir()
-        if path.is_file()
-        and path.suffix.casefold() in TRANSCRIPT_SUFFIXES
-        and path.name.casefold().startswith(video_id.casefold())
-    ] if directory.exists() else []
+    candidates = (
+        [
+            path
+            for path in directory.iterdir()
+            if path.is_file()
+            and path.suffix.casefold() in TRANSCRIPT_SUFFIXES
+            and path.name.casefold().startswith(video_id.casefold())
+        ]
+        if directory.exists()
+        else []
+    )
     if not candidates:
         return None
     return sorted(candidates, key=lambda path: transcript_rank(path, video_id))[0]
 
 
 def find_thumbnail(directory: Path, video_id: str) -> Path | None:
-    candidates = [
-        path
-        for path in directory.iterdir()
-        if path.is_file()
-        and path.suffix.casefold() in IMAGE_SUFFIXES
-        and path.name.casefold().startswith(video_id.casefold())
-    ] if directory.exists() else []
+    candidates = (
+        [
+            path
+            for path in directory.iterdir()
+            if path.is_file()
+            and path.suffix.casefold() in IMAGE_SUFFIXES
+            and path.name.casefold().startswith(video_id.casefold())
+        ]
+        if directory.exists()
+        else []
+    )
     if not candidates:
         return None
     preferred = {".jpg": 0, ".jpeg": 1, ".png": 2, ".webp": 3, ".avif": 4}
@@ -152,10 +161,10 @@ def clear_generated_files(directory: Path, video_id: str) -> None:
         if not path.is_file():
             continue
         name = path.name.casefold()
-        if (
-            name.startswith(prefix)
-            or name in {"evidence_bundle.json", "acquisition.json"}
-        ):
+        if name.startswith(prefix) or name in {
+            "evidence_bundle.json",
+            "acquisition.json",
+        }:
             path.unlink()
 
 
@@ -230,9 +239,7 @@ def run_local_whisper(
     if not executable:
         raise RuntimeError("Local Whisper CLI is not available on PATH.")
     selected_model = (
-        model
-        or os.environ.get("YOUTUBE_WHISPER_MODEL")
-        or DEFAULT_WHISPER_MODEL
+        model or os.environ.get("YOUTUBE_WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
     )
     return subprocess.run(
         [
@@ -294,8 +301,7 @@ def transcribe_audio_fallback(
                 "status": "READY",
                 "transcript": str(transcript_path),
                 "model": (
-                    os.environ.get("YOUTUBE_WHISPER_MODEL")
-                    or DEFAULT_WHISPER_MODEL
+                    os.environ.get("YOUTUBE_WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
                 ),
             }
         return {
@@ -329,9 +335,7 @@ def enriched_profile_ready(
 
     source_inputs = profile.get("source_inputs", {})
     transcript = (
-        source_inputs.get("transcript", {})
-        if isinstance(source_inputs, dict)
-        else {}
+        source_inputs.get("transcript", {}) if isinstance(source_inputs, dict) else {}
     )
     if not isinstance(transcript, dict) or transcript.get("status") != "PROVIDED":
         return False
@@ -459,9 +463,7 @@ def acquire_one(
 
     if transcript is None:
         failure_status = (
-            classify_ytdlp_failure(yt_result.stderr)
-            if yt_result is not None
-            else None
+            classify_ytdlp_failure(yt_result.stderr) if yt_result is not None else None
         )
         result = {
             "video_id": video_id,
@@ -511,9 +513,7 @@ def acquire_one(
         "status": status,
         "profile_sha256": prepared_hash,
         "network_called": network_called,
-        "yt_dlp_return_code": (
-            yt_result.returncode if yt_result is not None else None
-        ),
+        "yt_dlp_return_code": (yt_result.returncode if yt_result is not None else None),
         "transcript": str(transcript),
         "thumbnail": str(thumbnail) if thumbnail else None,
         "info_json": str(info_json) if info_json else None,
@@ -617,8 +617,7 @@ def main() -> None:
             "whisper": whisper_path(),
             "local_transcription_fallback": local_transcription_available(),
             "whisper_model": (
-                os.environ.get("YOUTUBE_WHISPER_MODEL")
-                or DEFAULT_WHISPER_MODEL
+                os.environ.get("YOUTUBE_WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
             ),
             "prepared_profiles": len(current_prepared_profiles()),
         }
@@ -645,11 +644,7 @@ def main() -> None:
     for result in summary["results"]:
         print(
             f"  {result['video_id']}: {result['status']}"
-            + (
-                " (network)"
-                if result.get("network_called")
-                else " (reused)"
-            )
+            + (" (network)" if result.get("network_called") else " (reused)")
         )
     print(f"Summary:          {SUMMARY_FILE}")
 

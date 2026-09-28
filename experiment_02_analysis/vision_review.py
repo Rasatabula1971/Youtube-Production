@@ -28,9 +28,7 @@ PREPARED_DIR = OUTPUT_DIR / "profiles_to_complete"
 ENRICHED_DIR = OUTPUT_DIR / "profiles_enriched"
 VISION_REVIEW_DIR = OUTPUT_DIR / "vision_review"
 VISION_NOTES_DIR = OUTPUT_DIR / "vision_notes"
-SOURCE_VISUAL_ROOT = (
-    PROJECT_ROOT / "source_acquisition" / "output" / "experiment_02"
-)
+SOURCE_VISUAL_ROOT = PROJECT_ROOT / "source_acquisition" / "output" / "experiment_02"
 ENV_FILE = PROJECT_ROOT / ".env"
 
 MAX_SCENE_REVIEW_FRAMES = 8
@@ -150,9 +148,7 @@ def vision_provider_status(
     host: str | None = None,
 ) -> dict[str, Any]:
     selected_model = str(model or os.environ.get(OLLAMA_MODEL_ENV, "")).strip()
-    selected_host = normalize_ollama_host(
-        host or os.environ.get(OLLAMA_HOST_ENV)
-    )
+    selected_host = normalize_ollama_host(host or os.environ.get(OLLAMA_HOST_ENV))
     if not selected_model:
         return {
             "status": "HUMAN_ONLY",
@@ -287,10 +283,7 @@ def evenly_selected_indexes(total: int, maximum: int) -> list[int]:
     if maximum == 1:
         return [0]
     return sorted(
-        {
-            round(index * (total - 1) / (maximum - 1))
-            for index in range(maximum)
-        }
+        {round(index * (total - 1) / (maximum - 1)) for index in range(maximum)}
     )
 
 
@@ -324,9 +317,7 @@ def frame_candidates(video_id: str) -> list[dict[str, Any]]:
                     "frame_id": "opening_frame",
                     "kind": "opening_frame",
                     "path": str(opening_path.resolve()),
-                    "timestamp_seconds": float(
-                        opening.get("timestamp_seconds") or 0.0
-                    ),
+                    "timestamp_seconds": float(opening.get("timestamp_seconds") or 0.0),
                     "source_sha256": sha256_file(opening_path),
                 }
             )
@@ -350,9 +341,7 @@ def frame_candidates(video_id: str) -> list[dict[str, Any]]:
                 "frame_id": path.stem,
                 "kind": "scene_frame",
                 "path": str(path.resolve()),
-                "timestamp_seconds": float(
-                    item.get("timestamp_seconds") or 0.0
-                ),
+                "timestamp_seconds": float(item.get("timestamp_seconds") or 0.0),
                 "source_sha256": sha256_file(path),
             }
         )
@@ -370,10 +359,9 @@ def packet_is_current(packet: dict[str, Any]) -> bool:
     provenance = packet.get("source_provenance", {})
     if not isinstance(provenance, dict):
         return False
-    return (
-        provenance.get("prepared_profile_sha256") == sha256_file(prepared)
-        and provenance.get("visual_report_sha256") == sha256_file(report)
-    )
+    return provenance.get("prepared_profile_sha256") == sha256_file(
+        prepared
+    ) and provenance.get("visual_report_sha256") == sha256_file(report)
 
 
 def build_packet(
@@ -396,8 +384,7 @@ def build_packet(
 
     provider_status = vision_provider_status(model=model, host=host)
     use_ollama = (
-        provider in {"auto", "ollama"}
-        and provider_status.get("status") == "READY"
+        provider in {"auto", "ollama"} and provider_status.get("status") == "READY"
     )
     if provider == "ollama" and not use_ollama:
         raise ValueError(provider_status.get("message") or "Ollama vision unavailable")
@@ -509,8 +496,7 @@ def build_all(
                 "status": packet["status"],
                 "provider": packet["provider"],
                 "proposal_count": sum(
-                    bool(item.get("proposal"))
-                    for item in packet["frames"]
+                    bool(item.get("proposal")) for item in packet["frames"]
                 ),
                 "frame_count": len(packet["frames"]),
                 "packet": str(existing_path),
@@ -544,10 +530,7 @@ def frame_path(video_id: str, frame_id: str) -> Path:
 
 
 def packet_counts(packet: dict[str, Any]) -> dict[str, int]:
-    frames = [
-        item for item in packet.get("frames", [])
-        if isinstance(item, dict)
-    ]
+    frames = [item for item in packet.get("frames", []) if isinstance(item, dict)]
     return {
         "total": len(frames),
         "pending": sum(item.get("decision") == "PENDING" for item in frames),
@@ -590,8 +573,7 @@ def review_snapshot() -> dict[str, Any]:
         and all(packet.get("status") == "COMPLETE" for packet in packets)
     )
     awaiting = any(
-        packet.get("status") == "AWAITING_HUMAN_REVIEW"
-        for packet in packets
+        packet.get("status") == "AWAITING_HUMAN_REVIEW" for packet in packets
     )
 
     if not video_ids:
@@ -630,11 +612,7 @@ def combined_notes(
     else:
         timing_notes = []
 
-    notes = [
-        item
-        for item in timing_notes
-        if isinstance(item, dict)
-    ]
+    notes = [item for item in timing_notes if isinstance(item, dict)]
     for frame in accepted_scene_frames:
         notes.append(
             {
@@ -678,8 +656,7 @@ def finalize_packet(packet: dict[str, Any]) -> dict[str, Any]:
         (
             item
             for item in packet.get("frames", [])
-            if isinstance(item, dict)
-            and item.get("kind") == "opening_frame"
+            if isinstance(item, dict) and item.get("kind") == "opening_frame"
         ),
         None,
     )
@@ -827,11 +804,7 @@ def main() -> None:
     for item in result.get("packets", []):
         print(
             f"  {item['video_id']}: {item['status']}"
-            + (
-                f" · provider={item.get('provider')}"
-                if item.get("provider")
-                else ""
-            )
+            + (f" · provider={item.get('provider')}" if item.get("provider") else "")
             + (
                 f" · proposals={item.get('proposal_count')}/{item.get('frame_count')}"
                 if item.get("frame_count") is not None

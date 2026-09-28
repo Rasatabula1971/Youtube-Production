@@ -17,7 +17,11 @@ _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
-from pipeline_integrity import atomic_write_json, atomic_write_text, exit_code_for_status
+from pipeline_integrity import (
+    atomic_write_json,
+    atomic_write_text,
+    exit_code_for_status,
+)
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -25,7 +29,7 @@ EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
     sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (  # noqa: E402
+from analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     load_runner_config,
@@ -34,7 +38,7 @@ from analysis_model_runner import (  # noqa: E402
     safe_attempts,
 )
 
-from transformation_engine import (  # noqa: E402
+from transformation_engine import (
     CANDIDATES_FILE,
     OUTPUT_DIR,
     load_json,
@@ -155,9 +159,7 @@ def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
                 "mechanism_application": item.get("mechanism_application"),
                 "transformation_method": item.get("transformation_method"),
                 "research_questions": item.get("research_questions", []),
-                "source_dependency_test": item.get(
-                    "source_dependency_test", {}
-                ),
+                "source_dependency_test": item.get("source_dependency_test", {}),
             }
         )
 
@@ -194,8 +196,7 @@ def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
         "10. shortlist_ids must contain exactly the concepts you classify SHORTLIST, "
         "with a minimum of 0 and maximum of 6. If none deserve human time, return an empty shortlist.\n"
         "11. Decision and overall_score must obey the thresholds above exactly.\n\n"
-        "CANDIDATES:\n"
-        + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+        "CANDIDATES:\n" + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
     )
     if len(prompt) > maximum_chars:
         raise ValueError(
@@ -232,9 +233,7 @@ def validate_triage(
             raise ValueError(f"invalid triage decision for {concept_id}")
         score = int(item.get("overall_score", -1))
         expected_decision = (
-            "SHORTLIST" if score >= 70
-            else "REWORK" if score >= 45
-            else "DROP"
+            "SHORTLIST" if score >= 70 else "REWORK" if score >= 45 else "DROP"
         )
         if decision != expected_decision:
             raise ValueError(
@@ -278,13 +277,9 @@ def build_shortlist_payload(
     source_hash: str,
 ) -> dict[str, Any]:
     by_id = {
-        str(item["concept_id"]): item
-        for item in candidates_payload.get("concepts", [])
+        str(item["concept_id"]): item for item in candidates_payload.get("concepts", [])
     }
-    decisions = {
-        str(item["concept_id"]): item
-        for item in triage["decisions"]
-    }
+    decisions = {str(item["concept_id"]): item for item in triage["decisions"]}
     concepts = []
     overrides = []
     shortlist_ids = set(triage["shortlist_ids"])
@@ -450,11 +445,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
     atomic_write_json(SHORTLIST_FILE, shortlist)
 
     counts = {
-        value: sum(
-            1
-            for item in triage["decisions"]
-            if item["decision"] == value
-        )
+        value: sum(1 for item in triage["decisions"] if item["decision"] == value)
         for value in ("SHORTLIST", "REWORK", "DROP")
     }
     report = {
@@ -472,9 +463,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="FAIR-backed Concept Candidate Triage"
-    )
+    parser = argparse.ArgumentParser(description="FAIR-backed Concept Candidate Triage")
     parser.add_argument("--mode", choices=("run",), required=True)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()

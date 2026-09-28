@@ -6,13 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import human_review
-
 from human_review import (
     apply_review,
     apply_review_action,
     build_review_request,
     decision_map,
-    review_snapshot,
 )
 
 
@@ -120,9 +118,7 @@ class HumanReviewTests(unittest.TestCase):
         self.assertTrue(request["items"][0]["item_id"].startswith("review."))
         self.assertEqual(len(request["items"][0]["item_id"]), 31)
         self.assertEqual(
-            request["items"][0]["supporting_evidence"][0][
-                "evidence_id"
-            ],
+            request["items"][0]["supporting_evidence"][0]["evidence_id"],
             "transcript.open",
         )
 
@@ -253,7 +249,6 @@ class HumanReviewTests(unittest.TestCase):
                 self.review_config,
             )
 
-
     def test_ui_review_action_persists_and_finalizes_only_when_complete(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
@@ -262,7 +257,13 @@ class HumanReviewTests(unittest.TestCase):
             responses_dir = root / "responses"
             reviewed_dir = root / "reviewed"
             reports_dir = root / "reports"
-            for path in (analyzed_dir, requests_dir, responses_dir, reviewed_dir, reports_dir):
+            for path in (
+                analyzed_dir,
+                requests_dir,
+                responses_dir,
+                reviewed_dir,
+                reports_dir,
+            ):
                 path.mkdir()
 
             profile_path = analyzed_dir / "v1.json"
@@ -275,11 +276,21 @@ class HumanReviewTests(unittest.TestCase):
             request_path = requests_dir / "v1.review_request.json"
             request_path.write_text(json.dumps(request), encoding="utf-8")
 
-            stack.enter_context(patch.object(human_review, "DEFAULT_ANALYZED_DIR", analyzed_dir))
-            stack.enter_context(patch.object(human_review, "REVIEW_REQUESTS_DIR", requests_dir))
-            stack.enter_context(patch.object(human_review, "REVIEW_RESPONSES_DIR", responses_dir))
-            stack.enter_context(patch.object(human_review, "REVIEWED_PROFILES_DIR", reviewed_dir))
-            stack.enter_context(patch.object(human_review, "REVIEW_REPORTS_DIR", reports_dir))
+            stack.enter_context(
+                patch.object(human_review, "DEFAULT_ANALYZED_DIR", analyzed_dir)
+            )
+            stack.enter_context(
+                patch.object(human_review, "REVIEW_REQUESTS_DIR", requests_dir)
+            )
+            stack.enter_context(
+                patch.object(human_review, "REVIEW_RESPONSES_DIR", responses_dir)
+            )
+            stack.enter_context(
+                patch.object(human_review, "REVIEWED_PROFILES_DIR", reviewed_dir)
+            )
+            stack.enter_context(
+                patch.object(human_review, "REVIEW_REPORTS_DIR", reports_dir)
+            )
 
             first = request["items"][0]["item_id"]
             second = request["items"][1]["item_id"]
@@ -318,15 +329,18 @@ class HumanReviewTests(unittest.TestCase):
             )
             self.assertEqual(len(saved["decisions"]), 2)
 
-
     def test_stale_review_request_is_rejected_after_reanalysis(self):
         v1 = self.profile()
         request = build_review_request(v1, self.experiment_config, self.review_config)
         response = self.response_for(request, decision="REJECT")
         v2 = self.profile()
-        v2["analysis"]["opening_hook"]["findings"][0]["finding"] = "Different never-reviewed finding"
+        v2["analysis"]["opening_hook"]["findings"][0][
+            "finding"
+        ] = "Different never-reviewed finding"
         with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
-            apply_review(v2, request, response, self.experiment_config, self.review_config)
+            apply_review(
+                v2, request, response, self.experiment_config, self.review_config
+            )
 
 
 if __name__ == "__main__":

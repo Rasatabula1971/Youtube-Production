@@ -11,8 +11,8 @@ from typing import Any
 
 from research_gate import (
     DEFAULT_DRAFTS_DIR,
-    REVIEWED_DIR,
     REVIEW_REQUESTS_DIR,
+    REVIEWED_DIR,
     SUMMARY_FILE,
     VERIFIED_DIR,
     apply_gate,
@@ -65,8 +65,7 @@ def build_requests() -> list[dict[str, Any]]:
         request = build_review_request(package, config)
         concept_id = str(request["concept_id"])
         request_path = (
-            REVIEW_REQUESTS_DIR
-            / f"{safe_slug(concept_id)}.research_gate_request.json"
+            REVIEW_REQUESTS_DIR / f"{safe_slug(concept_id)}.research_gate_request.json"
         )
         write_json(request_path, request)
         requests.append(
@@ -119,9 +118,7 @@ def snapshot() -> dict[str, Any]:
         }
 
     state = current_state()
-    claim_count = sum(
-        int(item["request"].get("claim_count", 0)) for item in requests
-    )
+    claim_count = sum(int(item["request"].get("claim_count", 0)) for item in requests)
     if not state:
         return {
             "status": "READY_TO_PREPARE",
@@ -170,8 +167,7 @@ def snapshot() -> dict[str, Any]:
             )
 
     ready_count = sum(
-        item.get("status") == "READY_FOR_STORY_SCRIPT"
-        for item in verified_statuses
+        item.get("status") == "READY_FOR_STORY_SCRIPT" for item in verified_statuses
     )
     return {
         "status": str(state.get("status") or "AWAITING_HUMAN_DECISION"),
@@ -248,9 +244,7 @@ def finalize_if_complete(
                 "accepted": reviewed["counts"]["accepted"],
                 "rework": reviewed["counts"]["rework"],
                 "rejected": reviewed["counts"]["rejected"],
-                "unresolved_questions": len(
-                    verified["unresolved_question_ids"]
-                ),
+                "unresolved_questions": len(verified["unresolved_question_ids"]),
                 "verified_package": str(verified_path),
             }
         )
@@ -261,7 +255,9 @@ def finalize_if_complete(
             "status": (
                 "READY_FOR_STORY_SCRIPT"
                 if summaries
-                and all(item["status"] == "READY_FOR_STORY_SCRIPT" for item in summaries)
+                and all(
+                    item["status"] == "READY_FOR_STORY_SCRIPT" for item in summaries
+                )
                 else "RESEARCH_INCOMPLETE"
             ),
             "packages": summaries,

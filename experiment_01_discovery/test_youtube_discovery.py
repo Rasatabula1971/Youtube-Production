@@ -16,15 +16,7 @@ def http_error(code: int, reason: str | None = None, retry_after: str | None = N
     headers = Message()
     if retry_after is not None:
         headers["Retry-After"] = retry_after
-    body = {
-        "error": {
-            "errors": (
-                [{"reason": reason}]
-                if reason is not None
-                else []
-            )
-        }
-    }
+    body = {"error": {"errors": ([{"reason": reason}] if reason is not None else [])}}
     return urllib.error.HTTPError(
         url="https://www.googleapis.com/youtube/v3/test",
         code=code,

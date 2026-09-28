@@ -1,75 +1,134 @@
 import unittest
-from concept_triage import validate_triage, build_shortlist_payload
+
+from concept_triage import build_shortlist_payload, validate_triage
+
 
 class ConceptTriageTests(unittest.TestCase):
     def candidates(self):
         return {
             "concepts": [
-                {"concept_id":"c1","working_title":"A"},
-                {"concept_id":"c2","working_title":"B"},
-                {"concept_id":"c3","working_title":"C"},
-                {"concept_id":"c4","working_title":"D"},
+                {"concept_id": "c1", "working_title": "A"},
+                {"concept_id": "c2", "working_title": "B"},
+                {"concept_id": "c3", "working_title": "C"},
+                {"concept_id": "c4", "working_title": "D"},
             ]
         }
 
     def response(self):
-        dims={
-            "channel_fit":5,"viewer_problem":5,"promise_clarity":5,
-            "feasibility":4,"researchability":4,"originality":4,
-            "overclaim_safety":4
+        dims = {
+            "channel_fit": 5,
+            "viewer_problem": 5,
+            "promise_clarity": 5,
+            "feasibility": 4,
+            "researchability": 4,
+            "originality": 4,
+            "overclaim_safety": 4,
         }
         return {
-            "decisions":[
-                {"concept_id":"c1","decision":"SHORTLIST","overall_score":90,"dimension_scores":dims,"strengths":["fit"],"risks":[],"rationale":"strong"},
-                {"concept_id":"c2","decision":"SHORTLIST","overall_score":85,"dimension_scores":dims,"strengths":["fit"],"risks":[],"rationale":"strong"},
-                {"concept_id":"c3","decision":"SHORTLIST","overall_score":80,"dimension_scores":dims,"strengths":["fit"],"risks":[],"rationale":"strong"},
-                {"concept_id":"c4","decision":"DROP","overall_score":40,"dimension_scores":dims,"strengths":[],"risks":["off channel"],"rationale":"weak"},
+            "decisions": [
+                {
+                    "concept_id": "c1",
+                    "decision": "SHORTLIST",
+                    "overall_score": 90,
+                    "dimension_scores": dims,
+                    "strengths": ["fit"],
+                    "risks": [],
+                    "rationale": "strong",
+                },
+                {
+                    "concept_id": "c2",
+                    "decision": "SHORTLIST",
+                    "overall_score": 85,
+                    "dimension_scores": dims,
+                    "strengths": ["fit"],
+                    "risks": [],
+                    "rationale": "strong",
+                },
+                {
+                    "concept_id": "c3",
+                    "decision": "SHORTLIST",
+                    "overall_score": 80,
+                    "dimension_scores": dims,
+                    "strengths": ["fit"],
+                    "risks": [],
+                    "rationale": "strong",
+                },
+                {
+                    "concept_id": "c4",
+                    "decision": "DROP",
+                    "overall_score": 40,
+                    "dimension_scores": dims,
+                    "strengths": [],
+                    "risks": ["off channel"],
+                    "rationale": "weak",
+                },
             ],
-            "shortlist_ids":["c1","c2","c3"],
-            "summary":"three strongest"
+            "shortlist_ids": ["c1", "c2", "c3"],
+            "summary": "three strongest",
         }
 
     def test_valid_triage_requires_all_candidates(self):
-        result=validate_triage(self.response(),self.candidates()["concepts"])
-        self.assertEqual(len(result["decisions"]),4)
-        self.assertEqual(result["shortlist_ids"],["c1","c2","c3"])
+        result = validate_triage(self.response(), self.candidates()["concepts"])
+        self.assertEqual(len(result["decisions"]), 4)
+        self.assertEqual(result["shortlist_ids"], ["c1", "c2", "c3"])
 
     def test_shortlist_must_match_decisions(self):
-        bad=self.response()
-        bad["shortlist_ids"]=["c1","c2","c4"]
+        bad = self.response()
+        bad["shortlist_ids"] = ["c1", "c2", "c4"]
         with self.assertRaises(ValueError):
-            validate_triage(bad,self.candidates()["concepts"])
+            validate_triage(bad, self.candidates()["concepts"])
 
     def test_shortlist_payload_preserves_llm_reason(self):
-        triage=validate_triage(self.response(),self.candidates()["concepts"])
-        payload=build_shortlist_payload(self.candidates(),triage,"abc")
-        self.assertEqual(payload["concept_count"],3)
-        self.assertEqual(payload["concepts"][0]["llm_triage"]["decision"],"SHORTLIST")
-
+        triage = validate_triage(self.response(), self.candidates()["concepts"])
+        payload = build_shortlist_payload(self.candidates(), triage, "abc")
+        self.assertEqual(payload["concept_count"], 3)
+        self.assertEqual(payload["concepts"][0]["llm_triage"]["decision"], "SHORTLIST")
 
     def test_zero_shortlist_is_allowed_when_all_concepts_are_weak(self):
-        dims={key:1 for key in ("channel_fit","viewer_problem","promise_clarity","feasibility","researchability","originality","overclaim_safety")}
-        response={
-            "decisions":[
-                {"concept_id":item["concept_id"],"decision":"DROP","overall_score":30,"dimension_scores":dims,"strengths":[],"risks":["weak"],"rationale":"weak"}
+        dims = {
+            key: 1
+            for key in (
+                "channel_fit",
+                "viewer_problem",
+                "promise_clarity",
+                "feasibility",
+                "researchability",
+                "originality",
+                "overclaim_safety",
+            )
+        }
+        response = {
+            "decisions": [
+                {
+                    "concept_id": item["concept_id"],
+                    "decision": "DROP",
+                    "overall_score": 30,
+                    "dimension_scores": dims,
+                    "strengths": [],
+                    "risks": ["weak"],
+                    "rationale": "weak",
+                }
                 for item in self.candidates()["concepts"]
             ],
-            "shortlist_ids":[],
-            "summary":"none strong enough",
+            "shortlist_ids": [],
+            "summary": "none strong enough",
         }
-        result=validate_triage(response,self.candidates()["concepts"])
-        self.assertEqual(result["shortlist_ids"],[])
+        result = validate_triage(response, self.candidates()["concepts"])
+        self.assertEqual(result["shortlist_ids"], [])
 
     def test_decision_must_match_score_threshold(self):
-        bad=self.response()
-        bad["decisions"][0]["overall_score"]=40
-        with self.assertRaisesRegex(ValueError,"decision/score mismatch"):
-            validate_triage(bad,self.candidates()["concepts"])
+        bad = self.response()
+        bad["decisions"][0]["overall_score"] = 40
+        with self.assertRaisesRegex(ValueError, "decision/score mismatch"):
+            validate_triage(bad, self.candidates()["concepts"])
 
     def test_non_shortlisted_concepts_remain_available_for_override(self):
-        triage=validate_triage(self.response(),self.candidates()["concepts"])
-        payload=build_shortlist_payload(self.candidates(),triage,"abc")
-        self.assertEqual([item["concept_id"] for item in payload["override_concepts"]],["c4"])
+        triage = validate_triage(self.response(), self.candidates()["concepts"])
+        payload = build_shortlist_payload(self.candidates(), triage, "abc")
+        self.assertEqual(
+            [item["concept_id"] for item in payload["override_concepts"]], ["c4"]
+        )
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     unittest.main()

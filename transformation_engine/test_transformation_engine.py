@@ -136,9 +136,7 @@ class TransformationEngineTests(unittest.TestCase):
 
                 first = run_prepare(handoff)
                 request_path = requests / "curiosity_gap.concept_request.json"
-                request = json.loads(
-                    request_path.read_text(encoding="utf-8")
-                )
+                request = json.loads(request_path.read_text(encoding="utf-8"))
                 first_hash = request["request_provenance"]["handoff_sha256"]
                 self.assertEqual(
                     first_hash,
@@ -161,9 +159,7 @@ class TransformationEngineTests(unittest.TestCase):
                     first["handoff_sha256"],
                     second["handoff_sha256"],
                 )
-                self.assertFalse(
-                    (output / "concept_gate_ui_state.json").exists()
-                )
+                self.assertFalse((output / "concept_gate_ui_state.json").exists())
             finally:
                 module.OUTPUT_DIR = old_output
                 module.REQUESTS_DIR = old_requests
@@ -279,9 +275,7 @@ class TransformationEngineTests(unittest.TestCase):
     def test_source_specific_usage_is_rejected(self):
         request = build_concept_request(self.entry, self.config)
         concept = self.valid_concept()
-        concept["source_specific_elements_used"] = [
-            "Exact gearbox wording."
-        ]
+        concept["source_specific_elements_used"] = ["Exact gearbox wording."]
 
         result = validate_response(
             {

@@ -74,9 +74,7 @@ def append_log(
 ) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a", encoding="utf-8") as handle:
-        handle.write(
-            f"\n[{checked_at.isoformat()}] {status}: {message}\n"
-        )
+        handle.write(f"\n[{checked_at.isoformat()}] {status}: {message}\n")
         if stdout:
             handle.write(stdout.rstrip() + "\n")
         if stderr:
@@ -94,8 +92,7 @@ def current_cohort_ready_for_01_4(
         for cell in payload.get("by_format", {}).values():
             if (
                 int(cell.get("unique_channels") or 0) >= minimum_channels
-                and int(cell.get("velocity_sample_count") or 0)
-                >= minimum_velocity
+                and int(cell.get("velocity_sample_count") or 0) >= minimum_velocity
                 and cell.get("age_matched_velocity_index") is not None
             ):
                 return True
@@ -124,9 +121,7 @@ def latest_snapshot_at(
         if not observed:
             continue
         try:
-            timestamp = datetime.fromisoformat(
-                observed.replace("Z", "+00:00")
-            )
+            timestamp = datetime.fromisoformat(observed.replace("Z", "+00:00"))
         except ValueError:
             continue
         if timestamp.tzinfo is None:
@@ -266,18 +261,14 @@ def run_scheduled_refresh(
             return payload
 
     video_ids = {
-        str(video_id)
-        for video_id in manifest.get("video_ids", [])
-        if video_id
+        str(video_id) for video_id in manifest.get("video_ids", []) if video_id
     }
     latest = latest_snapshot_at(
         PERSISTENT_SNAPSHOT_FILE,
         video_ids,
     )
     if latest is not None:
-        elapsed_hours = (
-            checked_at - latest
-        ).total_seconds() / 3600
+        elapsed_hours = (checked_at - latest).total_seconds() / 3600
         if elapsed_hours < minimum_interval_hours:
             message = (
                 "Latest frozen-cohort snapshot is only "
@@ -338,9 +329,7 @@ def run_scheduled_refresh(
         )
         if completed.returncode == 0:
             status = "REFRESHED"
-            message = (
-                "Scheduled frozen-cohort refresh completed successfully."
-            )
+            message = "Scheduled frozen-cohort refresh completed successfully."
         else:
             status = "FAILED_REFRESH"
             message = (
@@ -365,8 +354,7 @@ def run_scheduled_refresh(
 
     except subprocess.TimeoutExpired as exc:
         message = (
-            "Scheduled frozen-cohort refresh exceeded "
-            f"{timeout_seconds} seconds."
+            "Scheduled frozen-cohort refresh exceeded " f"{timeout_seconds} seconds."
         )
         payload = write_status(
             "FAILED_TIMEOUT",
@@ -408,9 +396,7 @@ def main() -> None:
         minimum_interval_hours=args.minimum_interval_hours,
         dry_run=args.dry_run,
     )
-    print(
-        f"{result['status']}: {result['message']}"
-    )
+    print(f"{result['status']}: {result['message']}")
     if str(result["status"]).startswith("FAILED"):
         raise SystemExit(1)
 
