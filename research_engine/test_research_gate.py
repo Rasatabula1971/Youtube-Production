@@ -63,6 +63,7 @@ class ResearchGateTests(unittest.TestCase):
                             "stance": "SUPPORTS",
                             "locator": "Section 2",
                             "evidence_note": "Discusses thermal constraints.",
+                            "evidence_quote": "Discusses thermal constraints.",
                         }
                     ],
                     "coverage": {
@@ -80,12 +81,14 @@ class ResearchGateTests(unittest.TestCase):
                             "stance": "SUPPORTS",
                             "locator": "Article 11",
                             "evidence_note": "Limits geometry.",
+                            "evidence_quote": "Limits geometry.",
                         },
                         {
                             "source_id": "src002",
                             "stance": "CONTRADICTS",
                             "locator": "Section 5",
                             "evidence_note": "Describes an exception.",
+                            "evidence_quote": "Describes an exception.",
                         },
                     ],
                     "coverage": {
