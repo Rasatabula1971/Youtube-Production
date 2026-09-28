@@ -34,6 +34,10 @@ def content_sha256(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def load_json(path: Path) -> Any:
     if not path.exists():
         raise FileNotFoundError(path)
@@ -453,7 +457,7 @@ def run_prepare(
     request = build_review_request(package, config)
     request["request_provenance"].update({
         "draft_source": str(draft_path.resolve()),
-        "draft_sha256": sha256_file(draft_path),
+        "draft_sha256": file_sha256(draft_path),
     })
 
     concept_id = str(request["concept_id"])
