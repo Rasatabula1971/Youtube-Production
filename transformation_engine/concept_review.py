@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,8 @@ from concept_gate import (
 from transformation_engine import OUTPUT_DIR, sha256_file
 
 STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
+IDEA_BANK_DIR = OUTPUT_DIR.parent.parent / ".idea_bank"
+SAVED_IDEAS_FILE = IDEA_BANK_DIR / "saved_ideas.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
 
@@ -37,6 +41,85 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def candidates_hash() -> str | None:
     return sha256_file(DEFAULT_CANDIDATES) if DEFAULT_CANDIDATES.exists() else None
+
+
+def idea_id_for(item: dict[str, Any]) -> str:
+    seed = "\0".join(
+        [
+            str(item.get("concept_id") or ""),
+            str(item.get("working_title") or ""),
+            str(item.get("premise") or ""),
+        ]
+    ).encode("utf-8")
+    return hashlib.sha256(seed).hexdigest()[:16]
+
+
+def load_saved_ideas() -> dict[str, Any]:
+    if not SAVED_IDEAS_FILE.exists():
+        return {"schema_version": "1.0", "ideas": []}
+    try:
+        payload = load_json(SAVED_IDEAS_FILE)
+    except (OSError, json.JSONDecodeError):
+        return {"schema_version": "1.0", "ideas": []}
+    if not isinstance(payload, dict) or not isinstance(payload.get("ideas"), list):
+        return {"schema_version": "1.0", "ideas": []}
+    return payload
+
+
+def save_idea(item: dict[str, Any], *, note: str, reviewer: str) -> dict[str, Any]:
+    bank = load_saved_ideas()
+    ideas = [value for value in bank.get("ideas", []) if isinstance(value, dict)]
+    idea_id = idea_id_for(item)
+    now = datetime.now(timezone.utc).isoformat()
+    triage = item.get("llm_triage", {})
+    title_test = item.get("title_clarity_test", {})
+    entry = {
+        "idea_id": idea_id,
+        "concept_id": str(item.get("concept_id") or ""),
+        "working_title": str(item.get("working_title") or ""),
+        "title_options": list(title_test.get("options", []))
+        if isinstance(title_test, dict)
+        else [],
+        "premise": str(item.get("premise") or ""),
+        "audience_promise": str(item.get("audience_promise") or ""),
+        "viewer_problem": str(item.get("viewer_problem") or ""),
+        "mechanism_id": item.get("mechanism_id"),
+        "mechanism_label": item.get("mechanism_label"),
+        "format_intent": item.get("format_intent"),
+        "triage_score": (
+            triage.get("overall_score") if isinstance(triage, dict) else None
+        ),
+        "triage_decision": (
+            triage.get("decision") if isinstance(triage, dict) else None
+        ),
+        "triage_rationale": (
+            triage.get("rationale") if isinstance(triage, dict) else None
+        ),
+        "note": note,
+        "saved_by": reviewer,
+        "source_candidates_sha256": candidates_hash(),
+        "saved_at": now,
+        "last_saved_at": now,
+    }
+
+    existing = next(
+        (value for value in ideas if str(value.get("idea_id")) == idea_id),
+        None,
+    )
+    if existing is not None:
+        entry["saved_at"] = existing.get("saved_at") or now
+        if not note:
+            entry["note"] = str(existing.get("note") or "")
+        ideas = [
+            entry if str(value.get("idea_id")) == idea_id else value
+            for value in ideas
+        ]
+    else:
+        ideas.append(entry)
+
+    bank = {"schema_version": "1.0", "ideas": ideas}
+    write_json(SAVED_IDEAS_FILE, bank)
+    return entry
 
 
 def prepare_state() -> dict[str, Any]:
@@ -75,14 +158,21 @@ def current_state() -> dict[str, Any]:
     return state
 
 
-def public_item(item: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+def public_item(
+    item: dict[str, Any],
+    state: dict[str, Any],
+    saved_ids: set[str] | None = None,
+) -> dict[str, Any]:
     concept_id = str(item["concept_id"])
     decision = state.get("decisions", {}).get(concept_id, {})
+    idea_id = idea_id_for(item)
     return {
         **item,
         "decision": decision.get("decision", "PENDING"),
         "criteria_decisions": decision.get("criteria", {}),
         "note": decision.get("note", ""),
+        "idea_id": idea_id,
+        "idea_saved": idea_id in (saved_ids or set()),
     }
 
 
@@ -107,6 +197,11 @@ def snapshot() -> dict[str, Any]:
             "concept_count": request["concept_count"],
         }
 
+    saved_bank = load_saved_ideas()
+    saved_ideas = [
+        value for value in saved_bank.get("ideas", []) if isinstance(value, dict)
+    ]
+    saved_ids = {str(value.get("idea_id")) for value in saved_ideas}
     active_overrides = set(state.get("active_override_ids", []))
     all_items = request.get("items", [])
     active_items = [
@@ -116,12 +211,12 @@ def snapshot() -> dict[str, Any]:
         or str(item.get("concept_id")) in active_overrides
     ]
     override_items = [
-        public_item(item, state)
+        public_item(item, state, saved_ids)
         for item in all_items
         if item.get("triage_default") is not True
         and str(item.get("concept_id")) not in active_overrides
     ]
-    items = [public_item(item, state) for item in active_items]
+    items = [public_item(item, state, saved_ids) for item in active_items]
     decisions = state.get("decisions", {})
     pending = sum(str(item["concept_id"]) not in decisions for item in active_items)
 
@@ -152,6 +247,8 @@ def snapshot() -> dict[str, Any]:
         "criteria": request.get("criteria", {}),
         "concepts": items,
         "override_concepts": override_items,
+        "saved_idea_count": len(saved_ideas),
+        "saved_ideas": saved_ideas,
     }
 
 
@@ -223,8 +320,6 @@ def apply_action(
     state = current_state()
     if not state:
         raise ValueError("Concept Gate is not prepared or is stale")
-    if state.get("status") == "COMPLETE":
-        raise ValueError("Concept Gate is already complete")
 
     candidates = load_json(DEFAULT_CANDIDATES)
     request = build_review_request(candidates, load_config())
@@ -240,6 +335,17 @@ def apply_action(
         raise ValueError("Unknown concept_id")
 
     value = str(decision or "").strip().upper()
+    if value == "SAVE_IDEA":
+        save_idea(
+            item,
+            note=str(note or "").strip(),
+            reviewer=str(state.get("reviewer") or DEFAULT_REVIEWER),
+        )
+        return snapshot()
+
+    if state.get("status") == "COMPLETE":
+        raise ValueError("Concept Gate is already complete")
+
     if value == "OVERRIDE":
         if item.get("triage_default") is True:
             raise ValueError("Concept is already in the default Human Gate shortlist")
