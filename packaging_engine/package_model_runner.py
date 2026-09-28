@@ -273,6 +273,9 @@ def run_one(
         "best_quality_score": bridge_result.get("best_quality_score"),
         "verification_state": bridge_result.get("verification_state"),
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
+        "direct_backup_used": bridge_result.get("direct_backup_used", False),
+        "direct_backup_may_bill": bridge_result.get("direct_backup_may_bill", False),
+        "billing_authorization": bridge_result.get("billing_authorization"),
         "attempts": safe_attempts(bridge_result),
     }
 
