@@ -1023,6 +1023,7 @@ function renderConceptReview(snapshot, force) {
   const fit = concept.channel_fit || {};
   const titleTest = concept.title_clarity_test || {};
   const sourceTest = concept.source_dependency_test || {};
+  const triage = concept.llm_triage || {};
 
   conceptReviewPanel.hidden = false;
   conceptNote.hidden = false;
@@ -1056,6 +1057,13 @@ function renderConceptReview(snapshot, force) {
         '<span>' + escapeHtml(humanizeToken(concept.format_intent)) + '</span>' +
       '</div>' +
     '</div>' +
+    '<div class="concept-detail-card"><h4>LLM TRIAGE</h4><p>' +
+      '<strong>Score:</strong> ' + escapeHtml(triage.overall_score == null ? "—" : triage.overall_score + "/100") +
+      '<br><strong>Decision:</strong> ' + escapeHtml(triage.decision || "—") +
+      '<br><strong>Why:</strong> ' + escapeHtml(triage.rationale || "") +
+      '<br><strong>Strengths:</strong> ' + escapeHtml((triage.strengths || []).join(" · ") || "—") +
+      '<br><strong>Risks:</strong> ' + escapeHtml((triage.risks || []).join(" · ") || "—") +
+      '</p></div>' +
     '<div class="concept-detail-card"><h4>PREMISE</h4><p>' +
       escapeHtml(concept.premise || "") + '</p></div>' +
     '<div class="concept-detail-card"><h4>AUDIENCE PROMISE</h4><p>' +
@@ -1782,7 +1790,7 @@ function renderAnalysis(data) {
   ) {
     activeIndex = 3;
   } else if (
-    ["transform_prepare", "concept_generate", "concept_gate_prepare"].includes(currentId) ||
+    ["transform_prepare", "concept_generate", "concept_triage", "concept_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_CONCEPT_GATE" ||
     (data.transformation && data.transformation.concept_gate_complete)
   ) {

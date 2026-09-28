@@ -116,10 +116,11 @@ class ExperimentUiTests(unittest.TestCase):
             "synthesis_build"
         )
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 4],
+            server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 5],
             [
                 "transform_prepare",
                 "concept_generate",
+                "concept_triage",
                 "concept_gate_prepare",
             ],
         )
@@ -1755,6 +1756,20 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertEqual(state["analysis_request_ids"], ["v1", "v2"])
         self.assertEqual(state["analyzed_ids"], ["v1"])
         self.assertEqual(state["analyzed_current_count"], 1)
+
+
+    def test_concept_triage_precedes_human_concept_gate(self):
+        self.assertIn("concept_triage", server.WORKFLOW_ACTION_ORDER)
+        generate_index = server.WORKFLOW_ACTION_ORDER.index("concept_generate")
+        triage_index = server.WORKFLOW_ACTION_ORDER.index("concept_triage")
+        gate_index = server.WORKFLOW_ACTION_ORDER.index("concept_gate_prepare")
+        self.assertLess(generate_index, triage_index)
+        self.assertLess(triage_index, gate_index)
+
+        command = server.ACTION_DEFS["concept_triage"]["command"]
+        self.assertIn("transformation_engine/concept_triage.py", " ".join(str(part) for part in command))
+        self.assertIn("--mode", command)
+        self.assertIn("run", command)
 
 
 if __name__ == "__main__":

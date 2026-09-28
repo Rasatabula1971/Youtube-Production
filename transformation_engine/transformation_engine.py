@@ -470,6 +470,10 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         for stale_name in (
             "concept_candidates.json",
             "rejected_concepts.json",
+            "concept_triage.json",
+            "concept_candidates_triaged.json",
+            "concept_triage_run.json",
+            "raw_concept_triage.txt",
             "concept_gate_request.json",
             "concept_gate_reviewed.json",
             "research_handoff.json",

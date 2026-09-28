@@ -89,6 +89,8 @@ TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
 TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
 TRANSFORM_RESPONSES_DIR = TRANSFORM_OUTPUT / "concept_responses"
 TRANSFORM_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates.json"
+TRANSFORM_TRIAGE_FILE = TRANSFORM_OUTPUT / "concept_triage.json"
+TRANSFORM_TRIAGED_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates_triaged.json"
 TRANSFORM_RESEARCH_HANDOFF = TRANSFORM_OUTPUT / "research_handoff.json"
 
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
@@ -149,6 +151,7 @@ WORKFLOW_ACTION_ORDER = [
     "synthesis_build",
     "transform_prepare",
     "concept_generate",
+    "concept_triage",
     "concept_gate_prepare",
     "package_prepare",
     "package_generate",
@@ -501,6 +504,20 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Runs the prepared concept requests through FAIR free-only routing, "
             "then applies deterministic Source Dependency and schema validation."
+        ),
+    },
+    "concept_triage": {
+        "label": "Triage Concept Candidates",
+        "stage": "04",
+        "command": [
+            sys.executable,
+            "transformation_engine/concept_triage.py",
+            "--mode",
+            "run",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to compare all structurally valid concepts "
+            "and shortlist the strongest 3-6 for human review."
         ),
     },
     "concept_gate_prepare": {
@@ -1067,14 +1084,38 @@ def transformation_artifact_state() -> dict[str, Any]:
         if isinstance(candidates, dict)
         else 0
     )
+    candidate_hash = (
+        sha256_file(TRANSFORM_CANDIDATES_FILE)
+        if TRANSFORM_CANDIDATES_FILE.exists()
+        else None
+    )
+    triage = safe_load_json(TRANSFORM_TRIAGE_FILE)
+    triaged = safe_load_json(TRANSFORM_TRIAGED_CANDIDATES_FILE)
+    triage_ready = (
+        candidate_hash is not None
+        and isinstance(triage, dict)
+        and isinstance(triaged, dict)
+        and triage.get("source_candidates_sha256") == candidate_hash
+        and triaged.get("source_candidates_sha256") == candidate_hash
+        and int(triaged.get("concept_count") or 0) > 0
+    )
+    shortlist_count = (
+        int(triaged.get("concept_count") or 0)
+        if isinstance(triaged, dict)
+        else 0
+    )
     requests_ready = bool(request_hashes)
     responses_complete = (
         requests_ready
         and set(request_hashes).issubset(current_response_ids)
     )
     candidates_ready = responses_complete and candidate_count > 0
-    gate = concept_gate_snapshot() if candidates_ready else {
-        "status": "WAITING_FOR_CONCEPT_CANDIDATES",
+    gate = concept_gate_snapshot() if candidates_ready and triage_ready else {
+        "status": (
+            "WAITING_FOR_TRIAGED_CONCEPTS"
+            if candidates_ready and not triage_ready
+            else "WAITING_FOR_CONCEPT_CANDIDATES"
+        ),
         "complete": False,
         "concepts": [],
     }
@@ -1092,6 +1133,9 @@ def transformation_artifact_state() -> dict[str, Any]:
         "responses_complete": responses_complete,
         "candidate_count": candidate_count,
         "candidates_ready": candidates_ready,
+        "triage_ready": triage_ready,
+        "shortlist_count": shortlist_count,
+        "concept_triage": triage if isinstance(triage, dict) else {},
         "concept_gate": gate,
         "concept_gate_complete": bool(gate.get("complete")),
         "research_ready": research_ready,
@@ -1597,6 +1641,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     transform = transformation_artifact_state()
     transform_requests = bool(transform["requests_ready"])
     transform_candidates = bool(transform["candidates_ready"])
+    transform_triage = bool(transform["triage_ready"])
     concept_gate = transform["concept_gate"]
     concept_gate_status = str(
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
@@ -1631,6 +1676,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif active_action in {
         "transform_prepare",
         "concept_generate",
+        "concept_triage",
         "concept_gate_prepare",
     }:
         transform_human = "CONCEPT WORK RUNNING"
@@ -1648,6 +1694,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_human = "CONCEPT GENERATION NEEDED"
         transform_tone = "action"
         transform_next = "Run Generate Concept Candidates."
+    elif not transform_triage:
+        transform_human = "LLM CONCEPT TRIAGE NEEDED"
+        transform_tone = "action"
+        transform_next = "Run Triage Concept Candidates."
     elif concept_gate_status == "READY_TO_PREPARE":
         transform_human = "PREPARE CONCEPT GATE"
         transform_tone = "action"
@@ -2077,6 +2127,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     transform = transformation_artifact_state()
     transform_requests = bool(transform["requests_ready"])
     transform_candidates = bool(transform["candidates_ready"])
+    transform_triage = bool(transform["triage_ready"])
     concept_gate = transform["concept_gate"]
     concept_gate_status = str(
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
@@ -2520,9 +2571,21 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "concept_triage": {
+            "enabled": transform_candidates and not transform_triage,
+            "reason": (
+                "Compare all current concept candidates and shortlist the strongest 3-6."
+                if transform_candidates and not transform_triage
+                else (
+                    f"Concept triage is current with {transform['shortlist_count']} shortlisted concept(s)."
+                    if transform_triage
+                    else "Generate valid concept candidates first."
+                )
+            ),
+        },
         "concept_gate_prepare": {
             "enabled": (
-                transform_candidates
+                transform_triage
                 and (
                     concept_gate_status == "READY_TO_PREPARE"
                     or (
@@ -2532,22 +2595,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
             "reason": (
-                "Validated concept candidates are ready for human review."
+                "LLM-shortlisted concepts are ready for final human review."
                 if (
-                    transform_candidates
+                    transform_triage
                     and concept_gate_status == "READY_TO_PREPARE"
                 )
                 else (
                     "No concept was accepted; reopen the current Concept Gate."
                     if (
-                        transform_candidates
+                        transform_triage
                         and concept_gate_complete
                         and not bool(transform["research_ready"])
                     )
                     else (
                         "Concept Gate is already prepared or complete."
-                        if transform_candidates
-                        else "Generate valid concept candidates first."
+                        if transform_triage
+                        else "Run Concept Triage before preparing the Human Concept Gate."
                     )
                 )
             ),
