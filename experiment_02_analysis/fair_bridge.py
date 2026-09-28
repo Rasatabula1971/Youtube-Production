@@ -53,6 +53,41 @@ def safe_attempt(attempt: Any) -> dict[str, Any]:
     }
 
 
+def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any]:
+    requested_output = int(settings.get("max_output_tokens", 4096))
+    expected_schema = settings.get("expected_schema_present", False)
+    routes: list[dict[str, Any]] = []
+    structured_ready = False
+
+    registry = getattr(fair, "_registry", None)
+    providers = getattr(registry, "providers", {}) if registry is not None else {}
+    for provider in providers.values() if isinstance(providers, dict) else []:
+        for model in getattr(provider, "models", []) or []:
+            capabilities = set(getattr(model, "capabilities", set()) or set())
+            max_output = getattr(model, "max_output_tokens", None)
+            output_ok = max_output is None or requested_output <= int(max_output)
+            structured_ok = (not expected_schema) or ("structured_output" in capabilities)
+            active = bool(getattr(model, "active", True))
+            eligible = active and output_ok and structured_ok
+            structured_ready = structured_ready or eligible
+            routes.append(
+                {
+                    "provider_id": str(getattr(provider, "provider_id", "")),
+                    "model_id": str(getattr(model, "model_id", "")),
+                    "active": active,
+                    "structured_output": "structured_output" in capabilities,
+                    "max_output_tokens": max_output,
+                    "compatible": eligible,
+                }
+            )
+    return {
+        "requested_output_tokens": requested_output,
+        "expected_schema": bool(expected_schema),
+        "compatible_route_available": structured_ready,
+        "routes": routes,
+    }
+
+
 async def execute(payload: dict[str, Any]) -> dict[str, Any]:
     fair_repo = Path(str(payload["fair_repo_path"])).resolve()
     if not fair_repo.exists():
@@ -93,6 +128,9 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             cross_check_required=bool(
                 settings.get("cross_check_required", False)
             ),
+            application_id=str(
+                settings.get("application_id", "youtube-production")
+            ),
         )
     except Exception as exc:
         return {
@@ -104,6 +142,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
 
     providers = fair.providers()
     skipped = dict(fair.skipped)
+    compatibility = compatibility_snapshot(fair, settings)
 
     if payload.get("action") == "doctor":
         try:
@@ -117,9 +156,14 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
                 "paid_inference_executed": False,
             }
         return {
-            "status": "READY",
+            "status": (
+                "READY"
+                if compatibility.get("compatible_route_available")
+                else "NO_COMPATIBLE_ROUTE"
+            ),
             "providers": providers,
             "skipped": skipped,
+            "compatibility": compatibility,
             "paid_inference_executed": False,
         }
 
@@ -132,7 +176,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
                 settings.get("cross_check_required", False)
             ),
             max_output_tokens=int(
-                settings.get("max_output_tokens", 8192)
+                settings.get("max_output_tokens", 4096)
             ),
             client_id=str(
                 settings.get(
@@ -160,6 +204,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             ],
             "providers": providers,
             "skipped": skipped,
+            "compatibility": compatibility,
         }
     except Exception as exc:
         return {
@@ -168,6 +213,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "error_detail": str(exc)[:1200],
             "providers": providers,
             "skipped": skipped,
+            "compatibility": compatibility,
             "paid_inference_executed": False,
         }
     finally:

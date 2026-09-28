@@ -19,6 +19,19 @@ class FakeFair:
     def __init__(self, **kwargs):
         type(self).last_kwargs = kwargs
         self.skipped = {"provider-x": "not configured"}
+        model = SimpleNamespace(
+            model_id="schema-model",
+            capabilities={"structured_output", "text"},
+            max_output_tokens=4096,
+            active=True,
+        )
+        provider = SimpleNamespace(
+            provider_id="schema-provider",
+            models=[model],
+        )
+        self._registry = SimpleNamespace(
+            providers={"schema-provider": provider}
+        )
 
     def providers(self):
         return ["kilo_free"]
@@ -76,6 +89,8 @@ class FairBridgeTests(unittest.TestCase):
                 "cross_check_required": False,
                 "max_output_tokens": 2048,
                 "client_id": "test-client",
+                "application_id": "youtube-production",
+                "expected_schema_present": True,
                 "priority": "P2",
                 "cache_mode": "bypass",
             },
@@ -93,6 +108,13 @@ class FairBridgeTests(unittest.TestCase):
         self.assertEqual(result["providers"], ["kilo_free"])
         self.assertFalse(result["paid_inference_executed"])
         self.assertEqual(FakeFair.last_kwargs["max_attempts"], 3)
+        self.assertEqual(
+            FakeFair.last_kwargs["application_id"],
+            "youtube-production",
+        )
+        self.assertTrue(
+            result["compatibility"]["compatible_route_available"]
+        )
         self.assertEqual(
             FakeFair.last_kwargs["confirmed_free_providers"],
             {"kilo_free"},

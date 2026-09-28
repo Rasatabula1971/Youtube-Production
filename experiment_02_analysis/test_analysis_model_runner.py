@@ -160,10 +160,11 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "max_verification_attempts": 1,
                 "timeout_seconds": 45,
                 "cross_check_required": False,
-                "max_output_tokens": 8192,
+                "max_output_tokens": 4096,
                 "cache_mode": "bypass",
                 "priority": "P2",
                 "client_id": "test",
+                "application_id": "youtube-production",
                 "confirmed_free_providers": [],
             },
             "runner": {
