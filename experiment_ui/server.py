@@ -122,6 +122,20 @@ RESEARCH_RESPONSES_DIR = RESEARCH_OUTPUT / "research_responses"
 RESEARCH_DRAFTS_DIR = RESEARCH_OUTPUT / "draft_packages"
 RESEARCH_VERIFIED_DIR = RESEARCH_OUTPUT / "verified_packages"
 
+STORY_DIR = PROJECT_ROOT / "story_script_engine"
+if str(STORY_DIR) not in sys.path:
+    sys.path.insert(0, str(STORY_DIR))
+
+from script_review import (  # noqa: E402
+    apply_action as apply_script_gate_action,
+    snapshot as script_gate_snapshot,
+)
+
+STORY_OUTPUT = STORY_DIR / "output"
+SCRIPT_REQUESTS_DIR = STORY_OUTPUT / "script_requests"
+SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
+SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
+
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
@@ -143,6 +157,9 @@ WORKFLOW_ACTION_ORDER = [
     "research_acquire",
     "research_generate",
     "research_gate_prepare",
+    "script_prepare",
+    "script_generate",
+    "script_gate_prepare",
 ]
 
 ACTION_DEFS: dict[str, dict[str, Any]] = {
@@ -592,6 +609,45 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Prepares the compact human claim-by-claim Research Gate before Script."
         ),
     },
+    "script_prepare": {
+        "label": "Prepare Script Requests",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/story_script_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds script requests from human-verified research and the approved package promise."
+        ),
+    },
+    "script_generate": {
+        "label": "Generate Script Drafts",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/script_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to draft original scripts constrained to accepted claim IDs."
+        ),
+    },
+    "script_gate_prepare": {
+        "label": "Prepare Script Gate",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/script_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the human Script Gate before production."
+        ),
+    },
 }
 
 OPEN_TARGETS = {
@@ -600,6 +656,7 @@ OPEN_TARGETS = {
     "transformation_output": TRANSFORM_OUTPUT,
     "packaging_output": PACKAGING_OUTPUT,
     "research_output": RESEARCH_OUTPUT,
+    "story_script_output": STORY_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
@@ -1218,6 +1275,73 @@ def research_artifact_state() -> dict[str, Any]:
         "research_gate": gate,
         "research_gate_complete": bool(gate.get("complete")),
         "story_ready": story_ready,
+    }
+
+
+def story_script_artifact_state() -> dict[str, Any]:
+    verified_hashes: dict[str, str] = {}
+    if RESEARCH_VERIFIED_DIR.exists():
+        for path in RESEARCH_VERIFIED_DIR.glob("*.verified_research_package.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict) or payload.get("status") != "READY_FOR_STORY_SCRIPT":
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if concept_id:
+                verified_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if SCRIPT_REQUESTS_DIR.exists():
+        for path in SCRIPT_REQUESTS_DIR.glob("*.script_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in verified_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("verified_research_sha256") == verified_hashes[concept_id]
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    draft_ids: set[str] = set()
+    if SCRIPT_DRAFTS_DIR.exists():
+        for path in SCRIPT_DRAFTS_DIR.glob("*.script_draft.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("draft_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256") == request_hashes[concept_id]
+            ):
+                draft_ids.add(concept_id)
+
+    gate = script_gate_snapshot() if draft_ids else {
+        "status": "WAITING_FOR_SCRIPT_DRAFTS",
+        "complete": False,
+        "scripts": [],
+    }
+    approved_ids = {
+        str(item.get("concept_id"))
+        for item in gate.get("scripts", [])
+        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    }
+
+    requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(request_hashes)
+    drafts_ready = requests_ready and set(verified_hashes).issubset(draft_ids)
+    production_ready = drafts_ready and bool(gate.get("complete")) and set(verified_hashes).issubset(approved_ids)
+    return {
+        "verified_concept_ids": sorted(verified_hashes),
+        "request_concept_ids": sorted(request_hashes),
+        "draft_concept_ids": sorted(draft_ids),
+        "requests_ready": requests_ready,
+        "drafts_ready": drafts_ready,
+        "script_gate": gate,
+        "script_gate_complete": bool(gate.get("complete")),
+        "production_ready": production_ready,
     }
 
 
@@ -1975,6 +2099,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         research_gate.get("status") or "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"
     )
     research_gate_complete = bool(research["research_gate_complete"])
+    story = story_script_artifact_state()
+    script_requests_ready = bool(story["requests_ready"])
+    script_drafts_ready = bool(story["drafts_ready"])
+    script_gate = story["script_gate"]
+    script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
+    script_gate_complete = bool(story["script_gate_complete"])
+    production_ready = bool(story["production_ready"])
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -2535,6 +2666,55 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "script_prepare": {
+            "enabled": bool(research["story_ready"]) and not script_requests_ready,
+            "reason": (
+                "Verified research and the approved package are ready for script requests."
+                if bool(research["story_ready"]) and not script_requests_ready
+                else (
+                    "Script requests are already current."
+                    if script_requests_ready
+                    else "Complete the Human Research Gate first."
+                )
+            ),
+        },
+        "script_generate": {
+            "enabled": script_requests_ready and not script_drafts_ready,
+            "reason": (
+                "Current script requests are ready for FAIR drafting."
+                if script_requests_ready and not script_drafts_ready
+                else (
+                    "Current script drafts already exist."
+                    if script_drafts_ready
+                    else "Prepare current script requests first."
+                )
+            ),
+        },
+        "script_gate_prepare": {
+            "enabled": (
+                script_drafts_ready
+                and (
+                    script_gate_status == "READY_TO_PREPARE"
+                    or (
+                        script_gate_complete
+                        and not production_ready
+                    )
+                )
+            ),
+            "reason": (
+                "Validated script drafts are ready for human review."
+                if script_drafts_ready and script_gate_status == "READY_TO_PREPARE"
+                else (
+                    "No script was approved; reopen the Script Gate."
+                    if script_drafts_ready and script_gate_complete and not production_ready
+                    else (
+                        "Script Gate is already prepared or complete."
+                        if script_drafts_ready
+                        else "Generate current script drafts first."
+                    )
+                )
+            ),
+        },
     }
 
 
@@ -2817,6 +2997,24 @@ def workflow_guidance(
             "next_title": "Story / Script",
         }
 
+    story = story_script_artifact_state()
+    script_gate = story.get("script_gate", {})
+    if (
+        story.get("drafts_ready")
+        and script_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_SCRIPT_GATE",
+            "current_action_id": None,
+            "current_title": "Review Script Draft",
+            "current_detail": (
+                "Check promise delivery, factual scope, claim mapping, originality "
+                "and story payoff before production."
+            ),
+            "next_action_id": None,
+            "next_title": "Ready for Production",
+        }
+
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
         gate_info = readiness.get(action_id, {})
         if gate_info.get("enabled"):
@@ -2867,6 +3065,7 @@ def status_payload() -> dict[str, Any]:
     transformation = transformation_artifact_state()
     packaging = packaging_artifact_state()
     research = research_artifact_state()
+    story = story_script_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -2916,6 +3115,8 @@ def status_payload() -> dict[str, Any]:
         "packaging_gate": packaging["packaging_gate"],
         "research": research,
         "research_gate": research["research_gate"],
+        "story_script": story,
+        "script_gate": story["script_gate"],
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -2991,6 +3192,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/research-gate":
             self._send_json(research_gate_snapshot())
+            return
+        if route == "/api/script-gate":
+            self._send_json(script_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -3105,6 +3309,20 @@ class Handler(BaseHTTPRequestHandler):
                 payload = apply_research_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     claim_id=str(body.get("claim_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(
+                        str(body["note"])
+                        if body.get("note") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/script-gate":
+                payload = apply_script_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(

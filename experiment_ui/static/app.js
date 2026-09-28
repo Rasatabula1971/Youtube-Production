@@ -91,6 +91,19 @@ const researchRework = document.getElementById("researchRework");
 const researchAccept = document.getElementById("researchAccept");
 const researchNext = document.getElementById("researchNext");
 
+const scriptReviewPanel = document.getElementById("scriptReviewPanel");
+const scriptReviewTitle = document.getElementById("scriptReviewTitle");
+const scriptReviewSummary = document.getElementById("scriptReviewSummary");
+const scriptReviewStatus = document.getElementById("scriptReviewStatus");
+const scriptDetail = document.getElementById("scriptDetail");
+const scriptCriteria = document.getElementById("scriptCriteria");
+const scriptNote = document.getElementById("scriptNote");
+const scriptPrev = document.getElementById("scriptPrev");
+const scriptReject = document.getElementById("scriptReject");
+const scriptRework = document.getElementById("scriptRework");
+const scriptAccept = document.getElementById("scriptAccept");
+const scriptNext = document.getElementById("scriptNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -121,6 +134,9 @@ let packagingEditing = false;
 let latestResearchSnapshot = null;
 let researchCursor = 0;
 let researchEditing = false;
+let latestScriptSnapshot = null;
+let scriptCursor = 0;
+let scriptEditing = false;
 
 const ROUTES = {
   "/": {
@@ -283,7 +299,8 @@ function statusTone(workflow) {
     state === "HUMAN_GATE" ||
     state === "HUMAN_VISION_GATE" ||
     state === "HUMAN_ANALYSIS_GATE" ||
-    state === "HUMAN_CONCEPT_GATE"
+    state === "HUMAN_CONCEPT_GATE" ||
+    state === "HUMAN_SCRIPT_GATE"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -314,6 +331,9 @@ function primaryTargetForWorkflow(workflow) {
   }
   if (workflow.state === "HUMAN_ANALYSIS_GATE") {
     return { type: "route", value: "/analysis", label: "Review analysis findings" };
+  }
+  if (workflow.state === "HUMAN_SCRIPT_GATE") {
+    return { type: "route", value: "/analysis", label: "Review script" };
   }
   if (workflow.state === "HUMAN_CONCEPT_GATE") {
     return { type: "route", value: "/analysis", label: "Review concepts" };
@@ -1525,13 +1545,184 @@ async function submitResearchDecision(decision) {
   }
 }
 
+function pendingScriptIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentScriptItem() {
+  const items = (latestScriptSnapshot && latestScriptSnapshot.scripts) || [];
+  if (!items.length) return null;
+  scriptCursor = Math.max(0, Math.min(scriptCursor, items.length - 1));
+  return { item: items[scriptCursor], items: items };
+}
+
+function renderScriptReview(snapshot, force) {
+  latestScriptSnapshot = snapshot || {};
+  if (
+    !snapshot ||
+    snapshot.status === "WAITING_FOR_SCRIPT_DRAFTS" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.scripts || []).length
+  ) {
+    scriptReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    scriptReviewPanel.hidden = false;
+    scriptReviewTitle.textContent = "Script Gate complete";
+    scriptReviewSummary.textContent =
+      (snapshot.accepted || 0) + " accepted · " +
+      (snapshot.rework || 0) + " rework · " +
+      (snapshot.rejected || 0) + " rejected";
+    scriptReviewStatus.textContent =
+      (snapshot.accepted || 0) > 0 ? "READY FOR PRODUCTION" : "NO APPROVED SCRIPT";
+    scriptReviewStatus.className =
+      "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
+    scriptDetail.innerHTML =
+      '<div class="concept-complete">' +
+      ((snapshot.accepted || 0) > 0
+        ? "Approved script is ready for the Production stage."
+        : "No script was approved. Rework or regenerate before production.") +
+      '</div>';
+    scriptCriteria.innerHTML = "";
+    scriptNote.hidden = true;
+    scriptPrev.disabled = true;
+    scriptNext.disabled = true;
+    scriptReject.disabled = true;
+    scriptRework.disabled = true;
+    scriptAccept.disabled = true;
+    return;
+  }
+
+  if (scriptEditing && !force) return;
+  const items = snapshot.scripts || [];
+  if (scriptCursor >= items.length) {
+    scriptCursor = Math.max(0, items.length - 1);
+  }
+  const script = items[scriptCursor] || {};
+  const pkg = script.package || {};
+  const sections = (script.sections || []).map(function (section) {
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(section.section_id || "SECTION") + ' · ' +
+      escapeHtml(section.purpose || "") + '</h4>' +
+      '<p>' + escapeHtml(section.narration || "") + '</p>' +
+      '<div class="concept-meta"><span>Claims: ' +
+      escapeHtml((section.claim_ids || []).join(", ") || "none") +
+      '</span></div></div>';
+  }).join("");
+
+  scriptReviewPanel.hidden = false;
+  scriptNote.hidden = false;
+  scriptReviewTitle.textContent =
+    "Script " + (scriptCursor + 1) + " of " + items.length;
+  scriptReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · " +
+    (snapshot.accepted || 0) + " accepted · " +
+    (snapshot.rework || 0) + " rework";
+  scriptReviewStatus.textContent = script.decision || "PENDING";
+  scriptReviewStatus.className =
+    "status-chip " +
+    (script.decision === "ACCEPT"
+      ? "success"
+      : script.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  scriptDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>APPROVED PACKAGE</h4><h3>' +
+      escapeHtml(pkg.title || script.title || script.concept_id) + '</h3>' +
+      '<p><strong>Promise:</strong> ' + escapeHtml(pkg.one_sentence_promise || "") +
+      '<br><strong>Expected payoff:</strong> ' + escapeHtml(pkg.expected_payoff || "") +
+      '<br><strong>Viewer outcome:</strong> ' + escapeHtml(pkg.desired_outcome || "") +
+      '</p></div>' +
+    '<div class="concept-detail-card"><h4>OPENING HOOK</h4><p>' +
+      escapeHtml(script.opening_hook || "") + '</p></div>' +
+    sections +
+    '<div class="concept-detail-card"><h4>CLOSING</h4><p>' +
+      escapeHtml(script.closing || "") + '</p></div>';
+
+  const descriptions = script.criteria || {};
+  const checked = script.criteria_decisions || {};
+  const required = script.required_accept_criteria || Object.keys(descriptions);
+  scriptCriteria.innerHTML = required.map(function (criterion) {
+    const id = "script-criterion-" + scriptCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) +
+      '" data-script-criterion="' + escapeHtml(criterion) + '"' +
+      (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(descriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  scriptNote.value = script.note || "";
+  scriptPrev.disabled = scriptCursor <= 0;
+  scriptNext.disabled = scriptCursor >= items.length - 1;
+  scriptReject.disabled = false;
+  scriptRework.disabled = false;
+  scriptAccept.disabled = false;
+  scriptEditing = false;
+}
+
+function moveScriptCursor(delta) {
+  const current = currentScriptItem();
+  if (!current) return;
+  scriptCursor = Math.max(0, Math.min(current.items.length - 1, scriptCursor + delta));
+  scriptEditing = false;
+  renderScriptReview(latestScriptSnapshot, true);
+}
+
+function collectScriptCriteria() {
+  const values = {};
+  scriptCriteria.querySelectorAll("[data-script-criterion]").forEach(function (input) {
+    values[input.dataset.scriptCriterion] = Boolean(input.checked);
+  });
+  return values;
+}
+
+async function submitScriptDecision(decision) {
+  const current = currentScriptItem();
+  if (!current) return;
+  const script = current.item;
+  try {
+    const payload = await api("/api/script-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: script.concept_id,
+        decision: decision,
+        criteria: collectScriptCriteria(),
+        note: scriptNote.value
+      })
+    });
+    scriptEditing = false;
+    latestScriptSnapshot = payload;
+    const nextPending = pendingScriptIndex(payload.scripts || []);
+    if (nextPending >= 0) scriptCursor = nextPending;
+    renderScriptReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Script accepted for production."
+        : decision === "REWORK"
+          ? "Script sent for rework."
+          : "Script rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
     "HUMAN_VISION_GATE",
     "HUMAN_CONCEPT_GATE",
     "HUMAN_PACKAGING_GATE",
-    "HUMAN_RESEARCH_GATE"
+    "HUMAN_RESEARCH_GATE",
+    "HUMAN_SCRIPT_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -1563,6 +1754,7 @@ function renderAnalysis(data) {
   renderConceptReview(data.concept_gate || {}, false);
   renderPackagingReview(data.packaging_gate || {}, false);
   renderResearchReview(data.research_gate || {}, false);
+  renderScriptReview(data.script_gate || {}, false);
 
   const currentId = workflow.current_action_id || "";
   let activeIndex = 0;
@@ -1571,6 +1763,12 @@ function renderAnalysis(data) {
     workflow.state === "HUMAN_ANALYSIS_GATE"
   ) {
     activeIndex = 1;
+  } else if (
+    ["script_prepare", "script_generate", "script_gate_prepare"].includes(currentId) ||
+    workflow.state === "HUMAN_SCRIPT_GATE" ||
+    (data.story_script && data.story_script.script_gate_complete)
+  ) {
+    activeIndex = 5;
   } else if (
     ["research_prepare", "research_acquire", "research_generate", "research_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_RESEARCH_GATE" ||
@@ -1936,6 +2134,27 @@ researchRework.addEventListener("click", function () {
 });
 researchAccept.addEventListener("click", function () {
   submitResearchDecision("ACCEPT");
+});
+scriptNote.addEventListener("input", function () {
+  scriptEditing = true;
+});
+scriptCriteria.addEventListener("change", function () {
+  scriptEditing = true;
+});
+scriptPrev.addEventListener("click", function () {
+  moveScriptCursor(-1);
+});
+scriptNext.addEventListener("click", function () {
+  moveScriptCursor(1);
+});
+scriptReject.addEventListener("click", function () {
+  submitScriptDecision("REJECT");
+});
+scriptRework.addEventListener("click", function () {
+  submitScriptDecision("REWORK");
+});
+scriptAccept.addEventListener("click", function () {
+  submitScriptDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });
