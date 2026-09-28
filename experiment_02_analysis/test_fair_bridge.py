@@ -65,6 +65,11 @@ class CloseFailingFair(FakeFair):
         raise RuntimeError("close failed")
 
 
+class SolveFailingFair(FakeFair):
+    async def solve(self, prompt, **kwargs):
+        raise RuntimeError("provider connection dropped after dispatch")
+
+
 def fake_module(fair_class):
     module = types.ModuleType("fair")
     module.FAIR = fair_class
@@ -180,6 +185,16 @@ class FairBridgeTests(unittest.TestCase):
         self.assertEqual(result["status"], "BRIDGE_ERROR")
         self.assertEqual(result["error_type"], "TypeError")
         self.assertFalse(result["paid_inference_executed"])
+
+
+    def test_solve_exception_after_dispatch_has_unknown_cost_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with patch.dict(sys.modules, {"fair": fake_module(SolveFailingFair)}):
+                result = asyncio.run(fair_bridge.execute(self.payload(repo)))
+        self.assertEqual(result["status"], "BRIDGE_ERROR")
+        self.assertIsNone(result["paid_inference_executed"])
+        self.assertEqual(result["cost_state"], "UNKNOWN_AFTER_DISPATCH")
 
 
 if __name__ == "__main__":
