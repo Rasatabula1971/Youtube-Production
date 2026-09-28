@@ -77,7 +77,7 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         if (
             isinstance(provenance, dict)
             and provenance.get("plan_sha256") == plan_hash
-            and existing.get("status") in {"COMPLETE", "PARTIAL"}
+            and existing.get("status") == "COMPLETE"
         ):
             return {
                 "status": "SKIPPED_CURRENT",
