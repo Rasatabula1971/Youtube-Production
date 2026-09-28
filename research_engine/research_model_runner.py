@@ -12,6 +12,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from pipeline_integrity import atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -265,7 +266,7 @@ def run_one(
     response_path = RESPONSES_DIR / f"{slug}.json"
 
     if report_path.exists() and response_path.exists() and not force:
-        report = load_json(report_path)
+        report = tolerant_load_json(report_path) or {}
         response = load_json(response_path)
         provenance = response.get("response_provenance", {})
         if (
@@ -436,13 +437,19 @@ def run_batch(*, force: bool, maximum_requests: int | None) -> dict[str, Any]:
         results.append(result)
         if result.get("status") != "SKIPPED_ALREADY_VALIDATED":
             invoked += 1
+        if result.get("status") in {
+            "COST_POLICY_VIOLATION",
+            "RUNNER_ERROR",
+            "MODEL_FAILED",
+        }:
+            break
 
     merge = run_apply()
     summary = {
-        "status": (
-            "COMPLETE"
-            if merge.get("status") == "DRAFT_RESEARCH_PACKAGES_READY"
-            else merge.get("status")
+        "status": batch_status(
+            results,
+            expected_count=len(plans),
+            processed_count=len(results),
         ),
         "plans_found": len(plans),
         "model_runs_invoked": invoked,
@@ -450,10 +457,7 @@ def run_batch(*, force: bool, maximum_requests: int | None) -> dict[str, Any]:
         "results": results,
         "merge": merge,
     }
-    BATCH_SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BATCH_SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    atomic_write_json(BATCH_SUMMARY_FILE, summary)
     return summary
 
 
@@ -481,6 +485,8 @@ def main() -> None:
             maximum_requests=args.max_requests,
         )
     print(json.dumps(result, indent=2, ensure_ascii=True))
+    if args.mode == "batch":
+        raise SystemExit(exit_code_for_status(result["status"]))
 
 
 if __name__ == "__main__":
