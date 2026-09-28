@@ -1084,14 +1084,38 @@ def transformation_artifact_state() -> dict[str, Any]:
         if isinstance(candidates, dict)
         else 0
     )
+    candidate_hash = (
+        sha256_file(TRANSFORM_CANDIDATES_FILE)
+        if TRANSFORM_CANDIDATES_FILE.exists()
+        else None
+    )
+    triage = safe_load_json(TRANSFORM_TRIAGE_FILE)
+    triaged = safe_load_json(TRANSFORM_TRIAGED_CANDIDATES_FILE)
+    triage_ready = (
+        candidate_hash is not None
+        and isinstance(triage, dict)
+        and isinstance(triaged, dict)
+        and triage.get("source_candidates_sha256") == candidate_hash
+        and triaged.get("source_candidates_sha256") == candidate_hash
+        and int(triaged.get("concept_count") or 0) > 0
+    )
+    shortlist_count = (
+        int(triaged.get("concept_count") or 0)
+        if isinstance(triaged, dict)
+        else 0
+    )
     requests_ready = bool(request_hashes)
     responses_complete = (
         requests_ready
         and set(request_hashes).issubset(current_response_ids)
     )
     candidates_ready = responses_complete and candidate_count > 0
-    gate = concept_gate_snapshot() if candidates_ready else {
-        "status": "WAITING_FOR_CONCEPT_CANDIDATES",
+    gate = concept_gate_snapshot() if candidates_ready and triage_ready else {
+        "status": (
+            "WAITING_FOR_TRIAGED_CONCEPTS"
+            if candidates_ready and not triage_ready
+            else "WAITING_FOR_CONCEPT_CANDIDATES"
+        ),
         "complete": False,
         "concepts": [],
     }
@@ -1109,6 +1133,9 @@ def transformation_artifact_state() -> dict[str, Any]:
         "responses_complete": responses_complete,
         "candidate_count": candidate_count,
         "candidates_ready": candidates_ready,
+        "triage_ready": triage_ready,
+        "shortlist_count": shortlist_count,
+        "concept_triage": triage if isinstance(triage, dict) else {},
         "concept_gate": gate,
         "concept_gate_complete": bool(gate.get("complete")),
         "research_ready": research_ready,
