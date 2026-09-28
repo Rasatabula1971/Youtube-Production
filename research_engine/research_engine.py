@@ -576,14 +576,14 @@ def run_apply() -> dict[str, Any]:
             and provenance.get("plan_sha256") != sha256_file(plan_path)
         ):
             rejected.append(
-                    {
-                        "response": str(response_path),
-                        "errors": [
-                            "response provenance does not match current research plan"
-                        ],
-                    }
-                )
-                continue
+                {
+                    "response": str(response_path),
+                    "errors": [
+                        "response provenance does not match current research plan"
+                    ],
+                }
+            )
+            continue
         try:
             draft = validate_research_response(
                 response,
