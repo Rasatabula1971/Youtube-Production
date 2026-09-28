@@ -515,6 +515,53 @@ def inference_cost_authorized(result: dict[str, Any]) -> bool:
     return result.get("paid_inference_executed") is False
 
 
+def gemini_compatible_schema(value: Any) -> Any:
+    """Convert project JSON Schema to Gemini's supported structured-output subset."""
+    if isinstance(value, list):
+        return [gemini_compatible_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    allowed = {
+        "$id",
+        "$defs",
+        "$ref",
+        "$anchor",
+        "type",
+        "format",
+        "title",
+        "description",
+        "enum",
+        "items",
+        "prefixItems",
+        "minItems",
+        "maxItems",
+        "minimum",
+        "maximum",
+        "anyOf",
+        "oneOf",
+        "properties",
+        "additionalProperties",
+        "required",
+        "propertyOrdering",
+    }
+    output: dict[str, Any] = {}
+    if "const" in value and "enum" not in value:
+        output["enum"] = [value["const"]]
+
+    for key, item in value.items():
+        if key == "const" or key not in allowed:
+            continue
+        if key == "properties" and isinstance(item, dict):
+            output[key] = {
+                str(name): gemini_compatible_schema(schema)
+                for name, schema in item.items()
+            }
+        else:
+            output[key] = gemini_compatible_schema(item)
+    return output
+
+
 def call_direct_gemini_backup(
     payload: dict[str, Any],
     *,
@@ -546,7 +593,7 @@ def call_direct_gemini_backup(
         ],
         "generationConfig": {
             "responseMimeType": "application/json",
-            "responseSchema": schema,
+            "responseSchema": gemini_compatible_schema(schema),
             "temperature": 0.2,
         },
     }
