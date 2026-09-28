@@ -318,5 +318,52 @@ class HumanReviewTests(unittest.TestCase):
             self.assertEqual(len(saved["decisions"]), 2)
 
 
+    def test_stale_reviewed_profile_does_not_complete_current_packet(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            analyzed_dir = root / "analyzed"
+            requests_dir = root / "requests"
+            responses_dir = root / "responses"
+            reviewed_dir = root / "reviewed"
+            reports_dir = root / "reports"
+            for path in (analyzed_dir, requests_dir, responses_dir, reviewed_dir, reports_dir):
+                path.mkdir()
+
+            profile_path = analyzed_dir / "v1.json"
+            profile_path.write_text(json.dumps(self.profile()), encoding="utf-8")
+            request = build_review_request(
+                self.profile(),
+                self.experiment_config,
+                self.review_config,
+            )
+            request_path = requests_dir / "v1.review_request.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+
+            (reviewed_dir / "v1.json").write_text(
+                json.dumps({"video_id": "v1", "review": {"completed": True}}),
+                encoding="utf-8",
+            )
+            (reports_dir / "v1.human_review.json").write_text(
+                json.dumps({
+                    "status": "REVIEW_COMPLETED",
+                    "profile_sha256": "stale-profile",
+                    "request_sha256": "stale-request",
+                }),
+                encoding="utf-8",
+            )
+
+            stack.enter_context(patch.object(human_review, "DEFAULT_ANALYZED_DIR", analyzed_dir))
+            stack.enter_context(patch.object(human_review, "REVIEW_REQUESTS_DIR", requests_dir))
+            stack.enter_context(patch.object(human_review, "REVIEW_RESPONSES_DIR", responses_dir))
+            stack.enter_context(patch.object(human_review, "REVIEWED_PROFILES_DIR", reviewed_dir))
+            stack.enter_context(patch.object(human_review, "REVIEW_REPORTS_DIR", reports_dir))
+
+            snapshot = review_snapshot()
+
+        self.assertFalse(snapshot["complete"])
+        self.assertEqual(snapshot["accepted"], 0)
+        self.assertEqual(snapshot["pending"], request["reviewable_item_count"])
+
+
 if __name__ == "__main__":
     unittest.main()
