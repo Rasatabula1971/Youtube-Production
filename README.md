@@ -88,6 +88,10 @@ Learning
 ├── packaging_engine/
 │   ├── packaging_engine.py
 │   └── packaging_gate.py
+├── format_engine/
+│   ├── format_engine.py
+│   ├── format_review.py
+│   └── format_config.json
 └── source_acquisition/
     ├── agent_reach_adapter.py
     └── youtube_discovery_benchmark.py
@@ -211,6 +215,27 @@ No package score, CTR prediction or automatic winner is produced.
 
 See `packaging_engine/PACKAGING_ENGINE.md` and
 `packaging_engine/PACKAGING_GATE.md`.
+
+
+## Format Engine
+
+The repository now includes the Format Engine and human Format Gate.
+
+A Script Gate approved script is converted into one production plan per required
+branch. The approved concept `format_intent` decides which branches are required:
+`long_form`, `short`, or both when the intent is `either`.
+
+Long-form and Shorts share source understanding, research, accepted facts and the
+master story package, but they are planned as separate productions. Plans that are
+identical across branches, or that differ only by truncating one timeline, fail
+deterministic validation before a human ever sees them.
+
+Every beat carrying factual material cites human-accepted research claims and traces
+back to the approved script sections it is built from.
+
+No format score, predicted retention or automatic branch winner is produced.
+
+See `format_engine/FORMAT_ENGINE.md` and `format_engine/FORMAT_GATE.md`.
 
 
 ## Source Acquisition / Agent Reach

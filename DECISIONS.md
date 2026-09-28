@@ -873,3 +873,38 @@ current Experiment 02 transformation handoff.
 The human Concept Gate remains mandatory. ACCEPT requires every configured
 human criterion to be affirmed. Only accepted concepts may enter the Research
 Engine handoff.
+
+
+## D-060 — Long-form and Shorts are planned as separate productions
+
+**Status:** Accepted
+
+After the Human Script Gate approves a script, the Format Engine plans one
+production branch per required format rather than one timeline that is later
+re-cut.
+
+The approved concept `format_intent` determines the required branches:
+`long_form` and `short` each require their own branch, and `either` requires
+both. An unrecognised `format_intent` fails deterministic validation instead of
+defaulting to a branch.
+
+Branches share source understanding, research, accepted facts and the master
+story package. They are not identical edits of one timeline. A plan whose
+branches carry the same beat sequence, or whose shorter branch is a prefix of
+the longer one, fails deterministic validation before human review.
+
+Every beat carrying factual material cites Research Gate accepted `claim_id`
+values, and every beat traces to the approved script `section_id` values it is
+built from. Each branch must carry at least one accepted claim, so no branch
+drifts free of verified research.
+
+Branch duration bounds, beat minimums and aspect ratios are configuration, not
+proven production rules. They remain hypotheses open to revision by the Learning
+Engine.
+
+No format score, predicted retention, or automatic branch winner is introduced.
+
+The Human Format Gate remains mandatory. ACCEPT requires every configured human
+criterion to be affirmed, and each review request is bound to the SHA-256 of the
+exact format plan it was prepared from. Only accepted format plans may enter the
+Production Engine.

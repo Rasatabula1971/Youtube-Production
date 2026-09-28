@@ -158,6 +158,10 @@ They may share:
 
 They should not be treated as identical edits of the same timeline.
 
+This stage is implemented as an offline framework in `format_engine/`. Branch
+separation is enforced deterministically before the Human Format Gate, and only
+gate-accepted plans reach the Production Engine. See D-060.
+
 ### 07 — Production Engine
 
 Potential capabilities:
