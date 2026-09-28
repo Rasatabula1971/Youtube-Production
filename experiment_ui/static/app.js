@@ -1919,6 +1919,7 @@ function renderJob(job, log) {
   let statusClass = "neutral";
   if (job.status === "SUCCEEDED") statusClass = "success";
   else if (job.status === "FAILED") statusClass = "failed";
+  else if (job.status === "PARTIAL") statusClass = "running";
   else if (running) statusClass = "running";
 
   jobSummaryButton.className = "job-summary " + statusClass;
