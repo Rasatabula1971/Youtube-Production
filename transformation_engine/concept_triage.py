@@ -1,7 +1,7 @@
 """FAIR-backed two-pass comparative triage for Transformation Engine concepts.
 
 Pass 1 scores concepts in small resumable chunks so free providers are not asked
-to return one oversized 25-item structured response. The strongest concepts from
+to return one oversized structured response for the whole candidate pool. The strongest concepts from
 each chunk advance to a bounded finalist pool. Pass 2 compares those finalists
 and produces the final 0-6 shortlist for the Human Concept Gate.
 
