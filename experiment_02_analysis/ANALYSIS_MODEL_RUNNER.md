@@ -267,7 +267,8 @@ contract and tests before model execution rather than weakening the schema gate.
 ## Direct Gemini backup
 
 The shared FAIR adapter supports an optional direct Gemini backup for all
-FAIR-backed stages in this repository. FAIR is always attempted first.
+FAIR-backed stages in this repository: Analysis, Concept Generation, Concept
+Triage, Packaging, Research, and Script. FAIR is always attempted first.
 
 Set these values in the YouTube project's root `.env`, not FAIR's `.env`:
 
