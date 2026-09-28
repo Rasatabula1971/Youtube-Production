@@ -88,7 +88,7 @@ def resolve_stream_url(
 
     for line in completed.stdout.splitlines():
         candidate = line.strip()
-        if candidate.startswith("https://") or candidate.startswith("http://"):
+        if candidate.startswith(("https://", "http://")):
             return candidate, completed
     return None, completed
 
