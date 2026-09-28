@@ -1277,6 +1277,73 @@ def research_artifact_state() -> dict[str, Any]:
     }
 
 
+def story_script_artifact_state() -> dict[str, Any]:
+    verified_hashes: dict[str, str] = {}
+    if RESEARCH_VERIFIED_DIR.exists():
+        for path in RESEARCH_VERIFIED_DIR.glob("*.verified_research_package.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict) or payload.get("status") != "READY_FOR_STORY_SCRIPT":
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if concept_id:
+                verified_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if SCRIPT_REQUESTS_DIR.exists():
+        for path in SCRIPT_REQUESTS_DIR.glob("*.script_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in verified_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("verified_research_sha256") == verified_hashes[concept_id]
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    draft_ids: set[str] = set()
+    if SCRIPT_DRAFTS_DIR.exists():
+        for path in SCRIPT_DRAFTS_DIR.glob("*.script_draft.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("draft_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256") == request_hashes[concept_id]
+            ):
+                draft_ids.add(concept_id)
+
+    gate = script_gate_snapshot() if draft_ids else {
+        "status": "WAITING_FOR_SCRIPT_DRAFTS",
+        "complete": False,
+        "scripts": [],
+    }
+    approved_ids = {
+        str(item.get("concept_id"))
+        for item in gate.get("scripts", [])
+        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    }
+
+    requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(request_hashes)
+    drafts_ready = requests_ready and set(verified_hashes).issubset(draft_ids)
+    production_ready = drafts_ready and bool(gate.get("complete")) and set(verified_hashes).issubset(approved_ids)
+    return {
+        "verified_concept_ids": sorted(verified_hashes),
+        "request_concept_ids": sorted(request_hashes),
+        "draft_concept_ids": sorted(draft_ids),
+        "requests_ready": requests_ready,
+        "drafts_ready": drafts_ready,
+        "script_gate": gate,
+        "script_gate_complete": bool(gate.get("complete")),
+        "production_ready": production_ready,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
