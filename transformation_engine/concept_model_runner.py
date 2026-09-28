@@ -11,6 +11,10 @@ import argparse
 import json
 import sys
 from pathlib import Path
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
 from pipeline_integrity import atomic_write_text, atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
