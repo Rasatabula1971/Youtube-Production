@@ -2571,9 +2571,21 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "concept_triage": {
+            "enabled": transform_candidates and not transform_triage,
+            "reason": (
+                "Compare all current concept candidates and shortlist the strongest 3-6."
+                if transform_candidates and not transform_triage
+                else (
+                    f"Concept triage is current with {transform['shortlist_count']} shortlisted concept(s)."
+                    if transform_triage
+                    else "Generate valid concept candidates first."
+                )
+            ),
+        },
         "concept_gate_prepare": {
             "enabled": (
-                transform_candidates
+                transform_triage
                 and (
                     concept_gate_status == "READY_TO_PREPARE"
                     or (
@@ -2583,22 +2595,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
             "reason": (
-                "Validated concept candidates are ready for human review."
+                "LLM-shortlisted concepts are ready for final human review."
                 if (
-                    transform_candidates
+                    transform_triage
                     and concept_gate_status == "READY_TO_PREPARE"
                 )
                 else (
                     "No concept was accepted; reopen the current Concept Gate."
                     if (
-                        transform_candidates
+                        transform_triage
                         and concept_gate_complete
                         and not bool(transform["research_ready"])
                     )
                     else (
                         "Concept Gate is already prepared or complete."
-                        if transform_candidates
-                        else "Generate valid concept candidates first."
+                        if transform_triage
+                        else "Run Concept Triage before preparing the Human Concept Gate."
                     )
                 )
             ),
