@@ -263,3 +263,27 @@ eligible free provider or local model when one is configured and admitted.
 
 If FAIR changes provider/model capabilities again, update the YouTube bridge
 contract and tests before model execution rather than weakening the schema gate.
+
+## Direct Gemini backup
+
+The shared FAIR adapter supports an optional direct Gemini backup for all
+FAIR-backed stages in this repository: Analysis, Concept Generation, Concept
+Triage, Packaging, Research, and Script. FAIR is always attempted first.
+
+Set these values in the YouTube project's root `.env`, not FAIR's `.env`:
+
+```text
+DIRECT_GEMINI_API_KEY=...
+DIRECT_GEMINI_MODEL=gemini-3.5-flash
+```
+
+The direct call is attempted only when FAIR returns a non-accepted result and
+explicitly reports `paid_inference_executed: false`. If FAIR's post-dispatch
+cost state is unknown, the pipeline still fails closed and does not call the
+backup.
+
+A successful backup is recorded as `provider_id: direct_gemini_backup` with
+`billing_authorization: USER_APPROVED_DIRECT_GEMINI_BACKUP`. It is never
+reported as verified-free; the configured Gemini key may be subject to the
+quota or billing rules of its Google AI project.
+

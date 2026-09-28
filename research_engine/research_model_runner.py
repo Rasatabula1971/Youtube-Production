@@ -36,6 +36,7 @@ if str(EXP2_DIR) not in sys.path:
 from analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
+    inference_cost_authorized,
     load_runner_config,
     parse_model_json,
     resolve_fair_paths,
@@ -386,9 +387,12 @@ def run_one(
         "provider_id": bridge_result.get("provider_id"),
         "model_id": bridge_result.get("model_id"),
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
+        "direct_backup_used": bridge_result.get("direct_backup_used", False),
+        "direct_backup_may_bill": bridge_result.get("direct_backup_may_bill", False),
+        "billing_authorization": bridge_result.get("billing_authorization"),
         "attempts": safe_attempts(bridge_result),
     }
-    if bridge_result.get("paid_inference_executed") is not False:
+    if not inference_cost_authorized(bridge_result):
         report = {**base, "status": "COST_POLICY_VIOLATION"}
         atomic_write_json(report_path, report)
         return report
