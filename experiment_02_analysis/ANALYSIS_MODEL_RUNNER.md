@@ -233,3 +233,33 @@ rather than reproduce long transcript passages.
 
 The objective is to analyze transferable mechanisms, not regenerate source
 scripts.
+
+
+## FAIR compatibility contract
+
+The YouTube project currently targets the FAIR embedded router contract on the
+FAIR repository main branch.
+
+The bridge intentionally uses:
+
+- application_id: `youtube-production`;
+- stage-specific client IDs for per-client routing/cache/quota accounting;
+- maximum output budget: 4096 tokens;
+- strict JSON Schema for Analysis, Transformation, Packaging and Research;
+- free-only provider admission inherited from FAIR.
+
+FAIR Doctor is a real structured-output preflight. It reports
+`NO_COMPATIBLE_ROUTE` when the currently loaded FAIR registry has no active
+model that both:
+
+1. supports `structured_output`; and
+2. can satisfy the configured output-token budget.
+
+This matters because a provider may be healthy for plain text but still be
+unsuitable for these YouTube stages. In the current FAIR model registry, Kilo
+Free routes are plain-text-only, so Kilo alone does not satisfy the YouTube
+structured-output contract. FAIR may still route these stages through another
+eligible free provider or local model when one is configured and admitted.
+
+If FAIR changes provider/model capabilities again, update the YouTube bridge
+contract and tests before model execution rather than weakening the schema gate.
