@@ -243,8 +243,11 @@ It uses FAIR through FAIR's own Python environment, requires schema-valid JSON,
 restricts claims to evidence actually shown to the model, and then passes the
 response through the deterministic Experiment 02 apply gate.
 
-The runner fails closed on model escalation, infrastructure failure, invalid
-final profiles, or any non-false paid_inference_executed signal.
+The runner fails closed on infrastructure/cost uncertainty, invalid final
+profiles, or any non-false FAIR `paid_inference_executed` signal. A configured
+project-level direct Gemini backup may handle a clean FAIR non-accept only when
+FAIR explicitly reports that no paid inference executed; that backup is recorded
+as user-authorized and is never labeled verified-free.
 
 See ANALYSIS_MODEL_RUNNER.md.
 
