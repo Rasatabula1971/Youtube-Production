@@ -196,7 +196,7 @@ def run_one(
         "attempts": safe_attempts(result),
     }
 
-    if result.not inference_cost_authorized(bridge_result):
+    if not inference_cost_authorized(result):
         report = {**base, "status": "COST_POLICY_VIOLATION"}
         atomic_write_json(report_path, report)
         return report
