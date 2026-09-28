@@ -62,8 +62,17 @@ def build_review_request(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     concepts = candidates_payload.get("concepts", [])
+    overrides = candidates_payload.get("override_concepts", [])
     if not isinstance(concepts, list):
         raise ValueError("concept_candidates concepts must be a list")
+    if not isinstance(overrides, list):
+        raise ValueError("concept_candidates override_concepts must be a list")
+    default_ids = {
+        str(item.get("concept_id"))
+        for item in concepts
+        if isinstance(item, dict)
+    }
+    concepts = list(concepts) + list(overrides)
 
     items = []
     seen_ids: set[str] = set()
@@ -107,6 +116,8 @@ def build_review_request(
                     "source_dependency_test", {}
                 ),
                 "llm_triage": concept.get("llm_triage", {}),
+                "triage_default": concept_id in default_ids,
+                "source_overlap": concept.get("source_overlap", {}),
                 "required_accept_criteria": list(
                     config["required_accept_criteria"]
                 ),
@@ -286,7 +297,9 @@ def apply_gate(
     if not expected_hash or expected_hash != content_sha256(candidates_payload):
         raise ValueError("STALE_REVIEW_REQUEST: concept candidates changed after review preparation")
     mapped = validate_decisions(request, response, config)
-    concepts = candidates_payload.get("concepts", [])
+    concepts = list(candidates_payload.get("concepts", [])) + list(
+        candidates_payload.get("override_concepts", [])
+    )
     by_id = {
         str(concept["concept_id"]): concept
         for concept in concepts

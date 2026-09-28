@@ -12,8 +12,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+_OVERLAP_ROOT = Path(__file__).resolve().parent.parent
+if str(_OVERLAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_OVERLAP_ROOT))
+
+from source_overlap import check_texts
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -422,6 +429,20 @@ def validate_response(
             "Concept must retain its main value without source wording, "
             "footage, story, personality, or exact execution."
         )
+        overlap = check_texts([
+            {"field": "working_title", "text": normalized.get("working_title", "")},
+            {"field": "premise", "text": normalized.get("premise", "")},
+            {"field": "audience_promise", "text": normalized.get("audience_promise", "")},
+            {"field": "mechanism_application", "text": normalized.get("mechanism_application", "")},
+            {"field": "transformation_method", "text": normalized.get("transformation_method", "")},
+        ])
+        normalized["source_overlap"] = overlap
+        if overlap.get("blocking"):
+            match = overlap.get("matches", [{}])[0]
+            errors.append(
+                "source overlap block: "
+                + str(match.get("overlap_text") or "")
+            )
 
         if errors:
             rejected.append(
@@ -617,6 +638,22 @@ def run_apply() -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     accepted, rejected = merge_candidate_files()
 
+    handoff_hashes = set()
+    if REQUESTS_DIR.exists():
+        for request_path in REQUESTS_DIR.glob("*.concept_request.json"):
+            try:
+                request = load_json(request_path)
+            except Exception:
+                continue
+            provenance = request.get("request_provenance", {})
+            if isinstance(provenance, dict) and provenance.get("handoff_sha256"):
+                handoff_hashes.add(str(provenance["handoff_sha256"]))
+    current_handoff_sha256 = (
+        next(iter(handoff_hashes))
+        if len(handoff_hashes) == 1
+        else None
+    )
+
     CANDIDATES_FILE.write_text(
         json.dumps(
             {
@@ -658,6 +695,7 @@ def run_apply() -> dict[str, Any]:
         "candidates_file": str(CANDIDATES_FILE),
         "rejected_file": str(REJECTED_FILE),
         "model_calls": 0,
+        "handoff_sha256": current_handoff_sha256,
     }
     SUMMARY_FILE.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),

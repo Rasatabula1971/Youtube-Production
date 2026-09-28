@@ -57,6 +57,8 @@ const conceptReviewTitle = document.getElementById("conceptReviewTitle");
 const conceptReviewSummary = document.getElementById("conceptReviewSummary");
 const conceptReviewStatus = document.getElementById("conceptReviewStatus");
 const conceptDetail = document.getElementById("conceptDetail");
+const conceptOverridesPanel = document.getElementById("conceptOverridesPanel");
+const conceptOverrides = document.getElementById("conceptOverrides");
 const conceptCriteria = document.getElementById("conceptCriteria");
 const conceptNote = document.getElementById("conceptNote");
 const conceptPrev = document.getElementById("conceptPrev");
@@ -979,8 +981,25 @@ function currentConceptItem() {
   return { item: items[conceptCursor], items: items };
 }
 
+function renderConceptOverrides(snapshot) {
+  const items = (snapshot && snapshot.override_concepts) || [];
+  conceptOverridesPanel.hidden = items.length === 0;
+  conceptOverrides.innerHTML = items.map(function (item) {
+    const triage = item.llm_triage || {};
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(triage.decision || "TRIAGE") + ' · ' +
+      escapeHtml(triage.overall_score == null ? "—" : triage.overall_score + "/100") + '</h4>' +
+      '<h3>' + escapeHtml(item.working_title || item.concept_id) + '</h3>' +
+      '<p>' + escapeHtml(triage.rationale || "") + '</p>' +
+      '<button class="ghost" type="button" data-concept-override="' +
+      escapeHtml(item.concept_id) + '">Review anyway</button>' +
+      '</div>';
+  }).join("");
+}
+
 function renderConceptReview(snapshot, force) {
   latestConceptSnapshot = snapshot || {};
+  renderConceptOverrides(snapshot || {});
 
   if (
     !snapshot ||
@@ -988,6 +1007,22 @@ function renderConceptReview(snapshot, force) {
     snapshot.status === "READY_TO_PREPARE" ||
     !(snapshot.concepts || []).length
   ) {
+    if ((snapshot.override_concepts || []).length) {
+      conceptReviewPanel.hidden = false;
+      conceptReviewTitle.textContent = "No default concepts shortlisted";
+      conceptReviewSummary.textContent = "Review an override only if you disagree with triage.";
+      conceptReviewStatus.textContent = "0 SHORTLISTED";
+      conceptReviewStatus.className = "status-chip running";
+      conceptDetail.innerHTML = '<div class="concept-complete">Triage found no concept strong enough for the default Human Gate.</div>';
+      conceptCriteria.innerHTML = "";
+      conceptNote.hidden = true;
+      conceptReject.disabled = true;
+      conceptRework.disabled = true;
+      conceptAccept.disabled = true;
+      conceptPrev.disabled = true;
+      conceptNext.disabled = true;
+      return;
+    }
     conceptReviewPanel.hidden = true;
     return;
   }
@@ -1035,6 +1070,7 @@ function renderConceptReview(snapshot, force) {
   const titleTest = concept.title_clarity_test || {};
   const sourceTest = concept.source_dependency_test || {};
   const triage = concept.llm_triage || {};
+  const overlap = concept.source_overlap || {};
 
   conceptReviewPanel.hidden = false;
   conceptNote.hidden = false;
@@ -1075,6 +1111,12 @@ function renderConceptReview(snapshot, force) {
       '<br><strong>Strengths:</strong> ' + escapeHtml((triage.strengths || []).join(" · ") || "—") +
       '<br><strong>Risks:</strong> ' + escapeHtml((triage.risks || []).join(" · ") || "—") +
       '</p></div>' +
+    (overlap.matches && overlap.matches.length
+      ? '<div class="concept-detail-card"><h4>SOURCE OVERLAP CHECK</h4><p>' +
+        overlap.matches.map(function (match) {
+          return escapeHtml((match.blocking ? "BLOCK " : "WARN ") + match.word_count + " words: " + match.overlap_text);
+        }).join("<br>") + '</p></div>'
+      : '') +
     '<div class="concept-detail-card"><h4>PREMISE</h4><p>' +
       escapeHtml(concept.premise || "") + '</p></div>' +
     '<div class="concept-detail-card"><h4>AUDIENCE PROMISE</h4><p>' +
@@ -1623,6 +1665,7 @@ function renderScriptReview(snapshot, force) {
   }
   const script = items[scriptCursor] || {};
   const pkg = script.package || {};
+  const scriptOverlap = script.source_overlap || {};
   const sections = (script.sections || []).map(function (section) {
     return '<div class="concept-detail-card">' +
       '<h4>' + escapeHtml(section.section_id || "SECTION") + ' · ' +
@@ -1657,6 +1700,12 @@ function renderScriptReview(snapshot, force) {
       '<br><strong>Expected payoff:</strong> ' + escapeHtml(pkg.expected_payoff || "") +
       '<br><strong>Viewer outcome:</strong> ' + escapeHtml(pkg.desired_outcome || "") +
       '</p></div>' +
+    (scriptOverlap.matches && scriptOverlap.matches.length
+      ? '<div class="concept-detail-card"><h4>SOURCE OVERLAP CHECK</h4><p>' +
+        scriptOverlap.matches.map(function (match) {
+          return escapeHtml((match.blocking ? "BLOCK " : "WARN ") + match.word_count + " words: " + match.overlap_text);
+        }).join("<br>") + '</p></div>'
+      : '') +
     '<div class="concept-detail-card"><h4>OPENING HOOK</h4><p>' +
       escapeHtml(script.opening_hook || "") + '</p></div>' +
     sections +
@@ -1870,6 +1919,7 @@ function renderJob(job, log) {
   let statusClass = "neutral";
   if (job.status === "SUCCEEDED") statusClass = "success";
   else if (job.status === "FAILED") statusClass = "failed";
+  else if (job.status === "PARTIAL") statusClass = "running";
   else if (running) statusClass = "running";
 
   jobSummaryButton.className = "job-summary " + statusClass;
@@ -2027,6 +2077,29 @@ document.addEventListener("click", function (event) {
   const openTargetButton = event.target.closest("[data-open]");
   if (openTargetButton) {
     openTarget(openTargetButton.dataset.open);
+    return;
+  }
+
+  const overrideButton = event.target.closest("[data-concept-override]");
+  if (overrideButton) {
+    api("/api/concept-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: overrideButton.dataset.conceptOverride,
+        decision: "OVERRIDE",
+        criteria: {},
+        note: ""
+      })
+    }).then(function (payload) {
+      latestConceptSnapshot = payload;
+      const nextPending = pendingConceptIndex(payload.concepts || []);
+      if (nextPending >= 0) conceptCursor = nextPending;
+      renderConceptReview(payload, true);
+      showToast("Concept added to Human Gate.", false);
+      loadStatus();
+    }).catch(function (error) {
+      showToast(error.message, true);
+    });
     return;
   }
 

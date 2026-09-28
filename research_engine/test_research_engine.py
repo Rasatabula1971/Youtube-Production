@@ -123,6 +123,7 @@ class ResearchEngineTests(unittest.TestCase):
                     "stance": "SUPPORTS",
                     "locator": "Article 11",
                     "evidence_note": "The rule limits the component geometry.",
+                    "evidence_quote": "The rule limits the component geometry.",
                 }
             ],
         }
@@ -170,6 +171,7 @@ class ResearchEngineTests(unittest.TestCase):
                 "stance": "SUPPORTS",
                 "locator": "Section 4",
                 "evidence_note": "Independent source describes the same constraint.",
+                "evidence_quote": "Independent source describes the same constraint.",
             }
         ]
 
@@ -184,6 +186,7 @@ class ResearchEngineTests(unittest.TestCase):
                 "stance": "CONTRADICTS",
                 "locator": "Section 8",
                 "evidence_note": "This source describes an exception.",
+                "evidence_quote": "This source describes an exception.",
             }
         ]
 
@@ -209,6 +212,7 @@ class ResearchEngineTests(unittest.TestCase):
                             "stance": "CONTRADICTS",
                             "locator": "Section 8",
                             "evidence_note": "Describes an exception.",
+                            "evidence_quote": "Describes an exception.",
                         }
                     ],
                 }

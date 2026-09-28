@@ -145,6 +145,7 @@ def build_review_request(
                 "concept_context": package.get(
                     "concept_context", {}
                 ),
+                "source_overlap": package.get("source_overlap", {}),
                 "required_accept_criteria": list(
                     config["required_accept_criteria"]
                 ),

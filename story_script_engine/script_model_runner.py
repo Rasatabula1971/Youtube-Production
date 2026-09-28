@@ -2,6 +2,11 @@
 from __future__ import annotations
 import argparse, json, sys
 from pathlib import Path
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_text, atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
 HERE=Path(__file__).resolve().parent
@@ -50,50 +55,190 @@ def build_prompt(request:dict[str,Any],maximum_chars:int)->str:
     if len(prompt)>maximum_chars: raise ValueError("Script prompt exceeds configured maximum")
     return prompt
 
-def run_one(path:Path,force:bool,config:dict[str,Any])->dict[str,Any]:
-    request=load_json(path.resolve()); concept_id=str(request.get("concept_id","")).strip()
-    if not concept_id: raise ValueError("Script request requires concept_id")
-    slug=safe_slug(concept_id); request_hash=sha256_file(path)
-    report_path=MODEL_RUNS_DIR/f"{slug}.model_run.json"; response_path=RESPONSES_DIR/f"{slug}.json"; draft_path=DRAFTS_DIR/f"{slug}.script_draft.json"
+def run_one(
+    path: Path,
+    force: bool,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    path = path.resolve()
+    request = load_json(path)
+    concept_id = str(request.get("concept_id", "")).strip()
+    if not concept_id:
+        raise ValueError("Script request requires concept_id")
+
+    slug = safe_slug(concept_id)
+    request_hash = sha256_file(path)
+    report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
+    response_path = RESPONSES_DIR / f"{slug}.json"
+    draft_path = DRAFTS_DIR / f"{slug}.script_draft.json"
+
     if report_path.exists() and draft_path.exists() and not force:
-        existing=load_json(report_path); draft=load_json(draft_path)
-        prov=draft.get("draft_provenance",{})
-        if existing.get("status")=="VALIDATED" and prov.get("request_sha256")==request_hash:
-            return {"status":"SKIPPED_ALREADY_VALIDATED","concept_id":concept_id,"report":str(report_path)}
-    prompt=build_prompt(request,int(config["runner"].get("max_prompt_chars",95000)))
-    schema=response_schema(request)
-    paths=resolve_fair_paths(config)
-    payload=bridge_payload(action="solve",prompt=prompt,schema=schema,config=config,paths=paths)
-    payload["settings"]["client_id"]="youtube-story-script"
-    for d in (MODEL_RUNS_DIR,RAW_OUTPUTS_DIR,RESPONSES_DIR,DRAFTS_DIR): d.mkdir(parents=True,exist_ok=True)
-    result=call_fair_bridge(payload,python_executable=paths["python"],timeout_seconds=float(config["runner"].get("subprocess_timeout_seconds",300)))
-    base={"concept_id":concept_id,"request_source":str(path.resolve()),"request_sha256":request_hash,"fair_request_id":result.get("request_id"),"fair_status":result.get("status"),"fair_reason_code":result.get("reason_code"),"provider_id":result.get("provider_id"),"model_id":result.get("model_id"),"best_quality_score":result.get("best_quality_score"),"verification_state":result.get("verification_state"),"paid_inference_executed":result.get("paid_inference_executed"),"attempts":safe_attempts(result)}
+        existing = tolerant_load_json(report_path) or {}
+        draft = tolerant_load_json(draft_path) or {}
+        provenance = draft.get("draft_provenance", {})
+        if (
+            existing.get("status") == "VALIDATED"
+            and isinstance(provenance, dict)
+            and provenance.get("request_sha256") == request_hash
+        ):
+            return {
+                "status": "SKIPPED_ALREADY_VALIDATED",
+                "concept_id": concept_id,
+                "report": str(report_path),
+            }
+
+    prompt = build_prompt(
+        request,
+        int(config["runner"].get("max_prompt_chars", 95000)),
+    )
+    schema = response_schema(request)
+    paths = resolve_fair_paths(config)
+    payload = bridge_payload(
+        action="solve",
+        prompt=prompt,
+        schema=schema,
+        config=config,
+        paths=paths,
+    )
+    payload["settings"]["client_id"] = "youtube-story-script"
+
+    for directory in (
+        MODEL_RUNS_DIR,
+        RAW_OUTPUTS_DIR,
+        RESPONSES_DIR,
+        DRAFTS_DIR,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    try:
+        result = call_fair_bridge(
+            payload,
+            python_executable=paths["python"],
+            timeout_seconds=float(
+                config["runner"].get("subprocess_timeout_seconds", 300)
+            ),
+        )
+    except Exception as exc:
+        report = {
+            "concept_id": concept_id,
+            "request_source": str(path),
+            "request_sha256": request_hash,
+            "status": "RUNNER_ERROR",
+            "error_type": type(exc).__name__,
+        }
+        atomic_write_json(report_path, report)
+        return report
+
+    base = {
+        "concept_id": concept_id,
+        "request_source": str(path),
+        "request_sha256": request_hash,
+        "fair_request_id": result.get("request_id"),
+        "fair_status": result.get("status"),
+        "fair_reason_code": result.get("reason_code"),
+        "provider_id": result.get("provider_id"),
+        "model_id": result.get("model_id"),
+        "best_quality_score": result.get("best_quality_score"),
+        "verification_state": result.get("verification_state"),
+        "paid_inference_executed": result.get("paid_inference_executed"),
+        "attempts": safe_attempts(result),
+    }
+
     if result.get("paid_inference_executed") is not False:
-        report={**base,"status":"COST_POLICY_VIOLATION"}; report_path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return report
-    if result.get("status")!="ACCEPTED":
-        report={**base,"status":"MODEL_ESCALATION_REQUIRED" if result.get("status")=="ESCALATION_REQUIRED" else "MODEL_FAILED"}; report_path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return report
-    raw=str(result.get("output") or ""); raw_path=RAW_OUTPUTS_DIR/f"{slug}.txt"; raw_path.write_text(raw,encoding="utf-8")
-    response=parse_model_json(raw); validation=validate_script_response(response,request)
+        report = {**base, "status": "COST_POLICY_VIOLATION"}
+        atomic_write_json(report_path, report)
+        return report
+
+    if result.get("status") != "ACCEPTED":
+        report = {
+            **base,
+            "status": (
+                "MODEL_ESCALATION_REQUIRED"
+                if result.get("status") == "ESCALATION_REQUIRED"
+                else "MODEL_FAILED"
+            ),
+        }
+        atomic_write_json(report_path, report)
+        return report
+
+    raw = str(result.get("output") or "")
+    raw_path = RAW_OUTPUTS_DIR / f"{slug}.txt"
+    atomic_write_text(raw_path, raw)
+
+    try:
+        response = parse_model_json(raw)
+        validation = validate_script_response(response, request)
+    except Exception as exc:
+        report = {
+            **base,
+            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:1000],
+            "raw_output": str(raw_path),
+        }
+        atomic_write_json(report_path, report)
+        return report
+
     if not validation["valid"]:
-        report={**base,"status":"MODEL_OUTPUT_VALIDATION_ERROR","errors":validation["errors"],"raw_output":str(raw_path)}; report_path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return report
-    response["response_provenance"]={"request_source":str(path.resolve()),"request_sha256":request_hash,"provider_id":result.get("provider_id"),"model_id":result.get("model_id")}
-    response_path.write_text(json.dumps(response,indent=2,ensure_ascii=False),encoding="utf-8")
-    draft={**response,"accepted_claims":request.get("accepted_claims",[]),"package":request.get("package",{}),"validation":validation,"draft_provenance":response["response_provenance"]}
-    draft_path.write_text(json.dumps(draft,indent=2,ensure_ascii=False),encoding="utf-8")
-    report={**base,"status":"VALIDATED","script_draft":str(draft_path),"claim_usage":validation["claim_usage"],"unused_accepted_claim_ids":validation["unused_accepted_claim_ids"]}
-    report_path.write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8"); return report
+        report = {
+            **base,
+            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
+            "errors": validation["errors"],
+            "raw_output": str(raw_path),
+        }
+        atomic_write_json(report_path, report)
+        return report
+
+    response["response_provenance"] = {
+        "request_source": str(path),
+        "request_sha256": request_hash,
+        "provider_id": result.get("provider_id"),
+        "model_id": result.get("model_id"),
+    }
+    atomic_write_json(response_path, response)
+
+    draft = {
+        **response,
+        "accepted_claims": request.get("accepted_claims", []),
+        "package": request.get("package", {}),
+        "validation": validation,
+        "draft_provenance": response["response_provenance"],
+    }
+    atomic_write_json(draft_path, draft)
+
+    report = {
+        **base,
+        "status": "VALIDATED",
+        "script_draft": str(draft_path),
+        "claim_usage": validation["claim_usage"],
+        "unused_accepted_claim_ids": validation[
+            "unused_accepted_claim_ids"
+        ],
+    }
+    atomic_write_json(report_path, report)
+    return report
+
 
 def run_batch(requests_dir:Path,force:bool,maximum:int|None,config:dict[str,Any])->dict[str,Any]:
     paths=sorted(requests_dir.glob("*.script_request.json")); limit=int(maximum if maximum is not None else config["runner"].get("max_requests_per_batch",4))
     results=[]; invoked=0
     for path in paths:
         if invoked>=limit: break
-        item=run_one(path,force,config); results.append(item)
+        try:
+            item=run_one(path,force,config)
+        except Exception as exc:
+            item={"status":"RUNNER_ERROR","error_type":type(exc).__name__,"request_source":str(path)}
+        results.append(item)
         if item.get("status")!="SKIPPED_ALREADY_VALIDATED": invoked+=1
-        if item.get("status") in {"COST_POLICY_VIOLATION","MODEL_FAILED"}: break
-    status="COMPLETE" if paths and all(r.get("status") in {"VALIDATED","SKIPPED_ALREADY_VALIDATED"} for r in results) else "PARTIAL"
+        if item.get("status") in {
+            "COST_POLICY_VIOLATION",
+            "MODEL_FAILED",
+            "RUNNER_ERROR",
+        }:
+            break
+    status=batch_status(results, expected_count=len(paths), processed_count=len(results))
     summary={"status":status,"requests_found":len(paths),"model_runs_invoked":invoked,"batch_limit":limit,"results":results}
-    BATCH_SUMMARY_FILE.parent.mkdir(parents=True,exist_ok=True); BATCH_SUMMARY_FILE.write_text(json.dumps(summary,indent=2,ensure_ascii=False),encoding="utf-8"); return summary
+    atomic_write_json(BATCH_SUMMARY_FILE, summary); return summary
 
 def main()->None:
     p=argparse.ArgumentParser(description="FAIR-backed Story / Script runner")
@@ -101,4 +246,6 @@ def main()->None:
     a=p.parse_args(); config=load_runner_config()
     result=run_one(a.request,a.force,config) if a.mode=="run" and a.request else run_batch(a.requests_dir.resolve(),a.force,a.max_requests,config)
     print(json.dumps(result,indent=2,ensure_ascii=False))
+    if a.mode=="batch":
+        raise SystemExit(exit_code_for_status(result["status"]))
 if __name__=="__main__": main()

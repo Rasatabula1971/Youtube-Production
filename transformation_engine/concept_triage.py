@@ -13,6 +13,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_json, atomic_write_text, exit_code_for_status
+
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
@@ -40,7 +46,7 @@ SHORTLIST_FILE = OUTPUT_DIR / "concept_candidates_triaged.json"
 RAW_OUTPUT_FILE = OUTPUT_DIR / "raw_concept_triage.txt"
 RUN_REPORT_FILE = OUTPUT_DIR / "concept_triage_run.json"
 
-MIN_SHORTLIST = 3
+MIN_SHORTLIST = 0
 MAX_SHORTLIST = 6
 ALLOWED_DECISIONS = {"SHORTLIST", "REWORK", "DROP"}
 DIMENSIONS = (
@@ -160,17 +166,15 @@ def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
         "system. Infer the intended channel/audience direction from the candidate "
         "pool and each candidate's channel_fit evidence. Return JSON only.\n\n"
         "Your job is NOT to approve a concept for production. Your job is to reduce "
-        "a large structurally-valid candidate pool to the strongest 3-6 concepts for "
+        "a large structurally-valid candidate pool to the strongest 0-6 concepts for "
         "a later Human Concept Gate.\n\n"
         "Evaluate EVERY concept independently and comparatively on seven dimensions, "
         "scored 0-5: channel_fit, viewer_problem, promise_clarity, feasibility, "
         "researchability, originality, overclaim_safety.\n\n"
         "Decision meanings:\n"
-        "- SHORTLIST: strong enough to spend human review and research effort on now.\n"
-        "- REWORK: useful core idea but wording, promise, feasibility, precision, or "
-        "channel fit needs correction before human approval.\n"
-        "- DROP: weak, off-channel, redundant, confused, or unjustifiably expensive/"
-        "difficult compared with stronger alternatives.\n\n"
+        "- SHORTLIST: overall_score 70-100; strong enough to spend human review and research effort on now.\n"
+        "- REWORK: overall_score 45-69; useful core idea but wording, promise, feasibility, precision, or channel fit needs correction.\n"
+        "- DROP: overall_score 0-44; weak, off-channel, redundant, confused, or unjustifiably difficult compared with stronger alternatives.\n\n"
         "Rules:\n"
         "1. Prefer concepts aligned with the intended channel/audience direction "
         "described across the candidate pool. Penalize mechanism transfer into unrelated "
@@ -188,7 +192,8 @@ def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
         "8. Do not reward a concept merely because it has a catchy title.\n"
         "9. Account for every concept exactly once.\n"
         "10. shortlist_ids must contain exactly the concepts you classify SHORTLIST, "
-        "with a minimum of 3 and maximum of 6.\n\n"
+        "with a minimum of 0 and maximum of 6. If none deserve human time, return an empty shortlist.\n"
+        "11. Decision and overall_score must obey the thresholds above exactly.\n\n"
         "CANDIDATES:\n"
         + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
     )
@@ -225,6 +230,17 @@ def validate_triage(
         decision = str(item.get("decision", "")).upper()
         if decision not in ALLOWED_DECISIONS:
             raise ValueError(f"invalid triage decision for {concept_id}")
+        score = int(item.get("overall_score", -1))
+        expected_decision = (
+            "SHORTLIST" if score >= 70
+            else "REWORK" if score >= 45
+            else "DROP"
+        )
+        if decision != expected_decision:
+            raise ValueError(
+                f"triage decision/score mismatch for {concept_id}: "
+                f"{decision} with score {score}"
+            )
         mapped[concept_id] = item
 
     if set(mapped) != expected:
@@ -270,21 +286,27 @@ def build_shortlist_payload(
         for item in triage["decisions"]
     }
     concepts = []
-    for concept_id in triage["shortlist_ids"]:
-        concept = dict(by_id[concept_id])
+    overrides = []
+    shortlist_ids = set(triage["shortlist_ids"])
+    for concept_id, original in by_id.items():
+        concept = dict(original)
         concept["llm_triage"] = decisions[concept_id]
-        concepts.append(concept)
+        if concept_id in shortlist_ids:
+            concepts.append(concept)
+        else:
+            overrides.append(concept)
 
     return {
         "artifact": "triaged_concept_candidates",
         "source_candidates_sha256": source_hash,
         "concept_count": len(concepts),
         "concepts": concepts,
+        "override_concepts": overrides,
         "triage_summary": triage.get("summary"),
         "notes": [
             "Triage is an LLM prefilter, not human approval.",
-            "Only SHORTLIST concepts enter the Human Concept Gate.",
-            "REWORK and DROP decisions remain in concept_triage.json.",
+            "SHORTLIST concepts enter the Human Concept Gate by default.",
+            "REWORK and DROP concepts remain available as explicit human overrides.",
         ],
     }
 
@@ -298,10 +320,8 @@ def run(*, force: bool = False) -> dict[str, Any]:
 
     candidates_payload = load_json(CANDIDATES_FILE)
     concepts = candidates_payload.get("concepts", [])
-    if not isinstance(concepts, list) or len(concepts) < MIN_SHORTLIST:
-        raise ValueError(
-            f"Concept triage requires at least {MIN_SHORTLIST} candidates"
-        )
+    if not isinstance(concepts, list) or not concepts:
+        raise ValueError("Concept triage requires at least one candidate")
 
     source_hash = sha256_file(CANDIDATES_FILE)
     if (
@@ -340,13 +360,23 @@ def run(*, force: bool = False) -> dict[str, Any]:
     )
     payload["settings"]["client_id"] = "youtube-concept-triage"
 
-    result = call_fair_bridge(
-        payload,
-        python_executable=paths["python"],
-        timeout_seconds=float(
-            config["runner"].get("subprocess_timeout_seconds", 300)
-        ),
-    )
+    try:
+        result = call_fair_bridge(
+            payload,
+            python_executable=paths["python"],
+            timeout_seconds=float(
+                config["runner"].get("subprocess_timeout_seconds", 300)
+            ),
+        )
+    except Exception as exc:
+        report = {
+            "status": "RUNNER_ERROR",
+            "source_candidates": str(CANDIDATES_FILE),
+            "source_candidates_sha256": source_hash,
+            "error_type": type(exc).__name__,
+        }
+        atomic_write_json(RUN_REPORT_FILE, report)
+        return report
 
     base_report = {
         "source_candidates": str(CANDIDATES_FILE),
@@ -364,10 +394,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
 
     if result.get("paid_inference_executed") is not False:
         report = {**base_report, "status": "COST_POLICY_VIOLATION"}
-        RUN_REPORT_FILE.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(RUN_REPORT_FILE, report)
         return report
 
     if result.get("status") != "ACCEPTED":
@@ -386,9 +413,20 @@ def run(*, force: bool = False) -> dict[str, Any]:
         return report
 
     raw = str(result.get("output") or "")
-    RAW_OUTPUT_FILE.write_text(raw, encoding="utf-8")
-    parsed = parse_model_json(raw)
-    triage = validate_triage(parsed, concepts)
+    atomic_write_text(RAW_OUTPUT_FILE, raw)
+    try:
+        parsed = parse_model_json(raw)
+        triage = validate_triage(parsed, concepts)
+    except Exception as exc:
+        report = {
+            **base_report,
+            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:1000],
+            "raw_output": str(RAW_OUTPUT_FILE),
+        }
+        atomic_write_json(RUN_REPORT_FILE, report)
+        return report
 
     triage_artifact = {
         "artifact": "concept_llm_triage",
@@ -408,14 +446,8 @@ def run(*, force: bool = False) -> dict[str, Any]:
         source_hash,
     )
 
-    TRIAGE_OUTPUT_FILE.write_text(
-        json.dumps(triage_artifact, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    SHORTLIST_FILE.write_text(
-        json.dumps(shortlist, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(TRIAGE_OUTPUT_FILE, triage_artifact)
+    atomic_write_json(SHORTLIST_FILE, shortlist)
 
     counts = {
         value: sum(
@@ -435,10 +467,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
         "triage": str(TRIAGE_OUTPUT_FILE),
         "shortlist": str(SHORTLIST_FILE),
     }
-    RUN_REPORT_FILE.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(RUN_REPORT_FILE, report)
     return report
 
 
@@ -449,7 +478,9 @@ def main() -> None:
     parser.add_argument("--mode", choices=("run",), required=True)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(run(force=args.force), indent=2, ensure_ascii=False))
+    result = run(force=args.force)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    raise SystemExit(exit_code_for_status(result.get("status", "FAILED")))
 
 
 if __name__ == "__main__":

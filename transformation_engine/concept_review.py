@@ -59,6 +59,7 @@ def prepare_state() -> dict[str, Any]:
         "candidates_sha256": candidates_hash(),
         "reviewer": os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER),
         "decisions": {},
+        "active_override_ids": [],
     }
     write_json(STATE_FILE, state)
     return snapshot()
@@ -105,14 +106,28 @@ def snapshot() -> dict[str, Any]:
             "concept_count": request["concept_count"],
         }
 
+    active_overrides = set(state.get("active_override_ids", []))
+    all_items = request.get("items", [])
+    active_items = [
+        item
+        for item in all_items
+        if item.get("triage_default") is True
+        or str(item.get("concept_id")) in active_overrides
+    ]
+    override_items = [
+        public_item(item, state)
+        for item in all_items
+        if item.get("triage_default") is not True
+        and str(item.get("concept_id")) not in active_overrides
+    ]
     items = [
         public_item(item, state)
-        for item in request.get("items", [])
+        for item in active_items
     ]
     decisions = state.get("decisions", {})
     pending = sum(
         str(item["concept_id"]) not in decisions
-        for item in request.get("items", [])
+        for item in active_items
     )
 
     status = str(state.get("status") or "AWAITING_HUMAN_DECISION")
@@ -141,6 +156,7 @@ def snapshot() -> dict[str, Any]:
         "research_status": research_status,
         "criteria": request.get("criteria", {}),
         "concepts": items,
+        "override_concepts": override_items,
     }
 
 
@@ -160,11 +176,14 @@ def finalize_if_complete(
     state: dict[str, Any],
     request: dict[str, Any],
 ) -> None:
+    active_overrides = set(state.get("active_override_ids", []))
     expected = {
         str(item["concept_id"])
         for item in request.get("items", [])
+        if item.get("triage_default") is True
+        or str(item.get("concept_id")) in active_overrides
     }
-    if expected != set(state.get("decisions", {})):
+    if not expected or expected != set(state.get("decisions", {})):
         write_json(STATE_FILE, state)
         return
 
@@ -226,6 +245,15 @@ def apply_action(
         raise ValueError("Unknown concept_id")
 
     value = str(decision or "").strip().upper()
+    if value == "OVERRIDE":
+        if item.get("triage_default") is True:
+            raise ValueError("Concept is already in the default Human Gate shortlist")
+        active = set(state.get("active_override_ids", []))
+        active.add(concept_id)
+        state["active_override_ids"] = sorted(active)
+        state["status"] = "AWAITING_HUMAN_DECISION"
+        write_json(STATE_FILE, state)
+        return snapshot()
     if value not in {"ACCEPT", "REWORK", "REJECT"}:
         raise ValueError("Decision must be ACCEPT, REWORK, or REJECT")
 

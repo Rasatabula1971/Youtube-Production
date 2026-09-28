@@ -1030,6 +1030,23 @@ def exp2_artifact_state() -> dict[str, Any]:
     evidence_complete = bool(prepared_ids) and prepared_ids.issubset(enriched_ids)
     requests_complete = evidence_complete and prepared_ids.issubset(request_ids)
 
+    synthesis_payload = safe_load_json(EXP2_SYNTHESIS_FILE)
+    current_review_hashes = {
+        video_id: sha256_file(EXP2_REVIEWED_DIR / f"{video_id}.json")
+        for video_id in reviewed_ids
+        if (EXP2_REVIEWED_DIR / f"{video_id}.json").exists()
+    }
+    synthesis_provenance = (
+        synthesis_payload.get("synthesis_provenance", {})
+        if isinstance(synthesis_payload, dict)
+        else {}
+    )
+    synthesis_ready = (
+        bool(current_review_hashes)
+        and isinstance(synthesis_provenance, dict)
+        and synthesis_provenance.get("profile_sha256") == current_review_hashes
+    )
+
     return {
         "prepared_ids": sorted(prepared_ids),
         "enriched_ready_ids": sorted(enriched_ids),
@@ -1056,7 +1073,7 @@ def exp2_artifact_state() -> dict[str, Any]:
             prepared_ids.intersection(review_request_ids)
         ),
         "reviewed_current_count": len(prepared_ids.intersection(reviewed_ids)),
-        "synthesis_ready": EXP2_SYNTHESIS_FILE.exists(),
+        "synthesis_ready": synthesis_ready,
         "acquisition_summary": safe_load_json(EXP2_ACQUISITION_SUMMARY),
         "visual_summary": safe_load_json(EXP2_VISUAL_SUMMARY),
     }
@@ -1118,7 +1135,6 @@ def transformation_artifact_state() -> dict[str, Any]:
         and isinstance(triaged, dict)
         and triage.get("source_candidates_sha256") == candidate_hash
         and triaged.get("source_candidates_sha256") == candidate_hash
-        and int(triaged.get("concept_count") or 0) > 0
     )
     shortlist_count = (
         int(triaged.get("concept_count") or 0)
@@ -1164,9 +1180,10 @@ def transformation_artifact_state() -> dict[str, Any]:
 
 
 def packaging_artifact_state() -> dict[str, Any]:
+    upstream = transformation_artifact_state()
     handoff_hash = (
         sha256_file(TRANSFORM_RESEARCH_HANDOFF)
-        if TRANSFORM_RESEARCH_HANDOFF.exists()
+        if upstream.get("research_ready") and TRANSFORM_RESEARCH_HANDOFF.exists()
         else None
     )
     request_hashes: dict[str, str] = {}
@@ -1237,9 +1254,10 @@ def packaging_artifact_state() -> dict[str, Any]:
 
 
 def research_artifact_state() -> dict[str, Any]:
+    upstream = packaging_artifact_state()
     packaging_handoff_hash = (
         sha256_file(PACKAGING_RESEARCH_HANDOFF)
-        if PACKAGING_RESEARCH_HANDOFF.exists()
+        if upstream.get("research_ready") and PACKAGING_RESEARCH_HANDOFF.exists()
         else None
     )
     plan_hashes: dict[str, str] = {}
@@ -1344,8 +1362,9 @@ def research_artifact_state() -> dict[str, Any]:
 
 
 def story_script_artifact_state() -> dict[str, Any]:
+    upstream = research_artifact_state()
     verified_hashes: dict[str, str] = {}
-    if RESEARCH_VERIFIED_DIR.exists():
+    if upstream.get("story_ready") and RESEARCH_VERIFIED_DIR.exists():
         for path in RESEARCH_VERIFIED_DIR.glob("*.verified_research_package.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict) or payload.get("status") != "READY_FOR_STORY_SCRIPT":
@@ -2897,7 +2916,13 @@ class JobManager:
             if self._job.get("status") == "STOPPING":
                 self._job["status"] = "STOPPED"
             else:
-                self._job["status"] = "SUCCEEDED" if return_code == 0 else "FAILED"
+                self._job["status"] = (
+                    "SUCCEEDED"
+                    if return_code == 0
+                    else "PARTIAL"
+                    if return_code == 2
+                    else "FAILED"
+                )
             self._process = None
 
         self._save_state(self.public_job())

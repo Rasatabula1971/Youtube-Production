@@ -43,6 +43,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "closing": draft.get("closing"),
         "package": draft.get("package", {}),
         "accepted_claims": draft.get("accepted_claims", []),
+        "source_overlap": draft.get("validation", {}).get("source_overlap", {}),
         "required_accept_criteria": list(CRITERIA),
         "criteria": {
             "package_promise_delivered": "The draft delivers the approved title/thumbnail promise and expected payoff.",

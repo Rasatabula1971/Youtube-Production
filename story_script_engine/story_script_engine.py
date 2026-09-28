@@ -4,9 +4,17 @@ Consumes human-verified research packages and prepares bounded script requests.
 Only accepted research claims may be referenced as factual support.
 """
 from __future__ import annotations
+
+import sys
 import argparse, hashlib, json
 from pathlib import Path
 from typing import Any
+
+_OVERLAP_ROOT = Path(__file__).resolve().parent.parent
+if str(_OVERLAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_OVERLAP_ROOT))
+
+from source_overlap import check_texts
 
 HERE=Path(__file__).resolve().parent
 PROJECT_ROOT=HERE.parent
@@ -117,11 +125,26 @@ def validate_script_response(response:dict[str,Any],request:dict[str,Any])->dict
         if not str(section.get("narration","")).strip(): errors.append(f"{sid or index} requires narration")
         ids=section.get("claim_ids")
         if not isinstance(ids,list): errors.append(f"{sid or index} claim_ids must be a list"); continue
+        if not ids:
+            errors.append(f"{sid or index} requires at least one accepted claim_id")
         for cid in ids:
             cid=str(cid)
             if cid not in allowed: errors.append(f"{sid or index} uses unapproved claim_id {cid}")
             else: used.add(cid)
-    return {"valid":not errors,"errors":errors,"claim_usage":sorted(used),"unused_accepted_claim_ids":sorted(allowed-used)}
+    overlap = check_texts(
+        [{"field":"title","text":response.get("title","")},
+         {"field":"opening_hook","text":response.get("opening_hook","")},
+         *[
+            {"field":f"section.{index}","text":section.get("narration","")}
+            for index, section in enumerate(sections)
+            if isinstance(section, dict)
+         ],
+         {"field":"closing","text":response.get("closing","")}]
+    )
+    if overlap.get("blocking"):
+        match = overlap.get("matches", [{}])[0]
+        errors.append("source overlap block: " + str(match.get("overlap_text") or ""))
+    return {"valid":not errors,"errors":errors,"claim_usage":sorted(used),"unused_accepted_claim_ids":sorted(allowed-used),"source_overlap":overlap}
 
 def run_prepare(verified_dir:Path=RESEARCH_VERIFIED_DIR)->dict[str,Any]:
     REQUESTS_DIR.mkdir(parents=True,exist_ok=True)

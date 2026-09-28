@@ -11,6 +11,7 @@ No network calls, model calls, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -487,6 +488,10 @@ def build_summary(
     }
 
 
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def preferred_profiles_dir() -> Path:
     if REVIEWED_PROFILES_DIR.exists() and any(
         REVIEWED_PROFILES_DIR.glob("*.json")
@@ -531,7 +536,18 @@ def run_build(profiles_dir: Path) -> dict[str, Any]:
     handoff = build_transformation_handoff(
         library, synthesis_config
     )
+    profile_hashes = {
+        path.stem: sha256_file(path)
+        for path in sorted(profiles_dir.glob("*.json"))
+    }
+    synthesis_provenance = {
+        "profiles_dir": str(profiles_dir.resolve()),
+        "profile_sha256": profile_hashes,
+    }
+    library["synthesis_provenance"] = synthesis_provenance
+    handoff["synthesis_provenance"] = synthesis_provenance
     summary = build_summary(library, handoff, profiles_dir)
+    summary["synthesis_provenance"] = synthesis_provenance
 
     MECHANISM_LIBRARY_FILE.write_text(
         json.dumps(library, indent=2, ensure_ascii=False),

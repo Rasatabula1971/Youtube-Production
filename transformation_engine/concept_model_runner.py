@@ -11,6 +11,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_text, atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -282,10 +287,7 @@ def run_one(
             "request_source": str(request_path),
             "request_sha256": request_hash,
         }
-        report_path.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(report_path, report)
         return report
 
     if bridge_result.get("paid_inference_executed") is not False:
@@ -296,10 +298,7 @@ def run_one(
             "request_sha256": request_hash,
             "fair_status": bridge_result.get("status"),
         }
-        report_path.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(report_path, report)
         return report
 
     base_report = {
@@ -326,15 +325,12 @@ def run_one(
                 else "MODEL_FAILED"
             ),
         }
-        report_path.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(report_path, report)
         return report
 
     raw_output = str(bridge_result.get("output") or "")
     raw_path = RAW_OUTPUTS_DIR / f"{slug}.txt"
-    raw_path.write_text(raw_output, encoding="utf-8")
+    atomic_write_text(raw_path, raw_output)
 
     try:
         response = parse_model_json(raw_output)
@@ -350,10 +346,7 @@ def run_one(
             "error_type": type(exc).__name__,
             "raw_output": str(raw_path),
         }
-        report_path.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(report_path, report)
         return report
 
     response["response_provenance"] = {
@@ -362,10 +355,7 @@ def run_one(
         "provider_id": bridge_result.get("provider_id"),
         "model_id": bridge_result.get("model_id"),
     }
-    response_path.write_text(
-        json.dumps(response, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(response_path, response)
 
     report = {
         **base_report,
@@ -375,10 +365,7 @@ def run_one(
         "structurally_accepted": len(validation["accepted"]),
         "structurally_rejected": len(validation["rejected"]),
     }
-    report_path.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(report_path, report)
     return report
 
 
@@ -420,10 +407,10 @@ def run_batch(
 
     merge_summary = run_apply()
     summary = {
-        "status": (
-            "COMPLETE"
-            if merge_summary.get("status") == "CONCEPT_CANDIDATES_READY"
-            else merge_summary.get("status")
+        "status": batch_status(
+            results,
+            expected_count=len(paths),
+            processed_count=len(results),
         ),
         "requests_found": len(paths),
         "model_runs_invoked": invoked,
@@ -431,11 +418,7 @@ def run_batch(
         "results": results,
         "merge": merge_summary,
     }
-    BATCH_SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BATCH_SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(BATCH_SUMMARY_FILE, summary)
     return summary
 
 
@@ -473,6 +456,8 @@ def main() -> None:
         )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.mode == "batch":
+        raise SystemExit(exit_code_for_status(result["status"]))
 
 
 if __name__ == "__main__":

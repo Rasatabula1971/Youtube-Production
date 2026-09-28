@@ -46,5 +46,30 @@ class ConceptTriageTests(unittest.TestCase):
         self.assertEqual(payload["concept_count"],3)
         self.assertEqual(payload["concepts"][0]["llm_triage"]["decision"],"SHORTLIST")
 
+
+    def test_zero_shortlist_is_allowed_when_all_concepts_are_weak(self):
+        dims={key:1 for key in ("channel_fit","viewer_problem","promise_clarity","feasibility","researchability","originality","overclaim_safety")}
+        response={
+            "decisions":[
+                {"concept_id":item["concept_id"],"decision":"DROP","overall_score":30,"dimension_scores":dims,"strengths":[],"risks":["weak"],"rationale":"weak"}
+                for item in self.candidates()["concepts"]
+            ],
+            "shortlist_ids":[],
+            "summary":"none strong enough",
+        }
+        result=validate_triage(response,self.candidates()["concepts"])
+        self.assertEqual(result["shortlist_ids"],[])
+
+    def test_decision_must_match_score_threshold(self):
+        bad=self.response()
+        bad["decisions"][0]["overall_score"]=40
+        with self.assertRaisesRegex(ValueError,"decision/score mismatch"):
+            validate_triage(bad,self.candidates()["concepts"])
+
+    def test_non_shortlisted_concepts_remain_available_for_override(self):
+        triage=validate_triage(self.response(),self.candidates()["concepts"])
+        payload=build_shortlist_payload(self.candidates(),triage,"abc")
+        self.assertEqual([item["concept_id"] for item in payload["override_concepts"]],["c4"])
+
 if __name__=="__main__":
     unittest.main()

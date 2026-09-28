@@ -27,8 +27,18 @@ class StoryScriptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/"pkg.json"; p.write_text(json.dumps(self.package()),encoding="utf-8")
             req=build_script_request(self.package(),p)
-        response={"concept_id":"c1","title":"T","opening_hook":"Hook","sections":[{"section_id":"s1","purpose":"Explain","narration":"Text","claim_ids":["clm001"]},{"section_id":"s2","purpose":"Payoff","narration":"Text","claim_ids":[]}],"closing":"Close"}
+        response={"concept_id":"c1","title":"T","opening_hook":"Hook","sections":[{"section_id":"s1","purpose":"Explain","narration":"Text","claim_ids":["clm001"]},{"section_id":"s2","purpose":"Payoff","narration":"Text","claim_ids":["clm001"]}],"closing":"Close"}
         result=validate_script_response(response,req)
         self.assertTrue(result["valid"])
         self.assertEqual(result["claim_usage"],["clm001"])
+
+    def test_empty_claim_mapping_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=Path(tmp)/"pkg.json"; p.write_text(json.dumps(self.package()),encoding="utf-8")
+            req=build_script_request(self.package(),p)
+        response={"concept_id":"c1","title":"T","opening_hook":"Hook","sections":[{"section_id":"s1","purpose":"Explain","narration":"Unsupported factual narration","claim_ids":[]}],"closing":"Close"}
+        result=validate_script_response(response,req)
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("requires at least one accepted claim_id" in e for e in result["errors"]))
+
 if __name__=="__main__": unittest.main()

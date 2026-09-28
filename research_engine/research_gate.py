@@ -108,6 +108,7 @@ def build_review_request(
                     "stance": link.get("stance"),
                     "locator": link.get("locator"),
                     "evidence_note": link.get("evidence_note"),
+                    "evidence_quote": link.get("evidence_quote"),
                     "source": (
                         {
                             "title": source.get("title"),
@@ -269,6 +270,22 @@ def validate_decisions(
             raise ValueError(
                 f"ACCEPT requires all criteria true for {claim_id}"
             )
+
+        if value == "ACCEPT":
+            evidence_items = item_lookup[claim_id].get("evidence", [])
+            supported = [
+                item
+                for item in evidence_items
+                if isinstance(item, dict)
+                and isinstance(item.get("source"), dict)
+                and str(item.get("evidence_quote") or "").strip()
+                and str(item.get("stance") or "").upper()
+                in {"SUPPORTS", "QUALIFIES"}
+            ]
+            if not supported:
+                raise ValueError(
+                    f"ACCEPT requires at least one traceable supporting source for {claim_id}"
+                )
 
         if value == "REWORK" and not note:
             raise ValueError(
@@ -499,8 +516,16 @@ def run_batch_prepare(
                 }
             )
 
+    total = len(list(drafts_dir.glob("*.json")))
+    status = (
+        "COMPLETE"
+        if total > 0 and len(prepared) == total and not failures
+        else "FAILED"
+        if not prepared and failures
+        else "PARTIAL"
+    )
     return {
-        "status": "COMPLETE",
+        "status": status,
         "prepared": len(prepared),
         "failures": failures,
         "requests_dir": str(REVIEW_REQUESTS_DIR),
@@ -612,6 +637,8 @@ def main() -> None:
         )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.mode == "batch-prepare" and result.get("status") != "COMPLETE":
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
