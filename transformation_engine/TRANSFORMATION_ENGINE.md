@@ -158,8 +158,12 @@ python .\transformation_engine\concept_model_runner.py --mode batch --requests-d
 ~~~
 
 The runner reuses the project's existing FAIR subprocess bridge and the same
-free-only cost policy used by Experiment 02. Any result that does not explicitly
-report `paid_inference_executed: false` fails closed.
+free-only cost policy used by Experiment 02. FAIR results still fail closed
+unless they explicitly report `paid_inference_executed: false`. If the separate
+project-level `DIRECT_GEMINI_API_KEY` is configured, a clean FAIR non-accept may
+fall back to direct Gemini under the explicit
+`USER_APPROVED_DIRECT_GEMINI_BACKUP` billing authorization. Direct Gemini is
+never labeled verified-free.
 
 The execution path is:
 
