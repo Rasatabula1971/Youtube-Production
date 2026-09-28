@@ -148,7 +148,7 @@ def make_task_id(
     duration_filter: str,
     query: str,
 ) -> str:
-    safe = "|".join([topic, fmt, family, duration_filter, query]).casefold()
+    safe = f"{topic}|{fmt}|{family}|{duration_filter}|{query}".casefold()
     return safe
 
 
