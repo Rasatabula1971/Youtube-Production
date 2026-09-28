@@ -156,7 +156,11 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
                 "paid_inference_executed": False,
             }
         return {
-            "status": "READY",
+            "status": (
+                "READY"
+                if compatibility.get("compatible_route_available")
+                else "NO_COMPATIBLE_ROUTE"
+            ),
             "providers": providers,
             "skipped": skipped,
             "compatibility": compatibility,
