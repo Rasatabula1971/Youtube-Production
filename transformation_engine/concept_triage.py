@@ -13,6 +13,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
 from pipeline_integrity import atomic_write_json, atomic_write_text, exit_code_for_status
 
 HERE = Path(__file__).resolve().parent
