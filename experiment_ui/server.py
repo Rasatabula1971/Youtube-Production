@@ -2996,6 +2996,24 @@ def workflow_guidance(
             "next_title": "Story / Script",
         }
 
+    story = story_script_artifact_state()
+    script_gate = story.get("script_gate", {})
+    if (
+        story.get("drafts_ready")
+        and script_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_SCRIPT_GATE",
+            "current_action_id": None,
+            "current_title": "Review Script Draft",
+            "current_detail": (
+                "Check promise delivery, factual scope, claim mapping, originality "
+                "and story payoff before production."
+            ),
+            "next_action_id": None,
+            "next_title": "Ready for Production",
+        }
+
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
         gate_info = readiness.get(action_id, {})
         if gate_info.get("enabled"):
@@ -3046,6 +3064,7 @@ def status_payload() -> dict[str, Any]:
     transformation = transformation_artifact_state()
     packaging = packaging_artifact_state()
     research = research_artifact_state()
+    story = story_script_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -3095,6 +3114,8 @@ def status_payload() -> dict[str, Any]:
         "packaging_gate": packaging["packaging_gate"],
         "research": research,
         "research_gate": research["research_gate"],
+        "story_script": story,
+        "script_gate": story["script_gate"],
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -3170,6 +3191,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/research-gate":
             self._send_json(research_gate_snapshot())
+            return
+        if route == "/api/script-gate":
+            self._send_json(script_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -3284,6 +3308,20 @@ class Handler(BaseHTTPRequestHandler):
                 payload = apply_research_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     claim_id=str(body.get("claim_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(
+                        str(body["note"])
+                        if body.get("note") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/script-gate":
+                payload = apply_script_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(
