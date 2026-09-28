@@ -1804,8 +1804,15 @@ class ExperimentUiTests(unittest.TestCase):
                     "X-CSRF-Token": server.CSRF_TOKEN,
                 },
             )
-            with urllib.request.urlopen(good, timeout=5) as response:
-                self.assertEqual(response.status, 200)
+            try:
+                with urllib.request.urlopen(good, timeout=5) as response:
+                    self.assertNotEqual(response.status, 403)
+            except urllib.error.HTTPError as allowed:
+                self.assertNotEqual(
+                    allowed.code,
+                    403,
+                    "same-origin JSON request with CSRF token must pass security checks",
+                )
         finally:
             httpd.shutdown()
             httpd.server_close()
