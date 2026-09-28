@@ -59,11 +59,15 @@ const conceptReviewStatus = document.getElementById("conceptReviewStatus");
 const conceptDetail = document.getElementById("conceptDetail");
 const conceptOverridesPanel = document.getElementById("conceptOverridesPanel");
 const conceptOverrides = document.getElementById("conceptOverrides");
+const savedIdeasPanel = document.getElementById("savedIdeasPanel");
+const savedIdeasSummary = document.getElementById("savedIdeasSummary");
+const savedIdeas = document.getElementById("savedIdeas");
 const conceptCriteria = document.getElementById("conceptCriteria");
 const conceptNote = document.getElementById("conceptNote");
 const conceptPrev = document.getElementById("conceptPrev");
 const conceptReject = document.getElementById("conceptReject");
 const conceptRework = document.getElementById("conceptRework");
+const conceptSaveIdea = document.getElementById("conceptSaveIdea");
 const conceptAccept = document.getElementById("conceptAccept");
 const conceptNext = document.getElementById("conceptNext");
 
@@ -983,16 +987,45 @@ function currentConceptItem() {
 
 function renderConceptOverrides(snapshot) {
   const items = (snapshot && snapshot.override_concepts) || [];
+  const complete = Boolean(snapshot && snapshot.complete);
   conceptOverridesPanel.hidden = items.length === 0;
   conceptOverrides.innerHTML = items.map(function (item) {
     const triage = item.llm_triage || {};
+    const reviewButton = complete
+      ? ""
+      : '<button class="ghost" type="button" data-concept-override="' +
+        escapeHtml(item.concept_id) + '">Review anyway</button>';
+    const saveButton = '<button class="ghost" type="button" data-concept-save="' +
+      escapeHtml(item.concept_id) + '"' +
+      (item.idea_saved ? " disabled" : "") + '>' +
+      (item.idea_saved ? "Saved" : "Save idea") + '</button>';
     return '<div class="concept-detail-card">' +
       '<h4>' + escapeHtml(triage.decision || "TRIAGE") + ' · ' +
       escapeHtml(triage.overall_score == null ? "—" : triage.overall_score + "/100") + '</h4>' +
       '<h3>' + escapeHtml(item.working_title || item.concept_id) + '</h3>' +
       '<p>' + escapeHtml(triage.rationale || "") + '</p>' +
-      '<button class="ghost" type="button" data-concept-override="' +
-      escapeHtml(item.concept_id) + '">Review anyway</button>' +
+      reviewButton + saveButton +
+      '</div>';
+  }).join("");
+}
+
+function renderSavedIdeas(snapshot) {
+  const items = (snapshot && snapshot.saved_ideas) || [];
+  savedIdeasPanel.hidden = items.length === 0;
+  savedIdeasSummary.textContent = "Saved Ideas / Title Bank (" + items.length + ")";
+  savedIdeas.innerHTML = items.slice().reverse().map(function (item) {
+    const triage = item.triage_score == null
+      ? "No triage score"
+      : String(item.triage_score) + "/100";
+    const note = item.note
+      ? '<p><strong>Note:</strong> ' + escapeHtml(item.note) + '</p>'
+      : "";
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(triage) + ' · ' +
+      escapeHtml(item.triage_decision || "SAVED") + '</h4>' +
+      '<h3>' + escapeHtml(item.working_title || item.concept_id || "Saved idea") + '</h3>' +
+      '<p>' + escapeHtml(item.premise || "") + '</p>' +
+      note +
       '</div>';
   }).join("");
 }
@@ -1000,6 +1033,7 @@ function renderConceptOverrides(snapshot) {
 function renderConceptReview(snapshot, force) {
   latestConceptSnapshot = snapshot || {};
   renderConceptOverrides(snapshot || {});
+  renderSavedIdeas(snapshot || {});
 
   if (
     !snapshot ||
@@ -1018,6 +1052,7 @@ function renderConceptReview(snapshot, force) {
       conceptNote.hidden = true;
       conceptReject.disabled = true;
       conceptRework.disabled = true;
+      conceptSaveIdea.disabled = true;
       conceptAccept.disabled = true;
       conceptPrev.disabled = true;
       conceptNext.disabled = true;
@@ -1028,12 +1063,25 @@ function renderConceptReview(snapshot, force) {
   }
 
   if (snapshot.complete) {
+    const closedItems = snapshot.concepts || [];
+    const closedCards = closedItems.map(function (item) {
+      return '<div class="concept-detail-card">' +
+        '<h4>' + escapeHtml(item.decision || "CLOSED") + '</h4>' +
+        '<h3>' + escapeHtml(item.working_title || item.concept_id) + '</h3>' +
+        '<button class="ghost" type="button" data-concept-save="' +
+        escapeHtml(item.concept_id) + '"' +
+        (item.idea_saved ? " disabled" : "") + '>' +
+        (item.idea_saved ? "Saved" : "Save idea") + '</button>' +
+        '</div>';
+    }).join("");
+
     conceptReviewPanel.hidden = false;
     conceptReviewTitle.textContent = "Concept Gate complete";
     conceptReviewSummary.textContent =
       (snapshot.accepted || 0) + " accepted · " +
       (snapshot.rework || 0) + " rework · " +
-      (snapshot.rejected || 0) + " rejected";
+      (snapshot.rejected || 0) + " rejected · " +
+      (snapshot.saved_idea_count || 0) + " saved";
     conceptReviewStatus.textContent = snapshot.research_status || "COMPLETE";
     conceptReviewStatus.className =
       "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
@@ -1042,13 +1090,18 @@ function renderConceptReview(snapshot, force) {
       ((snapshot.accepted || 0) > 0
         ? "Accepted concepts are ready for the next Research / Packaging stage."
         : "No concept was accepted. Regenerate or rework before continuing.") +
-      '</div>';
+      '</div>' +
+      (closedCards
+        ? '<details class="technical-details"><summary>Closed-gate concepts</summary>' +
+          '<div class="technical-body">' + closedCards + '</div></details>'
+        : "");
     conceptCriteria.innerHTML = "";
     conceptNote.hidden = true;
     conceptPrev.disabled = true;
     conceptNext.disabled = true;
     conceptReject.disabled = true;
     conceptRework.disabled = true;
+    conceptSaveIdea.disabled = true;
     conceptAccept.disabled = true;
     return;
   }
@@ -1154,6 +1207,8 @@ function renderConceptReview(snapshot, force) {
   conceptNext.disabled = conceptCursor >= items.length - 1;
   conceptReject.disabled = false;
   conceptRework.disabled = false;
+  conceptSaveIdea.disabled = Boolean(concept.idea_saved);
+  conceptSaveIdea.textContent = concept.idea_saved ? "Idea saved" : "Save idea";
   conceptAccept.disabled = false;
   conceptEditing = false;
 }
@@ -1175,6 +1230,27 @@ function collectConceptCriteria() {
     values[input.dataset.conceptCriterion] = Boolean(input.checked);
   });
   return values;
+}
+
+async function saveConceptIdea(conceptId, note) {
+  if (!conceptId) return;
+  try {
+    const payload = await api("/api/concept-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: conceptId,
+        decision: "SAVE_IDEA",
+        criteria: {},
+        note: note || ""
+      })
+    });
+    latestConceptSnapshot = payload;
+    renderConceptReview(payload, true);
+    showToast("Idea saved to the Title Bank.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 async function submitConceptDecision(decision) {
@@ -2080,6 +2156,12 @@ document.addEventListener("click", function (event) {
     return;
   }
 
+  const saveIdeaButton = event.target.closest("[data-concept-save]");
+  if (saveIdeaButton) {
+    saveConceptIdea(saveIdeaButton.dataset.conceptSave, "");
+    return;
+  }
+
   const overrideButton = event.target.closest("[data-concept-override]");
   if (overrideButton) {
     api("/api/concept-gate", {
@@ -2182,6 +2264,11 @@ conceptReject.addEventListener("click", function () {
 });
 conceptRework.addEventListener("click", function () {
   submitConceptDecision("REWORK");
+});
+conceptSaveIdea.addEventListener("click", function () {
+  const current = currentConceptItem();
+  if (!current) return;
+  saveConceptIdea(current.item.concept_id, conceptNote.value);
 });
 conceptAccept.addEventListener("click", function () {
   submitConceptDecision("ACCEPT");
