@@ -488,10 +488,7 @@ def fair_call(
         int(config["runner"].get("max_prompt_chars", 95000)),
         phase=phase,
     )
-    schema = response_schema(
-        concepts,
-        max_shortlist=len(concepts) if phase == "chunk" else MAX_SHORTLIST,
-    )
+    schema = response_schema(concepts)
     schema_chars = len(json.dumps(schema, separators=(",", ":")))
     if schema_chars > 19000:
         raise ValueError(
@@ -559,11 +556,8 @@ def fair_call(
     raw = str(result.get("output") or "")
     try:
         parsed = parse_model_json(raw)
-        triage = validate_triage(
-            parsed,
-            concepts,
-            max_shortlist=(len(concepts) if phase == "chunk" else MAX_SHORTLIST),
-        )
+        validated = validate_scores(parsed, concepts)
+        triage = normalize_scored_triage(validated, phase=phase)
     except Exception as exc:
         return (
             {
@@ -754,6 +748,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
     chunks = chunk_concepts(concepts)
     chunk_results = []
     chunk_triages = []
+    failed_chunks: list[int] = []
     for index, chunk in enumerate(chunks, start=1):
         result, triage = run_chunk(
             chunk,
@@ -764,20 +759,25 @@ def run(*, force: bool = False) -> dict[str, Any]:
         )
         chunk_results.append(result)
         if triage is None:
-            report = {
-                "status": "PARTIAL",
-                "phase": "FIRST_PASS",
-                "source_candidates": str(CANDIDATES_FILE),
-                "source_candidates_sha256": source_hash,
-                "candidates_found": len(concepts),
-                "chunks_total": len(chunks),
-                "chunks_complete": len(chunk_triages),
-                "failed_chunk": index,
-                "chunk_results": chunk_results,
-            }
-            atomic_write_json(RUN_REPORT_FILE, report)
-            return report
+            failed_chunks.append(index)
+            continue
         chunk_triages.append(triage)
+
+    if failed_chunks:
+        report = {
+            "status": "PARTIAL",
+            "phase": "FIRST_PASS",
+            "source_candidates": str(CANDIDATES_FILE),
+            "source_candidates_sha256": source_hash,
+            "candidates_found": len(concepts),
+            "chunks_total": len(chunks),
+            "chunks_complete": len(chunk_triages),
+            "failed_chunks": failed_chunks,
+            "retryable_failed_chunks": failed_chunks,
+            "chunk_results": chunk_results,
+        }
+        atomic_write_json(RUN_REPORT_FILE, report)
+        return report
 
     finalist_ids = select_finalist_ids(chunk_triages)
     by_id = {str(item["concept_id"]): item for item in concepts}
