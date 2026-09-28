@@ -384,12 +384,9 @@ def build_shortlist_payload(
     source_hash: str,
 ) -> dict[str, Any]:
     by_id = {
-        str(item["concept_id"]): item
-        for item in candidates_payload.get("concepts", [])
+        str(item["concept_id"]): item for item in candidates_payload.get("concepts", [])
     }
-    decisions = {
-        str(item["concept_id"]): item for item in triage["decisions"]
-    }
+    decisions = {str(item["concept_id"]): item for item in triage["decisions"]}
     concepts = []
     overrides = []
     shortlist_ids = set(triage["shortlist_ids"])
@@ -503,9 +500,7 @@ def fair_call(
         triage = validate_triage(
             parsed,
             concepts,
-            max_shortlist=(
-                len(concepts) if phase == "chunk" else MAX_SHORTLIST
-            ),
+            max_shortlist=(len(concepts) if phase == "chunk" else MAX_SHORTLIST),
         )
     except Exception as exc:
         return (
@@ -810,9 +805,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
     atomic_write_json(SHORTLIST_FILE, shortlist)
 
     counts = {
-        value: sum(
-            1 for item in full_decisions if item.get("decision") == value
-        )
+        value: sum(1 for item in full_decisions if item.get("decision") == value)
         for value in ("SHORTLIST", "REWORK", "DROP")
     }
     report = {

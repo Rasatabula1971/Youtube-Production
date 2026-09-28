@@ -135,7 +135,6 @@ class ConceptTriageTests(unittest.TestCase):
             [item["concept_id"] for item in payload["override_concepts"]], ["c4"]
         )
 
-
     def test_twenty_five_candidates_split_into_five_chunks(self):
         concepts = [{"concept_id": f"c{index}"} for index in range(25)]
         chunks = chunk_concepts(concepts)
@@ -170,11 +169,7 @@ class ConceptTriageTests(unittest.TestCase):
         finalists = select_finalist_ids(chunk_triages)
         self.assertEqual(len(finalists), 10)
         for chunk_index in range(5):
-            selected = {
-                cid
-                for cid in finalists
-                if cid.startswith(f"c{chunk_index}_")
-            }
+            selected = {cid for cid in finalists if cid.startswith(f"c{chunk_index}_")}
             self.assertEqual(
                 selected,
                 {f"c{chunk_index}_0", f"c{chunk_index}_1"},
