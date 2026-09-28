@@ -33,6 +33,10 @@ def content_sha256(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def load_json(path: Path) -> Any:
     if not path.exists():
         raise FileNotFoundError(path)
@@ -419,7 +423,7 @@ def run_prepare(candidates_path: Path) -> dict[str, Any]:
     request = build_review_request(candidates, config)
     request["request_provenance"].update({
         "candidates_source": str(candidates_path.resolve()),
-        "candidates_sha256": sha256_file(candidates_path),
+        "candidates_sha256": file_sha256(candidates_path),
     })
     REVIEW_REQUEST_FILE.write_text(
         json.dumps(request, indent=2, ensure_ascii=False),
