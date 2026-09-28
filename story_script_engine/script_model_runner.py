@@ -193,6 +193,9 @@ def run_one(
         "best_quality_score": result.get("best_quality_score"),
         "verification_state": result.get("verification_state"),
         "paid_inference_executed": result.get("paid_inference_executed"),
+        "direct_backup_used": result.get("direct_backup_used", False),
+        "direct_backup_may_bill": result.get("direct_backup_may_bill", False),
+        "billing_authorization": result.get("billing_authorization"),
         "attempts": safe_attempts(result),
     }
 
