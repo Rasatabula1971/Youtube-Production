@@ -155,6 +155,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             "adapter": "fair_subprocess",
             "fair": {
                 "quality_level": "standard",
+                "task_type": "youtube_structured_pipeline",
                 "max_attempts": 3,
                 "max_unanswered_attempts": 6,
                 "max_verification_attempts": 1,

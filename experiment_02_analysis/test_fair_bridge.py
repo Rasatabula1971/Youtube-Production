@@ -164,6 +164,10 @@ class FairBridgeTests(unittest.TestCase):
             FakeFair.last_solve_kwargs["client_id"],
             "test-client",
         )
+        self.assertEqual(
+            FakeFair.last_solve_kwargs["task_type"],
+            "youtube_structured_pipeline",
+        )
 
     def test_constructor_contract_failure_is_reported_without_inference(self):
         with tempfile.TemporaryDirectory() as tmp:
