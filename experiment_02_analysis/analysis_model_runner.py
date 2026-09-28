@@ -16,9 +16,9 @@ import os
 import subprocess
 import sys
 import tempfile
-import uuid
 import urllib.error
 import urllib.request
+import uuid
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
