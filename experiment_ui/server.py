@@ -122,6 +122,20 @@ RESEARCH_RESPONSES_DIR = RESEARCH_OUTPUT / "research_responses"
 RESEARCH_DRAFTS_DIR = RESEARCH_OUTPUT / "draft_packages"
 RESEARCH_VERIFIED_DIR = RESEARCH_OUTPUT / "verified_packages"
 
+STORY_DIR = PROJECT_ROOT / "story_script_engine"
+if str(STORY_DIR) not in sys.path:
+    sys.path.insert(0, str(STORY_DIR))
+
+from script_review import (  # noqa: E402
+    apply_action as apply_script_gate_action,
+    snapshot as script_gate_snapshot,
+)
+
+STORY_OUTPUT = STORY_DIR / "output"
+SCRIPT_REQUESTS_DIR = STORY_OUTPUT / "script_requests"
+SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
+SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
+
 WORKFLOW_ACTION_ORDER = [
     "opportunity_research",
     "exp2_prepare",
@@ -143,6 +157,9 @@ WORKFLOW_ACTION_ORDER = [
     "research_acquire",
     "research_generate",
     "research_gate_prepare",
+    "script_prepare",
+    "script_generate",
+    "script_gate_prepare",
 ]
 
 ACTION_DEFS: dict[str, dict[str, Any]] = {
@@ -590,6 +607,45 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Prepares the compact human claim-by-claim Research Gate before Script."
+        ),
+    },
+    "script_prepare": {
+        "label": "Prepare Script Requests",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/story_script_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds script requests from human-verified research and the approved package promise."
+        ),
+    },
+    "script_generate": {
+        "label": "Generate Script Drafts",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/script_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to draft original scripts constrained to accepted claim IDs."
+        ),
+    },
+    "script_gate_prepare": {
+        "label": "Prepare Script Gate",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/script_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the human Script Gate before production."
         ),
     },
 }
