@@ -177,7 +177,9 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "paid_inference_executed": False,
         }
 
+    solve_dispatched = False
     try:
+        solve_dispatched = True
         result = await fair.solve(
             str(payload.get("prompt") or ""),
             task_type=str(
@@ -227,7 +229,14 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "providers": providers,
             "skipped": skipped,
             "compatibility": compatibility,
-            "paid_inference_executed": False,
+            "paid_inference_executed": (
+                None if solve_dispatched else False
+            ),
+            "cost_state": (
+                "UNKNOWN_AFTER_DISPATCH"
+                if solve_dispatched
+                else "NO_INFERENCE_DISPATCHED"
+            ),
         }
     finally:
         try:
