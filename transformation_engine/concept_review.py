@@ -169,12 +169,13 @@ def finalize_if_complete(
     request: dict[str, Any],
 ) -> None:
     active_overrides = set(state.get("active_override_ids", []))
-    expected = {
-        str(item["concept_id"])
+    active_items = [
+        item
         for item in request.get("items", [])
         if item.get("triage_default") is True
         or str(item.get("concept_id")) in active_overrides
-    }
+    ]
+    expected = {str(item["concept_id"]) for item in active_items}
     if not expected or expected != set(state.get("decisions", {})):
         write_json(STATE_FILE, state)
         return
@@ -186,9 +187,12 @@ def finalize_if_complete(
         ],
         "overall_note": "",
     }
+    active_request = dict(request)
+    active_request["items"] = active_items
+    active_request["concept_count"] = len(active_items)
     reviewed, handoff = apply_gate(
         load_json(DEFAULT_CANDIDATES),
-        request,
+        active_request,
         response,
         load_config(),
     )

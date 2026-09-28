@@ -108,6 +108,17 @@ class ConceptReviewTests(unittest.TestCase):
             ],
         }
 
+    def triaged_candidates(self):
+        payload = self.candidates()
+        shortlisted, override = payload["concepts"]
+        return {
+            "artifact": "triaged_concept_candidates",
+            "source_candidates_sha256": "test-source",
+            "concept_count": 1,
+            "concepts": [shortlisted],
+            "override_concepts": [override],
+        }
+
     def criteria(self):
         return {
             "originality_clear": True,
@@ -215,6 +226,82 @@ class ConceptReviewTests(unittest.TestCase):
         self.assertEqual(handoff["status"], "READY_FOR_RESEARCH")
         self.assertEqual(handoff["concept_count"], 1)
         self.assertEqual(handoff["concepts"][0]["concept_id"], "c1")
+
+    def test_triaged_gate_finalizes_after_shortlist_only(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(self.triaged_candidates()),
+                encoding="utf-8",
+            )
+
+            prepared = review.prepare_state()
+            self.assertEqual(prepared["pending"], 1)
+            self.assertEqual(
+                [item["concept_id"] for item in prepared["concepts"]],
+                ["c1"],
+            )
+            self.assertEqual(
+                [item["concept_id"] for item in prepared["override_concepts"]],
+                ["c2"],
+            )
+
+            final = review.apply_action(
+                concept_id="c1",
+                decision="ACCEPT",
+                criteria=self.criteria(),
+                note="",
+            )
+            handoff = json.loads(
+                review.RESEARCH_HANDOFF_FILE.read_text(encoding="utf-8")
+            )
+
+        self.assertTrue(final["complete"])
+        self.assertEqual(final["accepted"], 1)
+        self.assertEqual(handoff["concept_count"], 1)
+        self.assertEqual(handoff["concepts"][0]["concept_id"], "c1")
+
+    def test_override_becomes_required_only_after_activation(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(self.triaged_candidates()),
+                encoding="utf-8",
+            )
+            review.prepare_state()
+
+            overridden = review.apply_action(
+                concept_id="c2",
+                decision="OVERRIDE",
+                criteria={},
+                note="",
+            )
+            self.assertEqual(overridden["pending"], 2)
+            self.assertEqual(
+                {item["concept_id"] for item in overridden["concepts"]},
+                {"c1", "c2"},
+            )
+
+            first = review.apply_action(
+                concept_id="c1",
+                decision="ACCEPT",
+                criteria=self.criteria(),
+                note="",
+            )
+            self.assertFalse(first["complete"])
+
+            final = review.apply_action(
+                concept_id="c2",
+                decision="REJECT",
+                criteria={key: False for key in self.criteria()},
+                note="",
+            )
+
+        self.assertTrue(final["complete"])
+        self.assertEqual(final["accepted"], 1)
+        self.assertEqual(final["rejected"], 1)
 
     def test_candidate_change_invalidates_old_ui_state(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
