@@ -258,7 +258,7 @@ def apply_action(
     # Validate the human action and reviewed-draft provenance BEFORE persisting it.
     normalized = validate_response(req, payload)
     source = assert_current_draft(req)
-    summary = apply_payload(request_path, normalized)
+    apply_payload(request_path, normalized)
 
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
     dest = response_path(concept_id)
