@@ -813,7 +813,7 @@ def run_one(
         atomic_write_json(report_path, report)
         return report
 
-    if bridge_result.get("paid_inference_executed") is not False:
+    if not inference_cost_authorized(bridge_result):
         report = {
             "video_id": request_video_id,
             "status": "COST_POLICY_VIOLATION",
