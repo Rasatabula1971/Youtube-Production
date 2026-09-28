@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pipeline_integrity import atomic_write_json, atomic_write_text, exit_code_for_status
+
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
@@ -299,8 +301,8 @@ def build_shortlist_payload(
         "triage_summary": triage.get("summary"),
         "notes": [
             "Triage is an LLM prefilter, not human approval.",
-            "Only SHORTLIST concepts enter the Human Concept Gate.",
-            "REWORK and DROP decisions remain in concept_triage.json.",
+            "SHORTLIST concepts enter the Human Concept Gate by default.",
+            "REWORK and DROP concepts remain available as explicit human overrides.",
         ],
     }
 
@@ -354,13 +356,23 @@ def run(*, force: bool = False) -> dict[str, Any]:
     )
     payload["settings"]["client_id"] = "youtube-concept-triage"
 
-    result = call_fair_bridge(
-        payload,
-        python_executable=paths["python"],
-        timeout_seconds=float(
-            config["runner"].get("subprocess_timeout_seconds", 300)
-        ),
-    )
+    try:
+        result = call_fair_bridge(
+            payload,
+            python_executable=paths["python"],
+            timeout_seconds=float(
+                config["runner"].get("subprocess_timeout_seconds", 300)
+            ),
+        )
+    except Exception as exc:
+        report = {
+            "status": "RUNNER_ERROR",
+            "source_candidates": str(CANDIDATES_FILE),
+            "source_candidates_sha256": source_hash,
+            "error_type": type(exc).__name__,
+        }
+        atomic_write_json(RUN_REPORT_FILE, report)
+        return report
 
     base_report = {
         "source_candidates": str(CANDIDATES_FILE),
@@ -378,10 +390,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
 
     if result.get("paid_inference_executed") is not False:
         report = {**base_report, "status": "COST_POLICY_VIOLATION"}
-        RUN_REPORT_FILE.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(RUN_REPORT_FILE, report)
         return report
 
     if result.get("status") != "ACCEPTED":
@@ -400,9 +409,20 @@ def run(*, force: bool = False) -> dict[str, Any]:
         return report
 
     raw = str(result.get("output") or "")
-    RAW_OUTPUT_FILE.write_text(raw, encoding="utf-8")
-    parsed = parse_model_json(raw)
-    triage = validate_triage(parsed, concepts)
+    atomic_write_text(RAW_OUTPUT_FILE, raw)
+    try:
+        parsed = parse_model_json(raw)
+        triage = validate_triage(parsed, concepts)
+    except Exception as exc:
+        report = {
+            **base_report,
+            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:1000],
+            "raw_output": str(RAW_OUTPUT_FILE),
+        }
+        atomic_write_json(RUN_REPORT_FILE, report)
+        return report
 
     triage_artifact = {
         "artifact": "concept_llm_triage",
@@ -422,14 +442,8 @@ def run(*, force: bool = False) -> dict[str, Any]:
         source_hash,
     )
 
-    TRIAGE_OUTPUT_FILE.write_text(
-        json.dumps(triage_artifact, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    SHORTLIST_FILE.write_text(
-        json.dumps(shortlist, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(TRIAGE_OUTPUT_FILE, triage_artifact)
+    atomic_write_json(SHORTLIST_FILE, shortlist)
 
     counts = {
         value: sum(
@@ -449,10 +463,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
         "triage": str(TRIAGE_OUTPUT_FILE),
         "shortlist": str(SHORTLIST_FILE),
     }
-    RUN_REPORT_FILE.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(RUN_REPORT_FILE, report)
     return report
 
 
@@ -463,7 +474,9 @@ def main() -> None:
     parser.add_argument("--mode", choices=("run",), required=True)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(run(force=args.force), indent=2, ensure_ascii=False))
+    result = run(force=args.force)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    raise SystemExit(exit_code_for_status(result.get("status", "FAILED")))
 
 
 if __name__ == "__main__":
