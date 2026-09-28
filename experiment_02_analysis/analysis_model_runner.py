@@ -24,6 +24,10 @@ from analysis_execute import merge_analysis_response
 from evidence_ingest import sha256_file
 from experiment_02 import load_config as load_experiment_config
 from experiment_02 import load_json, safe_filename
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
 from pipeline_integrity import (
     atomic_write_json,
     atomic_write_text,
