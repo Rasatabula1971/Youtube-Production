@@ -535,7 +535,7 @@ def fair_call(
         "attempts": safe_attempts(result),
     }
 
-    if result.not inference_cost_authorized(bridge_result):
+    if not inference_cost_authorized(result):
         return ({**base, "status": "COST_POLICY_VIOLATION"}, None, "")
 
     if result.get("status") != "ACCEPTED":
