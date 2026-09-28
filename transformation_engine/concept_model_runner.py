@@ -11,6 +11,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from pipeline_integrity import atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -420,10 +421,10 @@ def run_batch(
 
     merge_summary = run_apply()
     summary = {
-        "status": (
-            "COMPLETE"
-            if merge_summary.get("status") == "CONCEPT_CANDIDATES_READY"
-            else merge_summary.get("status")
+        "status": batch_status(
+            results,
+            expected_count=len(paths),
+            processed_count=len(results),
         ),
         "requests_found": len(paths),
         "model_runs_invoked": invoked,
@@ -431,11 +432,7 @@ def run_batch(
         "results": results,
         "merge": merge_summary,
     }
-    BATCH_SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BATCH_SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(BATCH_SUMMARY_FILE, summary)
     return summary
 
 
@@ -473,6 +470,8 @@ def main() -> None:
         )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.mode == "batch":
+        raise SystemExit(exit_code_for_status(result["status"]))
 
 
 if __name__ == "__main__":
