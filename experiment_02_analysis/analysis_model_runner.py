@@ -446,6 +446,9 @@ def bridge_payload(
         ),
         "settings": {
             "quality_level": fair_config.get("quality_level", "standard"),
+            "task_type": str(
+                fair_config.get("task_type", "youtube_structured_pipeline")
+            ),
             "max_attempts": int(fair_config.get("max_attempts", 3)),
             "max_unanswered_attempts": int(
                 fair_config.get("max_unanswered_attempts", 6)
