@@ -1598,6 +1598,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     reviewed_count = exp2_artifacts["reviewed_current_count"]
     analyzed = analyzed_count > 0
     analysis_complete = request_count > 0 and analyzed_count == request_count
+    reviewed = reviewed_count > 0
     review_complete = request_count > 0 and reviewed_count == request_count
 
     if synthesis_ready:
@@ -2147,7 +2148,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     review_requests_complete = (
         request_count > 0 and review_request_count == request_count
     )
-    reviewed = reviewed_count > 0
     review_complete = request_count > 0 and reviewed_count == request_count
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     transform = transformation_artifact_state()
