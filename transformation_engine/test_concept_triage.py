@@ -1,10 +1,14 @@
 import unittest
+from unittest.mock import patch
 
 from concept_triage import (
     build_shortlist_payload,
     chunk_concepts,
     merge_full_audit,
+    normalize_scored_triage,
+    run_first_pass,
     select_finalist_ids,
+    validate_scores,
     validate_triage,
 )
 
@@ -174,6 +178,79 @@ class ConceptTriageTests(unittest.TestCase):
                 selected,
                 {f"c{chunk_index}_0", f"c{chunk_index}_1"},
             )
+
+    def test_score_only_response_is_normalized_deterministically(self):
+        dims = {
+            key: 5
+            for key in (
+                "channel_fit",
+                "viewer_problem",
+                "promise_clarity",
+                "feasibility",
+                "researchability",
+                "originality",
+                "overclaim_safety",
+            )
+        }
+        response = {
+            "scores": [
+                {
+                    "concept_id": "c1",
+                    "overall_score": 92,
+                    "dimension_scores": dims,
+                    "rationale": "best",
+                },
+                {
+                    "concept_id": "c2",
+                    "overall_score": 65,
+                    "dimension_scores": dims,
+                    "rationale": "needs work",
+                },
+                {
+                    "concept_id": "c3",
+                    "overall_score": 30,
+                    "dimension_scores": dims,
+                    "rationale": "weak",
+                },
+                {
+                    "concept_id": "c4",
+                    "overall_score": 75,
+                    "dimension_scores": dims,
+                    "rationale": "strong",
+                },
+            ],
+            "summary": "scored",
+        }
+        validated = validate_scores(response, self.candidates()["concepts"])
+        triage = normalize_scored_triage(validated, phase="final")
+        by_id = {item["concept_id"]: item for item in triage["decisions"]}
+        self.assertEqual(by_id["c1"]["decision"], "SHORTLIST")
+        self.assertEqual(by_id["c2"]["decision"], "REWORK")
+        self.assertEqual(by_id["c3"]["decision"], "DROP")
+        self.assertEqual(set(triage["shortlist_ids"]), {"c1", "c4"})
+
+    def test_first_pass_continues_after_failed_chunk(self):
+        chunks = [
+            [{"concept_id": "c1"}],
+            [{"concept_id": "c2"}],
+            [{"concept_id": "c3"}],
+        ]
+        side_effect = [
+            ({"status": "VALIDATED"}, {"decisions": [{"concept_id": "c1"}]}),
+            ({"status": "MODEL_ESCALATION_REQUIRED"}, None),
+            ({"status": "VALIDATED"}, {"decisions": [{"concept_id": "c3"}]}),
+        ]
+        with patch("concept_triage.run_chunk", side_effect=side_effect) as mocked:
+            results, triages, failed = run_first_pass(
+                chunks,
+                source_hash="abc",
+                config={},
+                force=False,
+            )
+        self.assertEqual(mocked.call_count, 3)
+        self.assertEqual(len(results), 3)
+        self.assertEqual(len(triages), 2)
+        self.assertEqual(failed, [2])
 
     def test_full_audit_preserves_nonfinalists(self):
         first_pass = [
