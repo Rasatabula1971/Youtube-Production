@@ -895,6 +895,30 @@ button.danger {
   font-size: 12px;
 }
 
+/* Human Analysis Gate */
+.analysis-evidence-card {
+  padding: 10px 11px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(13,17,23,.3);
+}
+
+.analysis-evidence-card p {
+  margin: 6px 0 0;
+  color: #d0d9e3;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.analysis-evidence-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
 /* Human Concept Gate */
 .concept-review-panel {
   margin-top: 14px;
