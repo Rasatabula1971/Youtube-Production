@@ -152,7 +152,7 @@ def read_http_error(
             "utf-8",
             errors="replace",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - boundary cleanup/recovery must not escape
         return "<Could not read response body>", None
 
     reason: str | None = None
@@ -304,7 +304,7 @@ def api_get(
 
             time.sleep(wait_seconds)
 
-        except Exception:
+        except Exception:  # noqa: BLE001 - boundary cleanup/recovery must not escape
 
             if attempt == 3:
                 raise
