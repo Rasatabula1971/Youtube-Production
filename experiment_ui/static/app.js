@@ -1790,7 +1790,7 @@ function renderAnalysis(data) {
   ) {
     activeIndex = 3;
   } else if (
-    ["transform_prepare", "concept_generate", "concept_gate_prepare"].includes(currentId) ||
+    ["transform_prepare", "concept_generate", "concept_triage", "concept_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_CONCEPT_GATE" ||
     (data.transformation && data.transformation.concept_gate_complete)
   ) {
