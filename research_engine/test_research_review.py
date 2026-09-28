@@ -52,6 +52,7 @@ class ResearchReviewTests(unittest.TestCase):
                             "stance": "SUPPORTS",
                             "locator": "Section 1",
                             "evidence_note": "The source supports the bounded claim.",
+                            "evidence_quote": "The source supports the bounded claim.",
                         }
                     ],
                     "coverage": {"state": "SINGLE_SOURCE"},
