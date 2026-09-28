@@ -89,6 +89,8 @@ TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
 TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
 TRANSFORM_RESPONSES_DIR = TRANSFORM_OUTPUT / "concept_responses"
 TRANSFORM_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates.json"
+TRANSFORM_TRIAGE_FILE = TRANSFORM_OUTPUT / "concept_triage.json"
+TRANSFORM_TRIAGED_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates_triaged.json"
 TRANSFORM_RESEARCH_HANDOFF = TRANSFORM_OUTPUT / "research_handoff.json"
 
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
@@ -149,6 +151,7 @@ WORKFLOW_ACTION_ORDER = [
     "synthesis_build",
     "transform_prepare",
     "concept_generate",
+    "concept_triage",
     "concept_gate_prepare",
     "package_prepare",
     "package_generate",
@@ -501,6 +504,20 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Runs the prepared concept requests through FAIR free-only routing, "
             "then applies deterministic Source Dependency and schema validation."
+        ),
+    },
+    "concept_triage": {
+        "label": "Triage Concept Candidates",
+        "stage": "04",
+        "command": [
+            sys.executable,
+            "transformation_engine/concept_triage.py",
+            "--mode",
+            "run",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to compare all structurally valid concepts "
+            "and shortlist the strongest 3-6 for human review."
         ),
     },
     "concept_gate_prepare": {
