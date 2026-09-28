@@ -95,6 +95,7 @@ def build_review_request(
                 "source_dependency_test": concept.get(
                     "source_dependency_test", {}
                 ),
+                "llm_triage": concept.get("llm_triage", {}),
                 "required_accept_criteria": list(
                     config["required_accept_criteria"]
                 ),
