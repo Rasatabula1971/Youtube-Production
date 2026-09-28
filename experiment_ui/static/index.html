@@ -123,7 +123,7 @@
             <div>
               <p class="section-kicker">ANALYZE &amp; CREATE</p>
               <h2>Turn evidence into an original video</h2>
-              <p class="muted">Work through evidence, analysis, concept, packaging, research and script without leaving this workspace.</p>
+              <p class="muted">Work through evidence, analysis, concept, packaging, research, script and format without leaving this workspace.</p>
             </div>
           </div>
 
@@ -134,6 +134,7 @@
             <span class="creation-tab">Package</span>
             <span class="creation-tab">Research</span>
             <span class="creation-tab">Script</span>
+            <span class="creation-tab">Format</span>
             <span class="creation-tab future">Produce</span>
           </div>
 
@@ -313,6 +314,33 @@
                   <button class="ghost" id="scriptRework" type="button">Rework</button>
                   <button id="scriptAccept" type="button">Accept script</button>
                   <button class="ghost" id="scriptNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="formatReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN FORMAT GATE</p>
+                <h2 id="formatReviewTitle">Review format plan</h2>
+                <p class="muted" id="formatReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="formatReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="formatDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-criteria" id="formatCriteria"></div>
+                <label class="vision-label" for="formatNote">Review note</label>
+                <textarea id="formatNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="formatPrev" type="button">← Previous</button>
+                  <button class="danger" id="formatReject" type="button">Reject</button>
+                  <button class="ghost" id="formatRework" type="button">Rework</button>
+                  <button id="formatAccept" type="button">Accept format plan</button>
+                  <button class="ghost" id="formatNext" type="button">Next →</button>
                 </div>
               </div>
             </div>

@@ -106,6 +106,19 @@ const scriptRework = document.getElementById("scriptRework");
 const scriptAccept = document.getElementById("scriptAccept");
 const scriptNext = document.getElementById("scriptNext");
 
+const formatReviewPanel = document.getElementById("formatReviewPanel");
+const formatReviewTitle = document.getElementById("formatReviewTitle");
+const formatReviewSummary = document.getElementById("formatReviewSummary");
+const formatReviewStatus = document.getElementById("formatReviewStatus");
+const formatDetail = document.getElementById("formatDetail");
+const formatCriteria = document.getElementById("formatCriteria");
+const formatNote = document.getElementById("formatNote");
+const formatPrev = document.getElementById("formatPrev");
+const formatReject = document.getElementById("formatReject");
+const formatRework = document.getElementById("formatRework");
+const formatAccept = document.getElementById("formatAccept");
+const formatNext = document.getElementById("formatNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -140,6 +153,9 @@ let researchEditing = false;
 let latestScriptSnapshot = null;
 let scriptCursor = 0;
 let scriptEditing = false;
+let latestFormatSnapshot = null;
+let formatCursor = 0;
+let formatEditing = false;
 
 const ROUTES = {
   "/": {
@@ -1783,6 +1799,203 @@ async function submitScriptDecision(decision) {
   }
 }
 
+function pendingFormatIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentFormatItem() {
+  const items = (latestFormatSnapshot && latestFormatSnapshot.plans) || [];
+  if (!items.length) return null;
+  formatCursor = Math.max(0, Math.min(formatCursor, items.length - 1));
+  return { item: items[formatCursor], items: items };
+}
+
+function renderFormatBranch(branch) {
+  const beats = (branch.beats || []).map(function (beat) {
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(beat.beat_id || "BEAT") + ' · ' +
+      escapeHtml(beat.purpose || "") + '</h4>' +
+      '<p>' + escapeHtml(beat.treatment || "") + '</p>' +
+      '<div class="concept-meta"><span>Claims: ' +
+      escapeHtml((beat.claim_ids || []).join(", ") || "none") +
+      '</span><span>Script sections: ' +
+      escapeHtml((beat.source_section_ids || []).join(", ") || "none") +
+      '</span></div></div>';
+  }).join("");
+  return '<div class="concept-detail-card"><h4>' +
+      escapeHtml(humanizeToken(branch.format || "branch")) + ' BRANCH</h4>' +
+      '<p><strong>Duration intent:</strong> ' +
+      escapeHtml(String(branch.duration_intent_seconds || "")) + ' s' +
+      '<br><strong>Promise delivery:</strong> ' + escapeHtml(branch.promise_delivery || "") +
+      '<br><strong>Payoff:</strong> ' + escapeHtml(branch.payoff || "") +
+      '</p></div>' + beats;
+}
+
+function renderFormatReview(snapshot, force) {
+  latestFormatSnapshot = snapshot || {};
+  if (
+    !snapshot ||
+    snapshot.status === "WAITING_FOR_FORMAT_PLANS" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.plans || []).length
+  ) {
+    formatReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    formatReviewPanel.hidden = false;
+    formatReviewTitle.textContent = "Format Gate complete";
+    formatReviewSummary.textContent =
+      (snapshot.accepted || 0) + " accepted · " +
+      (snapshot.rework || 0) + " rework · " +
+      (snapshot.rejected || 0) + " rejected";
+    formatReviewStatus.textContent =
+      (snapshot.accepted || 0) > 0 ? "READY FOR PRODUCTION ENGINE" : "NO APPROVED FORMAT PLAN";
+    formatReviewStatus.className =
+      "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
+    formatDetail.innerHTML =
+      '<div class="concept-complete">' +
+      ((snapshot.accepted || 0) > 0
+        ? "Approved format plan is ready for the Production Engine."
+        : "No format plan was approved. Rework or regenerate before production.") +
+      '</div>';
+    formatCriteria.innerHTML = "";
+    formatNote.hidden = true;
+    formatPrev.disabled = true;
+    formatNext.disabled = true;
+    formatReject.disabled = true;
+    formatRework.disabled = true;
+    formatAccept.disabled = true;
+    return;
+  }
+
+  if (formatEditing && !force) return;
+  const items = snapshot.plans || [];
+  if (formatCursor >= items.length) {
+    formatCursor = Math.max(0, items.length - 1);
+  }
+  const plan = items[formatCursor] || {};
+  const pkg = plan.package || {};
+  const separation = plan.branch_separation || {};
+  const overlap = plan.source_overlap || {};
+  const branches = (plan.branches || []).map(renderFormatBranch).join("");
+
+  formatReviewPanel.hidden = false;
+  formatNote.hidden = false;
+  formatReviewTitle.textContent =
+    "Format plan " + (formatCursor + 1) + " of " + items.length;
+  formatReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · " +
+    (snapshot.accepted || 0) + " accepted · " +
+    (snapshot.rework || 0) + " rework";
+  formatReviewStatus.textContent = plan.decision || "PENDING";
+  formatReviewStatus.className =
+    "status-chip " +
+    (plan.decision === "ACCEPT"
+      ? "success"
+      : plan.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  formatDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>APPROVED PACKAGE</h4><h3>' +
+      escapeHtml(pkg.title || plan.concept_id) + '</h3>' +
+      '<p><strong>Promise:</strong> ' + escapeHtml(pkg.one_sentence_promise || "") +
+      '<br><strong>Expected payoff:</strong> ' + escapeHtml(pkg.expected_payoff || "") +
+      '<br><strong>Format intent:</strong> ' + escapeHtml(plan.format_intent || "") +
+      '<br><strong>Required branches:</strong> ' +
+      escapeHtml((plan.required_branches || []).join(", ")) +
+      '</p></div>' +
+    '<div class="concept-detail-card"><h4>BRANCH SEPARATION CHECK</h4><p>' +
+      escapeHtml(
+        separation.identical
+          ? "BLOCK: branches are identical edits of one timeline."
+          : separation.truncation
+            ? "BLOCK: one branch is a truncation of the other."
+            : "Branches differ in structure (deterministic check passed)."
+      ) + '</p></div>' +
+    (overlap.matches && overlap.matches.length
+      ? '<div class="concept-detail-card"><h4>SOURCE OVERLAP CHECK</h4><p>' +
+        overlap.matches.map(function (match) {
+          return escapeHtml((match.blocking ? "BLOCK " : "WARN ") + match.word_count + " words: " + match.overlap_text);
+        }).join("<br>") + '</p></div>'
+      : '') +
+    branches;
+
+  const descriptions = plan.criteria || {};
+  const checked = plan.criteria_decisions || {};
+  const required = plan.required_accept_criteria || Object.keys(descriptions);
+  formatCriteria.innerHTML = required.map(function (criterion) {
+    const id = "format-criterion-" + formatCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) +
+      '" data-format-criterion="' + escapeHtml(criterion) + '"' +
+      (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(descriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  formatNote.value = plan.note || "";
+  formatPrev.disabled = formatCursor <= 0;
+  formatNext.disabled = formatCursor >= items.length - 1;
+  formatReject.disabled = false;
+  formatRework.disabled = false;
+  formatAccept.disabled = false;
+  formatEditing = false;
+}
+
+function moveFormatCursor(delta) {
+  const current = currentFormatItem();
+  if (!current) return;
+  formatCursor = Math.max(0, Math.min(current.items.length - 1, formatCursor + delta));
+  formatEditing = false;
+  renderFormatReview(latestFormatSnapshot, true);
+}
+
+function collectFormatCriteria() {
+  const values = {};
+  formatCriteria.querySelectorAll("[data-format-criterion]").forEach(function (input) {
+    values[input.dataset.formatCriterion] = Boolean(input.checked);
+  });
+  return values;
+}
+
+async function submitFormatDecision(decision) {
+  const current = currentFormatItem();
+  if (!current) return;
+  const plan = current.item;
+  try {
+    const payload = await api("/api/format-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: plan.concept_id,
+        decision: decision,
+        criteria: collectFormatCriteria(),
+        note: formatNote.value
+      })
+    });
+    formatEditing = false;
+    latestFormatSnapshot = payload;
+    const nextPending = pendingFormatIndex(payload.plans || []);
+    if (nextPending >= 0) formatCursor = nextPending;
+    renderFormatReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Format plan accepted for production."
+        : decision === "REWORK"
+          ? "Format plan sent for rework."
+          : "Format plan rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -1790,7 +2003,8 @@ function renderAnalysis(data) {
     "HUMAN_CONCEPT_GATE",
     "HUMAN_PACKAGING_GATE",
     "HUMAN_RESEARCH_GATE",
-    "HUMAN_SCRIPT_GATE"
+    "HUMAN_SCRIPT_GATE",
+    "HUMAN_FORMAT_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -1823,6 +2037,7 @@ function renderAnalysis(data) {
   renderPackagingReview(data.packaging_gate || {}, false);
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
+  renderFormatReview(data.format_gate || {}, false);
 
   const currentId = workflow.current_action_id || "";
   let activeIndex = 0;
@@ -1831,6 +2046,12 @@ function renderAnalysis(data) {
     workflow.state === "HUMAN_ANALYSIS_GATE"
   ) {
     activeIndex = 1;
+  } else if (
+    ["format_prepare", "format_generate", "format_gate_prepare"].includes(currentId) ||
+    workflow.state === "HUMAN_FORMAT_GATE" ||
+    (data.format && data.format.format_gate_complete)
+  ) {
+    activeIndex = 6;
   } else if (
     ["script_prepare", "script_generate", "script_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_SCRIPT_GATE" ||
@@ -2248,6 +2469,27 @@ scriptRework.addEventListener("click", function () {
 });
 scriptAccept.addEventListener("click", function () {
   submitScriptDecision("ACCEPT");
+});
+formatNote.addEventListener("input", function () {
+  formatEditing = true;
+});
+formatCriteria.addEventListener("change", function () {
+  formatEditing = true;
+});
+formatPrev.addEventListener("click", function () {
+  moveFormatCursor(-1);
+});
+formatNext.addEventListener("click", function () {
+  moveFormatCursor(1);
+});
+formatReject.addEventListener("click", function () {
+  submitFormatDecision("REJECT");
+});
+formatRework.addEventListener("click", function () {
+  submitFormatDecision("REWORK");
+});
+formatAccept.addEventListener("click", function () {
+  submitFormatDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });

@@ -40,6 +40,10 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="researchReviewPanel"', html)
         self.assertIn('id="researchCriteria"', html)
         self.assertIn('id="researchNote"', html)
+        self.assertIn('id="scriptReviewPanel"', html)
+        self.assertIn('id="formatReviewPanel"', html)
+        self.assertIn('id="formatCriteria"', html)
+        self.assertIn('id="formatNote"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -56,6 +60,10 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/packaging-gate", script)
         self.assertIn("renderResearchReview", script)
         self.assertIn("/api/research-gate", script)
+        self.assertIn("renderScriptReview", script)
+        self.assertIn("/api/script-gate", script)
+        self.assertIn("renderFormatReview", script)
+        self.assertIn("/api/format-gate", script)
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
@@ -201,6 +209,143 @@ class ExperimentUiTests(unittest.TestCase):
             "research_engine/research_review.py",
             server.ACTION_DEFS["research_gate_prepare"]["command"][1],
         )
+
+    def test_format_actions_follow_script_gate(self):
+        for action_id in (
+            "format_prepare",
+            "format_generate",
+            "format_gate_prepare",
+        ):
+            self.assertIn(action_id, server.ACTION_DEFS)
+
+        script_index = server.WORKFLOW_ACTION_ORDER.index("script_gate_prepare")
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER[script_index + 1 : script_index + 4],
+            [
+                "format_prepare",
+                "format_generate",
+                "format_gate_prepare",
+            ],
+        )
+        self.assertIn(
+            "format_engine/format_engine.py",
+            server.ACTION_DEFS["format_prepare"]["command"][1],
+        )
+        self.assertIn(
+            "format_engine/format_model_runner.py",
+            server.ACTION_DEFS["format_generate"]["command"][1],
+        )
+        self.assertIn(
+            "format_engine/format_review.py",
+            server.ACTION_DEFS["format_gate_prepare"]["command"][1],
+        )
+        self.assertIn("format_output", server.OPEN_TARGETS)
+
+    def test_pending_format_gate_becomes_human_workflow_gate(self):
+        with (
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={
+                    "ready_for_experiment_02": True,
+                    "opportunities": [],
+                },
+            ),
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={
+                    "awaiting_human_review": False,
+                    "complete": True,
+                },
+            ),
+            patch.object(
+                server,
+                "opportunity_research_state",
+                return_value={},
+            ),
+            patch.object(
+                server,
+                "transformation_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "research_ready": True,
+                    "concept_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "packaging_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "research_ready": True,
+                    "packaging_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "research_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "research_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "story_script_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "script_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "format_artifact_state",
+                return_value={
+                    "plans_ready": True,
+                    "format_gate": {
+                        "status": "AWAITING_HUMAN_DECISION",
+                    },
+                },
+            ),
+        ):
+            workflow = server.workflow_guidance({})
+
+        self.assertEqual(workflow["state"], "HUMAN_FORMAT_GATE")
+        self.assertEqual(workflow["current_title"], "Review Format Plan")
+        self.assertEqual(workflow["next_title"], "Ready for Production")
+
+    def test_stage_cards_include_script_and_format(self):
+        stages = server.stage_statuses()
+        ids = [stage["id"] for stage in stages]
+        self.assertEqual(ids[-3:], ["06", "07", "08"])
+        by_id = {stage["id"]: stage for stage in stages}
+        self.assertEqual(by_id["07"]["title"], "Story / Script")
+        self.assertEqual(by_id["08"]["title"], "Format")
+        # With no artifacts on disk the later stages are blocked, not current.
+        self.assertFalse(by_id["08"]["ready"])
+        self.assertFalse(by_id["08"]["current"])
+        self.assertEqual(by_id["08"]["tone"], "blocked")
+
+    def test_format_state_is_in_status_payload(self):
+        payload = server.status_payload()
+        self.assertIn("format", payload)
+        self.assertIn("format_gate", payload)
+        self.assertEqual(
+            payload["format_gate"].get("status"), "WAITING_FOR_FORMAT_PLANS"
+        )
+        format_actions = {
+            action["id"]: action
+            for action in payload["actions"]
+            if action["id"].startswith("format_")
+        }
+        self.assertEqual(
+            set(format_actions),
+            {"format_prepare", "format_generate", "format_gate_prepare"},
+        )
+        for action in format_actions.values():
+            self.assertEqual(action["surface"], "workflow")
+            self.assertFalse(action["enabled"])
 
     def test_pending_research_gate_becomes_human_workflow_gate(self):
         with (
