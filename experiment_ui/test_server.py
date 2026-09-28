@@ -116,10 +116,11 @@ class ExperimentUiTests(unittest.TestCase):
             "synthesis_build"
         )
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 4],
+            server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 5],
             [
                 "transform_prepare",
                 "concept_generate",
+                "concept_triage",
                 "concept_gate_prepare",
             ],
         )
