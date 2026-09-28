@@ -466,11 +466,17 @@ def run_batch_prepare(profiles_dir: Path) -> dict[str, Any]:
                 }
             )
 
+    total = len(list(profiles_dir.glob("*.json")))
+    status = (
+        "COMPLETE"
+        if total > 0 and len(prepared) == total and not failures
+        else "FAILED"
+        if not prepared and failures
+        else "PARTIAL"
+    )
     return {
-        "status": "COMPLETE",
-        "profiles_found": len(
-            list(profiles_dir.glob("*.json"))
-        ),
+        "status": status,
+        "profiles_found": total,
         "prepared": len(prepared),
         "failures": failures,
         "requests_dir": str(REVIEW_REQUESTS_DIR),
@@ -813,6 +819,8 @@ def main() -> None:
         )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.mode == "batch-prepare" and result.get("status") != "COMPLETE":
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
