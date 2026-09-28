@@ -1,8 +1,12 @@
-"""FAIR-backed comparative triage for Transformation Engine concepts.
+"""FAIR-backed two-pass comparative triage for Transformation Engine concepts.
 
-Consumes all structurally valid concept candidates, asks FAIR to classify every
-candidate as SHORTLIST, REWORK, or DROP, and writes a bounded shortlist for the
-human Concept Gate. The full audit is preserved.
+Pass 1 scores concepts in small resumable chunks so free providers are not asked
+to return one oversized 25-item structured response. The strongest concepts from
+each chunk advance to a bounded finalist pool. Pass 2 compares those finalists
+and produces the final 0-6 shortlist for the Human Concept Gate.
+
+The full first-pass audit is preserved for every concept. Non-shortlisted
+concepts remain available to the Human Concept Gate as explicit overrides.
 """
 
 from __future__ import annotations
@@ -47,9 +51,14 @@ from transformation_engine import (
 
 TRIAGE_OUTPUT_FILE = OUTPUT_DIR / "concept_triage.json"
 SHORTLIST_FILE = OUTPUT_DIR / "concept_candidates_triaged.json"
-RAW_OUTPUT_FILE = OUTPUT_DIR / "raw_concept_triage.txt"
 RUN_REPORT_FILE = OUTPUT_DIR / "concept_triage_run.json"
+CHUNK_DIR = OUTPUT_DIR / "concept_triage_chunks"
+FINAL_RAW_FILE = OUTPUT_DIR / "raw_concept_triage_final.txt"
+FINAL_RESPONSE_FILE = OUTPUT_DIR / "concept_triage_final.json"
 
+CHUNK_SIZE = 5
+FINALISTS_PER_CHUNK = 2
+MAX_FINALISTS = 10
 MIN_SHORTLIST = 0
 MAX_SHORTLIST = 6
 ALLOWED_DECISIONS = {"SHORTLIST", "REWORK", "DROP"}
@@ -64,8 +73,16 @@ DIMENSIONS = (
 )
 
 
-def response_schema(concepts: list[dict[str, Any]]) -> dict[str, Any]:
+def response_schema(
+    concepts: list[dict[str, Any]],
+    *,
+    max_shortlist: int | None = None,
+) -> dict[str, Any]:
     concept_ids = [str(item["concept_id"]) for item in concepts]
+    shortlist_max = min(
+        len(concept_ids),
+        MAX_SHORTLIST if max_shortlist is None else max_shortlist,
+    )
     decision_item = {
         "type": "object",
         "additionalProperties": False,
@@ -129,7 +146,7 @@ def response_schema(concepts: list[dict[str, Any]]) -> dict[str, Any]:
             "shortlist_ids": {
                 "type": "array",
                 "minItems": MIN_SHORTLIST,
-                "maxItems": min(MAX_SHORTLIST, len(concept_ids)),
+                "maxItems": shortlist_max,
                 "uniqueItems": True,
                 "items": {"type": "string", "enum": concept_ids},
             },
@@ -138,8 +155,7 @@ def response_schema(concepts: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
-    concepts = payload.get("concepts", [])
+def compact_concepts(concepts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     compact = []
     for item in concepts:
         compact.append(
@@ -162,41 +178,70 @@ def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
                 "source_dependency_test": item.get("source_dependency_test", {}),
             }
         )
+    return compact
+
+
+def build_prompt(
+    payload: dict[str, Any],
+    maximum_chars: int,
+    *,
+    phase: str = "final",
+) -> str:
+    concepts = payload.get("concepts", [])
+    if phase not in {"chunk", "final"}:
+        raise ValueError("triage phase must be chunk or final")
+
+    if phase == "chunk":
+        purpose = (
+            "This is FIRST-PASS triage for one small chunk. Score every concept "
+            "honestly. shortlist_ids may contain 0-5 concepts, but this chunk "
+            "shortlist is advisory only; deterministic code will advance the two "
+            "highest-scoring concepts to the final comparative pass."
+        )
+        shortlist_rule = (
+            "10. shortlist_ids must exactly match concepts classified SHORTLIST "
+            "inside this chunk; 0-5 is allowed."
+        )
+    else:
+        purpose = (
+            "This is FINAL comparative triage across the strongest first-pass "
+            "finalists. Produce the final 0-6 shortlist for a later Human Concept Gate."
+        )
+        shortlist_rule = (
+            "10. shortlist_ids must exactly match concepts classified SHORTLIST, "
+            "with a minimum of 0 and maximum of 6."
+        )
 
     prompt = (
         "You are the comparative concept triage stage for a YouTube production "
         "system. Infer the intended channel/audience direction from the candidate "
         "pool and each candidate's channel_fit evidence. Return JSON only.\n\n"
-        "Your job is NOT to approve a concept for production. Your job is to reduce "
-        "a large structurally-valid candidate pool to the strongest 0-6 concepts for "
-        "a later Human Concept Gate.\n\n"
-        "Evaluate EVERY concept independently and comparatively on seven dimensions, "
-        "scored 0-5: channel_fit, viewer_problem, promise_clarity, feasibility, "
-        "researchability, originality, overclaim_safety.\n\n"
+        + purpose
+        + "\n\nEvaluate EVERY concept independently and comparatively on seven "
+        "dimensions, scored 0-5: channel_fit, viewer_problem, promise_clarity, "
+        "feasibility, researchability, originality, overclaim_safety.\n\n"
         "Decision meanings:\n"
-        "- SHORTLIST: overall_score 70-100; strong enough to spend human review and research effort on now.\n"
-        "- REWORK: overall_score 45-69; useful core idea but wording, promise, feasibility, precision, or channel fit needs correction.\n"
-        "- DROP: overall_score 0-44; weak, off-channel, redundant, confused, or unjustifiably difficult compared with stronger alternatives.\n\n"
+        "- SHORTLIST: overall_score 70-100.\n"
+        "- REWORK: overall_score 45-69.\n"
+        "- DROP: overall_score 0-44.\n\n"
         "Rules:\n"
-        "1. Prefer concepts aligned with the intended channel/audience direction "
-        "described across the candidate pool. Penalize mechanism transfer into unrelated "
-        "fields unless the candidate makes a strong, explicit channel-fit case.\n"
-        "2. Penalize promises that assume research conclusions before research exists "
-        "(for example 'optimal', 'exact', 'safest', or specific performance outcomes).\n"
-        "3. Penalize concepts whose proposed test would require unrealistic, unsafe, "
-        "or highly specialized original testing when credible independent research may "
-        "not exist.\n"
-        "4. Treat content_gap HYPOTHESIS/UNASSESSED honestly; do not reward it as proven demand.\n"
-        "5. Prefer concepts that can be independently researched with credible sources.\n"
-        "6. Prefer clear viewer moments, concrete outcomes, and a packageable curiosity/payoff.\n"
-        "7. Penalize terminology errors, false precision, category mistakes, and "
-        "comparisons that confuse distinct technical variables.\n"
+        "1. Prefer concepts aligned with the intended channel/audience direction.\n"
+        "2. Penalize promises that assume research conclusions before research exists.\n"
+        "3. Penalize unrealistic, unsafe, or highly specialized original testing.\n"
+        "4. Treat content_gap HYPOTHESIS/UNASSESSED honestly.\n"
+        "5. Prefer concepts independently researchable with credible sources.\n"
+        "6. Prefer clear viewer moments, concrete outcomes, and packageable payoff.\n"
+        "7. Penalize terminology errors, false precision, and category mistakes.\n"
         "8. Do not reward a concept merely because it has a catchy title.\n"
         "9. Account for every concept exactly once.\n"
-        "10. shortlist_ids must contain exactly the concepts you classify SHORTLIST, "
-        "with a minimum of 0 and maximum of 6. If none deserve human time, return an empty shortlist.\n"
-        "11. Decision and overall_score must obey the thresholds above exactly.\n\n"
-        "CANDIDATES:\n" + json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+        + shortlist_rule
+        + "\n11. Decision and overall_score must obey the thresholds exactly.\n\n"
+        "CANDIDATES:\n"
+        + json.dumps(
+            compact_concepts(concepts),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     )
     if len(prompt) > maximum_chars:
         raise ValueError(
@@ -209,6 +254,8 @@ def build_prompt(payload: dict[str, Any], maximum_chars: int) -> str:
 def validate_triage(
     response: dict[str, Any],
     candidates: list[dict[str, Any]],
+    *,
+    max_shortlist: int | None = None,
 ) -> dict[str, Any]:
     expected = {str(item["concept_id"]) for item in candidates}
     decisions = response.get("decisions")
@@ -249,7 +296,11 @@ def validate_triage(
     shortlist = [str(value) for value in shortlist_ids]
     if len(shortlist) != len(set(shortlist)):
         raise ValueError("shortlist_ids must be unique")
-    if not MIN_SHORTLIST <= len(shortlist) <= min(MAX_SHORTLIST, len(expected)):
+    shortlist_limit = min(
+        len(expected),
+        MAX_SHORTLIST if max_shortlist is None else max_shortlist,
+    )
+    if not MIN_SHORTLIST <= len(shortlist) <= shortlist_limit:
         raise ValueError("shortlist size is outside configured bounds")
     if not set(shortlist).issubset(expected):
         raise ValueError("shortlist contains unknown concept_id")
@@ -271,15 +322,74 @@ def validate_triage(
     }
 
 
+def chunk_concepts(
+    concepts: list[dict[str, Any]],
+    *,
+    chunk_size: int = CHUNK_SIZE,
+) -> list[list[dict[str, Any]]]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    return [
+        concepts[index : index + chunk_size]
+        for index in range(0, len(concepts), chunk_size)
+    ]
+
+
+def decision_rank(item: dict[str, Any]) -> tuple[int, int, str]:
+    dimensions = item.get("dimension_scores", {})
+    dimension_total = sum(
+        int(dimensions.get(key, 0))
+        for key in DIMENSIONS
+        if isinstance(dimensions, dict)
+    )
+    return (
+        int(item.get("overall_score", 0)),
+        dimension_total,
+        str(item.get("concept_id", "")),
+    )
+
+
+def select_finalist_ids(
+    chunk_triages: list[dict[str, Any]],
+    *,
+    per_chunk: int = FINALISTS_PER_CHUNK,
+    maximum: int = MAX_FINALISTS,
+) -> list[str]:
+    selected: list[dict[str, Any]] = []
+    for triage in chunk_triages:
+        ranked = sorted(
+            triage.get("decisions", []),
+            key=decision_rank,
+            reverse=True,
+        )
+        selected.extend(ranked[:per_chunk])
+
+    ranked_all = sorted(selected, key=decision_rank, reverse=True)
+    seen: set[str] = set()
+    finalist_ids: list[str] = []
+    for item in ranked_all:
+        concept_id = str(item.get("concept_id", ""))
+        if not concept_id or concept_id in seen:
+            continue
+        seen.add(concept_id)
+        finalist_ids.append(concept_id)
+        if len(finalist_ids) >= maximum:
+            break
+    return finalist_ids
+
+
 def build_shortlist_payload(
     candidates_payload: dict[str, Any],
     triage: dict[str, Any],
     source_hash: str,
 ) -> dict[str, Any]:
     by_id = {
-        str(item["concept_id"]): item for item in candidates_payload.get("concepts", [])
+        str(item["concept_id"]): item
+        for item in candidates_payload.get("concepts", [])
     }
-    decisions = {str(item["concept_id"]): item for item in triage["decisions"]}
+    decisions = {
+        str(item["concept_id"]): item for item in triage["decisions"]
+    }
     concepts = []
     overrides = []
     shortlist_ids = set(triage["shortlist_ids"])
@@ -302,8 +412,245 @@ def build_shortlist_payload(
             "Triage is an LLM prefilter, not human approval.",
             "SHORTLIST concepts enter the Human Concept Gate by default.",
             "REWORK and DROP concepts remain available as explicit human overrides.",
+            "Triage used resumable 5-concept first-pass chunks followed by a bounded finalist comparison.",
         ],
     }
+
+
+def fair_call(
+    concepts: list[dict[str, Any]],
+    *,
+    phase: str,
+    client_id: str,
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None, str]:
+    prompt = build_prompt(
+        {"concepts": concepts},
+        int(config["runner"].get("max_prompt_chars", 95000)),
+        phase=phase,
+    )
+    schema = response_schema(
+        concepts,
+        max_shortlist=len(concepts) if phase == "chunk" else MAX_SHORTLIST,
+    )
+    schema_chars = len(json.dumps(schema, separators=(",", ":")))
+    if schema_chars > 19000:
+        raise ValueError(
+            f"Generated triage schema is {schema_chars:,} characters; "
+            "FAIR supports schemas below 20,000 characters."
+        )
+
+    paths = resolve_fair_paths(config)
+    payload = bridge_payload(
+        action="solve",
+        prompt=prompt,
+        schema=schema,
+        config=config,
+        paths=paths,
+    )
+    payload["settings"]["client_id"] = client_id
+
+    try:
+        result = call_fair_bridge(
+            payload,
+            python_executable=paths["python"],
+            timeout_seconds=float(
+                config["runner"].get("subprocess_timeout_seconds", 300)
+            ),
+        )
+    except Exception as exc:
+        return (
+            {
+                "status": "RUNNER_ERROR",
+                "error_type": type(exc).__name__,
+            },
+            None,
+            "",
+        )
+
+    base = {
+        "fair_request_id": result.get("request_id"),
+        "fair_status": result.get("status"),
+        "fair_reason_code": result.get("reason_code"),
+        "provider_id": result.get("provider_id"),
+        "model_id": result.get("model_id"),
+        "best_quality_score": result.get("best_quality_score"),
+        "verification_state": result.get("verification_state"),
+        "paid_inference_executed": result.get("paid_inference_executed"),
+        "attempts": safe_attempts(result),
+    }
+
+    if result.get("paid_inference_executed") is not False:
+        return ({**base, "status": "COST_POLICY_VIOLATION"}, None, "")
+
+    if result.get("status") != "ACCEPTED":
+        return (
+            {
+                **base,
+                "status": (
+                    "MODEL_ESCALATION_REQUIRED"
+                    if result.get("status") == "ESCALATION_REQUIRED"
+                    else "MODEL_FAILED"
+                ),
+            },
+            None,
+            "",
+        )
+
+    raw = str(result.get("output") or "")
+    try:
+        parsed = parse_model_json(raw)
+        triage = validate_triage(
+            parsed,
+            concepts,
+            max_shortlist=(
+                len(concepts) if phase == "chunk" else MAX_SHORTLIST
+            ),
+        )
+    except Exception as exc:
+        return (
+            {
+                **base,
+                "status": "MODEL_OUTPUT_VALIDATION_ERROR",
+                "error_type": type(exc).__name__,
+                "message": str(exc)[:1000],
+            },
+            None,
+            raw,
+        )
+
+    return ({**base, "status": "VALIDATED"}, triage, raw)
+
+
+def chunk_paths(index: int) -> tuple[Path, Path, Path]:
+    stem = f"chunk_{index:03d}"
+    return (
+        CHUNK_DIR / f"{stem}.json",
+        CHUNK_DIR / f"{stem}.report.json",
+        CHUNK_DIR / f"{stem}.raw.txt",
+    )
+
+
+def load_current_chunk(
+    index: int,
+    *,
+    source_hash: str,
+    concept_ids: list[str],
+) -> dict[str, Any] | None:
+    triage_path, report_path, _ = chunk_paths(index)
+    if not triage_path.exists() or not report_path.exists():
+        return None
+    try:
+        triage_artifact = load_json(triage_path)
+        report = load_json(report_path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if (
+        report.get("status") == "VALIDATED"
+        and triage_artifact.get("source_candidates_sha256") == source_hash
+        and triage_artifact.get("concept_ids") == concept_ids
+    ):
+        return triage_artifact
+    return None
+
+
+def run_chunk(
+    concepts: list[dict[str, Any]],
+    *,
+    index: int,
+    source_hash: str,
+    config: dict[str, Any],
+    force: bool,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    concept_ids = [str(item["concept_id"]) for item in concepts]
+    triage_path, report_path, raw_path = chunk_paths(index)
+    if not force:
+        current = load_current_chunk(
+            index,
+            source_hash=source_hash,
+            concept_ids=concept_ids,
+        )
+        if current is not None:
+            return (
+                {
+                    "status": "SKIPPED_ALREADY_VALIDATED",
+                    "chunk": index,
+                    "concept_ids": concept_ids,
+                    "triage": str(triage_path),
+                },
+                current,
+            )
+
+    report, triage, raw = fair_call(
+        concepts,
+        phase="chunk",
+        client_id=f"youtube-concept-triage-chunk-{index:03d}",
+        config=config,
+    )
+    report = {
+        **report,
+        "chunk": index,
+        "concept_ids": concept_ids,
+        "source_candidates_sha256": source_hash,
+    }
+    CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+    if raw:
+        atomic_write_text(raw_path, raw)
+
+    if triage is None:
+        atomic_write_json(report_path, report)
+        return report, None
+
+    artifact = {
+        "artifact": "concept_triage_chunk",
+        "chunk": index,
+        "source_candidates_sha256": source_hash,
+        "concept_ids": concept_ids,
+        **triage,
+        "model_provenance": {
+            "provider_id": report.get("provider_id"),
+            "model_id": report.get("model_id"),
+            "fair_request_id": report.get("fair_request_id"),
+        },
+    }
+    atomic_write_json(triage_path, artifact)
+    atomic_write_json(report_path, report)
+    return report, artifact
+
+
+def merge_full_audit(
+    first_pass: list[dict[str, Any]],
+    final_triage: dict[str, Any],
+    finalist_ids: list[str],
+) -> list[dict[str, Any]]:
+    first_map = {
+        str(item["concept_id"]): dict(item)
+        for triage in first_pass
+        for item in triage.get("decisions", [])
+    }
+    final_map = {
+        str(item["concept_id"]): dict(item)
+        for item in final_triage.get("decisions", [])
+    }
+    finalist_set = set(finalist_ids)
+
+    merged = []
+    for concept_id in sorted(first_map):
+        first = first_map[concept_id]
+        if concept_id in finalist_set and concept_id in final_map:
+            final = final_map[concept_id]
+            final["first_pass"] = {
+                "decision": first.get("decision"),
+                "overall_score": first.get("overall_score"),
+                "dimension_scores": first.get("dimension_scores", {}),
+                "rationale": first.get("rationale"),
+            }
+            final["triage_stage"] = "FINALIST"
+            merged.append(final)
+        else:
+            first["triage_stage"] = "FIRST_PASS_ONLY"
+            merged.append(first)
+    return merged
 
 
 def run(*, force: bool = False) -> dict[str, Any]:
@@ -340,104 +687,115 @@ def run(*, force: bool = False) -> dict[str, Any]:
             }
 
     config = load_runner_config()
-    prompt = build_prompt(
-        candidates_payload,
-        int(config["runner"].get("max_prompt_chars", 95000)),
-    )
-    schema = response_schema(concepts)
-    paths = resolve_fair_paths(config)
-    payload = bridge_payload(
-        action="solve",
-        prompt=prompt,
-        schema=schema,
-        config=config,
-        paths=paths,
-    )
-    payload["settings"]["client_id"] = "youtube-concept-triage"
-
-    try:
-        result = call_fair_bridge(
-            payload,
-            python_executable=paths["python"],
-            timeout_seconds=float(
-                config["runner"].get("subprocess_timeout_seconds", 300)
-            ),
+    chunks = chunk_concepts(concepts)
+    chunk_results = []
+    chunk_triages = []
+    for index, chunk in enumerate(chunks, start=1):
+        result, triage = run_chunk(
+            chunk,
+            index=index,
+            source_hash=source_hash,
+            config=config,
+            force=force,
         )
-    except Exception as exc:
+        chunk_results.append(result)
+        if triage is None:
+            report = {
+                "status": "PARTIAL",
+                "phase": "FIRST_PASS",
+                "source_candidates": str(CANDIDATES_FILE),
+                "source_candidates_sha256": source_hash,
+                "candidates_found": len(concepts),
+                "chunks_total": len(chunks),
+                "chunks_complete": len(chunk_triages),
+                "failed_chunk": index,
+                "chunk_results": chunk_results,
+            }
+            atomic_write_json(RUN_REPORT_FILE, report)
+            return report
+        chunk_triages.append(triage)
+
+    finalist_ids = select_finalist_ids(chunk_triages)
+    by_id = {str(item["concept_id"]): item for item in concepts}
+    finalists = [by_id[concept_id] for concept_id in finalist_ids]
+
+    final_report, final_triage, final_raw = fair_call(
+        finalists,
+        phase="final",
+        client_id="youtube-concept-triage-final",
+        config=config,
+    )
+    if final_raw:
+        atomic_write_text(FINAL_RAW_FILE, final_raw)
+
+    if final_triage is None:
         report = {
-            "status": "RUNNER_ERROR",
+            **final_report,
+            "status": "PARTIAL",
+            "phase": "FINAL_PASS",
             "source_candidates": str(CANDIDATES_FILE),
             "source_candidates_sha256": source_hash,
-            "error_type": type(exc).__name__,
+            "candidates_found": len(concepts),
+            "chunks_total": len(chunks),
+            "chunks_complete": len(chunk_triages),
+            "finalists": finalist_ids,
+            "chunk_results": chunk_results,
         }
         atomic_write_json(RUN_REPORT_FILE, report)
         return report
 
-    base_report = {
-        "source_candidates": str(CANDIDATES_FILE),
-        "source_candidates_sha256": source_hash,
-        "fair_request_id": result.get("request_id"),
-        "fair_status": result.get("status"),
-        "fair_reason_code": result.get("reason_code"),
-        "provider_id": result.get("provider_id"),
-        "model_id": result.get("model_id"),
-        "best_quality_score": result.get("best_quality_score"),
-        "verification_state": result.get("verification_state"),
-        "paid_inference_executed": result.get("paid_inference_executed"),
-        "attempts": safe_attempts(result),
-    }
+    atomic_write_json(
+        FINAL_RESPONSE_FILE,
+        {
+            "artifact": "concept_triage_finalists",
+            "source_candidates_sha256": source_hash,
+            "finalist_ids": finalist_ids,
+            **final_triage,
+            "model_provenance": {
+                "provider_id": final_report.get("provider_id"),
+                "model_id": final_report.get("model_id"),
+                "fair_request_id": final_report.get("fair_request_id"),
+            },
+        },
+    )
 
-    if result.get("paid_inference_executed") is not False:
-        report = {**base_report, "status": "COST_POLICY_VIOLATION"}
-        atomic_write_json(RUN_REPORT_FILE, report)
-        return report
-
-    if result.get("status") != "ACCEPTED":
-        report = {
-            **base_report,
-            "status": (
-                "MODEL_ESCALATION_REQUIRED"
-                if result.get("status") == "ESCALATION_REQUIRED"
-                else "MODEL_FAILED"
-            ),
-        }
-        RUN_REPORT_FILE.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        return report
-
-    raw = str(result.get("output") or "")
-    atomic_write_text(RAW_OUTPUT_FILE, raw)
-    try:
-        parsed = parse_model_json(raw)
-        triage = validate_triage(parsed, concepts)
-    except Exception as exc:
-        report = {
-            **base_report,
-            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
-            "error_type": type(exc).__name__,
-            "message": str(exc)[:1000],
-            "raw_output": str(RAW_OUTPUT_FILE),
-        }
-        atomic_write_json(RUN_REPORT_FILE, report)
-        return report
-
+    full_decisions = merge_full_audit(
+        chunk_triages,
+        final_triage,
+        finalist_ids,
+    )
     triage_artifact = {
         "artifact": "concept_llm_triage",
+        "triage_design": "TWO_PASS_CHUNKED",
         "source_candidates": str(CANDIDATES_FILE),
         "source_candidates_sha256": source_hash,
         "candidate_count": len(concepts),
-        **triage,
-        "model_provenance": {
-            "provider_id": result.get("provider_id"),
-            "model_id": result.get("model_id"),
-            "fair_request_id": result.get("request_id"),
+        "chunk_size": CHUNK_SIZE,
+        "chunks": len(chunks),
+        "finalist_count": len(finalist_ids),
+        "finalist_ids": finalist_ids,
+        "decisions": full_decisions,
+        "shortlist_ids": final_triage["shortlist_ids"],
+        "summary": final_triage["summary"],
+        "first_pass": {
+            "chunks": [
+                {
+                    "chunk": item.get("chunk"),
+                    "concept_ids": item.get("concept_ids", []),
+                    "summary": item.get("summary"),
+                }
+                for item in chunk_triages
+            ]
+        },
+        "final_model_provenance": {
+            "provider_id": final_report.get("provider_id"),
+            "model_id": final_report.get("model_id"),
+            "fair_request_id": final_report.get("fair_request_id"),
         },
     }
     shortlist = build_shortlist_payload(
         candidates_payload,
-        triage,
+        triage_artifact,
         source_hash,
     )
 
@@ -445,16 +803,26 @@ def run(*, force: bool = False) -> dict[str, Any]:
     atomic_write_json(SHORTLIST_FILE, shortlist)
 
     counts = {
-        value: sum(1 for item in triage["decisions"] if item["decision"] == value)
+        value: sum(
+            1 for item in full_decisions if item.get("decision") == value
+        )
         for value in ("SHORTLIST", "REWORK", "DROP")
     }
     report = {
-        **base_report,
+        **final_report,
         "status": "TRIAGE_COMPLETE",
+        "triage_design": "TWO_PASS_CHUNKED",
+        "source_candidates": str(CANDIDATES_FILE),
+        "source_candidates_sha256": source_hash,
         "candidates_found": len(concepts),
-        "shortlisted": counts["SHORTLIST"],
+        "chunks_total": len(chunks),
+        "chunks_complete": len(chunk_triages),
+        "finalist_count": len(finalist_ids),
+        "finalists": finalist_ids,
+        "shortlisted": len(final_triage["shortlist_ids"]),
         "rework": counts["REWORK"],
         "dropped": counts["DROP"],
+        "chunk_results": chunk_results,
         "triage": str(TRIAGE_OUTPUT_FILE),
         "shortlist": str(SHORTLIST_FILE),
     }
@@ -463,7 +831,9 @@ def run(*, force: bool = False) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="FAIR-backed Concept Candidate Triage")
+    parser = argparse.ArgumentParser(
+        description="FAIR-backed two-pass Concept Candidate Triage"
+    )
     parser.add_argument("--mode", choices=("run",), required=True)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
