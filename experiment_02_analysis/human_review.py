@@ -598,11 +598,18 @@ def review_snapshot() -> dict[str, Any]:
         request = load_json(request_path)
         video_id = str(request.get("video_id") or request_path.stem)
         profile_path = DEFAULT_ANALYZED_DIR / f"{safe_filename(video_id)}.json"
-        current_packet = (
-            profile_path.exists()
-            and request.get("request_provenance", {}).get("profile_sha256")
-            == sha256_file(profile_path)
-        )
+        provenance = request.get("request_provenance", {})
+        current_packet = False
+        if profile_path.exists() and isinstance(provenance, dict):
+            file_hash = provenance.get("profile_sha256")
+            content_hash = provenance.get("profile_content_sha256")
+            current_packet = (
+                (bool(file_hash) and file_hash == sha256_file(profile_path))
+                or (
+                    bool(content_hash)
+                    and content_hash == content_sha256(load_json(profile_path))
+                )
+            )
         response = (
             _load_partial_response(video_id, request=request)
             if current_packet
@@ -651,13 +658,29 @@ def review_snapshot() -> dict[str, Any]:
     stale = any(
         not (
             (DEFAULT_ANALYZED_DIR / f"{safe_filename(packet['video_id'])}.json").exists()
-            and load_json(
-                REVIEW_REQUESTS_DIR
-                / f"{safe_filename(packet['video_id'])}.review_request.json"
-            ).get("request_provenance", {}).get("profile_sha256")
-            == sha256_file(
-                DEFAULT_ANALYZED_DIR
-                / f"{safe_filename(packet['video_id'])}.json"
+            and (
+                (
+                    load_json(
+                        REVIEW_REQUESTS_DIR
+                        / f"{safe_filename(packet['video_id'])}.review_request.json"
+                    ).get("request_provenance", {}).get("profile_sha256")
+                    == sha256_file(
+                        DEFAULT_ANALYZED_DIR
+                        / f"{safe_filename(packet['video_id'])}.json"
+                    )
+                )
+                or (
+                    load_json(
+                        REVIEW_REQUESTS_DIR
+                        / f"{safe_filename(packet['video_id'])}.review_request.json"
+                    ).get("request_provenance", {}).get("profile_content_sha256")
+                    == content_sha256(
+                        load_json(
+                            DEFAULT_ANALYZED_DIR
+                            / f"{safe_filename(packet['video_id'])}.json"
+                        )
+                    )
+                )
             )
         )
         for packet in packets
