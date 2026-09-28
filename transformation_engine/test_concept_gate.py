@@ -268,5 +268,24 @@ class ConceptGateTests(unittest.TestCase):
         )
 
 
+    def test_stale_candidates_cannot_receive_old_human_accept(self):
+        candidates_v1 = {"concepts": [self.concept("c1")]}
+        request = build_review_request(candidates_v1, self.config)
+        response = {
+            "reviewer": "r",
+            "decisions": [{
+                "concept_id": "c1",
+                "decision": "ACCEPT",
+                "criteria": {key: True for key in self.config["required_accept_criteria"]},
+                "note": "",
+            }],
+            "overall_note": "",
+        }
+        candidates_v2 = {"concepts": [self.concept("c1")]}
+        candidates_v2["concepts"][0]["premise"] = "Materially different unseen premise"
+        with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
+            apply_gate(candidates_v2, request, response, self.config)
+
+
 if __name__ == "__main__":
     unittest.main()
