@@ -16,7 +16,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
-from datetime import datetime, timezone, timezone
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
