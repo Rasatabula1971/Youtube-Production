@@ -2098,6 +2098,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         research_gate.get("status") or "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"
     )
     research_gate_complete = bool(research["research_gate_complete"])
+    story = story_script_artifact_state()
+    script_requests_ready = bool(story["requests_ready"])
+    script_drafts_ready = bool(story["drafts_ready"])
+    script_gate = story["script_gate"]
+    script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
+    script_gate_complete = bool(story["script_gate_complete"])
+    production_ready = bool(story["production_ready"])
 
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -2654,6 +2661,55 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                         "Research Gate is already prepared or complete."
                         if research_drafts
                         else "Structure current research claims first."
+                    )
+                )
+            ),
+        },
+        "script_prepare": {
+            "enabled": bool(research["story_ready"]) and not script_requests_ready,
+            "reason": (
+                "Verified research and the approved package are ready for script requests."
+                if bool(research["story_ready"]) and not script_requests_ready
+                else (
+                    "Script requests are already current."
+                    if script_requests_ready
+                    else "Complete the Human Research Gate first."
+                )
+            ),
+        },
+        "script_generate": {
+            "enabled": script_requests_ready and not script_drafts_ready,
+            "reason": (
+                "Current script requests are ready for FAIR drafting."
+                if script_requests_ready and not script_drafts_ready
+                else (
+                    "Current script drafts already exist."
+                    if script_drafts_ready
+                    else "Prepare current script requests first."
+                )
+            ),
+        },
+        "script_gate_prepare": {
+            "enabled": (
+                script_drafts_ready
+                and (
+                    script_gate_status == "READY_TO_PREPARE"
+                    or (
+                        script_gate_complete
+                        and not production_ready
+                    )
+                )
+            ),
+            "reason": (
+                "Validated script drafts are ready for human review."
+                if script_drafts_ready and script_gate_status == "READY_TO_PREPARE"
+                else (
+                    "No script was approved; reopen the Script Gate."
+                    if script_drafts_ready and script_gate_complete and not production_ready
+                    else (
+                        "Script Gate is already prepared or complete."
+                        if script_drafts_ready
+                        else "Generate current script drafts first."
                     )
                 )
             ),
