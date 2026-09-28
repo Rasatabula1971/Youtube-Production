@@ -387,6 +387,9 @@ def run_one(
         "provider_id": bridge_result.get("provider_id"),
         "model_id": bridge_result.get("model_id"),
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
+        "direct_backup_used": bridge_result.get("direct_backup_used", False),
+        "direct_backup_may_bill": bridge_result.get("direct_backup_may_bill", False),
+        "billing_authorization": bridge_result.get("billing_authorization"),
         "attempts": safe_attempts(bridge_result),
     }
     if not inference_cost_authorized(bridge_result):
