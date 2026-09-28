@@ -365,9 +365,7 @@ def run_one(
                 runner_config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except Exception as exc:
         report = {
             "concept_id": concept_id,
             "status": "RUNNER_ERROR",
@@ -414,9 +412,7 @@ def run_one(
         response = parse_model_json(raw_output)
         validate_acquired_source_boundary(response, evidence)
         validate_research_response(response, plan, load_config())
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except Exception as exc:
         report = {
             **base,
             "status": "MODEL_OUTPUT_VALIDATION_ERROR",

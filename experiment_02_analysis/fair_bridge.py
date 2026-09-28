@@ -109,9 +109,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
 
     try:
         from fair import FAIR
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+    except Exception as exc:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
@@ -134,9 +132,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             cross_check_required=bool(settings.get("cross_check_required", False)),
             application_id=str(settings.get("application_id", "youtube-production")),
         )
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+    except Exception as exc:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
@@ -151,9 +147,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("action") == "doctor":
         try:
             await fair.close()
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+        except Exception as exc:
             return {
                 "status": "DOCTOR_CLOSE_FAILED",
                 "error_type": type(exc).__name__,
@@ -208,9 +202,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "skipped": skipped,
             "compatibility": compatibility,
         }
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+    except Exception as exc:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
@@ -241,9 +233,7 @@ def main() -> None:
     try:
         payload = load_json(args.input)
         result = asyncio.run(execute(payload))
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+    except Exception as exc:
         result = {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
