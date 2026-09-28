@@ -110,11 +110,12 @@ class ScriptReviewTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with patch.object(script_review, "APPROVED_DIR", approved), patch.object(
-                script_review, "SUMMARY_FILE", root / "summary.json"
+            with (
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SUMMARY_FILE", root / "summary.json"),
+                self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"),
             ):
-                with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
-                    script_review.apply(request, response)
+                script_review.apply(request, response)
 
             draft.write_text(
                 json.dumps({"concept_id": "c1", "title": "A"}), encoding="utf-8"
