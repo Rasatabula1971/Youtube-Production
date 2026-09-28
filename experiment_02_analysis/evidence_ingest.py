@@ -72,7 +72,7 @@ def parse_timecode(value: str) -> float:
 
 
 def format_seconds(value: float) -> str:
-    total_ms = int(round(value * 1000))
+    total_ms = round(value * 1000)
     hours, remainder = divmod(total_ms, 3_600_000)
     minutes, remainder = divmod(remainder, 60_000)
     seconds, milliseconds = divmod(remainder, 1000)
@@ -80,8 +80,8 @@ def format_seconds(value: float) -> str:
 
 
 def transcript_evidence_id(start: float, end: float, ordinal: int) -> str:
-    start_ms = int(round(start * 1000))
-    end_ms = int(round(end * 1000))
+    start_ms = round(start * 1000)
+    end_ms = round(end * 1000)
     return f"transcript.t{start_ms:09d}_{end_ms:09d}_{ordinal:04d}"
 
 
@@ -196,7 +196,7 @@ def note_evidence_id(note_type: str, ordinal: int, start_seconds: float | None) 
     }[note_type]
     if start_seconds is None:
         return f"{prefix}.n{ordinal:04d}"
-    return f"{prefix}.t{int(round(start_seconds * 1000)):09d}_{ordinal:04d}"
+    return f"{prefix}.t{round(start_seconds * 1000):09d}_{ordinal:04d}"
 
 
 def parse_notes_file(path: Path) -> list[dict[str, Any]]:
