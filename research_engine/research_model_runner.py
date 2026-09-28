@@ -143,6 +143,7 @@ def response_schema(plan: dict[str, Any], evidence: dict[str, Any]) -> dict[str,
                                     "stance",
                                     "locator",
                                     "evidence_note",
+                                    "evidence_quote",
                                 ],
                                 "properties": {
                                     "source_id": {
@@ -164,6 +165,11 @@ def response_schema(plan: dict[str, Any], evidence: dict[str, Any]) -> dict[str,
                                     "evidence_note": {
                                         "type": "string",
                                         "minLength": 1,
+                                    },
+                                    "evidence_quote": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 500,
                                     },
                                 },
                             },
@@ -209,7 +215,7 @@ def build_prompt(
         "1. Use ONLY the acquired_pages supplied below. Never invent a URL, source, publisher, date, locator, or fact.\n"
         "2. source_id and URL must exactly match an acquired page.\n"
         "3. A claim must be supported, contradicted, or qualified by text actually present in the linked page.\n"
-        "4. Keep evidence_note short and paraphrased. Do not copy long source passages.\n"
+        "4. Keep evidence_note short and paraphrased. Also provide evidence_quote as a short exact excerpt copied from the linked acquired page; never invent or normalize wording inside evidence_quote.\n"
         "5. If evidence is insufficient for a research question, emit no unsupported claim for it; leave it unresolved for the human Research Gate.\n"
         "6. Record contradiction or qualification when the acquired evidence contains it. Do not silently harmonize disagreements.\n"
         "7. Do not infer audience demand from a HYPOTHESIS or UNASSESSED content gap.\n"
@@ -227,13 +233,22 @@ def build_prompt(
     return prompt
 
 
+def _normalized_text(value: Any) -> str:
+    return " ".join(str(value or "").split()).casefold()
+
+
 def validate_acquired_source_boundary(
     response: dict[str, Any],
     evidence: dict[str, Any],
 ) -> None:
-    allowed = {
-        (str(page.get("source_id")), str(page.get("url")))
+    pages = {
+        str(page.get("source_id")): page
         for page in evidence.get("pages", [])
+        if isinstance(page, dict) and page.get("source_id")
+    }
+    allowed = {
+        (source_id, str(page.get("url")))
+        for source_id, page in pages.items()
     }
     for source in response.get("sources", []):
         pair = (str(source.get("source_id")), str(source.get("url")))
@@ -242,6 +257,28 @@ def validate_acquired_source_boundary(
                 "Model returned a source outside acquired evidence: "
                 f"{pair[0]} {pair[1]}"
             )
+
+    for claim in response.get("claims", []):
+        links = claim.get("evidence_links", [])
+        if not isinstance(links, list) or not links:
+            raise ValueError("Every research claim requires supporting evidence_links")
+        for link in links:
+            source_id = str(link.get("source_id", ""))
+            page = pages.get(source_id)
+            if page is None:
+                raise ValueError(
+                    f"Claim references unavailable acquired source: {source_id}"
+                )
+            quote = _normalized_text(link.get("evidence_quote"))
+            if not quote:
+                raise ValueError(
+                    f"Claim evidence link {source_id} requires evidence_quote"
+                )
+            content = _normalized_text(page.get("content"))
+            if quote not in content:
+                raise ValueError(
+                    f"Claim evidence_quote is not present in acquired page {source_id}"
+                )
 
 
 def run_one(
@@ -260,6 +297,11 @@ def run_one(
         raise ValueError("Research plan and acquired evidence concept_id must match")
 
     plan_hash = sha256_file(plan_path)
+    evidence_plan_hash = evidence.get("provenance", {}).get("plan_sha256")
+    if evidence_plan_hash != plan_hash:
+        raise ValueError(
+            "STALE_RESEARCH_EVIDENCE: acquired evidence does not match current research plan"
+        )
     evidence_hash = sha256_file(evidence_path)
     slug = safe_slug(concept_id)
     report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
