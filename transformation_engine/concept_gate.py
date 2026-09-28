@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "concept_gate_config.json"
 
 OUTPUT_DIR = HERE / "output"
-DEFAULT_CANDIDATES = OUTPUT_DIR / "concept_candidates.json"
+DEFAULT_CANDIDATES = OUTPUT_DIR / "concept_candidates_triaged.json"
 REVIEW_REQUEST_FILE = OUTPUT_DIR / "concept_gate_request.json"
 REVIEWED_FILE = OUTPUT_DIR / "concept_gate_reviewed.json"
 RESEARCH_HANDOFF_FILE = OUTPUT_DIR / "research_handoff.json"
