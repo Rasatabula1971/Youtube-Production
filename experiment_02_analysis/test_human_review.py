@@ -1,9 +1,18 @@
+import json
+import tempfile
 import unittest
+from contextlib import ExitStack
+from pathlib import Path
+from unittest.mock import patch
+
+import human_review
 
 from human_review import (
     apply_review,
+    apply_review_action,
     build_review_request,
     decision_map,
+    review_snapshot,
 )
 
 
@@ -242,6 +251,71 @@ class HumanReviewTests(unittest.TestCase):
                 self.experiment_config,
                 self.review_config,
             )
+
+
+    def test_ui_review_action_persists_and_finalizes_only_when_complete(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            analyzed_dir = root / "analyzed"
+            requests_dir = root / "requests"
+            responses_dir = root / "responses"
+            reviewed_dir = root / "reviewed"
+            reports_dir = root / "reports"
+            for path in (analyzed_dir, requests_dir, responses_dir, reviewed_dir, reports_dir):
+                path.mkdir()
+
+            profile_path = analyzed_dir / "v1.json"
+            profile_path.write_text(json.dumps(self.profile()), encoding="utf-8")
+            request = build_review_request(
+                self.profile(),
+                self.experiment_config,
+                self.review_config,
+            )
+            request_path = requests_dir / "v1.review_request.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+
+            stack.enter_context(patch.object(human_review, "DEFAULT_ANALYZED_DIR", analyzed_dir))
+            stack.enter_context(patch.object(human_review, "REVIEW_REQUESTS_DIR", requests_dir))
+            stack.enter_context(patch.object(human_review, "REVIEW_RESPONSES_DIR", responses_dir))
+            stack.enter_context(patch.object(human_review, "REVIEWED_PROFILES_DIR", reviewed_dir))
+            stack.enter_context(patch.object(human_review, "REVIEW_REPORTS_DIR", reports_dir))
+
+            first = request["items"][0]["item_id"]
+            second = request["items"][1]["item_id"]
+
+            with patch.object(human_review, "run_apply") as run_apply:
+                snapshot = apply_review_action(
+                    video_id="v1",
+                    item_id=first,
+                    decision="ACCEPT",
+                    note="looks supported",
+                )
+                run_apply.assert_not_called()
+                self.assertEqual(snapshot["pending"], 1)
+                self.assertEqual(snapshot["accepted"], 1)
+
+                def finalize(profile_path, request_path, response_path, output_path):
+                    reviewed_dir.joinpath("v1.json").write_text(
+                        json.dumps({"video_id": "v1", "review": {"completed": True}}),
+                        encoding="utf-8",
+                    )
+                    return {"status": "REVIEW_COMPLETED"}
+
+                run_apply.side_effect = finalize
+                snapshot = apply_review_action(
+                    video_id="v1",
+                    item_id=second,
+                    decision="REJECT",
+                    note="too broad",
+                )
+
+            self.assertTrue(snapshot["complete"])
+            self.assertEqual(snapshot["accepted"], 1)
+            self.assertEqual(snapshot["rejected"], 1)
+            saved = json.loads(
+                (responses_dir / "v1.review_response.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(saved["decisions"]), 2)
 
 
 if __name__ == "__main__":
