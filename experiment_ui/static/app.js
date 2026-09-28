@@ -1665,6 +1665,7 @@ function renderScriptReview(snapshot, force) {
   }
   const script = items[scriptCursor] || {};
   const pkg = script.package || {};
+  const scriptOverlap = script.source_overlap || {};
   const sections = (script.sections || []).map(function (section) {
     return '<div class="concept-detail-card">' +
       '<h4>' + escapeHtml(section.section_id || "SECTION") + ' · ' +
@@ -1699,6 +1700,12 @@ function renderScriptReview(snapshot, force) {
       '<br><strong>Expected payoff:</strong> ' + escapeHtml(pkg.expected_payoff || "") +
       '<br><strong>Viewer outcome:</strong> ' + escapeHtml(pkg.desired_outcome || "") +
       '</p></div>' +
+    (scriptOverlap.matches && scriptOverlap.matches.length
+      ? '<div class="concept-detail-card"><h4>SOURCE OVERLAP CHECK</h4><p>' +
+        scriptOverlap.matches.map(function (match) {
+          return escapeHtml((match.blocking ? "BLOCK " : "WARN ") + match.word_count + " words: " + match.overlap_text);
+        }).join("<br>") + '</p></div>'
+      : '') +
     '<div class="concept-detail-card"><h4>OPENING HOOK</h4><p>' +
       escapeHtml(script.opening_hook || "") + '</p></div>' +
     sections +
