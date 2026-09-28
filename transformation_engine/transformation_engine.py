@@ -545,7 +545,6 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         "requests_created": len(requests),
         "requests": requests,
         "model_calls": 0,
-        "handoff_sha256": current_handoff_sha256,
     }
     SUMMARY_FILE.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
@@ -691,6 +690,7 @@ def run_apply() -> dict[str, Any]:
         "candidates_file": str(CANDIDATES_FILE),
         "rejected_file": str(REJECTED_FILE),
         "model_calls": 0,
+        "handoff_sha256": current_handoff_sha256,
     }
     SUMMARY_FILE.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
