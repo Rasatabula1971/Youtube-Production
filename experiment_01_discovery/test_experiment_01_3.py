@@ -137,13 +137,13 @@ class Experiment013Tests(unittest.TestCase):
             "published_after": "2026-04-29T00:00:00Z",
             "published_before": "2026-06-28T00:00:00Z",
         }
-        base = dict(
-            topic_name="brakes",
-            query="F1 brakes engineering",
-            format_target="long_form_candidate",
-            video_duration="medium",
-            order="viewCount",
-        )
+        base = {
+            "topic_name": "brakes",
+            "query": "F1 brakes engineering",
+            "format_target": "long_form_candidate",
+            "video_duration": "medium",
+            "order": "viewCount",
+        }
 
         key_a = search_job_key(search_phase="strict", age_window=strict, **base)
         key_b = search_job_key(search_phase="expanded", age_window=wide, **base)
