@@ -10,6 +10,7 @@ on:
       - "research_engine/**"
       - "packaging_engine/**"
       - "source_acquisition/**"
+      - "story_script_engine/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
   push:
@@ -22,6 +23,7 @@ on:
       - "research_engine/**"
       - "packaging_engine/**"
       - "source_acquisition/**"
+      - "story_script_engine/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
 
@@ -52,3 +54,5 @@ jobs:
         run: python -m unittest discover -s packaging_engine -p "test_*.py" -v
       - name: Run Source Acquisition tests
         run: python -m unittest discover -s source_acquisition -p "test_*.py" -v
+      - name: Run Story Script Engine tests
+        run: python -m unittest discover -s story_script_engine -p "test_*.py" -v
