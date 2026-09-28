@@ -118,6 +118,7 @@ const toast = document.getElementById("toast");
 
 let jobTimer = null;
 let latestStatus = null;
+let csrfToken = "";
 let renderedPath = null;
 let latestVisionSnapshot = null;
 let visionCursor = 0;
@@ -214,9 +215,19 @@ function showToast(message, error) {
 }
 
 async function api(url, options) {
-  const response = await fetch(url, Object.assign({
-    headers: { "Content-Type": "application/json" }
-  }, options || {}));
+  const requestOptions = Object.assign({}, options || {});
+  const headers = Object.assign(
+    { "Content-Type": "application/json" },
+    requestOptions.headers || {}
+  );
+  if (String(requestOptions.method || "GET").toUpperCase() !== "GET") {
+    if (!csrfToken) {
+      throw new Error("Security token is not loaded yet. Refresh the page.");
+    }
+    headers["X-CSRF-Token"] = csrfToken;
+  }
+  requestOptions.headers = headers;
+  const response = await fetch(url, requestOptions);
 
   let payload = {};
   try {
@@ -1901,6 +1912,7 @@ function renderAll(data) {
 async function loadStatus() {
   try {
     const data = await api("/api/status");
+    csrfToken = String(data.csrf_token || "");
     renderAll(data);
     if (data.job && (data.job.status === "RUNNING" || data.job.status === "STOPPING")) {
       startJobPolling();
