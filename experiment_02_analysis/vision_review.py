@@ -408,7 +408,7 @@ def build_packet(
                     model=selected_model,
                     host=selected_host,
                 )
-            except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+            except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
                 proposal_error = f"{type(exc).__name__}: {exc}"
 
         items.append(
