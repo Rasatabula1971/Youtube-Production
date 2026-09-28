@@ -117,10 +117,8 @@ class HumanReviewTests(unittest.TestCase):
         )
 
         self.assertEqual(request["reviewable_item_count"], 2)
-        self.assertEqual(
-            request["items"][0]["item_id"],
-            "analysis.opening_hook.findings.0000",
-        )
+        self.assertTrue(request["items"][0]["item_id"].startswith("review."))
+        self.assertEqual(len(request["items"][0]["item_id"]), 31)
         self.assertEqual(
             request["items"][0]["supporting_evidence"][0][
                 "evidence_id"
@@ -222,10 +220,13 @@ class HumanReviewTests(unittest.TestCase):
             self.review_config,
         )
         response = self.response_for(request)
+        transfer_id = next(
+            item["item_id"]
+            for item in request["items"]
+            if item["kind"] == "transferable_mechanism"
+        )
         for decision in response["decisions"]:
-            if decision["item_id"].startswith(
-                "transfer.transferable_mechanisms"
-            ):
+            if decision["item_id"] == transfer_id:
                 decision["decision"] = "REJECT"
 
         reviewed, _ = apply_review(
