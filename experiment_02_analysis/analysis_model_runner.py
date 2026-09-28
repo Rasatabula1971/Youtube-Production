@@ -24,6 +24,12 @@ from analysis_execute import merge_analysis_response
 from evidence_ingest import sha256_file
 from experiment_02 import load_config as load_experiment_config
 from experiment_02 import load_json, safe_filename
+from pipeline_integrity import (
+    atomic_write_json,
+    batch_status,
+    exit_code_for_status,
+    tolerant_load_json,
+)
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -875,17 +881,17 @@ def run_batch(
             break
 
     summary = {
-        "status": "COMPLETE",
+        "status": batch_status(
+            results,
+            expected_count=len(paths),
+            processed_count=len(results),
+        ),
         "requests_found": len(paths),
         "model_runs_invoked": invoked,
         "batch_limit": limit,
         "results": results,
     }
-    BATCH_SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BATCH_SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(BATCH_SUMMARY_FILE, summary)
     return summary
 
 
@@ -933,6 +939,7 @@ def main() -> None:
         config=config,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
+    raise SystemExit(exit_code_for_status(summary["status"]))
 
 
 if __name__ == "__main__":
