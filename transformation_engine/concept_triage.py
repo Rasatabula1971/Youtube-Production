@@ -73,34 +73,20 @@ DIMENSIONS = (
 )
 
 
-def response_schema(
-    concepts: list[dict[str, Any]],
-    *,
-    max_shortlist: int | None = None,
-) -> dict[str, Any]:
+def response_schema(concepts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Small score-only schema for reliable free-provider structured output."""
     concept_ids = [str(item["concept_id"]) for item in concepts]
-    shortlist_max = min(
-        len(concept_ids),
-        MAX_SHORTLIST if max_shortlist is None else max_shortlist,
-    )
-    decision_item = {
+    score_item = {
         "type": "object",
         "additionalProperties": False,
         "required": [
             "concept_id",
-            "decision",
             "overall_score",
             "dimension_scores",
-            "strengths",
-            "risks",
             "rationale",
         ],
         "properties": {
             "concept_id": {"type": "string", "enum": concept_ids},
-            "decision": {
-                "type": "string",
-                "enum": ["SHORTLIST", "REWORK", "DROP"],
-            },
             "overall_score": {
                 "type": "integer",
                 "minimum": 0,
@@ -119,36 +105,19 @@ def response_schema(
                     for key in DIMENSIONS
                 },
             },
-            "strengths": {
-                "type": "array",
-                "maxItems": 4,
-                "items": {"type": "string", "minLength": 1},
-            },
-            "risks": {
-                "type": "array",
-                "maxItems": 4,
-                "items": {"type": "string", "minLength": 1},
-            },
             "rationale": {"type": "string", "minLength": 1},
         },
     }
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["decisions", "shortlist_ids", "summary"],
+        "required": ["scores", "summary"],
         "properties": {
-            "decisions": {
+            "scores": {
                 "type": "array",
                 "minItems": len(concept_ids),
                 "maxItems": len(concept_ids),
-                "items": decision_item,
-            },
-            "shortlist_ids": {
-                "type": "array",
-                "minItems": MIN_SHORTLIST,
-                "maxItems": shortlist_max,
-                "uniqueItems": True,
-                "items": {"type": "string", "enum": concept_ids},
+                "items": score_item,
             },
             "summary": {"type": "string", "minLength": 1},
         },
@@ -191,39 +160,31 @@ def build_prompt(
     if phase not in {"chunk", "final"}:
         raise ValueError("triage phase must be chunk or final")
 
-    if phase == "chunk":
-        purpose = (
-            "This is FIRST-PASS triage for one small chunk. Score every concept "
-            "honestly. shortlist_ids may contain 0-5 concepts, but this chunk "
-            "shortlist is advisory only; deterministic code will advance the two "
-            "highest-scoring concepts to the final comparative pass."
+    purpose = (
+        "This is FIRST-PASS scoring for one small chunk. Score every concept "
+        "honestly. Do not choose winners; deterministic code will advance the two "
+        "highest-scoring concepts to the final comparative pass."
+        if phase == "chunk"
+        else (
+            "This is FINAL comparative scoring across the strongest first-pass "
+            "finalists. Do not produce a shortlist; deterministic code will derive "
+            "SHORTLIST/REWORK/DROP from the scores and select at most six."
         )
-        shortlist_rule = (
-            "10. shortlist_ids must exactly match concepts classified SHORTLIST "
-            "inside this chunk; 0-5 is allowed."
-        )
-    else:
-        purpose = (
-            "This is FINAL comparative triage across the strongest first-pass "
-            "finalists. Produce the final 0-6 shortlist for a later Human Concept Gate."
-        )
-        shortlist_rule = (
-            "10. shortlist_ids must exactly match concepts classified SHORTLIST, "
-            "with a minimum of 0 and maximum of 6."
-        )
+    )
 
     prompt = (
-        "You are the comparative concept triage stage for a YouTube production "
+        "You are the comparative concept scoring stage for a YouTube production "
         "system. Infer the intended channel/audience direction from the candidate "
         "pool and each candidate's channel_fit evidence. Return JSON only.\n\n"
         + purpose
         + "\n\nEvaluate EVERY concept independently and comparatively on seven "
         "dimensions, scored 0-5: channel_fit, viewer_problem, promise_clarity, "
-        "feasibility, researchability, originality, overclaim_safety.\n\n"
-        "Decision meanings:\n"
-        "- SHORTLIST: overall_score 70-100.\n"
-        "- REWORK: overall_score 45-69.\n"
-        "- DROP: overall_score 0-44.\n\n"
+        "feasibility, researchability, originality, overclaim_safety. Also provide "
+        "an overall_score from 0-100 and a concise rationale.\n\n"
+        "Scoring guidance:\n"
+        "- 70-100 means strong enough to be eligible for the final shortlist.\n"
+        "- 45-69 means useful but needs rework.\n"
+        "- 0-44 means weak enough to drop from the default shortlist.\n\n"
         "Rules:\n"
         "1. Prefer concepts aligned with the intended channel/audience direction.\n"
         "2. Penalize promises that assume research conclusions before research exists.\n"
@@ -234,8 +195,7 @@ def build_prompt(
         "7. Penalize terminology errors, false precision, and category mistakes.\n"
         "8. Do not reward a concept merely because it has a catchy title.\n"
         "9. Account for every concept exactly once.\n"
-        + shortlist_rule
-        + "\n11. Decision and overall_score must obey the thresholds exactly.\n\n"
+        "10. Return only scores and rationales; Python code derives decisions.\n\n"
         "CANDIDATES:\n"
         + json.dumps(
             compact_concepts(concepts),
@@ -251,16 +211,134 @@ def build_prompt(
     return prompt
 
 
+def validate_scores(
+    response: dict[str, Any],
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    expected = {str(item["concept_id"]) for item in candidates}
+    scores = response.get("scores")
+    if not isinstance(scores, list):
+        raise ValueError("triage scores must be a list")
+
+    mapped: dict[str, dict[str, Any]] = {}
+    for item in scores:
+        if not isinstance(item, dict):
+            raise ValueError("every triage score must be an object")
+        concept_id = str(item.get("concept_id", "")).strip()
+        if concept_id not in expected:
+            raise ValueError(f"unknown concept_id in triage: {concept_id}")
+        if concept_id in mapped:
+            raise ValueError(f"duplicate triage score: {concept_id}")
+
+        score = int(item.get("overall_score", -1))
+        if not 0 <= score <= 100:
+            raise ValueError(f"invalid overall_score for {concept_id}")
+
+        dimensions = item.get("dimension_scores")
+        if not isinstance(dimensions, dict):
+            raise ValueError(
+                f"dimension_scores must be an object for {concept_id}"
+            )
+        normalized_dimensions: dict[str, int] = {}
+        for key in DIMENSIONS:
+            value = int(dimensions.get(key, -1))
+            if not 0 <= value <= 5:
+                raise ValueError(
+                    f"invalid {key} score for {concept_id}"
+                )
+            normalized_dimensions[key] = value
+
+        rationale = str(item.get("rationale", "")).strip()
+        if not rationale:
+            raise ValueError(f"rationale is required for {concept_id}")
+
+        mapped[concept_id] = {
+            "concept_id": concept_id,
+            "overall_score": score,
+            "dimension_scores": normalized_dimensions,
+            "rationale": rationale,
+        }
+
+    if set(mapped) != expected:
+        missing = sorted(expected - set(mapped))
+        raise ValueError("triage omitted concept(s): " + ", ".join(missing))
+
+    return {
+        "scores": [mapped[cid] for cid in sorted(mapped)],
+        "summary": str(response.get("summary", "")).strip(),
+    }
+
+
+def decision_for_score(score: int) -> str:
+    if score >= 70:
+        return "SHORTLIST"
+    if score >= 45:
+        return "REWORK"
+    return "DROP"
+
+
+def normalize_scored_triage(
+    validated: dict[str, Any],
+    *,
+    phase: str,
+) -> dict[str, Any]:
+    decisions = []
+    for item in validated["scores"]:
+        score = int(item["overall_score"])
+        decisions.append(
+            {
+                **item,
+                "decision": decision_for_score(score),
+                "strengths": [],
+                "risks": [],
+            }
+        )
+
+    shortlist_ids: list[str] = []
+    if phase == "final":
+        eligible = [
+            item
+            for item in decisions
+            if int(item["overall_score"]) >= 70
+        ]
+        ranked = sorted(eligible, key=decision_rank, reverse=True)
+        shortlist_ids = [
+            str(item["concept_id"])
+            for item in ranked[:MAX_SHORTLIST]
+        ]
+        shortlist_set = set(shortlist_ids)
+        for item in decisions:
+            if (
+                item["decision"] == "SHORTLIST"
+                and item["concept_id"] not in shortlist_set
+            ):
+                item["decision"] = "REWORK"
+                item["capped_from_shortlist"] = True
+
+    return {
+        "decisions": decisions,
+        "shortlist_ids": shortlist_ids,
+        "summary": validated.get("summary", ""),
+    }
+
+
+# Backwards-compatible validator retained for historical tests/artifacts.
 def validate_triage(
     response: dict[str, Any],
     candidates: list[dict[str, Any]],
     *,
     max_shortlist: int | None = None,
 ) -> dict[str, Any]:
+    del max_shortlist
+    if "scores" in response:
+        return normalize_scored_triage(
+            validate_scores(response, candidates),
+            phase="final",
+        )
+
     expected = {str(item["concept_id"]) for item in candidates}
     decisions = response.get("decisions")
     shortlist_ids = response.get("shortlist_ids")
-
     if not isinstance(decisions, list):
         raise ValueError("triage decisions must be a list")
     if not isinstance(shortlist_ids, list):
@@ -279,9 +357,7 @@ def validate_triage(
         if decision not in ALLOWED_DECISIONS:
             raise ValueError(f"invalid triage decision for {concept_id}")
         score = int(item.get("overall_score", -1))
-        expected_decision = (
-            "SHORTLIST" if score >= 70 else "REWORK" if score >= 45 else "DROP"
-        )
+        expected_decision = decision_for_score(score)
         if decision != expected_decision:
             raise ValueError(
                 f"triage decision/score mismatch for {concept_id}: "
@@ -296,24 +372,10 @@ def validate_triage(
     shortlist = [str(value) for value in shortlist_ids]
     if len(shortlist) != len(set(shortlist)):
         raise ValueError("shortlist_ids must be unique")
-    shortlist_limit = min(
-        len(expected),
-        MAX_SHORTLIST if max_shortlist is None else max_shortlist,
-    )
-    if not MIN_SHORTLIST <= len(shortlist) <= shortlist_limit:
-        raise ValueError("shortlist size is outside configured bounds")
     if not set(shortlist).issubset(expected):
         raise ValueError("shortlist contains unknown concept_id")
-
-    decision_shortlist = {
-        cid
-        for cid, item in mapped.items()
-        if str(item.get("decision")).upper() == "SHORTLIST"
-    }
-    if set(shortlist) != decision_shortlist:
-        raise ValueError(
-            "shortlist_ids must exactly match concepts classified SHORTLIST"
-        )
+    if len(shortlist) > min(MAX_SHORTLIST, len(expected)):
+        raise ValueError("shortlist size is outside configured bounds")
 
     return {
         "decisions": [mapped[cid] for cid in sorted(mapped)],
