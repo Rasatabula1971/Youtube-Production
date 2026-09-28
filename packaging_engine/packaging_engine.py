@@ -15,6 +15,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from source_overlap import check_texts
+
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
@@ -302,6 +304,21 @@ def validate_response(
         normalized = dict(package)
         normalized["concept_id"] = concept_id
         normalized["concept_context"] = request["concept"]
+        overlap = check_texts([
+            {"field": "title", "text": normalized.get("title", "")},
+            {"field": "one_sentence_promise", "text": normalized.get("one_sentence_promise", "")},
+            {"field": "core_promise", "text": normalized.get("core_promise", "")},
+            {"field": "curiosity_gap", "text": normalized.get("curiosity_gap", "")},
+            {"field": "thumbnail.message", "text": (normalized.get("thumbnail") or {}).get("message", "")},
+            {"field": "opening_frame.purpose", "text": (normalized.get("opening_frame") or {}).get("purpose", "")},
+        ])
+        normalized["source_overlap"] = overlap
+        if overlap.get("blocking"):
+            match = overlap.get("matches", [{}])[0]
+            errors.append(
+                "source overlap block: "
+                + str(match.get("overlap_text") or "")
+            )
 
         if errors:
             rejected.append(
