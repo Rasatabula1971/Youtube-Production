@@ -457,7 +457,11 @@ def bridge_payload(
             "cross_check_required": bool(
                 fair_config.get("cross_check_required", False)
             ),
-            "max_output_tokens": int(fair_config.get("max_output_tokens", 8192)),
+            "max_output_tokens": int(fair_config.get("max_output_tokens", 4096)),
+            "expected_schema_present": bool(schema is not None or action == "doctor"),
+            "application_id": str(
+                fair_config.get("application_id", "youtube-production")
+            ),
             "cache_mode": str(fair_config.get("cache_mode", "bypass")),
             "priority": str(fair_config.get("priority", "P2")),
             "client_id": str(
