@@ -930,7 +930,23 @@ def exp2_artifact_state() -> dict[str, Any]:
             ):
                 review_request_ids.add(video_id)
 
-    reviewed_ids = json_stems(EXP2_REVIEWED_DIR)
+    reviewed_ids: set[str] = set()
+    for video_id in analyzed_ids:
+        analyzed_path = EXP2_ANALYZED_DIR / f"{video_id}.json"
+        request_path = EXP2_REVIEW_REQUESTS_DIR / f"{video_id}.review_request.json"
+        reviewed_path = EXP2_REVIEWED_DIR / f"{video_id}.json"
+        report_path = EXP2_OUTPUT / "human_review_reports" / f"{video_id}.human_review.json"
+        report = safe_load_json(report_path)
+        if (
+            analyzed_path.exists()
+            and request_path.exists()
+            and reviewed_path.exists()
+            and isinstance(report, dict)
+            and report.get("status") == "REVIEW_COMPLETED"
+            and report.get("profile_sha256") == sha256_file(analyzed_path)
+            and report.get("request_sha256") == sha256_file(request_path)
+        ):
+            reviewed_ids.add(video_id)
 
     evidence_complete = bool(prepared_ids) and prepared_ids.issubset(enriched_ids)
     requests_complete = evidence_complete and prepared_ids.issubset(request_ids)
