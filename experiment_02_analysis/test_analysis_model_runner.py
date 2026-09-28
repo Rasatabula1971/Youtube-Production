@@ -7,6 +7,7 @@ from unittest.mock import patch
 from analysis_model_runner import (
     build_model_prompt,
     call_direct_gemini_backup,
+    call_fair_bridge,
     gemini_compatible_schema,
     inference_cost_authorized,
     confirmed_free_providers,
@@ -489,6 +490,108 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertTrue(result["direct_backup_may_bill"])
         self.assertIsNone(result["paid_inference_executed"])
         self.assertTrue(inference_cost_authorized(result))
+
+    def test_shared_bridge_uses_direct_backup_after_clean_fair_escalation(self):
+        class Completed:
+            returncode = 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            python = root / "python.exe"
+            python.write_text("", encoding="utf-8")
+
+            def fake_run(args, **_kwargs):
+                output = Path(args[args.index("--output") + 1])
+                output.write_text(
+                    json.dumps(
+                        {
+                            "status": "ESCALATION_REQUIRED",
+                            "reason_code": "ALL_FREE_MODELS_UNAVAILABLE",
+                            "paid_inference_executed": False,
+                            "attempts": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return Completed()
+
+            backup = {
+                "status": "ACCEPTED",
+                "provider_id": "direct_gemini_backup",
+                "paid_inference_executed": None,
+                "direct_backup_used": True,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+            }
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"DIRECT_GEMINI_API_KEY": "test-key"},
+                    clear=False,
+                ),
+                patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch(
+                    "analysis_model_runner.call_direct_gemini_backup",
+                    return_value=backup,
+                ) as direct_backup,
+            ):
+                result = call_fair_bridge(
+                    {
+                        "prompt": "test",
+                        "expected_schema": {"type": "object"},
+                    },
+                    python_executable=python,
+                    timeout_seconds=30,
+                )
+
+        self.assertEqual(result["provider_id"], "direct_gemini_backup")
+        direct_backup.assert_called_once()
+
+    def test_shared_bridge_does_not_backup_unknown_fair_cost(self):
+        class Completed:
+            returncode = 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            python = root / "python.exe"
+            python.write_text("", encoding="utf-8")
+
+            def fake_run(args, **_kwargs):
+                output = Path(args[args.index("--output") + 1])
+                output.write_text(
+                    json.dumps(
+                        {
+                            "status": "BRIDGE_ERROR",
+                            "paid_inference_executed": None,
+                            "cost_state": "UNKNOWN_AFTER_DISPATCH",
+                            "attempts": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return Completed()
+
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"DIRECT_GEMINI_API_KEY": "test-key"},
+                    clear=False,
+                ),
+                patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch(
+                    "analysis_model_runner.call_direct_gemini_backup"
+                ) as direct_backup,
+            ):
+                result = call_fair_bridge(
+                    {
+                        "prompt": "test",
+                        "expected_schema": {"type": "object"},
+                    },
+                    python_executable=python,
+                    timeout_seconds=30,
+                )
+
+        self.assertEqual(result["status"], "BRIDGE_ERROR")
+        direct_backup.assert_not_called()
 
     def test_unknown_fair_cost_is_never_authorized_implicitly(self):
         result = {
