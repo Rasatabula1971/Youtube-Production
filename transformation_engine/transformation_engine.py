@@ -599,7 +599,7 @@ def run_apply() -> dict[str, Any]:
         for request_path in REQUESTS_DIR.glob("*.concept_request.json"):
             try:
                 request = load_json(request_path)
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 continue
             provenance = request.get("request_provenance", {})
             if isinstance(provenance, dict) and provenance.get("handoff_sha256"):
