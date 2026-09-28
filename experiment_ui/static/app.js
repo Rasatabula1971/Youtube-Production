@@ -41,6 +41,17 @@ const visionReject = document.getElementById("visionReject");
 const visionAccept = document.getElementById("visionAccept");
 const visionNext = document.getElementById("visionNext");
 
+const humanAnalysisReviewPanel = document.getElementById("humanAnalysisReviewPanel");
+const humanAnalysisReviewTitle = document.getElementById("humanAnalysisReviewTitle");
+const humanAnalysisReviewSummary = document.getElementById("humanAnalysisReviewSummary");
+const humanAnalysisReviewStatus = document.getElementById("humanAnalysisReviewStatus");
+const humanAnalysisDetail = document.getElementById("humanAnalysisDetail");
+const humanAnalysisNote = document.getElementById("humanAnalysisNote");
+const humanAnalysisPrev = document.getElementById("humanAnalysisPrev");
+const humanAnalysisReject = document.getElementById("humanAnalysisReject");
+const humanAnalysisAccept = document.getElementById("humanAnalysisAccept");
+const humanAnalysisNext = document.getElementById("humanAnalysisNext");
+
 const conceptReviewPanel = document.getElementById("conceptReviewPanel");
 const conceptReviewTitle = document.getElementById("conceptReviewTitle");
 const conceptReviewSummary = document.getElementById("conceptReviewSummary");
@@ -98,6 +109,9 @@ let renderedPath = null;
 let latestVisionSnapshot = null;
 let visionCursor = 0;
 let visionEditing = false;
+let latestHumanAnalysisSnapshot = null;
+let humanAnalysisCursor = 0;
+let humanAnalysisEditing = false;
 let latestConceptSnapshot = null;
 let conceptCursor = 0;
 let conceptEditing = false;
@@ -268,6 +282,7 @@ function statusTone(workflow) {
     state === "ACTION_REQUIRED" ||
     state === "HUMAN_GATE" ||
     state === "HUMAN_VISION_GATE" ||
+    state === "HUMAN_ANALYSIS_GATE" ||
     state === "HUMAN_CONCEPT_GATE"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
@@ -296,6 +311,9 @@ function primaryTargetForWorkflow(workflow) {
   }
   if (workflow.state === "HUMAN_VISION_GATE") {
     return { type: "route", value: "/analysis", label: "Review visual evidence" };
+  }
+  if (workflow.state === "HUMAN_ANALYSIS_GATE") {
+    return { type: "route", value: "/analysis", label: "Review analysis findings" };
   }
   if (workflow.state === "HUMAN_CONCEPT_GATE") {
     return { type: "route", value: "/analysis", label: "Review concepts" };
@@ -759,6 +777,156 @@ async function submitVisionDecision(action) {
       action === "ACCEPT_FRAME"
         ? "Visual observation accepted."
         : "Frame rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function pendingHumanAnalysisIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentHumanAnalysisItem() {
+  const items = (latestHumanAnalysisSnapshot && latestHumanAnalysisSnapshot.items) || [];
+  if (!items.length) return null;
+  humanAnalysisCursor = Math.max(0, Math.min(humanAnalysisCursor, items.length - 1));
+  return { item: items[humanAnalysisCursor], items: items };
+}
+
+function renderHumanAnalysisReview(snapshot, force) {
+  latestHumanAnalysisSnapshot = snapshot || {};
+
+  if (
+    !snapshot ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.items || []).length
+  ) {
+    humanAnalysisReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    humanAnalysisReviewPanel.hidden = false;
+    humanAnalysisReviewTitle.textContent = "Human Analysis Gate complete";
+    humanAnalysisReviewSummary.textContent =
+      (snapshot.accepted || 0) + " accepted · " +
+      (snapshot.rejected || 0) + " rejected";
+    humanAnalysisReviewStatus.textContent = "COMPLETE";
+    humanAnalysisReviewStatus.className = "status-chip success";
+    humanAnalysisDetail.innerHTML =
+      '<div class="concept-complete">All current analysis findings have been reviewed. Synthesis can continue.</div>';
+    humanAnalysisNote.hidden = true;
+    humanAnalysisPrev.disabled = true;
+    humanAnalysisNext.disabled = true;
+    humanAnalysisReject.disabled = true;
+    humanAnalysisAccept.disabled = true;
+    return;
+  }
+
+  if (humanAnalysisEditing && !force) return;
+
+  const items = snapshot.items || [];
+  if (humanAnalysisCursor >= items.length) {
+    humanAnalysisCursor = Math.max(0, items.length - 1);
+  }
+  const item = items[humanAnalysisCursor] || {};
+  const evidence = item.supporting_evidence || [];
+  const mechanismIds = item.mechanism_ids || [];
+
+  humanAnalysisReviewPanel.hidden = false;
+  humanAnalysisNote.hidden = false;
+  humanAnalysisReviewTitle.textContent =
+    "Finding " + (humanAnalysisCursor + 1) + " of " + items.length;
+  humanAnalysisReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · " +
+    (snapshot.accepted || 0) + " accepted · " +
+    (snapshot.rejected || 0) + " rejected";
+  humanAnalysisReviewStatus.textContent = item.decision || "PENDING";
+  humanAnalysisReviewStatus.className =
+    "status-chip " +
+    (item.decision === "ACCEPT"
+      ? "success"
+      : item.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  const evidenceHtml = evidence.map(function (row) {
+    return '<div class="analysis-evidence-card">' +
+      '<div class="analysis-evidence-meta">' +
+        '<span>' + escapeHtml(row.evidence_id || "") + '</span>' +
+        '<span>' + escapeHtml(humanizeToken(row.type || "")) + '</span>' +
+        '<span>' + escapeHtml(row.locator || "") + '</span>' +
+      '</div>' +
+      '<p>' + escapeHtml(row.observation || "") + '</p>' +
+    '</div>';
+  }).join("");
+
+  humanAnalysisDetail.innerHTML =
+    '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(humanizeToken(item.kind || "analysis finding")) + '</h4>' +
+      '<h3>' + escapeHtml(item.statement || "") + '</h3>' +
+      '<div class="concept-meta">' +
+        '<span>Video ' + escapeHtml(item.video_id || "") + '</span>' +
+        '<span>' + escapeHtml(humanizeToken(item.dimension || "")) + '</span>' +
+        '<span>Confidence ' + escapeHtml(item.confidence || "—") + '</span>' +
+      '</div>' +
+      (mechanismIds.length
+        ? '<div class="concept-meta"><span>Mechanisms: ' +
+          escapeHtml(mechanismIds.join(", ")) + '</span></div>'
+        : '') +
+    '</div>' +
+    '<div class="concept-detail-card"><h4>SUPPORTING EVIDENCE</h4>' +
+      (evidenceHtml || '<p>No supporting evidence was attached.</p>') +
+    '</div>';
+
+  humanAnalysisNote.value = item.note || "";
+  humanAnalysisPrev.disabled = humanAnalysisCursor <= 0;
+  humanAnalysisNext.disabled = humanAnalysisCursor >= items.length - 1;
+  humanAnalysisReject.disabled = false;
+  humanAnalysisAccept.disabled = false;
+  humanAnalysisEditing = false;
+}
+
+function moveHumanAnalysisCursor(delta) {
+  const current = currentHumanAnalysisItem();
+  if (!current) return;
+  humanAnalysisCursor = Math.max(
+    0,
+    Math.min(current.items.length - 1, humanAnalysisCursor + delta)
+  );
+  humanAnalysisEditing = false;
+  renderHumanAnalysisReview(latestHumanAnalysisSnapshot, true);
+}
+
+async function submitHumanAnalysisDecision(decision) {
+  const current = currentHumanAnalysisItem();
+  if (!current) return;
+  const item = current.item;
+
+  try {
+    const payload = await api("/api/human-analysis-review", {
+      method: "POST",
+      body: JSON.stringify({
+        video_id: item.video_id,
+        item_id: item.item_id,
+        decision: decision,
+        note: humanAnalysisNote.value
+      })
+    });
+    humanAnalysisEditing = false;
+    latestHumanAnalysisSnapshot = payload;
+    const nextPending = pendingHumanAnalysisIndex(payload.items || []);
+    if (nextPending >= 0) humanAnalysisCursor = nextPending;
+    renderHumanAnalysisReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Analysis finding accepted."
+        : "Analysis finding rejected.",
       false
     );
     await loadStatus();
@@ -1391,6 +1559,7 @@ function renderAnalysis(data) {
   });
   renderActionCollection(actions, analysisActions);
   renderVisionReview(data.vision_review || {}, false);
+  renderHumanAnalysisReview(data.human_analysis_review || {}, false);
   renderConceptReview(data.concept_gate || {}, false);
   renderPackagingReview(data.packaging_gate || {}, false);
   renderResearchReview(data.research_gate || {}, false);
@@ -1398,7 +1567,8 @@ function renderAnalysis(data) {
   const currentId = workflow.current_action_id || "";
   let activeIndex = 0;
   if (
-    ["analysis_batch_prepare", "analysis_model_one", "analysis_model_remaining", "human_review_prepare", "synthesis_build"].includes(currentId)
+    ["analysis_batch_prepare", "analysis_model_one", "analysis_model_remaining", "human_review_prepare", "synthesis_build"].includes(currentId) ||
+    workflow.state === "HUMAN_ANALYSIS_GATE"
   ) {
     activeIndex = 1;
   } else if (
@@ -1688,6 +1858,21 @@ visionReject.addEventListener("click", function () {
 });
 visionAccept.addEventListener("click", function () {
   submitVisionDecision("ACCEPT_FRAME");
+});
+humanAnalysisNote.addEventListener("input", function () {
+  humanAnalysisEditing = true;
+});
+humanAnalysisPrev.addEventListener("click", function () {
+  moveHumanAnalysisCursor(-1);
+});
+humanAnalysisNext.addEventListener("click", function () {
+  moveHumanAnalysisCursor(1);
+});
+humanAnalysisReject.addEventListener("click", function () {
+  submitHumanAnalysisDecision("REJECT");
+});
+humanAnalysisAccept.addEventListener("click", function () {
+  submitHumanAnalysisDecision("ACCEPT");
 });
 conceptNote.addEventListener("input", function () {
   conceptEditing = true;

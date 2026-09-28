@@ -179,6 +179,31 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="humanAnalysisReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN ANALYSIS GATE</p>
+                <h2 id="humanAnalysisReviewTitle">Review analysis finding</h2>
+                <p class="muted" id="humanAnalysisReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="humanAnalysisReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="humanAnalysisDetail"></div>
+              <div class="concept-decision-pane">
+                <label class="vision-label" for="humanAnalysisNote">Review note</label>
+                <textarea id="humanAnalysisNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Optional note explaining your decision."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="humanAnalysisPrev" type="button">← Previous</button>
+                  <button class="danger" id="humanAnalysisReject" type="button">Reject</button>
+                  <button id="humanAnalysisAccept" type="button">Accept finding</button>
+                  <button class="ghost" id="humanAnalysisNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="conceptReviewPanel" hidden>
             <div class="panel-head">
               <div>

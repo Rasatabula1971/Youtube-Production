@@ -34,6 +34,8 @@ DEFAULT_ANALYZED_DIR = OUTPUT_DIR / "profiles_analyzed"
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "human_review_requests"
 REVIEWED_PROFILES_DIR = OUTPUT_DIR / "profiles_reviewed"
 REVIEW_REPORTS_DIR = OUTPUT_DIR / "human_review_reports"
+REVIEW_RESPONSES_DIR = OUTPUT_DIR / "human_review_responses"
+UI_REVIEWER = "local-operator"
 
 
 def load_review_config() -> dict[str, Any]:
@@ -502,6 +504,159 @@ def run_apply(
         encoding="utf-8",
     )
     return report
+
+
+def _response_path(video_id: str) -> Path:
+    return REVIEW_RESPONSES_DIR / f"{safe_filename(video_id)}.review_response.json"
+
+
+def _load_partial_response(video_id: str) -> dict[str, Any]:
+    path = _response_path(video_id)
+    if not path.exists():
+        return {
+            "video_id": video_id,
+            "reviewer": UI_REVIEWER,
+            "decisions": [],
+            "overall_note": "",
+        }
+    payload = load_json(path)
+    if not isinstance(payload, dict):
+        raise ValueError("Saved human review response must be a JSON object")
+    return payload
+
+
+def review_snapshot() -> dict[str, Any]:
+    packets: list[dict[str, Any]] = []
+    if not REVIEW_REQUESTS_DIR.exists():
+        return {
+            "status": "READY_TO_PREPARE",
+            "complete": False,
+            "pending": 0,
+            "accepted": 0,
+            "rejected": 0,
+            "packets": [],
+            "items": [],
+        }
+
+    total_pending = total_accepted = total_rejected = 0
+    flattened: list[dict[str, Any]] = []
+
+    for request_path in sorted(REVIEW_REQUESTS_DIR.glob("*.review_request.json")):
+        request = load_json(request_path)
+        video_id = str(request.get("video_id") or request_path.stem)
+        response = _load_partial_response(video_id)
+        decisions = {
+            str(item.get("item_id")): item
+            for item in response.get("decisions", [])
+            if isinstance(item, dict) and item.get("item_id")
+        }
+        reviewed_path = REVIEWED_PROFILES_DIR / f"{safe_filename(video_id)}.json"
+        packet_items: list[dict[str, Any]] = []
+
+        for item in request.get("items", []):
+            item_id = str(item.get("item_id") or "")
+            saved = decisions.get(item_id, {})
+            decision = (
+                "ACCEPT"
+                if reviewed_path.exists() and not saved.get("decision")
+                else str(saved.get("decision") or "PENDING").upper()
+            )
+            row = {
+                **item,
+                "video_id": video_id,
+                "decision": decision,
+                "note": str(saved.get("note") or ""),
+            }
+            packet_items.append(row)
+            flattened.append(row)
+            if decision == "ACCEPT":
+                total_accepted += 1
+            elif decision == "REJECT":
+                total_rejected += 1
+            else:
+                total_pending += 1
+
+        packets.append(
+            {
+                "video_id": video_id,
+                "source": request.get("source", {}),
+                "reviewable_item_count": len(packet_items),
+                "complete": reviewed_path.exists(),
+                "items": packet_items,
+            }
+        )
+
+    complete = bool(packets) and all(packet["complete"] for packet in packets)
+    return {
+        "status": "COMPLETE" if complete else "AWAITING_HUMAN_DECISION",
+        "complete": complete,
+        "pending": total_pending,
+        "accepted": total_accepted,
+        "rejected": total_rejected,
+        "packets": packets,
+        "items": flattened,
+    }
+
+
+def apply_review_action(
+    *,
+    video_id: str,
+    item_id: str,
+    decision: str,
+    note: str | None = None,
+) -> dict[str, Any]:
+    decision = decision.strip().upper()
+    if decision not in {"ACCEPT", "REJECT"}:
+        raise ValueError("Decision must be ACCEPT or REJECT")
+
+    request_path = REVIEW_REQUESTS_DIR / f"{safe_filename(video_id)}.review_request.json"
+    profile_path = DEFAULT_ANALYZED_DIR / f"{safe_filename(video_id)}.json"
+    if not request_path.exists():
+        raise ValueError("Human review packet not found for video")
+    if not profile_path.exists():
+        raise ValueError("Analyzed profile not found for video")
+
+    request = load_json(request_path)
+    expected_ids = {
+        str(item.get("item_id"))
+        for item in request.get("items", [])
+        if isinstance(item, dict)
+    }
+    if item_id not in expected_ids:
+        raise ValueError("Unknown human review item")
+
+    response = _load_partial_response(video_id)
+    mapped = {
+        str(item.get("item_id")): dict(item)
+        for item in response.get("decisions", [])
+        if isinstance(item, dict) and item.get("item_id")
+    }
+    mapped[item_id] = {
+        "item_id": item_id,
+        "decision": decision,
+        "note": str(note or ""),
+    }
+    response["video_id"] = video_id
+    response["reviewer"] = str(response.get("reviewer") or UI_REVIEWER)
+    response["decisions"] = [mapped[key] for key in sorted(mapped)]
+    response["overall_note"] = str(response.get("overall_note") or "")
+
+    REVIEW_RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
+    response_path = _response_path(video_id)
+    response_path.write_text(
+        json.dumps(response, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    if expected_ids and expected_ids.issubset(mapped):
+        run_apply(
+            profile_path.resolve(),
+            request_path.resolve(),
+            response_path.resolve(),
+            None,
+        )
+
+    return review_snapshot()
 
 
 def main() -> None:
