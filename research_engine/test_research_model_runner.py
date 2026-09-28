@@ -52,7 +52,14 @@ class ResearchModelRunnerTests(unittest.TestCase):
                     "source_id": "web001",
                     "url": "https://example.com/source",
                 }
-            ]
+            ],
+            "claims": [{
+                "claim_id": "clm001",
+                "evidence_links": [{
+                    "source_id": "web001",
+                    "evidence_quote": "mechanism is caused by heat",
+                }],
+            }],
         }
 
         runner.validate_acquired_source_boundary(
@@ -95,6 +102,21 @@ class ResearchModelRunnerTests(unittest.TestCase):
             "Use ONLY the acquired_pages",
             prompt,
         )
+
+
+    def test_source_boundary_rejects_fabricated_quote(self):
+        response = {
+            "sources": [{"source_id": "web001", "url": "https://example.com/source"}],
+            "claims": [{
+                "claim_id": "clm001",
+                "evidence_links": [{
+                    "source_id": "web001",
+                    "evidence_quote": "This wording never appears in the source",
+                }],
+            }],
+        }
+        with self.assertRaisesRegex(ValueError, "not present"):
+            runner.validate_acquired_source_boundary(response, self.evidence())
 
 
 if __name__ == "__main__":
