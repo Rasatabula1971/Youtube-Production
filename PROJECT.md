@@ -506,6 +506,13 @@ researchable.
 Only ACCEPT concepts enter the future Research Engine handoff. Working titles
 remain provisional and are not treated as final packaging.
 
+The Human Concept Gate also supports a non-gating **SAVE IDEA** action. SAVE IDEA
+does not ACCEPT, REWORK, or REJECT the concept and does not advance it downstream.
+It archives the working title, alternate title options, premise, triage context,
+and optional reviewer note in the local persistent Saved Ideas / Title Bank.
+Saved ideas remain available after the Concept Gate is complete so promising
+titles or angles can be revisited without reopening or weakening the gate.
+
 
 ## 8. Research Engine framework
 
