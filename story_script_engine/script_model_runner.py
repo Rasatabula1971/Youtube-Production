@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse, json, sys
 from pathlib import Path
-from pipeline_integrity import atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
+from pipeline_integrity import atomic_write_text, atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
 HERE=Path(__file__).resolve().parent
@@ -73,14 +73,14 @@ def run_one(path:Path,force:bool,config:dict[str,Any])->dict[str,Any]:
         report={**base,"status":"COST_POLICY_VIOLATION"}; report_path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return report
     if result.get("status")!="ACCEPTED":
         report={**base,"status":"MODEL_ESCALATION_REQUIRED" if result.get("status")=="ESCALATION_REQUIRED" else "MODEL_FAILED"}; report_path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return report
-    raw=str(result.get("output") or ""); raw_path=RAW_OUTPUTS_DIR/f"{slug}.txt"; raw_path.write_text(raw,encoding="utf-8")
+    raw=str(result.get("output") or ""); raw_path=RAW_OUTPUTS_DIR/f"{slug}.txt"; atomic_write_text(raw_path, raw)
     response=parse_model_json(raw); validation=validate_script_response(response,request)
     if not validation["valid"]:
         report={**base,"status":"MODEL_OUTPUT_VALIDATION_ERROR","errors":validation["errors"],"raw_output":str(raw_path)}; report_path.write_text(json.dumps(report,indent=2),encoding="utf-8"); return report
     response["response_provenance"]={"request_source":str(path.resolve()),"request_sha256":request_hash,"provider_id":result.get("provider_id"),"model_id":result.get("model_id")}
     response_path.write_text(json.dumps(response,indent=2,ensure_ascii=False),encoding="utf-8")
     draft={**response,"accepted_claims":request.get("accepted_claims",[]),"package":request.get("package",{}),"validation":validation,"draft_provenance":response["response_provenance"]}
-    draft_path.write_text(json.dumps(draft,indent=2,ensure_ascii=False),encoding="utf-8")
+    atomic_write_json(draft_path, draft)
     report={**base,"status":"VALIDATED","script_draft":str(draft_path),"claim_usage":validation["claim_usage"],"unused_accepted_claim_ids":validation["unused_accepted_claim_ids"]}
     report_path.write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8"); return report
 
