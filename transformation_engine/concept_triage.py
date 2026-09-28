@@ -714,6 +714,7 @@ def merge_full_audit(
             merged.append(final)
         else:
             first["first_pass_decision"] = first.get("decision")
+            first["decision"] = "NOT_FINALIST"
             first["final_selection"] = "NOT_FINALIST"
             first["triage_stage"] = "FIRST_PASS_ONLY"
             merged.append(first)
