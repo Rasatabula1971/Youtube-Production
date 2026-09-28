@@ -172,7 +172,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
                 settings.get("cross_check_required", False)
             ),
             max_output_tokens=int(
-                settings.get("max_output_tokens", 8192)
+                settings.get("max_output_tokens", 4096)
             ),
             client_id=str(
                 settings.get(
