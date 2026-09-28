@@ -319,5 +319,15 @@ class HumanReviewTests(unittest.TestCase):
             self.assertEqual(len(saved["decisions"]), 2)
 
 
+    def test_stale_review_request_is_rejected_after_reanalysis(self):
+        v1 = self.profile()
+        request = build_review_request(v1, self.experiment_config, self.review_config)
+        response = self.response_for(request, decision="REJECT")
+        v2 = self.profile()
+        v2["analysis"]["opening_hook"]["findings"][0]["finding"] = "Different never-reviewed finding"
+        with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
+            apply_review(v2, request, response, self.experiment_config, self.review_config)
+
+
 if __name__ == "__main__":
     unittest.main()
