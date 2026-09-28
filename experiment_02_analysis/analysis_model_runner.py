@@ -24,8 +24,9 @@ from analysis_execute import merge_analysis_response
 from evidence_ingest import sha256_file
 from experiment_02 import load_config as load_experiment_config
 from experiment_02 import load_json, safe_filename
-from pipeline_integrity import atomic_write_text, (
+from pipeline_integrity import (
     atomic_write_json,
+    atomic_write_text,
     batch_status,
     exit_code_for_status,
     tolerant_load_json,
@@ -705,10 +706,7 @@ def run_one(
         request,
     )
     response_path = MODEL_RESPONSES_DIR / f"{video_slug}.json"
-    response_path.write_text(
-        json.dumps(restricted_response, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(response_path, restricted_response)
 
     experiment_config = load_experiment_config()
     try:
@@ -754,10 +752,7 @@ def run_one(
         return report
 
     analyzed_path = ANALYZED_DIR / f"{video_slug}.json"
-    analyzed_path.write_text(
-        json.dumps(analyzed_profile, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(analyzed_path, analyzed_profile)
 
     report = {
         **base_report,
