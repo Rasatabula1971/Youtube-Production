@@ -416,7 +416,7 @@ def run_batch_prepare(profiles_dir: Path) -> dict[str, Any]:
     for profile_path in sorted(profiles_dir.glob("*.json")):
         try:
             prepared.append(run_prepare(profile_path, None))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
             failures.append(
                 {
                     "profile": str(profile_path),
