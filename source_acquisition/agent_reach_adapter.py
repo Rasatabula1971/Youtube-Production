@@ -75,6 +75,7 @@ def doctor(
             errors="replace",
             timeout=timeout_seconds,
             shell=False,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         return {
@@ -248,6 +249,7 @@ def search_youtube(
             errors="replace",
             timeout=timeout_seconds,
             shell=False,
+            check=False,
         )
     except subprocess.TimeoutExpired as exc:
         raise AcquisitionError(
@@ -377,6 +379,7 @@ def search_web(
             errors="replace",
             timeout=timeout_seconds,
             shell=False,
+            check=False,
         )
     except subprocess.TimeoutExpired as exc:
         raise AcquisitionError(
@@ -444,6 +447,7 @@ def read_web_page(
             errors="replace",
             timeout=timeout_seconds + 10,
             shell=False,
+            check=False,
         )
     except subprocess.TimeoutExpired as exc:
         raise AcquisitionError(
