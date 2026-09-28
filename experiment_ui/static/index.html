@@ -215,7 +215,13 @@
             </div>
 
             <div class="concept-review-layout">
-              <div class="concept-detail" id="conceptDetail"></div>
+              <div>
+                <div class="concept-detail" id="conceptDetail"></div>
+                <details class="technical-details" id="conceptOverridesPanel" hidden>
+                  <summary>Other triaged concepts</summary>
+                  <div class="technical-body" id="conceptOverrides"></div>
+                </details>
+              </div>
               <div class="concept-decision-pane">
                 <div class="concept-criteria" id="conceptCriteria"></div>
                 <label class="vision-label" for="conceptNote">Review note</label>
