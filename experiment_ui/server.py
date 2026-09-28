@@ -534,8 +534,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "run",
         ],
         "description": (
-            "Uses FAIR free-only routing to compare all structurally valid concepts "
-            "and shortlist the strongest 3-6 for human review."
+            "Uses FAIR free-only routing in resumable 5-concept chunks, advances "
+            "up to 10 finalists, then produces a final 0-6 shortlist for human review."
         ),
     },
     "concept_gate_prepare": {
@@ -2578,7 +2578,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "concept_triage": {
             "enabled": transform_candidates and not transform_triage,
             "reason": (
-                "Compare all current concept candidates and shortlist the strongest 3-6."
+                "Run two-pass triage: score 5 concepts at a time, advance up to 10 finalists, then produce a final 0-6 shortlist."
                 if transform_candidates and not transform_triage
                 else (
                     f"Concept triage is current with {transform['shortlist_count']} shortlisted concept(s)."
