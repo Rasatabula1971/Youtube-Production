@@ -4,6 +4,8 @@ Consumes human-verified research packages and prepares bounded script requests.
 Only accepted research claims may be referenced as factual support.
 """
 from __future__ import annotations
+
+import sys
 import argparse, hashlib, json
 from pathlib import Path
 from typing import Any
