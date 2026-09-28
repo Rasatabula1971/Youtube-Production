@@ -126,6 +126,7 @@ WORKFLOW_ACTION_ORDER = [
     "exp2_vision_prepare",
     "analysis_batch_prepare",
     "analysis_model_one",
+    "analysis_model_remaining",
     "human_review_prepare",
     "synthesis_build",
     "transform_prepare",
@@ -412,6 +413,22 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "1",
         ],
         "description": "Runs one FAIR-backed analysis request so results can be inspected before scaling.",
+    },
+    "analysis_model_remaining": {
+        "label": "Run Remaining Analyses",
+        "stage": "02",
+        "command": [
+            sys.executable,
+            "experiment_02_analysis/analysis_model_runner.py",
+            "--mode",
+            "batch",
+            "--requests-dir",
+            "experiment_02_analysis/output/analysis_requests",
+        ],
+        "description": (
+            "Runs all remaining current FAIR-backed analysis requests. "
+            "Already-applied requests are skipped automatically."
+        ),
     },
     "human_review_prepare": {
         "label": "Prepare Human Review Packets",
@@ -1374,8 +1391,13 @@ def stage_statuses() -> list[dict[str, Any]]:
     )
     vision_satisfied = (not visual_ready) or vision_complete
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
-    analyzed = exp2_artifacts["analyzed_current_count"] > 0
-    reviewed = exp2_artifacts["reviewed_current_count"] > 0
+    analyzed_count = exp2_artifacts["analyzed_current_count"]
+    request_count = len(exp2_artifacts["analysis_request_ids"])
+    reviewed_count = exp2_artifacts["reviewed_current_count"]
+    analyzed = analyzed_count > 0
+    analysis_complete = request_count > 0 and analyzed_count == request_count
+    reviewed = reviewed_count > 0
+    review_complete = request_count > 0 and reviewed_count == request_count
 
     if synthesis_ready:
         exp2_human = "STAGE COMPLETE"
@@ -1392,6 +1414,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         "exp2_vision_prepare",
         "analysis_batch_prepare",
         "analysis_model_one",
+        "analysis_model_remaining",
         "human_review_prepare",
     }:
         exp2_human = "ANALYSIS RUNNING"
@@ -1426,10 +1449,18 @@ def stage_statuses() -> list[dict[str, Any]]:
             exp2_human = "PREPARE VISUAL REVIEW"
             exp2_tone = "action"
             exp2_next = "Run Prepare Visual Review."
-    elif reviewed or analyzed:
+    elif reviewed and review_complete:
         exp2_human = "SYNTHESIS NEEDED"
         exp2_tone = "action"
         exp2_next = "Run Build Experiment 02 Synthesis."
+    elif analysis_complete:
+        exp2_human = "HUMAN REVIEW NEEDED"
+        exp2_tone = "action"
+        exp2_next = "Prepare and complete Human Review for all analyzed videos."
+    elif analyzed:
+        exp2_human = "MORE ANALYSIS NEEDED"
+        exp2_tone = "action"
+        exp2_next = "Run Remaining Analyses."
     else:
         exp2_human = "EVIDENCE READY — ANALYSIS NEEDED"
         exp2_tone = "action"
@@ -1904,9 +1935,16 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     vision_complete = bool(vision_review.get("complete"))
     vision_awaiting = bool(vision_review.get("awaiting_human_review"))
     requests_complete = bool(exp2_artifacts["requests_complete"])
-    analyzed = exp2_artifacts["analyzed_current_count"] > 0
-    review_requests = exp2_artifacts["review_requests_current_count"] > 0
-    reviewed = exp2_artifacts["reviewed_current_count"] > 0
+    analyzed_count = exp2_artifacts["analyzed_current_count"]
+    request_count = len(exp2_artifacts["analysis_request_ids"])
+    review_request_count = exp2_artifacts["review_requests_current_count"]
+    reviewed_count = exp2_artifacts["reviewed_current_count"]
+    analyzed = analyzed_count > 0
+    analysis_complete = request_count > 0 and analyzed_count == request_count
+    review_requests = review_request_count > 0
+    review_requests_complete = request_count > 0 and review_request_count == request_count
+    reviewed = reviewed_count > 0
+    review_complete = request_count > 0 and reviewed_count == request_count
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     transform = transformation_artifact_state()
     transform_requests = bool(transform["requests_ready"])
@@ -2231,10 +2269,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 and not analyzed
             ),
             "reason": (
-                "Current approved analysis requests are ready."
+                "Run one current analysis request as the FAIR safety check."
                 if human_gate_ready and requests_complete and not analyzed
                 else (
-                    "A current approved profile has already been analyzed."
+                    "The one-model safety check has already produced a current analyzed profile."
                     if analyzed
                     else (
                         "Human opportunity approval is required first."
@@ -2244,22 +2282,49 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "analysis_model_remaining": {
+            "enabled": (
+                human_gate_ready
+                and requests_complete
+                and analyzed
+                and not analysis_complete
+            ),
+            "reason": (
+                f"{analyzed_count} of {request_count} current analyses are applied. "
+                "Run the remaining requests; completed requests will be skipped."
+                if (
+                    human_gate_ready
+                    and requests_complete
+                    and analyzed
+                    and not analysis_complete
+                )
+                else (
+                    "All current analysis requests are applied."
+                    if analysis_complete
+                    else "Complete the one-model FAIR safety check first."
+                )
+            ),
+        },
         "human_review_prepare": {
             "enabled": (
                 human_gate_ready
-                and analyzed
-                and not review_requests
+                and analysis_complete
+                and not review_requests_complete
             ),
             "reason": (
-                "A current approved analyzed profile is ready for review."
-                if human_gate_ready and analyzed and not review_requests
+                "All current analyzed profiles are ready for Human Review packets."
+                if (
+                    human_gate_ready
+                    and analysis_complete
+                    and not review_requests_complete
+                )
                 else (
-                    "Human review packets are already prepared."
-                    if review_requests
+                    "Human Review packets are already current for every analyzed profile."
+                    if review_requests_complete
                     else (
                         "Human opportunity approval is required first."
                         if not human_gate_ready
-                        else "Run model or human analysis first."
+                        else "Finish all current model analyses first."
                     )
                 )
             ),
@@ -2267,14 +2332,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "synthesis_build": {
             "enabled": (
                 human_gate_ready
-                and (analyzed or reviewed)
+                and review_complete
                 and not synthesis_ready
             ),
             "reason": (
-                "Human-approved analyzed/reviewed profiles available."
+                "Human Review is complete for every current analyzed profile."
                 if (
                     human_gate_ready
-                    and (analyzed or reviewed)
+                    and review_complete
                     and not synthesis_ready
                 )
                 else (
@@ -2283,7 +2348,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     else (
                         "Human opportunity approval is required first."
                         if not human_gate_ready
-                        else "Waiting for Experiment 02 analyzed profiles."
+                        else "Waiting for complete Human Review of all current analyzed profiles."
                     )
                 )
             ),
