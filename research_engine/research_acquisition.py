@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pipeline_integrity import atomic_write_json, exit_code_for_status
+
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 SOURCE_DIR = PROJECT_ROOT / "source_acquisition"
@@ -176,7 +178,26 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
             if page["url"] in urls and question_id not in page["question_ids"]:
                 page["question_ids"].append(question_id)
 
-    status = "COMPLETE" if pages and not errors else ("PARTIAL" if pages else "FAILED")
+    required_question_ids = {
+        str(question.get("question_id"))
+        for question in questions
+        if isinstance(question, dict) and question.get("question_id")
+    }
+    covered_question_ids = {
+        str(question_id)
+        for page in pages
+        for question_id in page.get("question_ids", [])
+    }
+    unresolved_question_ids = sorted(
+        required_question_ids - covered_question_ids
+    )
+    status = (
+        "COMPLETE"
+        if pages and not errors and not unresolved_question_ids
+        else "PARTIAL"
+        if pages
+        else "FAILED"
+    )
     payload = {
         "artifact": "research_acquired_evidence",
         "status": status,
@@ -190,12 +211,10 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         "question_searches": question_searches,
         "pages": pages,
         "errors": errors,
+        "unresolved_question_ids": unresolved_question_ids,
         "limits": config,
     }
-    destination.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(destination, payload)
     return {
         "status": status,
         "concept_id": concept_id,
@@ -227,17 +246,24 @@ def run_batch(*, force: bool = False) -> dict[str, Any]:
         item.get("status") in {"COMPLETE", "PARTIAL", "SKIPPED_CURRENT"}
         for item in results
     )
+    complete = sum(
+        item.get("status") in {"COMPLETE", "SKIPPED_CURRENT"}
+        for item in results
+    )
+    status = (
+        "COMPLETE"
+        if results and complete == len(results)
+        else "FAILED"
+        if results and usable == 0
+        else "PARTIAL"
+    )
     summary = {
-        "status": "EVIDENCE_ACQUIRED" if usable else "NO_RESEARCH_EVIDENCE",
+        "status": status,
         "plans": len(results),
         "usable": usable,
         "results": results,
     }
-    SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(SUMMARY_FILE, summary)
     return summary
 
 
@@ -256,6 +282,8 @@ def main() -> None:
         result = run_batch(force=args.force)
 
     print(json.dumps(result, indent=2, ensure_ascii=True))
+    if args.mode == "batch":
+        raise SystemExit(exit_code_for_status(result["status"]))
 
 
 if __name__ == "__main__":
