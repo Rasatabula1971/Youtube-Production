@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import shutil
+import secrets
 import subprocess
 import sys
 import threading
@@ -26,6 +27,7 @@ PROJECT_ROOT = HERE.parent
 STATIC_DIR = HERE / "static"
 APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
 IS_WINDOWS = os.name == "nt"
+CSRF_TOKEN = secrets.token_urlsafe(32)
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
@@ -3158,6 +3160,7 @@ def status_payload() -> dict[str, Any]:
         )
 
     return {
+        "csrf_token": CSRF_TOKEN,
         "project_root": str(PROJECT_ROOT),
         "stages": stage_statuses(),
         "actions": actions,
@@ -3273,8 +3276,35 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    def _post_security_error(self) -> str | None:
+        content_type = str(self.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return "POST requests require Content-Type: application/json."
+
+        port = int(self.server.server_address[1])
+        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        host = str(self.headers.get("Host", "")).strip().lower()
+        if host not in allowed_hosts:
+            return "Invalid Host for local control UI."
+
+        origin = str(self.headers.get("Origin", "")).strip().lower()
+        if origin and origin not in {
+            f"http://127.0.0.1:{port}",
+            f"http://localhost:{port}",
+        }:
+            return "Cross-origin POST requests are not allowed."
+
+        if str(self.headers.get("X-CSRF-Token", "")) != CSRF_TOKEN:
+            return "Missing or invalid CSRF token."
+        return None
+
     def do_POST(self) -> None:
         route = urlparse(self.path).path
+        security_error = self._post_security_error()
+        if security_error:
+            self._send_json({"error": security_error}, 403)
+            return
+
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         try:
