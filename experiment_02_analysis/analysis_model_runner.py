@@ -665,6 +665,7 @@ def run_one(
         "paid_inference_executed": bridge_result.get("paid_inference_executed"),
         "bridge_error_type": bridge_result.get("error_type"),
         "bridge_error_detail": bridge_result.get("error_detail"),
+        "compatibility": bridge_result.get("compatibility"),
         "attempts": safe_attempts(bridge_result),
     }
 
@@ -829,6 +830,7 @@ def run_doctor(config: dict[str, Any]) -> dict[str, Any]:
         ),
         "providers": result.get("providers", []),
         "skipped": result.get("skipped", {}),
+        "compatibility": result.get("compatibility", {}),
     }
 
 
