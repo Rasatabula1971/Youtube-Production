@@ -2916,7 +2916,13 @@ class JobManager:
             if self._job.get("status") == "STOPPING":
                 self._job["status"] = "STOPPED"
             else:
-                self._job["status"] = "SUCCEEDED" if return_code == 0 else "FAILED"
+                self._job["status"] = (
+                    "SUCCEEDED"
+                    if return_code == 0
+                    else "PARTIAL"
+                    if return_code == 2
+                    else "FAILED"
+                )
             self._process = None
 
         self._save_state(self.public_job())
