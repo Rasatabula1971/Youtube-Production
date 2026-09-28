@@ -284,6 +284,33 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="scriptReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN SCRIPT GATE</p>
+                <h2 id="scriptReviewTitle">Review script draft</h2>
+                <p class="muted" id="scriptReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="scriptReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="scriptDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-criteria" id="scriptCriteria"></div>
+                <label class="vision-label" for="scriptNote">Review note</label>
+                <textarea id="scriptNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="scriptPrev" type="button">← Previous</button>
+                  <button class="danger" id="scriptReject" type="button">Reject</button>
+                  <button class="ghost" id="scriptRework" type="button">Rework</button>
+                  <button id="scriptAccept" type="button">Accept script</button>
+                  <button class="ghost" id="scriptNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
@@ -302,6 +329,7 @@
             <button class="ghost" data-open="transformation_output">Transformation Output</button>
             <button class="ghost" data-open="packaging_output">Packaging Output</button>
             <button class="ghost" data-open="research_output">Research Output</button>
+            <button class="ghost" data-open="story_script_output">Story / Script Output</button>
             <button class="ghost" data-open="ui_jobs">Job Logs</button>
           </div>
 
