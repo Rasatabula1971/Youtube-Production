@@ -1,4 +1,5 @@
 """Human Script Gate."""
+
 from __future__ import annotations
 
 import argparse
@@ -61,11 +62,16 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
 
 def prepare() -> dict[str, Any]:
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
-    paths = sorted(DRAFTS_DIR.glob("*.script_draft.json")) if DRAFTS_DIR.exists() else []
+    paths = (
+        sorted(DRAFTS_DIR.glob("*.script_draft.json")) if DRAFTS_DIR.exists() else []
+    )
     prepared = []
     for path in paths:
         req = build_review_request(load_json(path), path)
-        dest = REVIEW_REQUESTS_DIR / f"{safe_slug(req['concept_id'])}.script_review_request.json"
+        dest = (
+            REVIEW_REQUESTS_DIR
+            / f"{safe_slug(req['concept_id'])}.script_review_request.json"
+        )
         dest.write_text(json.dumps(req, indent=2, ensure_ascii=False), encoding="utf-8")
         prepared.append({"concept_id": req["concept_id"], "request": str(dest)})
     return {
@@ -109,7 +115,9 @@ def assert_current_draft(req: dict[str, Any]) -> Path:
     if not source.exists() or not expected_hash:
         raise ValueError("STALE_REVIEW_REQUEST: reviewed script draft is unavailable")
     if sha256_file(source) != expected_hash:
-        raise ValueError("STALE_REVIEW_REQUEST: script draft changed after review preparation")
+        raise ValueError(
+            "STALE_REVIEW_REQUEST: script draft changed after review preparation"
+        )
     return source
 
 
@@ -123,15 +131,15 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
         "status": (
             "READY_FOR_PRODUCTION"
             if decision == "ACCEPT"
-            else "SCRIPT_REWORK_REQUIRED"
-            if decision == "REWORK"
-            else "SCRIPT_REJECTED"
+            else "SCRIPT_REWORK_REQUIRED" if decision == "REWORK" else "SCRIPT_REJECTED"
         ),
         **normalized,
         "reviewed_at": reviewed_at,
     }
 
-    approved_path = APPROVED_DIR / f"{safe_slug(req['concept_id'])}.approved_script.json"
+    approved_path = (
+        APPROVED_DIR / f"{safe_slug(req['concept_id'])}.approved_script.json"
+    )
     if decision == "ACCEPT":
         draft = load_json(source)
         draft["script_gate"] = summary
@@ -232,7 +240,9 @@ def apply_action(
     criteria: dict[str, Any],
     note: str | None = None,
 ) -> dict[str, Any]:
-    request_path = REVIEW_REQUESTS_DIR / f"{safe_slug(concept_id)}.script_review_request.json"
+    request_path = (
+        REVIEW_REQUESTS_DIR / f"{safe_slug(concept_id)}.script_review_request.json"
+    )
     if not request_path.exists():
         raise ValueError("Script review request not found")
 
@@ -248,7 +258,7 @@ def apply_action(
     # Validate the human action and reviewed-draft provenance BEFORE persisting it.
     normalized = validate_response(req, payload)
     source = assert_current_draft(req)
-    summary = apply_payload(request_path, normalized)
+    apply_payload(request_path, normalized)
 
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
     dest = response_path(concept_id)

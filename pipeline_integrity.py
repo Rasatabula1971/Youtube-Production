@@ -1,4 +1,5 @@
 """Shared integrity helpers for pipeline runners."""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +7,6 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Any
-
 
 SUCCESS_STATUSES = {
     "APPLIED",
@@ -87,13 +87,18 @@ def batch_status(
 
 
 def exit_code_for_status(status: str) -> int:
-    return 0 if status in {
-        "COMPLETE",
-        "VALIDATED",
-        "APPLIED",
-        "TRIAGE_COMPLETE",
-        "SKIPPED_ALREADY_TRIAGED",
-        "SCRIPT_GATE_READY",
-        "CONCEPT_CANDIDATES_READY",
-        "DRAFT_RESEARCH_PACKAGES_READY",
-    } else 2
+    return (
+        0
+        if status
+        in {
+            "COMPLETE",
+            "VALIDATED",
+            "APPLIED",
+            "TRIAGE_COMPLETE",
+            "SKIPPED_ALREADY_TRIAGED",
+            "SCRIPT_GATE_READY",
+            "CONCEPT_CANDIDATES_READY",
+            "DRAFT_RESEARCH_PACKAGES_READY",
+        }
+        else 2
+    )

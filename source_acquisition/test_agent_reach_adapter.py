@@ -51,7 +51,8 @@ class AgentReachAdapterTests(unittest.TestCase):
         def which(name):
             return (
                 f"/bin/{name}"
-                if name in {
+                if name
+                in {
                     "agent-reach",
                     "yt-dlp",
                 }
@@ -70,25 +71,19 @@ class AgentReachAdapterTests(unittest.TestCase):
                 return_value=subprocess.CompletedProcess(
                     ["agent-reach"],
                     0,
-                    stdout=json.dumps(
-                        payload
-                    ),
+                    stdout=json.dumps(payload),
                     stderr="",
                 ),
             ),
         ):
             doctor = adapter.doctor()
-            health = adapter.youtube_health(
-                doctor
-            )
+            health = adapter.youtube_health(doctor)
 
         self.assertEqual(
             doctor["status"],
             "READY",
         )
-        self.assertTrue(
-            health["ready"]
-        )
+        self.assertTrue(health["ready"])
         self.assertEqual(
             health["active_backend"],
             "yt-dlp",
@@ -111,13 +106,9 @@ class AgentReachAdapterTests(unittest.TestCase):
             "yt_dlp_path",
             return_value="/bin/yt-dlp",
         ):
-            health = adapter.youtube_health(
-                payload
-            )
+            health = adapter.youtube_health(payload)
 
-        self.assertFalse(
-            health["ready"]
-        )
+        self.assertFalse(health["ready"])
 
     def test_search_uses_ytsearch_and_parses_json_lines(self):
         stdout = "\n".join(
@@ -146,7 +137,8 @@ class AgentReachAdapterTests(unittest.TestCase):
         def which(name):
             return (
                 f"/bin/{name}"
-                if name in {
+                if name
+                in {
                     "agent-reach",
                     "yt-dlp",
                 }
@@ -193,9 +185,7 @@ class AgentReachAdapterTests(unittest.TestCase):
             "ytsearch2:F1 brakes engineering",
             command,
         )
-        self.assertFalse(
-            run.call_args.kwargs["shell"]
-        )
+        self.assertFalse(run.call_args.kwargs["shell"])
 
     def test_date_strategy_compatibility_uses_supported_ytsearch(self):
         with (
@@ -234,9 +224,7 @@ class AgentReachAdapterTests(unittest.TestCase):
             "ytsearch3:query",
             command,
         )
-        self.assertFalse(
-            any("ytsearchdate" in part for part in command)
-        )
+        self.assertFalse(any("ytsearchdate" in part for part in command))
         self.assertEqual(
             result["effective_strategy"],
             "relevance",
@@ -245,7 +233,6 @@ class AgentReachAdapterTests(unittest.TestCase):
             "removed ytsearchdate",
             result["strategy_note"],
         )
-
 
     def test_extract_urls_handles_mcporter_text(self):
         urls = adapter.extract_urls(

@@ -30,9 +30,7 @@ INGESTION_REPORTS_DIR = OUTPUT_DIR / "ingestion_reports"
 TIMECODE_HMS_RE = re.compile(
     r"^(?P<h>\d{1,2}):(?P<m>\d{2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$"
 )
-TIMECODE_MS_RE = re.compile(
-    r"^(?P<m>\d{1,2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$"
-)
+TIMECODE_MS_RE = re.compile(r"^(?P<m>\d{1,2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$")
 TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -74,7 +72,7 @@ def parse_timecode(value: str) -> float:
 
 
 def format_seconds(value: float) -> str:
-    total_ms = int(round(value * 1000))
+    total_ms = round(value * 1000)
     hours, remainder = divmod(total_ms, 3_600_000)
     minutes, remainder = divmod(remainder, 60_000)
     seconds, milliseconds = divmod(remainder, 1000)
@@ -82,8 +80,8 @@ def format_seconds(value: float) -> str:
 
 
 def transcript_evidence_id(start: float, end: float, ordinal: int) -> str:
-    start_ms = int(round(start * 1000))
-    end_ms = int(round(end * 1000))
+    start_ms = round(start * 1000)
+    end_ms = round(end * 1000)
     return f"transcript.t{start_ms:09d}_{end_ms:09d}_{ordinal:04d}"
 
 
@@ -135,9 +133,7 @@ def parse_subtitle_file(path: Path) -> list[dict[str, Any]]:
 
         observation = " ".join(
             stripped
-            for stripped in (
-                strip_subtitle_markup(item) for item in text_lines
-            )
+            for stripped in (strip_subtitle_markup(item) for item in text_lines)
             if stripped
         ).strip()
         if not observation:
@@ -200,14 +196,16 @@ def note_evidence_id(note_type: str, ordinal: int, start_seconds: float | None) 
     }[note_type]
     if start_seconds is None:
         return f"{prefix}.n{ordinal:04d}"
-    return f"{prefix}.t{int(round(start_seconds * 1000)):09d}_{ordinal:04d}"
+    return f"{prefix}.t{round(start_seconds * 1000):09d}_{ordinal:04d}"
 
 
 def parse_notes_file(path: Path) -> list[dict[str, Any]]:
     payload = load_json(path)
     notes = payload.get("notes") if isinstance(payload, dict) else payload
     if not isinstance(notes, list):
-        raise ValueError("Notes file must be a JSON list or an object with a 'notes' list")
+        raise ValueError(
+            "Notes file must be a JSON list or an object with a 'notes' list"
+        )
 
     digest = sha256_file(path)
     evidence: list[dict[str, Any]] = []
@@ -297,7 +295,11 @@ def register_image(
     digest = sha256_file(path)
     mime_type, _ = mimetypes.guess_type(path.name)
     source_input = {
-        "status": "PROVIDED" if observation and observation.strip() else "REGISTERED_UNOBSERVED",
+        "status": (
+            "PROVIDED"
+            if observation and observation.strip()
+            else "REGISTERED_UNOBSERVED"
+        ),
         "source": str(path),
         "sha256": digest,
         "mime_type": mime_type,

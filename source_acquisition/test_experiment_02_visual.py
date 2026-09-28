@@ -34,9 +34,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
         stack.enter_context(patch.object(visual.base, "PROJECT_ROOT", root))
         stack.enter_context(patch.object(visual.base, "PREPARED_DIR", prepared))
         stack.enter_context(patch.object(visual.base, "ENRICHED_DIR", enriched))
-        stack.enter_context(
-            patch.object(visual.base, "ACQUISITION_ROOT", acquired)
-        )
+        stack.enter_context(patch.object(visual.base, "ACQUISITION_ROOT", acquired))
 
     def write_profile(self, path: Path, video_id: str = "abc123") -> None:
         path.write_text(
@@ -104,9 +102,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             duration=10.0,
         )
 
-        self.assertFalse(
-            payload["detector"]["semantic_interpretation"]
-        )
+        self.assertFalse(payload["detector"]["semantic_interpretation"])
         self.assertEqual(
             payload["summary"]["scene_transition_candidate_count"],
             3,
@@ -157,9 +153,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             enriched.write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -184,16 +178,12 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.assertFalse(
-                visual.visual_report_current(report, profile)
-            )
+            self.assertFalse(visual.visual_report_current(report, profile))
 
             enriched.write_text(
                 json.dumps(
                     {
-                        "source_inputs": {
-                            "transcript": {"status": "PROVIDED"}
-                        },
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
                         "evidence": [
                             {
                                 "evidence_id": "transcript.p0001",
@@ -211,9 +201,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.assertTrue(
-                visual.visual_report_current(report, profile)
-            )
+            self.assertTrue(visual.visual_report_current(report, profile))
 
     def test_visual_stage_waits_for_transcript_before_network(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -222,9 +210,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             profile = visual.PREPARED_DIR / "abc123.json"
             self.write_profile(profile)
 
-            stream = stack.enter_context(
-                patch.object(visual, "resolve_stream_url")
-            )
+            stream = stack.enter_context(patch.object(visual, "resolve_stream_url"))
 
             result = visual.acquire_visual_one(
                 profile,
@@ -392,9 +378,7 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             )
 
             def fake_ingest(bundle_path, *, python_executable):
-                bundle = json.loads(
-                    Path(bundle_path).read_text(encoding="utf-8")
-                )
+                bundle = json.loads(Path(bundle_path).read_text(encoding="utf-8"))
                 self.assertIn("notes", bundle)
                 self.assertIn("opening_frame", bundle)
                 self.assertEqual(bundle["video_id"], "abc123")

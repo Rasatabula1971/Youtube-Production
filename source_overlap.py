@@ -3,6 +3,7 @@
 Uses locally acquired Experiment 02 transcripts and source titles only.
 No model/network calls.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,12 +35,14 @@ def source_documents() -> list[dict[str, str]]:
                     text = path.read_text(encoding="utf-8", errors="ignore")
                 except OSError:
                     continue
-                docs.append({
-                    "source_id": directory.name,
-                    "kind": "transcript",
-                    "source": str(path),
-                    "text": text,
-                })
+                docs.append(
+                    {
+                        "source_id": directory.name,
+                        "kind": "transcript",
+                        "source": str(path),
+                        "text": text,
+                    }
+                )
             elif path.name.endswith(".info.json"):
                 try:
                     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -47,25 +50,29 @@ def source_documents() -> list[dict[str, str]]:
                     continue
                 title = str(payload.get("title") or "")
                 if title:
-                    docs.append({
-                        "source_id": directory.name,
-                        "kind": "title",
-                        "source": str(path),
-                        "text": title,
-                    })
+                    docs.append(
+                        {
+                            "source_id": directory.name,
+                            "kind": "title",
+                            "source": str(path),
+                            "text": title,
+                        }
+                    )
     return docs
 
 
-def _longest_match(candidate_words: list[str], source_words: list[str], minimum: int) -> tuple[int, int]:
+def _longest_match(
+    candidate_words: list[str], source_words: list[str], minimum: int
+) -> tuple[int, int]:
     if len(candidate_words) < minimum or len(source_words) < minimum:
         return (0, -1)
     source_index: dict[tuple[str, ...], list[int]] = {}
     for size in range(min(len(candidate_words), 40), minimum - 1, -1):
         source_index.clear()
-        for j in range(0, len(source_words) - size + 1):
-            source_index.setdefault(tuple(source_words[j:j + size]), []).append(j)
-        for i in range(0, len(candidate_words) - size + 1):
-            key = tuple(candidate_words[i:i + size])
+        for j in range(len(source_words) - size + 1):
+            source_index.setdefault(tuple(source_words[j : j + size]), []).append(j)
+        for i in range(len(candidate_words) - size + 1):
+            key = tuple(candidate_words[i : i + size])
             if key in source_index:
                 return (size, i)
     return (0, -1)
@@ -85,19 +92,25 @@ def check_texts(
         if len(candidate_words) < warn_words:
             continue
         for doc in docs:
-            count, start = _longest_match(candidate_words, words(doc["text"]), warn_words)
+            count, start = _longest_match(
+                candidate_words, words(doc["text"]), warn_words
+            )
             if count < warn_words:
                 continue
-            phrase = " ".join(candidate_words[start:start + count])
-            matches.append({
-                "field": str(field.get("field") or ""),
-                "source_id": doc["source_id"],
-                "source_kind": doc["kind"],
-                "word_count": count,
-                "overlap_text": phrase,
-                "blocking": count >= block_words,
-            })
-    matches.sort(key=lambda item: (-int(item["word_count"]), item["field"], item["source_id"]))
+            phrase = " ".join(candidate_words[start : start + count])
+            matches.append(
+                {
+                    "field": str(field.get("field") or ""),
+                    "source_id": doc["source_id"],
+                    "source_kind": doc["kind"],
+                    "word_count": count,
+                    "overlap_text": phrase,
+                    "blocking": count >= block_words,
+                }
+            )
+    matches.sort(
+        key=lambda item: (-int(item["word_count"]), item["field"], item["source_id"])
+    )
     return {
         "checked": bool(docs),
         "warning_threshold_words": warn_words,

@@ -23,11 +23,7 @@ from agent_reach_adapter import (
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-EXP13_CONFIG = (
-    PROJECT_ROOT
-    / "experiment_01_discovery"
-    / "experiment_01_3_config.json"
-)
+EXP13_CONFIG = PROJECT_ROOT / "experiment_01_discovery" / "experiment_01_3_config.json"
 DEFAULT_API_REFERENCE = (
     PROJECT_ROOT
     / "experiment_01_discovery"
@@ -35,11 +31,7 @@ DEFAULT_API_REFERENCE = (
     / "experiment_01_3_discovery_checkpoint.json"
 )
 
-OUTPUT_DIR = (
-    HERE
-    / "output"
-    / "youtube_discovery_benchmark"
-)
+OUTPUT_DIR = HERE / "output" / "youtube_discovery_benchmark"
 RESULTS_FILE = OUTPUT_DIR / "agent_reach_results.json"
 COMPARISON_FILE = OUTPUT_DIR / "comparison.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
@@ -74,20 +66,14 @@ def collect(
 ) -> dict[str, Any]:
     config = load_json(EXP13_CONFIG)
     plan = query_plan(config)
-    strategies = (
-        ["relevance", "date"]
-        if strategy == "both"
-        else [strategy]
-    )
+    strategies = ["relevance", "date"] if strategy == "both" else [strategy]
 
     health_payload = doctor()
     health = youtube_health(health_payload)
     if not health["ready"]:
         return {
             "status": "AGENT_REACH_YOUTUBE_NOT_READY",
-            "doctor_status": health_payload.get(
-                "status"
-            ),
+            "doctor_status": health_payload.get("status"),
             "youtube_health": health,
             "query_count": len(plan),
             "searches_completed": 0,
@@ -123,26 +109,16 @@ def collect(
                     **item,
                     "strategy": current_strategy,
                     "status": result["status"],
-                    "result_count": result[
-                        "result_count"
-                    ],
+                    "result_count": result["result_count"],
                     "results": result["results"],
                 }
             )
 
     return {
-        "status": (
-            "COMPLETE"
-            if not failures
-            else "PARTIAL"
-        ),
-        "collected_at": datetime.now(
-            timezone.utc
-        ).isoformat(),
+        "status": ("COMPLETE" if not failures else "PARTIAL"),
+        "collected_at": datetime.now(timezone.utc).isoformat(),
         "source": "agent_reach",
-        "active_backend": health.get(
-            "active_backend"
-        ),
+        "active_backend": health.get("active_backend"),
         "limit_per_search": limit,
         "strategy": strategy,
         "query_count": len(plan),
@@ -161,22 +137,14 @@ def _reference_map(
     ] = defaultdict(set)
 
     for audit in checkpoint.get("audit", []):
-        topic = str(
-            audit.get("target_topic", "")
-        ).strip()
-        query = str(
-            audit.get("query", "")
-        ).strip()
+        topic = str(audit.get("target_topic", "")).strip()
+        query = str(audit.get("query", "")).strip()
         if not topic or not query:
             continue
-        for video_id in audit.get(
-            "video_ids", []
-        ):
+        for video_id in audit.get("video_ids", []):
             value = str(video_id).strip()
             if value:
-                result[
-                    (topic, query)
-                ].add(value)
+                result[(topic, query)].add(value)
     return result
 
 
@@ -188,19 +156,13 @@ def _agent_map(
         set[str],
     ] = defaultdict(set)
 
-    for search in results.get(
-        "searches", []
-    ):
+    for search in results.get("searches", []):
         key = (
             str(search.get("topic", "")),
             str(search.get("query", "")),
         )
-        for item in search.get(
-            "results", []
-        ):
-            video_id = str(
-                item.get("video_id", "")
-            ).strip()
+        for item in search.get("results", []):
+            video_id = str(item.get("video_id", "")).strip()
             if video_id:
                 output[key].add(video_id)
     return output
@@ -225,24 +187,16 @@ def compare(
     api_map = _reference_map(checkpoint)
     agent_map = _agent_map(results)
 
-    keys = sorted(
-        set(api_map) | set(agent_map)
-    )
+    keys = sorted(set(api_map) | set(agent_map))
     rows = []
 
     api_union: set[str] = set()
     agent_union: set[str] = set()
 
     for topic, query in keys:
-        api_ids = api_map.get(
-            (topic, query), set()
-        )
-        agent_ids = agent_map.get(
-            (topic, query), set()
-        )
-        overlap = (
-            api_ids & agent_ids
-        )
+        api_ids = api_map.get((topic, query), set())
+        agent_ids = agent_map.get((topic, query), set())
+        overlap = api_ids & agent_ids
 
         api_union.update(api_ids)
         agent_union.update(agent_ids)
@@ -251,15 +205,9 @@ def compare(
             {
                 "topic": topic,
                 "query": query,
-                "youtube_api_unique_ids": len(
-                    api_ids
-                ),
-                "agent_reach_unique_ids": len(
-                    agent_ids
-                ),
-                "overlap_count": len(
-                    overlap
-                ),
+                "youtube_api_unique_ids": len(api_ids),
+                "agent_reach_unique_ids": len(agent_ids),
+                "overlap_count": len(overlap),
                 "api_reference_recall": ratio(
                     len(overlap),
                     len(api_ids),
@@ -268,44 +216,24 @@ def compare(
                     len(overlap),
                     len(agent_ids),
                 ),
-                "overlap_video_ids": sorted(
-                    overlap
-                ),
-                "only_agent_reach_video_ids": sorted(
-                    agent_ids - api_ids
-                ),
-                "only_youtube_api_video_ids": sorted(
-                    api_ids - agent_ids
-                ),
+                "overlap_video_ids": sorted(overlap),
+                "only_agent_reach_video_ids": sorted(agent_ids - api_ids),
+                "only_youtube_api_video_ids": sorted(api_ids - agent_ids),
             }
         )
 
-    overall_overlap = (
-        api_union & agent_union
-    )
+    overall_overlap = api_union & agent_union
 
     return {
         "status": "COMPARISON_READY",
-        "reference_experiment": checkpoint.get(
-            "experiment_id"
-        ),
-        "reference_status": checkpoint.get(
-            "status"
-        ),
-        "reference_observed_at": checkpoint.get(
-            "observed_at"
-        ),
+        "reference_experiment": checkpoint.get("experiment_id"),
+        "reference_status": checkpoint.get("status"),
+        "reference_observed_at": checkpoint.get("observed_at"),
         "queries_compared": len(rows),
         "overall": {
-            "youtube_api_unique_ids": len(
-                api_union
-            ),
-            "agent_reach_unique_ids": len(
-                agent_union
-            ),
-            "overlap_count": len(
-                overall_overlap
-            ),
+            "youtube_api_unique_ids": len(api_union),
+            "agent_reach_unique_ids": len(agent_union),
+            "overlap_count": len(overall_overlap),
             "api_reference_recall": ratio(
                 len(overall_overlap),
                 len(api_union),
@@ -329,9 +257,7 @@ def write_summary(
     collection: dict[str, Any],
     comparison: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    if collection.get("status") == (
-        "AGENT_REACH_YOUTUBE_NOT_READY"
-    ):
+    if collection.get("status") == ("AGENT_REACH_YOUTUBE_NOT_READY"):
         status = collection["status"]
     elif comparison is not None:
         status = "BENCHMARK_COMPARISON_READY"
@@ -340,23 +266,11 @@ def write_summary(
 
     summary = {
         "status": status,
-        "agent_reach_collection_status": collection.get(
-            "status"
-        ),
-        "searches_completed": collection.get(
-            "searches_completed", 0
-        ),
-        "comparison_available": (
-            comparison is not None
-        ),
-        "results_file": str(
-            RESULTS_FILE
-        ),
-        "comparison_file": (
-            str(COMPARISON_FILE)
-            if comparison is not None
-            else None
-        ),
+        "agent_reach_collection_status": collection.get("status"),
+        "searches_completed": collection.get("searches_completed", 0),
+        "comparison_available": (comparison is not None),
+        "results_file": str(RESULTS_FILE),
+        "comparison_file": (str(COMPARISON_FILE) if comparison is not None else None),
         "youtube_api_calls": 0,
         "experiment_01_3_modified": False,
     }
@@ -396,14 +310,8 @@ def run_collect(
     )
 
     comparison = None
-    if (
-        collection.get("status")
-        in {"COMPLETE", "PARTIAL"}
-        and api_reference.exists()
-    ):
-        checkpoint = load_json(
-            api_reference
-        )
+    if collection.get("status") in {"COMPLETE", "PARTIAL"} and api_reference.exists():
+        checkpoint = load_json(api_reference)
         comparison = compare(
             collection,
             checkpoint,
@@ -432,12 +340,8 @@ def run_compare(
         parents=True,
         exist_ok=True,
     )
-    results = load_json(
-        results_path
-    )
-    checkpoint = load_json(
-        api_reference
-    )
+    results = load_json(results_path)
+    checkpoint = load_json(api_reference)
     comparison = compare(
         results,
         checkpoint,

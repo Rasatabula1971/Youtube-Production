@@ -29,7 +29,6 @@ class EvidenceIngestTests(unittest.TestCase):
         self.assertEqual(evidence[0]["locator"], "00:00:00.000-00:00:02.500")
         self.assertEqual(evidence[0]["observation"], "This is the hook.")
 
-
     def test_parse_vtt_supports_minute_second_timecodes(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "test.vtt"

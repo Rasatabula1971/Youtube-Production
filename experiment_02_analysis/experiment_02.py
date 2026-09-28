@@ -187,11 +187,7 @@ def finding_evidence_types(
     refs: list[str],
     evidence: dict[str, dict[str, Any]],
 ) -> set[str]:
-    return {
-        str(evidence[ref].get("type"))
-        for ref in refs
-        if ref in evidence
-    }
+    return {str(evidence[ref].get("type")) for ref in refs if ref in evidence}
 
 
 def causal_warnings(statement: str, config: dict[str, Any]) -> list[str]:
@@ -259,9 +255,7 @@ def validate_supported_item(
         if mechanism not in config["mechanism_taxonomy"]
     ]
     if unknown_mechanisms:
-        errors.append(
-            f"{path}: unknown mechanism ids: {', '.join(unknown_mechanisms)}"
-        )
+        errors.append(f"{path}: unknown mechanism ids: {', '.join(unknown_mechanisms)}")
 
     for phrase in causal_warnings(statement, config):
         warnings.append(
@@ -311,9 +305,7 @@ def validate_profile(
             errors.append(f"analysis.{dimension}.findings must be a list")
             continue
 
-        allowed_types = set(
-            config["dimension_evidence_types"].get(dimension, [])
-        )
+        allowed_types = set(config["dimension_evidence_types"].get(dimension, []))
         for index, finding in enumerate(findings):
             item_errors, item_warnings = validate_supported_item(
                 finding,
@@ -385,9 +377,7 @@ def validate_profile(
         else:
             unknown = [str(ref) for ref in refs if str(ref) not in evidence]
             if unknown:
-                errors.append(
-                    f"{path}: unknown evidence refs: {', '.join(unknown)}"
-                )
+                errors.append(f"{path}: unknown evidence refs: {', '.join(unknown)}")
 
     for index, hypothesis in enumerate(profile.get("working_hypotheses", [])):
         if not str(hypothesis.get("hypothesis", "")).strip():
@@ -480,18 +470,15 @@ def aggregate_profiles(
         row = mechanism_rows[mechanism_id]
         video_count = len(row["video_ids"])
         channel_count = len(row["channel_ids"])
-        replicated = (
-            video_count >= int(config["minimum_replication_videos"])
-            and channel_count >= int(config["minimum_replication_channels"])
-        )
+        replicated = video_count >= int(
+            config["minimum_replication_videos"]
+        ) and channel_count >= int(config["minimum_replication_channels"])
         patterns.append(
             {
                 "mechanism_id": mechanism_id,
                 "label": config["mechanism_taxonomy"][mechanism_id],
                 "status": (
-                    "REPLICATED_PATTERN"
-                    if replicated
-                    else "SINGLE_SOURCE_OBSERVATION"
+                    "REPLICATED_PATTERN" if replicated else "SINGLE_SOURCE_OBSERVATION"
                 ),
                 "video_count": video_count,
                 "unique_channels": channel_count,
@@ -521,11 +508,7 @@ def load_study_set_video_ids() -> set[str]:
     if not SOURCE_STUDY_SET.exists():
         return set()
     study_set = load_json(SOURCE_STUDY_SET)
-    return {
-        str(item.get("video_id"))
-        for item in study_set
-        if item.get("video_id")
-    }
+    return {str(item.get("video_id")) for item in study_set if item.get("video_id")}
 
 
 def run_prepare() -> None:

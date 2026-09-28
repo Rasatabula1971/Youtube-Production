@@ -108,7 +108,9 @@ class Experiment02Tests(unittest.TestCase):
         profile = build_profile_from_study_item(study[0], self.config)
 
         self.assertEqual(len(packets), 1)
-        self.assertEqual(profile["source_inputs"]["transcript"]["status"], "NOT_PROVIDED")
+        self.assertEqual(
+            profile["source_inputs"]["transcript"]["status"], "NOT_PROVIDED"
+        )
         self.assertEqual(profile["analysis"]["packaging"]["findings"], [])
         self.assertEqual(profile["source"]["niche"], "automotive_racing")
         self.assertEqual(packets[0]["niche"], "automotive_racing")
@@ -126,9 +128,7 @@ class Experiment02Tests(unittest.TestCase):
 
         report = validate_profile(profile, self.config)
         self.assertFalse(report["valid"])
-        self.assertTrue(
-            any("evidence_refs" in error for error in report["errors"])
-        )
+        self.assertTrue(any("evidence_refs" in error for error in report["errors"]))
 
     def test_dimension_requires_appropriate_evidence_type(self):
         profile = self.base_profile()

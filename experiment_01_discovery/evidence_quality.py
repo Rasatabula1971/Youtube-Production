@@ -14,7 +14,6 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-
 RELEVANCE_ON_INTENT = "ON_INTENT"
 RELEVANCE_ADJACENT = "ADJACENT"
 RELEVANCE_OFF_INTENT = "OFF_INTENT"
@@ -44,11 +43,7 @@ def _contains_term(text: str, term: str) -> bool:
 
 
 def _matching_terms(text: str, terms: Iterable[str]) -> list[str]:
-    return [
-        term
-        for term in terms
-        if _contains_term(text, term)
-    ]
+    return [term for term in terms if _contains_term(text, term)]
 
 
 def classify_relevance(
@@ -81,9 +76,7 @@ def classify_relevance(
     if exclusions:
         return {
             "relevance": RELEVANCE_OFF_INTENT,
-            "relevance_reason": (
-                "excluded_term:" + ",".join(exclusions)
-            ),
+            "relevance_reason": ("excluded_term:" + ",".join(exclusions)),
             "relevance_matches": exclusions,
         }
 
@@ -94,9 +87,7 @@ def classify_relevance(
     if strong:
         return {
             "relevance": RELEVANCE_ON_INTENT,
-            "relevance_reason": (
-                "strong_intent_term:" + ",".join(strong)
-            ),
+            "relevance_reason": ("strong_intent_term:" + ",".join(strong)),
             "relevance_matches": strong,
         }
 
@@ -107,9 +98,7 @@ def classify_relevance(
     if context:
         return {
             "relevance": RELEVANCE_ADJACENT,
-            "relevance_reason": (
-                "context_only:" + ",".join(context)
-            ),
+            "relevance_reason": ("context_only:" + ",".join(context)),
             "relevance_matches": context,
         }
 
@@ -121,16 +110,13 @@ def classify_relevance(
         description_text,
         profile.get("context_terms", []),
     )
-    description_matches = sorted(
-        set(description_strong + description_context)
-    )
+    description_matches = sorted(set(description_strong + description_context))
 
     if description_strong and description_context:
         return {
             "relevance": RELEVANCE_ON_INTENT,
             "relevance_reason": (
-                "description_strong_and_context:"
-                + ",".join(description_matches)
+                "description_strong_and_context:" + ",".join(description_matches)
             ),
             "relevance_matches": description_matches,
         }
@@ -138,10 +124,7 @@ def classify_relevance(
     if description_matches:
         return {
             "relevance": RELEVANCE_ADJACENT,
-            "relevance_reason": (
-                "description_signal:"
-                + ",".join(description_matches)
-            ),
+            "relevance_reason": ("description_signal:" + ",".join(description_matches)),
             "relevance_matches": description_matches,
         }
 
@@ -170,9 +153,7 @@ def classify_outlier_reliability(
     reasons: list[str] = []
 
     if baseline_confidence != "strong_sample":
-        reasons.append(
-            f"baseline_confidence:{baseline_confidence}"
-        )
+        reasons.append(f"baseline_confidence:{baseline_confidence}")
 
     if baseline_warning:
         reasons.extend(
@@ -204,11 +185,7 @@ def _classify_rule_labels(
         return []
 
     text = _normalize(title)
-    labels = [
-        label
-        for label, terms in rules.items()
-        if _matching_terms(text, terms)
-    ]
+    labels = [label for label, terms in rules.items() if _matching_terms(text, terms)]
     return sorted(labels)
 
 
@@ -277,13 +254,10 @@ def annotate_evidence_quality(
 
     themes: list[str] = []
     topics: list[str] = []
-    if (
-        relevance["relevance"]
-        not in {
-            RELEVANCE_OFF_INTENT,
-            RELEVANCE_UNREVIEWED,
-        }
-    ):
+    if relevance["relevance"] not in {
+        RELEVANCE_OFF_INTENT,
+        RELEVANCE_UNREVIEWED,
+    }:
         title = row.get("title", "")
         themes = classify_themes(
             title,

@@ -11,14 +11,15 @@ from typing import Any
 from concept_gate import (
     DEFAULT_CANDIDATES,
     RESEARCH_HANDOFF_FILE,
-    REVIEWED_FILE,
     REVIEW_REQUEST_FILE,
+    REVIEWED_FILE,
     SUMMARY_FILE,
     apply_gate,
     build_review_request,
     load_config,
     load_json,
 )
+
 from transformation_engine import OUTPUT_DIR, sha256_file
 
 STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
@@ -120,15 +121,9 @@ def snapshot() -> dict[str, Any]:
         if item.get("triage_default") is not True
         and str(item.get("concept_id")) not in active_overrides
     ]
-    items = [
-        public_item(item, state)
-        for item in active_items
-    ]
+    items = [public_item(item, state) for item in active_items]
     decisions = state.get("decisions", {})
-    pending = sum(
-        str(item["concept_id"]) not in decisions
-        for item in active_items
-    )
+    pending = sum(str(item["concept_id"]) not in decisions for item in active_items)
 
     status = str(state.get("status") or "AWAITING_HUMAN_DECISION")
     research_status = None
@@ -166,10 +161,7 @@ def normalize_criteria(
 ) -> dict[str, bool]:
     if not isinstance(criteria, dict):
         criteria = {}
-    return {
-        criterion: criteria.get(criterion) is True
-        for criterion in required
-    }
+    return {criterion: criteria.get(criterion) is True for criterion in required}
 
 
 def finalize_if_complete(
@@ -190,8 +182,7 @@ def finalize_if_complete(
     response = {
         "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
         "decisions": [
-            state["decisions"][concept_id]
-            for concept_id in sorted(expected)
+            state["decisions"][concept_id] for concept_id in sorted(expected)
         ],
         "overall_note": "",
     }
@@ -262,13 +253,9 @@ def apply_action(
     clean_note = str(note or "").strip()
 
     if value == "ACCEPT" and not all(normalized.values()):
-        missing = [
-            key for key, passed in normalized.items()
-            if not passed
-        ]
+        missing = [key for key, passed in normalized.items() if not passed]
         raise ValueError(
-            "ACCEPT requires every criterion confirmed: "
-            + ", ".join(missing)
+            "ACCEPT requires every criterion confirmed: " + ", ".join(missing)
         )
     if value == "REWORK" and not clean_note:
         raise ValueError("REWORK requires a note explaining what must change")
@@ -282,7 +269,6 @@ def apply_action(
     state["status"] = "AWAITING_HUMAN_DECISION"
     finalize_if_complete(state, request)
     return snapshot()
-
 
 
 def main() -> None:

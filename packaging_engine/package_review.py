@@ -13,14 +13,15 @@ from packaging_gate import (
     APPROVED_FILE,
     DEFAULT_CANDIDATES,
     RESEARCH_HANDOFF_FILE,
-    REVIEWED_FILE,
     REVIEW_REQUEST_FILE,
+    REVIEWED_FILE,
     SUMMARY_FILE,
     apply_gate,
     build_review_request,
     load_config,
     load_json,
 )
+
 from packaging_engine import OUTPUT_DIR
 
 STATE_FILE = OUTPUT_DIR / "packaging_gate_ui_state.json"
@@ -30,9 +31,7 @@ DEFAULT_REVIEWER = "local-operator"
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def sha256_file(path: Path) -> str:
@@ -148,9 +147,7 @@ def finalize_if_complete(
     state: dict[str, Any],
     request: dict[str, Any],
 ) -> None:
-    expected = {
-        str(item["package_id"]) for item in request.get("items", [])
-    }
+    expected = {str(item["package_id"]) for item in request.get("items", [])}
     if expected != set(state.get("decisions", {})):
         write_json(STATE_FILE, state)
         return

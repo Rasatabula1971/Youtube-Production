@@ -28,9 +28,10 @@ VERIFIED_DIR = OUTPUT_DIR / "verified_packages"
 SUMMARY_FILE = OUTPUT_DIR / "research_gate_summary.json"
 
 
-
 def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -53,16 +54,13 @@ def load_config() -> dict[str, Any]:
     }
     missing = sorted(required - set(config))
     if missing:
-        raise SystemExit(
-            "Research Gate config is missing: " + ", ".join(missing)
-        )
+        raise SystemExit("Research Gate config is missing: " + ", ".join(missing))
     return config
 
 
 def safe_slug(value: str) -> str:
     cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_"
-        for char in value
+        char if char.isalnum() or char in "-_." else "_" for char in value
     ).strip("._")
     return cleaned or "unknown"
 
@@ -94,9 +92,7 @@ def build_review_request(
         if not claim_id:
             raise ValueError("Every research claim requires claim_id")
         if claim_id in seen_claim_ids:
-            raise ValueError(
-                f"Duplicate claim_id in draft package: {claim_id}"
-            )
+            raise ValueError(f"Duplicate claim_id in draft package: {claim_id}")
         seen_claim_ids.add(claim_id)
 
         evidence = []
@@ -127,14 +123,10 @@ def build_review_request(
                 "claim_id": claim_id,
                 "statement": claim.get("statement"),
                 "role": claim.get("role"),
-                "question_ids": list(
-                    claim.get("question_ids", [])
-                ),
+                "question_ids": list(claim.get("question_ids", [])),
                 "coverage": claim.get("coverage", {}),
                 "evidence": evidence,
-                "required_accept_criteria": list(
-                    config["required_accept_criteria"]
-                ),
+                "required_accept_criteria": list(config["required_accept_criteria"]),
             }
         )
 
@@ -142,9 +134,7 @@ def build_review_request(
         "request_type": "human_research_gate",
         "concept_id": concept_id,
         "concept": package.get("concept", {}),
-        "research_questions": package.get(
-            "research_questions", []
-        ),
+        "research_questions": package.get("research_questions", []),
         "claim_count": len(items),
         "items": items,
         "criteria": {
@@ -170,9 +160,7 @@ def build_review_request(
                     "decision": "ACCEPT|REWORK|REJECT",
                     "criteria": {
                         criterion: True
-                        for criterion in config[
-                            "required_accept_criteria"
-                        ]
+                        for criterion in config["required_accept_criteria"]
                     },
                     "note": "required for REWORK and for accepted conflicted claims",
                 }
@@ -192,12 +180,8 @@ def validate_decisions(
     response: dict[str, Any],
     config: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    if str(response.get("concept_id", "")) != str(
-        request.get("concept_id", "")
-    ):
-        raise ValueError(
-            "Research Gate response concept_id does not match request"
-        )
+    if str(response.get("concept_id", "")) != str(request.get("concept_id", "")):
+        raise ValueError("Research Gate response concept_id does not match request")
 
     reviewer = str(response.get("reviewer", "")).strip()
     if config["require_reviewer_name"] and not reviewer:
@@ -207,69 +191,40 @@ def validate_decisions(
     if not isinstance(decisions, list):
         raise ValueError("Research Gate decisions must be a list")
 
-    item_lookup = {
-        str(item["claim_id"]): item
-        for item in request.get("items", [])
-    }
+    item_lookup = {str(item["claim_id"]): item for item in request.get("items", [])}
     expected = set(item_lookup)
     mapped: dict[str, dict[str, Any]] = {}
 
     for index, decision in enumerate(decisions):
         if not isinstance(decision, dict):
-            raise ValueError(
-                f"Research Gate decision {index} must be an object"
-            )
+            raise ValueError(f"Research Gate decision {index} must be an object")
 
-        claim_id = str(
-            decision.get("claim_id", "")
-        ).strip()
+        claim_id = str(decision.get("claim_id", "")).strip()
         if claim_id not in expected:
-            raise ValueError(
-                f"Unknown claim_id in Research Gate: {claim_id}"
-            )
+            raise ValueError(f"Unknown claim_id in Research Gate: {claim_id}")
         if claim_id in mapped:
-            raise ValueError(
-                f"Duplicate Research Gate decision: {claim_id}"
-            )
+            raise ValueError(f"Duplicate Research Gate decision: {claim_id}")
 
-        value = str(
-            decision.get("decision", "")
-        ).strip().upper()
+        value = str(decision.get("decision", "")).strip().upper()
         if value not in {"ACCEPT", "REWORK", "REJECT"}:
-            raise ValueError(
-                f"Invalid decision for {claim_id}: {value!r}"
-            )
+            raise ValueError(f"Invalid decision for {claim_id}: {value!r}")
 
         criteria = decision.get("criteria")
         if not isinstance(criteria, dict):
-            raise ValueError(
-                f"Decision criteria are required for {claim_id}"
-            )
+            raise ValueError(f"Decision criteria are required for {claim_id}")
 
         required = config["required_accept_criteria"]
-        missing = [
-            criterion
-            for criterion in required
-            if criterion not in criteria
-        ]
+        missing = [criterion for criterion in required if criterion not in criteria]
         if missing:
-            raise ValueError(
-                f"Missing criteria for {claim_id}: "
-                + ", ".join(missing)
-            )
+            raise ValueError(f"Missing criteria for {claim_id}: " + ", ".join(missing))
 
         normalized = {
-            criterion: criteria.get(criterion) is True
-            for criterion in required
+            criterion: criteria.get(criterion) is True for criterion in required
         }
         note = str(decision.get("note", "") or "").strip()
 
-        if value == "ACCEPT" and not all(
-            normalized.values()
-        ):
-            raise ValueError(
-                f"ACCEPT requires all criteria true for {claim_id}"
-            )
+        if value == "ACCEPT" and not all(normalized.values()):
+            raise ValueError(f"ACCEPT requires all criteria true for {claim_id}")
 
         if value == "ACCEPT":
             evidence_items = item_lookup[claim_id].get("evidence", [])
@@ -279,8 +234,7 @@ def validate_decisions(
                 if isinstance(item, dict)
                 and isinstance(item.get("source"), dict)
                 and str(item.get("evidence_quote") or "").strip()
-                and str(item.get("stance") or "").upper()
-                in {"SUPPORTS", "QUALIFIES"}
+                and str(item.get("stance") or "").upper() in {"SUPPORTS", "QUALIFIES"}
             ]
             if not supported:
                 raise ValueError(
@@ -288,15 +242,9 @@ def validate_decisions(
                 )
 
         if value == "REWORK" and not note:
-            raise ValueError(
-                f"REWORK requires a note for {claim_id}"
-            )
+            raise ValueError(f"REWORK requires a note for {claim_id}")
 
-        coverage_state = (
-            item_lookup[claim_id]
-            .get("coverage", {})
-            .get("state")
-        )
+        coverage_state = item_lookup[claim_id].get("coverage", {}).get("state")
         if (
             value == "ACCEPT"
             and coverage_state == "CONFLICTED"
@@ -317,8 +265,7 @@ def validate_decisions(
     missing = sorted(expected - set(mapped))
     if missing:
         raise ValueError(
-            "Research Gate is incomplete; missing decisions for: "
-            + ", ".join(missing)
+            "Research Gate is incomplete; missing decisions for: " + ", ".join(missing)
         )
 
     return mapped
@@ -337,8 +284,7 @@ def apply_gate(
     )
 
     claims_by_id = {
-        str(claim["claim_id"]): claim
-        for claim in package.get("claims", [])
+        str(claim["claim_id"]): claim for claim in package.get("claims", [])
     }
     reviewer = str(response.get("reviewer", "")).strip()
     reviewed_at = datetime.now(timezone.utc).isoformat()
@@ -367,10 +313,7 @@ def apply_gate(
         else:
             buckets["rejected"].append(claim)
 
-    accepted_claim_ids = {
-        str(claim["claim_id"])
-        for claim in buckets["accepted"]
-    }
+    accepted_claim_ids = {str(claim["claim_id"]) for claim in buckets["accepted"]}
 
     question_status = []
     unresolved = []
@@ -388,15 +331,8 @@ def apply_gate(
             {
                 "question_id": question_id,
                 "question": question.get("question"),
-                "status": (
-                    "RESOLVED_FOR_SCRIPT"
-                    if resolved
-                    else "UNRESOLVED"
-                ),
-                "accepted_claim_ids": [
-                    claim["claim_id"]
-                    for claim in linked
-                ],
+                "status": ("RESOLVED_FOR_SCRIPT" if resolved else "UNRESOLVED"),
+                "accepted_claim_ids": [claim["claim_id"] for claim in linked],
             }
         )
 
@@ -417,16 +353,11 @@ def apply_gate(
         "concept_id": package.get("concept_id"),
         "reviewer": reviewer,
         "reviewed_at": reviewed_at,
-        "overall_note": str(
-            response.get("overall_note", "") or ""
-        ),
+        "overall_note": str(response.get("overall_note", "") or ""),
         "accepted": buckets["accepted"],
         "rework": buckets["rework"],
         "rejected": buckets["rejected"],
-        "counts": {
-            key: len(value)
-            for key, value in buckets.items()
-        },
+        "counts": {key: len(value) for key, value in buckets.items()},
         "question_status": question_status,
     }
 
@@ -439,9 +370,7 @@ def apply_gate(
             else "RESEARCH_INCOMPLETE"
         ),
         "concept": package.get("concept", {}),
-        "research_questions": package.get(
-            "research_questions", []
-        ),
+        "research_questions": package.get("research_questions", []),
         "question_status": question_status,
         "unresolved_question_ids": unresolved,
         "sources": verified_sources,
@@ -449,9 +378,7 @@ def apply_gate(
         "research_gate": {
             "reviewer": reviewer,
             "reviewed_at": reviewed_at,
-            "accepted_claim_ids": sorted(
-                accepted_claim_ids
-            ),
+            "accepted_claim_ids": sorted(accepted_claim_ids),
         },
         "notes": [
             "Verified means human-approved for this project's script use, not universal truth.",
@@ -472,15 +399,16 @@ def run_prepare(
     package = load_json(draft_path)
     config = load_config()
     request = build_review_request(package, config)
-    request["request_provenance"].update({
-        "draft_source": str(draft_path.resolve()),
-        "draft_sha256": file_sha256(draft_path),
-    })
+    request["request_provenance"].update(
+        {
+            "draft_source": str(draft_path.resolve()),
+            "draft_sha256": file_sha256(draft_path),
+        }
+    )
 
     concept_id = str(request["concept_id"])
     destination = (
-        REVIEW_REQUESTS_DIR
-        / f"{safe_slug(concept_id)}.research_gate_request.json"
+        REVIEW_REQUESTS_DIR / f"{safe_slug(concept_id)}.research_gate_request.json"
     )
     destination.write_text(
         json.dumps(request, indent=2, ensure_ascii=False),
@@ -520,9 +448,7 @@ def run_batch_prepare(
     status = (
         "COMPLETE"
         if total > 0 and len(prepared) == total and not failures
-        else "FAILED"
-        if not prepared and failures
-        else "PARTIAL"
+        else "FAILED" if not prepared and failures else "PARTIAL"
     )
     return {
         "status": status,
@@ -552,17 +478,9 @@ def run_apply(
     REVIEWED_DIR.mkdir(parents=True, exist_ok=True)
     VERIFIED_DIR.mkdir(parents=True, exist_ok=True)
 
-    concept_id = safe_slug(
-        str(package.get("concept_id", "unknown"))
-    )
-    reviewed_path = (
-        REVIEWED_DIR
-        / f"{concept_id}.research_gate_reviewed.json"
-    )
-    verified_path = (
-        VERIFIED_DIR
-        / f"{concept_id}.verified_research_package.json"
-    )
+    concept_id = safe_slug(str(package.get("concept_id", "unknown")))
+    reviewed_path = REVIEWED_DIR / f"{concept_id}.research_gate_reviewed.json"
+    verified_path = VERIFIED_DIR / f"{concept_id}.verified_research_package.json"
 
     reviewed_path.write_text(
         json.dumps(reviewed, indent=2, ensure_ascii=False),
@@ -579,9 +497,7 @@ def run_apply(
         "accepted": reviewed["counts"]["accepted"],
         "rework": reviewed["counts"]["rework"],
         "rejected": reviewed["counts"]["rejected"],
-        "unresolved_questions": len(
-            verified["unresolved_question_ids"]
-        ),
+        "unresolved_questions": len(verified["unresolved_question_ids"]),
         "reviewed_file": str(reviewed_path),
         "verified_package": str(verified_path),
     }
@@ -593,9 +509,7 @@ def run_apply(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Human Research Gate"
-    )
+    parser = argparse.ArgumentParser(description="Human Research Gate")
     parser.add_argument(
         "--mode",
         choices=("prepare", "batch-prepare", "apply"),
@@ -613,20 +527,12 @@ def main() -> None:
 
     if args.mode == "prepare":
         if args.draft is None:
-            raise SystemExit(
-                "--draft is required for Research Gate prepare"
-            )
+            raise SystemExit("--draft is required for Research Gate prepare")
         result = run_prepare(args.draft.resolve())
     elif args.mode == "batch-prepare":
-        result = run_batch_prepare(
-            args.drafts_dir.resolve()
-        )
+        result = run_batch_prepare(args.drafts_dir.resolve())
     else:
-        if (
-            args.draft is None
-            or args.request is None
-            or args.response is None
-        ):
+        if args.draft is None or args.request is None or args.response is None:
             raise SystemExit(
                 "--draft, --request and --response are required for Research Gate apply"
             )

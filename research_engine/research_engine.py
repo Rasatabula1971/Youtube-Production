@@ -20,12 +20,7 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
 CONFIG_FILE = HERE / "research_config.json"
-DEFAULT_HANDOFF = (
-    PROJECT_ROOT
-    / "packaging_engine"
-    / "output"
-    / "research_handoff.json"
-)
+DEFAULT_HANDOFF = PROJECT_ROOT / "packaging_engine" / "output" / "research_handoff.json"
 
 OUTPUT_DIR = HERE / "output"
 PLANS_DIR = OUTPUT_DIR / "plans"
@@ -51,16 +46,13 @@ def load_config() -> dict[str, Any]:
     }
     missing = sorted(required - set(config))
     if missing:
-        raise SystemExit(
-            "Research config is missing: " + ", ".join(missing)
-        )
+        raise SystemExit("Research config is missing: " + ", ".join(missing))
     return config
 
 
 def safe_slug(value: str) -> str:
     cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_"
-        for char in value
+        char if char.isalnum() or char in "-_." else "_" for char in value
     ).strip("._")
     return cleaned or "unknown"
 
@@ -87,17 +79,13 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
 
     raw_questions = concept.get("research_questions", [])
     if not isinstance(raw_questions, list) or not raw_questions:
-        raise ValueError(
-            f"Concept {concept_id} requires research_questions"
-        )
+        raise ValueError(f"Concept {concept_id} requires research_questions")
 
     questions = []
     for index, question in enumerate(raw_questions, start=1):
         text = str(question).strip()
         if not text:
-            raise ValueError(
-                f"Concept {concept_id} has an empty research question"
-            )
+            raise ValueError(f"Concept {concept_id} has an empty research question")
         questions.append(
             {
                 "question_id": f"rq{index:03d}",
@@ -108,9 +96,7 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
 
     packaging = concept.get("packaging")
     if not isinstance(packaging, dict):
-        raise ValueError(
-            f"Concept {concept_id} requires an approved packaging object"
-        )
+        raise ValueError(f"Concept {concept_id} requires an approved packaging object")
 
     if "research_dependencies" not in packaging:
         raise ValueError(
@@ -147,9 +133,7 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
         "desired_outcome": concept.get("desired_outcome"),
         "content_gap": concept.get("content_gap", {}),
         "channel_fit": concept.get("channel_fit", {}),
-        "title_clarity_test": concept.get(
-            "title_clarity_test", {}
-        ),
+        "title_clarity_test": concept.get("title_clarity_test", {}),
         "format_intent": concept.get("format_intent"),
         "mechanism_id": concept.get("mechanism_id"),
         "mechanism_label": concept.get("mechanism_label"),
@@ -221,8 +205,7 @@ def validate_source(
     source_type = str(source.get("source_type", "")).strip()
     if source_type not in config["allowed_source_types"]:
         errors.append(
-            "source_type must be one of "
-            + ", ".join(config["allowed_source_types"])
+            "source_type must be one of " + ", ".join(config["allowed_source_types"])
         )
 
     if not str(source.get("provenance_note", "")).strip():
@@ -266,14 +249,10 @@ def claim_coverage_state(
     return {
         "state": state,
         "supporting_source_count": len(supporting_sources),
-        "contradicting_source_count": len(
-            contradicting_sources
-        ),
+        "contradicting_source_count": len(contradicting_sources),
         "qualifying_source_count": len(qualifying_sources),
         "supporting_source_ids": sorted(supporting_sources),
-        "contradicting_source_ids": sorted(
-            contradicting_sources
-        ),
+        "contradicting_source_ids": sorted(contradicting_sources),
         "qualifying_source_ids": sorted(qualifying_sources),
     }
 
@@ -296,27 +275,17 @@ def validate_claim(
 
     role = str(claim.get("role", "")).strip()
     if role not in config["allowed_claim_roles"]:
-        errors.append(
-            "role must be one of "
-            + ", ".join(config["allowed_claim_roles"])
-        )
+        errors.append("role must be one of " + ", ".join(config["allowed_claim_roles"]))
 
     linked_questions = claim.get("question_ids")
     if not isinstance(linked_questions, list) or not linked_questions:
         errors.append("question_ids must be a non-empty list")
     else:
         unknown_questions = sorted(
-            {
-                str(value)
-                for value in linked_questions
-                if str(value) not in question_ids
-            }
+            {str(value) for value in linked_questions if str(value) not in question_ids}
         )
         if unknown_questions:
-            errors.append(
-                "unknown question_ids: "
-                + ", ".join(unknown_questions)
-            )
+            errors.append("unknown question_ids: " + ", ".join(unknown_questions))
 
     evidence_links = claim.get("evidence_links")
     if not isinstance(evidence_links, list):
@@ -325,9 +294,7 @@ def validate_claim(
 
     for index, link in enumerate(evidence_links):
         if not isinstance(link, dict):
-            errors.append(
-                f"evidence_links[{index}] must be an object"
-            )
+            errors.append(f"evidence_links[{index}] must be an object")
             continue
 
         source_id = str(link.get("source_id", "")).strip()
@@ -338,26 +305,18 @@ def validate_claim(
 
         stance = str(link.get("stance", "")).strip()
         if stance not in config["allowed_stances"]:
-            errors.append(
-                f"evidence_links[{index}] has invalid stance {stance!r}"
-            )
+            errors.append(f"evidence_links[{index}] has invalid stance {stance!r}")
 
         if (
             config["require_source_locator"]
             and not str(link.get("locator", "")).strip()
         ):
-            errors.append(
-                f"evidence_links[{index}] requires locator"
-            )
+            errors.append(f"evidence_links[{index}] requires locator")
 
         if not str(link.get("evidence_note", "")).strip():
-            errors.append(
-                f"evidence_links[{index}] requires evidence_note"
-            )
+            errors.append(f"evidence_links[{index}] requires evidence_note")
         if not str(link.get("evidence_quote", "")).strip():
-            errors.append(
-                f"evidence_links[{index}] requires evidence_quote"
-            )
+            errors.append(f"evidence_links[{index}] requires evidence_quote")
 
     return errors
 
@@ -369,9 +328,7 @@ def validate_research_response(
 ) -> dict[str, Any]:
     concept_id = str(plan["concept_id"])
     if str(response.get("concept_id", "")) != concept_id:
-        raise ValueError(
-            "Research response concept_id does not match plan"
-        )
+        raise ValueError("Research response concept_id does not match plan")
 
     sources = response.get("sources")
     claims = response.get("claims")
@@ -403,9 +360,7 @@ def validate_research_response(
             source_ids.add(source_id)
 
         normalized = dict(source)
-        normalized["host"] = source_host(
-            str(source.get("url", "") or "")
-        )
+        normalized["host"] = source_host(str(source.get("url", "") or ""))
 
         if errors:
             rejected_sources.append(
@@ -418,13 +373,9 @@ def validate_research_response(
         else:
             valid_sources.append(normalized)
 
-    valid_source_ids = {
-        str(source["source_id"])
-        for source in valid_sources
-    }
+    valid_source_ids = {str(source["source_id"]) for source in valid_sources}
     question_ids = {
-        str(question["question_id"])
-        for question in plan["research_questions"]
+        str(question["question_id"]) for question in plan["research_questions"]
     }
 
     valid_claims: list[dict[str, Any]] = []
@@ -456,9 +407,7 @@ def validate_research_response(
 
         normalized = dict(claim)
         if isinstance(claim.get("evidence_links"), list):
-            normalized["coverage"] = claim_coverage_state(
-                claim["evidence_links"]
-            )
+            normalized["coverage"] = claim_coverage_state(claim["evidence_links"])
 
         if errors:
             rejected_claims.append(
@@ -483,10 +432,7 @@ def validate_research_response(
             {
                 "question_id": question_id,
                 "question": question["question"],
-                "claim_ids": [
-                    claim["claim_id"]
-                    for claim in linked_claims
-                ],
+                "claim_ids": [claim["claim_id"] for claim in linked_claims],
                 "has_claims": bool(linked_claims),
             }
         )
@@ -561,14 +507,9 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         }
         concept_id = str(plan["concept_id"])
         if concept_id in seen_concept_ids:
-            raise ValueError(
-                f"Duplicate concept_id in research handoff: {concept_id}"
-            )
+            raise ValueError(f"Duplicate concept_id in research handoff: {concept_id}")
         seen_concept_ids.add(concept_id)
-        destination = (
-            PLANS_DIR
-            / f"{safe_slug(plan['concept_id'])}.research_plan.json"
-        )
+        destination = PLANS_DIR / f"{safe_slug(plan['concept_id'])}.research_plan.json"
         destination.write_text(
             json.dumps(plan, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -581,11 +522,7 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
             stale_path.unlink()
 
     summary = {
-        "status": (
-            "RESEARCH_PLANS_READY"
-            if paths
-            else "NO_ACCEPTED_CONCEPTS"
-        ),
+        "status": ("RESEARCH_PLANS_READY" if paths else "NO_ACCEPTED_CONCEPTS"),
         "plans_created": len(paths),
         "plans": paths,
         "network_calls": 0,
@@ -622,34 +559,30 @@ def run_apply() -> dict[str, Any]:
     for response_path in sorted(RESPONSES_DIR.glob("*.json")):
         response = load_json(response_path)
         concept_id = str(response.get("concept_id", "")).strip()
-        plan_path = (
-            PLANS_DIR
-            / f"{safe_slug(concept_id)}.research_plan.json"
-        )
+        plan_path = PLANS_DIR / f"{safe_slug(concept_id)}.research_plan.json"
         if not plan_path.exists():
             rejected.append(
                 {
                     "response": str(response_path),
-                    "errors": [
-                        "matching research plan not found"
-                    ],
+                    "errors": ["matching research plan not found"],
                 }
             )
             continue
 
         plan = load_json(plan_path)
         provenance = response.get("response_provenance")
-        if isinstance(provenance, dict):
-            if provenance.get("plan_sha256") != sha256_file(plan_path):
-                rejected.append(
-                    {
-                        "response": str(response_path),
-                        "errors": [
-                            "response provenance does not match current research plan"
-                        ],
-                    }
-                )
-                continue
+        if isinstance(provenance, dict) and provenance.get(
+            "plan_sha256"
+        ) != sha256_file(plan_path):
+            rejected.append(
+                {
+                    "response": str(response_path),
+                    "errors": [
+                        "response provenance does not match current research plan"
+                    ],
+                }
+            )
+            continue
         try:
             draft = validate_research_response(
                 response,
@@ -666,8 +599,7 @@ def run_apply() -> dict[str, Any]:
             continue
 
         destination = (
-            DRAFTS_DIR
-            / f"{safe_slug(concept_id)}.draft_research_package.json"
+            DRAFTS_DIR / f"{safe_slug(concept_id)}.draft_research_package.json"
         )
         draft["draft_provenance"] = {
             "plan_source": str(plan_path),
@@ -702,9 +634,7 @@ def run_apply() -> dict[str, Any]:
 
     summary = {
         "status": (
-            "DRAFT_RESEARCH_PACKAGES_READY"
-            if drafts
-            else "NO_VALID_RESEARCH_PACKAGES"
+            "DRAFT_RESEARCH_PACKAGES_READY" if drafts else "NO_VALID_RESEARCH_PACKAGES"
         ),
         "draft_packages": len(drafts),
         "rejected_inputs": len(rejected),
@@ -720,9 +650,7 @@ def run_apply() -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Research Engine framework"
-    )
+    parser = argparse.ArgumentParser(description="Research Engine framework")
     parser.add_argument(
         "--mode",
         choices=("prepare", "apply"),

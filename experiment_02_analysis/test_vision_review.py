@@ -142,12 +142,8 @@ class VisionReviewTests(unittest.TestCase):
         self.assertEqual(packet["provider"], "human")
         self.assertEqual(packet["status"], "AWAITING_HUMAN_REVIEW")
         self.assertGreaterEqual(len(packet["frames"]), 1)
-        self.assertTrue(
-            all(item["decision"] == "PENDING" for item in packet["frames"])
-        )
-        self.assertTrue(
-            all(item["proposal"] is None for item in packet["frames"])
-        )
+        self.assertTrue(all(item["decision"] == "PENDING" for item in packet["frames"]))
+        self.assertTrue(all(item["proposal"] is None for item in packet["frames"]))
 
     def test_ollama_proposal_is_only_a_structured_draft(self):
         response = _FakeResponse(
@@ -219,8 +215,7 @@ class VisionReviewTests(unittest.TestCase):
             payload = json.loads(notes_path.read_text(encoding="utf-8"))
 
         visual_notes = [
-            item for item in payload["notes"]
-            if item.get("type") == "visual_note"
+            item for item in payload["notes"] if item.get("type") == "visual_note"
         ]
         self.assertEqual(len(visual_notes), 1)
         self.assertEqual(visual_notes[0]["source_image"], str(frame))
@@ -235,7 +230,9 @@ class VisionReviewTests(unittest.TestCase):
             for item in packet["frames"]:
                 if item["kind"] == "opening_frame":
                     item["decision"] = "ACCEPT"
-                    item["final_observation"] = "A tyre is centered against a dark background."
+                    item["final_observation"] = (
+                        "A tyre is centered against a dark background."
+                    )
                 elif item["frame_id"] == "scene_0001":
                     item["decision"] = "ACCEPT"
                     item["final_observation"] = "A close-up shows the tyre surface."
@@ -243,16 +240,12 @@ class VisionReviewTests(unittest.TestCase):
                     item["decision"] = "REJECT"
                     item["final_observation"] = None
 
-            ingest = stack.enter_context(
-                patch.object(vision, "run_ingest")
-            )
+            ingest = stack.enter_context(patch.object(vision, "run_ingest"))
             finalized = vision.finalize_packet(packet)
 
             final_bundle = Path(finalized["final_bundle"])
             bundle = json.loads(final_bundle.read_text(encoding="utf-8"))
-            notes = json.loads(
-                Path(bundle["notes"]).read_text(encoding="utf-8")
-            )
+            notes = json.loads(Path(bundle["notes"]).read_text(encoding="utf-8"))
 
         self.assertEqual(finalized["status"], "COMPLETE")
         self.assertEqual(
@@ -260,8 +253,7 @@ class VisionReviewTests(unittest.TestCase):
             "A tyre is centered against a dark background.",
         )
         visual_notes = [
-            item for item in notes["notes"]
-            if item.get("type") == "visual_note"
+            item for item in notes["notes"] if item.get("type") == "visual_note"
         ]
         self.assertEqual(len(visual_notes), 1)
         self.assertEqual(

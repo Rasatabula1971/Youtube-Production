@@ -110,9 +110,7 @@ def collect_source_specific_elements(
             "confidence": item.get("confidence"),
             "evidence_refs": list(item.get("evidence_refs", [])),
         }
-        for item in profile.get("transfer", {}).get(
-            "source_specific_elements", []
-        )
+        for item in profile.get("transfer", {}).get("source_specific_elements", [])
     ]
 
 
@@ -122,9 +120,7 @@ def collect_transformation_directions(
     meta = supported_profile_metadata(profile)
     items: list[dict[str, Any]] = []
 
-    for item in profile.get("transfer", {}).get(
-        "transformation_opportunities", []
-    ):
+    for item in profile.get("transfer", {}).get("transformation_opportunities", []):
         dependency = item.get("source_dependency_test", {})
         if dependency.get("passes") is not True:
             continue
@@ -151,11 +147,7 @@ def collect_transformation_directions(
 
 def unique_nonempty(values: list[Any]) -> list[str]:
     return sorted(
-        {
-            str(value)
-            for value in values
-            if value is not None and str(value).strip()
-        }
+        {str(value) for value in values if value is not None and str(value).strip()}
     )
 
 
@@ -177,10 +169,7 @@ def mechanism_state(
     minimum_videos: int,
     minimum_channels: int,
 ) -> str:
-    replicated = (
-        video_count >= minimum_videos
-        and channel_count >= minimum_channels
-    )
+    replicated = video_count >= minimum_videos and channel_count >= minimum_channels
     if not replicated:
         return "SINGLE_SOURCE_OBSERVATION"
 
@@ -228,12 +217,8 @@ def build_mechanism_library(
 
     minimum_videos = int(experiment_config["minimum_replication_videos"])
     minimum_channels = int(experiment_config["minimum_replication_channels"])
-    max_examples = int(
-        synthesis_config["max_observed_examples_per_mechanism"]
-    )
-    max_transfer = int(
-        synthesis_config["max_transfer_descriptions_per_mechanism"]
-    )
+    max_examples = int(synthesis_config["max_observed_examples_per_mechanism"])
+    max_transfer = int(synthesis_config["max_transfer_descriptions_per_mechanism"])
     max_directions = int(
         synthesis_config["max_transformation_directions_per_mechanism"]
     )
@@ -242,12 +227,8 @@ def build_mechanism_library(
 
     for mechanism_id in sorted(occurrence_map):
         occurrences = occurrence_map[mechanism_id]
-        video_ids = unique_nonempty(
-            [item.get("video_id") for item in occurrences]
-        )
-        channel_ids = unique_nonempty(
-            [item.get("channel_id") for item in occurrences]
-        )
+        video_ids = unique_nonempty([item.get("video_id") for item in occurrences])
+        channel_ids = unique_nonempty([item.get("channel_id") for item in occurrences])
         reviewed_video_ids = unique_nonempty(
             [
                 item.get("video_id")
@@ -267,9 +248,7 @@ def build_mechanism_library(
         formats = unique_nonempty(
             [item.get("format_candidate") for item in occurrences]
         )
-        dimensions = unique_nonempty(
-            [item.get("dimension") for item in occurrences]
-        )
+        dimensions = unique_nonempty([item.get("dimension") for item in occurrences])
 
         state = mechanism_state(
             video_count=len(video_ids),
@@ -343,9 +322,7 @@ def build_mechanism_library(
                 },
                 "scope": {
                     "topics": topics,
-                    "topic_scope": replication_scope(
-                        topics, cross_label="CROSS_TOPIC"
-                    ),
+                    "topic_scope": replication_scope(topics, cross_label="CROSS_TOPIC"),
                     "formats": formats,
                     "format_scope": replication_scope(
                         formats, cross_label="CROSS_FORMAT"
@@ -384,9 +361,7 @@ def build_transformation_handoff(
     library: dict[str, Any],
     synthesis_config: dict[str, Any],
 ) -> dict[str, Any]:
-    require_review = bool(
-        synthesis_config["require_human_review_for_ready"]
-    )
+    require_review = bool(synthesis_config["require_human_review_for_ready"])
 
     entries: list[dict[str, Any]] = []
 
@@ -409,9 +384,7 @@ def build_transformation_handoff(
                 "replication": mechanism["replication"],
                 "scope": mechanism["scope"],
                 "observed_examples": mechanism["observed_examples"],
-                "transferable_descriptions": mechanism[
-                    "transferable_descriptions"
-                ],
+                "transferable_descriptions": mechanism["transferable_descriptions"],
                 "source_specific_elements_to_avoid": mechanism[
                     "source_specific_elements_to_avoid"
                 ],
@@ -432,9 +405,7 @@ def build_transformation_handoff(
         if item["handoff_status"] == "READY_FOR_TRANSFORMATION_ENGINE"
     ]
     waiting = [
-        item
-        for item in entries
-        if item["handoff_status"] == "REQUIRES_HUMAN_REVIEW"
+        item for item in entries if item["handoff_status"] == "REQUIRES_HUMAN_REVIEW"
     ]
 
     if ready:
@@ -493,9 +464,7 @@ def sha256_file(path: Path) -> str:
 
 
 def preferred_profiles_dir() -> Path:
-    if REVIEWED_PROFILES_DIR.exists() and any(
-        REVIEWED_PROFILES_DIR.glob("*.json")
-    ):
+    if REVIEWED_PROFILES_DIR.exists() and any(REVIEWED_PROFILES_DIR.glob("*.json")):
         return REVIEWED_PROFILES_DIR
     return ANALYZED_PROFILES_DIR
 
@@ -530,15 +499,10 @@ def run_build(profiles_dir: Path) -> dict[str, Any]:
         )
         return summary
 
-    library = build_mechanism_library(
-        profiles, experiment_config, synthesis_config
-    )
-    handoff = build_transformation_handoff(
-        library, synthesis_config
-    )
+    library = build_mechanism_library(profiles, experiment_config, synthesis_config)
+    handoff = build_transformation_handoff(library, synthesis_config)
     profile_hashes = {
-        path.stem: sha256_file(path)
-        for path in sorted(profiles_dir.glob("*.json"))
+        path.stem: sha256_file(path) for path in sorted(profiles_dir.glob("*.json"))
     }
     synthesis_provenance = {
         "profiles_dir": str(profiles_dir.resolve()),
@@ -593,14 +557,8 @@ def main() -> None:
     print(f"Status:                  {summary['status']}")
     print(f"Valid profiles:          {summary.get('valid_profiles', 0)}")
     print(f"Mechanisms:              {summary.get('mechanism_count', 0)}")
-    print(
-        "Ready for transformation: "
-        f"{summary.get('ready_for_transformation', 0)}"
-    )
-    print(
-        "Requires human review:    "
-        f"{summary.get('requires_human_review', 0)}"
-    )
+    print("Ready for transformation: " f"{summary.get('ready_for_transformation', 0)}")
+    print("Requires human review:    " f"{summary.get('requires_human_review', 0)}")
     if summary["status"] != "WAITING_FOR_ANALYZED_PROFILES":
         print(f"Mechanism library:       {MECHANISM_LIBRARY_FILE}")
         print(f"Transformation handoff: {HANDOFF_FILE}")

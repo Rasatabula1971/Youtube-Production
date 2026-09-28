@@ -108,9 +108,7 @@ class Experiment015Tests(unittest.TestCase):
                 "format_candidate": "short_candidate",
                 "views": 900000,
                 "validated_topics": ["brakes"],
-                "query_provenance": [
-                    {"topic": "brakes", "family": "failure_problem"}
-                ],
+                "query_provenance": [{"topic": "brakes", "family": "failure_problem"}],
             }
         ]
         topic_velocity = {
@@ -156,9 +154,7 @@ class Experiment015Tests(unittest.TestCase):
                 "format_candidate": "short_candidate",
                 "views": 900000,
                 "validated_topics": ["brakes"],
-                "query_provenance": [
-                    {"topic": "brakes", "family": "failure_problem"}
-                ],
+                "query_provenance": [{"topic": "brakes", "family": "failure_problem"}],
             }
         ]
         topic_velocity = {

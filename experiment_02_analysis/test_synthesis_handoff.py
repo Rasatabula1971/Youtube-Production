@@ -169,17 +169,15 @@ class SynthesisHandoffTests(unittest.TestCase):
 
     def test_failed_source_dependency_direction_is_excluded(self):
         first = self.profile("v1", "c1")
-        first["transfer"]["transformation_opportunities"][0][
-            "source_dependency_test"
-        ]["passes"] = False
+        first["transfer"]["transformation_opportunities"][0]["source_dependency_test"][
+            "passes"
+        ] = False
         library = build_mechanism_library(
             [first, self.profile("v2", "c2")],
             self.experiment_config,
             self.synthesis_config,
         )
-        directions = library["mechanisms"][0][
-            "accepted_transformation_directions"
-        ]
+        directions = library["mechanisms"][0]["accepted_transformation_directions"]
         self.assertEqual(len(directions), 1)
         self.assertEqual(directions[0]["video_id"], "v2")
 

@@ -11,12 +11,19 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
-from pipeline_integrity import atomic_write_text, atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
+
+from pipeline_integrity import (
+    atomic_write_json,
+    atomic_write_text,
+    batch_status,
+    exit_code_for_status,
+)
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -24,7 +31,7 @@ EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
     sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (  # noqa: E402
+from analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     load_runner_config,
@@ -32,9 +39,9 @@ from analysis_model_runner import (  # noqa: E402
     resolve_fair_paths,
     safe_attempts,
 )
-from evidence_ingest import sha256_file  # noqa: E402
+from evidence_ingest import sha256_file
 
-from transformation_engine import (  # noqa: E402
+from transformation_engine import (
     OUTPUT_DIR,
     REQUESTS_DIR,
     RESPONSES_DIR,
@@ -242,9 +249,7 @@ def run_one(
 
     prompt = build_prompt(
         request,
-        maximum_chars=int(
-            runner_config["runner"].get("max_prompt_chars", 95000)
-        ),
+        maximum_chars=int(runner_config["runner"].get("max_prompt_chars", 95000)),
     )
     schema = response_schema(request)
     schema_chars = len(json.dumps(schema, separators=(",", ":")))

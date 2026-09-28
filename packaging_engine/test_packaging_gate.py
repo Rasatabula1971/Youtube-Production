@@ -79,9 +79,7 @@ class PackagingGateTests(unittest.TestCase):
             "expected_payoff": "Viewer understands the tradeoff",
             "format_intent": "long_form",
             "title_thumbnail_relationship": "Title asks why; thumbnail shows contrast",
-            "research_dependencies": [
-                "Verify the claimed engineering difference"
-            ],
+            "research_dependencies": ["Verify the claimed engineering difference"],
             "concept_context": {
                 "working_title": title,
                 "premise": "Independent concept",
@@ -108,12 +106,8 @@ class PackagingGateTests(unittest.TestCase):
                     "rationale": "Clear across multiple title framings.",
                 },
                 "format_intent": "long_form",
-                "research_questions": [
-                    "What causes the difference?"
-                ],
-                "concept_gate": {
-                    "decision": "ACCEPT"
-                },
+                "research_questions": ["What causes the difference?"],
+                "concept_gate": {"decision": "ACCEPT"},
             },
         }
 
@@ -122,11 +116,7 @@ class PackagingGateTests(unittest.TestCase):
         accepted_concepts = set()
         for item in request["items"]:
             concept_id = item["concept_id"]
-            value = (
-                "ACCEPT"
-                if concept_id not in accepted_concepts
-                else "REJECT"
-            )
+            value = "ACCEPT" if concept_id not in accepted_concepts else "REJECT"
             if value == "ACCEPT":
                 accepted_concepts.add(concept_id)
             decisions.append(
@@ -135,9 +125,7 @@ class PackagingGateTests(unittest.TestCase):
                     "decision": value,
                     "criteria": {
                         criterion: True
-                        for criterion in self.config[
-                            "required_accept_criteria"
-                        ]
+                        for criterion in self.config["required_accept_criteria"]
                     },
                     "note": "",
                 }
@@ -176,9 +164,7 @@ class PackagingGateTests(unittest.TestCase):
             self.config,
         )
         response = self.response(request)
-        response["decisions"][0]["criteria"][
-            "not_misleading"
-        ] = False
+        response["decisions"][0]["criteria"]["not_misleading"] = False
 
         with self.assertRaises(ValueError):
             validate_decisions(
@@ -193,9 +179,7 @@ class PackagingGateTests(unittest.TestCase):
             self.config,
         )
         response = self.response(request)
-        response["decisions"][1][
-            "decision"
-        ] = "ACCEPT"
+        response["decisions"][1]["decision"] = "ACCEPT"
 
         with self.assertRaises(ValueError):
             validate_decisions(
@@ -239,9 +223,7 @@ class PackagingGateTests(unittest.TestCase):
             self.config,
         )
         response = self.response(request)
-        response["decisions"][0][
-            "decision"
-        ] = "REWORK"
+        response["decisions"][0]["decision"] = "REWORK"
 
         with self.assertRaises(ValueError):
             validate_decisions(

@@ -148,7 +148,6 @@ class ResearchEngineTests(unittest.TestCase):
             self.concept["packaging"]["one_sentence_promise"],
         )
 
-
     def test_plan_requires_approved_packaging_context(self):
         concept = dict(self.concept)
         concept.pop("packaging")
@@ -157,9 +156,7 @@ class ResearchEngineTests(unittest.TestCase):
             build_research_plan(concept)
 
     def test_single_source_is_not_called_verified(self):
-        coverage = claim_coverage_state(
-            self.claim()["evidence_links"]
-        )
+        coverage = claim_coverage_state(self.claim()["evidence_links"])
 
         self.assertEqual(coverage["state"], "SINGLE_SOURCE")
         self.assertNotIn("verified", coverage)
@@ -281,10 +278,7 @@ class ResearchEngineTests(unittest.TestCase):
             self.config,
         )
 
-        by_id = {
-            item["question_id"]: item
-            for item in package["question_coverage"]
-        }
+        by_id = {item["question_id"]: item for item in package["question_coverage"]}
         self.assertFalse(by_id["rq001"]["has_claims"])
         self.assertTrue(by_id["rq002"]["has_claims"])
 

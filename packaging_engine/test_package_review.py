@@ -16,22 +16,30 @@ class PackageReviewTests(unittest.TestCase):
         output.mkdir()
         stack.enter_context(patch.object(review, "OUTPUT_DIR", output))
         stack.enter_context(
-            patch.object(review, "DEFAULT_CANDIDATES", output / "package_candidates.json")
+            patch.object(
+                review, "DEFAULT_CANDIDATES", output / "package_candidates.json"
+            )
         )
         stack.enter_context(
             patch.object(review, "STATE_FILE", output / "packaging_gate_ui_state.json")
         )
         stack.enter_context(
-            patch.object(review, "REVIEW_REQUEST_FILE", output / "packaging_gate_request.json")
+            patch.object(
+                review, "REVIEW_REQUEST_FILE", output / "packaging_gate_request.json"
+            )
         )
         stack.enter_context(
-            patch.object(review, "REVIEWED_FILE", output / "packaging_gate_reviewed.json")
+            patch.object(
+                review, "REVIEWED_FILE", output / "packaging_gate_reviewed.json"
+            )
         )
         stack.enter_context(
             patch.object(review, "APPROVED_FILE", output / "approved_packages.json")
         )
         stack.enter_context(
-            patch.object(review, "RESEARCH_HANDOFF_FILE", output / "research_handoff.json")
+            patch.object(
+                review, "RESEARCH_HANDOFF_FILE", output / "research_handoff.json"
+            )
         )
         stack.enter_context(
             patch.object(review, "SUMMARY_FILE", output / "packaging_gate_summary.json")

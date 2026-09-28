@@ -10,8 +10,8 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -46,8 +46,10 @@ EXP1_MODULE_DIR = PROJECT_ROOT / "experiment_01_discovery"
 if str(EXP1_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(EXP1_MODULE_DIR))
 
-from opportunity_gate import (  # noqa: E402
+from opportunity_gate import (
     apply_gate_action,
+)
+from opportunity_gate import (
     gate_snapshot as opportunity_gate_snapshot,
 )
 
@@ -55,14 +57,20 @@ EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
     sys.path.insert(0, str(EXP2_DIR))
 
-from vision_review import (  # noqa: E402
-    apply_review_action as apply_vision_review_action,
-    frame_path as vision_frame_path,
-    review_snapshot as vision_review_snapshot,
-)
-from human_review import (  # noqa: E402
+from human_review import (
     apply_review_action as apply_human_analysis_review_action,
+)
+from human_review import (
     review_snapshot as human_analysis_review_snapshot,
+)
+from vision_review import (
+    apply_review_action as apply_vision_review_action,
+)
+from vision_review import (
+    frame_path as vision_frame_path,
+)
+from vision_review import (
+    review_snapshot as vision_review_snapshot,
 )
 
 EXP2_OUTPUT = EXP2_DIR / "output"
@@ -82,8 +90,10 @@ TRANSFORM_DIR = PROJECT_ROOT / "transformation_engine"
 if str(TRANSFORM_DIR) not in sys.path:
     sys.path.insert(0, str(TRANSFORM_DIR))
 
-from concept_review import (  # noqa: E402
+from concept_review import (
     apply_action as apply_concept_gate_action,
+)
+from concept_review import (
     snapshot as concept_gate_snapshot,
 )
 
@@ -99,8 +109,10 @@ PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
 if str(PACKAGING_DIR) not in sys.path:
     sys.path.insert(0, str(PACKAGING_DIR))
 
-from package_review import (  # noqa: E402
+from package_review import (
     apply_action as apply_packaging_gate_action,
+)
+from package_review import (
     snapshot as packaging_gate_snapshot,
 )
 
@@ -114,8 +126,10 @@ RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 if str(RESEARCH_DIR) not in sys.path:
     sys.path.insert(0, str(RESEARCH_DIR))
 
-from research_review import (  # noqa: E402
+from research_review import (
     apply_action as apply_research_gate_action,
+)
+from research_review import (
     snapshot as research_gate_snapshot,
 )
 
@@ -130,8 +144,10 @@ STORY_DIR = PROJECT_ROOT / "story_script_engine"
 if str(STORY_DIR) not in sys.path:
     sys.path.insert(0, str(STORY_DIR))
 
-from script_review import (  # noqa: E402
+from script_review import (
     apply_action as apply_script_gate_action,
+)
+from script_review import (
     snapshot as script_gate_snapshot,
 )
 
@@ -663,9 +679,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "--mode",
             "prepare",
         ],
-        "description": (
-            "Prepares the human Script Gate before production."
-        ),
+        "description": ("Prepares the human Script Gate before production."),
     },
 }
 
@@ -783,15 +797,11 @@ def exp13_depth_ready_cell_count() -> int:
     minimum_velocity = 3
     if isinstance(config, dict):
         try:
-            minimum_channels = int(
-                config.get("minimum_unique_channels", 3)
-            )
+            minimum_channels = int(config.get("minimum_unique_channels", 3))
         except (TypeError, ValueError):
             minimum_channels = 3
         try:
-            minimum_velocity = int(
-                config.get("minimum_velocity_samples", 3)
-            )
+            minimum_velocity = int(config.get("minimum_velocity_samples", 3))
         except (TypeError, ValueError):
             minimum_velocity = 3
 
@@ -851,11 +861,7 @@ def sha256_file(path: Path) -> str:
 def json_stems(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    return {
-        item.stem
-        for item in path.glob("*.json")
-        if item.is_file()
-    }
+    return {item.stem for item in path.glob("*.json") if item.is_file()}
 
 
 def suffixed_json_ids(path: Path, suffix: str) -> set[str]:
@@ -884,17 +890,13 @@ def enriched_transcript_ready_ids() -> set[str]:
             if isinstance(source_inputs, dict)
             else {}
         )
-        if (
-            not isinstance(transcript, dict)
-            or transcript.get("status") != "PROVIDED"
-        ):
+        if not isinstance(transcript, dict) or transcript.get("status") != "PROVIDED":
             continue
         evidence = payload.get("evidence", [])
         if not isinstance(evidence, list):
             continue
         if any(
-            isinstance(item, dict)
-            and item.get("type") == "transcript"
+            isinstance(item, dict) and item.get("type") == "transcript"
             for item in evidence
         ):
             ready.add(path.stem)
@@ -958,17 +960,12 @@ def exp2_artifact_state() -> dict[str, Any]:
             video_id = request_path.name[: -len(".analysis_request.json")]
             enriched_path = EXP2_ENRICHED_DIR / f"{video_id}.json"
             request = safe_load_json(request_path)
-            if (
-                not enriched_path.exists()
-                or not isinstance(request, dict)
-            ):
+            if not enriched_path.exists() or not isinstance(request, dict):
                 continue
             provenance = request.get("request_provenance", {})
-            if (
-                isinstance(provenance, dict)
-                and provenance.get("profile_sha256")
-                == sha256_file(enriched_path)
-            ):
+            if isinstance(provenance, dict) and provenance.get(
+                "profile_sha256"
+            ) == sha256_file(enriched_path):
                 request_ids.add(video_id)
     analyzed_ids: set[str] = set()
     for video_id in request_ids:
@@ -987,23 +984,16 @@ def exp2_artifact_state() -> dict[str, Any]:
 
     review_request_ids: set[str] = set()
     if EXP2_REVIEW_REQUESTS_DIR.exists():
-        for request_path in EXP2_REVIEW_REQUESTS_DIR.glob(
-            "*.review_request.json"
-        ):
+        for request_path in EXP2_REVIEW_REQUESTS_DIR.glob("*.review_request.json"):
             video_id = request_path.name[: -len(".review_request.json")]
             analyzed_path = EXP2_ANALYZED_DIR / f"{video_id}.json"
             request = safe_load_json(request_path)
-            if (
-                not analyzed_path.exists()
-                or not isinstance(request, dict)
-            ):
+            if not analyzed_path.exists() or not isinstance(request, dict):
                 continue
             provenance = request.get("request_provenance", {})
-            if (
-                isinstance(provenance, dict)
-                and provenance.get("profile_sha256")
-                == sha256_file(analyzed_path)
-            ):
+            if isinstance(provenance, dict) and provenance.get(
+                "profile_sha256"
+            ) == sha256_file(analyzed_path):
                 review_request_ids.add(video_id)
 
     reviewed_ids: set[str] = set()
@@ -1012,8 +1002,7 @@ def exp2_artifact_state() -> dict[str, Any]:
         request_path = EXP2_REVIEW_REQUESTS_DIR / f"{video_id}.review_request.json"
         reviewed_path = EXP2_REVIEWED_DIR / f"{video_id}.json"
         report_path = (
-            EXP2_OUTPUT / "human_review_reports"
-            / f"{video_id}.human_review.json"
+            EXP2_OUTPUT / "human_review_reports" / f"{video_id}.human_review.json"
         )
         report = safe_load_json(report_path)
         if (
@@ -1058,9 +1047,7 @@ def exp2_artifact_state() -> dict[str, Any]:
         "reviewed_ids": sorted(reviewed_ids),
         "prepared_count": len(prepared_ids),
         "evidence_ready_count": len(prepared_ids.intersection(enriched_ids)),
-        "visual_attempted_count": len(
-            prepared_ids.intersection(visual_report_ids)
-        ),
+        "visual_attempted_count": len(prepared_ids.intersection(visual_report_ids)),
         "visual_attempted": bool(prepared_ids)
         and prepared_ids.issubset(visual_report_ids),
         "visual_ready_count": len(prepared_ids.intersection(visual_ready_ids)),
@@ -1081,9 +1068,7 @@ def exp2_artifact_state() -> dict[str, Any]:
 
 def transformation_artifact_state() -> dict[str, Any]:
     handoff_hash = (
-        sha256_file(EXP2_SYNTHESIS_FILE)
-        if EXP2_SYNTHESIS_FILE.exists()
-        else None
+        sha256_file(EXP2_SYNTHESIS_FILE) if EXP2_SYNTHESIS_FILE.exists() else None
     )
     request_hashes: dict[str, str] = {}
     if handoff_hash and TRANSFORM_REQUESTS_DIR.exists():
@@ -1111,16 +1096,13 @@ def transformation_artifact_state() -> dict[str, Any]:
             if (
                 mechanism_id in request_hashes
                 and isinstance(provenance, dict)
-                and provenance.get("request_sha256")
-                == request_hashes[mechanism_id]
+                and provenance.get("request_sha256") == request_hashes[mechanism_id]
             ):
                 current_response_ids.add(mechanism_id)
 
     candidates = safe_load_json(TRANSFORM_CANDIDATES_FILE)
     candidate_count = (
-        int(candidates.get("count") or 0)
-        if isinstance(candidates, dict)
-        else 0
+        int(candidates.get("count") or 0) if isinstance(candidates, dict) else 0
     )
     candidate_hash = (
         sha256_file(TRANSFORM_CANDIDATES_FILE)
@@ -1137,25 +1119,26 @@ def transformation_artifact_state() -> dict[str, Any]:
         and triaged.get("source_candidates_sha256") == candidate_hash
     )
     shortlist_count = (
-        int(triaged.get("concept_count") or 0)
-        if isinstance(triaged, dict)
-        else 0
+        int(triaged.get("concept_count") or 0) if isinstance(triaged, dict) else 0
     )
     requests_ready = bool(request_hashes)
-    responses_complete = (
-        requests_ready
-        and set(request_hashes).issubset(current_response_ids)
+    responses_complete = requests_ready and set(request_hashes).issubset(
+        current_response_ids
     )
     candidates_ready = responses_complete and candidate_count > 0
-    gate = concept_gate_snapshot() if candidates_ready and triage_ready else {
-        "status": (
-            "WAITING_FOR_TRIAGED_CONCEPTS"
-            if candidates_ready and not triage_ready
-            else "WAITING_FOR_CONCEPT_CANDIDATES"
-        ),
-        "complete": False,
-        "concepts": [],
-    }
+    gate = (
+        concept_gate_snapshot()
+        if candidates_ready and triage_ready
+        else {
+            "status": (
+                "WAITING_FOR_TRIAGED_CONCEPTS"
+                if candidates_ready and not triage_ready
+                else "WAITING_FOR_CONCEPT_CANDIDATES"
+            ),
+            "complete": False,
+            "concepts": [],
+        }
+    )
     research_handoff = safe_load_json(TRANSFORM_RESEARCH_HANDOFF)
     research_ready = (
         isinstance(research_handoff, dict)
@@ -1218,21 +1201,22 @@ def packaging_artifact_state() -> dict[str, Any]:
 
     candidates = safe_load_json(PACKAGING_CANDIDATES_FILE)
     candidate_count = (
-        int(candidates.get("count") or 0)
-        if isinstance(candidates, dict)
-        else 0
+        int(candidates.get("count") or 0) if isinstance(candidates, dict) else 0
     )
     requests_ready = bool(request_hashes)
-    responses_complete = (
-        requests_ready
-        and set(request_hashes).issubset(current_response_ids)
+    responses_complete = requests_ready and set(request_hashes).issubset(
+        current_response_ids
     )
     candidates_ready = responses_complete and candidate_count > 0
-    gate = packaging_gate_snapshot() if candidates_ready else {
-        "status": "WAITING_FOR_PACKAGE_CANDIDATES",
-        "complete": False,
-        "packages": [],
-    }
+    gate = (
+        packaging_gate_snapshot()
+        if candidates_ready
+        else {
+            "status": "WAITING_FOR_PACKAGE_CANDIDATES",
+            "complete": False,
+            "packages": [],
+        }
+    )
     research_handoff = safe_load_json(PACKAGING_RESEARCH_HANDOFF)
     research_ready = (
         isinstance(research_handoff, dict)
@@ -1271,8 +1255,7 @@ def research_artifact_state() -> dict[str, Any]:
             if (
                 concept_id
                 and isinstance(provenance, dict)
-                and provenance.get("packaging_handoff_sha256")
-                == packaging_handoff_hash
+                and provenance.get("packaging_handoff_sha256") == packaging_handoff_hash
             ):
                 plan_hashes[concept_id] = sha256_file(path)
 
@@ -1330,18 +1313,21 @@ def research_artifact_state() -> dict[str, Any]:
     evidence_complete = plans_ready and set(plan_hashes).issubset(evidence_hashes)
     responses_complete = plans_ready and set(plan_hashes).issubset(response_hashes)
     drafts_ready = responses_complete and set(plan_hashes).issubset(current_drafts)
-    gate = research_gate_snapshot() if drafts_ready else {
-        "status": "WAITING_FOR_DRAFT_RESEARCH_PACKAGES",
-        "complete": False,
-        "claims": [],
-    }
+    gate = (
+        research_gate_snapshot()
+        if drafts_ready
+        else {
+            "status": "WAITING_FOR_DRAFT_RESEARCH_PACKAGES",
+            "complete": False,
+            "claims": [],
+        }
+    )
     verified = gate.get("verified_packages", []) if isinstance(gate, dict) else []
     story_ready = (
         bool(gate.get("complete"))
         and bool(verified)
         and all(
-            isinstance(item, dict)
-            and item.get("status") == "READY_FOR_STORY_SCRIPT"
+            isinstance(item, dict) and item.get("status") == "READY_FOR_STORY_SCRIPT"
             for item in verified
         )
     )
@@ -1367,7 +1353,10 @@ def story_script_artifact_state() -> dict[str, Any]:
     if upstream.get("story_ready") and RESEARCH_VERIFIED_DIR.exists():
         for path in RESEARCH_VERIFIED_DIR.glob("*.verified_research_package.json"):
             payload = safe_load_json(path)
-            if not isinstance(payload, dict) or payload.get("status") != "READY_FOR_STORY_SCRIPT":
+            if (
+                not isinstance(payload, dict)
+                or payload.get("status") != "READY_FOR_STORY_SCRIPT"
+            ):
                 continue
             concept_id = str(payload.get("concept_id") or "").strip()
             if concept_id:
@@ -1384,7 +1373,8 @@ def story_script_artifact_state() -> dict[str, Any]:
             if (
                 concept_id in verified_hashes
                 and isinstance(provenance, dict)
-                and provenance.get("verified_research_sha256") == verified_hashes[concept_id]
+                and provenance.get("verified_research_sha256")
+                == verified_hashes[concept_id]
             ):
                 request_hashes[concept_id] = sha256_file(path)
 
@@ -1403,20 +1393,30 @@ def story_script_artifact_state() -> dict[str, Any]:
             ):
                 draft_ids.add(concept_id)
 
-    gate = script_gate_snapshot() if draft_ids else {
-        "status": "WAITING_FOR_SCRIPT_DRAFTS",
-        "complete": False,
-        "scripts": [],
-    }
+    gate = (
+        script_gate_snapshot()
+        if draft_ids
+        else {
+            "status": "WAITING_FOR_SCRIPT_DRAFTS",
+            "complete": False,
+            "scripts": [],
+        }
+    )
     approved_ids = {
         str(item.get("concept_id"))
         for item in gate.get("scripts", [])
         if isinstance(item, dict) and item.get("decision") == "ACCEPT"
     }
 
-    requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(request_hashes)
+    requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(
+        request_hashes
+    )
     drafts_ready = requests_ready and set(verified_hashes).issubset(draft_ids)
-    production_ready = drafts_ready and bool(gate.get("complete")) and set(verified_hashes).issubset(approved_ids)
+    production_ready = (
+        drafts_ready
+        and bool(gate.get("complete"))
+        and set(verified_hashes).issubset(approved_ids)
+    )
     return {
         "verified_concept_ids": sorted(verified_hashes),
         "request_concept_ids": sorted(request_hashes),
@@ -1448,15 +1448,10 @@ def stage_statuses() -> list[dict[str, Any]]:
     exp13_topic = EXP13_DIR / "topic_velocity.json"
 
     cohort_files_ready = (
-        exp13_manifest.exists()
-        and exp13_summary.exists()
-        and exp13_topic.exists()
+        exp13_manifest.exists() and exp13_summary.exists() and exp13_topic.exists()
     )
     cohort_info = exp13_cohort_readiness()
-    cohort_sufficient = (
-        cohort_files_ready
-        and bool(cohort_info["sufficient"])
-    )
+    cohort_sufficient = cohort_files_ready and bool(cohort_info["sufficient"])
     depth_ready_cells = exp13_depth_ready_cell_count()
     velocity_ready = cohort_sufficient and depth_ready_cells > 0
     cp_status = checkpoint_status()
@@ -1593,14 +1588,9 @@ def stage_statuses() -> list[dict[str, Any]]:
     vision_review = vision_review_snapshot()
     vision_complete = bool(vision_review.get("complete"))
     visual_available = (
-        shutil.which("yt-dlp") is not None
-        and shutil.which("ffmpeg") is not None
+        shutil.which("yt-dlp") is not None and shutil.which("ffmpeg") is not None
     )
-    visual_satisfied = (
-        visual_ready
-        or visual_attempted
-        or not visual_available
-    )
+    visual_satisfied = visual_ready or visual_attempted or not visual_available
     vision_satisfied = (not visual_ready) or vision_complete
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     analyzed_count = exp2_artifacts["analyzed_current_count"]
@@ -1904,11 +1894,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                 human_gate_status
                 if study_set_ready
                 else handoff_status
-                or (
-                    "READY_TO_BUILD"
-                    if exp14_complete
-                    else "WAITING_FOR_01_4"
-                )
+                or ("READY_TO_BUILD" if exp14_complete else "WAITING_FOR_01_4")
             ),
             "human_status": exp15_human,
             "tone": exp15_tone,
@@ -2119,6 +2105,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
     ]
 
+
 def opportunity_research_state() -> dict[str, Any]:
     payload = safe_load_json(OPPORTUNITY_RESEARCH_STATE)
     return payload if isinstance(payload, dict) else {}
@@ -2126,9 +2113,8 @@ def opportunity_research_state() -> dict[str, Any]:
 
 def action_readiness() -> dict[str, dict[str, Any]]:
     cohort_info = exp13_cohort_readiness()
-    exp13_cohort = (
-        (EXP13_DIR / "cohort_manifest.json").exists()
-        and bool(cohort_info["sufficient"])
+    exp13_cohort = (EXP13_DIR / "cohort_manifest.json").exists() and bool(
+        cohort_info["sufficient"]
     )
     exp13_evidence = exp13_depth_ready_cell_count() > 0
 
@@ -2159,9 +2145,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     reviewed_count = exp2_artifacts["reviewed_current_count"]
     analyzed = analyzed_count > 0
     analysis_complete = request_count > 0 and analyzed_count == request_count
-    review_requests = review_request_count > 0
-    review_requests_complete = request_count > 0 and review_request_count == request_count
-    reviewed = reviewed_count > 0
+    review_requests_complete = (
+        request_count > 0 and review_request_count == request_count
+    )
     review_complete = request_count > 0 and reviewed_count == request_count
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     transform = transformation_artifact_state()
@@ -2202,11 +2188,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
     visual_available = yt_dlp_installed and ffmpeg_installed
-    visual_satisfied = (
-        visual_complete
-        or visual_attempted
-        or not visual_available
-    )
+    visual_satisfied = visual_complete or visual_attempted or not visual_available
     vision_satisfied = (not visual_complete) or vision_complete
 
     return {
@@ -2341,7 +2323,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     if evidence_complete
                     else (
                         "yt-dlp is required for automatic source evidence acquisition."
-                        if human_gate_ready and profiles_prepared and not yt_dlp_installed
+                        if human_gate_ready
+                        and profiles_prepared
+                        and not yt_dlp_installed
                         else (
                             "Prepare Experiment 02 profiles first."
                             if human_gate_ready and not profiles_prepared
@@ -2489,11 +2473,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "analysis_model_one": {
-            "enabled": (
-                human_gate_ready
-                and requests_complete
-                and not analyzed
-            ),
+            "enabled": (human_gate_ready and requests_complete and not analyzed),
             "reason": (
                 "Run one current analysis request as the FAIR safety check."
                 if human_gate_ready and requests_complete and not analyzed
@@ -2533,9 +2513,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         },
         "human_review_prepare": {
             "enabled": (
-                human_gate_ready
-                and analysis_complete
-                and not review_requests_complete
+                human_gate_ready and analysis_complete and not review_requests_complete
             ),
             "reason": (
                 "All current analyzed profiles are ready for Human Review packets."
@@ -2556,18 +2534,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "synthesis_build": {
-            "enabled": (
-                human_gate_ready
-                and review_complete
-                and not synthesis_ready
-            ),
+            "enabled": (human_gate_ready and review_complete and not synthesis_ready),
             "reason": (
                 "Human Review is complete for every current analyzed profile."
-                if (
-                    human_gate_ready
-                    and review_complete
-                    and not synthesis_ready
-                )
+                if (human_gate_ready and review_complete and not synthesis_ready)
                 else (
                     "Synthesis is already built."
                     if synthesis_ready
@@ -2593,17 +2563,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         },
         "concept_generate": {
             "enabled": (
-                synthesis_ready
-                and transform_requests
-                and not transform_candidates
+                synthesis_ready and transform_requests and not transform_candidates
             ),
             "reason": (
                 "Current concept requests are ready for FAIR free-only generation."
-                if (
-                    synthesis_ready
-                    and transform_requests
-                    and not transform_candidates
-                )
+                if (synthesis_ready and transform_requests and not transform_candidates)
                 else (
                     "Valid concept candidates already exist."
                     if transform_candidates
@@ -2628,18 +2592,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 transform_triage
                 and (
                     concept_gate_status == "READY_TO_PREPARE"
-                    or (
-                        concept_gate_complete
-                        and not bool(transform["research_ready"])
-                    )
+                    or (concept_gate_complete and not bool(transform["research_ready"]))
                 )
             ),
             "reason": (
                 "LLM-shortlisted concepts are ready for final human review."
-                if (
-                    transform_triage
-                    and concept_gate_status == "READY_TO_PREPARE"
-                )
+                if (transform_triage and concept_gate_status == "READY_TO_PREPARE")
                 else (
                     "No concept was accepted; reopen the current Concept Gate."
                     if (
@@ -2749,10 +2707,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 research_drafts
                 and (
                     research_gate_status == "READY_TO_PREPARE"
-                    or (
-                        research_gate_complete
-                        and not bool(research["story_ready"])
-                    )
+                    or (research_gate_complete and not bool(research["story_ready"]))
                 )
             ),
             "reason": (
@@ -2798,10 +2753,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 script_drafts_ready
                 and (
                     script_gate_status == "READY_TO_PREPARE"
-                    or (
-                        script_gate_complete
-                        and not production_ready
-                    )
+                    or (script_gate_complete and not production_ready)
                 )
             ),
             "reason": (
@@ -2809,7 +2761,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 if script_drafts_ready and script_gate_status == "READY_TO_PREPARE"
                 else (
                     "No script was approved; reopen the Script Gate."
-                    if script_drafts_ready and script_gate_complete and not production_ready
+                    if script_drafts_ready
+                    and script_gate_complete
+                    and not production_ready
                     else (
                         "Script Gate is already prepared or complete."
                         if script_drafts_ready
@@ -2839,7 +2793,11 @@ class JobManager:
         if job is None:
             return None
 
-        if process is not None and process.poll() is not None and job.get("status") == "RUNNING":
+        if (
+            process is not None
+            and process.poll() is not None
+            and job.get("status") == "RUNNING"
+        ):
             self._finalize(process.returncode)
 
         public = self.public_job()
@@ -2858,7 +2816,7 @@ class JobManager:
                 raise RuntimeError("Another experiment job is already running.")
 
             JOB_LOG_DIR.mkdir(parents=True, exist_ok=True)
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             log_path = JOB_LOG_DIR / f"{stamp}_{action_id}.log"
             action = ACTION_DEFS[action_id]
 
@@ -2919,9 +2877,7 @@ class JobManager:
                 self._job["status"] = (
                     "SUCCEEDED"
                     if return_code == 0
-                    else "PARTIAL"
-                    if return_code == 2
-                    else "FAILED"
+                    else "PARTIAL" if return_code == 2 else "FAILED"
                 )
             self._process = None
 
@@ -2949,9 +2905,7 @@ class JobManager:
             if not self._job:
                 return {}
             return {
-                key: value
-                for key, value in self._job.items()
-                if key != "_log_handle"
+                key: value for key, value in self._job.items() if key != "_log_handle"
             }
 
     def log_text(self, max_chars: int = 30000) -> str:
@@ -3139,9 +3093,7 @@ def workflow_guidance(
                 "current_detail": gate_info.get("reason"),
                 "next_action_id": next_id,
                 "next_title": (
-                    ACTION_DEFS[next_id]["label"]
-                    if next_id
-                    else "Workflow complete"
+                    ACTION_DEFS[next_id]["label"] if next_id else "Workflow complete"
                 ),
             }
 
@@ -3187,9 +3139,7 @@ def status_payload() -> dict[str, Any]:
                 "enabled": bool(gate["enabled"]) and not JOB_MANAGER.running(),
                 "reason": gate["reason"],
                 "surface": (
-                    "workflow"
-                    if action_id in WORKFLOW_ACTION_ORDER
-                    else "tools"
+                    "workflow" if action_id in WORKFLOW_ACTION_ORDER else "tools"
                 ),
                 "role": (
                     "do_now"
@@ -3321,7 +3271,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def _post_security_error(self) -> str | None:
-        content_type = str(self.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
+        content_type = (
+            str(self.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
+        )
         if content_type != "application/json":
             return "POST requests require Content-Type: application/json."
 
@@ -3405,11 +3357,7 @@ class Handler(BaseHTTPRequestHandler):
                     video_id=str(body.get("video_id", "")),
                     item_id=str(body.get("item_id", "")),
                     decision=str(body.get("decision", "")),
-                    note=(
-                        str(body["note"])
-                        if body.get("note") is not None
-                        else None
-                    ),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
                 )
                 self._send_json(payload)
                 return
@@ -3419,11 +3367,7 @@ class Handler(BaseHTTPRequestHandler):
                     concept_id=str(body.get("concept_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
-                    note=(
-                        str(body["note"])
-                        if body.get("note") is not None
-                        else None
-                    ),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
                 )
                 self._send_json(payload)
                 return
@@ -3433,11 +3377,7 @@ class Handler(BaseHTTPRequestHandler):
                     package_id=str(body.get("package_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
-                    note=(
-                        str(body["note"])
-                        if body.get("note") is not None
-                        else None
-                    ),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
                 )
                 self._send_json(payload)
                 return
@@ -3448,11 +3388,7 @@ class Handler(BaseHTTPRequestHandler):
                     claim_id=str(body.get("claim_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
-                    note=(
-                        str(body["note"])
-                        if body.get("note") is not None
-                        else None
-                    ),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
                 )
                 self._send_json(payload)
                 return
@@ -3462,11 +3398,7 @@ class Handler(BaseHTTPRequestHandler):
                     concept_id=str(body.get("concept_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
-                    note=(
-                        str(body["note"])
-                        if body.get("note") is not None
-                        else None
-                    ),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
                 )
                 self._send_json(payload)
                 return

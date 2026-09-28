@@ -133,8 +133,31 @@ class ScheduledRefreshTests(unittest.TestCase):
         )
 
     def test_skips_when_no_frozen_cohort_exists(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.patch_paths(Path(tmp)):
+        with tempfile.TemporaryDirectory() as tmp, self.patch_paths(Path(tmp)):
+            result = scheduler.run_scheduled_refresh(
+                now=datetime(
+                    2026,
+                    9,
+                    27,
+                    12,
+                    0,
+                    tzinfo=timezone.utc,
+                )
+            )
+
+        self.assertEqual(result["status"], "SKIPPED_NO_COHORT")
+
+    def test_skips_once_current_cohort_is_ready_for_01_4(self):
+        with tempfile.TemporaryDirectory() as tmp, self.patch_paths(Path(tmp)):
+            self.write_manifest()
+            self.write_01_4_config()
+            self.write_topic_velocity(
+                channels=3,
+                velocity_samples=3,
+                index=1.4,
+            )
+
+            with patch.object(scheduler.subprocess, "run") as run:
                 result = scheduler.run_scheduled_refresh(
                     now=datetime(
                         2026,
@@ -146,68 +169,40 @@ class ScheduledRefreshTests(unittest.TestCase):
                     )
                 )
 
-        self.assertEqual(result["status"], "SKIPPED_NO_COHORT")
-
-    def test_skips_once_current_cohort_is_ready_for_01_4(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.patch_paths(Path(tmp)):
-                self.write_manifest()
-                self.write_01_4_config()
-                self.write_topic_velocity(
-                    channels=3,
-                    velocity_samples=3,
-                    index=1.4,
-                )
-
-                with patch.object(scheduler.subprocess, "run") as run:
-                    result = scheduler.run_scheduled_refresh(
-                        now=datetime(
-                            2026,
-                            9,
-                            27,
-                            12,
-                            0,
-                            tzinfo=timezone.utc,
-                        )
-                    )
-
-                run.assert_not_called()
+            run.assert_not_called()
 
         self.assertEqual(result["status"], "SKIPPED_EVIDENCE_READY")
 
     def test_skips_recent_snapshot_to_avoid_duplicate_api_work(self):
         now = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.patch_paths(Path(tmp)):
-                self.write_manifest()
-                self.write_01_4_config()
-                self.write_topic_velocity(
-                    channels=3,
-                    velocity_samples=0,
-                    index=None,
+        with tempfile.TemporaryDirectory() as tmp, self.patch_paths(Path(tmp)):
+            self.write_manifest()
+            self.write_01_4_config()
+            self.write_topic_velocity(
+                channels=3,
+                velocity_samples=0,
+                index=None,
+            )
+            scheduler.PERSISTENT_SNAPSHOT_FILE.write_text(
+                json.dumps(
+                    {
+                        "video_id": "v1",
+                        "observed_at": (now - timedelta(minutes=30)).isoformat(),
+                        "views": 1000,
+                    }
                 )
-                scheduler.PERSISTENT_SNAPSHOT_FILE.write_text(
-                    json.dumps(
-                        {
-                            "video_id": "v1",
-                            "observed_at": (
-                                now - timedelta(minutes=30)
-                            ).isoformat(),
-                            "views": 1000,
-                        }
-                    )
-                    + "\n",
-                    encoding="utf-8",
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(scheduler.subprocess, "run") as run:
+                result = scheduler.run_scheduled_refresh(
+                    now=now,
+                    minimum_interval_hours=1.5,
                 )
 
-                with patch.object(scheduler.subprocess, "run") as run:
-                    result = scheduler.run_scheduled_refresh(
-                        now=now,
-                        minimum_interval_hours=1.5,
-                    )
-
-                run.assert_not_called()
+            run.assert_not_called()
 
         self.assertEqual(result["status"], "SKIPPED_RECENT_SNAPSHOT")
 
@@ -228,9 +223,7 @@ class ScheduledRefreshTests(unittest.TestCase):
                     json.dumps(
                         {
                             "video_id": "v1",
-                            "observed_at": (
-                                now - timedelta(hours=3)
-                            ).isoformat(),
+                            "observed_at": (now - timedelta(hours=3)).isoformat(),
                             "views": 1000,
                         }
                     )
@@ -276,23 +269,22 @@ class ScheduledRefreshTests(unittest.TestCase):
     def test_dry_run_reports_due_without_refreshing(self):
         now = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.patch_paths(Path(tmp)):
-                self.write_manifest()
-                self.write_01_4_config()
-                self.write_topic_velocity(
-                    channels=3,
-                    velocity_samples=0,
-                    index=None,
+        with tempfile.TemporaryDirectory() as tmp, self.patch_paths(Path(tmp)):
+            self.write_manifest()
+            self.write_01_4_config()
+            self.write_topic_velocity(
+                channels=3,
+                velocity_samples=0,
+                index=None,
+            )
+
+            with patch.object(scheduler.subprocess, "run") as run:
+                result = scheduler.run_scheduled_refresh(
+                    now=now,
+                    dry_run=True,
                 )
 
-                with patch.object(scheduler.subprocess, "run") as run:
-                    result = scheduler.run_scheduled_refresh(
-                        now=now,
-                        dry_run=True,
-                    )
-
-                run.assert_not_called()
+            run.assert_not_called()
 
         self.assertEqual(result["status"], "DUE")
 

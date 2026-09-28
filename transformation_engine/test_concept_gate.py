@@ -122,9 +122,7 @@ class ConceptGateTests(unittest.TestCase):
                     "decision": "ACCEPT",
                     "criteria": {
                         criterion: True
-                        for criterion in self.config[
-                            "required_accept_criteria"
-                        ]
+                        for criterion in self.config["required_accept_criteria"]
                     },
                     "note": "",
                 }
@@ -141,7 +139,6 @@ class ConceptGateTests(unittest.TestCase):
 
         self.assertEqual(request["concept_count"], 2)
         self.assertEqual(len(request["items"]), 2)
-
 
     def test_duplicate_concept_ids_are_rejected(self):
         candidates = {
@@ -176,9 +173,7 @@ class ConceptGateTests(unittest.TestCase):
             self.config,
         )
         response = self.response(request)
-        response["decisions"][0]["criteria"][
-            "researchable"
-        ] = False
+        response["decisions"][0]["criteria"]["researchable"] = False
 
         with self.assertRaises(ValueError):
             validate_decisions(
@@ -247,12 +242,8 @@ class ConceptGateTests(unittest.TestCase):
         )
         response = self.response(request)
         response["decisions"][0]["decision"] = "REWORK"
-        response["decisions"][0]["criteria"][
-            "audience_promise_clear"
-        ] = False
-        response["decisions"][0]["note"] = (
-            "Clarify the viewer payoff."
-        )
+        response["decisions"][0]["criteria"]["audience_promise_clear"] = False
+        response["decisions"][0]["note"] = "Clarify the viewer payoff."
 
         reviewed, handoff = apply_gate(
             self.candidates,
@@ -268,18 +259,21 @@ class ConceptGateTests(unittest.TestCase):
             "c2",
         )
 
-
     def test_stale_candidates_cannot_receive_old_human_accept(self):
         candidates_v1 = {"concepts": [deepcopy(self.candidates["concepts"][0])]}
         request = build_review_request(candidates_v1, self.config)
         response = {
             "reviewer": "r",
-            "decisions": [{
-                "concept_id": "c1",
-                "decision": "ACCEPT",
-                "criteria": {key: True for key in self.config["required_accept_criteria"]},
-                "note": "",
-            }],
+            "decisions": [
+                {
+                    "concept_id": "c1",
+                    "decision": "ACCEPT",
+                    "criteria": {
+                        key: True for key in self.config["required_accept_criteria"]
+                    },
+                    "note": "",
+                }
+            ],
             "overall_note": "",
         }
         candidates_v2 = {"concepts": [deepcopy(self.candidates["concepts"][0])]}

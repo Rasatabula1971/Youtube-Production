@@ -35,7 +35,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -57,7 +56,6 @@ from market_intelligence import (
     enrich_query_profiles_with_evidence,
     load_snapshot_history,
 )
-
 
 # ============================================================
 # PATHS
@@ -110,6 +108,7 @@ YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
 # ENVIRONMENT
 # ============================================================
 
+
 def load_env_file(path: Path) -> None:
     """Load KEY=VALUE entries from the project .env file."""
 
@@ -117,9 +116,7 @@ def load_env_file(path: Path) -> None:
         print(f"WARNING: .env file not found: {path}")
         return
 
-    for raw_line in path.read_text(
-        encoding="utf-8"
-    ).splitlines():
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
 
         line = raw_line.strip()
 
@@ -136,12 +133,7 @@ def load_env_file(path: Path) -> None:
 
         key = key.strip()
 
-        value = (
-            value
-            .strip()
-            .strip('"')
-            .strip("'")
-        )
+        value = value.strip().strip('"').strip("'")
 
         if key and key not in os.environ:
             os.environ[key] = value
@@ -151,6 +143,7 @@ def load_env_file(path: Path) -> None:
 # API ERROR DISPLAY
 # ============================================================
 
+
 def read_http_error(
     exc: urllib.error.HTTPError,
 ) -> tuple[str, str | None]:
@@ -159,21 +152,15 @@ def read_http_error(
             "utf-8",
             errors="replace",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - boundary cleanup/recovery must not escape
         return "<Could not read response body>", None
 
     reason: str | None = None
     try:
         parsed = json.loads(body)
-        error_payload = (
-            parsed.get("error")
-            if isinstance(parsed, dict)
-            else None
-        )
+        error_payload = parsed.get("error") if isinstance(parsed, dict) else None
         errors = (
-            error_payload.get("errors", [])
-            if isinstance(error_payload, dict)
-            else []
+            error_payload.get("errors", []) if isinstance(error_payload, dict) else []
         )
         if errors and isinstance(errors[0], dict):
             value = errors[0].get("reason")
@@ -224,6 +211,7 @@ def display_http_error(
 # API REQUEST
 # ============================================================
 
+
 def api_get(
     resource: str,
     api_key: str,
@@ -232,21 +220,13 @@ def api_get(
 
     params["key"] = api_key
 
-    query_string = urllib.parse.urlencode(
-        params
-    )
+    query_string = urllib.parse.urlencode(params)
 
-    url = (
-        f"{YOUTUBE_API}/{resource}"
-        f"?{query_string}"
-    )
+    url = f"{YOUTUBE_API}/{resource}" f"?{query_string}"
 
     request = urllib.request.Request(
         url,
-        headers={
-            "User-Agent":
-                "YouTube-Production-Stage2-Research/1.1"
-        },
+        headers={"User-Agent": "YouTube-Production-Stage2-Research/1.1"},
     )
 
     for attempt in range(4):
@@ -258,9 +238,7 @@ def api_get(
                 timeout=30,
             ) as response:
 
-                raw = response.read().decode(
-                    "utf-8"
-                )
+                raw = response.read().decode("utf-8")
 
                 return json.loads(raw)
 
@@ -272,7 +250,8 @@ def api_get(
             retryable = (
                 500 <= exc.code < 600
                 or exc.code == 429
-                or youtube_reason in {
+                or youtube_reason
+                in {
                     "rateLimitExceeded",
                     "userRateLimitExceeded",
                     "backendError",
@@ -281,11 +260,7 @@ def api_get(
             )
 
             if not retryable:
-                detail = (
-                    f" reason={youtube_reason}"
-                    if youtube_reason
-                    else ""
-                )
+                detail = f" reason={youtube_reason}" if youtube_reason else ""
                 raise SystemExit(
                     "YouTube rejected the request "
                     f"(HTTP {exc.code}{detail}). "
@@ -304,19 +279,13 @@ def api_get(
                 retry_after = None
 
             wait_seconds = (
-                max(0.0, retry_after)
-                if retry_after is not None
-                else float(2 ** attempt)
+                max(0.0, retry_after) if retry_after is not None else float(2**attempt)
             )
 
             print(
                 "Retryable YouTube API error "
                 f"(HTTP {exc.code}"
-                + (
-                    f", reason={youtube_reason}"
-                    if youtube_reason
-                    else ""
-                )
+                + (f", reason={youtube_reason}" if youtube_reason else "")
                 + f"). Retrying in {wait_seconds:g}s..."
             )
 
@@ -327,15 +296,11 @@ def api_get(
             if attempt == 3:
                 raise
 
-            wait_seconds = 2 ** attempt
+            wait_seconds = 2**attempt
 
-            print(
-                f"Network error: {exc}"
-            )
+            print(f"Network error: {exc}")
 
-            print(
-                f"Retrying in {wait_seconds}s..."
-            )
+            print(f"Retrying in {wait_seconds}s...")
 
             time.sleep(wait_seconds)
 
@@ -344,48 +309,35 @@ def api_get(
             if attempt == 3:
                 raise
 
-            wait_seconds = 2 ** attempt
+            wait_seconds = 2**attempt
 
-            print(
-                "Unexpected API error. "
-                f"Retrying in {wait_seconds}s..."
-            )
+            print("Unexpected API error. " f"Retrying in {wait_seconds}s...")
 
             time.sleep(wait_seconds)
 
-    raise RuntimeError(
-        "API request failed after retries."
-    )
+    raise RuntimeError("API request failed after retries.")
 
 
 # ============================================================
 # HELPERS
 # ============================================================
 
+
 def parse_duration_seconds(
     duration: str,
 ) -> int:
 
     match = re.fullmatch(
-        r"PT(?:(\d+)H)?"
-        r"(?:(\d+)M)?"
-        r"(?:(\d+)S)?",
+        r"PT(?:(\d+)H)?" r"(?:(\d+)M)?" r"(?:(\d+)S)?",
         duration or "",
     )
 
     if not match:
         return 0
 
-    hours, minutes, seconds = (
-        int(value or 0)
-        for value in match.groups()
-    )
+    hours, minutes, seconds = (int(value or 0) for value in match.groups())
 
-    return (
-        hours * 3600
-        + minutes * 60
-        + seconds
-    )
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def parse_time(
@@ -404,10 +356,7 @@ def age_days(
     published_at: str,
 ) -> float:
 
-    delta = (
-        datetime.now(timezone.utc)
-        - parse_time(published_at)
-    )
+    delta = datetime.now(timezone.utc) - parse_time(published_at)
 
     return max(
         delta.total_seconds() / 86400,
@@ -426,14 +375,13 @@ def chunks(
         size,
     ):
 
-        yield values[
-            index:index + size
-        ]
+        yield values[index : index + size]
 
 
 # ============================================================
 # FORMAT CANDIDATE
 # ============================================================
+
 
 def classify_format_candidate(
     duration_seconds: int,
@@ -447,10 +395,7 @@ def classify_format_candidate(
     the video as a Short.
     """
 
-    if (
-        duration_seconds > 0
-        and duration_seconds <= 180
-    ):
+    if duration_seconds > 0 and duration_seconds <= 180:
         return "short_candidate"
 
     return "long_form_candidate"
@@ -459,6 +404,7 @@ def classify_format_candidate(
 # ============================================================
 # BASELINE QUALITY
 # ============================================================
+
 
 def baseline_confidence(
     sample_size: int,
@@ -495,21 +441,15 @@ def baseline_warning(
     warnings: list[str] = []
 
     if sample_size < 5:
-        warnings.append(
-            "small_baseline_sample"
-        )
+        warnings.append("small_baseline_sample")
 
     if baseline is not None:
 
         if baseline < 1_000:
-            warnings.append(
-                "extremely_small_channel_baseline"
-            )
+            warnings.append("extremely_small_channel_baseline")
 
         elif baseline < 5_000:
-            warnings.append(
-                "small_channel_baseline"
-            )
+            warnings.append("small_channel_baseline")
 
     if not warnings:
         return ""
@@ -521,32 +461,22 @@ def baseline_warning(
 # VIDEO DETAILS
 # ============================================================
 
+
 def get_video_details(
     video_ids: list[str],
     api_key: str,
 ) -> dict[str, dict[str, Any]]:
 
-    results: dict[
-        str,
-        dict[str, Any]
-    ] = {}
+    results: dict[str, dict[str, Any]] = {}
 
-    unique_ids = list(
-        dict.fromkeys(video_ids)
-    )
+    unique_ids = list(dict.fromkeys(video_ids))
 
-    for batch in chunks(
-        unique_ids
-    ):
+    for batch in chunks(unique_ids):
 
         data = api_get(
             "videos",
             api_key,
-            part=(
-                "snippet,"
-                "statistics,"
-                "contentDetails"
-            ),
+            part=("snippet," "statistics," "contentDetails"),
             id=",".join(batch),
             maxResults=50,
         )
@@ -556,9 +486,7 @@ def get_video_details(
             [],
         ):
 
-            results[
-                item["id"]
-            ] = item
+            results[item["id"]] = item
 
     return results
 
@@ -567,32 +495,22 @@ def get_video_details(
 # CHANNEL DETAILS
 # ============================================================
 
+
 def get_channel_details(
     channel_ids: list[str],
     api_key: str,
 ) -> dict[str, dict[str, Any]]:
 
-    results: dict[
-        str,
-        dict[str, Any]
-    ] = {}
+    results: dict[str, dict[str, Any]] = {}
 
-    unique_ids = list(
-        dict.fromkeys(channel_ids)
-    )
+    unique_ids = list(dict.fromkeys(channel_ids))
 
-    for batch in chunks(
-        unique_ids
-    ):
+    for batch in chunks(unique_ids):
 
         data = api_get(
             "channels",
             api_key,
-            part=(
-                "snippet,"
-                "statistics,"
-                "contentDetails"
-            ),
+            part=("snippet," "statistics," "contentDetails"),
             id=",".join(batch),
             maxResults=50,
         )
@@ -602,9 +520,7 @@ def get_channel_details(
             [],
         ):
 
-            results[
-                item["id"]
-            ] = item
+            results[item["id"]] = item
 
     return results
 
@@ -613,6 +529,7 @@ def get_channel_details(
 # RECENT CHANNEL UPLOADS
 # ============================================================
 
+
 def get_recent_upload_ids(
     channel: dict[str, Any],
     api_key: str,
@@ -620,8 +537,7 @@ def get_recent_upload_ids(
 ) -> list[str]:
 
     uploads_playlist = (
-        channel
-        .get(
+        channel.get(
             "contentDetails",
             {},
         )
@@ -653,19 +569,13 @@ def get_recent_upload_ids(
         [],
     ):
 
-        video_id = (
-            item
-            .get(
-                "contentDetails",
-                {},
-            )
-            .get("videoId")
-        )
+        video_id = item.get(
+            "contentDetails",
+            {},
+        ).get("videoId")
 
         if video_id:
-            results.append(
-                video_id
-            )
+            results.append(video_id)
 
     return results
 
@@ -673,6 +583,7 @@ def get_recent_upload_ids(
 # ============================================================
 # CHANNEL BASELINE
 # ============================================================
+
 
 def calculate_channel_baseline(
     candidate: dict[str, Any],
@@ -682,13 +593,9 @@ def calculate_channel_baseline(
     int,
 ]:
 
-    candidate_id = (
-        candidate["video_id"]
-    )
+    candidate_id = candidate["video_id"]
 
-    candidate_format = (
-        candidate["format_candidate"]
-    )
+    candidate_format = candidate["format_candidate"]
 
     comparable_views: list[int] = []
 
@@ -697,62 +604,40 @@ def calculate_channel_baseline(
         if video["id"] == candidate_id:
             continue
 
-        duration = (
-            parse_duration_seconds(
-                video
-                .get(
-                    "contentDetails",
-                    {},
-                )
-                .get(
-                    "duration",
-                    "",
-                )
+        duration = parse_duration_seconds(
+            video.get(
+                "contentDetails",
+                {},
+            ).get(
+                "duration",
+                "",
             )
         )
 
-        video_format = (
-            classify_format_candidate(
-                duration
-            )
-        )
+        video_format = classify_format_candidate(duration)
 
-        if (
-            video_format
-            != candidate_format
-        ):
+        if video_format != candidate_format:
             continue
 
         views = int(
-            video
-            .get(
+            video.get(
                 "statistics",
                 {},
-            )
-            .get(
+            ).get(
                 "viewCount",
                 0,
             )
         )
 
-        comparable_views.append(
-            views
-        )
+        comparable_views.append(views)
 
-        if (
-            len(comparable_views)
-            >= 10
-        ):
+        if len(comparable_views) >= 10:
             break
 
     if not comparable_views:
         return None, 0
 
-    baseline = float(
-        statistics.median(
-            comparable_views
-        )
-    )
+    baseline = float(statistics.median(comparable_views))
 
     return (
         baseline,
@@ -816,8 +701,7 @@ def save_search_checkpoint(
         "search_calls": search_calls,
         "completed_jobs": sorted(completed_jobs),
         "discovered": {
-            video_id: sorted(niches)
-            for video_id, niches in discovered.items()
+            video_id: sorted(niches) for video_id, niches in discovered.items()
         },
         "query_matches": query_matches,
         "query_search_results": query_search_results,
@@ -834,6 +718,7 @@ def save_search_checkpoint(
 # MAIN
 # ============================================================
 
+
 def main() -> None:
 
     parser = argparse.ArgumentParser(
@@ -848,20 +733,13 @@ def main() -> None:
         "--max-searches",
         type=int,
         default=30,
-        help=(
-            "Maximum number of "
-            "YouTube search.list requests."
-        ),
+        help=("Maximum number of " "YouTube search.list requests."),
     )
 
     parser.add_argument(
         "--published-after",
         default=None,
-        help=(
-            "Optional RFC3339 date. "
-            "Example: "
-            "2025-01-01T00:00:00Z"
-        ),
+        help=("Optional RFC3339 date. " "Example: " "2025-01-01T00:00:00Z"),
     )
 
     parser.add_argument(
@@ -881,21 +759,13 @@ def main() -> None:
     # ========================================================
 
     print()
-    print(
-        "Loading environment from:"
-    )
+    print("Loading environment from:")
 
-    print(
-        f"  {ENV_FILE}"
-    )
+    print(f"  {ENV_FILE}")
 
-    load_env_file(
-        ENV_FILE
-    )
+    load_env_file(ENV_FILE)
 
-    api_key = os.getenv(
-        "YOUTUBE_API_KEY"
-    )
+    api_key = os.getenv("YOUTUBE_API_KEY")
 
     if not api_key:
 
@@ -906,9 +776,7 @@ def main() -> None:
             f"{ENV_FILE}\n"
         )
 
-    print(
-        "YouTube API key found."
-    )
+    print("YouTube API key found.")
 
     # ========================================================
     # LOAD NICHES
@@ -916,40 +784,26 @@ def main() -> None:
 
     if not NICHE_FILE.exists():
 
-        raise SystemExit(
-            f"Cannot find {NICHE_FILE}"
-        )
+        raise SystemExit(f"Cannot find {NICHE_FILE}")
 
     try:
 
-        config = json.loads(
-            NICHE_FILE.read_text(
-                encoding="utf-8"
-            )
-        )
+        config = json.loads(NICHE_FILE.read_text(encoding="utf-8"))
 
     except json.JSONDecodeError as exc:
 
-        raise SystemExit(
-            f"Invalid niches.json: {exc}"
-        ) from exc
+        raise SystemExit(f"Invalid niches.json: {exc}") from exc
 
     if "niches" not in config:
 
-        raise SystemExit(
-            "niches.json must contain "
-            "a 'niches' array."
-        )
+        raise SystemExit("niches.json must contain " "a 'niches' array.")
 
     EXPERIMENT_OUTPUT_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    run_observed_at = (
-        datetime.now(timezone.utc)
-        .isoformat()
-    )
+    run_observed_at = datetime.now(timezone.utc).isoformat()
 
     # ========================================================
     # DISCOVERY
@@ -965,9 +819,7 @@ def main() -> None:
         list[dict[str, Any]],
     ] = {}
 
-    query_search_results: list[
-        dict[str, Any]
-    ] = []
+    query_search_results: list[dict[str, Any]] = []
 
     signature = discovery_checkpoint_signature(
         config,
@@ -1023,18 +875,11 @@ def main() -> None:
         search_calls = 0
 
     print()
-    print(
-        "STAGE 2 — EXPERIMENT 01.2"
-    )
+    print("STAGE 2 — EXPERIMENT 01.2")
 
-    print(
-        "=" * 60
-    )
+    print("=" * 60)
 
-    print(
-        "Collecting Demand + Breakout + "
-        "Momentum signals..."
-    )
+    print("Collecting Demand + Breakout + " "Momentum signals...")
 
     print()
 
@@ -1042,30 +887,19 @@ def main() -> None:
 
         niche_name = niche["name"]
 
-        print(
-            f"Niche: {niche_name}"
-        )
+        print(f"Niche: {niche_name}")
 
-        for query in niche[
-            "queries"
-        ]:
+        for query in niche["queries"]:
 
             job_key = f"{niche_name}::{query}"
             if job_key in completed_jobs:
-                print(
-                    f"  Already checkpointed: {query}"
-                )
+                print(f"  Already checkpointed: {query}")
                 continue
 
-            if (
-                search_calls
-                >= args.max_searches
-            ):
+            if search_calls >= args.max_searches:
                 break
 
-            print(
-                f"  Searching: {query}"
-            )
+            print(f"  Searching: {query}")
 
             params: dict[
                 str,
@@ -1080,21 +914,15 @@ def main() -> None:
 
             if args.published_after:
 
-                params[
-                    "publishedAfter"
-                ] = args.published_after
+                params["publishedAfter"] = args.published_after
 
             if args.region_code:
 
-                params[
-                    "regionCode"
-                ] = args.region_code
+                params["regionCode"] = args.region_code
 
             if args.language:
 
-                params[
-                    "relevanceLanguage"
-                ] = args.language
+                params["relevanceLanguage"] = args.language
 
             data = api_get(
                 "search",
@@ -1118,29 +946,19 @@ def main() -> None:
                 start=1,
             ):
 
-                video_id = (
-                    item
-                    .get(
-                        "id",
-                        {},
-                    )
-                    .get(
-                        "videoId"
-                    )
-                )
+                video_id = item.get(
+                    "id",
+                    {},
+                ).get("videoId")
 
                 if video_id:
 
-                    query_video_ids.append(
-                        video_id
-                    )
+                    query_video_ids.append(video_id)
 
                     discovered.setdefault(
                         video_id,
                         set(),
-                    ).add(
-                        niche_name
-                    )
+                    ).add(niche_name)
 
                     query_matches.setdefault(
                         video_id,
@@ -1171,60 +989,36 @@ def main() -> None:
                 search_calls=search_calls,
             )
 
-        if (
-            search_calls
-            >= args.max_searches
-        ):
+        if search_calls >= args.max_searches:
             break
 
     print()
 
-    print(
-        "Unique videos discovered: "
-        f"{len(discovered):,}"
-    )
+    print("Unique videos discovered: " f"{len(discovered):,}")
 
     # ========================================================
     # VIDEO DETAILS
     # ========================================================
 
-    print(
-        "Downloading video statistics..."
-    )
+    print("Downloading video statistics...")
 
     details = get_video_details(
         list(discovered),
         api_key,
     )
 
-    channel_ids = list(
-        {
-            video[
-                "snippet"
-            ][
-                "channelId"
-            ]
-            for video
-            in details.values()
-        }
-    )
+    channel_ids = list({video["snippet"]["channelId"] for video in details.values()})
 
-    print(
-        "Channels discovered: "
-        f"{len(channel_ids):,}"
-    )
+    print("Channels discovered: " f"{len(channel_ids):,}")
 
-    channels = (
-        get_channel_details(
-            channel_ids,
-            api_key,
-        )
+    channels = get_channel_details(
+        channel_ids,
+        api_key,
     )
 
     query_profiles = [
         {
-            "niche":
-                item["niche"],
+            "niche": item["niche"],
             **build_query_competition_profile(
                 query=item["query"],
                 video_ids=item["video_ids"],
@@ -1239,9 +1033,7 @@ def main() -> None:
     # BUILD DATASET
     # ========================================================
 
-    rows: list[
-        dict[str, Any]
-    ] = []
+    rows: list[dict[str, Any]] = []
 
     for (
         video_id,
@@ -1269,55 +1061,37 @@ def main() -> None:
         if views < ANALYSIS_MIN_VIEWS:
             continue
 
-        duration_seconds = (
-            parse_duration_seconds(
-                item
-                .get(
-                    "contentDetails",
-                    {},
-                )
-                .get(
-                    "duration",
-                    "",
-                )
-            )
-        )
-
-        format_candidate = (
-            classify_format_candidate(
-                duration_seconds
-            )
-        )
-
-        published_at = (
-            snippet.get(
-                "publishedAt",
+        duration_seconds = parse_duration_seconds(
+            item.get(
+                "contentDetails",
+                {},
+            ).get(
+                "duration",
                 "",
             )
         )
 
-        days = age_days(
-            published_at
+        format_candidate = classify_format_candidate(duration_seconds)
+
+        published_at = snippet.get(
+            "publishedAt",
+            "",
         )
 
-        average_views_per_day = (
-            views / days
-        )
+        days = age_days(published_at)
+
+        average_views_per_day = views / days
 
         if "likeCount" in stats:
 
-            likes: int | None = int(
-                stats["likeCount"]
-            )
+            likes: int | None = int(stats["likeCount"])
 
         else:
             likes = None
 
-        channel_id = (
-            snippet.get(
-                "channelId",
-                "",
-            )
+        channel_id = snippet.get(
+            "channelId",
+            "",
         )
 
         channel = channels.get(
@@ -1344,200 +1118,120 @@ def main() -> None:
         # This does NOT mean selected/rejected.
         # ----------------------------------------------------
 
-        if (
-            format_candidate
-            == "short_candidate"
-        ):
+        if format_candidate == "short_candidate":
 
-            meets_original_reference = (
-                views
-                >= SHORT_CANDIDATE_REFERENCE_VIEWS
-            )
+            meets_original_reference = views >= SHORT_CANDIDATE_REFERENCE_VIEWS
 
         else:
 
-            meets_original_reference = (
-                views
-                >= LONG_FORM_REFERENCE_VIEWS
-            )
+            meets_original_reference = views >= LONG_FORM_REFERENCE_VIEWS
 
         rows.append(
             {
                 # --------------------------------------------
                 # Identity
                 # --------------------------------------------
-
-                "video_id":
-                    video_id,
-
-                "youtube_url":
-                    (
-                        "https://www.youtube.com/"
-                        "watch?v="
-                        + video_id
-                    ),
-
-                "title":
-                    snippet.get(
-                        "title",
-                        "",
-                    ),
-
-                "description":
-                    snippet.get(
-                        "description",
-                        "",
-                    ),
-
-                "channel_id":
-                    channel_id,
-
-                "channel_title":
-                    snippet.get(
-                        "channelTitle",
-                        "",
-                    ),
-
-                "niches":
-                    sorted(
-                        discovered.get(
+                "video_id": video_id,
+                "youtube_url": ("https://www.youtube.com/" "watch?v=" + video_id),
+                "title": snippet.get(
+                    "title",
+                    "",
+                ),
+                "description": snippet.get(
+                    "description",
+                    "",
+                ),
+                "channel_id": channel_id,
+                "channel_title": snippet.get(
+                    "channelTitle",
+                    "",
+                ),
+                "niches": sorted(
+                    discovered.get(
+                        video_id,
+                        set(),
+                    )
+                ),
+                "matched_queries": sorted(
+                    {
+                        match["query"]
+                        for match in query_matches.get(
                             video_id,
-                            set(),
+                            [],
+                        )
+                    }
+                ),
+                "best_search_rank": min(
+                    (
+                        match["rank"]
+                        for match in query_matches.get(
+                            video_id,
+                            [],
                         )
                     ),
-
-                "matched_queries":
-                    sorted(
-                        {
-                            match["query"]
-                            for match
-                            in query_matches.get(
-                                video_id,
-                                [],
-                            )
-                        }
-                    ),
-
-                "best_search_rank":
-                    min(
-                        (
-                            match["rank"]
-                            for match
-                            in query_matches.get(
-                                video_id,
-                                [],
-                            )
-                        ),
-                        default=None,
-                    ),
-
-                "query_matches":
-                    query_matches.get(
-                        video_id,
-                        [],
-                    ),
-
+                    default=None,
+                ),
+                "query_matches": query_matches.get(
+                    video_id,
+                    [],
+                ),
                 # --------------------------------------------
                 # Format signal
                 # --------------------------------------------
-
-                "duration_seconds":
-                    duration_seconds,
-
-                "format_candidate":
-                    format_candidate,
-
+                "duration_seconds": duration_seconds,
+                "format_candidate": format_candidate,
                 # --------------------------------------------
                 # Demand signal
                 # --------------------------------------------
-
-                "views":
-                    views,
-
-                "meets_original_reference":
-                    meets_original_reference,
-
+                "views": views,
+                "meets_original_reference": meets_original_reference,
                 # --------------------------------------------
                 # Momentum proxy
                 # --------------------------------------------
-
-                "published_at":
-                    published_at,
-
-                "age_days":
-                    round(
-                        days,
-                        2,
-                    ),
-
-                "average_views_per_day":
-                    round(
-                        average_views_per_day,
-                        2,
-                    ),
-
+                "published_at": published_at,
+                "age_days": round(
+                    days,
+                    2,
+                ),
+                "average_views_per_day": round(
+                    average_views_per_day,
+                    2,
+                ),
                 # --------------------------------------------
                 # Engagement context
                 # --------------------------------------------
-
-                "likes":
-                    likes,
-
-                "like_rate":
-                    (
-                        round(
-                            likes / views,
-                            6,
-                        )
-                        if (
-                            likes is not None
-                            and views
-                        )
-                        else None
-                    ),
-
+                "likes": likes,
+                "like_rate": (
+                    round(
+                        likes / views,
+                        6,
+                    )
+                    if (likes is not None and views)
+                    else None
+                ),
                 # --------------------------------------------
                 # Channel context
                 # --------------------------------------------
-
-                "channel_subscribers":
-                    subscriber_count,
-
+                "channel_subscribers": subscriber_count,
                 # --------------------------------------------
                 # Breakout signal
                 # --------------------------------------------
-
-                "channel_baseline_median":
-                    None,
-
-                "baseline_sample_size":
-                    0,
-
-                "baseline_confidence":
-                    "no_baseline",
-
-                "baseline_warning":
-                    "",
-
-                "outlier_ratio":
-                    None,
+                "channel_baseline_median": None,
+                "baseline_sample_size": 0,
+                "baseline_confidence": "no_baseline",
+                "baseline_warning": "",
+                "outlier_ratio": None,
             }
         )
 
-    print(
-        "Videos with >=500K views: "
-        f"{len(rows):,}"
-    )
+    print("Videos with >=500K views: " f"{len(rows):,}")
 
     # ========================================================
     # BASELINE / BREAKOUT ANALYSIS
     # ========================================================
 
     print()
-    print(
-        "Calculating channel-relative "
-        "breakout signals..."
-    )
+    print("Calculating channel-relative " "breakout signals...")
 
     history_cache: dict[
         str,
@@ -1546,79 +1240,48 @@ def main() -> None:
 
     for row in rows:
 
-        channel_id = (
-            row["channel_id"]
-        )
+        channel_id = row["channel_id"]
 
-        channel = channels.get(
-            channel_id
-        )
+        channel = channels.get(channel_id)
 
         if not channel:
             continue
 
-        if (
-            channel_id
-            not in history_cache
-        ):
+        if channel_id not in history_cache:
 
-            upload_ids = (
-                get_recent_upload_ids(
-                    channel,
-                    api_key,
-                    maximum=25,
-                )
+            upload_ids = get_recent_upload_ids(
+                channel,
+                api_key,
+                maximum=25,
             )
 
-            history_cache[
-                channel_id
-            ] = list(
+            history_cache[channel_id] = list(
                 get_video_details(
                     upload_ids,
                     api_key,
                 ).values()
             )
 
-        baseline, sample_size = (
-            calculate_channel_baseline(
-                row,
-                history_cache[
-                    channel_id
-                ],
-            )
+        baseline, sample_size = calculate_channel_baseline(
+            row,
+            history_cache[channel_id],
         )
 
-        row[
-            "channel_baseline_median"
-        ] = baseline
+        row["channel_baseline_median"] = baseline
 
-        row[
-            "baseline_sample_size"
-        ] = sample_size
+        row["baseline_sample_size"] = sample_size
 
-        row[
-            "baseline_confidence"
-        ] = baseline_confidence(
-            sample_size
-        )
+        row["baseline_confidence"] = baseline_confidence(sample_size)
 
-        row[
-            "baseline_warning"
-        ] = baseline_warning(
+        row["baseline_warning"] = baseline_warning(
             baseline,
             sample_size,
         )
 
-        if (
-            baseline is not None
-            and baseline > 0
-        ):
+        if baseline is not None and baseline > 0:
 
-            row[
-                "outlier_ratio"
-            ] = round(
-                row["views"]
-                / baseline,
+            row["outlier_ratio"] = round(
+                row["views"] / baseline,
                 2,
             )
 
@@ -1626,10 +1289,7 @@ def main() -> None:
     # EXPERIMENT 01.2 — RELEVANCE / EVIDENCE QUALITY
     # ========================================================
 
-    niche_lookup = {
-        niche["name"]: niche
-        for niche in config["niches"]
-    }
+    niche_lookup = {niche["name"]: niche for niche in config["niches"]}
 
     for row in rows:
         row.update(
@@ -1643,11 +1303,7 @@ def main() -> None:
     # REPEATED SNAPSHOTS / TRUE VIEW ACCUMULATION VELOCITY
     # ========================================================
 
-    snapshot_history = (
-        load_snapshot_history(
-            SNAPSHOT_FILE
-        )
-    )
+    snapshot_history = load_snapshot_history(SNAPSHOT_FILE)
 
     for row in rows:
         row.update(
@@ -1665,18 +1321,12 @@ def main() -> None:
         run_observed_at,
     )
 
-    query_profiles = (
-        enrich_query_profiles_with_evidence(
-            query_profiles,
-            rows,
-        )
+    query_profiles = enrich_query_profiles_with_evidence(
+        query_profiles,
+        rows,
     )
 
-    topic_evidence = (
-        aggregate_topic_evidence(
-            rows
-        )
-    )
+    topic_evidence = aggregate_topic_evidence(rows)
 
     # ========================================================
     # SORT
@@ -1687,9 +1337,7 @@ def main() -> None:
 
     rows.sort(
         key=lambda row: (
-            row[
-                "average_views_per_day"
-            ],
+            row["average_views_per_day"],
             row["views"],
         ),
         reverse=True,
@@ -1699,10 +1347,7 @@ def main() -> None:
     # RAW JSON
     # ========================================================
 
-    raw_file = (
-        EXPERIMENT_OUTPUT_DIR
-        / "raw_results.json"
-    )
+    raw_file = EXPERIMENT_OUTPUT_DIR / "raw_results.json"
 
     raw_file.write_text(
         json.dumps(
@@ -1713,10 +1358,7 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    query_profiles_file = (
-        EXPERIMENT_OUTPUT_DIR
-        / "query_profiles.json"
-    )
+    query_profiles_file = EXPERIMENT_OUTPUT_DIR / "query_profiles.json"
 
     query_profiles_file.write_text(
         json.dumps(
@@ -1727,10 +1369,7 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    topic_evidence_file = (
-        EXPERIMENT_OUTPUT_DIR
-        / "topic_evidence.json"
-    )
+    topic_evidence_file = EXPERIMENT_OUTPUT_DIR / "topic_evidence.json"
 
     topic_evidence_file.write_text(
         json.dumps(
@@ -1745,10 +1384,7 @@ def main() -> None:
     # CSV
     # ========================================================
 
-    csv_file = (
-        EXPERIMENT_OUTPUT_DIR
-        / "candidates.csv"
-    )
+    csv_file = EXPERIMENT_OUTPUT_DIR / "candidates.csv"
 
     fields = [
         "video_id",
@@ -1760,22 +1396,16 @@ def main() -> None:
         "matched_queries",
         "best_search_rank",
         "query_matches",
-
         "duration_seconds",
         "format_candidate",
-
         "views",
         "meets_original_reference",
-
         "published_at",
         "age_days",
         "average_views_per_day",
-
         "likes",
         "like_rate",
-
         "channel_subscribers",
-
         "channel_baseline_median",
         "baseline_sample_size",
         "baseline_confidence",
@@ -1783,7 +1413,6 @@ def main() -> None:
         "outlier_ratio",
         "outlier_reliability",
         "outlier_reliability_reason",
-
         "velocity_status",
         "velocity_previous_at",
         "velocity_previous_views",
@@ -1791,7 +1420,6 @@ def main() -> None:
         "view_delta_since_snapshot",
         "current_views_per_hour",
         "current_views_per_day",
-
         "relevance",
         "relevance_reason",
         "relevance_matches",
@@ -1814,114 +1442,47 @@ def main() -> None:
 
         for row in rows:
 
-            flat_row = dict(
-                row
-            )
+            flat_row = dict(row)
 
-            flat_row[
-                "niches"
-            ] = "|".join(
-                row["niches"]
-            )
+            flat_row["niches"] = "|".join(row["niches"])
 
-            flat_row[
-                "matched_queries"
-            ] = "|".join(
-                row["matched_queries"]
-            )
+            flat_row["matched_queries"] = "|".join(row["matched_queries"])
 
-            flat_row[
-                "query_matches"
-            ] = json.dumps(
+            flat_row["query_matches"] = json.dumps(
                 row["query_matches"],
                 ensure_ascii=False,
             )
 
-            flat_row[
-                "relevance_matches"
-            ] = "|".join(
-                row["relevance_matches"]
-            )
+            flat_row["relevance_matches"] = "|".join(row["relevance_matches"])
 
-            flat_row[
-                "themes"
-            ] = "|".join(
-                row["themes"]
-            )
+            flat_row["themes"] = "|".join(row["themes"])
 
-            flat_row[
-                "topics"
-            ] = "|".join(
-                row["topics"]
-            )
+            flat_row["topics"] = "|".join(row["topics"])
 
-            writer.writerow(
-                {
-                    key:
-                        flat_row.get(
-                            key
-                        )
-                    for key
-                    in fields
-                }
-            )
+            writer.writerow({key: flat_row.get(key) for key in fields})
 
     # ========================================================
     # SUMMARY STATISTICS
     # ========================================================
 
-    reference_count = sum(
-        bool(
-            row[
-                "meets_original_reference"
-            ]
-        )
-        for row in rows
-    )
+    reference_count = sum(bool(row["meets_original_reference"]) for row in rows)
 
-    with_baseline = [
-        row
-        for row in rows
-        if row[
-            "channel_baseline_median"
-        ] is not None
-    ]
+    with_baseline = [row for row in rows if row["channel_baseline_median"] is not None]
 
     strong_baselines = sum(
-        row[
-            "baseline_confidence"
-        ] == "strong_sample"
-        for row in rows
+        row["baseline_confidence"] == "strong_sample" for row in rows
     )
 
-    warned_baselines = sum(
-        bool(
-            row[
-                "baseline_warning"
-            ]
-        )
-        for row in rows
-    )
+    warned_baselines = sum(bool(row["baseline_warning"]) for row in rows)
 
-    short_candidates = sum(
-        row[
-            "format_candidate"
-        ] == "short_candidate"
-        for row in rows
-    )
+    short_candidates = sum(row["format_candidate"] == "short_candidate" for row in rows)
 
     long_candidates = sum(
-        row[
-            "format_candidate"
-        ] == "long_form_candidate"
-        for row in rows
+        row["format_candidate"] == "long_form_candidate" for row in rows
     )
 
     relevance_counts = {
-        label: sum(
-            row.get("relevance") == label
-            for row in rows
-        )
+        label: sum(row.get("relevance") == label for row in rows)
         for label in (
             RELEVANCE_ON_INTENT,
             RELEVANCE_ADJACENT,
@@ -1930,10 +1491,7 @@ def main() -> None:
     }
 
     reliability_counts = {
-        label: sum(
-            row.get("outlier_reliability") == label
-            for row in rows
-        )
+        label: sum(row.get("outlier_reliability") == label for row in rows)
         for label in (
             RELIABILITY_TRUSTED,
             RELIABILITY_CAUTION,
@@ -1944,33 +1502,19 @@ def main() -> None:
     theme_counts: dict[str, int] = {}
     for row in rows:
         for theme in row.get("themes", []):
-            theme_counts[theme] = (
-                theme_counts.get(theme, 0)
-                + 1
-            )
+            theme_counts[theme] = theme_counts.get(theme, 0) + 1
 
     topic_counts: dict[str, int] = {}
     for row in rows:
         for topic in row.get("topics", []):
-            topic_counts[topic] = (
-                topic_counts.get(topic, 0)
-                + 1
-            )
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
 
-    velocity_valid = sum(
-        row.get("velocity_status") == "VALID"
-        for row in rows
-    )
+    velocity_valid = sum(row.get("velocity_status") == "VALID" for row in rows)
 
-    velocity_no_prior = sum(
-        row.get("velocity_status") == "NO_PRIOR"
-        for row in rows
-    )
+    velocity_no_prior = sum(row.get("velocity_status") == "NO_PRIOR" for row in rows)
 
     velocity_adjustments = sum(
-        row.get("velocity_status")
-        == "NEGATIVE_ADJUSTMENT"
-        for row in rows
+        row.get("velocity_status") == "NEGATIVE_ADJUSTMENT" for row in rows
     )
 
     # ========================================================
@@ -1979,26 +1523,12 @@ def main() -> None:
     # Useful later for choosing evidence-based thresholds.
     # ========================================================
 
-    view_values = sorted(
-        row["views"]
-        for row in rows
-    )
+    view_values = sorted(row["views"] for row in rows)
 
-    avg_rate_values = sorted(
-        row[
-            "average_views_per_day"
-        ]
-        for row in rows
-    )
+    avg_rate_values = sorted(row["average_views_per_day"] for row in rows)
 
     outlier_values = sorted(
-        row[
-            "outlier_ratio"
-        ]
-        for row in rows
-        if row[
-            "outlier_ratio"
-        ] is not None
+        row["outlier_ratio"] for row in rows if row["outlier_ratio"] is not None
     )
 
     def median_or_none(
@@ -2009,127 +1539,64 @@ def main() -> None:
             return None
 
         return round(
-            float(
-                statistics.median(
-                    values
-                )
-            ),
+            float(statistics.median(values)),
             2,
         )
 
     summary = {
-        "experiment":
-            "Stage 2 Experiment 01.2",
-
-        "search_calls":
-            search_calls,
-
-        "unique_search_hits":
-            len(discovered),
-
-        "videos_at_least_500k":
-            len(rows),
-
+        "experiment": "Stage 2 Experiment 01.2",
+        "search_calls": search_calls,
+        "unique_search_hits": len(discovered),
+        "videos_at_least_500k": len(rows),
         "format_candidates": {
-            "long_form_candidate":
-                long_candidates,
-
-            "short_candidate":
-                short_candidates,
+            "long_form_candidate": long_candidates,
+            "short_candidate": short_candidates,
         },
-
         "original_reference_threshold": {
-            "count_meeting_reference":
-                reference_count,
-
-            "long_form_reference_views":
-                LONG_FORM_REFERENCE_VIEWS,
-
-            "short_candidate_reference_views":
-                SHORT_CANDIDATE_REFERENCE_VIEWS,
+            "count_meeting_reference": reference_count,
+            "long_form_reference_views": LONG_FORM_REFERENCE_VIEWS,
+            "short_candidate_reference_views": SHORT_CANDIDATE_REFERENCE_VIEWS,
         },
-
         "baseline_analysis": {
-            "videos_with_baseline":
-                len(with_baseline),
-
-            "strong_baseline_samples":
-                strong_baselines,
-
-            "videos_with_baseline_warning":
-                warned_baselines,
+            "videos_with_baseline": len(with_baseline),
+            "strong_baseline_samples": strong_baselines,
+            "videos_with_baseline_warning": warned_baselines,
         },
-
-        "relevance_analysis":
-            relevance_counts,
-
-        "outlier_reliability_analysis":
-            reliability_counts,
-
-        "theme_counts":
-            dict(
-                sorted(
-                    theme_counts.items(),
-                    key=lambda item: (
-                        -item[1],
-                        item[0],
-                    ),
-                )
-            ),
-
-        "topic_counts":
-            dict(
-                sorted(
-                    topic_counts.items(),
-                    key=lambda item: (
-                        -item[1],
-                        item[0],
-                    ),
-                )
-            ),
-
-        "query_profiles_generated":
-            len(query_profiles),
-
+        "relevance_analysis": relevance_counts,
+        "outlier_reliability_analysis": reliability_counts,
+        "theme_counts": dict(
+            sorted(
+                theme_counts.items(),
+                key=lambda item: (
+                    -item[1],
+                    item[0],
+                ),
+            )
+        ),
+        "topic_counts": dict(
+            sorted(
+                topic_counts.items(),
+                key=lambda item: (
+                    -item[1],
+                    item[0],
+                ),
+            )
+        ),
+        "query_profiles_generated": len(query_profiles),
         "velocity_analysis": {
-            "valid_velocity_samples":
-                velocity_valid,
-
-            "no_prior_snapshot":
-                velocity_no_prior,
-
-            "negative_view_adjustments":
-                velocity_adjustments,
-
-            "snapshot_file":
-                str(SNAPSHOT_FILE),
+            "valid_velocity_samples": velocity_valid,
+            "no_prior_snapshot": velocity_no_prior,
+            "negative_view_adjustments": velocity_adjustments,
+            "snapshot_file": str(SNAPSHOT_FILE),
         },
-
         "distribution": {
-            "median_views":
-                median_or_none(
-                    view_values
-                ),
-
-            "median_average_views_per_day":
-                median_or_none(
-                    avg_rate_values
-                ),
-
-            "median_outlier_ratio":
-                median_or_none(
-                    outlier_values
-                ),
+            "median_views": median_or_none(view_values),
+            "median_average_views_per_day": median_or_none(avg_rate_values),
+            "median_outlier_ratio": median_or_none(outlier_values),
         },
-
         "important_notes": [
-            (
-                "No final opportunity score "
-                "is calculated in Experiment 01.2."
-            ),
-            (
-                "Views measure absolute demand."
-            ),
+            ("No final opportunity score " "is calculated in Experiment 01.2."),
+            ("Views measure absolute demand."),
             (
                 "Outlier ratio measures performance "
                 "relative to recent comparable uploads "
@@ -2171,10 +1638,7 @@ def main() -> None:
         ],
     }
 
-    summary_file = (
-        EXPERIMENT_OUTPUT_DIR
-        / "summary.json"
-    )
+    summary_file = EXPERIMENT_OUTPUT_DIR / "summary.json"
 
     summary_file.write_text(
         json.dumps(
@@ -2189,144 +1653,68 @@ def main() -> None:
     # ========================================================
 
     print()
-    print(
-        "=" * 60
-    )
+    print("=" * 60)
 
-    print(
-        "EXPERIMENT 01.2 COMPLETE"
-    )
+    print("EXPERIMENT 01.2 COMPLETE")
 
-    print(
-        "=" * 60
-    )
+    print("=" * 60)
 
-    print(
-        f"Search calls:             "
-        f"{search_calls}"
-    )
+    print(f"Search calls:             " f"{search_calls}")
 
-    print(
-        f"Unique search hits:       "
-        f"{len(discovered):,}"
-    )
+    print(f"Unique search hits:       " f"{len(discovered):,}")
 
-    print(
-        f"Videos >=500K:            "
-        f"{len(rows):,}"
-    )
+    print(f"Videos >=500K:            " f"{len(rows):,}")
 
-    print(
-        f"Long-form candidates:     "
-        f"{long_candidates:,}"
-    )
+    print(f"Long-form candidates:     " f"{long_candidates:,}")
 
-    print(
-        f"Short candidates:         "
-        f"{short_candidates:,}"
-    )
+    print(f"Short candidates:         " f"{short_candidates:,}")
 
-    print(
-        f"Meet old reference:       "
-        f"{reference_count:,}"
-    )
+    print(f"Meet old reference:       " f"{reference_count:,}")
 
-    print(
-        f"Videos with baseline:     "
-        f"{len(with_baseline):,}"
-    )
+    print(f"Videos with baseline:     " f"{len(with_baseline):,}")
 
-    print(
-        f"Strong baseline samples:  "
-        f"{strong_baselines:,}"
-    )
+    print(f"Strong baseline samples:  " f"{strong_baselines:,}")
 
-    print(
-        f"Baseline warnings:        "
-        f"{warned_baselines:,}"
-    )
+    print(f"Baseline warnings:        " f"{warned_baselines:,}")
 
-    print(
-        f"ON_INTENT:                "
-        f"{relevance_counts[RELEVANCE_ON_INTENT]:,}"
-    )
+    print(f"ON_INTENT:                " f"{relevance_counts[RELEVANCE_ON_INTENT]:,}")
 
-    print(
-        f"ADJACENT:                 "
-        f"{relevance_counts[RELEVANCE_ADJACENT]:,}"
-    )
+    print(f"ADJACENT:                 " f"{relevance_counts[RELEVANCE_ADJACENT]:,}")
 
-    print(
-        f"OFF_INTENT:               "
-        f"{relevance_counts[RELEVANCE_OFF_INTENT]:,}"
-    )
+    print(f"OFF_INTENT:               " f"{relevance_counts[RELEVANCE_OFF_INTENT]:,}")
 
-    print(
-        f"Trusted outliers:         "
-        f"{reliability_counts[RELIABILITY_TRUSTED]:,}"
-    )
+    print(f"Trusted outliers:         " f"{reliability_counts[RELIABILITY_TRUSTED]:,}")
 
-    print(
-        f"Caution outliers:         "
-        f"{reliability_counts[RELIABILITY_CAUTION]:,}"
-    )
+    print(f"Caution outliers:         " f"{reliability_counts[RELIABILITY_CAUTION]:,}")
 
-    print(
-        f"Velocity samples:         "
-        f"{velocity_valid:,}"
-    )
+    print(f"Velocity samples:         " f"{velocity_valid:,}")
 
-    print(
-        f"Topics with evidence:     "
-        f"{len(topic_evidence):,}"
-    )
+    print(f"Topics with evidence:     " f"{len(topic_evidence):,}")
 
-    print(
-        f"Query profiles:           "
-        f"{len(query_profiles):,}"
-    )
+    print(f"Query profiles:           " f"{len(query_profiles):,}")
 
     print()
-    print(
-        "No final score has been assigned."
-    )
+    print("No final score has been assigned.")
 
-    print(
-        "Demand, breakout and momentum "
-        "are being measured independently."
-    )
+    print("Demand, breakout and momentum " "are being measured independently.")
 
     print()
-    print(
-        "Results:"
-    )
+    print("Results:")
 
-    print(
-        f"  {raw_file}"
-    )
+    print(f"  {raw_file}")
 
-    print(
-        f"  {csv_file}"
-    )
+    print(f"  {csv_file}")
 
-    print(
-        f"  {summary_file}"
-    )
+    print(f"  {summary_file}")
 
     if SEARCH_CHECKPOINT_FILE.exists():
         SEARCH_CHECKPOINT_FILE.unlink()
 
-    print(
-        f"  {query_profiles_file}"
-    )
+    print(f"  {query_profiles_file}")
 
-    print(
-        f"  {topic_evidence_file}"
-    )
+    print(f"  {topic_evidence_file}")
 
-    print(
-        f"  {SNAPSHOT_FILE}"
-    )
+    print(f"  {SNAPSHOT_FILE}")
 
 
 if __name__ == "__main__":

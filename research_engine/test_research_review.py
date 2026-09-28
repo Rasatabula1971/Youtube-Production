@@ -80,7 +80,9 @@ class ResearchReviewTests(unittest.TestCase):
         stack.enter_context(
             patch.object(review, "SUMMARY_FILE", output / "research_gate_summary.json")
         )
-        stack.enter_context(patch.object(review, "load_config", return_value=self.config()))
+        stack.enter_context(
+            patch.object(review, "load_config", return_value=self.config())
+        )
 
     def criteria(self):
         return {name: True for name in self.config()["required_accept_criteria"]}

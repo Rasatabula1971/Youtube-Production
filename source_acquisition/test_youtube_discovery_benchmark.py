@@ -15,9 +15,7 @@ class YoutubeDiscoveryBenchmarkTests(unittest.TestCase):
                 "topics": [
                     {
                         "topic": "brakes",
-                        "queries": [
-                            "F1 brakes engineering"
-                        ],
+                        "queries": ["F1 brakes engineering"],
                     }
                 ]
             }
@@ -49,9 +47,7 @@ class YoutubeDiscoveryBenchmarkTests(unittest.TestCase):
             ]
         }
 
-        mapped = _reference_map(
-            checkpoint
-        )
+        mapped = _reference_map(checkpoint)
 
         self.assertEqual(
             mapped[
@@ -136,23 +132,15 @@ class YoutubeDiscoveryBenchmarkTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            output["overall"][
-                "overlap_count"
-            ],
+            output["overall"]["overlap_count"],
             2,
         )
         self.assertEqual(
-            output["overall"][
-                "api_reference_recall"
-            ],
+            output["overall"]["api_reference_recall"],
             0.6667,
         )
         self.assertTrue(
-            any(
-                "does not reproduce identically"
-                in note
-                for note in output["notes"]
-            )
+            any("does not reproduce identically" in note for note in output["notes"])
         )
 
 
