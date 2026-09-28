@@ -20,6 +20,7 @@ class ConceptReviewTests(unittest.TestCase):
         reviewed = output / "concept_gate_reviewed.json"
         handoff = output / "research_handoff.json"
         summary = output / "concept_gate_summary.json"
+        saved_ideas = root / ".idea_bank" / "saved_ideas.json"
 
         stack.enter_context(patch.object(review, "OUTPUT_DIR", output))
         stack.enter_context(patch.object(review, "DEFAULT_CANDIDATES", candidates))
@@ -28,6 +29,7 @@ class ConceptReviewTests(unittest.TestCase):
         stack.enter_context(patch.object(review, "REVIEWED_FILE", reviewed))
         stack.enter_context(patch.object(review, "RESEARCH_HANDOFF_FILE", handoff))
         stack.enter_context(patch.object(review, "SUMMARY_FILE", summary))
+        stack.enter_context(patch.object(review, "SAVED_IDEAS_FILE", saved_ideas))
 
     def candidates(self):
         return {
@@ -302,6 +304,82 @@ class ConceptReviewTests(unittest.TestCase):
         self.assertTrue(final["complete"])
         self.assertEqual(final["accepted"], 1)
         self.assertEqual(final["rejected"], 1)
+
+    def test_save_idea_does_not_change_gate_decision(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(self.candidates()),
+                encoding="utf-8",
+            )
+            review.prepare_state()
+
+            saved = review.apply_action(
+                concept_id="c1",
+                decision="SAVE_IDEA",
+                criteria={},
+                note="Strong title; revisit later.",
+            )
+            bank = json.loads(
+                review.SAVED_IDEAS_FILE.read_text(encoding="utf-8")
+            )
+
+        self.assertFalse(saved["complete"])
+        self.assertEqual(saved["pending"], 2)
+        self.assertEqual(saved["saved_idea_count"], 1)
+        self.assertTrue(saved["concepts"][0]["idea_saved"])
+        self.assertEqual(bank["ideas"][0]["working_title"], "Why Racing Tyres Look Destroyed")
+        self.assertEqual(bank["ideas"][0]["note"], "Strong title; revisit later.")
+
+    def test_save_idea_allowed_after_gate_complete_and_deduped(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(self.candidates()),
+                encoding="utf-8",
+            )
+            review.prepare_state()
+
+            review.apply_action(
+                concept_id="c1",
+                decision="ACCEPT",
+                criteria=self.criteria(),
+                note="",
+            )
+            complete = review.apply_action(
+                concept_id="c2",
+                decision="REJECT",
+                criteria={key: False for key in self.criteria()},
+                note="",
+            )
+            self.assertTrue(complete["complete"])
+
+            first_save = review.apply_action(
+                concept_id="c2",
+                decision="SAVE_IDEA",
+                criteria={},
+                note="Keep the title, rebuild the premise.",
+            )
+            second_save = review.apply_action(
+                concept_id="c2",
+                decision="SAVE_IDEA",
+                criteria={},
+                note="Keep for a future tyre-temperature series.",
+            )
+            bank = json.loads(
+                review.SAVED_IDEAS_FILE.read_text(encoding="utf-8")
+            )
+
+        self.assertTrue(first_save["complete"])
+        self.assertTrue(second_save["complete"])
+        self.assertEqual(second_save["saved_idea_count"], 1)
+        self.assertEqual(len(bank["ideas"]), 1)
+        self.assertEqual(
+            bank["ideas"][0]["note"],
+            "Keep for a future tyre-temperature series.",
+        )
 
     def test_candidate_change_invalidates_old_ui_state(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
