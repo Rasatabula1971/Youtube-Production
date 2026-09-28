@@ -14,6 +14,25 @@ import server
 
 
 class ExperimentUiTests(unittest.TestCase):
+    def test_send_json_ignores_client_disconnect(self):
+        class DisconnectingWriter:
+            def write(self, _body):
+                raise ConnectionAbortedError("browser disconnected")
+
+        class FakeHandler:
+            wfile = DisconnectingWriter()
+
+            def send_response(self, _status):
+                pass
+
+            def send_header(self, _name, _value):
+                pass
+
+            def end_headers(self):
+                pass
+
+        server.Handler._send_json(FakeHandler(), {"status": "ok"})
+
     def test_ui_v3_routes_are_registered(self):
         self.assertEqual(
             server.APP_ROUTES,
