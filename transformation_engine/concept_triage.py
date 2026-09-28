@@ -236,16 +236,12 @@ def validate_scores(
 
         dimensions = item.get("dimension_scores")
         if not isinstance(dimensions, dict):
-            raise ValueError(
-                f"dimension_scores must be an object for {concept_id}"
-            )
+            raise ValueError(f"dimension_scores must be an object for {concept_id}")
         normalized_dimensions: dict[str, int] = {}
         for key in DIMENSIONS:
             value = int(dimensions.get(key, -1))
             if not 0 <= value <= 5:
-                raise ValueError(
-                    f"invalid {key} score for {concept_id}"
-                )
+                raise ValueError(f"invalid {key} score for {concept_id}")
             normalized_dimensions[key] = value
 
         rationale = str(item.get("rationale", "")).strip()
@@ -296,16 +292,9 @@ def normalize_scored_triage(
 
     shortlist_ids: list[str] = []
     if phase == "final":
-        eligible = [
-            item
-            for item in decisions
-            if int(item["overall_score"]) >= 70
-        ]
+        eligible = [item for item in decisions if int(item["overall_score"]) >= 70]
         ranked = sorted(eligible, key=decision_rank, reverse=True)
-        shortlist_ids = [
-            str(item["concept_id"])
-            for item in ranked[:MAX_SHORTLIST]
-        ]
+        shortlist_ids = [str(item["concept_id"]) for item in ranked[:MAX_SHORTLIST]]
         shortlist_set = set(shortlist_ids)
         for item in decisions:
             if (
