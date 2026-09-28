@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse, json, sys
 from pathlib import Path
+from pipeline_integrity import atomic_write_json, batch_status, exit_code_for_status, tolerant_load_json
 from typing import Any
 
 HERE=Path(__file__).resolve().parent
@@ -88,12 +89,16 @@ def run_batch(requests_dir:Path,force:bool,maximum:int|None,config:dict[str,Any]
     results=[]; invoked=0
     for path in paths:
         if invoked>=limit: break
-        item=run_one(path,force,config); results.append(item)
+        try:
+            item=run_one(path,force,config)
+        except Exception as exc:
+            item={"status":"RUNNER_ERROR","error_type":type(exc).__name__,"request_source":str(path)}
+        results.append(item)
         if item.get("status")!="SKIPPED_ALREADY_VALIDATED": invoked+=1
         if item.get("status") in {"COST_POLICY_VIOLATION","MODEL_FAILED"}: break
-    status="COMPLETE" if paths and all(r.get("status") in {"VALIDATED","SKIPPED_ALREADY_VALIDATED"} for r in results) else "PARTIAL"
+    status=batch_status(results, expected_count=len(paths), processed_count=len(results))
     summary={"status":status,"requests_found":len(paths),"model_runs_invoked":invoked,"batch_limit":limit,"results":results}
-    BATCH_SUMMARY_FILE.parent.mkdir(parents=True,exist_ok=True); BATCH_SUMMARY_FILE.write_text(json.dumps(summary,indent=2,ensure_ascii=False),encoding="utf-8"); return summary
+    atomic_write_json(BATCH_SUMMARY_FILE, summary); return summary
 
 def main()->None:
     p=argparse.ArgumentParser(description="FAIR-backed Story / Script runner")
@@ -101,4 +106,6 @@ def main()->None:
     a=p.parse_args(); config=load_runner_config()
     result=run_one(a.request,a.force,config) if a.mode=="run" and a.request else run_batch(a.requests_dir.resolve(),a.force,a.max_requests,config)
     print(json.dumps(result,indent=2,ensure_ascii=False))
+    if a.mode=="batch":
+        raise SystemExit(exit_code_for_status(result["status"]))
 if __name__=="__main__": main()
