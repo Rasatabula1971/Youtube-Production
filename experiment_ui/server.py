@@ -58,6 +58,10 @@ from vision_review import (  # noqa: E402
     frame_path as vision_frame_path,
     review_snapshot as vision_review_snapshot,
 )
+from human_review import (  # noqa: E402
+    apply_review_action as apply_human_analysis_review_action,
+    review_snapshot as human_analysis_review_snapshot,
+)
 
 EXP2_OUTPUT = EXP2_DIR / "output"
 EXP2_PREPARED_DIR = EXP2_OUTPUT / "profiles_to_complete"
@@ -2745,6 +2749,20 @@ def workflow_guidance(
             "next_title": "Prepare Analysis Requests",
         }
 
+    human_analysis_review = human_analysis_review_snapshot()
+    if human_analysis_review.get("status") == "AWAITING_HUMAN_DECISION":
+        return {
+            "state": "HUMAN_ANALYSIS_GATE",
+            "current_action_id": None,
+            "current_title": "Review Analysis Findings",
+            "current_detail": (
+                "Review each evidence-backed finding and transfer item. "
+                "Accept only claims that fairly represent the cited source evidence."
+            ),
+            "next_action_id": "synthesis_build",
+            "next_title": "Build Experiment 02 Synthesis",
+        }
+
     transform = transformation_artifact_state()
     concept_gate = transform.get("concept_gate", {})
     if (
@@ -2891,6 +2909,7 @@ def status_payload() -> dict[str, Any]:
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
         "vision_review": vision_review_snapshot(),
+        "human_analysis_review": human_analysis_review_snapshot(),
         "transformation": transformation,
         "concept_gate": transformation["concept_gate"],
         "packaging": packaging,
@@ -2960,6 +2979,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/vision-review":
             self._send_json(vision_review_snapshot())
+            return
+        if route == "/api/human-analysis-review":
+            self._send_json(human_analysis_review_snapshot())
             return
         if route == "/api/concept-gate":
             self._send_json(concept_gate_snapshot())
@@ -3031,6 +3053,20 @@ class Handler(BaseHTTPRequestHandler):
                     observation=(
                         str(body["observation"])
                         if body.get("observation") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/human-analysis-review":
+                payload = apply_human_analysis_review_action(
+                    video_id=str(body.get("video_id", "")),
+                    item_id=str(body.get("item_id", "")),
+                    decision=str(body.get("decision", "")),
+                    note=(
+                        str(body["note"])
+                        if body.get("note") is not None
                         else None
                     ),
                 )
