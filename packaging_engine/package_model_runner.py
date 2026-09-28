@@ -250,7 +250,7 @@ def run_one(
         atomic_write_json(report_path, report)
         return report
 
-    if bridge_result.not inference_cost_authorized(bridge_result):
+    if not inference_cost_authorized(bridge_result):
         report = {
             "concept_id": concept_id,
             "status": "COST_POLICY_VIOLATION",
