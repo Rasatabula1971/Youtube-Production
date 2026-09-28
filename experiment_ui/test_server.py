@@ -1679,5 +1679,83 @@ class ExperimentUiTests(unittest.TestCase):
             self.assertTrue(readiness["exp2_prepare"]["enabled"])
 
 
+    def test_remaining_analysis_action_is_in_guided_workflow(self):
+        self.assertIn("analysis_model_remaining", server.WORKFLOW_ACTION_ORDER)
+        one_index = server.WORKFLOW_ACTION_ORDER.index("analysis_model_one")
+        remaining_index = server.WORKFLOW_ACTION_ORDER.index("analysis_model_remaining")
+        review_index = server.WORKFLOW_ACTION_ORDER.index("human_review_prepare")
+        self.assertLess(one_index, remaining_index)
+        self.assertLess(remaining_index, review_index)
+
+        command = server.ACTION_DEFS["analysis_model_remaining"]["command"]
+        self.assertIn("analysis_model_runner.py", " ".join(str(part) for part in command))
+        self.assertIn("--mode", command)
+        self.assertIn("batch", command)
+        self.assertNotIn("--max-requests", command)
+
+    def test_exp2_artifact_state_counts_partial_analysis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prepared = root / "prepared"
+            enriched = root / "enriched"
+            requests = root / "requests"
+            analyzed = root / "analyzed"
+            runs = root / "runs"
+            for path in (prepared, enriched, requests, analyzed, runs):
+                path.mkdir()
+
+            for video_id in ("v1", "v2"):
+                prepared_path = prepared / f"{video_id}.json"
+                prepared_path.write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+                enriched_path = enriched / f"{video_id}.json"
+                enriched_path.write_text(
+                    json.dumps({
+                        "video_id": video_id,
+                        "source_inputs": {"transcript": {"status": "PROVIDED"}},
+                        "evidence": [{"type": "transcript"}],
+                    }),
+                    encoding="utf-8",
+                )
+                request_path = requests / f"{video_id}.analysis_request.json"
+                request_path.write_text(
+                    json.dumps({
+                        "video_id": video_id,
+                        "request_provenance": {
+                            "profile_sha256": server.sha256_file(enriched_path)
+                        },
+                    }),
+                    encoding="utf-8",
+                )
+
+            first_request = requests / "v1.analysis_request.json"
+            (analyzed / "v1.json").write_text(json.dumps({"video_id": "v1"}), encoding="utf-8")
+            (runs / "v1.model_run.json").write_text(
+                json.dumps({
+                    "status": "APPLIED",
+                    "request_sha256": server.sha256_file(first_request),
+                }),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(server, "EXP2_PREPARED_DIR", prepared),
+                patch.object(server, "EXP2_ENRICHED_DIR", enriched),
+                patch.object(server, "EXP2_REQUESTS_DIR", requests),
+                patch.object(server, "EXP2_ANALYZED_DIR", analyzed),
+                patch.object(server, "EXP2_MODEL_RUNS_DIR", runs),
+                patch.object(server, "EXP2_REVIEW_REQUESTS_DIR", root / "review_requests"),
+                patch.object(server, "EXP2_REVIEWED_DIR", root / "reviewed"),
+                patch.object(server, "EXP2_SYNTHESIS_FILE", root / "synthesis.json"),
+                patch.object(server, "EXP2_ACQUISITION_SUMMARY", root / "acq.json"),
+                patch.object(server, "EXP2_VISUAL_SUMMARY", root / "visual.json"),
+                patch.object(server, "SOURCE_ACQ_OUTPUT", root / "source"),
+            ):
+                state = server.exp2_artifact_state()
+
+        self.assertEqual(state["analysis_request_ids"], ["v1", "v2"])
+        self.assertEqual(state["analyzed_ids"], ["v1"])
+        self.assertEqual(state["analyzed_current_count"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
