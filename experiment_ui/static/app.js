@@ -1398,7 +1398,7 @@ function renderAnalysis(data) {
   const currentId = workflow.current_action_id || "";
   let activeIndex = 0;
   if (
-    ["analysis_batch_prepare", "analysis_model_one", "human_review_prepare", "synthesis_build"].includes(currentId)
+    ["analysis_batch_prepare", "analysis_model_one", "analysis_model_remaining", "human_review_prepare", "synthesis_build"].includes(currentId)
   ) {
     activeIndex = 1;
   } else if (
