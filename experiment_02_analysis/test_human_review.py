@@ -117,10 +117,8 @@ class HumanReviewTests(unittest.TestCase):
         )
 
         self.assertEqual(request["reviewable_item_count"], 2)
-        self.assertEqual(
-            request["items"][0]["item_id"],
-            "analysis.opening_hook.findings.0000",
-        )
+        self.assertTrue(request["items"][0]["item_id"].startswith("review."))
+        self.assertEqual(len(request["items"][0]["item_id"]), 31)
         self.assertEqual(
             request["items"][0]["supporting_evidence"][0][
                 "evidence_id"
@@ -222,10 +220,13 @@ class HumanReviewTests(unittest.TestCase):
             self.review_config,
         )
         response = self.response_for(request)
+        transfer_id = next(
+            item["item_id"]
+            for item in request["items"]
+            if item["kind"] == "transferable_mechanism"
+        )
         for decision in response["decisions"]:
-            if decision["item_id"].startswith(
-                "transfer.transferable_mechanisms"
-            ):
+            if decision["item_id"] == transfer_id:
                 decision["decision"] = "REJECT"
 
         reviewed, _ = apply_review(
@@ -316,6 +317,16 @@ class HumanReviewTests(unittest.TestCase):
                 (responses_dir / "v1.review_response.json").read_text(encoding="utf-8")
             )
             self.assertEqual(len(saved["decisions"]), 2)
+
+
+    def test_stale_review_request_is_rejected_after_reanalysis(self):
+        v1 = self.profile()
+        request = build_review_request(v1, self.experiment_config, self.review_config)
+        response = self.response_for(request, decision="REJECT")
+        v2 = self.profile()
+        v2["analysis"]["opening_hook"]["findings"][0]["finding"] = "Different never-reviewed finding"
+        with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
+            apply_review(v2, request, response, self.experiment_config, self.review_config)
 
 
 if __name__ == "__main__":

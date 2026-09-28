@@ -11,6 +11,7 @@ research question lacks an accepted claim.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,16 @@ REVIEW_REQUESTS_DIR = OUTPUT_DIR / "review_requests"
 REVIEWED_DIR = OUTPUT_DIR / "reviewed_packages"
 VERIFIED_DIR = OUTPUT_DIR / "verified_packages"
 SUMMARY_FILE = OUTPUT_DIR / "research_gate_summary.json"
+
+
+
+def content_sha256(payload: Any) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def load_json(path: Path) -> Any:
@@ -444,6 +455,10 @@ def run_prepare(
     package = load_json(draft_path)
     config = load_config()
     request = build_review_request(package, config)
+    request["request_provenance"].update({
+        "draft_source": str(draft_path.resolve()),
+        "draft_sha256": file_sha256(draft_path),
+    })
 
     concept_id = str(request["concept_id"])
     destination = (

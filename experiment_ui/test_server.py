@@ -1,8 +1,11 @@
 import json
 import sys
 import tempfile
+import threading
 import time
 import unittest
+import urllib.error
+import urllib.request
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -1770,6 +1773,49 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("transformation_engine/concept_triage.py", " ".join(str(part) for part in command))
         self.assertIn("--mode", command)
         self.assertIn("run", command)
+
+
+    def test_state_changing_posts_require_same_origin_json_and_csrf(self):
+        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        port = httpd.server_address[1]
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            bad = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/stop",
+                data=b"{}",
+                method="POST",
+                headers={
+                    "Content-Type": "text/plain",
+                    "Origin": "https://evil.example",
+                },
+            )
+            with self.assertRaises(urllib.error.HTTPError) as denied:
+                urllib.request.urlopen(bad, timeout=5)
+            self.assertEqual(denied.exception.code, 403)
+
+            good = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/stop",
+                data=b"{}",
+                method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": f"http://127.0.0.1:{port}",
+                    "X-CSRF-Token": server.CSRF_TOKEN,
+                },
+            )
+            try:
+                with urllib.request.urlopen(good, timeout=5) as response:
+                    self.assertNotEqual(response.status, 403)
+            except urllib.error.HTTPError as allowed:
+                self.assertNotEqual(
+                    allowed.code,
+                    403,
+                    "same-origin JSON request with CSRF token must pass security checks",
+                )
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ No model or network calls are made.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,16 @@ REVIEW_REQUEST_FILE = OUTPUT_DIR / "concept_gate_request.json"
 REVIEWED_FILE = OUTPUT_DIR / "concept_gate_reviewed.json"
 RESEARCH_HANDOFF_FILE = OUTPUT_DIR / "research_handoff.json"
 SUMMARY_FILE = OUTPUT_DIR / "concept_gate_summary.json"
+
+
+
+def content_sha256(payload: Any) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def load_json(path: Path) -> Any:
@@ -141,6 +152,9 @@ def build_review_request(
             ),
         },
         "items": items,
+        "request_provenance": {
+            "candidates_content_sha256": content_sha256(candidates_payload),
+        },
         "response_schema": {
             "reviewer": "reviewer name or identifier",
             "decisions": [
@@ -268,6 +282,9 @@ def apply_gate(
     response: dict[str, Any],
     config: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    expected_hash = request.get("request_provenance", {}).get("candidates_content_sha256")
+    if not expected_hash or expected_hash != content_sha256(candidates_payload):
+        raise ValueError("STALE_REVIEW_REQUEST: concept candidates changed after review preparation")
     mapped = validate_decisions(request, response, config)
     concepts = candidates_payload.get("concepts", [])
     by_id = {
@@ -404,6 +421,10 @@ def run_prepare(candidates_path: Path) -> dict[str, Any]:
     candidates = load_json(candidates_path)
     config = load_config()
     request = build_review_request(candidates, config)
+    request["request_provenance"].update({
+        "candidates_source": str(candidates_path.resolve()),
+        "candidates_sha256": file_sha256(candidates_path),
+    })
     REVIEW_REQUEST_FILE.write_text(
         json.dumps(request, indent=2, ensure_ascii=False),
         encoding="utf-8",

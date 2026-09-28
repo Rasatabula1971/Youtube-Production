@@ -7,6 +7,7 @@ Approved package dependencies are carried into the Research Engine handoff.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,16 @@ REVIEWED_FILE = OUTPUT_DIR / "packaging_gate_reviewed.json"
 APPROVED_FILE = OUTPUT_DIR / "approved_packages.json"
 RESEARCH_HANDOFF_FILE = OUTPUT_DIR / "research_handoff.json"
 SUMMARY_FILE = OUTPUT_DIR / "packaging_gate_summary.json"
+
+
+
+def content_sha256(payload: Any) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def load_json(path: Path) -> Any:
@@ -182,6 +193,9 @@ def build_review_request(
             ),
         },
         "items": items,
+        "request_provenance": {
+            "candidates_content_sha256": content_sha256(candidates_payload),
+        },
         "response_schema": {
             "reviewer": "reviewer name or identifier",
             "decisions": [
@@ -504,6 +518,10 @@ def run_prepare(
         candidates,
         config,
     )
+    request["request_provenance"].update({
+        "candidates_source": str(candidates_path.resolve()),
+        "candidates_sha256": file_sha256(candidates_path),
+    })
     REVIEW_REQUEST_FILE.write_text(
         json.dumps(
             request,

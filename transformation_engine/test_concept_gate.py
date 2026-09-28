@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 
 from concept_gate import (
     apply_gate,
@@ -266,6 +267,25 @@ class ConceptGateTests(unittest.TestCase):
             handoff["concepts"][0]["concept_id"],
             "c2",
         )
+
+
+    def test_stale_candidates_cannot_receive_old_human_accept(self):
+        candidates_v1 = {"concepts": [deepcopy(self.candidates["concepts"][0])]}
+        request = build_review_request(candidates_v1, self.config)
+        response = {
+            "reviewer": "r",
+            "decisions": [{
+                "concept_id": "c1",
+                "decision": "ACCEPT",
+                "criteria": {key: True for key in self.config["required_accept_criteria"]},
+                "note": "",
+            }],
+            "overall_note": "",
+        }
+        candidates_v2 = {"concepts": [deepcopy(self.candidates["concepts"][0])]}
+        candidates_v2["concepts"][0]["premise"] = "Materially different unseen premise"
+        with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
+            apply_gate(candidates_v2, request, response, self.config)
 
 
 if __name__ == "__main__":

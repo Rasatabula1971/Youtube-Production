@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import shutil
+import secrets
 import subprocess
 import sys
 import threading
@@ -26,6 +27,7 @@ PROJECT_ROOT = HERE.parent
 STATIC_DIR = HERE / "static"
 APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
 IS_WINDOWS = os.name == "nt"
+CSRF_TOKEN = secrets.token_urlsafe(32)
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
@@ -1004,7 +1006,26 @@ def exp2_artifact_state() -> dict[str, Any]:
             ):
                 review_request_ids.add(video_id)
 
-    reviewed_ids = json_stems(EXP2_REVIEWED_DIR)
+    reviewed_ids: set[str] = set()
+    for video_id in analyzed_ids:
+        analyzed_path = EXP2_ANALYZED_DIR / f"{video_id}.json"
+        request_path = EXP2_REVIEW_REQUESTS_DIR / f"{video_id}.review_request.json"
+        reviewed_path = EXP2_REVIEWED_DIR / f"{video_id}.json"
+        report_path = (
+            EXP2_OUTPUT / "human_review_reports"
+            / f"{video_id}.human_review.json"
+        )
+        report = safe_load_json(report_path)
+        if (
+            analyzed_path.exists()
+            and request_path.exists()
+            and reviewed_path.exists()
+            and isinstance(report, dict)
+            and report.get("status") == "REVIEW_COMPLETED"
+            and report.get("profile_sha256") == sha256_file(analyzed_path)
+            and report.get("request_sha256") == sha256_file(request_path)
+        ):
+            reviewed_ids.add(video_id)
 
     evidence_complete = bool(prepared_ids) and prepared_ids.issubset(enriched_ids)
     requests_complete = evidence_complete and prepared_ids.issubset(request_ids)
@@ -3158,6 +3179,7 @@ def status_payload() -> dict[str, Any]:
         )
 
     return {
+        "csrf_token": CSRF_TOKEN,
         "project_root": str(PROJECT_ROOT),
         "stages": stage_statuses(),
         "actions": actions,
@@ -3273,8 +3295,35 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    def _post_security_error(self) -> str | None:
+        content_type = str(self.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return "POST requests require Content-Type: application/json."
+
+        port = int(self.server.server_address[1])
+        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        host = str(self.headers.get("Host", "")).strip().lower()
+        if host not in allowed_hosts:
+            return "Invalid Host for local control UI."
+
+        origin = str(self.headers.get("Origin", "")).strip().lower()
+        if origin and origin not in {
+            f"http://127.0.0.1:{port}",
+            f"http://localhost:{port}",
+        }:
+            return "Cross-origin POST requests are not allowed."
+
+        if str(self.headers.get("X-CSRF-Token", "")) != CSRF_TOKEN:
+            return "Missing or invalid CSRF token."
+        return None
+
     def do_POST(self) -> None:
         route = urlparse(self.path).path
+        security_error = self._post_security_error()
+        if security_error:
+            self._send_json({"error": security_error}, 403)
+            return
+
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         try:
