@@ -1641,6 +1641,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     transform = transformation_artifact_state()
     transform_requests = bool(transform["requests_ready"])
     transform_candidates = bool(transform["candidates_ready"])
+    transform_triage = bool(transform["triage_ready"])
     concept_gate = transform["concept_gate"]
     concept_gate_status = str(
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
@@ -1675,6 +1676,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif active_action in {
         "transform_prepare",
         "concept_generate",
+        "concept_triage",
         "concept_gate_prepare",
     }:
         transform_human = "CONCEPT WORK RUNNING"
@@ -1692,6 +1694,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_human = "CONCEPT GENERATION NEEDED"
         transform_tone = "action"
         transform_next = "Run Generate Concept Candidates."
+    elif not transform_triage:
+        transform_human = "LLM CONCEPT TRIAGE NEEDED"
+        transform_tone = "action"
+        transform_next = "Run Triage Concept Candidates."
     elif concept_gate_status == "READY_TO_PREPARE":
         transform_human = "PREPARE CONCEPT GATE"
         transform_tone = "action"
@@ -2121,6 +2127,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     transform = transformation_artifact_state()
     transform_requests = bool(transform["requests_ready"])
     transform_candidates = bool(transform["candidates_ready"])
+    transform_triage = bool(transform["triage_ready"])
     concept_gate = transform["concept_gate"]
     concept_gate_status = str(
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
