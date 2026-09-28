@@ -118,7 +118,9 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
                     "result_urls": urls,
                 }
             )
-        except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
             errors.append(
                 {
                     "question_id": question_id,
@@ -143,7 +145,9 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
 
             try:
                 read = read_web_page(clean_url)
-            except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
                 errors.append(
                     {
                         "question_id": question_id,
@@ -230,7 +234,9 @@ def run_batch(*, force: bool = False) -> dict[str, Any]:
     for path in sorted(PLANS_DIR.glob("*.research_plan.json")):
         try:
             results.append(acquire_plan(path, force=force))
-        except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
             results.append(
                 {
                     "status": "ERROR",

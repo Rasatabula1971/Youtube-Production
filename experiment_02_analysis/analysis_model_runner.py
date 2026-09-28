@@ -616,7 +616,9 @@ def run_one(
                 runner_config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             "video_id": request_video_id,
             "status": "RUNNER_ERROR",
@@ -680,7 +682,9 @@ def run_one(
 
     try:
         response = parse_model_json(raw_output)
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             **base_report,
             "status": "MODEL_OUTPUT_PARSE_ERROR",
@@ -704,7 +708,9 @@ def run_one(
             restricted_response,
             experiment_config,
         )
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             **base_report,
             "status": "APPLY_ERROR",
@@ -774,7 +780,9 @@ def run_doctor(config: dict[str, Any]) -> dict[str, Any]:
                 config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         return {
             "status": "DOCTOR_ERROR",
             "error_type": type(exc).__name__,

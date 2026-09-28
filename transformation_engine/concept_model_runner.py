@@ -284,7 +284,9 @@ def run_one(
                 )
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             "mechanism_id": mechanism_id,
             "status": "RUNNER_ERROR",
@@ -344,7 +346,9 @@ def run_one(
             request,
             load_config(),
         )
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             **base_report,
             "status": "MODEL_OUTPUT_VALIDATION_ERROR",

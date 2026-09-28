@@ -363,7 +363,9 @@ def run(*, force: bool = False) -> dict[str, Any]:
                 config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             "status": "RUNNER_ERROR",
             "source_candidates": str(CANDIDATES_FILE),
@@ -412,7 +414,9 @@ def run(*, force: bool = False) -> dict[str, Any]:
     try:
         parsed = parse_model_json(raw)
         triage = validate_triage(parsed, concepts)
-    except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
         report = {
             **base_report,
             "status": "MODEL_OUTPUT_VALIDATION_ERROR",

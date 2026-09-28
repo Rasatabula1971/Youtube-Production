@@ -436,7 +436,9 @@ def run_batch_prepare(
     for draft_path in sorted(drafts_dir.glob("*.json")):
         try:
             prepared.append(run_prepare(draft_path))
-        except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - boundary converts failure to structured status  # noqa: BLE001 - boundary converts failure to structured status
             failures.append(
                 {
                     "draft": str(draft_path),

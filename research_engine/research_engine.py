@@ -571,10 +571,9 @@ def run_apply() -> dict[str, Any]:
 
         plan = load_json(plan_path)
         provenance = response.get("response_provenance")
-        if (
-            isinstance(provenance, dict)
-            and provenance.get("plan_sha256") != sha256_file(plan_path)
-        ):
+        if isinstance(provenance, dict) and provenance.get(
+            "plan_sha256"
+        ) != sha256_file(plan_path):
             rejected.append(
                 {
                     "response": str(response_path),

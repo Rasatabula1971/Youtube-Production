@@ -304,7 +304,7 @@ def api_get(
 
             time.sleep(wait_seconds)
 
-        except Exception:  # noqa: BLE001 - boundary cleanup/recovery must not escape
+        except Exception:
 
             if attempt == 3:
                 raise

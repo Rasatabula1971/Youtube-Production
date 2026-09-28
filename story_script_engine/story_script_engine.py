@@ -216,7 +216,9 @@ def run_prepare(verified_dir: Path = RESEARCH_VERIFIED_DIR) -> dict[str, Any]:
                 json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
             )
             prepared.append({"concept_id": request["concept_id"], "request": str(dest)})
-        except Exception as exc:  # noqa: BLE001 - boundary converts failure to structured status
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - boundary converts failure to structured status
             failures.append({"package": str(path), "error_type": type(exc).__name__})
     summary = {
         "status": (
