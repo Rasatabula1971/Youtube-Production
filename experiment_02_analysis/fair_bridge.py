@@ -220,7 +220,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
     finally:
         try:
             await fair.close()
-        except Exception:  # noqa: BLE001,S110 - cleanup must not mask the FAIR result
+        except Exception:  # noqa: S110 - cleanup must not mask the FAIR result
             pass
 
 
