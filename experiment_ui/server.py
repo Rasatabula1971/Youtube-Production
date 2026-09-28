@@ -16,7 +16,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -1598,7 +1598,6 @@ def stage_statuses() -> list[dict[str, Any]]:
     reviewed_count = exp2_artifacts["reviewed_current_count"]
     analyzed = analyzed_count > 0
     analysis_complete = request_count > 0 and analyzed_count == request_count
-    reviewed = reviewed_count > 0
     review_complete = request_count > 0 and reviewed_count == request_count
 
     if synthesis_ready:
@@ -2145,7 +2144,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     reviewed_count = exp2_artifacts["reviewed_current_count"]
     analyzed = analyzed_count > 0
     analysis_complete = request_count > 0 and analyzed_count == request_count
-    review_requests = review_request_count > 0
     review_requests_complete = (
         request_count > 0 and review_request_count == request_count
     )
@@ -2818,7 +2816,7 @@ class JobManager:
                 raise RuntimeError("Another experiment job is already running.")
 
             JOB_LOG_DIR.mkdir(parents=True, exist_ok=True)
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             log_path = JOB_LOG_DIR / f"{stamp}_{action_id}.log"
             action = ACTION_DEFS[action_id]
 
