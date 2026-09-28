@@ -46,11 +46,21 @@ def safe_attempt(attempt: Any) -> dict[str, Any]:
         "error_detail",
         "role",
     }
-    return {
+    safe = {
         key: value
         for key, value in payload.items()
         if key in allowed
     }
+    quality = payload.get("quality")
+    if isinstance(quality, dict):
+        safe["quality"] = {
+            "overall_score": quality.get("overall_score"),
+            "hard_reject": quality.get("hard_reject"),
+            "reject_reasons": quality.get("reject_reasons", []),
+            "verification_state": quality.get("verification_state"),
+            "validator_results": quality.get("validator_results", {}),
+        }
+    return safe
 
 
 def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any]:
@@ -170,6 +180,9 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         result = await fair.solve(
             str(payload.get("prompt") or ""),
+            task_type=str(
+                settings.get("task_type", "youtube_structured_pipeline")
+            ),
             expected_schema=payload.get("expected_schema"),
             quality_level=str(settings.get("quality_level", "standard")),
             cross_check_required=bool(
