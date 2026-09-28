@@ -508,8 +508,7 @@ def direct_gemini_available() -> bool:
 def inference_cost_authorized(result: dict[str, Any]) -> bool:
     if (
         result.get("direct_backup_used") is True
-        and result.get("billing_authorization")
-        == "USER_APPROVED_DIRECT_GEMINI_BACKUP"
+        and result.get("billing_authorization") == "USER_APPROVED_DIRECT_GEMINI_BACKUP"
     ):
         return True
     return result.get("paid_inference_executed") is False
@@ -674,9 +673,7 @@ def call_direct_gemini_backup(
         "reason_code": fair_result.get("reason_code"),
         "provider_id": fair_result.get("provider_id"),
         "model_id": fair_result.get("model_id"),
-        "paid_inference_executed": fair_result.get(
-            "paid_inference_executed"
-        ),
+        "paid_inference_executed": fair_result.get("paid_inference_executed"),
     }
     return {
         "status": "ACCEPTED",

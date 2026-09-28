@@ -440,9 +440,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                         "candidates": [
                             {
                                 "content": {
-                                    "parts": [
-                                        {"text": '{"scores":[],"summary":"ok"}'}
-                                    ]
+                                    "parts": [{"text": '{"scores":[],"summary":"ok"}'}]
                                 }
                             }
                         ]
@@ -475,7 +473,10 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 },
                 clear=False,
             ),
-            patch("analysis_model_runner.urllib.request.urlopen", return_value=FakeResponse()),
+            patch(
+                "analysis_model_runner.urllib.request.urlopen",
+                return_value=FakeResponse(),
+            ),
         ):
             result = call_direct_gemini_backup(
                 payload,
