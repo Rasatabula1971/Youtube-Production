@@ -354,6 +354,10 @@ def validate_claim(
             errors.append(
                 f"evidence_links[{index}] requires evidence_note"
             )
+        if not str(link.get("evidence_quote", "")).strip():
+            errors.append(
+                f"evidence_links[{index}] requires evidence_quote"
+            )
 
     return errors
 
