@@ -15,6 +15,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from source_overlap import check_texts
+
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
@@ -422,6 +424,20 @@ def validate_response(
             "Concept must retain its main value without source wording, "
             "footage, story, personality, or exact execution."
         )
+        overlap = check_texts([
+            {"field": "working_title", "text": normalized.get("working_title", "")},
+            {"field": "premise", "text": normalized.get("premise", "")},
+            {"field": "audience_promise", "text": normalized.get("audience_promise", "")},
+            {"field": "mechanism_application", "text": normalized.get("mechanism_application", "")},
+            {"field": "transformation_method", "text": normalized.get("transformation_method", "")},
+        ])
+        normalized["source_overlap"] = overlap
+        if overlap.get("blocking"):
+            match = overlap.get("matches", [{}])[0]
+            errors.append(
+                "source overlap block: "
+                + str(match.get("overlap_text") or "")
+            )
 
         if errors:
             rejected.append(
