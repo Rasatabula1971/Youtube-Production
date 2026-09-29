@@ -3743,28 +3743,16 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "voice_gate_prepare": {
             "enabled": (
                 voice_specs_ready
-                and (
-                    performance_gate_status == "READY_TO_PREPARE"
-                    or (
-                        performance_gate_complete
-                        and not voice_visual_ready
-                    )
-                )
+                and performance_gate_status == "READY_TO_PREPARE"
             ),
             "reason": (
                 "Validated Voice Performance specs are ready for human review."
                 if voice_specs_ready
                 and performance_gate_status == "READY_TO_PREPARE"
                 else (
-                    "No Voice Performance spec was accepted; reopen the gate."
+                    "Performance Gate is already prepared or complete."
                     if voice_specs_ready
-                    and performance_gate_complete
-                    and not voice_visual_ready
-                    else (
-                        "Performance Gate is already prepared or complete."
-                        if voice_specs_ready
-                        else "Generate current Voice Performance specs first."
-                    )
+                    else "Generate current Voice Performance specs first."
                 )
             ),
         },
