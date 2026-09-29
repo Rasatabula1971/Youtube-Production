@@ -53,6 +53,28 @@ Examples:
 
 What the viewer wants to understand, fix, avoid or decide.
 
+### viewer_need_evidence
+
+The viewer problem must preserve how strongly it is supported rather than letting
+a plausible model-generated problem masquerade as observed demand.
+
+Statuses:
+
+- `OBSERVED` — concrete audience-signal evidence is recorded, such as repeated
+  questions/comments or explicit search-intent evidence;
+- `INFERRED` — the viewer need is a reasoned inference from available market,
+  source, or pattern evidence, but has not been directly observed in audience
+  language;
+- `HYPOTHESIS` — the viewer need is plausible but currently unverified.
+
+Every concept records an `evidence_basis` list and a rationale. `OBSERVED`
+requires at least one concrete basis item. If no direct audience-signal evidence
+exists, the system must use `INFERRED` or `HYPOTHESIS`.
+
+Existing concepts created before this field was introduced are treated as
+`HYPOTHESIS` at the Human Concept Gate unless they already contain a defensible
+evidence record.
+
 ### content_gap
 
 A content gap is never assumed from popularity alone.
@@ -123,6 +145,7 @@ Concept Gate checks:
 
 - problem specificity;
 - viewer moment clarity;
+- viewer-need evidence honesty;
 - outcome specificity;
 - gap-evidence honesty;
 - channel fit;
@@ -140,7 +163,8 @@ No numeric idea score, fit score or gap score is introduced.
 
 ## Comment mining — planned evidence source
 
-Comment mining is not yet implemented.
+The evidence-state contract is implemented, but automated comment/question
+acquisition is not yet implemented.
 
 When added, it should look for repeated:
 
