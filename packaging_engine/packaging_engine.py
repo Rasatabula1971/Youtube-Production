@@ -482,11 +482,29 @@ def run_apply() -> dict[str, Any]:
             item["response_source"] = str(response_path)
             rejected.append(item)
 
+    current_response_hashes: dict[str, str] = {}
+    for response_path in sorted(RESPONSES_DIR.glob("*.json")):
+        try:
+            response = load_json(response_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        concept_id = str(response.get("concept_id", "")).strip()
+        request_path = REQUESTS_DIR / f"{safe_slug(concept_id)}.package_request.json"
+        if not request_path.exists():
+            continue
+        provenance = response.get("response_provenance", {})
+        if (
+            isinstance(provenance, dict)
+            and provenance.get("request_sha256") == sha256_file(request_path)
+        ):
+            current_response_hashes[concept_id] = sha256_file(response_path)
+
     CANDIDATES_FILE.write_text(
         json.dumps(
             {
                 "artifact": "package_candidates",
                 "count": len(accepted),
+                "source_response_sha256": current_response_hashes,
                 "packages": accepted,
                 "notes": [
                     "Packages are not ranked.",
