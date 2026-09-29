@@ -1,0 +1,29 @@
+MEGALINTER_VERSION: v10.1.0
+MEGALINTER_FLAVOR: python
+APPLY_FIXES: none
+VALIDATE_ALL_CODEBASE: true
+PRINT_ALPACA: false
+SHOW_ELAPSED_TIME: true
+IGNORE_GITIGNORED_FILES: true
+
+# Keep MegaLinter focused on code/security checks that matter to this project.
+ENABLE_LINTERS:
+  - PYTHON_RUFF
+  - PYTHON_MYPY
+  - PYTHON_BANDIT
+  - REPOSITORY_SEMGREP
+  - YAML_YAMLLINT
+  - JSON_JSONLINT
+  - ACTION_ACTIONLINT
+
+FILTER_REGEX_EXCLUDE: '(^|/)(output|archive|\.idea_bank|\.experiment_ui|megalinter-reports)/'
+PYTHON_RUFF_CONFIG_FILE: ruff.toml
+PYTHON_MYPY_CONFIG_FILE: mypy.ini
+PYTHON_BANDIT_ARGUMENTS: '-lll -ii'
+
+PYTHON_RUFF_ARGUMENTS: '--select BLE,S,B,F,PLW,E722,ASYNC'
+PYTHON_MYPY_FILTER_REGEX_EXCLUDE: '(^|/)test_.*\.py$'
+REPOSITORY_SEMGREP_RULESETS:
+  - p/python
+  - p/security-audit
+REPOSITORY_SEMGREP_ARGUMENTS: "--exclude '**/test_*.py'"

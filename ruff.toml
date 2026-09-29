@@ -9,10 +9,10 @@ ignore = ["TRY004"]
 # These modules are subsystem boundaries. They intentionally catch arbitrary
 # provider/parser/runtime failures and convert them into structured status
 # artifacts instead of allowing exceptions to escape the pipeline.
-"experiment_02_analysis/analysis_model_runner.py" = ["BLE001"]
+"experiment_02_analysis/analysis_model_runner.py" = ["BLE001", "S310", "S603"]
 "experiment_02_analysis/fair_bridge.py" = ["BLE001"]
 "experiment_02_analysis/human_review.py" = ["BLE001"]
-"experiment_02_analysis/vision_review.py" = ["BLE001"]
+"experiment_02_analysis/vision_review.py" = ["BLE001", "S310"]
 "format_engine/format_engine.py" = ["BLE001"]
 "format_engine/format_model_runner.py" = ["BLE001"]
 "packaging_engine/package_model_runner.py" = ["BLE001"]
@@ -23,3 +23,17 @@ ignore = ["TRY004"]
 "story_script_engine/story_script_engine.py" = ["BLE001"]
 "transformation_engine/concept_model_runner.py" = ["BLE001"]
 "transformation_engine/concept_triage.py" = ["BLE001"]
+
+# Reviewed subprocess boundaries use argv lists with shell=False and executables
+# resolved from trusted project configuration/PATH. Security behavior is covered
+# separately by Semgrep and Bandit in CI.
+"experiment_01_discovery/opportunity_research.py" = ["S603", "S607"]
+"experiment_01_discovery/scheduled_refresh.py" = ["S603"]
+"experiment_01_discovery/vidiq_mcp.py" = ["S603"]
+"experiment_01_discovery/youtube_discovery.py" = ["S310"]
+"experiment_ui/server.py" = ["S603", "S606", "S607"]
+"experiment_ui/workflow_automation.py" = ["S603"]
+"source_acquisition/agent_reach_adapter.py" = ["S603"]
+"source_acquisition/experiment_02_evidence.py" = ["S603"]
+"source_acquisition/experiment_02_visual.py" = ["S603"]
+"**/test_*.py" = ["S"]

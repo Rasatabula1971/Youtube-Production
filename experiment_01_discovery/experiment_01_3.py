@@ -15,6 +15,7 @@ import re
 import shutil
 import statistics
 import sys
+from collections.abc import Sequence
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -123,7 +124,7 @@ def release_refresh_lock(
         pass
 
 
-def median_or_none(values: list[float | int]) -> float | None:
+def median_or_none(values: Sequence[float | int]) -> float | None:
     return round(float(statistics.median(values)), 2) if values else None
 
 
@@ -313,22 +314,30 @@ def aggregate_age_matched_velocity(
 
     topics: dict[str, Any] = {}
     for (niche, topic, fmt), group in sorted(grouped.items()):
-        group = dedupe_rows(group)
+        deduped_group = dedupe_rows(group)
         velocities = [
             float(r["current_views_per_day"])
-            for r in group
+            for r in deduped_group
             if r.get("current_views_per_day") is not None
         ]
-        ages = [float(r["age_days"]) for r in group if r.get("age_days") is not None]
-        views = [int(r["views"]) for r in group if r.get("views") is not None]
+        ages = [
+            float(r["age_days"])
+            for r in deduped_group
+            if r.get("age_days") is not None
+        ]
+        views = [
+            int(r["views"])
+            for r in deduped_group
+            if r.get("views") is not None
+        ]
         trusted = [
             float(r["outlier_ratio"])
-            for r in group
+            for r in deduped_group
             if r.get("outlier_reliability") == "TRUSTED"
             and r.get("outlier_ratio") is not None
         ]
         unique_channels = len(
-            {r.get("channel_id") for r in group if r.get("channel_id")}
+            {r.get("channel_id") for r in deduped_group if r.get("channel_id")}
         )
         topic_median = median_or_none(velocities)
         cohort_median = cohort_medians.get((niche, fmt))
@@ -346,7 +355,7 @@ def aggregate_age_matched_velocity(
         topic_payload["niche"] = niche
         topic_payload["by_format"][fmt] = {
             "niche": niche,
-            "video_count": len(group),
+            "video_count": len(deduped_group),
             "unique_channels": unique_channels,
             "topic_channel_confidence": topic_channel_confidence(unique_channels),
             "velocity_sample_count": len(velocities),
@@ -1007,7 +1016,7 @@ def cohort_discovery_readiness(
             channels[(str(topic), fmt)].add(channel_id)
 
     topic_niches = topic_niche_map(config)
-    cells = []
+    cells: list[dict[str, Any]] = []
     for (topic, fmt), channel_ids in sorted(channels.items()):
         cells.append(
             {

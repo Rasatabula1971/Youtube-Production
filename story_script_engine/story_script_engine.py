@@ -183,11 +183,13 @@ def validate_script_response(
         if not ids:
             errors.append(f"{sid or index} requires at least one accepted claim_id")
         for cid in ids:
-            cid = str(cid)
-            if cid not in allowed:
-                errors.append(f"{sid or index} uses unapproved claim_id {cid}")
+            normalized_cid = str(cid)
+            if normalized_cid not in allowed:
+                errors.append(
+                    f"{sid or index} uses unapproved claim_id {normalized_cid}"
+                )
             else:
-                used.add(cid)
+                used.add(normalized_cid)
     overlap = check_texts(
         [
             {"field": "title", "text": response.get("title", "")},

@@ -316,7 +316,7 @@ def run_one(
     }
     atomic_write_json(response_path, response)
 
-    report = {
+    validated_report: dict[str, Any] = {
         **base_report,
         "status": "VALIDATED",
         "model_response": str(response_path),
@@ -324,8 +324,8 @@ def run_one(
         "structurally_accepted": len(validation["accepted"]),
         "structurally_rejected": len(validation["rejected"]),
     }
-    atomic_write_json(report_path, report)
-    return report
+    atomic_write_json(report_path, validated_report)
+    return validated_report
 
 
 def run_batch(

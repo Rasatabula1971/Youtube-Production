@@ -247,8 +247,11 @@ def run_local_whisper(
     selected_model = (
         model or os.environ.get("YOUTUBE_WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
     )
+    if not re.fullmatch(r"[A-Za-z0-9._/-]{1,120}", selected_model):
+        raise ValueError("YOUTUBE_WHISPER_MODEL contains unsupported characters")
+    # shell=False and the model value is validated as a single argv token.
     return subprocess.run(
-        [
+        [  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
             executable,
             str(audio_path),
             "--model",

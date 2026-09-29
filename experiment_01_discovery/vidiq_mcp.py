@@ -247,9 +247,10 @@ class VidIQMCPClient:
         transport: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         self.url = url.strip() or DEFAULT_MCP_URL
-        self.package = (
+        self.package = str(
             package
-            or os.getenv("VIDIQ_MCP_REMOTE_PACKAGE", DEFAULT_MCP_REMOTE_PACKAGE)
+            or os.getenv("VIDIQ_MCP_REMOTE_PACKAGE")
+            or DEFAULT_MCP_REMOTE_PACKAGE
         ).strip()
         self._transport_override = transport
         self._next_id = 1

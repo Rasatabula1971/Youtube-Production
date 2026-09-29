@@ -217,6 +217,9 @@ def api_get(
     api_key: str,
     **params: Any,
 ) -> dict[str, Any]:
+    allowed_resources = {"search", "videos", "channels", "playlistItems"}
+    if resource not in allowed_resources:
+        raise ValueError(f"Unsupported YouTube API resource: {resource}")
 
     params["key"] = api_key
 
@@ -233,7 +236,9 @@ def api_get(
 
         try:
 
-            with urllib.request.urlopen(
+            # URL is constructed from the fixed HTTPS YouTube API base and
+            # an allowlisted resource above.
+            with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 request,
                 timeout=30,
             ) as response:
@@ -1242,15 +1247,15 @@ def main() -> None:
 
         channel_id = row["channel_id"]
 
-        channel = channels.get(channel_id)
+        channel_info = channels.get(channel_id)
 
-        if not channel:
+        if not channel_info:
             continue
 
         if channel_id not in history_cache:
 
             upload_ids = get_recent_upload_ids(
-                channel,
+                channel_info,
                 api_key,
                 maximum=25,
             )

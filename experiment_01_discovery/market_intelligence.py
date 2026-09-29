@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import statistics
+from collections.abc import Sequence
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +19,7 @@ VELOCITY_VALID = "VALID"
 VELOCITY_NEGATIVE_ADJUSTMENT = "NEGATIVE_ADJUSTMENT"
 
 
-def _median_or_none(values: list[float | int]) -> float | None:
+def _median_or_none(values: Sequence[float | int]) -> float | None:
     if not values:
         return None
     return round(float(statistics.median(values)), 2)

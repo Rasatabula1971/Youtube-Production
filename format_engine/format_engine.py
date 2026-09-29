@@ -150,7 +150,7 @@ def build_format_request(
             raise ValueError("Every accepted claim requires claim_id")
         claim_ids.append(claim_id)
 
-    branches = resolve_branches(package.get("format_intent"), config)
+    branches = resolve_branches(str(package.get("format_intent") or ""), config)
     constraints = {
         branch: dict(config["branch_constraints"][branch])
         for branch in branches
@@ -272,21 +272,24 @@ def _validate_branch(
             errors.append(f"{beat_label} claim_ids must be a list")
         else:
             for claim_id in claim_ids:
-                claim_id = str(claim_id)
-                if claim_id not in allowed_claims:
-                    errors.append(f"{beat_label} uses unapproved claim_id {claim_id}")
+                normalized_claim_id = str(claim_id)
+                if normalized_claim_id not in allowed_claims:
+                    errors.append(
+                        f"{beat_label} uses unapproved claim_id {normalized_claim_id}"
+                    )
                 else:
-                    used.add(claim_id)
+                    used.add(normalized_claim_id)
 
         source_ids = beat.get("source_section_ids")
         if not isinstance(source_ids, list) or not source_ids:
             errors.append(f"{beat_label} requires source_section_ids")
         else:
             for source_id in source_ids:
-                source_id = str(source_id)
-                if source_id not in allowed_sections:
+                normalized_source_id = str(source_id)
+                if normalized_source_id not in allowed_sections:
                     errors.append(
-                        f"{beat_label} references unknown script section {source_id}"
+                        f"{beat_label} references unknown script section "
+                        f"{normalized_source_id}"
                     )
 
     if not used:
@@ -367,7 +370,7 @@ def validate_format_response(
         [branch for branch in branches if isinstance(branch, dict)], errors
     )
 
-    texts = []
+    texts: list[dict[str, Any]] = []
     for branch in branches:
         if not isinstance(branch, dict):
             continue
@@ -386,7 +389,14 @@ def validate_format_response(
                             "text": beat.get("treatment"),
                         }
                     )
-    overlap = check_texts([{**item, "text": str(item["text"] or "")} for item in texts])
+    normalized_texts: list[dict[str, str]] = [
+        {
+            "field": str(item.get("field") or ""),
+            "text": str(item.get("text") or ""),
+        }
+        for item in texts
+    ]
+    overlap = check_texts(normalized_texts)
     if overlap.get("blocking"):
         match = overlap.get("matches", [{}])[0]
         errors.append("source overlap block: " + str(match.get("overlap_text") or ""))

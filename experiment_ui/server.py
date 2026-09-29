@@ -1465,7 +1465,8 @@ def research_artifact_state() -> dict[str, Any]:
             "claims": [],
         }
     )
-    verified = gate.get("verified_packages", []) if isinstance(gate, dict) else []
+    verified_value = gate.get("verified_packages", []) if isinstance(gate, dict) else []
+    verified = verified_value if isinstance(verified_value, list) else []
     story_ready = (
         bool(gate.get("complete"))
         and bool(verified)
@@ -1545,9 +1546,11 @@ def story_script_artifact_state() -> dict[str, Any]:
             "scripts": [],
         }
     )
+    scripts_value = gate.get("scripts", [])
+    scripts = scripts_value if isinstance(scripts_value, list) else []
     approved_ids = {
         str(item.get("concept_id"))
-        for item in gate.get("scripts", [])
+        for item in scripts
         if isinstance(item, dict) and item.get("decision") == "ACCEPT"
     }
 
@@ -1630,9 +1633,11 @@ def format_artifact_state() -> dict[str, Any]:
             "plans": [],
         }
     )
+    plans_value = gate.get("plans", [])
+    plans = plans_value if isinstance(plans_value, list) else []
     approved_ids = {
         str(item.get("concept_id"))
-        for item in gate.get("plans", [])
+        for item in plans
         if isinstance(item, dict) and item.get("decision") == "ACCEPT"
     }
 
@@ -2599,7 +2604,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_satisfied = visual_complete or visual_attempted or not visual_available
     vision_satisfied = (not visual_complete) or vision_complete
 
-    result = {
+    result: dict[str, dict[str, Any]] = {
         "opportunity_research": {
             "enabled": not study_set and not research_waiting,
             "reason": (
@@ -3307,7 +3312,7 @@ class JobManager:
             log_handle = log_path.open("w", encoding="utf-8", buffering=1)
             creationflags = 0
             if os.name == "nt":
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+                creationflags = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
 
             child_env = os.environ.copy()
             child_env["PYTHONUNBUFFERED"] = "1"
@@ -3814,7 +3819,7 @@ class Handler(BaseHTTPRequestHandler):
         if content_type != "application/json":
             return "POST requests require Content-Type: application/json."
 
-        port = int(self.server.server_address[1])
+        port = int(getattr(self.server, "server_port", 0))
         allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
         host = str(self.headers.get("Host", "")).strip().lower()
         if host not in allowed_hosts:
@@ -3986,7 +3991,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Unknown open target.")
                 target.mkdir(parents=True, exist_ok=True)
                 if os.name == "nt":
-                    os.startfile(str(target))
+                    os.startfile(str(target))  # type: ignore[attr-defined]
                 elif sys.platform == "darwin":
                     subprocess.Popen(["open", str(target)])
                 else:

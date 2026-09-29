@@ -641,8 +641,8 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
             )
             continue
 
-        for concept in result["accepted"]:
-            concept = dict(concept)
+        for accepted_concept in result["accepted"]:
+            concept = dict(accepted_concept)
             model_concept_id = str(concept.get("concept_id", "")).strip()
             concept_id, renamed = reserve_generated_id(
                 raw_id=model_concept_id,

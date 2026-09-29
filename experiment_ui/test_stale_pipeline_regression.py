@@ -132,7 +132,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     },
                 },
             )
-            response = write_json(
+            write_json(
                 responses / "m1.json",
                 {
                     "mechanism_id": "m1",
@@ -183,7 +183,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     },
                 },
             )
-            response = write_json(
+            write_json(
                 responses / "c1.json",
                 {
                     "concept_id": "c1",

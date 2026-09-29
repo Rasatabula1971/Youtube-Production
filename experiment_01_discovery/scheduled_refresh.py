@@ -64,6 +64,12 @@ def write_status(
     return payload
 
 
+def completed_output_text(value: bytes | str | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def append_log(
     checked_at: datetime,
     status: str,
@@ -365,8 +371,8 @@ def run_scheduled_refresh(
             checked_at,
             payload["status"],
             message,
-            stdout=exc.stdout or "",
-            stderr=exc.stderr or "",
+            stdout=completed_output_text(exc.stdout),
+            stderr=completed_output_text(exc.stderr),
         )
         return payload
     finally:

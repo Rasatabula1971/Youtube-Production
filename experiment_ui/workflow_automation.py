@@ -10,7 +10,6 @@ this runner is the normal workflow path.
 from __future__ import annotations
 
 import subprocess
-import sys
 from typing import Any
 
 import server as control

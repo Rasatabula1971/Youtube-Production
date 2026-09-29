@@ -137,7 +137,7 @@ def prepare_state() -> dict[str, Any]:
     request = build_review_request(candidates, load_config())
     write_json(REVIEW_REQUEST_FILE, request)
 
-    state = {
+    state: dict[str, Any] = {
         "schema_version": "1.0",
         "status": (
             "AWAITING_HUMAN_DECISION"
