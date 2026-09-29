@@ -1408,6 +1408,7 @@ def research_artifact_state() -> dict[str, Any]:
                 concept_id in plan_hashes
                 and isinstance(provenance, dict)
                 and provenance.get("plan_sha256") == plan_hashes[concept_id]
+                and payload.get("status") == "COMPLETE"
                 and payload.get("pages")
             ):
                 evidence_hashes[concept_id] = sha256_file(path)
