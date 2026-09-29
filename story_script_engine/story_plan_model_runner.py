@@ -58,6 +58,28 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "story_plan_model_batch_summary.json"
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed_claims = list(request.get("accepted_claim_ids", []))
     approved_title = str(request.get("package", {}).get("title") or "")
+    psychology_contract = request.get("psychology_contract", {})
+    opening_line = (
+        psychology_contract.get("opening_line", {})
+        if isinstance(psychology_contract, dict)
+        else {}
+    )
+    hook_mechanisms = list(opening_line.get("allowed_mechanisms", []))
+    beat_mechanisms = list(
+        psychology_contract.get("beat_mechanisms", [])
+        if isinstance(psychology_contract, dict)
+        else []
+    )
+    loop_actions = list(
+        psychology_contract.get("loop_actions", [])
+        if isinstance(psychology_contract, dict)
+        else []
+    )
+    tension_levels = list(
+        psychology_contract.get("tension_levels", [])
+        if isinstance(psychology_contract, dict)
+        else []
+    )
     return {
         "type": "object",
         "additionalProperties": False,
@@ -66,6 +88,8 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "title",
             "story_question",
             "opening_hook_intent",
+            "viewer_state",
+            "opening_psychology",
             "beats",
             "payoff_intent",
             "closing_intent",
@@ -78,6 +102,36 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "title": {"type": "string", "const": approved_title},
             "story_question": {"type": "string", "minLength": 1},
             "opening_hook_intent": {"type": "string", "minLength": 1},
+            "viewer_state": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["awareness", "expectation", "desired_resolution"],
+                "properties": {
+                    "awareness": {"type": "string", "minLength": 1},
+                    "expectation": {"type": "string", "minLength": 1},
+                    "desired_resolution": {"type": "string", "minLength": 1},
+                },
+            },
+            "opening_psychology": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "mechanism",
+                    "impact_intent",
+                    "justification_intent",
+                    "claim_ids",
+                ],
+                "properties": {
+                    "mechanism": {"type": "string", "enum": hook_mechanisms},
+                    "impact_intent": {"type": "string", "minLength": 1},
+                    "justification_intent": {"type": "string", "minLength": 1},
+                    "claim_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": allowed_claims},
+                        "uniqueItems": True,
+                    },
+                },
+            },
             "beats": {
                 "type": "array",
                 "minItems": 3,
@@ -91,6 +145,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                         "viewer_progress",
                         "claim_ids",
                         "transition_intent",
+                        "psychology",
                     ],
                     "properties": {
                         "beat_id": {"type": "string", "minLength": 1},
@@ -118,6 +173,43 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                             "type": "string",
                             "minLength": 1,
                         },
+                        "psychology": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [
+                                "primary_mechanism",
+                                "viewer_expectation",
+                                "cognitive_load_instruction",
+                                "tension_level",
+                                "open_loop_id",
+                                "loop_action",
+                            ],
+                            "properties": {
+                                "primary_mechanism": {
+                                    "type": "string",
+                                    "enum": beat_mechanisms,
+                                },
+                                "viewer_expectation": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                },
+                                "cognitive_load_instruction": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                },
+                                "tension_level": {
+                                    "type": "string",
+                                    "enum": tension_levels,
+                                },
+                                "open_loop_id": {
+                                    "type": ["string", "null"],
+                                },
+                                "loop_action": {
+                                    "type": "string",
+                                    "enum": loop_actions,
+                                },
+                            },
+                        },
                     },
                 },
             },
@@ -133,12 +225,18 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "Do NOT write the final narration. Return JSON only.\n\n"
         "Rules:\n"
         "1. The approved Packaging title is immutable. Return it exactly.\n"
-        "2. Decide the viewer journey before wording: hook tension, setup, escalation/explanation, reveal, payoff, close.\n"
-        "3. Every beat must add new viewer progress. Do not repeat the same function.\n"
-        "4. Use only accepted_claim_ids for factual beats.\n"
-        "5. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
-        "6. At least one beat must be PAYOFF.\n"
-        "7. Keep this as a structural plan: no polished narration paragraphs.\n\n"
+        "2. Decide the viewer journey before wording: high-impact hook, setup, escalation/explanation, reveal, payoff, close.\n"
+        "3. Model the viewer state explicitly: what they already know, what they expect, and what they want resolved.\n"
+        "4. Plan a high-impact FIRST SPOKEN LINE using one allowed opening mechanism. Bold is good; unsupported drama is not.\n"
+        "5. The material immediately after the hook must justify, contextualize, or begin proving the hook.\n"
+        "6. Assign one primary audience-psychology mechanism to every beat and make each beat change the viewer's state.\n"
+        "7. Manage cognitive load deliberately. Prefer one primary new idea per beat when the explanation is complex.\n"
+        "8. Track open loops with open_loop_id and loop_action. Every OPEN must later receive a PAYOFF; never create a fake unresolved hook.\n"
+        "9. Use tension, novelty and expectation violation only when they serve the verified story and approved promise.\n"
+        "10. Use only accepted_claim_ids for factual beats and factual opening claims.\n"
+        "11. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
+        "12. At least one beat must be PAYOFF.\n"
+        "13. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n\n"
         "STORY PLAN REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
