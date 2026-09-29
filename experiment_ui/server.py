@@ -43,6 +43,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/script-gate",
     "/api/format-gate",
     "/api/performance-gate",
+    "/api/narration-spend-gate",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -214,10 +215,25 @@ from voice_review import (
 from voice_review import (
     snapshot as performance_gate_snapshot,
 )
+from narration_render import (
+    snapshot as narration_render_snapshot,
+)
+from narration_cost_review import (
+    apply_action as apply_narration_spend_gate_action,
+)
+from narration_cost_review import (
+    snapshot as narration_spend_gate_snapshot,
+)
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
 PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
+PRODUCTION_NARRATION_RENDER_RESULTS_DIR = (
+    PRODUCTION_OUTPUT / "narration_render_results"
+)
+PRODUCTION_NARRATION_QC_SUMMARY = (
+    PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
+)
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
 
 AUTO_MACHINE_ACTION_ORDER = [
@@ -252,6 +268,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "voice_prepare",
     "voice_generate",
     "voice_gate_prepare",
+    "narration_prepare",
+    "narration_spend_gate_prepare",
+    "narration_audio_qc",
     "production_visual_prepare",
 ]
 
@@ -909,6 +928,48 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Prepares the mandatory Human Performance Gate before any paid "
             "narration render can be introduced."
+        ),
+    },
+    "narration_prepare": {
+        "label": "Prepare Narration Render + Cost Boundary",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/narration_render.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds immutable narration render requests, provider quote templates "
+            "and worst-case cost estimates. Makes no paid provider call."
+        ),
+    },
+    "narration_spend_gate_prepare": {
+        "label": "Prepare Narration Spend Gate",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/narration_cost_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares human approval of the current provider quote and worst-case "
+            "narration cost before any paid render may be authorized."
+        ),
+    },
+    "narration_audio_qc": {
+        "label": "Run Narration Audio QC + Timing Map",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/narration_audio_qc.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Runs local ffmpeg/ffprobe checks for duration, silence, clipping and "
+            "missing segments, then writes the narration timing map."
         ),
     },
     "production_visual_prepare": {
@@ -1991,6 +2052,69 @@ def voice_performance_artifact_state() -> dict[str, Any]:
     }
 
 
+def narration_artifact_state() -> dict[str, Any]:
+    """Return narration render, spend-gate and local Audio QC state."""
+    voice = voice_performance_artifact_state()
+    if not voice.get("visual_ready"):
+        return {
+            "render": {
+                "status": "WAITING_FOR_PERFORMANCE_APPROVAL",
+                "prepared": 0,
+                "ready_for_spend_gate": 0,
+                "items": [],
+            },
+            "spend_gate": {
+                "status": "WAITING_FOR_PROVIDER_QUOTE",
+                "complete": False,
+                "items": [],
+            },
+            "render_results_present": False,
+            "audio_qc": {
+                "status": "WAITING_FOR_NARRATION_RENDER_RESULTS",
+                "processed": 0,
+                "passed": 0,
+                "failed": 0,
+                "items": [],
+            },
+            "audio_ready": False,
+        }
+
+    render = narration_render_snapshot()
+    spend_gate = narration_spend_gate_snapshot()
+    render_results_present = (
+        PRODUCTION_NARRATION_RENDER_RESULTS_DIR.exists()
+        and any(
+            PRODUCTION_NARRATION_RENDER_RESULTS_DIR.glob(
+                "*.narration_render_result.json"
+            )
+        )
+    )
+    qc_payload = safe_load_json(PRODUCTION_NARRATION_QC_SUMMARY)
+    audio_qc = (
+        qc_payload
+        if isinstance(qc_payload, dict)
+        else {
+            "status": "WAITING_FOR_NARRATION_RENDER_RESULTS",
+            "processed": 0,
+            "passed": 0,
+            "failed": 0,
+            "items": [],
+        }
+    )
+    audio_ready = bool(
+        render_results_present
+        and audio_qc.get("status") == "PASS"
+        and int(audio_qc.get("processed") or 0) > 0
+    )
+    return {
+        "render": render,
+        "spend_gate": spend_gate,
+        "render_results_present": render_results_present,
+        "audio_qc": audio_qc,
+        "audio_ready": audio_ready,
+    }
+
+
 def production_visual_artifact_state() -> dict[str, Any]:
     """Return current cheap-first visual-manifest coverage.
 
@@ -3029,6 +3153,28 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         or "WAITING_FOR_VOICE_PERFORMANCE_SPECS"
     )
     voice_visual_ready = bool(voice["visual_ready"])
+    narration = narration_artifact_state()
+    narration_render = narration["render"]
+    narration_spend_gate = narration["spend_gate"]
+    narration_prepared = int(narration_render.get("prepared") or 0) > 0
+    narration_ready_for_spend_gate = bool(
+        narration_render.get("status") == "READY_FOR_SPEND_GATE"
+    )
+    narration_spend_gate_status = str(
+        narration_spend_gate.get("status") or "WAITING_FOR_PROVIDER_QUOTE"
+    )
+    narration_spend_complete = bool(narration_spend_gate.get("complete"))
+    narration_spend_accepted = bool(
+        narration_spend_complete
+        and int(narration_spend_gate.get("accepted") or 0) > 0
+        and int(narration_spend_gate.get("pending") or 0) == 0
+        and int(narration_spend_gate.get("rework") or 0) == 0
+        and int(narration_spend_gate.get("rejected") or 0) == 0
+    )
+    narration_render_results_present = bool(
+        narration.get("render_results_present")
+    )
+    narration_audio_ready = bool(narration.get("audio_ready"))
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
     agent_reach_installed = shutil.which("agent-reach") is not None
@@ -3755,15 +3901,59 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
-        "production_visual_prepare": {
-            "enabled": voice_visual_ready and not visual_manifests_ready,
+        "narration_prepare": {
+            "enabled": voice_visual_ready and not narration_prepared,
             "reason": (
-                "Human-approved performance plans unlock cheap-first visual manifests."
-                if voice_visual_ready and not visual_manifests_ready
+                "Accepted performance plans are ready for narration render and cost preparation."
+                if voice_visual_ready and not narration_prepared
+                else (
+                    "Narration render preparation already exists."
+                    if narration_prepared
+                    else "Complete and accept the Human Performance Gate first."
+                )
+            ),
+        },
+        "narration_spend_gate_prepare": {
+            "enabled": (
+                narration_ready_for_spend_gate
+                and narration_spend_gate_status == "READY_TO_PREPARE"
+            ),
+            "reason": (
+                "A current provider quote and worst-case estimate are ready for human spend approval."
+                if narration_ready_for_spend_gate
+                and narration_spend_gate_status == "READY_TO_PREPARE"
+                else (
+                    "Narration Spend Gate is already prepared or complete."
+                    if narration_ready_for_spend_gate
+                    else "Narration remains blocked until provider prerequisites and a current quote exist."
+                )
+            ),
+        },
+        "narration_audio_qc": {
+            "enabled": narration_spend_accepted and narration_render_results_present and not narration_audio_ready,
+            "reason": (
+                "Rendered narration exists under an accepted spend authorization; run local Audio QC."
+                if narration_spend_accepted and narration_render_results_present and not narration_audio_ready
+                else (
+                    "Narration Audio QC has passed and timing maps are ready."
+                    if narration_audio_ready
+                    else (
+                        "Import current narration render results after spend approval."
+                        if narration_spend_accepted
+                        else "Complete the Human Narration Spend Gate first."
+                    )
+                )
+            ),
+        },
+        "production_visual_prepare": {
+            "enabled": narration_audio_ready and not visual_manifests_ready,
+            "reason": (
+                "QC-passed narration timing maps unlock cheap-first visual manifests."
+                if narration_audio_ready and not visual_manifests_ready
                 else (
                     "Visual acquisition manifests are already current."
                     if visual_manifests_ready
-                    else "Complete and accept the Human Performance Gate first."
+                    else "Narration must render and pass local Audio QC first."
                 )
             ),
         },
@@ -4146,11 +4336,77 @@ def workflow_guidance(
                 "narration beat. This gate spends no provider credits."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Prepare Visual Acquisition",
+            "next_title": "Prepare Narration Rendering",
+        }
+
+    narration = narration_artifact_state()
+    narration_render = narration.get("render", {})
+    narration_spend_gate = narration.get("spend_gate", {})
+    if narration_spend_gate.get("status") == "AWAITING_HUMAN_DECISION":
+        return {
+            "state": "HUMAN_NARRATION_SPEND_GATE",
+            "current_action_id": None,
+            "current_title": "Review Narration Spend",
+            "current_detail": (
+                "Review the current provider quote and worst-case narration cost. "
+                "No paid render is authorized until this gate is accepted."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Render Narration",
+        }
+
+    if (
+        voice.get("visual_ready")
+        and narration_render.get("status") == "NARRATION_PREPARED_WITH_BLOCKERS"
+    ):
+        blockers: list[str] = []
+        for item in narration_render.get("items", []):
+            if isinstance(item, dict):
+                blockers.extend(str(value) for value in item.get("blockers", []))
+        blocker_text = ", ".join(sorted(set(blockers))) or "provider prerequisites"
+        return {
+            "state": "NARRATION_PROVIDER_CONFIGURATION_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Narration rendering is safely blocked",
+            "current_detail": (
+                "No provider credits were spent. Resolve: " + blocker_text + "."
+            ),
+            "next_action_id": None,
+            "next_title": "Configure verified narration provider contract / quote",
+        }
+
+    if (
+        narration_spend_gate.get("complete")
+        and int(narration_spend_gate.get("accepted") or 0) > 0
+        and not narration.get("render_results_present")
+    ):
+        return {
+            "state": "NARRATION_RENDER_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Narration spend approved — render required",
+            "current_detail": (
+                "The cost gate is approved. A verified provider adapter must create "
+                "the narration render-result artifact before local Audio QC can run."
+            ),
+            "next_action_id": None,
+            "next_title": "Render narration with verified adapter",
+        }
+
+    if narration.get("audio_qc", {}).get("status") == "FAIL":
+        return {
+            "state": "NARRATION_AUDIO_QC_FAILED",
+            "current_action_id": None,
+            "current_title": "Narration Audio QC needs attention",
+            "current_detail": (
+                "One or more narration segments failed deterministic duration, "
+                "silence, clipping or missing-file checks."
+            ),
+            "next_action_id": None,
+            "next_title": "Regenerate failed segment within the approved attempt limit",
         }
 
     production_visual = production_visual_artifact_state()
-    if voice.get("visual_ready") and production_visual.get("manifests_ready"):
+    if narration.get("audio_ready") and production_visual.get("manifests_ready"):
         return {
             "state": "VISUAL_ACQUISITION_REQUIRED",
             "current_action_id": None,
@@ -4214,6 +4470,7 @@ def status_payload() -> dict[str, Any]:
     story = story_script_artifact_state()
     fmt = format_artifact_state()
     voice = voice_performance_artifact_state()
+    narration = narration_artifact_state()
     production_visual = production_visual_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
@@ -4269,6 +4526,8 @@ def status_payload() -> dict[str, Any]:
         "format_gate": fmt["format_gate"],
         "voice_performance": voice,
         "performance_gate": voice["performance_gate"],
+        "narration": narration,
+        "narration_spend_gate": narration["spend_gate"],
         "production_visual": production_visual,
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
@@ -4361,6 +4620,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/performance-gate":
             self._send_json(performance_gate_snapshot())
+            return
+        if route == "/api/narration-spend-gate":
+            self._send_json(narration_spend_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -4550,6 +4812,20 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/performance-gate":
                 payload = apply_performance_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-spend-gate":
+                payload = apply_narration_spend_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     format=str(body.get("format", "")),
                     decision=str(body.get("decision", "")),
