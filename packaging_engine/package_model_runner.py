@@ -316,7 +316,7 @@ def run_one(
     }
     atomic_write_json(response_path, response)
 
-    report = {
+    report: dict[str, Any] = {
         **base_report,
         "status": "VALIDATED",
         "model_response": str(response_path),
