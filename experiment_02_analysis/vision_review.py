@@ -477,7 +477,7 @@ def build_all(
             "packets": [],
         }
 
-    packets = []
+    packets: list[dict[str, Any]] = []
     for video_id in video_ids:
         existing_path = packet_path(video_id)
         if existing_path.exists():
