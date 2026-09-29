@@ -299,7 +299,26 @@ class AgentReachAdapterTests(unittest.TestCase):
             "https://r.jina.ai/https://example.com/source",
             command,
         )
+        self.assertIn("--fail", command)
         self.assertFalse(run.call_args.kwargs["shell"])
+
+
+    def test_web_read_rejects_http_error_body(self):
+        with (
+            patch.object(adapter, "curl_path", return_value="/bin/curl"),
+            patch.object(
+                adapter.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    ["curl"],
+                    22,
+                    stdout="<html><title>404 Not Found</title></html>",
+                    stderr="curl: (22) The requested URL returned error: 404",
+                ),
+            ),
+        ):
+            with self.assertRaises(adapter.AcquisitionError):
+                adapter.read_web_page("https://example.com/missing")
 
 
 if __name__ == "__main__":
