@@ -118,6 +118,7 @@ from transformation_engine import (
 TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
 TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
 TRANSFORM_RESPONSES_DIR = TRANSFORM_OUTPUT / "concept_responses"
+TRANSFORM_MODEL_RUNS_DIR = TRANSFORM_OUTPUT / "concept_model_runs"
 TRANSFORM_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates.json"
 TRANSFORM_TRIAGE_FILE = TRANSFORM_OUTPUT / "concept_triage.json"
 TRANSFORM_TRIAGED_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates_triaged.json"
@@ -1239,11 +1240,20 @@ def transformation_artifact_state() -> dict[str, Any]:
                 continue
             mechanism_id = str(payload.get("mechanism_id") or "").strip()
             provenance = payload.get("response_provenance", {})
+            report = safe_load_json(
+                TRANSFORM_MODEL_RUNS_DIR
+                / f"{safe_slug(mechanism_id)}.model_run.json"
+            )
             if (
                 mechanism_id in request_hashes
                 and isinstance(provenance, dict)
                 and provenance.get("request_sha256") == request_hashes[mechanism_id]
                 and provenance.get("validation_contract_sha256")
+                == validation_contract
+                and isinstance(report, dict)
+                and report.get("status") == "VALIDATED"
+                and report.get("request_sha256") == request_hashes[mechanism_id]
+                and report.get("validation_contract_sha256")
                 == validation_contract
             ):
                 current_response_hashes[mechanism_id] = sha256_file(path)
