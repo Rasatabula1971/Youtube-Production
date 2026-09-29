@@ -129,6 +129,7 @@ def build_concept_request(
             "Do not reuse source titles, scripts, footage, story sequences, personalities, or exact examples.",
             "Each concept must have a distinct premise and audience promise.",
             "Define the specific viewer problem, the moment the viewer is in, and the desired outcome.",
+            "Classify viewer-need support as OBSERVED, INFERRED, or HYPOTHESIS. OBSERVED requires concrete audience-signal evidence supplied in the request, such as repeated questions, comments, or search-intent evidence. Do not invent audience evidence.",
             "State a content-gap hypothesis separately from evidence; do not claim a gap is proven without a concrete evidence basis.",
             "State channel fit explicitly. Use REVIEW or UNASSESSED when fit is not yet defensible.",
             "Run a three-title clarity test before accepting the concept as packaging-ready.",
