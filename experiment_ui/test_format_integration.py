@@ -92,10 +92,7 @@ class FormatUiIntegrationTests(unittest.TestCase):
                     "format_gate": {"status": "AWAITING_HUMAN_DECISION"},
                 },
             ),
-            patch.object(server.EXP15_DIR.__class__, "exists", return_value=True),
         ):
-            # Avoid relying on the real 01.5 filesystem by supplying an existing
-            # study-set path through the already-patched Path.exists behavior.
             workflow = server.workflow_guidance({})
 
         self.assertEqual(workflow["state"], "HUMAN_FORMAT_GATE")
