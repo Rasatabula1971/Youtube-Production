@@ -363,8 +363,10 @@ class TransformationEngineTests(unittest.TestCase):
             requests.mkdir()
             responses.mkdir()
 
+            validation_contract = module.validation_contract_sha256()
             for mechanism in ("m1", "m2"):
-                (requests / f"{mechanism}.concept_request.json").write_text(
+                request_path = requests / f"{mechanism}.concept_request.json"
+                request_path.write_text(
                     json.dumps({"mechanism_id": mechanism}),
                     encoding="utf-8",
                 )
@@ -378,6 +380,10 @@ class TransformationEngineTests(unittest.TestCase):
                                     "working_title": mechanism,
                                 }
                             ],
+                            "response_provenance": {
+                                "request_sha256": module.sha256_file(request_path),
+                                "validation_contract_sha256": validation_contract,
+                            },
                         }
                     ),
                     encoding="utf-8",

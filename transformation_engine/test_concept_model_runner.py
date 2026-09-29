@@ -198,6 +198,128 @@ class ConceptModelRunnerTests(unittest.TestCase):
             response["response_provenance"]["request_sha256"],
             expected_request_hash,
         )
+        self.assertEqual(
+            response["response_provenance"]["validation_contract_sha256"],
+            engine.validation_contract_sha256(),
+        )
+
+    @patch("concept_model_runner.resolve_fair_paths")
+    @patch("concept_model_runner.call_fair_bridge")
+    def test_old_validation_contract_forces_regeneration(
+        self,
+        call_bridge,
+        resolve_paths,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            request_path = root / "curiosity_gap.concept_request.json"
+            request_path.write_text(
+                json.dumps(self.request()),
+                encoding="utf-8",
+            )
+            request_hash = engine.sha256_file(request_path)
+            runs = root / "runs"
+            responses = root / "responses"
+            raw = root / "raw"
+            runs.mkdir()
+            responses.mkdir()
+            raw.mkdir()
+            (runs / "curiosity_gap.model_run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "VALIDATED",
+                        "request_sha256": request_hash,
+                        "validation_contract_sha256": "old-contract",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (responses / "curiosity_gap.json").write_text(
+                json.dumps(
+                    {
+                        "mechanism_id": "curiosity_gap",
+                        "concepts": [self.valid_concept()],
+                        "response_provenance": {
+                            "request_sha256": request_hash,
+                            "validation_contract_sha256": "old-contract",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            resolve_paths.return_value = {
+                "repo": root,
+                "env_file": root / ".env",
+                "python": root / "python.exe",
+            }
+            call_bridge.return_value = {
+                "status": "ACCEPTED",
+                "output": json.dumps(
+                    {
+                        "mechanism_id": "curiosity_gap",
+                        "concepts": [self.valid_concept()],
+                    }
+                ),
+                "paid_inference_executed": False,
+                "provider_id": "kilo_free",
+                "model_id": "free-model",
+                "request_id": "req-regenerated",
+                "attempts": [],
+            }
+
+            old_runs = runner.MODEL_RUNS_DIR
+            old_raw = runner.RAW_OUTPUTS_DIR
+            old_responses = runner.RESPONSES_DIR
+            try:
+                runner.MODEL_RUNS_DIR = runs
+                runner.RAW_OUTPUTS_DIR = raw
+                runner.RESPONSES_DIR = responses
+                result = runner.run_one(
+                    request_path,
+                    force=False,
+                    runner_config=self.runner_config(),
+                )
+            finally:
+                runner.MODEL_RUNS_DIR = old_runs
+                runner.RAW_OUTPUTS_DIR = old_raw
+                runner.RESPONSES_DIR = old_responses
+
+        self.assertEqual(result["status"], "VALIDATED")
+        call_bridge.assert_called_once()
+
+    @patch("concept_model_runner.run_apply")
+    @patch("concept_model_runner.run_one")
+    def test_clean_batch_limit_reports_progress(
+        self,
+        run_one,
+        run_apply,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            requests = Path(tmp)
+            for index in range(5):
+                (requests / f"m{index}.concept_request.json").write_text(
+                    json.dumps({"mechanism_id": f"m{index}"}),
+                    encoding="utf-8",
+                )
+            run_one.side_effect = [
+                {"status": "VALIDATED", "mechanism_id": f"m{index}"}
+                for index in range(4)
+            ]
+            run_apply.return_value = {
+                "status": "CONCEPT_CANDIDATES_READY",
+                "accepted_concepts": 4,
+            }
+
+            result = runner.run_batch(
+                requests,
+                force=False,
+                maximum_requests=None,
+                config=self.runner_config(),
+            )
+
+        self.assertEqual(result["status"], "BATCH_PROGRESS")
+        self.assertEqual(result["model_runs_invoked"], 4)
+        self.assertEqual(run_one.call_count, 4)
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")

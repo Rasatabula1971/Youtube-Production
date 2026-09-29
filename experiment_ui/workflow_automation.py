@@ -102,13 +102,19 @@ def run_until_human_gate() -> dict[str, Any]:
         next_id = next_enabled_action(after)
         if next_id == action_id:
             after_reason = str(after[action_id].get("reason") or "")
-            return {
-                "status": "NO_PROGRESS",
-                "failed_action": action_id,
-                "completed_actions": completed_actions,
-                "before_reason": before_reason,
-                "after_reason": after_reason,
-            }
+            if after_reason == before_reason:
+                return {
+                    "status": "NO_PROGRESS",
+                    "failed_action": action_id,
+                    "completed_actions": completed_actions,
+                    "before_reason": before_reason,
+                    "after_reason": after_reason,
+                }
+            # The same batched action is still ready, but its readiness reason
+            # changed (for example 0/5 -> 4/5 current concept responses).
+            # That is measurable progress, so allow the bounded loop to run the
+            # next batch rather than misclassifying it as a stall.
+            continue
 
     return {
         "status": "SAFETY_STOP",

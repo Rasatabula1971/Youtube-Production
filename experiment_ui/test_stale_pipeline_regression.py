@@ -123,6 +123,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
             synthesis = write_json(root / "synthesis.json", {"v": 2})
             requests = root / "concept_requests"
             responses = root / "concept_responses"
+            runs = root / "concept_model_runs"
             request = write_json(
                 requests / "m1.concept_request.json",
                 {
@@ -132,13 +133,23 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     },
                 },
             )
+            validation_contract = server.transformation_validation_contract_sha256()
             write_json(
                 responses / "m1.json",
                 {
                     "mechanism_id": "m1",
                     "response_provenance": {
                         "request_sha256": sha(request),
+                        "validation_contract_sha256": validation_contract,
                     },
+                },
+            )
+            write_json(
+                runs / "m1.model_run.json",
+                {
+                    "status": "VALIDATED",
+                    "request_sha256": sha(request),
+                    "validation_contract_sha256": validation_contract,
                 },
             )
             candidates = write_json(
@@ -153,6 +164,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
             stack.enter_context(patch.object(server, "EXP2_SYNTHESIS_FILE", synthesis))
             stack.enter_context(patch.object(server, "TRANSFORM_REQUESTS_DIR", requests))
             stack.enter_context(patch.object(server, "TRANSFORM_RESPONSES_DIR", responses))
+            stack.enter_context(patch.object(server, "TRANSFORM_MODEL_RUNS_DIR", runs))
             stack.enter_context(patch.object(server, "TRANSFORM_CANDIDATES_FILE", candidates))
             stack.enter_context(patch.object(server, "TRANSFORM_TRIAGE_FILE", root / "triage.json"))
             stack.enter_context(

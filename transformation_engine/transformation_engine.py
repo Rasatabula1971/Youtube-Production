@@ -50,6 +50,33 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def validation_contract_sha256() -> str:
+    """Fingerprint the rules that decide whether a concept is acceptable.
+
+    Request provenance alone is not enough: validation can become stricter while
+    a concept request remains byte-for-byte identical. Cached model responses
+    must therefore be invalidated whenever the validator, its configuration, or
+    the source-overlap rules change.
+    """
+    digest = hashlib.sha256()
+    dependencies = (
+        Path(__file__).resolve(),
+        CONFIG_FILE.resolve(),
+        (PROJECT_ROOT / "source_overlap.py").resolve(),
+    )
+    for path in dependencies:
+        relative = (
+            path.relative_to(PROJECT_ROOT)
+            if path.is_relative_to(PROJECT_ROOT)
+            else path
+        )
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def load_json(path: Path) -> Any:
     if not path.exists():
         raise FileNotFoundError(path)
@@ -602,6 +629,7 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
         return accepted, rejected
 
     config = load_config()
+    validation_contract = validation_contract_sha256()
     for response_path in sorted(RESPONSES_DIR.glob("*.json")):
         response = load_json(response_path)
         mechanism_id = str(response.get("mechanism_id", ""))
@@ -617,18 +645,35 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
 
         request = load_json(request_path)
         provenance = response.get("response_provenance")
-        if isinstance(provenance, dict):
-            expected_hash = sha256_file(request_path)
-            if provenance.get("request_sha256") != expected_hash:
-                rejected.append(
-                    {
-                        "response": str(response_path),
-                        "errors": [
-                            "model response provenance does not match current concept request"
-                        ],
-                    }
-                )
-                continue
+        expected_hash = sha256_file(request_path)
+        if not isinstance(provenance, dict):
+            rejected.append(
+                {
+                    "response": str(response_path),
+                    "errors": ["model response provenance is missing"],
+                }
+            )
+            continue
+        if provenance.get("request_sha256") != expected_hash:
+            rejected.append(
+                {
+                    "response": str(response_path),
+                    "errors": [
+                        "model response provenance does not match current concept request"
+                    ],
+                }
+            )
+            continue
+        if provenance.get("validation_contract_sha256") != validation_contract:
+            rejected.append(
+                {
+                    "response": str(response_path),
+                    "errors": [
+                        "model response was validated under an older validation contract"
+                    ],
+                }
+            )
+            continue
 
         try:
             result = validate_response(response, request, config)
@@ -663,6 +708,7 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
 
 def run_apply() -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    validation_contract = validation_contract_sha256()
     accepted, rejected = merge_candidate_files()
 
     handoff_hashes = set()
@@ -694,6 +740,8 @@ def run_apply() -> dict[str, Any]:
             if (
                 isinstance(provenance, dict)
                 and provenance.get("request_sha256") == sha256_file(request_path)
+                and provenance.get("validation_contract_sha256")
+                == validation_contract
             ):
                 current_response_hashes[mechanism_id] = sha256_file(response_path)
 
@@ -738,6 +786,7 @@ def run_apply() -> dict[str, Any]:
         "rejected_file": str(REJECTED_FILE),
         "model_calls": 0,
         "handoff_sha256": current_handoff_sha256,
+        "validation_contract_sha256": validation_contract,
     }
     SUMMARY_FILE.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),

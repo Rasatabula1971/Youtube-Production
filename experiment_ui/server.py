@@ -111,10 +111,15 @@ from concept_review import (
 from concept_review import (
     snapshot as concept_gate_snapshot,
 )
+from transformation_engine import (
+    safe_slug as transformation_safe_slug,
+    validation_contract_sha256 as transformation_validation_contract_sha256,
+)
 
 TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
 TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
 TRANSFORM_RESPONSES_DIR = TRANSFORM_OUTPUT / "concept_responses"
+TRANSFORM_MODEL_RUNS_DIR = TRANSFORM_OUTPUT / "concept_model_runs"
 TRANSFORM_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates.json"
 TRANSFORM_TRIAGE_FILE = TRANSFORM_OUTPUT / "concept_triage.json"
 TRANSFORM_TRIAGED_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates_triaged.json"
@@ -1209,6 +1214,7 @@ def exp2_artifact_state() -> dict[str, Any]:
 
 
 def transformation_artifact_state() -> dict[str, Any]:
+    validation_contract = transformation_validation_contract_sha256()
     handoff_hash = (
         sha256_file(EXP2_SYNTHESIS_FILE) if EXP2_SYNTHESIS_FILE.exists() else None
     )
@@ -1235,10 +1241,21 @@ def transformation_artifact_state() -> dict[str, Any]:
                 continue
             mechanism_id = str(payload.get("mechanism_id") or "").strip()
             provenance = payload.get("response_provenance", {})
+            report = safe_load_json(
+                TRANSFORM_MODEL_RUNS_DIR
+                / f"{transformation_safe_slug(mechanism_id)}.model_run.json"
+            )
             if (
                 mechanism_id in request_hashes
                 and isinstance(provenance, dict)
                 and provenance.get("request_sha256") == request_hashes[mechanism_id]
+                and provenance.get("validation_contract_sha256")
+                == validation_contract
+                and isinstance(report, dict)
+                and report.get("status") == "VALIDATED"
+                and report.get("request_sha256") == request_hashes[mechanism_id]
+                and report.get("validation_contract_sha256")
+                == validation_contract
             ):
                 current_response_hashes[mechanism_id] = sha256_file(path)
 
@@ -1298,6 +1315,7 @@ def transformation_artifact_state() -> dict[str, Any]:
     )
     return {
         "handoff_sha256": handoff_hash,
+        "validation_contract_sha256": validation_contract,
         "request_mechanism_ids": sorted(request_hashes),
         "current_response_mechanism_ids": sorted(current_response_hashes),
         "candidate_provenance_current": candidates_current,
@@ -3093,7 +3111,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 synthesis_ready and transform_requests and not transform_candidates
             ),
             "reason": (
-                "Current concept requests are ready for FAIR free-only generation."
+                (
+                    "Concept generation progress: "
+                    f"{len(transform['current_response_mechanism_ids'])}/"
+                    f"{len(transform['request_mechanism_ids'])} current responses. "
+                    "Continue FAIR free-only generation."
+                )
                 if (synthesis_ready and transform_requests and not transform_candidates)
                 else (
                     "Valid concept candidates already exist."

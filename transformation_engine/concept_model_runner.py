@@ -19,6 +19,7 @@ if str(_INTEGRITY_ROOT) not in sys.path:
 from typing import Any
 
 from pipeline_integrity import (
+    SUCCESS_STATUSES,
     atomic_write_json,
     atomic_write_text,
     batch_status,
@@ -51,6 +52,7 @@ from transformation_engine import (
     run_apply,
     safe_slug,
     validate_response,
+    validation_contract_sha256,
 )
 
 MODEL_RUNS_DIR = OUTPUT_DIR / "concept_model_runs"
@@ -249,6 +251,7 @@ def run_one(
         raise ValueError("Concept request requires mechanism_id")
 
     request_hash = sha256_file(request_path)
+    validation_contract = validation_contract_sha256()
     slug = safe_slug(mechanism_id)
     report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
     response_path = RESPONSES_DIR / f"{slug}.json"
@@ -260,8 +263,12 @@ def run_one(
         if (
             existing.get("status") == "VALIDATED"
             and existing.get("request_sha256") == request_hash
+            and existing.get("validation_contract_sha256")
+            == validation_contract
             and isinstance(provenance, dict)
             and provenance.get("request_sha256") == request_hash
+            and provenance.get("validation_contract_sha256")
+            == validation_contract
         ):
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
@@ -332,6 +339,7 @@ def run_one(
         "mechanism_id": mechanism_id,
         "request_source": str(request_path),
         "request_sha256": request_hash,
+        "validation_contract_sha256": validation_contract,
         "fair_request_id": bridge_result.get("request_id"),
         "fair_status": bridge_result.get("status"),
         "fair_reason_code": bridge_result.get("reason_code"),
@@ -382,18 +390,26 @@ def run_one(
     response["response_provenance"] = {
         "request_source": str(request_path),
         "request_sha256": request_hash,
+        "validation_contract_sha256": validation_contract,
         "provider_id": bridge_result.get("provider_id"),
         "model_id": bridge_result.get("model_id"),
     }
     atomic_write_json(response_path, response)
 
+    accepted_count = len(validation["accepted"])
+    rejected_count = len(validation["rejected"])
     report = {
         **base_report,
-        "status": "VALIDATED",
+        "status": (
+            "VALIDATED"
+            if accepted_count > 0
+            else "MODEL_OUTPUT_VALIDATION_ERROR"
+        ),
+        "error_type": None if accepted_count > 0 else "NoAcceptedConcepts",
         "model_response": str(response_path),
         "raw_output": str(raw_path),
-        "structurally_accepted": len(validation["accepted"]),
-        "structurally_rejected": len(validation["rejected"]),
+        "structurally_accepted": accepted_count,
+        "structurally_rejected": rejected_count,
     }
     atomic_write_json(report_path, report)
     return report
@@ -436,12 +452,21 @@ def run_batch(
             break
 
     merge_summary = run_apply()
+    status = batch_status(
+        results,
+        expected_count=len(paths),
+        processed_count=len(results),
+    )
+    if (
+        len(results) < len(paths)
+        and invoked >= limit
+        and results
+        and all(str(item.get("status") or "") in SUCCESS_STATUSES for item in results)
+    ):
+        status = "BATCH_PROGRESS"
+
     summary = {
-        "status": batch_status(
-            results,
-            expected_count=len(paths),
-            processed_count=len(results),
-        ),
+        "status": status,
         "requests_found": len(paths),
         "model_runs_invoked": invoked,
         "batch_limit": limit,
@@ -487,6 +512,8 @@ def main() -> None:
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if args.mode == "batch":
+        if result["status"] == "BATCH_PROGRESS":
+            raise SystemExit(0)
         raise SystemExit(exit_code_for_status(result["status"]))
 
 
