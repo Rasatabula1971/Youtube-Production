@@ -78,17 +78,18 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         else []
     )
     reward_types = list(request.get("reward_types", []))
-    profile = request.get("psychology_profile", {})
+    profile_value = request.get("psychology_profile", {})
+    profile = profile_value if isinstance(profile_value, dict) else {}
+    minimum_value = profile.get("min_sections")
+    maximum_value = profile.get("max_sections")
     minimum = (
-        int(profile.get("min_sections"))
-        if isinstance(profile, dict)
-        and isinstance(profile.get("min_sections"), int)
+        minimum_value
+        if isinstance(minimum_value, int) and not isinstance(minimum_value, bool)
         else 1
     )
     maximum = (
-        int(profile.get("max_sections"))
-        if isinstance(profile, dict)
-        and isinstance(profile.get("max_sections"), int)
+        maximum_value
+        if isinstance(maximum_value, int) and not isinstance(maximum_value, bool)
         else None
     )
     section_schema: dict[str, Any] = {
