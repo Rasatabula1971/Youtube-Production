@@ -265,6 +265,44 @@ It is offline and uses explicit PASS / REVIEW / HOLD evidence gates rather than
 a composite opportunity score. A small diversity-constrained study set becomes
 the formal handoff from M1 into Experiment 02.
 
+
+### vidIQ supplemental opportunity intelligence
+
+vidIQ MCP is wired as a **supplemental validation source** after the 01.5 study
+set exists and before/during the Human Opportunity Gate.
+
+It does not replace project-owned YouTube API measurements and it does not
+change PASS / REVIEW / HOLD automatically.
+
+The bounded first integration uses only:
+
+- `keyword_research` for search-demand / intent context;
+- `outliers` for channel-relative breakout context;
+- `trending_videos` for current momentum / format context.
+
+The project does not use Video Watch in Experiment 01 because it costs more
+credits and duplicates work handled later by Experiment 02.
+
+Cost safety is fail-closed:
+
+- vidIQ Free currently provides 150 shared AI credits per month;
+- the YouTube project hard-clamps itself to **149 credits**, not 149 calls;
+- the three allowed research tools are budgeted at 5 credits each;
+- therefore the local ceiling allows at most 29 such paid calls before the
+  149-credit guard blocks further dispatch;
+- provider credit balance is checked with the free balance utility immediately
+  before every paid call;
+- at least one provider credit is always left in reserve;
+- if provider balance cannot be verified, no paid tool is called;
+- successful results are cached against the exact 01.5 study-set hash and query
+  so rerunning the same check does not spend credits again;
+- a second per-run limit defaults to 9 paid calls (45 credits) to prevent one
+  accidental run from consuming the monthly pool.
+
+The Human Opportunity Gate displays vidIQ evidence separately from canonical
+project evidence so the operator can compare sources without collapsing them
+into a composite score.
+
 ### Signals currently collected
 
 **Search provenance**

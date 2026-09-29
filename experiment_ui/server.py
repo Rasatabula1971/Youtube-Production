@@ -198,6 +198,35 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "depth expansion and opportunity handoff, then stops for human review."
         ),
     },
+    "vidiq_doctor": {
+        "label": "Run vidIQ Doctor (0 paid credits)",
+        "stage": "OPPORTUNITY",
+        "command": [
+            sys.executable,
+            "experiment_01_discovery/vidiq_opportunity_enrichment.py",
+            "--mode",
+            "doctor",
+        ],
+        "description": (
+            "Checks vidIQ MCP authentication, required research tools and the "
+            "free credit balance. It does not call any paid research tool."
+        ),
+    },
+    "vidiq_enrich": {
+        "label": "Run vidIQ Opportunity Check",
+        "stage": "OPPORTUNITY",
+        "command": [
+            sys.executable,
+            "experiment_01_discovery/vidiq_opportunity_enrichment.py",
+            "--mode",
+            "enrich",
+        ],
+        "description": (
+            "Adds keyword, outlier and trending evidence to the current 01.5 "
+            "opportunities. The adapter checks provider balance before every paid "
+            "call, preserves a reserve, caches results, and hard-stops at 149 credits."
+        ),
+    },
     "agent_reach_doctor": {
         "label": "Run Agent Reach Doctor",
         "stage": "ACQ",
@@ -2202,6 +2231,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     if research_waiting
                     else "Run the Opportunity Engine automatically through 01.5."
                 )
+            ),
+        },
+        "vidiq_doctor": {
+            "enabled": True,
+            "reason": "Safe configuration check; no paid vidIQ research call is made.",
+        },
+        "vidiq_enrich": {
+            "enabled": study_set,
+            "reason": (
+                "01.5 study set is ready for supplemental vidIQ validation."
+                if study_set
+                else "Build the 01.5 study set first."
             ),
         },
         "agent_reach_doctor": {
