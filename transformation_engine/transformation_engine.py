@@ -459,10 +459,21 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    for stale_request in REQUESTS_DIR.glob("*.concept_request.json"):
-        stale_request.unlink()
+    previous_request_hashes: set[str] = set()
+    previous_request_count = 0
+    for request_path in REQUESTS_DIR.glob("*.concept_request.json"):
+        previous_request_count += 1
+        try:
+            previous_request = load_json(request_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        provenance = previous_request.get("request_provenance", {})
+        if isinstance(provenance, dict) and provenance.get("handoff_sha256"):
+            previous_request_hashes.add(str(provenance["handoff_sha256"]))
 
     if not handoff_path.exists():
+        for stale_request in REQUESTS_DIR.glob("*.concept_request.json"):
+            stale_request.unlink()
         summary = {
             "status": "WAITING_FOR_EXPERIMENT_02_HANDOFF",
             "handoff": str(handoff_path),
@@ -479,7 +490,15 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     handoff_hash = sha256_file(handoff_path)
 
     previous_summary = load_json(SUMMARY_FILE) if SUMMARY_FILE.exists() else {}
-    if previous_summary.get("handoff_sha256") not in {None, handoff_hash}:
+    previous_summary_hash = previous_summary.get("handoff_sha256")
+    previous_hashes = set(previous_request_hashes)
+    if previous_summary_hash:
+        previous_hashes.add(str(previous_summary_hash))
+    upstream_changed = (
+        (previous_request_count > 0 and not previous_hashes)
+        or any(value != handoff_hash for value in previous_hashes)
+    )
+    if upstream_changed:
         for stale_name in (
             "concept_candidates.json",
             "rejected_concepts.json",
@@ -496,6 +515,9 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
             stale_path = OUTPUT_DIR / stale_name
             if stale_path.exists():
                 stale_path.unlink()
+
+    for stale_request in REQUESTS_DIR.glob("*.concept_request.json"):
+        stale_request.unlink()
 
     entries = ready_entries(handoff, config)
 
@@ -657,11 +679,30 @@ def run_apply() -> dict[str, Any]:
         next(iter(handoff_hashes)) if len(handoff_hashes) == 1 else None
     )
 
+    current_response_hashes: dict[str, str] = {}
+    if RESPONSES_DIR.exists():
+        for response_path in sorted(RESPONSES_DIR.glob("*.json")):
+            try:
+                response = load_json(response_path)
+            except (OSError, json.JSONDecodeError):
+                continue
+            mechanism_id = str(response.get("mechanism_id", "")).strip()
+            request_path = REQUESTS_DIR / f"{safe_slug(mechanism_id)}.concept_request.json"
+            if not request_path.exists():
+                continue
+            provenance = response.get("response_provenance", {})
+            if (
+                isinstance(provenance, dict)
+                and provenance.get("request_sha256") == sha256_file(request_path)
+            ):
+                current_response_hashes[mechanism_id] = sha256_file(response_path)
+
     CANDIDATES_FILE.write_text(
         json.dumps(
             {
                 "artifact": "concept_candidates",
                 "count": len(accepted),
+                "source_response_sha256": current_response_hashes,
                 "concepts": accepted,
                 "notes": [
                     "Concepts are not ranked.",

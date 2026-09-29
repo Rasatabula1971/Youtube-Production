@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import ExitStack
 
 import transformation_engine as module
 from transformation_engine import (
@@ -405,6 +406,75 @@ class TransformationEngineTests(unittest.TestCase):
         )
         renamed = next(item for item in accepted if item["concept_id"] != "concept-1")
         self.assertEqual(renamed["model_concept_id"], "concept-1")
+
+
+    def test_apply_preserves_handoff_hash_so_next_prepare_invalidates_stale_outputs(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            output = root / "output"
+            requests = output / "concept_requests"
+            responses = output / "concept_responses"
+            output.mkdir()
+            requests.mkdir()
+            responses.mkdir()
+            handoff = root / "handoff.json"
+
+            stack.enter_context(patch.object(module, "OUTPUT_DIR", output))
+            stack.enter_context(patch.object(module, "REQUESTS_DIR", requests))
+            stack.enter_context(patch.object(module, "RESPONSES_DIR", responses))
+            stack.enter_context(
+                patch.object(module, "CANDIDATES_FILE", output / "concept_candidates.json")
+            )
+            stack.enter_context(
+                patch.object(module, "REJECTED_FILE", output / "rejected_concepts.json")
+            )
+            stack.enter_context(
+                patch.object(module, "SUMMARY_FILE", output / "summary.json")
+            )
+            stack.enter_context(patch.object(module, "load_config", return_value={}))
+            stack.enter_context(
+                patch.object(
+                    module,
+                    "ready_entries",
+                    side_effect=lambda payload, config: payload.get("entries", []),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    module,
+                    "build_concept_request",
+                    side_effect=lambda entry, config: {
+                        "mechanism_id": entry["mechanism_id"]
+                    },
+                )
+            )
+
+            handoff.write_text(
+                json.dumps({"entries": [{"mechanism_id": "m1", "label": "v1"}]}),
+                encoding="utf-8",
+            )
+            first = run_prepare(handoff)
+            module.run_apply()
+            saved = json.loads(module.SUMMARY_FILE.read_text(encoding="utf-8"))
+            self.assertEqual(saved["handoff_sha256"], first["handoff_sha256"])
+
+            stale_names = [
+                "concept_triage.json",
+                "concept_candidates_triaged.json",
+                "concept_gate_reviewed.json",
+                "research_handoff.json",
+                "concept_gate_ui_state.json",
+            ]
+            for name in stale_names:
+                (output / name).write_text("{}", encoding="utf-8")
+
+            handoff.write_text(
+                json.dumps({"entries": [{"mechanism_id": "m1", "label": "v2"}]}),
+                encoding="utf-8",
+            )
+            run_prepare(handoff)
+
+            self.assertTrue(all(not (output / name).exists() for name in stale_names))
 
 
 if __name__ == "__main__":
