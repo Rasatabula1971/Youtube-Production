@@ -401,6 +401,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "concept": request.get("concept", {}),
         "accepted_claims": request.get("accepted_claims", []),
         "accepted_claim_ids": request.get("accepted_claim_ids", []),
+        "psychology_contract": request.get("psychology_contract", {}),
         "validation": validation,
         "plan_provenance": response["response_provenance"],
     }
