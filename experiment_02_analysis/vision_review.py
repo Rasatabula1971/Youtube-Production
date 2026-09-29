@@ -121,12 +121,14 @@ def ollama_tags(
     *,
     timeout_seconds: float = 2.5,
 ) -> dict[str, Any]:
+    host = normalize_ollama_host(host)
     request = urllib.request.Request(
         host + "/api/tags",
         method="GET",
         headers={"Accept": "application/json"},
     )
-    with urllib.request.urlopen(
+    # normalize_ollama_host restricts this request to loopback HTTP(S).
+    with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         request,
         timeout=timeout_seconds,
     ) as response:
@@ -208,6 +210,7 @@ def ollama_frame_proposal(
     host: str,
     timeout_seconds: float = 90.0,
 ) -> dict[str, Any]:
+    host = normalize_ollama_host(host)
     encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
     payload = {
         "model": model,
@@ -234,7 +237,8 @@ def ollama_frame_proposal(
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(
+    # normalize_ollama_host restricts this request to loopback HTTP(S).
+    with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         request,
         timeout=timeout_seconds,
     ) as response:
