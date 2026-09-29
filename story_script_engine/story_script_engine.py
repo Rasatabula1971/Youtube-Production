@@ -49,6 +49,18 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def validation_contract_sha256() -> str:
+    """Fingerprint deterministic Script acceptance and overlap rules."""
+    digest = hashlib.sha256()
+    for path in (
+        Path(__file__).resolve(),
+        (PROJECT_ROOT / "source_overlap.py").resolve(),
+    ):
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
     owners: dict[str, str] = {}
     for raw in values:
