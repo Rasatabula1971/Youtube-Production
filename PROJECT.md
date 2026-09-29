@@ -268,6 +268,13 @@ the formal handoff from M1 into Experiment 02.
 
 ### vidIQ supplemental opportunity intelligence
 
+vidIQ exposes a fixed MCP URL and uses an OAuth 2.0 authorization flow; it does
+not issue a project API key for this integration. The local project connects to
+`https://mcp.vidiq.com/mcp` through the pinned open-source `mcp-remote` bridge.
+On first use the bridge opens a browser login/consent flow, then reuses its
+locally stored OAuth state on later runs. No vidIQ OAuth token is stored in this
+repository or `.env`.
+
 vidIQ MCP is wired as a **supplemental validation source** after the 01.5 study
 set exists and before/during the Human Opportunity Gate.
 
