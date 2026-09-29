@@ -126,6 +126,13 @@ def build_format_request(
     package = script.get("package", {})
     if not isinstance(package, dict):
         package = {}
+    approved_title = str(package.get("title") or "").strip()
+    if not approved_title:
+        raise ValueError("Approved script requires Packaging title")
+    if str(script.get("title") or "") != approved_title:
+        raise ValueError(
+            "Approved script title does not match the Packaging title contract"
+        )
 
     sections = script.get("sections", [])
     if not isinstance(sections, list) or not sections:

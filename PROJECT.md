@@ -138,10 +138,15 @@ Produces:
 
 - evidence and primary-source research where practical;
 - fact verification;
-- hook;
-- story architecture;
-- evidence-backed script;
+- an approved-title-bound Story Plan;
+- hook intent, narrative progression, reveal and payoff structure;
+- evidence-backed narration written only after the Story Plan exists;
 - visual directions.
+
+The approved Packaging title is the viewer contract and is immutable downstream.
+Story Planning decides **what happens and in what order**. Script Writing decides
+**the exact spoken words**. The two are separate machine steps before the Human
+Script Gate. See D-063.
 
 A useful default is narrative progress rather than disconnected facts, but individual formats may justify other structures.
 

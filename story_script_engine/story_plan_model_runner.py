@@ -1,4 +1,4 @@
-"""FAIR-backed Story / Script model runner."""
+"""FAIR-backed Story Plan model runner."""
 
 from __future__ import annotations
 
@@ -6,12 +6,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
-
-from typing import Any
 
 from pipeline_integrity import (
     SUCCESS_STATUSES,
@@ -27,6 +26,7 @@ PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
     sys.path.insert(0, str(EXP2_DIR))
+
 from analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
@@ -36,128 +36,135 @@ from analysis_model_runner import (
     resolve_fair_paths,
     safe_attempts,
 )
-
+from story_plan_engine import (
+    STORY_PLAN_REQUESTS_DIR,
+    STORY_PLAN_RESPONSES_DIR,
+    STORY_PLANS_DIR,
+    validate_story_plan_response,
+    validation_contract_sha256,
+)
 from story_script_engine import (
-    DRAFTS_DIR,
     OUTPUT_DIR,
-    REQUESTS_DIR,
-    RESPONSES_DIR,
     load_json,
     safe_slug,
     sha256_file,
-    validate_script_response,
-    validation_contract_sha256,
 )
 
-MODEL_RUNS_DIR = OUTPUT_DIR / "script_model_runs"
-RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_script_outputs"
-BATCH_SUMMARY_FILE = OUTPUT_DIR / "script_model_batch_summary.json"
+MODEL_RUNS_DIR = OUTPUT_DIR / "story_plan_model_runs"
+RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_story_plan_outputs"
+BATCH_SUMMARY_FILE = OUTPUT_DIR / "story_plan_model_batch_summary.json"
 
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
-    allowed = list(request.get("accepted_claim_ids", []))
+    allowed_claims = list(request.get("accepted_claim_ids", []))
     approved_title = str(request.get("package", {}).get("title") or "")
-    story_plan = request.get("story_plan", {})
-    beats = (
-        story_plan.get("beats", [])
-        if isinstance(story_plan, dict)
-        else []
-    )
-    beat_ids = [
-        str(beat.get("beat_id", ""))
-        for beat in beats
-        if isinstance(beat, dict) and str(beat.get("beat_id", "")).strip()
-    ]
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["concept_id", "title", "opening_hook", "sections", "closing"],
+        "required": [
+            "concept_id",
+            "title",
+            "story_question",
+            "opening_hook_intent",
+            "beats",
+            "payoff_intent",
+            "closing_intent",
+        ],
         "properties": {
             "concept_id": {
                 "type": "string",
                 "const": str(request.get("concept_id", "")),
             },
             "title": {"type": "string", "const": approved_title},
-            "opening_hook": {"type": "string", "minLength": 1},
-            "sections": {
+            "story_question": {"type": "string", "minLength": 1},
+            "opening_hook_intent": {"type": "string", "minLength": 1},
+            "beats": {
                 "type": "array",
-                "minItems": len(beat_ids) if beat_ids else 1,
-                **({"maxItems": len(beat_ids)} if beat_ids else {}),
+                "minItems": 3,
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
                     "required": [
-                        "section_id",
-                        "story_beat_id",
+                        "beat_id",
+                        "role",
                         "purpose",
-                        "narration",
+                        "viewer_progress",
                         "claim_ids",
+                        "transition_intent",
                     ],
                     "properties": {
-                        "section_id": {"type": "string", "minLength": 1},
-                        "story_beat_id": {
+                        "beat_id": {"type": "string", "minLength": 1},
+                        "role": {
                             "type": "string",
-                            "enum": beat_ids,
+                            "enum": [
+                                "SETUP",
+                                "ESCALATION",
+                                "EXPLANATION",
+                                "REVEAL",
+                                "PAYOFF",
+                            ],
                         },
                         "purpose": {"type": "string", "minLength": 1},
-                        "narration": {"type": "string", "minLength": 1},
+                        "viewer_progress": {"type": "string", "minLength": 1},
                         "claim_ids": {
                             "type": "array",
-                            "items": {"type": "string", "enum": allowed},
+                            "items": {
+                                "type": "string",
+                                "enum": allowed_claims,
+                            },
                             "uniqueItems": True,
+                        },
+                        "transition_intent": {
+                            "type": "string",
+                            "minLength": 1,
                         },
                     },
                 },
             },
-            "closing": {"type": "string", "minLength": 1},
+            "payoff_intent": {"type": "string", "minLength": 1},
+            "closing_intent": {"type": "string", "minLength": 1},
         },
     }
 
 
 def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
     prompt = (
-        "You are writing the narration for an original YouTube video from an "
-        "approved Story Plan and human-verified research. Return JSON only.\n\n"
+        "You are planning the story structure for an original YouTube video. "
+        "Do NOT write the final narration. Return JSON only.\n\n"
         "Rules:\n"
-        "1. Return the approved Packaging title EXACTLY. Do not rewrite, optimize, or replace it.\n"
-        "2. Follow the supplied Story Plan in order. Do not invent a new story structure.\n"
-        "3. Create exactly one script section for each Story Plan beat and map it with story_beat_id.\n"
-        "4. Each section must carry exactly the claim_ids assigned to its Story Plan beat.\n"
-        "5. Use only accepted_claims for factual assertions. Never invent a factual detail.\n"
-        "6. Original connective narration is allowed only when it does not add factual claims.\n"
-        "7. Do not copy source-video wording, story sequence, personality, or exact execution.\n"
-        "8. Do not mention claim IDs or story beat IDs in spoken narration.\n"
-        "9. Turn the Story Plan intent into natural spoken language with a strong hook, progression, payoff and concise close.\n\n"
-        "SCRIPT REQUEST:\n"
+        "1. The approved Packaging title is immutable. Return it exactly.\n"
+        "2. Decide the viewer journey before wording: hook tension, setup, escalation/explanation, reveal, payoff, close.\n"
+        "3. Every beat must add new viewer progress. Do not repeat the same function.\n"
+        "4. Use only accepted_claim_ids for factual beats.\n"
+        "5. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
+        "6. At least one beat must be PAYOFF.\n"
+        "7. Keep this as a structural plan: no polished narration paragraphs.\n\n"
+        "STORY PLAN REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
     if len(prompt) > maximum_chars:
-        raise ValueError("Script prompt exceeds configured maximum")
+        raise ValueError("Story Plan prompt exceeds configured maximum")
     return prompt
 
 
-def run_one(
-    path: Path,
-    force: bool,
-    config: dict[str, Any],
-) -> dict[str, Any]:
+def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
     path = path.resolve()
     request = load_json(path)
     concept_id = str(request.get("concept_id", "")).strip()
     if not concept_id:
-        raise ValueError("Script request requires concept_id")
+        raise ValueError("Story Plan request requires concept_id")
 
     slug = safe_slug(concept_id)
     request_hash = sha256_file(path)
     validation_contract = validation_contract_sha256()
     report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
-    response_path = RESPONSES_DIR / f"{slug}.json"
-    draft_path = DRAFTS_DIR / f"{slug}.script_draft.json"
+    response_path = STORY_PLAN_RESPONSES_DIR / f"{slug}.json"
+    plan_path = STORY_PLANS_DIR / f"{slug}.story_plan.json"
 
-    if report_path.exists() and draft_path.exists() and not force:
+    if report_path.exists() and plan_path.exists() and not force:
         existing = tolerant_load_json(report_path) or {}
-        draft = tolerant_load_json(draft_path) or {}
-        provenance = draft.get("draft_provenance", {})
+        plan = tolerant_load_json(plan_path) or {}
+        provenance = plan.get("plan_provenance", {})
         if (
             existing.get("status") == "VALIDATED"
             and existing.get("validation_contract_sha256")
@@ -186,13 +193,13 @@ def run_one(
         config=config,
         paths=paths,
     )
-    payload["settings"]["client_id"] = "youtube-story-script"
+    payload["settings"]["client_id"] = "youtube-story-plan"
 
     for directory in (
         MODEL_RUNS_DIR,
         RAW_OUTPUTS_DIR,
-        RESPONSES_DIR,
-        DRAFTS_DIR,
+        STORY_PLAN_RESPONSES_DIR,
+        STORY_PLANS_DIR,
     ):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -204,7 +211,7 @@ def run_one(
                 config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, TimeoutError) as exc:
         report = {
             "concept_id": concept_id,
             "request_source": str(path),
@@ -257,8 +264,8 @@ def run_one(
 
     try:
         response = parse_model_json(raw)
-        validation = validate_script_response(response, request)
-    except Exception as exc:
+        validation = validate_story_plan_response(response, request)
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
         report = {
             **base,
             "status": "MODEL_OUTPUT_VALIDATION_ERROR",
@@ -288,19 +295,23 @@ def run_one(
     }
     atomic_write_json(response_path, response)
 
-    draft = {
+    plan = {
+        "artifact": "story_plan",
+        "status": "STORY_PLAN_READY",
         **response,
-        "accepted_claims": request.get("accepted_claims", []),
         "package": request.get("package", {}),
+        "concept": request.get("concept", {}),
+        "accepted_claims": request.get("accepted_claims", []),
+        "accepted_claim_ids": request.get("accepted_claim_ids", []),
         "validation": validation,
-        "draft_provenance": response["response_provenance"],
+        "plan_provenance": response["response_provenance"],
     }
-    atomic_write_json(draft_path, draft)
+    atomic_write_json(plan_path, plan)
 
     report = {
         **base,
         "status": "VALIDATED",
-        "script_draft": str(draft_path),
+        "story_plan": str(plan_path),
         "claim_usage": validation["claim_usage"],
         "unused_accepted_claim_ids": validation["unused_accepted_claim_ids"],
     }
@@ -309,22 +320,25 @@ def run_one(
 
 
 def run_batch(
-    requests_dir: Path, force: bool, maximum: int | None, config: dict[str, Any]
+    requests_dir: Path,
+    force: bool,
+    maximum: int | None,
+    config: dict[str, Any],
 ) -> dict[str, Any]:
-    paths = sorted(requests_dir.glob("*.script_request.json"))
+    paths = sorted(requests_dir.glob("*.story_plan_request.json"))
     limit = int(
         maximum
         if maximum is not None
         else config["runner"].get("max_requests_per_batch", 4)
     )
-    results = []
+    results: list[dict[str, Any]] = []
     invoked = 0
     for path in paths:
         if invoked >= limit:
             break
         try:
             item = run_one(path, force, config)
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             item = {
                 "status": "RUNNER_ERROR",
                 "error_type": type(exc).__name__,
@@ -339,8 +353,11 @@ def run_batch(
             "RUNNER_ERROR",
         }:
             break
+
     status = batch_status(
-        results, expected_count=len(paths), processed_count=len(results)
+        results,
+        expected_count=len(paths),
+        processed_count=len(results),
     )
     if (
         len(results) < len(paths)
@@ -361,21 +378,30 @@ def run_batch(
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="FAIR-backed Story / Script runner")
-    p.add_argument("--mode", choices=("run", "batch"), required=True)
-    p.add_argument("--request", type=Path)
-    p.add_argument("--requests-dir", type=Path, default=REQUESTS_DIR)
-    p.add_argument("--max-requests", type=int)
-    p.add_argument("--force", action="store_true")
-    a = p.parse_args()
+    parser = argparse.ArgumentParser(description="FAIR-backed Story Plan runner")
+    parser.add_argument("--mode", choices=("run", "batch"), required=True)
+    parser.add_argument("--request", type=Path)
+    parser.add_argument(
+        "--requests-dir",
+        type=Path,
+        default=STORY_PLAN_REQUESTS_DIR,
+    )
+    parser.add_argument("--max-requests", type=int)
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args()
     config = load_runner_config()
     result = (
-        run_one(a.request, a.force, config)
-        if a.mode == "run" and a.request
-        else run_batch(a.requests_dir.resolve(), a.force, a.max_requests, config)
+        run_one(args.request, args.force, config)
+        if args.mode == "run" and args.request
+        else run_batch(
+            args.requests_dir.resolve(),
+            args.force,
+            args.max_requests,
+            config,
+        )
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
-    if a.mode == "batch":
+    if args.mode == "batch":
         if result["status"] == "BATCH_PROGRESS":
             raise SystemExit(0)
         raise SystemExit(exit_code_for_status(result["status"]))

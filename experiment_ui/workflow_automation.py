@@ -35,6 +35,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "research_acquire",
     "research_generate",
     "research_gate_prepare",
+    "story_prepare",
+    "story_generate",
     "script_prepare",
     "script_generate",
     "script_gate_prepare",

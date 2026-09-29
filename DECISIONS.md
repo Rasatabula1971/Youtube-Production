@@ -1022,3 +1022,34 @@ visual manifests and routes supplied candidates without web search, downloads or
 provider calls. External acquisition and paid-generation adapters are added only
 after this policy layer is proven by tests.
 
+## D-063 — Story structure is planned before narration and Packaging owns the title
+
+**Status:** Accepted
+
+After the Research Gate verifies the factual material, the Story / Script Engine
+runs in two machine stages:
+
+1. **Story Plan** — decides the viewer journey, hook intent, progression,
+   explanation/reveal sequence, payoff and closing intent.
+2. **Script Draft** — turns that accepted structure into natural spoken
+   narration.
+
+The Story Plan is structural, not polished prose. It may use only Research Gate
+accepted claim IDs for factual beats and must contain a payoff beat. Every script
+section maps to exactly one Story Plan beat, and the factual claim IDs attached
+to that section must match the claim IDs assigned to the corresponding beat.
+
+The Human Script Gate remains the single human boundary for this stage. A
+separate human Story Plan gate is not added; the final script review explicitly
+checks that the narration followed the Story Plan.
+
+The **Packaging title is immutable downstream**. Packaging owns the title because
+it defines the click promise. Story Planning, Script Writing, Format Planning,
+Voice Performance and Production may fulfill that promise but may not silently
+rewrite it. Both Story Plan and Script validators fail closed if their returned
+title differs from the approved Packaging title.
+
+This separation exists to prevent one model call from simultaneously inventing
+structure and wording, which can produce informative but shapeless scripts or
+allow the story to drift away from the approved package promise.
+

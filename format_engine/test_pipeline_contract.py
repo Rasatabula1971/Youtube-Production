@@ -38,6 +38,7 @@ import script_review
 import format_engine
 import packaging_engine
 import research_engine
+import story_plan_engine
 import story_script_engine
 
 PROMISE = (
@@ -306,33 +307,114 @@ class PipelineContractTests(unittest.TestCase):
         verified_path = write_json(
             self.root / "c1.verified_research_package.json", verified
         )
-        request = story_script_engine.build_script_request(verified, verified_path)
-        # The approved package promise must survive into the script request.
+
+        story_request = story_plan_engine.build_story_plan_request(
+            verified,
+            verified_path,
+        )
+        self.assertEqual(
+            story_request["package"]["title"],
+            "Why F1 Brakes Work Backwards",
+        )
+        self.assertEqual(story_request["package"]["one_sentence_promise"], PROMISE)
+
+        claim_ids = story_request["accepted_claim_ids"]
+        story_response = {
+            "concept_id": "c1",
+            "title": "Why F1 Brakes Work Backwards",
+            "story_question": "Why do racing brakes need conditions that seem wrong for road cars?",
+            "opening_hook_intent": "Open on the apparent contradiction and make the viewer want the mechanism.",
+            "beats": [
+                {
+                    "beat_id": "b1",
+                    "role": "SETUP",
+                    "purpose": "Establish the race-brake contradiction.",
+                    "viewer_progress": "The viewer understands the puzzle.",
+                    "claim_ids": [],
+                    "transition_intent": "Move from the visible contradiction to the governing constraint.",
+                },
+                {
+                    "beat_id": "b2",
+                    "role": "EXPLANATION",
+                    "purpose": "Explain the verified constraint and temperature behavior.",
+                    "viewer_progress": "The viewer understands the mechanism.",
+                    "claim_ids": claim_ids[:1],
+                    "transition_intent": "Use the mechanism to reframe heat as intentional.",
+                },
+                {
+                    "beat_id": "b3",
+                    "role": "PAYOFF",
+                    "purpose": "Resolve why the design only seems backwards.",
+                    "viewer_progress": "The approved title promise is fulfilled.",
+                    "claim_ids": claim_ids,
+                    "transition_intent": "Close on the resolved engineering tradeoff.",
+                },
+            ],
+            "payoff_intent": "Show that the apparently wrong behavior follows from the verified design constraints.",
+            "closing_intent": "Leave one clear mental model of the tradeoff.",
+        }
+        story_validation = story_plan_engine.validate_story_plan_response(
+            story_response,
+            story_request,
+        )
+        self.assertTrue(story_validation["valid"], story_validation["errors"])
+
+        story_plan = {
+            "artifact": "story_plan",
+            "status": "STORY_PLAN_READY",
+            **story_response,
+            "package": story_request["package"],
+            "concept": story_request["concept"],
+            "accepted_claims": story_request["accepted_claims"],
+            "accepted_claim_ids": story_request["accepted_claim_ids"],
+            "validation": story_validation,
+            "plan_provenance": {"request_sha256": "contract"},
+        }
+        story_plan_path = write_json(
+            self.root / "c1.story_plan.json",
+            story_plan,
+        )
+
+        request = story_script_engine.build_script_request(
+            story_plan,
+            story_plan_path,
+        )
         self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
         self.assertEqual(request["package"]["format_intent"], "either")
-        expected_claims = sorted(claim["claim_id"] for claim in verified["claims"])
-        self.assertEqual(request["accepted_claim_ids"], expected_claims)
+        self.assertEqual(request["accepted_claim_ids"], claim_ids)
+        self.assertEqual(
+            request["title"] if "title" in request else request["package"]["title"],
+            "Why F1 Brakes Work Backwards",
+        )
 
-        claim_ids = request["accepted_claim_ids"]
         response = {
             "concept_id": "c1",
             "title": "Why F1 Brakes Work Backwards",
-            "opening_hook": "A road car would destroy these brakes in one corner.",
+            "opening_hook": "A road car would hate the conditions these brakes are built to need.",
             "sections": [
                 {
                     "section_id": "s1",
-                    "purpose": "Explain the constraint",
-                    "narration": "The rulebook fixes what the brake may be.",
-                    "claim_ids": claim_ids[:1],
+                    "story_beat_id": "b1",
+                    "purpose": "Establish the contradiction",
+                    "narration": "At first glance, the race-car solution seems backwards.",
+                    "claim_ids": [],
                 },
                 {
                     "section_id": "s2",
+                    "story_beat_id": "b2",
+                    "purpose": "Explain the constraint",
+                    "narration": "The verified constraint changes what the brake must tolerate.",
+                    "claim_ids": claim_ids[:1],
+                },
+                {
+                    "section_id": "s3",
+                    "story_beat_id": "b3",
                     "purpose": "Deliver the payoff",
-                    "narration": "So heat is not a flaw; it is the design target.",
+                    "narration": "Once the constraints are included, heat becomes part of the design target rather than a contradiction.",
                     "claim_ids": claim_ids,
                 },
             ],
-            "closing": "That is why the pedal feels wrong until it is right.",
+            "closing": "That is why the design looks wrong only until you see the problem it is solving.",
         }
         validation = story_script_engine.validate_script_response(response, request)
         self.assertTrue(validation["valid"], validation["errors"])
@@ -342,6 +424,7 @@ class PipelineContractTests(unittest.TestCase):
             **response,
             "accepted_claims": request["accepted_claims"],
             "package": request["package"],
+            "story_plan": request["story_plan"],
             "validation": validation,
             "draft_provenance": {"request_sha256": "contract"},
         }
@@ -372,6 +455,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertTrue(approved_path.exists())
         return approved_path
 
+
     # ---- seam 7: Format Gate → Production -----------------------------------
 
     def approved_format_plan(self, approved_script_path: Path) -> dict:
@@ -386,7 +470,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(request["required_branches"], ["long_form", "short"])
         # The promise has now crossed four stages untouched.
         self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
-        self.assertEqual(request["script_section_ids"], ["s1", "s2"])
+        self.assertEqual(request["script_section_ids"], ["s1", "s2", "s3"])
         # This is the hash the Experiment UI uses to decide the request is current.
         self.assertEqual(
             request["request_provenance"]["approved_script_sha256"],
@@ -416,7 +500,7 @@ class PipelineContractTests(unittest.TestCase):
                         beat("lf1", "hook", "Open on the corner.", ["s1"], []),
                         beat("lf2", "context", "Normal brakes.", ["s1"], claim_ids[:1]),
                         beat("lf3", "reveal", "The rule.", ["s1"], claim_ids),
-                        beat("lf4", "payoff", "Heat as target.", ["s2"], claim_ids),
+                        beat("lf4", "payoff", "Heat as target.", ["s3"], claim_ids),
                     ],
                 },
                 {
@@ -425,9 +509,9 @@ class PipelineContractTests(unittest.TestCase):
                     "promise_delivery": "One counterintuitive fact, fast.",
                     "payoff": "Viewer leaves with the single mechanism.",
                     "beats": [
-                        beat("sh1", "cold open", "State the claim.", ["s2"], claim_ids),
+                        beat("sh1", "cold open", "State the claim.", ["s3"], claim_ids),
                         beat("sh2", "proof", "One visual.", ["s1"], claim_ids[:1]),
-                        beat("sh3", "close", "Restate in a line.", ["s2"], claim_ids),
+                        beat("sh3", "close", "Restate in a line.", ["s3"], claim_ids),
                     ],
                 },
             ],

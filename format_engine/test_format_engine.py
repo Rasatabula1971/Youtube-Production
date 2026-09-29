@@ -110,6 +110,15 @@ class FormatEngineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve_branches("vertical_reel", self.config())
 
+    def test_script_title_must_match_packaging_title(self):
+        script = self.script()
+        script["title"] = "A Different Title"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "script.json"
+            path.write_text(json.dumps(script), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Packaging title contract"):
+                build_format_request(script, path, self.config())
+
     def test_script_not_approved_is_rejected(self):
         script = self.script()
         script["script_gate"] = {"status": "SCRIPT_REWORK_REQUIRED"}
