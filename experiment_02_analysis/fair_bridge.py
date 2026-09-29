@@ -20,6 +20,10 @@ def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def resolve_path(value: str) -> Path:
+    return Path(value).resolve()
+
+
 def path_exists(path: Path) -> bool:
     return path.exists()
 
@@ -128,7 +132,10 @@ def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any
 
 
 async def execute(payload: dict[str, Any]) -> dict[str, Any]:
-    fair_repo = Path(str(payload["fair_repo_path"])).resolve()
+    fair_repo = await asyncio.to_thread(
+        resolve_path,
+        str(payload["fair_repo_path"]),
+    )
     if not await asyncio.to_thread(path_exists, fair_repo):
         return {
             "status": "BRIDGE_ERROR",
