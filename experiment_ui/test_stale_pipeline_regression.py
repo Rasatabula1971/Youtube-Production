@@ -223,5 +223,86 @@ class StalePipelineRegressionTests(unittest.TestCase):
         self.assertFalse(state["candidates_ready"])
 
 
+    def test_changed_human_reviews_make_existing_synthesis_rebuildable(self):
+        stale_state = {
+            "prepared_count": 1,
+            "evidence_complete": True,
+            "visual_attempted": True,
+            "visual_complete": False,
+            "requests_complete": True,
+            "analyzed_current_count": 1,
+            "analysis_request_ids": ["v1"],
+            "review_requests_current_count": 1,
+            "reviewed_current_count": 1,
+            "synthesis_ready": False,
+        }
+        transform = {
+            "requests_ready": False,
+            "candidates_ready": False,
+            "triage_ready": False,
+            "concept_gate": {"status": "WAITING_FOR_CONCEPT_CANDIDATES"},
+            "concept_gate_complete": False,
+            "research_ready": False,
+            "shortlist_count": 0,
+        }
+        packaging = {
+            "requests_ready": False,
+            "candidates_ready": False,
+            "packaging_gate": {"status": "WAITING_FOR_PACKAGE_CANDIDATES"},
+            "packaging_gate_complete": False,
+            "research_ready": False,
+        }
+        research = {
+            "plans_ready": False,
+            "evidence_complete": False,
+            "drafts_ready": False,
+            "research_gate": {"status": "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"},
+            "research_gate_complete": False,
+            "story_ready": False,
+        }
+        story = {
+            "requests_ready": False,
+            "drafts_ready": False,
+            "script_gate": {"status": "WAITING_FOR_SCRIPT_DRAFTS"},
+            "script_gate_complete": False,
+            "production_ready": False,
+        }
+        fmt = {
+            "requests_ready": False,
+            "plans_ready": False,
+            "format_gate": {"status": "WAITING_FOR_FORMAT_PLANS"},
+            "format_gate_complete": False,
+            "production_engine_ready": False,
+        }
+
+        with (
+            patch.object(server, "exp13_cohort_readiness", return_value={"sufficient": False}),
+            patch.object(server, "exp13_depth_ready_cell_count", return_value=0),
+            patch.object(server, "exp14_plan_status", return_value="WAITING"),
+            patch.object(server, "exp14_execution_status", return_value="WAITING"),
+            patch.object(server, "opportunity_research_state", return_value={}),
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={"ready_for_experiment_02": True},
+            ),
+            patch.object(server, "exp2_artifact_state", return_value=stale_state),
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={"complete": True, "awaiting_human_review": False},
+            ),
+            patch.object(server, "transformation_artifact_state", return_value=transform),
+            patch.object(server, "packaging_artifact_state", return_value=packaging),
+            patch.object(server, "research_artifact_state", return_value=research),
+            patch.object(server, "story_script_artifact_state", return_value=story),
+            patch.object(server, "format_artifact_state", return_value=fmt),
+            patch.object(server.shutil, "which", return_value=None),
+        ):
+            readiness = server.action_readiness()
+
+        self.assertTrue(readiness["synthesis_build"]["enabled"])
+
+
 if __name__ == "__main__":
     unittest.main()
