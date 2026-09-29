@@ -437,6 +437,7 @@ def read_web_page(
                 executable,
                 "-L",
                 "-sS",
+                "--fail",
                 "--max-time",
                 str(int(timeout_seconds)),
                 reader_url,
@@ -457,10 +458,15 @@ def read_web_page(
         raise AcquisitionError(f"Jina Reader failed to start: {exc}") from exc
 
     content = completed.stdout.strip()
-    if completed.returncode != 0 or not content:
-        raise AcquisitionError(
-            (completed.stderr.strip() or "Jina Reader returned no content")[:1600]
+    if completed.returncode != 0:
+        detail = (
+            completed.stderr.strip()
+            or completed.stdout.strip()
+            or f"Jina Reader HTTP request failed with curl exit {completed.returncode}"
         )
+        raise AcquisitionError(detail[:1600])
+    if not content:
+        raise AcquisitionError("Jina Reader returned no content")
 
     return {
         "status": "COMPLETE",
