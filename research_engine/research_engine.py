@@ -178,6 +178,7 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
                             "stance": "SUPPORTS|CONTRADICTS|QUALIFIES",
                             "locator": "page, section, timestamp, table, or other locator",
                             "evidence_note": "brief paraphrase of what the source says",
+                            "evidence_quote": "short exact excerpt copied from the linked acquired page",
                         }
                     ],
                 }
