@@ -502,6 +502,7 @@ function renderOpportunityGate(gate) {
   }
 
   const status = escapeHtml(gate.status || "AWAITING_HUMAN_DECISION");
+  const vidiq = gate.vidiq || {};
   let html =
     '<div class="gate-summary"><div class="gate-summary-copy">' +
     '<span class="status-chip ' +
@@ -514,11 +515,35 @@ function renderOpportunityGate(gate) {
     (gate.ready_for_experiment_02
       ? '<button data-route="/analysis">Continue to Analyze →</button>'
       : '') +
+    '</div>' +
+    '<div class="gate-summary"><div class="gate-summary-copy">' +
+      '<strong>vidIQ supplemental check</strong><span>' +
+      escapeHtml(
+        (vidiq.status || "NOT_RUN") +
+        (vidiq.provider_remaining_credits == null
+          ? ""
+          : " · " + vidiq.provider_remaining_credits + " provider credits remaining") +
+        (vidiq.local_charged_credits == null
+          ? ""
+          : " · " + vidiq.local_charged_credits + "/" + (vidiq.hard_credit_cap || 149) + " local credits reserved")
+      ) +
+      '</span></div>' +
+      '<button class="ghost compact" data-action="vidiq_enrich">Run vidIQ check</button>' +
     '</div>';
 
   (gate.opportunities || []).forEach(function (opportunity) {
     const evidence = opportunity.topic_evidence || {};
+    const vidiqEvidence = opportunity.vidiq_evidence || {};
+    const vidiqTools = vidiqEvidence.tools || {};
     const decision = opportunity.decision || "PENDING";
+    const vidiqRows = ["keyword_research", "outliers", "trending_videos"].map(function (toolName) {
+      const item = vidiqTools[toolName] || {};
+      return '<div class="concept-detail-card"><h4>' +
+        escapeHtml(humanizeToken(toolName)) + '</h4><p><strong>' +
+        escapeHtml(item.status || "NOT_RUN") + '</strong>' +
+        (item.preview ? '<br>' + escapeHtml(item.preview) : '') +
+        '</p></div>';
+    }).join("");
 
     html += '<article class="opportunity-card">' +
       '<div class="opportunity-head"><div>' +
@@ -541,7 +566,12 @@ function renderOpportunityGate(gate) {
       '<div><span>Views/day</span><strong>' + escapeHtml(compactNumber(evidence.median_current_views_per_day)) + '</strong></div>' +
       '<div><span>Confidence</span><strong>' +
       escapeHtml(evidence.topic_channel_confidence || evidence.confidence || "—") +
-      '</strong></div></div><div class="example-grid">';
+      '</strong></div></div>' +
+      (vidiqRows
+        ? '<details class="technical-details"><summary>vidIQ market evidence</summary>' +
+          '<div class="technical-body">' + vidiqRows + '</div></details>'
+        : '') +
+      '<div class="example-grid">';
 
     (opportunity.selected_examples || []).forEach(function (example, index) {
       const youtubeUrl = safeYoutubeUrl(example.youtube_url);
