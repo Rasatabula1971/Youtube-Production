@@ -209,9 +209,21 @@ The scheduled continuation is resume-safe. If 01.4 has already completed, it
 does not repeat depth-expansion searches just because a later step needs to be
 retried.
 
-The main action area shows the current required action in blue and the following
-step in amber. Manual experiment controls, Doctor actions, scheduler controls,
-benchmarks and clean-restart controls are under **Tools & Diagnostics**.
+The main action area now exposes only the creator-facing automation boundary.
+Deterministic machine steps are chained automatically until the next Human Gate.
+When a Human Gate becomes complete and produces a valid downstream handoff, the
+UI starts the next automatic machine segment without another run-button decision.
+
+The individual Experiment 02, Transformation, Packaging, Research and Script
+commands remain available under **Tools & Diagnostics** for diagnosis, forced
+retry and recovery. They are no longer routine workflow gates.
+
+Opportunity Research also attempts the supplemental vidIQ check automatically
+after 01.5 and before the Human Opportunity Gate. It runs paid vidIQ research
+only when the zero-cost Doctor is READY, the live tool metadata still declares
+the expected credit cost, the provider renewable balance is readable, and the
+local credit guards permit the call. Otherwise vidIQ is skipped and the Human
+Opportunity Gate still opens on canonical project evidence.
 
 
 ## UI v3 — multi-view workspace
