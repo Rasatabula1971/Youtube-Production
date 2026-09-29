@@ -12,6 +12,7 @@ on:
       - "source_acquisition/**"
       - "story_script_engine/**"
       - "format_engine/**"
+      - "production_engine/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
   push:
@@ -26,6 +27,7 @@ on:
       - "source_acquisition/**"
       - "story_script_engine/**"
       - "format_engine/**"
+      - "production_engine/**"
       - "Start Experiment UI.bat"
       - ".github/workflows/experiment-01-tests.yml"
 
@@ -61,3 +63,6 @@ jobs:
 
       - name: Run Format Engine tests
         run: python -m unittest discover -s format_engine -p "test_*.py" -v
+
+      - name: Run Production Engine tests
+        run: python -m unittest discover -s production_engine -p "test_*.py" -v

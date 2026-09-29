@@ -976,3 +976,49 @@ default for non-enterprise accounts. Both are accepted knowingly.
 
 No performance score, predicted retention, or automatic take selection is
 introduced. The human rough-cut gate (08) remains mandatory before publish.
+
+## D-062 — Visual acquisition is cheap-first before paid generation
+
+**Status:** Accepted
+
+The Production Engine does not default to generating every visual with
+Higgsfield. During pre-monetization testing, the system proves audience demand
+before increasing production spend.
+
+The default visual source order is:
+
+1. project-owned and previously licensed reusable assets;
+2. verified free commercial-use footage;
+3. verified public-domain material;
+4. compatible Creative Commons material with recorded licence provenance;
+5. third-party editorial excerpts, which always require human rights/context
+   review;
+6. project-created motion graphics or still treatments;
+7. low-cost AI generation; and
+8. Higgsfield premium generation.
+
+This order is a cost policy, not a legal conclusion. The system never implements
+a "three-second rule" or any other clip-duration shortcut. An
+`EDITORIAL_EXCERPT` is never auto-selected regardless of duration. Its source,
+intended use and context are preserved for the source/copyright/licensing gate.
+
+Every candidate asset records provenance and rights metadata where applicable,
+including source URL or local path, licence reference, commercial-use status,
+attribution requirement and estimated paid cost.
+
+For the `pre_monetization` production phase, the initial operating target is
+US$5 or less of paid visual generation per finished video and the automated
+hard cap is US$10. These values are hypotheses for economical channel testing
+and remain configuration, not universal production rules.
+
+D-061 remains in force for narration: the Voice Performance Layer plans delivery
+and Higgsfield renders the licensed voice. D-061's earlier assumption that
+Higgsfield is the single generated-video provider is narrowed by this decision:
+for visuals, Higgsfield is the premium fallback after cheaper acceptable routes
+have been exhausted.
+
+The first implementation is deliberately offline. It prepares provenance-bound
+visual manifests and routes supplied candidates without web search, downloads or
+provider calls. External acquisition and paid-generation adapters are added only
+after this policy layer is proven by tests.
+

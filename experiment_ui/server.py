@@ -187,6 +187,10 @@ FORMAT_REQUESTS_DIR = FORMAT_OUTPUT / "format_requests"
 FORMAT_PLANS_DIR = FORMAT_OUTPUT / "format_plans"
 FORMAT_APPROVED_DIR = FORMAT_OUTPUT / "approved_format_plans"
 
+PRODUCTION_DIR = PROJECT_ROOT / "production_engine"
+PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
+PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
+
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
     "exp2_acquire",
@@ -214,6 +218,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
+    "production_visual_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -802,6 +807,20 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Prepares the human Format Gate before the Production Engine."
         ),
     },
+    "production_visual_prepare": {
+        "label": "Prepare Visual Acquisition Manifest",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_acquisition.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Converts accepted format beats into cheap-first visual requirements "
+            "without searching, downloading media, or spending credits."
+        ),
+    },
 }
 
 OPEN_TARGETS = {
@@ -812,6 +831,7 @@ OPEN_TARGETS = {
     "research_output": RESEARCH_OUTPUT,
     "story_script_output": STORY_OUTPUT,
     "format_output": FORMAT_OUTPUT,
+    "production_output": PRODUCTION_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
@@ -1659,6 +1679,86 @@ def format_artifact_state() -> dict[str, Any]:
         "format_gate": gate,
         "format_gate_complete": bool(gate.get("complete")),
         "production_engine_ready": production_engine_ready,
+    }
+
+
+def production_visual_artifact_state() -> dict[str, Any]:
+    """Return current cheap-first visual-manifest coverage.
+
+    A manifest counts only when it is bound to the exact currently accepted
+    format plan for the same concept and format branch.
+    """
+    fmt = format_artifact_state()
+    if not fmt.get("production_engine_ready"):
+        return {
+            "expected_branches": [],
+            "current_branches": [],
+            "manifests_ready": False,
+            "manifest_count": 0,
+        }
+
+    gate = fmt.get("format_gate", {})
+    plans_value = gate.get("plans", []) if isinstance(gate, dict) else []
+    accepted_ids = {
+        str(item.get("concept_id") or "").strip()
+        for item in plans_value
+        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    }
+    accepted_ids.discard("")
+
+    plan_hashes: dict[str, str] = {}
+    expected: set[tuple[str, str]] = set()
+    if FORMAT_APPROVED_DIR.exists():
+        for path in FORMAT_APPROVED_DIR.glob("*.approved_format_plan.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if concept_id not in accepted_ids:
+                continue
+            plan_hashes[concept_id] = sha256_file(path)
+            branches = payload.get("branches", [])
+            if not isinstance(branches, list):
+                continue
+            for branch in branches:
+                if not isinstance(branch, dict):
+                    continue
+                branch_format = str(branch.get("format") or "").strip()
+                if branch_format:
+                    expected.add((concept_id, branch_format))
+
+    current: set[tuple[str, str]] = set()
+    if PRODUCTION_VISUAL_MANIFESTS_DIR.exists():
+        for path in PRODUCTION_VISUAL_MANIFESTS_DIR.glob(
+            "*.visual_manifest.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            branch_format = str(payload.get("format") or "").strip()
+            provenance = payload.get("manifest_provenance", {})
+            if (
+                concept_id in plan_hashes
+                and branch_format
+                and isinstance(provenance, dict)
+                and provenance.get("approved_format_plan_sha256")
+                == plan_hashes[concept_id]
+            ):
+                current.add((concept_id, branch_format))
+
+    ready = bool(expected) and expected.issubset(current)
+    return {
+        "expected_branches": [
+            {"concept_id": concept_id, "format": branch_format}
+            for concept_id, branch_format in sorted(expected)
+        ],
+        "current_branches": [
+            {"concept_id": concept_id, "format": branch_format}
+            for concept_id, branch_format in sorted(current)
+        ],
+        "manifests_ready": ready,
+        "manifest_count": len(current),
     }
 
 
@@ -2597,6 +2697,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     format_gate_status = str(format_gate.get("status") or "WAITING_FOR_FORMAT_PLANS")
     format_gate_complete = bool(fmt["format_gate_complete"])
     production_engine_ready = bool(fmt["production_engine_ready"])
+    production_visual = production_visual_artifact_state()
+    visual_manifests_ready = bool(production_visual["manifests_ready"])
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -3244,6 +3346,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "production_visual_prepare": {
+            "enabled": production_engine_ready and not visual_manifests_ready,
+            "reason": (
+                "Accepted format branches are ready for cheap-first visual manifests."
+                if production_engine_ready and not visual_manifests_ready
+                else (
+                    "Visual acquisition manifests are already current."
+                    if visual_manifests_ready
+                    else "Complete and accept the Human Format Gate first."
+                )
+            ),
+        },
 
     }
 
@@ -3604,8 +3718,22 @@ def workflow_guidance(
                 "Confirm long-form and Shorts are separate productions that each "
                 "deliver the approved promise within accepted claims."
             ),
+            "next_action_id": "auto_continue",
+            "next_title": "Prepare Visual Acquisition",
+        }
+
+    production_visual = production_visual_artifact_state()
+    if production_visual.get("manifests_ready"):
+        return {
+            "state": "VISUAL_ACQUISITION_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Visual acquisition manifest ready",
+            "current_detail": (
+                "The Production Engine has mapped every accepted format beat to "
+                "the cheap-first visual policy. Asset acquisition is the next build."
+            ),
             "next_action_id": None,
-            "next_title": "Ready for Production",
+            "next_title": "Acquire Visual Assets",
         }
 
     for index, action_id in enumerate(WORKFLOW_ACTION_ORDER):
@@ -3658,6 +3786,7 @@ def status_payload() -> dict[str, Any]:
     research = research_artifact_state()
     story = story_script_artifact_state()
     fmt = format_artifact_state()
+    production_visual = production_visual_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -3710,9 +3839,11 @@ def status_payload() -> dict[str, Any]:
         "script_gate": story["script_gate"],
         "format": fmt,
         "format_gate": fmt["format_gate"],
+        "production_visual": production_visual,
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
+            "production": str(PRODUCTION_OUTPUT),
         },
         "updated_at": utc_now(),
     }

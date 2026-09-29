@@ -41,6 +41,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
+    "production_visual_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40
