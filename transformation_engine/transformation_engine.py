@@ -149,6 +149,11 @@ def build_concept_request(
                     "viewer_problem": "specific problem, question, or curiosity the viewer is trying to resolve",
                     "viewer_moment": "the situation or decision state the viewer is in when this matters",
                     "desired_outcome": "what the viewer wants to understand, fix, avoid, or decide",
+                    "viewer_need_evidence": {
+                        "status": "OBSERVED|INFERRED|HYPOTHESIS",
+                        "evidence_basis": [],
+                        "rationale": "why the viewer problem has this evidence state",
+                    },
                     "content_gap": {
                         "hypothesis": "what existing content may leave unanswered, too broad, outdated, or poorly served",
                         "evidence_status": "SUPPORTED|HYPOTHESIS|UNASSESSED",
