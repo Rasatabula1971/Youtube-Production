@@ -394,7 +394,7 @@ def apply_action(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Human Voice Performance Gate")
     parser.add_argument("--mode", choices=("prepare",), required=True)
-    args = parser.parse_args()
+    parser.parse_args()
     print(json.dumps(prepare(), indent=2, ensure_ascii=False))
 
 
