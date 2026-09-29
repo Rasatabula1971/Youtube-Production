@@ -336,6 +336,25 @@ def snapshot() -> dict[str, Any]:
     }
 
 
+def _apply_rework_feedback(source: Path, note: str) -> None:
+    """Feed human rework guidance into the free planner and invalidate the spec."""
+    spec = load_json(source)
+    provenance = spec.get("spec_provenance", {})
+    if not isinstance(provenance, dict):
+        raise ValueError("Voice Performance spec is missing provenance")
+    request_source = Path(str(provenance.get("request_source") or ""))
+    if not request_source.exists():
+        raise ValueError("Voice Performance request for rework is missing")
+    request = load_json(request_source)
+    if not isinstance(request, dict):
+        raise ValueError("Voice Performance request must be an object")
+    iteration = int(request.get("human_rework_iteration") or 0) + 1
+    request["human_rework_iteration"] = iteration
+    request["human_rework_note"] = note
+    atomic_write_json(request_source, request)
+    source.unlink()
+
+
 def apply_action(
     *,
     concept_id: str,
@@ -359,13 +378,16 @@ def apply_action(
     }
     normalized = validate_response(request, payload)
     source = assert_current_spec(request)
+    source_hash = sha256_file(source)
     apply_payload(request_path, normalized)
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
     saved = {
         **normalized,
-        "voice_performance_spec_sha256": sha256_file(source),
+        "voice_performance_spec_sha256": source_hash,
     }
     atomic_write_json(response_path(concept_id, format), saved)
+    if normalized["decision"] == "REWORK":
+        _apply_rework_feedback(source, normalized["note"])
     return snapshot()
 
 
