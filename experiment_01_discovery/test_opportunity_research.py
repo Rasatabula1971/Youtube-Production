@@ -158,6 +158,13 @@ class OpportunityResearchTests(unittest.TestCase):
             remove = stack.enter_context(
                 patch.object(research, "remove_continuation_task")
             )
+            vidiq = stack.enter_context(
+                patch.object(
+                    research,
+                    "run_vidiq_supplemental",
+                    return_value=("COMPLETE", "vidIQ complete"),
+                )
+            )
 
             result = research.advance_downstream(
                 python_executable="python-test",
@@ -169,6 +176,40 @@ class OpportunityResearchTests(unittest.TestCase):
             "AWAITING_HUMAN_OPPORTUNITY_REVIEW",
         )
         self.assertEqual(run.call_count, 3)
+        remove.assert_called_once()
+        vidiq.assert_called_once_with(python_executable="python-test")
+        self.assertEqual(result["vidiq_status"], "COMPLETE")
+
+    def test_existing_study_set_runs_vidiq_before_human_gate(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            exp15 = root / "experiment_01_5"
+            (exp15 / "study_set.json").write_text(
+                json.dumps([{"video_id": "v1"}]),
+                encoding="utf-8",
+            )
+            vidiq = stack.enter_context(
+                patch.object(
+                    research,
+                    "run_vidiq_supplemental",
+                    return_value=("PARTIAL", "supplement partial"),
+                )
+            )
+            remove = stack.enter_context(
+                patch.object(research, "remove_continuation_task")
+            )
+
+            result = research.continue_research(
+                python_executable="python-test",
+                minimum_interval_hours=1.5,
+                max_refresh_attempts=3,
+                schedule_if_waiting=True,
+            )
+
+        self.assertEqual(result["status"], "AWAITING_HUMAN_OPPORTUNITY_REVIEW")
+        self.assertEqual(result["vidiq_status"], "PARTIAL")
+        vidiq.assert_called_once_with(python_executable="python-test")
         remove.assert_called_once()
 
     def test_start_runs_discovery_then_enters_continuation(self):
