@@ -15,6 +15,7 @@ import csv
 import json
 import os
 import statistics
+from collections.abc import Sequence
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -49,7 +50,7 @@ SUMMARY_FILE = OUTPUT_DIR / "summary.json"
 EXPERIMENT_ID = "01.4"
 
 
-def median_or_none(values: list[float | int]) -> float | None:
+def median_or_none(values: Sequence[float | int]) -> float | None:
     return round(float(statistics.median(values)), 2) if values else None
 
 
