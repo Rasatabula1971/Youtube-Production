@@ -111,6 +111,17 @@ class ExperimentUiTests(unittest.TestCase):
             server.WORKFLOW_ACTION_ORDER,
         )
 
+    def test_main_workflow_uses_one_automatic_downstream_action(self):
+        self.assertEqual(
+            server.WORKFLOW_ACTION_ORDER,
+            ["opportunity_research", "auto_continue"],
+        )
+        self.assertIn("auto_continue", server.ACTION_DEFS)
+        self.assertIn(
+            "workflow_automation.py",
+            server.ACTION_DEFS["auto_continue"]["command"][1],
+        )
+
     def test_experiment_02_evidence_acquisition_is_guided_step(self):
         self.assertIn("exp2_acquire", server.ACTION_DEFS)
         self.assertIn(
@@ -118,8 +129,8 @@ class ExperimentUiTests(unittest.TestCase):
             server.ACTION_DEFS["exp2_acquire"]["command"][1],
         )
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[
-                server.WORKFLOW_ACTION_ORDER.index("exp2_prepare") + 1
+            server.AUTO_MACHINE_ACTION_ORDER[
+                server.AUTO_MACHINE_ACTION_ORDER.index("exp2_prepare") + 1
             ],
             "exp2_acquire",
         )
@@ -132,9 +143,9 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        synthesis_index = server.WORKFLOW_ACTION_ORDER.index("synthesis_build")
+        synthesis_index = server.AUTO_MACHINE_ACTION_ORDER.index("synthesis_build")
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 5],
+            server.AUTO_MACHINE_ACTION_ORDER[synthesis_index + 1 : synthesis_index + 5],
             [
                 "transform_prepare",
                 "concept_generate",
@@ -163,9 +174,9 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        concept_index = server.WORKFLOW_ACTION_ORDER.index("concept_gate_prepare")
+        concept_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_gate_prepare")
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[concept_index + 1 : concept_index + 4],
+            server.AUTO_MACHINE_ACTION_ORDER[concept_index + 1 : concept_index + 4],
             [
                 "package_prepare",
                 "package_generate",
@@ -194,9 +205,9 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        packaging_index = server.WORKFLOW_ACTION_ORDER.index("package_gate_prepare")
+        packaging_index = server.AUTO_MACHINE_ACTION_ORDER.index("package_gate_prepare")
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[packaging_index + 1 : packaging_index + 5],
+            server.AUTO_MACHINE_ACTION_ORDER[packaging_index + 1 : packaging_index + 5],
             [
                 "research_prepare",
                 "research_acquire",
@@ -469,9 +480,9 @@ class ExperimentUiTests(unittest.TestCase):
             "source_acquisition/experiment_02_visual.py",
             server.ACTION_DEFS["exp2_visual"]["command"][1],
         )
-        acquire_index = server.WORKFLOW_ACTION_ORDER.index("exp2_acquire")
+        acquire_index = server.AUTO_MACHINE_ACTION_ORDER.index("exp2_acquire")
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[acquire_index + 1],
+            server.AUTO_MACHINE_ACTION_ORDER[acquire_index + 1],
             "exp2_visual",
         )
 
@@ -481,9 +492,9 @@ class ExperimentUiTests(unittest.TestCase):
             "experiment_02_analysis/vision_review.py",
             server.ACTION_DEFS["exp2_vision_prepare"]["command"][1],
         )
-        visual_index = server.WORKFLOW_ACTION_ORDER.index("exp2_visual")
+        visual_index = server.AUTO_MACHINE_ACTION_ORDER.index("exp2_visual")
         self.assertEqual(
-            server.WORKFLOW_ACTION_ORDER[visual_index + 1],
+            server.AUTO_MACHINE_ACTION_ORDER[visual_index + 1],
             "exp2_vision_prepare",
         )
 
@@ -651,7 +662,7 @@ class ExperimentUiTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow["next_action_id"],
-            "analysis_batch_prepare",
+            "auto_continue",
         )
 
     def test_completed_visual_review_can_unlock_analysis_requests(self):
@@ -1113,7 +1124,7 @@ class ExperimentUiTests(unittest.TestCase):
 
         self.assertEqual(workflow["state"], "HUMAN_GATE")
         self.assertEqual(workflow["current_title"], "Review Opportunity")
-        self.assertEqual(workflow["next_action_id"], "exp2_prepare")
+        self.assertEqual(workflow["next_action_id"], "auto_continue")
 
     def test_auto_refresh_actions_are_windows_gated(self):
         with patch.object(server, "IS_WINDOWS", False):
@@ -1620,10 +1631,10 @@ class ExperimentUiTests(unittest.TestCase):
             self.assertTrue(readiness["exp2_prepare"]["enabled"])
 
     def test_remaining_analysis_action_is_in_guided_workflow(self):
-        self.assertIn("analysis_model_remaining", server.WORKFLOW_ACTION_ORDER)
-        one_index = server.WORKFLOW_ACTION_ORDER.index("analysis_model_one")
-        remaining_index = server.WORKFLOW_ACTION_ORDER.index("analysis_model_remaining")
-        review_index = server.WORKFLOW_ACTION_ORDER.index("human_review_prepare")
+        self.assertIn("analysis_model_remaining", server.AUTO_MACHINE_ACTION_ORDER)
+        one_index = server.AUTO_MACHINE_ACTION_ORDER.index("analysis_model_one")
+        remaining_index = server.AUTO_MACHINE_ACTION_ORDER.index("analysis_model_remaining")
+        review_index = server.AUTO_MACHINE_ACTION_ORDER.index("human_review_prepare")
         self.assertLess(one_index, remaining_index)
         self.assertLess(remaining_index, review_index)
 
@@ -1711,10 +1722,10 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertEqual(state["analyzed_current_count"], 1)
 
     def test_concept_triage_precedes_human_concept_gate(self):
-        self.assertIn("concept_triage", server.WORKFLOW_ACTION_ORDER)
-        generate_index = server.WORKFLOW_ACTION_ORDER.index("concept_generate")
-        triage_index = server.WORKFLOW_ACTION_ORDER.index("concept_triage")
-        gate_index = server.WORKFLOW_ACTION_ORDER.index("concept_gate_prepare")
+        self.assertIn("concept_triage", server.AUTO_MACHINE_ACTION_ORDER)
+        generate_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_generate")
+        triage_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_triage")
+        gate_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_gate_prepare")
         self.assertLess(generate_index, triage_index)
         self.assertLess(triage_index, gate_index)
 

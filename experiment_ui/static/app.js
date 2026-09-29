@@ -527,8 +527,7 @@ function renderOpportunityGate(gate) {
           ? ""
           : " · " + vidiq.local_charged_credits + "/" + (vidiq.hard_credit_cap || 149) + " local credits reserved")
       ) +
-      '</span></div>' +
-      '<button class="ghost compact" data-action="vidiq_enrich">Run vidIQ check</button>' +
+      '</span><span class="muted">Runs automatically before this Human Opportunity Gate when its safety checks are READY.</span></div>' +
     '</div>';
 
   (gate.opportunities || []).forEach(function (opportunity) {
@@ -1948,37 +1947,43 @@ function renderAnalysis(data) {
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
 
-  const currentId = workflow.current_action_id || "";
   let activeIndex = 0;
+  const exp2 = data.experiment_02_artifacts || {};
+  const transform = data.transformation || {};
+  const packaging = data.packaging || {};
+  const research = data.research || {};
+  const story = data.story_script || {};
+
   if (
-    ["analysis_batch_prepare", "analysis_model_one", "analysis_model_remaining", "human_review_prepare", "synthesis_build"].includes(currentId) ||
-    workflow.state === "HUMAN_ANALYSIS_GATE"
-  ) {
-    activeIndex = 1;
-  } else if (
-    ["script_prepare", "script_generate", "script_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_SCRIPT_GATE" ||
-    (data.story_script && data.story_script.script_gate_complete)
+    story.requests_ready || story.drafts_ready || story.script_gate_complete
   ) {
     activeIndex = 5;
   } else if (
-    ["research_prepare", "research_acquire", "research_generate", "research_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_RESEARCH_GATE" ||
-    (data.research && data.research.research_gate_complete)
+    research.plans_ready || research.evidence_complete ||
+    research.drafts_ready || research.research_gate_complete
   ) {
     activeIndex = 4;
   } else if (
-    ["package_prepare", "package_generate", "package_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_PACKAGING_GATE" ||
-    (data.packaging && data.packaging.packaging_gate_complete)
+    packaging.requests_ready || packaging.candidates_ready ||
+    packaging.packaging_gate_complete
   ) {
     activeIndex = 3;
   } else if (
-    ["transform_prepare", "concept_generate", "concept_triage", "concept_gate_prepare"].includes(currentId) ||
     workflow.state === "HUMAN_CONCEPT_GATE" ||
-    (data.transformation && data.transformation.concept_gate_complete)
+    transform.requests_ready || transform.candidates_ready ||
+    transform.triage_ready || transform.concept_gate_complete
   ) {
     activeIndex = 2;
+  } else if (
+    workflow.state === "HUMAN_ANALYSIS_GATE" ||
+    Number(exp2.analyzed_current_count || 0) > 0 ||
+    Number(exp2.review_requests_current_count || 0) > 0 ||
+    Boolean(exp2.requests_complete)
+  ) {
+    activeIndex = 1;
   }
 
   creationTabs.forEach(function (tab, index) {

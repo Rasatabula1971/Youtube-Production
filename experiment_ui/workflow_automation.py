@@ -1,0 +1,138 @@
+"""Automatic deterministic workflow runner.
+
+Runs enabled machine-only steps in the established pipeline order and stops as
+soon as the next boundary is a human gate, a prerequisite wait, or an error.
+
+The individual commands remain available in Tools & Diagnostics for debugging;
+this runner is the normal workflow path.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from typing import Any
+
+import server as control
+
+AUTO_MACHINE_ACTION_ORDER = [
+    "exp2_prepare",
+    "exp2_acquire",
+    "exp2_visual",
+    "exp2_vision_prepare",
+    "analysis_batch_prepare",
+    "analysis_model_one",
+    "analysis_model_remaining",
+    "human_review_prepare",
+    "synthesis_build",
+    "transform_prepare",
+    "concept_generate",
+    "concept_triage",
+    "concept_gate_prepare",
+    "package_prepare",
+    "package_generate",
+    "package_gate_prepare",
+    "research_prepare",
+    "research_acquire",
+    "research_generate",
+    "research_gate_prepare",
+    "script_prepare",
+    "script_generate",
+    "script_gate_prepare",
+]
+
+MAX_STEPS_PER_RUN = 40
+
+
+def next_enabled_action(
+    readiness: dict[str, dict[str, Any]],
+) -> str | None:
+    for action_id in AUTO_MACHINE_ACTION_ORDER:
+        if readiness.get(action_id, {}).get("enabled"):
+            return action_id
+    return None
+
+
+def run_action(action_id: str) -> int:
+    action = control.ACTION_DEFS[action_id]
+    print()
+    print("=" * 72)
+    print(f"AUTOMATIC MACHINE STEP — {action['label']}")
+    print("=" * 72)
+    completed = subprocess.run(
+        action["command"],
+        cwd=control.PROJECT_ROOT,
+        check=False,
+    )
+    return int(completed.returncode)
+
+
+def run_until_human_gate() -> dict[str, Any]:
+    completed_actions: list[str] = []
+
+    for _ in range(MAX_STEPS_PER_RUN):
+        readiness = control.action_readiness()
+        action_id = next_enabled_action(readiness)
+        if action_id is None:
+            guidance = control.workflow_guidance(readiness)
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "No deterministic machine step is currently ready.",
+            }
+
+        before_reason = str(readiness[action_id].get("reason") or "")
+        code = run_action(action_id)
+        if code != 0:
+            return {
+                "status": "FAILED",
+                "failed_action": action_id,
+                "return_code": code,
+                "completed_actions": completed_actions,
+            }
+
+        completed_actions.append(action_id)
+
+        after = control.action_readiness()
+        next_id = next_enabled_action(after)
+        if next_id == action_id:
+            after_reason = str(after[action_id].get("reason") or "")
+            return {
+                "status": "NO_PROGRESS",
+                "failed_action": action_id,
+                "completed_actions": completed_actions,
+                "before_reason": before_reason,
+                "after_reason": after_reason,
+            }
+
+    return {
+        "status": "SAFETY_STOP",
+        "completed_actions": completed_actions,
+        "message": f"Stopped after {MAX_STEPS_PER_RUN} automatic steps.",
+    }
+
+
+def main() -> None:
+    result = run_until_human_gate()
+    print()
+    print("=" * 72)
+    print("AUTOMATIC WORKFLOW")
+    print("=" * 72)
+    print(f"Status: {result['status']}")
+    if result.get("workflow_state"):
+        print(f"Boundary: {result['workflow_state']}")
+    if result.get("message"):
+        print(f"Message: {result['message']}")
+    if result.get("completed_actions"):
+        print("Completed:")
+        for action_id in result["completed_actions"]:
+            print(f"  - {action_id}")
+
+    if result["status"] in {"FAILED", "NO_PROGRESS", "SAFETY_STOP"}:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -156,8 +156,7 @@ SCRIPT_REQUESTS_DIR = STORY_OUTPUT / "script_requests"
 SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
 SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
 
-WORKFLOW_ACTION_ORDER = [
-    "opportunity_research",
+AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
     "exp2_acquire",
     "exp2_visual",
@@ -183,6 +182,11 @@ WORKFLOW_ACTION_ORDER = [
     "script_gate_prepare",
 ]
 
+WORKFLOW_ACTION_ORDER = [
+    "opportunity_research",
+    "auto_continue",
+]
+
 ACTION_DEFS: dict[str, dict[str, Any]] = {
     "opportunity_research": {
         "label": "Run Opportunity Research",
@@ -196,6 +200,18 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Automatically runs discovery, timed velocity validation, "
             "depth expansion and opportunity handoff, then stops for human review."
+        ),
+    },
+    "auto_continue": {
+        "label": "Continue Automatically to Human Gate",
+        "stage": "AUTO",
+        "command": [
+            sys.executable,
+            "experiment_ui/workflow_automation.py",
+        ],
+        "description": (
+            "Runs every currently ready deterministic machine step in order and "
+            "stops automatically at the next human gate, prerequisite wait, or error."
         ),
     },
     "vidiq_doctor": {
@@ -2221,7 +2237,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_satisfied = visual_complete or visual_attempted or not visual_available
     vision_satisfied = (not visual_complete) or vision_complete
 
-    return {
+    result = {
         "opportunity_research": {
             "enabled": not study_set and not research_waiting,
             "reason": (
@@ -2816,6 +2832,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         },
     }
 
+    ready_machine_steps = [
+        action_id
+        for action_id in AUTO_MACHINE_ACTION_ORDER
+        if result.get(action_id, {}).get("enabled")
+    ]
+    result["auto_continue"] = {
+        "enabled": bool(ready_machine_steps),
+        "reason": (
+            "Automatic machine work is ready: "
+            + ACTION_DEFS[ready_machine_steps[0]]["label"]
+            if ready_machine_steps
+            else "Waiting at a human gate, prerequisite, or completed workflow."
+        ),
+    }
+    return result
+
 
 class JobManager:
     def __init__(self) -> None:
@@ -2972,6 +3004,23 @@ class JobManager:
 JOB_MANAGER = JobManager()
 
 
+def maybe_start_automatic_workflow() -> dict[str, Any] | None:
+    """Start deterministic downstream work after a human gate completes.
+
+    If the gate is still incomplete, rejected without a valid downstream
+    handoff, or another job is running, no automatic job is started.
+    """
+    if JOB_MANAGER.running():
+        return None
+    readiness = action_readiness().get("auto_continue", {})
+    if not readiness.get("enabled"):
+        return None
+    try:
+        return JOB_MANAGER.start("auto_continue")
+    except RuntimeError:
+        return None
+
+
 def workflow_guidance(
     readiness: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
@@ -2989,8 +3038,8 @@ def workflow_guidance(
             "current_detail": (
                 "Review the selected topic and examples, then approve, hold or reject."
             ),
-            "next_action_id": "exp2_prepare",
-            "next_title": "Prepare Experiment 02",
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic Experiment 02 continuation",
         }
 
     if research_status == "DISCOVERY_RUNNING" and not study_set:
@@ -3030,8 +3079,8 @@ def workflow_guidance(
                 "Check each retained frame. Accept or edit only observations "
                 "that are directly visible; reject uncertain or unhelpful frames."
             ),
-            "next_action_id": "analysis_batch_prepare",
-            "next_title": "Prepare Analysis Requests",
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic analysis continuation",
         }
 
     human_analysis_review = human_analysis_review_snapshot()
@@ -3044,8 +3093,8 @@ def workflow_guidance(
                 "Review each evidence-backed finding and transfer item. "
                 "Accept only claims that fairly represent the cited source evidence."
             ),
-            "next_action_id": "synthesis_build",
-            "next_title": "Build Experiment 02 Synthesis",
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic synthesis and concept generation",
         }
 
     transform = transformation_artifact_state()
@@ -3062,8 +3111,8 @@ def workflow_guidance(
                 "Inspect each original concept against the human acceptance "
                 "criteria. Accept, send for rework, or reject."
             ),
-            "next_action_id": None,
-            "next_title": "Packaging",
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic Packaging",
         }
 
     packaging = packaging_artifact_state()
@@ -3080,8 +3129,8 @@ def workflow_guidance(
                 "Review title, thumbnail and opening-frame packages. Approve at "
                 "most one package per concept, send it for rework, or reject it."
             ),
-            "next_action_id": None,
-            "next_title": "Research",
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic Research",
         }
 
     research = research_artifact_state()
@@ -3098,8 +3147,8 @@ def workflow_guidance(
                 "Check each claim against its cited acquired source evidence. "
                 "Accept only wording safe to carry into the script."
             ),
-            "next_action_id": None,
-            "next_title": "Story / Script",
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic Story / Script",
         }
 
     story = story_script_artifact_state()
@@ -3379,6 +3428,9 @@ class Handler(BaseHTTPRequestHandler):
                         else None
                     ),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
@@ -3397,6 +3449,9 @@ class Handler(BaseHTTPRequestHandler):
                         else None
                     ),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
@@ -3407,6 +3462,9 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
@@ -3417,6 +3475,9 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
@@ -3427,6 +3488,9 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
@@ -3438,6 +3502,9 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
@@ -3448,6 +3515,9 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
