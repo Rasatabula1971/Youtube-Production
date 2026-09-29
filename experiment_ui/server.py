@@ -1744,9 +1744,11 @@ def story_script_artifact_state() -> dict[str, Any]:
             "production_ready_concept_ids": [],
         }
     )
+    ready_value = gate.get("production_ready_concept_ids", [])
+    ready_items = ready_value if isinstance(ready_value, list) else []
     ready_ids = {
         str(item)
-        for item in gate.get("production_ready_concept_ids", [])
+        for item in ready_items
         if str(item).strip()
     }
 
