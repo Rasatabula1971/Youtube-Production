@@ -25,6 +25,8 @@ SYNTHESIS_CONFIG_FILE = HERE / "synthesis_config.json"
 OUTPUT_DIR = HERE / "output"
 ANALYZED_PROFILES_DIR = OUTPUT_DIR / "profiles_analyzed"
 REVIEWED_PROFILES_DIR = OUTPUT_DIR / "profiles_reviewed"
+REVIEW_REQUESTS_DIR = OUTPUT_DIR / "human_review_requests"
+REVIEW_REPORTS_DIR = OUTPUT_DIR / "human_review_reports"
 SYNTHESIS_DIR = OUTPUT_DIR / "synthesis"
 MECHANISM_LIBRARY_FILE = SYNTHESIS_DIR / "mechanism_library.json"
 HANDOFF_FILE = SYNTHESIS_DIR / "transformation_handoff.json"
@@ -47,11 +49,60 @@ def load_synthesis_config() -> dict[str, Any]:
     return config
 
 
-def profile_reviewed(profile: dict[str, Any]) -> bool:
-    return bool(profile.get("review", {}).get("completed") is True)
+def profile_reviewed(
+    profile: dict[str, Any],
+    reviewed_video_ids: set[str] | None = None,
+) -> bool:
+    video_id = str(profile.get("video_id", "")).strip()
+    return bool(
+        reviewed_video_ids
+        and video_id in reviewed_video_ids
+        and profile.get("review", {}).get("completed") is True
+    )
 
 
-def supported_profile_metadata(profile: dict[str, Any]) -> dict[str, Any]:
+def validated_reviewed_video_ids(profiles_dir: Path) -> set[str]:
+    """Return only reviewed profiles whose full review provenance still matches disk."""
+    try:
+        is_reviewed_dir = profiles_dir.resolve() == REVIEWED_PROFILES_DIR.resolve()
+    except OSError:
+        is_reviewed_dir = False
+    if not is_reviewed_dir or not profiles_dir.exists():
+        return set()
+
+    validated: set[str] = set()
+    for profile_path in sorted(profiles_dir.glob("*.json")):
+        try:
+            profile = load_json(profile_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        video_id = str(profile.get("video_id", "")).strip()
+        if not video_id or profile.get("review", {}).get("completed") is not True:
+            continue
+
+        analyzed_path = ANALYZED_PROFILES_DIR / f"{video_id}.json"
+        request_path = REVIEW_REQUESTS_DIR / f"{video_id}.review_request.json"
+        report_path = REVIEW_REPORTS_DIR / f"{video_id}.human_review.json"
+        if not (analyzed_path.exists() and request_path.exists() and report_path.exists()):
+            continue
+        try:
+            report = load_json(report_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            report.get("status") == "REVIEW_COMPLETED"
+            and report.get("profile_sha256") == sha256_file(analyzed_path)
+            and report.get("request_sha256") == sha256_file(request_path)
+            and report.get("reviewed_profile_sha256") == sha256_file(profile_path)
+        ):
+            validated.add(video_id)
+    return validated
+
+
+def supported_profile_metadata(
+    profile: dict[str, Any],
+    reviewed_video_ids: set[str] | None = None,
+) -> dict[str, Any]:
     source = profile.get("source", {})
     return {
         "video_id": str(profile.get("video_id", "")),
@@ -59,12 +110,15 @@ def supported_profile_metadata(profile: dict[str, Any]) -> dict[str, Any]:
         "channel_title": source.get("channel_title"),
         "topic": source.get("topic"),
         "format_candidate": source.get("format_candidate"),
-        "review_completed": profile_reviewed(profile),
+        "review_completed": profile_reviewed(profile, reviewed_video_ids),
     }
 
 
-def collect_occurrences(profile: dict[str, Any]) -> list[dict[str, Any]]:
-    meta = supported_profile_metadata(profile)
+def collect_occurrences(
+    profile: dict[str, Any],
+    reviewed_video_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    meta = supported_profile_metadata(profile, reviewed_video_ids)
     occurrences: list[dict[str, Any]] = []
 
     for dimension, payload in profile.get("analysis", {}).items():
@@ -101,8 +155,9 @@ def collect_occurrences(profile: dict[str, Any]) -> list[dict[str, Any]]:
 
 def collect_source_specific_elements(
     profile: dict[str, Any],
+    reviewed_video_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    meta = supported_profile_metadata(profile)
+    meta = supported_profile_metadata(profile, reviewed_video_ids)
     return [
         {
             **meta,
@@ -116,8 +171,9 @@ def collect_source_specific_elements(
 
 def collect_transformation_directions(
     profile: dict[str, Any],
+    reviewed_video_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    meta = supported_profile_metadata(profile)
+    meta = supported_profile_metadata(profile, reviewed_video_ids)
     items: list[dict[str, Any]] = []
 
     for item in profile.get("transfer", {}).get("transformation_opportunities", []):
@@ -187,6 +243,7 @@ def build_mechanism_library(
     profiles: list[dict[str, Any]],
     experiment_config: dict[str, Any],
     synthesis_config: dict[str, Any],
+    reviewed_video_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     validation_reports = []
     valid_profiles: list[dict[str, Any]] = []
@@ -202,17 +259,17 @@ def build_mechanism_library(
     source_specific_by_video: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for profile in valid_profiles:
-        for occurrence in collect_occurrences(profile):
+        for occurrence in collect_occurrences(profile, reviewed_video_ids):
             mechanism_id = str(occurrence["mechanism_id"])
             if mechanism_id in experiment_config["mechanism_taxonomy"]:
                 occurrence_map[mechanism_id].append(occurrence)
 
-        for direction in collect_transformation_directions(profile):
+        for direction in collect_transformation_directions(profile, reviewed_video_ids):
             mechanism_id = str(direction["mechanism_id"])
             if mechanism_id in experiment_config["mechanism_taxonomy"]:
                 direction_map[mechanism_id].append(direction)
 
-        for item in collect_source_specific_elements(profile):
+        for item in collect_source_specific_elements(profile, reviewed_video_ids):
             source_specific_by_video[str(item["video_id"])].append(item)
 
     minimum_videos = int(experiment_config["minimum_replication_videos"])
@@ -499,7 +556,13 @@ def run_build(profiles_dir: Path) -> dict[str, Any]:
         )
         return summary
 
-    library = build_mechanism_library(profiles, experiment_config, synthesis_config)
+    reviewed_video_ids = validated_reviewed_video_ids(profiles_dir)
+    library = build_mechanism_library(
+        profiles,
+        experiment_config,
+        synthesis_config,
+        reviewed_video_ids=reviewed_video_ids,
+    )
     handoff = build_transformation_handoff(library, synthesis_config)
     profile_hashes = {
         path.stem: sha256_file(path) for path in sorted(profiles_dir.glob("*.json"))

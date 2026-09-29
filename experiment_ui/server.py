@@ -24,10 +24,25 @@ from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline_integrity import atomic_write_json
+
 STATIC_DIR = HERE / "static"
 APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
 IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
+HUMAN_GATE_MUTATION_ROUTES = {
+    "/api/opportunity-gate",
+    "/api/vision-review",
+    "/api/human-analysis-review",
+    "/api/concept-gate",
+    "/api/packaging-gate",
+    "/api/research-gate",
+    "/api/script-gate",
+    "/api/format-gate",
+}
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
@@ -1398,6 +1413,7 @@ def research_artifact_state() -> dict[str, Any]:
                 concept_id in plan_hashes
                 and isinstance(provenance, dict)
                 and provenance.get("plan_sha256") == plan_hashes[concept_id]
+                and payload.get("status") == "COMPLETE"
                 and payload.get("pages")
             ):
                 evidence_hashes[concept_id] = sha256_file(path)
@@ -3389,13 +3405,19 @@ class JobManager:
 
     def _save_state(self, payload: dict[str, Any]) -> None:
         UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        JOB_STATE_FILE.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(JOB_STATE_FILE, payload)
 
 
 JOB_MANAGER = JobManager()
+
+
+def human_gate_mutation_block_reason(route: str) -> str | None:
+    if route in HUMAN_GATE_MUTATION_ROUTES and JOB_MANAGER.running():
+        return (
+            "Human Gate changes are locked while an automatic or diagnostic "
+            "pipeline job is running."
+        )
+    return None
 
 
 def maybe_start_automatic_workflow() -> dict[str, Any] | None:
@@ -3822,6 +3844,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw.decode("utf-8") or "{}")
         except json.JSONDecodeError:
             self._send_json({"error": "Invalid JSON body."}, 400)
+            return
+
+        gate_lock_error = human_gate_mutation_block_reason(route)
+        if gate_lock_error:
+            self._send_json({"error": gate_lock_error}, 409)
             return
 
         try:

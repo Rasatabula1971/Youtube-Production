@@ -9,10 +9,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_json
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output" / "experiment_01_5"
@@ -136,10 +143,7 @@ def load_state(study_set: list[dict[str, Any]]) -> dict[str, Any]:
 def save_state(state: dict[str, Any]) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = utc_now()
-    DECISION_FILE.write_text(
-        json.dumps(state, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(DECISION_FILE, state)
 
 
 def _vidiq_payload(study_set: list[dict[str, Any]]) -> dict[str, Any]:
@@ -296,10 +300,7 @@ def _materialize_approved(
     ready = gate_complete and bool(approved)
 
     if ready:
-        APPROVED_STUDY_SET_FILE.write_text(
-            json.dumps(approved, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(APPROVED_STUDY_SET_FILE, approved)
     elif APPROVED_STUDY_SET_FILE.exists():
         APPROVED_STUDY_SET_FILE.unlink()
 

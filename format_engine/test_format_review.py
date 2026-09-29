@@ -193,5 +193,14 @@ class FormatReviewTests(unittest.TestCase):
                 self.assertFalse((approved / "c1.approved_format_plan.json").exists())
 
 
+    def test_reviewer_identity_can_be_configured(self):
+        with patch.dict(
+            "os.environ",
+            {"YOUTUBE_REVIEWER_ID": "ricky"},
+            clear=False,
+        ):
+            self.assertEqual(format_review.reviewer_id(), "ricky")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,9 +9,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_json
 
 from format_engine import (
     OUTPUT_DIR,
@@ -28,7 +36,12 @@ REVIEW_REQUESTS_DIR = OUTPUT_DIR / "format_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "format_review_responses"
 APPROVED_DIR = OUTPUT_DIR / "approved_format_plans"
 SUMMARY_FILE = OUTPUT_DIR / "format_gate_summary.json"
-UI_REVIEWER = "local-operator"
+REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DEFAULT_REVIEWER = "local-operator"
+
+
+def reviewer_id() -> str:
+    return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER
 
 CRITERIA_DESCRIPTIONS = {
     "branches_are_separate_productions": (
@@ -112,9 +125,7 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
             REVIEW_REQUESTS_DIR
             / f"{safe_slug(request['concept_id'])}.format_review_request.json"
         )
-        dest.write_text(
-            json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        atomic_write_json(dest, request)
         prepared.append({"concept_id": request["concept_id"], "request": str(dest)})
     return {
         "status": "FORMAT_GATE_READY" if prepared else "WAITING_FOR_FORMAT_PLANS",
@@ -200,17 +211,13 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
             "format_plan_sha256": sha256_file(source),
         }
         APPROVED_DIR.mkdir(parents=True, exist_ok=True)
-        approved_path.write_text(
-            json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        atomic_write_json(approved_path, plan)
         summary["approved_format_plan"] = str(approved_path)
     elif approved_path.exists():
         approved_path.unlink()
 
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    atomic_write_json(SUMMARY_FILE, summary)
     return summary
 
 
@@ -294,7 +301,7 @@ def apply_action(
     request = load_json(request_path)
     payload = {
         "concept_id": concept_id,
-        "reviewer": UI_REVIEWER,
+        "reviewer": reviewer_id(),
         "decision": decision,
         "criteria": criteria,
         "note": str(note or ""),
@@ -308,7 +315,7 @@ def apply_action(
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
     dest = response_path(concept_id)
     saved = {**normalized, "format_plan_sha256": sha256_file(source)}
-    dest.write_text(json.dumps(saved, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(dest, saved)
     return snapshot()
 
 

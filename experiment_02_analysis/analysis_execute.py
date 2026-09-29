@@ -596,10 +596,21 @@ def merge_analysis_response(
     routed_hypotheses: list[dict[str, Any]] = []
     decisions: list[dict[str, Any]] = []
 
-    response_analysis = response.get("analysis", {})
+    response_analysis = response.get("analysis")
+    if not isinstance(response_analysis, dict):
+        raise ValueError("analysis response must contain an analysis object")
+    missing_dimensions = [
+        dimension
+        for dimension in config["required_dimensions"]
+        if dimension not in response_analysis
+    ]
+    if missing_dimensions:
+        raise ValueError(
+            "analysis response is missing required dimensions: "
+            + ", ".join(missing_dimensions)
+        )
+
     for dimension in config["required_dimensions"]:
-        if dimension not in response_analysis:
-            continue
         payload = response_analysis.get(dimension, {})
         findings = payload.get("findings", [])
         if findings is None:

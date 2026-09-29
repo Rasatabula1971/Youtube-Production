@@ -54,6 +54,21 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
+    owners: dict[str, str] = {}
+    for raw in values:
+        slug = safe_slug(raw)
+        previous = owners.get(slug)
+        if previous is not None:
+            if previous == raw:
+                raise ValueError(f"Duplicate {label} ID: {raw!r}")
+            raise ValueError(
+                f"{label} IDs collide after filesystem normalization: "
+                f"{previous!r} and {raw!r} -> {slug!r}"
+            )
+        owners[slug] = raw
+
+
 def load_config(path: Path = CONFIG_FILE) -> dict[str, Any]:
     config = load_json(path)
     required = {"allowed_formats", "format_intent_branches", "branch_constraints"}
@@ -402,24 +417,39 @@ def run_prepare(
     )
     prepared = []
     failures = []
+    pending: list[tuple[Path, dict[str, Any]]] = []
     for path in paths:
         try:
             request = build_format_request(load_json(path), path, config)
-            dest = (
-                REQUESTS_DIR / f"{safe_slug(request['concept_id'])}.format_request.json"
-            )
-            dest.write_text(
-                json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-            prepared.append(
-                {
-                    "concept_id": request["concept_id"],
-                    "required_branches": request["required_branches"],
-                    "request": str(dest),
-                }
-            )
+            pending.append((path, request))
         except Exception as exc:
             failures.append({"script": str(path), "error_type": type(exc).__name__})
+
+    assert_unique_slug_ids(
+        [str(request["concept_id"]) for _, request in pending],
+        label="concept",
+    )
+
+    current_destinations: set[Path] = set()
+    for _, request in pending:
+        dest = (
+            REQUESTS_DIR / f"{safe_slug(request['concept_id'])}.format_request.json"
+        )
+        dest.write_text(
+            json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        current_destinations.add(dest.resolve())
+        prepared.append(
+            {
+                "concept_id": request["concept_id"],
+                "required_branches": request["required_branches"],
+                "request": str(dest),
+            }
+        )
+
+    for stale_path in REQUESTS_DIR.glob("*.format_request.json"):
+        if stale_path.resolve() not in current_destinations:
+            stale_path.unlink()
     summary = {
         "status": (
             "FORMAT_REQUESTS_READY" if prepared else "WAITING_FOR_APPROVED_SCRIPTS"

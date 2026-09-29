@@ -200,5 +200,14 @@ class ScriptReviewTests(unittest.TestCase):
         self.assertTrue(snap["complete"])
 
 
+    def test_reviewer_identity_can_be_configured(self):
+        with patch.dict(
+            "os.environ",
+            {"YOUTUBE_REVIEWER_ID": "ricky"},
+            clear=False,
+        ):
+            self.assertEqual(script_review.reviewer_id(), "ricky")
+
+
 if __name__ == "__main__":
     unittest.main()

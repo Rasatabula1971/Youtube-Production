@@ -13,10 +13,18 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_json
 
 from evidence_ingest import sha256_file
 from experiment_02 import (
@@ -36,7 +44,12 @@ REVIEW_REQUESTS_DIR = OUTPUT_DIR / "human_review_requests"
 REVIEWED_PROFILES_DIR = OUTPUT_DIR / "profiles_reviewed"
 REVIEW_REPORTS_DIR = OUTPUT_DIR / "human_review_reports"
 REVIEW_RESPONSES_DIR = OUTPUT_DIR / "human_review_responses"
-UI_REVIEWER = "local-operator"
+REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DEFAULT_REVIEWER = "local-operator"
+
+
+def reviewer_id() -> str:
+    return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER
 
 
 def content_sha256(payload: Any) -> str:
@@ -389,10 +402,7 @@ def run_prepare(
         else (REVIEW_REQUESTS_DIR / f"{video_id}.review_request.json").resolve()
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(request, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(destination, request)
     return {
         "status": "REVIEW_PREPARED",
         "video_id": profile.get("video_id"),
@@ -471,10 +481,7 @@ def run_apply(
     report["response_sha256"] = sha256_file(response_path)
 
     report_path = REVIEW_REPORTS_DIR / f"{video_id}.human_review.json"
-    report_path.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(report_path, report)
 
     if report["status"] != "REVIEW_COMPLETED":
         report["report"] = str(report_path)
@@ -486,17 +493,12 @@ def run_apply(
         else (REVIEWED_PROFILES_DIR / f"{video_id}.json").resolve()
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(reviewed, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(destination, reviewed)
 
     report["reviewed_profile"] = str(destination)
+    report["reviewed_profile_sha256"] = sha256_file(destination)
     report["report"] = str(report_path)
-    report_path.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(report_path, report)
     return report
 
 
@@ -507,7 +509,7 @@ def _response_path(video_id: str) -> Path:
 def _blank_response(video_id: str) -> dict[str, Any]:
     return {
         "video_id": video_id,
-        "reviewer": UI_REVIEWER,
+        "reviewer": reviewer_id(),
         "decisions": [],
         "overall_note": "",
     }
@@ -703,7 +705,7 @@ def apply_review_action(
         "note": str(note or ""),
     }
     response["video_id"] = video_id
-    response["reviewer"] = str(response.get("reviewer") or UI_REVIEWER)
+    response["reviewer"] = str(response.get("reviewer") or reviewer_id())
     response["decisions"] = [mapped[key] for key in sorted(mapped)]
     response["overall_note"] = str(response.get("overall_note") or "")
     response["profile_content_sha256"] = request.get("request_provenance", {}).get(
@@ -712,10 +714,7 @@ def apply_review_action(
 
     REVIEW_RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
     response_path = _response_path(video_id)
-    response_path.write_text(
-        json.dumps(response, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(response_path, response)
 
     if expected_ids and expected_ids.issubset(mapped):
         run_apply(

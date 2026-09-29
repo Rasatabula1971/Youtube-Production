@@ -306,7 +306,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                 self.config,
             )
 
-    def test_partial_response_preserves_omitted_dimension(self):
+    def test_partial_response_missing_required_dimension_is_rejected(self):
         profile = self.profile()
         profile["analysis"]["packaging"]["findings"] = [
             {
@@ -335,25 +335,18 @@ class AnalysisExecutionTests(unittest.TestCase):
             "transfer": {},
         }
 
-        merged, _ = merge_analysis_response(
-            profile,
-            response,
-            self.config,
-        )
-
-        self.assertEqual(
-            merged["analysis"]["packaging"]["findings"][0]["finding"],
-            "Existing packaging finding.",
-        )
-        self.assertEqual(
-            len(merged["analysis"]["opening_hook"]["findings"]),
-            1,
-        )
+        with self.assertRaisesRegex(ValueError, "missing required dimensions"):
+            merge_analysis_response(
+                profile,
+                response,
+                self.config,
+            )
 
     def test_reapplying_same_hypothesis_does_not_duplicate_it(self):
         response = {
             "video_id": "v1",
             "analysis": {
+                "packaging": {"findings": []},
                 "opening_hook": {
                     "findings": [
                         {

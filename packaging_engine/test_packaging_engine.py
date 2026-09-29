@@ -304,5 +304,13 @@ class PackagingEngineTests(unittest.TestCase):
         self.assertEqual(renamed["model_package_id"], "package-1")
 
 
+    def test_slug_collision_is_rejected_before_request_writes(self):
+        with self.assertRaisesRegex(ValueError, "collide"):
+            module.assert_unique_slug_ids(
+                ["gear/ratio", "gear ratio"],
+                label="concept",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

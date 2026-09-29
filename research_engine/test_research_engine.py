@@ -1,3 +1,4 @@
+import research_engine as module
 import unittest
 
 from research_engine import (
@@ -281,6 +282,14 @@ class ResearchEngineTests(unittest.TestCase):
         by_id = {item["question_id"]: item for item in package["question_coverage"]}
         self.assertFalse(by_id["rq001"]["has_claims"])
         self.assertTrue(by_id["rq002"]["has_claims"])
+
+
+    def test_slug_collision_is_rejected_before_plan_writes(self):
+        with self.assertRaisesRegex(ValueError, "collide"):
+            module.assert_unique_slug_ids(
+                ["gear/ratio", "gear ratio"],
+                label="concept",
+            )
 
 
 if __name__ == "__main__":

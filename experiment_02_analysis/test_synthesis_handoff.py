@@ -1,4 +1,10 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import synthesis_handoff as module
 
 from synthesis_handoff import (
     build_mechanism_library,
@@ -137,10 +143,25 @@ class SynthesisHandoffTests(unittest.TestCase):
             ],
             self.experiment_config,
             self.synthesis_config,
+            reviewed_video_ids={"v1", "v2"},
         )
         self.assertEqual(
             library["mechanisms"][0]["state"],
             "HUMAN_CONFIRMED_PATTERN",
+        )
+
+    def test_plain_review_completed_flag_is_not_enough_for_confirmation(self):
+        library = build_mechanism_library(
+            [
+                self.profile("v1", "c1", reviewed=True),
+                self.profile("v2", "c2", reviewed=True),
+            ],
+            self.experiment_config,
+            self.synthesis_config,
+        )
+        self.assertEqual(
+            library["mechanisms"][0]["state"],
+            "MODEL_SYNTHESIS_DRAFT",
         )
 
     def test_same_channel_does_not_meet_replication_gate(self):
@@ -208,6 +229,7 @@ class SynthesisHandoffTests(unittest.TestCase):
             ],
             self.experiment_config,
             self.synthesis_config,
+            reviewed_video_ids={"v1", "v2"},
         )
         handoff = build_transformation_handoff(
             library,
@@ -228,6 +250,62 @@ class SynthesisHandoffTests(unittest.TestCase):
             minimum_channels=2,
         )
         self.assertEqual(state, "MODEL_SYNTHESIS_DRAFT")
+
+
+    def test_review_provenance_validator_requires_matching_files_and_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            analyzed = root / "profiles_analyzed"
+            reviewed = root / "profiles_reviewed"
+            requests = root / "human_review_requests"
+            reports = root / "human_review_reports"
+            for directory in (analyzed, reviewed, requests, reports):
+                directory.mkdir()
+
+            analyzed_path = analyzed / "v1.json"
+            reviewed_path = reviewed / "v1.json"
+            request_path = requests / "v1.review_request.json"
+            report_path = reports / "v1.human_review.json"
+
+            analyzed_path.write_text(
+                json.dumps(self.profile("v1", "c1", reviewed=False)),
+                encoding="utf-8",
+            )
+            reviewed_path.write_text(
+                json.dumps(self.profile("v1", "c1", reviewed=True)),
+                encoding="utf-8",
+            )
+            request_path.write_text(
+                json.dumps({"video_id": "v1"}),
+                encoding="utf-8",
+            )
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "status": "REVIEW_COMPLETED",
+                        "profile_sha256": module.sha256_file(analyzed_path),
+                        "request_sha256": module.sha256_file(request_path),
+                        "reviewed_profile_sha256": module.sha256_file(reviewed_path),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(module, "ANALYZED_PROFILES_DIR", analyzed),
+                patch.object(module, "REVIEWED_PROFILES_DIR", reviewed),
+                patch.object(module, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(module, "REVIEW_REPORTS_DIR", reports),
+            ):
+                valid = module.validated_reviewed_video_ids(reviewed)
+                reviewed_path.write_text(
+                    json.dumps({"video_id": "v1", "review": {"completed": True}, "tampered": True}),
+                    encoding="utf-8",
+                )
+                tampered = module.validated_reviewed_video_ids(reviewed)
+
+        self.assertEqual(valid, {"v1"})
+        self.assertEqual(tampered, set())
 
 
 if __name__ == "__main__":

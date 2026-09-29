@@ -343,5 +343,14 @@ class HumanReviewTests(unittest.TestCase):
             )
 
 
+    def test_reviewer_identity_can_be_configured(self):
+        with patch.dict(
+            "os.environ",
+            {"YOUTUBE_REVIEWER_ID": "ricky"},
+            clear=False,
+        ):
+            self.assertEqual(human_review.reviewer_id(), "ricky")
+
+
 if __name__ == "__main__":
     unittest.main()

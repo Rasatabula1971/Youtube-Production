@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import story_script_engine as module
+
 from story_script_engine import build_script_request, validate_script_response
 
 
@@ -121,6 +123,14 @@ class StoryScriptTests(unittest.TestCase):
                 "requires at least one accepted claim_id" in e for e in result["errors"]
             )
         )
+
+
+    def test_slug_collision_is_rejected_before_script_request_writes(self):
+        with self.assertRaisesRegex(ValueError, "collide"):
+            module.assert_unique_slug_ids(
+                ["gear/ratio", "gear ratio"],
+                label="concept",
+            )
 
 
 if __name__ == "__main__":

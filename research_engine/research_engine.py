@@ -61,6 +61,21 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
+    owners: dict[str, str] = {}
+    for raw in values:
+        slug = safe_slug(raw)
+        previous = owners.get(slug)
+        if previous is not None:
+            if previous == raw:
+                raise ValueError(f"Duplicate {label} ID: {raw!r}")
+            raise ValueError(
+                f"{label} IDs collide after filesystem normalization: "
+                f"{previous!r} and {raw!r} -> {slug!r}"
+            )
+        owners[slug] = raw
+
+
 def source_host(url: str) -> str | None:
     value = str(url or "").strip()
     if not value:
@@ -496,6 +511,13 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     concepts = handoff.get("concepts", [])
     if not isinstance(concepts, list):
         raise ValueError("Research handoff concepts must be a list")
+
+    concept_ids = [
+        str(concept.get("concept_id", "")).strip()
+        for concept in concepts
+        if isinstance(concept, dict)
+    ]
+    assert_unique_slug_ids(concept_ids, label="concept")
 
     paths = []
     current_destinations: set[Path] = set()
