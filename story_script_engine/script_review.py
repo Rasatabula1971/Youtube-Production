@@ -41,6 +41,8 @@ CRITERIA = (
     "claim_mapping_reasonable",
     "original_source_independent",
     "story_plan_followed",
+    "opening_hook_high_impact_truthful",
+    "audience_psychology_coherent",
     "structure_and_payoff_clear",
 )
 
@@ -54,6 +56,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "concept_id": concept_id,
         "title": draft.get("title"),
         "opening_hook": draft.get("opening_hook"),
+        "opening_hook_mechanism": draft.get("opening_hook_mechanism"),
         "sections": draft.get("sections", []),
         "closing": draft.get("closing"),
         "package": draft.get("package", {}),
@@ -67,6 +70,8 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
             "claim_mapping_reasonable": "Section claim IDs reasonably support the factual narration they are attached to.",
             "original_source_independent": "The script is original and does not depend on source wording, footage, story or personality.",
             "story_plan_followed": "The narration follows the approved Story Plan in order and preserves its intended viewer journey.",
+            "opening_hook_high_impact_truthful": "The first spoken line creates immediate interest through the planned hook mechanism, matches the package promise, and does not exaggerate beyond verified research.",
+            "audience_psychology_coherent": "Curiosity, expectation, cognitive load, tension/release, open loops and payoff are used coherently in service of viewer understanding rather than fake withholding or manufactured drama.",
             "structure_and_payoff_clear": "The hook, progression and final payoff are clear enough to produce.",
         },
         "request_provenance": {
