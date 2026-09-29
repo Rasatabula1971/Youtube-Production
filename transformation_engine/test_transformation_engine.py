@@ -2,10 +2,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import transformation_engine as module
 from transformation_engine import (
     build_concept_request,
+    merge_candidate_files,
     ready_entries,
     run_prepare,
     validate_response,
@@ -350,6 +352,59 @@ class TransformationEngineTests(unittest.TestCase):
         )
 
         self.assertEqual(len(result["accepted"]), 0)
+
+
+    def test_cross_response_duplicate_concept_ids_are_namespaced_not_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requests = root / "requests"
+            responses = root / "responses"
+            requests.mkdir()
+            responses.mkdir()
+
+            for mechanism in ("m1", "m2"):
+                (requests / f"{mechanism}.concept_request.json").write_text(
+                    json.dumps({"mechanism_id": mechanism}),
+                    encoding="utf-8",
+                )
+                (responses / f"{mechanism}.json").write_text(
+                    json.dumps(
+                        {
+                            "mechanism_id": mechanism,
+                            "concepts": [
+                                {
+                                    "concept_id": "concept-1",
+                                    "working_title": mechanism,
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            with (
+                patch.object(module, "REQUESTS_DIR", requests),
+                patch.object(module, "RESPONSES_DIR", responses),
+                patch.object(module, "load_config", return_value=self.config),
+                patch.object(
+                    module,
+                    "validate_response",
+                    side_effect=lambda response, request, config: {
+                        "accepted": response["concepts"],
+                        "rejected": [],
+                    },
+                ),
+            ):
+                accepted, rejected = merge_candidate_files()
+
+        self.assertEqual(rejected, [])
+        self.assertEqual(len(accepted), 2)
+        self.assertEqual(
+            {item["concept_id"] for item in accepted},
+            {"concept-1", "m2--concept-1"},
+        )
+        renamed = next(item for item in accepted if item["concept_id"] != "concept-1")
+        self.assertEqual(renamed["model_concept_id"], "concept-1")
 
 
 if __name__ == "__main__":

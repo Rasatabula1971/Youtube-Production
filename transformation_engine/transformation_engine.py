@@ -549,6 +549,28 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     return summary
 
 
+def reserve_generated_id(
+    *,
+    raw_id: str,
+    namespace: str,
+    used_ids: set[str],
+) -> tuple[str, bool]:
+    """Reserve a stable globally unique ID without discarding valid model output."""
+    raw_id = str(raw_id).strip()
+    if raw_id not in used_ids:
+        used_ids.add(raw_id)
+        return raw_id, False
+
+    base = f"{safe_slug(namespace)}--{safe_slug(raw_id)}"
+    candidate = base
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{base}--{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate, True
+
+
 def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -598,19 +620,16 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
             continue
 
         for concept in result["accepted"]:
-            concept_id = str(concept.get("concept_id", "")).strip()
-            if concept_id in global_ids:
-                rejected.append(
-                    {
-                        "response_source": str(response_path),
-                        "concept": concept,
-                        "errors": [
-                            "concept_id must be globally unique across all responses"
-                        ],
-                    }
-                )
-                continue
-            global_ids.add(concept_id)
+            concept = dict(concept)
+            model_concept_id = str(concept.get("concept_id", "")).strip()
+            concept_id, renamed = reserve_generated_id(
+                raw_id=model_concept_id,
+                namespace=mechanism_id,
+                used_ids=global_ids,
+            )
+            if renamed:
+                concept["model_concept_id"] = model_concept_id
+                concept["concept_id"] = concept_id
             concept["response_source"] = str(response_path)
             accepted.append(concept)
         for item in result["rejected"]:

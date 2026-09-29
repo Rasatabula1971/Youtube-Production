@@ -783,5 +783,38 @@ class Experiment013Tests(unittest.TestCase):
         )
 
 
+    def test_incomplete_output_is_archived_without_replace_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "experiment_01_3"
+            output.mkdir()
+            (output / "rejected_candidates.json").write_text("[]", encoding="utf-8")
+
+            with (
+                patch.object(exp13, "OUTPUT_DIR", output),
+                patch.object(exp13, "MANIFEST_FILE", output / "cohort_manifest.json"),
+            ):
+                archived = exp13.prepare_output_for_discovery(replace_cohort=False)
+
+            self.assertIsNotNone(archived)
+            self.assertFalse(output.exists())
+            self.assertTrue(Path(archived).exists())
+
+    def test_existing_valid_cohort_still_requires_explicit_replace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "experiment_01_3"
+            output.mkdir()
+            manifest = output / "cohort_manifest.json"
+            manifest.write_text("{}", encoding="utf-8")
+
+            with (
+                patch.object(exp13, "OUTPUT_DIR", output),
+                patch.object(exp13, "MANIFEST_FILE", manifest),
+            ):
+                with self.assertRaises(SystemExit):
+                    exp13.prepare_output_for_discovery(replace_cohort=False)
+
+
 if __name__ == "__main__":
     unittest.main()

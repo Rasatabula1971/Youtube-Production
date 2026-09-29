@@ -272,6 +272,19 @@ def apply_gate(
     response: dict[str, Any],
     config: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    provenance = request.get("request_provenance", {})
+    expected_hash = (
+        provenance.get("candidates_content_sha256")
+        if isinstance(provenance, dict)
+        else None
+    )
+    current_hash = content_sha256(candidates_payload)
+    if expected_hash != current_hash:
+        raise ValueError(
+            "STALE_REVIEW_REQUEST: package candidates changed after the "
+            "Packaging Gate request was prepared"
+        )
+
     mapped = validate_decisions(
         request,
         response,

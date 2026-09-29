@@ -73,8 +73,14 @@ def sha256_file(path: Path) -> str:
 
 
 def safe_name(value: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._")
-    return cleaned or "unknown"
+    """Make a filesystem-safe name without changing valid YouTube IDs.
+
+    Leading underscores and hyphens are valid in YouTube video IDs and are
+    identity-bearing. Do not strip them. Only collapse unsupported characters
+    and reject path-special empty/dot-only names.
+    """
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).rstrip(".")
+    return "unknown" if cleaned in {"", ".", ".."} else cleaned
 
 
 def youtube_url(profile: dict[str, Any]) -> str:

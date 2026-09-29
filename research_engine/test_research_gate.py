@@ -257,5 +257,24 @@ class ResearchGateTests(unittest.TestCase):
         )
 
 
+    def test_apply_rejects_changed_draft_after_review_request(self):
+        request = build_review_request(
+            self.package,
+            self.config,
+        )
+        response = self.response(request)
+        changed = dict(self.package)
+        changed["claims"] = [dict(item) for item in self.package["claims"]]
+        changed["claims"][0]["statement"] = "Updated statement"
+
+        with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
+            apply_gate(
+                changed,
+                request,
+                response,
+                self.config,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

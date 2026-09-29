@@ -1077,6 +1077,24 @@ def archive_existing_output() -> Path | None:
     return destination
 
 
+def prepare_output_for_discovery(*, replace_cohort: bool) -> Path | None:
+    """Prepare 01.3 output without letting a failed partial run jam restarts.
+
+    A directory with a manifest is a real frozen cohort and still requires an
+    explicit replacement request. A directory without a manifest is an
+    incomplete/failed discovery attempt, so archive it automatically and allow
+    a clean retry.
+    """
+    if not OUTPUT_DIR.exists():
+        return None
+    if MANIFEST_FILE.exists() and not replace_cohort:
+        raise SystemExit(
+            "01.3 output already exists. Use --mode refresh, or rerun discovery "
+            "with --replace-cohort to archive the old cohort and start clean."
+        )
+    return archive_existing_output()
+
+
 def build_rows(
     discovered: dict[str, set[str]],
     query_matches: dict[str, list[dict[str, Any]]],
@@ -1660,6 +1678,12 @@ def run_discover(
 ) -> None:
     checkpoint = None if args.restart_discovery else load_discovery_checkpoint()
 
+    # An unreadable checkpoint is not resumable. Remove it so the next logic
+    # can treat any output without a manifest as an incomplete attempt rather
+    # than permanently blocking discovery.
+    if checkpoint is None and CHECKPOINT_FILE.exists():
+        CHECKPOINT_FILE.unlink()
+
     if checkpoint is not None:
         observed_at = str(checkpoint["observed_at"])
         observed_dt = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
@@ -1674,18 +1698,16 @@ def run_discover(
         print(f"Resuming saved Experiment 01.3 discovery checkpoint: {CHECKPOINT_FILE}")
         print(f"Completed search jobs already saved: {len(completed_jobs):,}")
     else:
-        if args.restart_discovery and CHECKPOINT_FILE.exists():
-            CHECKPOINT_FILE.unlink()
-
-        if OUTPUT_DIR.exists():
-            if not args.replace_cohort:
-                raise SystemExit(
-                    "01.3 output already exists. Use --mode refresh, or rerun discovery "
-                    "with --replace-cohort to archive the old cohort and start clean."
-                )
-            archived = archive_existing_output()
-            if archived is not None:
-                print(f"Archived previous Experiment 01.3 output to: {archived}")
+        archived = prepare_output_for_discovery(
+            replace_cohort=bool(args.replace_cohort)
+        )
+        if archived is not None:
+            reason = (
+                "previous cohort"
+                if args.replace_cohort
+                else "incomplete failed discovery"
+            )
+            print(f"Archived {reason} to: {archived}")
 
         observed_dt = datetime.now(timezone.utc)
         observed_at = observed_dt.isoformat()
@@ -1897,6 +1919,11 @@ def run_discover(
         encoding="utf-8",
     )
     if not rows:
+        # The search work is exhausted and this checkpoint cannot make forward
+        # progress. Clear it so a later run can start clean instead of replaying
+        # the same terminal checkpoint forever.
+        if CHECKPOINT_FILE.exists():
+            CHECKPOINT_FILE.unlink()
         raise SystemExit(
             "No videos passed the age, view, title-topic and motorsport-context filters."
         )

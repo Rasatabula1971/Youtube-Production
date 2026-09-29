@@ -1,7 +1,14 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import packaging_engine as module
 
 from packaging_engine import (
     build_package_request,
+    run_apply,
     validate_response,
 )
 
@@ -229,6 +236,72 @@ class PackagingEngineTests(unittest.TestCase):
 
         self.assertEqual(len(result["accepted"]), 1)
         self.assertEqual(len(result["rejected"]), 1)
+
+
+    def test_cross_response_duplicate_package_ids_are_namespaced_not_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requests = root / "requests"
+            responses = root / "responses"
+            requests.mkdir()
+            responses.mkdir()
+
+            for concept_id in ("c1", "c2"):
+                request_path = requests / f"{concept_id}.package_request.json"
+                request_path.write_text(
+                    json.dumps({"concept_id": concept_id}),
+                    encoding="utf-8",
+                )
+                response = {
+                    "concept_id": concept_id,
+                    "response_provenance": {
+                        "request_sha256": module.sha256_file(request_path),
+                    },
+                    "packages": [
+                        {
+                            "package_id": "package-1",
+                            "title": concept_id,
+                        }
+                    ],
+                }
+                (responses / f"{concept_id}.json").write_text(
+                    json.dumps(response),
+                    encoding="utf-8",
+                )
+
+            with (
+                patch.object(module, "OUTPUT_DIR", root),
+                patch.object(module, "REQUESTS_DIR", requests),
+                patch.object(module, "RESPONSES_DIR", responses),
+                patch.object(module, "CANDIDATES_FILE", root / "candidates.json"),
+                patch.object(module, "REJECTED_FILE", root / "rejected.json"),
+                patch.object(module, "SUMMARY_FILE", root / "summary.json"),
+                patch.object(module, "load_config", return_value=self.config),
+                patch.object(
+                    module,
+                    "validate_response",
+                    side_effect=lambda response, request, config: {
+                        "accepted": response["packages"],
+                        "rejected": [],
+                    },
+                ),
+            ):
+                result = run_apply()
+                candidates = json.loads(
+                    (root / "candidates.json").read_text(encoding="utf-8")
+                )
+
+        self.assertEqual(result["accepted_packages"], 2)
+        self.assertEqual(result["rejected_packages"], 0)
+        self.assertEqual(
+            {item["package_id"] for item in candidates["packages"]},
+            {"package-1", "c2--package-1"},
+        )
+        renamed = next(
+            item for item in candidates["packages"]
+            if item["package_id"] != "package-1"
+        )
+        self.assertEqual(renamed["model_package_id"], "package-1")
 
 
 if __name__ == "__main__":

@@ -379,6 +379,28 @@ def run_prepare(
     return summary
 
 
+def reserve_generated_id(
+    *,
+    raw_id: str,
+    namespace: str,
+    used_ids: set[str],
+) -> tuple[str, bool]:
+    """Reserve a stable globally unique package ID without dropping output."""
+    raw_id = str(raw_id).strip()
+    if raw_id not in used_ids:
+        used_ids.add(raw_id)
+        return raw_id, False
+
+    base = f"{safe_slug(namespace)}--{safe_slug(raw_id)}"
+    candidate = base
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{base}--{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate, True
+
+
 def run_apply() -> dict[str, Any]:
     config = load_config()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -443,17 +465,16 @@ def run_apply() -> dict[str, Any]:
             continue
 
         for package in result["accepted"]:
-            package_id = str(package["package_id"])
-            if package_id in global_package_ids:
-                rejected.append(
-                    {
-                        "response": str(response_path),
-                        "package": package,
-                        "errors": ["package_id must be globally unique"],
-                    }
-                )
-                continue
-            global_package_ids.add(package_id)
+            package = dict(package)
+            model_package_id = str(package["package_id"]).strip()
+            package_id, renamed = reserve_generated_id(
+                raw_id=model_package_id,
+                namespace=concept_id,
+                used_ids=global_package_ids,
+            )
+            if renamed:
+                package["model_package_id"] = model_package_id
+                package["package_id"] = package_id
             package["response_source"] = str(response_path)
             accepted.append(package)
 
