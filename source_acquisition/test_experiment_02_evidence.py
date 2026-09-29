@@ -356,5 +356,15 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
         ingest.assert_not_called()
 
 
+    def test_safe_name_preserves_valid_leading_underscore_video_id(self):
+        self.assertEqual(
+            acquisition.safe_name("_abc123XYZ0"),
+            "_abc123XYZ0",
+        )
+
+    def test_safe_name_rejects_dot_only_path_names(self):
+        self.assertEqual(acquisition.safe_name(".."), "unknown")
+
+
 if __name__ == "__main__":
     unittest.main()
