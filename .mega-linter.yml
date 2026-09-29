@@ -20,3 +20,10 @@ FILTER_REGEX_EXCLUDE: '(^|/)(output|archive|\.idea_bank|\.experiment_ui|megalint
 PYTHON_RUFF_CONFIG_FILE: ruff.toml
 PYTHON_MYPY_CONFIG_FILE: mypy.ini
 PYTHON_BANDIT_ARGUMENTS: '-lll -ii'
+
+PYTHON_RUFF_ARGUMENTS: '--select BLE,S,B,F,PLW,E722,ASYNC'
+PYTHON_MYPY_FILTER_REGEX_EXCLUDE: '(^|/)test_.*\.py$'
+REPOSITORY_SEMGREP_RULESETS:
+  - p/python
+  - p/security-audit
+REPOSITORY_SEMGREP_ARGUMENTS: "--exclude '**/test_*.py'"
