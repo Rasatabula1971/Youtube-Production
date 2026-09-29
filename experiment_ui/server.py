@@ -4163,7 +4163,7 @@ def workflow_guidance(
         }
 
     production_visual = production_visual_artifact_state()
-    if production_visual.get("manifests_ready"):
+    if voice.get("visual_ready") and production_visual.get("manifests_ready"):
         return {
             "state": "VISUAL_ACQUISITION_REQUIRED",
             "current_action_id": None,
