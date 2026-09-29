@@ -1,0 +1,32 @@
+{
+  "allowed_formats": [
+    "long_form",
+    "short"
+  ],
+  "format_intent_branches": {
+    "long_form": [
+      "long_form"
+    ],
+    "short": [
+      "short"
+    ],
+    "either": [
+      "long_form",
+      "short"
+    ]
+  },
+  "branch_constraints": {
+    "long_form": {
+      "aspect_ratio": "16:9",
+      "min_duration_seconds": 180,
+      "max_duration_seconds": 2400,
+      "min_beats": 4
+    },
+    "short": {
+      "aspect_ratio": "9:16",
+      "min_duration_seconds": 15,
+      "max_duration_seconds": 60,
+      "min_beats": 3
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "concept_id": "CONCEPT_ID",
+  "reviewer": "YOUR_NAME_OR_ID",
+  "decision": "ACCEPT",
+  "criteria": {
+    "branches_are_separate_productions": true,
+    "promise_preserved_per_branch": true,
+    "facts_within_accepted_claims": true,
+    "duration_intent_realistic": true,
+    "producible_from_available_material": true
+  },
+  "note": ""
+}

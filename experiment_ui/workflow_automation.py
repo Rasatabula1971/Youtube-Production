@@ -39,6 +39,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
+    "format_prepare",
+    "format_generate",
+    "format_gate_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40

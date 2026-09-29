@@ -158,6 +158,10 @@ They may share:
 
 They should not be treated as identical edits of the same timeline.
 
+This stage is implemented as an offline framework in `format_engine/`. Branch
+separation is enforced deterministically before the Human Format Gate, and only
+gate-accepted plans reach the Production Engine. See D-060.
+
 ### 07 — Production Engine
 
 Potential capabilities:
@@ -174,6 +178,9 @@ Potential capabilities:
 Visuals should support the narration or story rather than exist only to create motion.
 
 OpenMontage and related production tooling belong here. Production tooling is the backend, not the creative decision-maker.
+
+Narration is planned by the Voice Performance Layer and rendered by Higgsfield.
+See D-061.
 
 ### 08 — Quality Gates
 

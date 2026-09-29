@@ -1,0 +1,39 @@
+{
+  "concept_id": "CONCEPT_ID",
+  "branches": [
+    {
+      "format": "long_form",
+      "duration_intent_seconds": 600,
+      "promise_delivery": "",
+      "payoff": "",
+      "beats": [
+        {
+          "beat_id": "lf001",
+          "purpose": "",
+          "treatment": "",
+          "claim_ids": [],
+          "source_section_ids": [
+            ""
+          ]
+        }
+      ]
+    },
+    {
+      "format": "short",
+      "duration_intent_seconds": 45,
+      "promise_delivery": "",
+      "payoff": "",
+      "beats": [
+        {
+          "beat_id": "sh001",
+          "purpose": "",
+          "treatment": "",
+          "claim_ids": [],
+          "source_section_ids": [
+            ""
+          ]
+        }
+      ]
+    }
+  ]
+}

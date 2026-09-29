@@ -1,0 +1,10 @@
+{
+  "required_accept_criteria": [
+    "branches_are_separate_productions",
+    "promise_preserved_per_branch",
+    "facts_within_accepted_claims",
+    "duration_intent_realistic",
+    "producible_from_available_material"
+  ],
+  "require_reviewer_name": true
+}

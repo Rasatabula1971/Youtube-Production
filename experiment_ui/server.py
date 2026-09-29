@@ -156,6 +156,22 @@ SCRIPT_REQUESTS_DIR = STORY_OUTPUT / "script_requests"
 SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
 SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
 
+FORMAT_DIR = PROJECT_ROOT / "format_engine"
+if str(FORMAT_DIR) not in sys.path:
+    sys.path.insert(0, str(FORMAT_DIR))
+
+from format_review import (
+    apply_action as apply_format_gate_action,
+)
+from format_review import (
+    snapshot as format_gate_snapshot,
+)
+
+FORMAT_OUTPUT = FORMAT_DIR / "output"
+FORMAT_REQUESTS_DIR = FORMAT_OUTPUT / "format_requests"
+FORMAT_PLANS_DIR = FORMAT_OUTPUT / "format_plans"
+FORMAT_APPROVED_DIR = FORMAT_OUTPUT / "approved_format_plans"
+
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
     "exp2_acquire",
@@ -180,6 +196,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
+    "format_prepare",
+    "format_generate",
+    "format_gate_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -727,6 +746,47 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": ("Prepares the human Script Gate before production."),
     },
+    "format_prepare": {
+        "label": "Prepare Format Requests",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "format_engine/format_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds per-branch format requests from human-approved scripts. "
+            "Long-form and Shorts are planned as separate productions."
+        ),
+    },
+    "format_generate": {
+        "label": "Generate Format Plans",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "format_engine/format_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to plan each required branch, "
+            "rejecting identical or truncated timelines."
+        ),
+    },
+    "format_gate_prepare": {
+        "label": "Prepare Format Gate",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "format_engine/format_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the human Format Gate before the Production Engine."
+        ),
+    },
 }
 
 OPEN_TARGETS = {
@@ -736,6 +796,7 @@ OPEN_TARGETS = {
     "packaging_output": PACKAGING_OUTPUT,
     "research_output": RESEARCH_OUTPUT,
     "story_script_output": STORY_OUTPUT,
+    "format_output": FORMAT_OUTPUT,
     "source_acquisition_output": SOURCE_ACQ_OUTPUT,
     "ui_jobs": JOB_LOG_DIR,
 }
@@ -1475,6 +1536,91 @@ def story_script_artifact_state() -> dict[str, Any]:
     }
 
 
+def format_artifact_state() -> dict[str, Any]:
+    upstream = story_script_artifact_state()
+    approved_hashes: dict[str, str] = {}
+    if upstream.get("production_ready") and SCRIPT_APPROVED_DIR.exists():
+        for path in SCRIPT_APPROVED_DIR.glob("*.approved_script.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            gate_info = payload.get("script_gate", {})
+            if (
+                not isinstance(gate_info, dict)
+                or gate_info.get("status") != "READY_FOR_PRODUCTION"
+            ):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if concept_id:
+                approved_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if FORMAT_REQUESTS_DIR.exists():
+        for path in FORMAT_REQUESTS_DIR.glob("*.format_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in approved_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("approved_script_sha256")
+                == approved_hashes[concept_id]
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    plan_ids: set[str] = set()
+    if FORMAT_PLANS_DIR.exists():
+        for path in FORMAT_PLANS_DIR.glob("*.format_plan.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("plan_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256") == request_hashes[concept_id]
+            ):
+                plan_ids.add(concept_id)
+
+    gate = (
+        format_gate_snapshot()
+        if plan_ids
+        else {
+            "status": "WAITING_FOR_FORMAT_PLANS",
+            "complete": False,
+            "plans": [],
+        }
+    )
+    approved_ids = {
+        str(item.get("concept_id"))
+        for item in gate.get("plans", [])
+        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    }
+
+    requests_ready = bool(approved_hashes) and set(approved_hashes).issubset(
+        request_hashes
+    )
+    plans_ready = requests_ready and set(approved_hashes).issubset(plan_ids)
+    production_engine_ready = (
+        plans_ready
+        and bool(gate.get("complete"))
+        and set(approved_hashes).issubset(approved_ids)
+    )
+    return {
+        "approved_script_concept_ids": sorted(approved_hashes),
+        "request_concept_ids": sorted(request_hashes),
+        "plan_concept_ids": sorted(plan_ids),
+        "requests_ready": requests_ready,
+        "plans_ready": plans_ready,
+        "format_gate": gate,
+        "format_gate_complete": bool(gate.get("complete")),
+        "production_engine_ready": production_engine_ready,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -1744,7 +1890,20 @@ def stage_statuses() -> list[dict[str, Any]]:
     )
     research_gate_complete = bool(research["research_gate_complete"])
     story_ready = bool(research["story_ready"])
-
+    story = story_script_artifact_state()
+    script_requests_ready = bool(story["requests_ready"])
+    script_drafts_ready = bool(story["drafts_ready"])
+    script_gate = story["script_gate"]
+    script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
+    script_gate_complete = bool(story["script_gate_complete"])
+    production_ready = bool(story["production_ready"])
+    fmt = format_artifact_state()
+    format_requests_ready = bool(fmt["requests_ready"])
+    format_plans_ready = bool(fmt["plans_ready"])
+    format_gate = fmt["format_gate"]
+    format_gate_status = str(format_gate.get("status") or "WAITING_FOR_FORMAT_PLANS")
+    format_gate_complete = bool(fmt["format_gate_complete"])
+    production_engine_ready = bool(fmt["production_engine_ready"])
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
         transform_tone = "complete"
@@ -1877,6 +2036,88 @@ def stage_statuses() -> list[dict[str, Any]]:
         research_human = "RESEARCH NEEDS ATTENTION"
         research_tone = "action"
         research_next = "Inspect the Research Gate state."
+
+    if production_ready:
+        script_human = "SCRIPT APPROVED — STAGE COMPLETE"
+        script_tone = "complete"
+        script_next = "Proceed to Format."
+    elif active_action in {
+        "script_prepare",
+        "script_generate",
+        "script_gate_prepare",
+    }:
+        script_human = "SCRIPT WORK RUNNING"
+        script_tone = "running"
+        script_next = "Wait for the current Script job to finish."
+    elif not story_ready:
+        script_human = "WAITING FOR VERIFIED RESEARCH"
+        script_tone = "blocked"
+        script_next = "Complete the Research Gate first."
+    elif not script_requests_ready:
+        script_human = "READY TO PREPARE SCRIPTS"
+        script_tone = "ready"
+        script_next = "Run Prepare Script Requests."
+    elif not script_drafts_ready:
+        script_human = "SCRIPT DRAFTING NEEDED"
+        script_tone = "action"
+        script_next = "Run Generate Script Drafts."
+    elif script_gate_status == "READY_TO_PREPARE":
+        script_human = "PREPARE SCRIPT GATE"
+        script_tone = "action"
+        script_next = "Run Prepare Script Gate."
+    elif script_gate_status == "AWAITING_HUMAN_DECISION":
+        script_human = "HUMAN SCRIPT DECISION NEEDED"
+        script_tone = "action"
+        script_next = "Review script drafts in Analyze & Create."
+    elif script_gate_complete:
+        script_human = "NO APPROVED SCRIPT"
+        script_tone = "action"
+        script_next = "Rework or regenerate scripts before Format."
+    else:
+        script_human = "SCRIPT NEEDS ATTENTION"
+        script_tone = "action"
+        script_next = "Inspect the Script Gate state."
+
+    if production_engine_ready:
+        format_human = "FORMAT APPROVED — STAGE COMPLETE"
+        format_tone = "complete"
+        format_next = "Ready for the Production Engine."
+    elif active_action in {
+        "format_prepare",
+        "format_generate",
+        "format_gate_prepare",
+    }:
+        format_human = "FORMAT WORK RUNNING"
+        format_tone = "running"
+        format_next = "Wait for the current Format job to finish."
+    elif not production_ready:
+        format_human = "WAITING FOR APPROVED SCRIPT"
+        format_tone = "blocked"
+        format_next = "Approve a script first."
+    elif not format_requests_ready:
+        format_human = "READY TO PREPARE FORMATS"
+        format_tone = "ready"
+        format_next = "Run Prepare Format Requests."
+    elif not format_plans_ready:
+        format_human = "FORMAT PLANNING NEEDED"
+        format_tone = "action"
+        format_next = "Run Generate Format Plans."
+    elif format_gate_status == "READY_TO_PREPARE":
+        format_human = "PREPARE FORMAT GATE"
+        format_tone = "action"
+        format_next = "Run Prepare Format Gate."
+    elif format_gate_status == "AWAITING_HUMAN_DECISION":
+        format_human = "HUMAN FORMAT DECISION NEEDED"
+        format_tone = "action"
+        format_next = "Review format plans in Analyze & Create."
+    elif format_gate_complete:
+        format_human = "NO APPROVED FORMAT PLAN"
+        format_tone = "action"
+        format_next = "Rework or regenerate format plans before production."
+    else:
+        format_human = "FORMAT NEEDS ATTENTION"
+        format_tone = "action"
+        format_next = "Inspect the Format Gate state."
 
     return [
         {
@@ -2149,6 +2390,84 @@ def stage_statuses() -> list[dict[str, Any]]:
             "ready": packaging_research_ready,
             "current": packaging_research_ready and not story_ready,
         },
+        {
+            "id": "07",
+            "title": "Story / Script",
+            "state": script_gate_status if script_drafts_ready else (
+                "READY_TO_PREPARE" if story_ready else "WAITING_FOR_RESEARCH"
+            ),
+            "human_status": script_human,
+            "tone": script_tone,
+            "detail": (
+                "Drafts an original script constrained to human-accepted claims, "
+                "then requires a human Script Gate decision."
+            ),
+            "next_action": script_next,
+            "criteria": [
+                {
+                    "label": "Verified research handoff ready",
+                    "done": story_ready,
+                },
+                {
+                    "label": "Script requests prepared",
+                    "done": script_requests_ready,
+                },
+                {
+                    "label": "Validated script drafts generated",
+                    "done": script_drafts_ready,
+                },
+                {
+                    "label": "Human Script Gate complete",
+                    "done": script_gate_complete,
+                },
+                {
+                    "label": "Every script approved for Format",
+                    "done": production_ready,
+                },
+            ],
+            "complete": production_ready,
+            "ready": story_ready,
+            "current": story_ready and not production_ready,
+        },
+        {
+            "id": "08",
+            "title": "Format",
+            "state": format_gate_status if format_plans_ready else (
+                "READY_TO_PREPARE" if production_ready else "WAITING_FOR_SCRIPT"
+            ),
+            "human_status": format_human,
+            "tone": format_tone,
+            "detail": (
+                "Plans long-form and Shorts as separate productions from the "
+                "approved script, then requires a human Format Gate decision."
+            ),
+            "next_action": format_next,
+            "criteria": [
+                {
+                    "label": "Approved script handoff ready",
+                    "done": production_ready,
+                },
+                {
+                    "label": "Format requests prepared",
+                    "done": format_requests_ready,
+                },
+                {
+                    "label": "Validated format plans generated",
+                    "done": format_plans_ready,
+                },
+                {
+                    "label": "Human Format Gate complete",
+                    "done": format_gate_complete,
+                },
+                {
+                    "label": "Every format plan approved for production",
+                    "done": production_engine_ready,
+                },
+            ],
+            "complete": production_engine_ready,
+            "ready": production_ready,
+            "current": production_ready and not production_engine_ready,
+        },
     ]
 
 
@@ -2172,6 +2491,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     research_waiting = research_status in {
         "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
         "DISCOVERY_RUNNING",
+
     }
     human_gate = opportunity_gate_snapshot()
     human_gate_ready = bool(human_gate.get("ready_for_experiment_02"))
@@ -2229,7 +2549,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
-
+    fmt = format_artifact_state()
+    format_requests_ready = bool(fmt["requests_ready"])
+    format_plans_ready = bool(fmt["plans_ready"])
+    format_gate = fmt["format_gate"]
+    format_gate_status = str(format_gate.get("status") or "WAITING_FOR_FORMAT_PLANS")
+    format_gate_complete = bool(fmt["format_gate_complete"])
+    production_engine_ready = bool(fmt["production_engine_ready"])
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -2829,7 +3155,55 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     )
                 )
             ),
+        },        "format_prepare": {
+            "enabled": production_ready and not format_requests_ready,
+            "reason": (
+                "Approved scripts are ready for per-branch format requests."
+                if production_ready and not format_requests_ready
+                else (
+                    "Format requests are already current."
+                    if format_requests_ready
+                    else "Complete the Human Script Gate first."
+                )
+            ),
         },
+        "format_generate": {
+            "enabled": format_requests_ready and not format_plans_ready,
+            "reason": (
+                "Current format requests are ready for FAIR planning."
+                if format_requests_ready and not format_plans_ready
+                else (
+                    "Current format plans already exist."
+                    if format_plans_ready
+                    else "Prepare current format requests first."
+                )
+            ),
+        },
+        "format_gate_prepare": {
+            "enabled": (
+                format_plans_ready
+                and (
+                    format_gate_status == "READY_TO_PREPARE"
+                    or (format_gate_complete and not production_engine_ready)
+                )
+            ),
+            "reason": (
+                "Validated format plans are ready for human review."
+                if format_plans_ready and format_gate_status == "READY_TO_PREPARE"
+                else (
+                    "No format plan was approved; reopen the Format Gate."
+                    if format_plans_ready
+                    and format_gate_complete
+                    and not production_engine_ready
+                    else (
+                        "Format Gate is already prepared or complete."
+                        if format_plans_ready
+                        else "Generate current format plans first."
+                    )
+                )
+            ),
+        },
+
     }
 
     ready_machine_steps = [
@@ -3165,6 +3539,24 @@ def workflow_guidance(
                 "Check promise delivery, factual scope, claim mapping, originality "
                 "and story payoff before production."
             ),
+            "next_action_id": "auto_continue",
+            "next_title": "Automatic Format planning",
+        }
+
+    fmt = format_artifact_state()
+    format_gate = fmt.get("format_gate", {})
+    if (
+        fmt.get("plans_ready")
+        and format_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_FORMAT_GATE",
+            "current_action_id": None,
+            "current_title": "Review Format Plan",
+            "current_detail": (
+                "Confirm long-form and Shorts are separate productions that each "
+                "deliver the approved promise within accepted claims."
+            ),
             "next_action_id": None,
             "next_title": "Ready for Production",
         }
@@ -3218,6 +3610,7 @@ def status_payload() -> dict[str, Any]:
     packaging = packaging_artifact_state()
     research = research_artifact_state()
     story = story_script_artifact_state()
+    fmt = format_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -3268,6 +3661,8 @@ def status_payload() -> dict[str, Any]:
         "research_gate": research["research_gate"],
         "story_script": story,
         "script_gate": story["script_gate"],
+        "format": fmt,
+        "format_gate": fmt["format_gate"],
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -3352,6 +3747,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/script-gate":
             self._send_json(script_gate_snapshot())
+            return
+        if route == "/api/format-gate":
+            self._send_json(format_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -3510,6 +3908,19 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/script-gate":
                 payload = apply_script_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/format-gate":
+                payload = apply_format_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
