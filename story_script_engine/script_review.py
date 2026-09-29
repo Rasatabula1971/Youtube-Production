@@ -40,6 +40,7 @@ CRITERIA = (
     "facts_within_verified_claims",
     "claim_mapping_reasonable",
     "original_source_independent",
+    "story_plan_followed",
     "structure_and_payoff_clear",
 )
 
@@ -56,6 +57,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "sections": draft.get("sections", []),
         "closing": draft.get("closing"),
         "package": draft.get("package", {}),
+        "story_plan": draft.get("story_plan", {}),
         "accepted_claims": draft.get("accepted_claims", []),
         "source_overlap": draft.get("validation", {}).get("source_overlap", {}),
         "required_accept_criteria": list(CRITERIA),
@@ -64,6 +66,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
             "facts_within_verified_claims": "Factual statements stay within human-accepted research claims.",
             "claim_mapping_reasonable": "Section claim IDs reasonably support the factual narration they are attached to.",
             "original_source_independent": "The script is original and does not depend on source wording, footage, story or personality.",
+            "story_plan_followed": "The narration follows the approved Story Plan in order and preserves its intended viewer journey.",
             "structure_and_payoff_clear": "The hook, progression and final payoff are clear enough to produce.",
         },
         "request_provenance": {
