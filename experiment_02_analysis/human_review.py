@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +37,12 @@ REVIEW_REQUESTS_DIR = OUTPUT_DIR / "human_review_requests"
 REVIEWED_PROFILES_DIR = OUTPUT_DIR / "profiles_reviewed"
 REVIEW_REPORTS_DIR = OUTPUT_DIR / "human_review_reports"
 REVIEW_RESPONSES_DIR = OUTPUT_DIR / "human_review_responses"
-UI_REVIEWER = "local-operator"
+REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DEFAULT_REVIEWER = "local-operator"
+
+
+def reviewer_id() -> str:
+    return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER
 
 
 def content_sha256(payload: Any) -> str:
@@ -508,7 +514,7 @@ def _response_path(video_id: str) -> Path:
 def _blank_response(video_id: str) -> dict[str, Any]:
     return {
         "video_id": video_id,
-        "reviewer": UI_REVIEWER,
+        "reviewer": reviewer_id(),
         "decisions": [],
         "overall_note": "",
     }
@@ -704,7 +710,7 @@ def apply_review_action(
         "note": str(note or ""),
     }
     response["video_id"] = video_id
-    response["reviewer"] = str(response.get("reviewer") or UI_REVIEWER)
+    response["reviewer"] = str(response.get("reviewer") or reviewer_id())
     response["decisions"] = [mapped[key] for key in sorted(mapped)]
     response["overall_note"] = str(response.get("overall_note") or "")
     response["profile_content_sha256"] = request.get("request_provenance", {}).get(
