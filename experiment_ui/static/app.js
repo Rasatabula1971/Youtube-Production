@@ -123,6 +123,19 @@ const formatRework = document.getElementById("formatRework");
 const formatAccept = document.getElementById("formatAccept");
 const formatNext = document.getElementById("formatNext");
 
+const performanceReviewPanel = document.getElementById("performanceReviewPanel");
+const performanceReviewTitle = document.getElementById("performanceReviewTitle");
+const performanceReviewSummary = document.getElementById("performanceReviewSummary");
+const performanceReviewStatus = document.getElementById("performanceReviewStatus");
+const performanceDetail = document.getElementById("performanceDetail");
+const performanceCriteria = document.getElementById("performanceCriteria");
+const performanceNote = document.getElementById("performanceNote");
+const performancePrev = document.getElementById("performancePrev");
+const performanceReject = document.getElementById("performanceReject");
+const performanceRework = document.getElementById("performanceRework");
+const performanceAccept = document.getElementById("performanceAccept");
+const performanceNext = document.getElementById("performanceNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -160,6 +173,9 @@ let scriptEditing = false;
 let latestFormatSnapshot = null;
 let formatCursor = 0;
 let formatEditing = false;
+let latestPerformanceSnapshot = null;
+let performanceCursor = 0;
+let performanceEditing = false;
 
 const ROUTES = {
   "/": {
@@ -2119,6 +2135,191 @@ async function submitFormatDecision(decision) {
   }
 }
 
+
+function pendingPerformanceIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentPerformanceItem() {
+  const items = (latestPerformanceSnapshot && latestPerformanceSnapshot.specs) || [];
+  if (!items.length) return null;
+  performanceCursor = Math.max(0, Math.min(performanceCursor, items.length - 1));
+  return { item: items[performanceCursor], items: items };
+}
+
+function renderPerformanceReview(snapshot, force) {
+  latestPerformanceSnapshot = snapshot || {};
+  if (
+    !snapshot ||
+    snapshot.status === "WAITING_FOR_VOICE_PERFORMANCE_SPECS" ||
+    snapshot.status === "READY_TO_PREPARE" ||
+    !(snapshot.specs || []).length
+  ) {
+    performanceReviewPanel.hidden = true;
+    return;
+  }
+
+  if (snapshot.complete) {
+    performanceReviewPanel.hidden = false;
+    performanceReviewTitle.textContent = "Performance Gate complete";
+    performanceReviewSummary.textContent =
+      (snapshot.accepted || 0) + " accepted · " +
+      (snapshot.rework || 0) + " rework · " +
+      (snapshot.rejected || 0) + " rejected";
+    performanceReviewStatus.textContent =
+      (snapshot.accepted || 0) > 0 ? "PERFORMANCE APPROVED" : "NO APPROVED PERFORMANCE";
+    performanceReviewStatus.className =
+      "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
+    performanceDetail.innerHTML =
+      '<div class="concept-complete">' +
+      ((snapshot.accepted || 0) > 0
+        ? "Performance plan approved. No audio has been rendered or paid for by this gate."
+        : "No performance plan was approved. Rework or regenerate before rendering.") +
+      '</div>';
+    performanceCriteria.innerHTML = "";
+    performanceNote.hidden = true;
+    performancePrev.disabled = true;
+    performanceNext.disabled = true;
+    performanceReject.disabled = true;
+    performanceRework.disabled = true;
+    performanceAccept.disabled = true;
+    return;
+  }
+
+  if (performanceEditing && !force) return;
+  const items = snapshot.specs || [];
+  if (performanceCursor >= items.length) {
+    performanceCursor = Math.max(0, items.length - 1);
+  }
+  const spec = items[performanceCursor] || {};
+  const directions = {};
+  (spec.directions || []).forEach(function (direction) {
+    directions[direction.beat_id] = direction;
+  });
+  const beats = (spec.beats || []).map(function (beat) {
+    const direction = directions[beat.beat_id] || {};
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(beat.beat_id || "BEAT") + ' · ' +
+      escapeHtml(beat.purpose || "") + '</h4>' +
+      '<p><strong>Immutable narration:</strong> ' +
+      escapeHtml(beat.immutable_narration || "") + '</p>' +
+      '<div class="concept-meta">' +
+      '<span>Emotion: ' + escapeHtml(direction.emotion || "") + '</span>' +
+      '<span>Intensity: ' + escapeHtml(String(direction.intensity ?? "")) + '</span>' +
+      '<span>Speed: ' + escapeHtml(String(direction.speed ?? "")) + '</span>' +
+      '<span>Pause before: ' + escapeHtml(String(direction.pause_before_ms ?? "")) + ' ms</span>' +
+      '<span>Pause after: ' + escapeHtml(String(direction.pause_after_ms ?? "")) + ' ms</span>' +
+      '<span>Emphasis: ' + escapeHtml((direction.emphasis_terms || []).join(", ") || "none") + '</span>' +
+      '</div></div>';
+  }).join("");
+
+  performanceReviewPanel.hidden = false;
+  performanceNote.hidden = false;
+  performanceReviewTitle.textContent =
+    "Performance plan " + (performanceCursor + 1) + " of " + items.length;
+  performanceReviewSummary.textContent =
+    (snapshot.pending || 0) + " pending · " +
+    (snapshot.accepted || 0) + " accepted · " +
+    (snapshot.rework || 0) + " rework";
+  performanceReviewStatus.textContent = spec.decision || "PENDING";
+  performanceReviewStatus.className =
+    "status-chip " +
+    (spec.decision === "ACCEPT"
+      ? "success"
+      : spec.decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  const identity = spec.voice_identity || {};
+  performanceDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>VOICE PERFORMANCE</h4><h3>' +
+      escapeHtml(spec.title || spec.concept_id) + '</h3>' +
+      '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(spec.format || "")) +
+      '<br><strong>Provider target:</strong> ' + escapeHtml(identity.provider || "higgsfield") +
+      '<br><strong>Render prerequisites:</strong> ' +
+      escapeHtml(spec.render_prerequisites_configured ? "configured" : "not configured — paid render remains blocked") +
+      '</p></div>' +
+    beats;
+
+  const descriptions = spec.criteria || {};
+  const checked = spec.criteria_decisions || {};
+  const required = spec.required_accept_criteria || Object.keys(descriptions);
+  performanceCriteria.innerHTML = required.map(function (criterion) {
+    const id = "performance-criterion-" + performanceCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) +
+      '" data-performance-criterion="' + escapeHtml(criterion) + '"' +
+      (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(descriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  performanceNote.value = spec.note || "";
+  performancePrev.disabled = performanceCursor <= 0;
+  performanceNext.disabled = performanceCursor >= items.length - 1;
+  performanceReject.disabled = false;
+  performanceRework.disabled = false;
+  performanceAccept.disabled = false;
+  performanceEditing = false;
+}
+
+function movePerformanceCursor(delta) {
+  const current = currentPerformanceItem();
+  if (!current) return;
+  performanceCursor = Math.max(
+    0,
+    Math.min(current.items.length - 1, performanceCursor + delta)
+  );
+  performanceEditing = false;
+  renderPerformanceReview(latestPerformanceSnapshot, true);
+}
+
+function collectPerformanceCriteria() {
+  const values = {};
+  performanceCriteria
+    .querySelectorAll("[data-performance-criterion]")
+    .forEach(function (input) {
+      values[input.dataset.performanceCriterion] = Boolean(input.checked);
+    });
+  return values;
+}
+
+async function submitPerformanceDecision(decision) {
+  const current = currentPerformanceItem();
+  if (!current) return;
+  const spec = current.item;
+  try {
+    const payload = await api("/api/performance-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: spec.concept_id,
+        format: spec.format,
+        decision: decision,
+        criteria: collectPerformanceCriteria(),
+        note: performanceNote.value
+      })
+    });
+    performanceEditing = false;
+    latestPerformanceSnapshot = payload;
+    const nextPending = pendingPerformanceIndex(payload.specs || []);
+    if (nextPending >= 0) performanceCursor = nextPending;
+    renderPerformanceReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Voice performance accepted."
+        : decision === "REWORK"
+          ? "Voice performance sent for rework."
+          : "Voice performance rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -2127,7 +2328,8 @@ function renderAnalysis(data) {
     "HUMAN_PACKAGING_GATE",
     "HUMAN_RESEARCH_GATE",
     "HUMAN_SCRIPT_GATE",
-    "HUMAN_FORMAT_GATE"
+    "HUMAN_FORMAT_GATE",
+    "HUMAN_PERFORMANCE_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -2161,6 +2363,7 @@ function renderAnalysis(data) {
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
   renderFormatReview(data.format_gate || {}, false);
+  renderPerformanceReview(data.performance_gate || {}, false);
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -2169,8 +2372,14 @@ function renderAnalysis(data) {
   const research = data.research || {};
   const story = data.story_script || {};
   const fmt = data.format || {};
+  const voice = data.voice_performance || {};
 
   if (
+    workflow.state === "HUMAN_PERFORMANCE_GATE" ||
+    voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
+  ) {
+    activeIndex = 7;
+  } else if (
     workflow.state === "HUMAN_FORMAT_GATE" ||
     fmt.requests_ready || fmt.plans_ready || fmt.format_gate_complete
   ) {
@@ -2630,6 +2839,27 @@ formatRework.addEventListener("click", function () {
 });
 formatAccept.addEventListener("click", function () {
   submitFormatDecision("ACCEPT");
+});
+performanceNote.addEventListener("input", function () {
+  performanceEditing = true;
+});
+performanceCriteria.addEventListener("change", function () {
+  performanceEditing = true;
+});
+performancePrev.addEventListener("click", function () {
+  movePerformanceCursor(-1);
+});
+performanceNext.addEventListener("click", function () {
+  movePerformanceCursor(1);
+});
+performanceReject.addEventListener("click", function () {
+  submitPerformanceDecision("REJECT");
+});
+performanceRework.addEventListener("click", function () {
+  submitPerformanceDecision("REWORK");
+});
+performanceAccept.addEventListener("click", function () {
+  submitPerformanceDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });
