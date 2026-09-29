@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from copy import deepcopy
@@ -578,11 +579,19 @@ def call_direct_gemini_backup(
     if not prompt or not isinstance(schema, dict):
         return fair_result
 
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", model):
+        raise ValueError("DIRECT_GEMINI_MODEL contains unsupported characters")
     endpoint = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
         + model
         + ":generateContent"
     )
+    parsed_endpoint = urllib.parse.urlparse(endpoint)
+    if (
+        parsed_endpoint.scheme != "https"
+        or parsed_endpoint.hostname != "generativelanguage.googleapis.com"
+    ):
+        raise ValueError("Direct Gemini endpoint failed host validation")
     body = {
         "contents": [
             {
@@ -619,7 +628,8 @@ def call_direct_gemini_backup(
         "role": "BACKUP",
     }
     try:
-        with urllib.request.urlopen(
+        # Endpoint is validated to the fixed Google Gemini HTTPS host above.
+        with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             request,
             timeout=min(max(timeout_seconds, 5.0), 180.0),
         ) as response:
