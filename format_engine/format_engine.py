@@ -272,21 +272,24 @@ def _validate_branch(
             errors.append(f"{beat_label} claim_ids must be a list")
         else:
             for claim_id in claim_ids:
-                claim_id = str(claim_id)
-                if claim_id not in allowed_claims:
-                    errors.append(f"{beat_label} uses unapproved claim_id {claim_id}")
+                normalized_claim_id = str(claim_id)
+                if normalized_claim_id not in allowed_claims:
+                    errors.append(
+                        f"{beat_label} uses unapproved claim_id {normalized_claim_id}"
+                    )
                 else:
-                    used.add(claim_id)
+                    used.add(normalized_claim_id)
 
         source_ids = beat.get("source_section_ids")
         if not isinstance(source_ids, list) or not source_ids:
             errors.append(f"{beat_label} requires source_section_ids")
         else:
             for source_id in source_ids:
-                source_id = str(source_id)
-                if source_id not in allowed_sections:
+                normalized_source_id = str(source_id)
+                if normalized_source_id not in allowed_sections:
                     errors.append(
-                        f"{beat_label} references unknown script section {source_id}"
+                        f"{beat_label} references unknown script section "
+                        f"{normalized_source_id}"
                     )
 
     if not used:
