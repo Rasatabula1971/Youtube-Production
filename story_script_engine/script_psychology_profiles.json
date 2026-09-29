@@ -1,0 +1,52 @@
+{
+  "format_intent_branches": {
+    "long_form": ["long_form"],
+    "short": ["short"],
+    "either": ["long_form", "short"]
+  },
+  "profiles": {
+    "long_form": {
+      "hook_target_seconds": null,
+      "attention_refresh_target_seconds": null,
+      "attention_refresh_window_seconds": null,
+      "reward_density": "MODERATE",
+      "require_all_story_beats": true,
+      "min_sections": 3,
+      "max_sections": null,
+      "principles": [
+        "Open with a high-impact truthful line tied directly to the package promise.",
+        "Use sustained curiosity and longer open loops when the eventual payoff justifies the wait.",
+        "Prioritize comprehension over constant novelty.",
+        "Allow setup, examples and breathing room when they reduce cognitive load.",
+        "Use larger delayed payoffs rather than forcing a micro-payoff into every section."
+      ]
+    },
+    "short": {
+      "hook_target_seconds": 3,
+      "attention_refresh_target_seconds": 5,
+      "attention_refresh_window_seconds": [4, 6],
+      "reward_density": "HIGH",
+      "require_all_story_beats": false,
+      "min_sections": 3,
+      "max_sections": 8,
+      "principles": [
+        "The first spoken line must immediately defend against the swipe with a truthful high-impact hook.",
+        "Treat the 3-second hook target as a testable production hypothesis, not a universal law.",
+        "Aim for a meaningful attention or reward refresh roughly every 4-6 seconds; this is a testable hypothesis.",
+        "Every section should deliver progress through proof, novelty, reveal, expectation shift or micro-payoff.",
+        "Keep cognitive branching very low and stay on one core idea.",
+        "Close open loops quickly and finish with a strong payoff."
+      ]
+    }
+  },
+  "reward_types": [
+    "NONE",
+    "PROOF",
+    "NOVELTY",
+    "REVEAL",
+    "EXPECTATION_SHIFT",
+    "MICRO_PAYOFF",
+    "PROGRESS"
+  ],
+  "hypothesis_notice": "Short-form timing targets are starting hypotheses for the Learning Engine to test against actual channel retention; they are not claimed universal physiological laws."
+}
