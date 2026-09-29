@@ -366,7 +366,15 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
     }
     atomic_write_json(dest, saved)
 
-    bundle_path = _refresh_approved_bundle(str(req["concept_id"]))
+    try:
+        bundle_path = _refresh_approved_bundle(str(req["concept_id"]))
+    except ValueError:
+        # Do not persist an ACCEPT that cannot form a valid multi-format bundle.
+        if normalized["decision"] == "ACCEPT" and dest.exists():
+            dest.unlink()
+        _refresh_approved_bundle(str(req["concept_id"]))
+        raise
+
     result = {
         "status": (
             "SCRIPT_BRANCH_ACCEPTED"
