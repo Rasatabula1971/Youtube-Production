@@ -150,7 +150,7 @@ def build_format_request(
             raise ValueError("Every accepted claim requires claim_id")
         claim_ids.append(claim_id)
 
-    branches = resolve_branches(package.get("format_intent"), config)
+    branches = resolve_branches(str(package.get("format_intent") or ""), config)
     constraints = {
         branch: dict(config["branch_constraints"][branch])
         for branch in branches
@@ -370,7 +370,7 @@ def validate_format_response(
         [branch for branch in branches if isinstance(branch, dict)], errors
     )
 
-    texts = []
+    texts: list[dict[str, Any]] = []
     for branch in branches:
         if not isinstance(branch, dict):
             continue
@@ -389,7 +389,14 @@ def validate_format_response(
                             "text": beat.get("treatment"),
                         }
                     )
-    overlap = check_texts([{**item, "text": str(item["text"] or "")} for item in texts])
+    normalized_texts: list[dict[str, str]] = [
+        {
+            "field": str(item.get("field") or ""),
+            "text": str(item.get("text") or ""),
+        }
+        for item in texts
+    ]
+    overlap = check_texts(normalized_texts)
     if overlap.get("blocking"):
         match = overlap.get("matches", [{}])[0]
         errors.append("source overlap block: " + str(match.get("overlap_text") or ""))
