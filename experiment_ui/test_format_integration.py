@@ -14,10 +14,21 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 4],
-            ["format_prepare", "format_generate", "format_gate_prepare"],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 5],
+            [
+                "format_prepare",
+                "format_generate",
+                "format_gate_prepare",
+                "production_visual_prepare",
+            ],
         )
         self.assertIn("format_output", server.OPEN_TARGETS)
+        self.assertIn("production_output", server.OPEN_TARGETS)
+        self.assertIn("production_visual_prepare", server.ACTION_DEFS)
+        self.assertIn(
+            "production_engine/visual_acquisition.py",
+            server.ACTION_DEFS["production_visual_prepare"]["command"][1],
+        )
 
     def test_static_ui_contains_format_gate(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
