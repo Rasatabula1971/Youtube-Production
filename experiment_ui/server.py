@@ -3991,7 +3991,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Unknown open target.")
                 target.mkdir(parents=True, exist_ok=True)
                 if os.name == "nt":
-                    getattr(os, "startfile")(str(target))
+                    os.startfile(str(target))  # type: ignore[attr-defined]
                 elif sys.platform == "darwin":
                     subprocess.Popen(["open", str(target)])
                 else:
