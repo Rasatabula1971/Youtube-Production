@@ -112,6 +112,7 @@ from concept_review import (
     snapshot as concept_gate_snapshot,
 )
 from transformation_engine import (
+    safe_slug as transformation_safe_slug,
     validation_contract_sha256 as transformation_validation_contract_sha256,
 )
 
@@ -1242,7 +1243,7 @@ def transformation_artifact_state() -> dict[str, Any]:
             provenance = payload.get("response_provenance", {})
             report = safe_load_json(
                 TRANSFORM_MODEL_RUNS_DIR
-                / f"{safe_slug(mechanism_id)}.model_run.json"
+                / f"{transformation_safe_slug(mechanism_id)}.model_run.json"
             )
             if (
                 mechanism_id in request_hashes
