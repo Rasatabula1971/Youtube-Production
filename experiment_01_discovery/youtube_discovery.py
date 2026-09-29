@@ -1247,15 +1247,15 @@ def main() -> None:
 
         channel_id = row["channel_id"]
 
-        channel = channels.get(channel_id)
+        channel_info = channels.get(channel_id)
 
-        if not channel:
+        if not channel_info:
             continue
 
         if channel_id not in history_cache:
 
             upload_ids = get_recent_upload_ids(
-                channel,
+                channel_info,
                 api_key,
                 maximum=25,
             )
