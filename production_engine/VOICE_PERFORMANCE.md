@@ -80,6 +80,10 @@ An ACCEPT decision requires all configured criteria:
 The review request is SHA-256 bound to the exact performance specification so a
 stale decision cannot approve a regenerated plan.
 
+A **Rework** decision writes the human note back into the free planning request,
+invalidates the current specification, and automatically regenerates a new plan.
+It does not simply reopen the same gate.
+
 ## Next production slice
 
 After this gate is proven, build the paid narration adapter with a dry-run cost
