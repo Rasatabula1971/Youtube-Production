@@ -256,12 +256,6 @@ def _validate_branch(
 ) -> tuple[str, set[str]]:
     constraints_by_branch = request.get("branch_constraints", {})
     allowed_claims = set(request.get("accepted_claim_ids", []))
-    section_ids_by_branch = request.get("script_section_ids_by_branch", {})
-    allowed_sections = set(
-        section_ids_by_branch.get(fmt, [])
-        if isinstance(section_ids_by_branch, dict)
-        else []
-    )
 
     fmt = str(branch.get("format", "")).strip()
     label = fmt or f"branch {index}"
@@ -271,6 +265,12 @@ def _validate_branch(
         errors.append(f"branch {index} requires format")
         return label, used
 
+    section_ids_by_branch = request.get("script_section_ids_by_branch", {})
+    allowed_sections = set(
+        section_ids_by_branch.get(fmt, [])
+        if isinstance(section_ids_by_branch, dict)
+        else []
+    )
     constraints = constraints_by_branch.get(fmt, {})
 
     duration = branch.get("duration_intent_seconds")
