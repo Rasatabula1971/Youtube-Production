@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,30 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)\bBearer\s+[^\s,;]+"),
+    re.compile(
+        r"(?i)([?&](?:api[_-]?key|key|token|access_token|secret|password)=)[^&\s]+"
+    ),
+    re.compile(
+        r"(?i)\b((?:api[_-]?key|token|access_token|secret|password)\s*[=:]\s*)[^\s,;]+"
+    ),
+    re.compile(
+        r'(?i)("(?:api[_-]?key|token|access_token|secret|password)"\s*:\s*")[^"]+(")'
+    ),
+)
+
+
+def redact_error_detail(value: Any, maximum: int = 1200) -> str:
+    """Remove common credential forms before diagnostics leave the FAIR bridge."""
+    text = str(value)
+    text = _SECRET_PATTERNS[0].sub("Bearer [REDACTED]", text)
+    for pattern in _SECRET_PATTERNS[1:3]:
+        text = pattern.sub(r"\1[REDACTED]", text)
+    text = _SECRET_PATTERNS[3].sub(r"\1[REDACTED]\2", text)
+    return text[:maximum]
 
 
 def safe_attempt(attempt: Any) -> dict[str, Any]:
@@ -47,6 +72,8 @@ def safe_attempt(attempt: Any) -> dict[str, Any]:
         "role",
     }
     safe = {key: value for key, value in payload.items() if key in allowed}
+    if safe.get("error_detail") is not None:
+        safe["error_detail"] = redact_error_detail(safe["error_detail"])
     quality = payload.get("quality")
     if isinstance(quality, dict):
         safe["quality"] = {
@@ -136,7 +163,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
-            "error_detail": str(exc)[:1200],
+            "error_detail": redact_error_detail(exc),
             "paid_inference_executed": False,
         }
 
@@ -206,7 +233,7 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
-            "error_detail": str(exc)[:1200],
+            "error_detail": redact_error_detail(exc),
             "providers": providers,
             "skipped": skipped,
             "compatibility": compatibility,
@@ -237,7 +264,7 @@ def main() -> None:
         result = {
             "status": "BRIDGE_ERROR",
             "error_type": type(exc).__name__,
-            "error_detail": str(exc)[:1200],
+            "error_detail": redact_error_detail(exc),
             "paid_inference_executed": False,
         }
 

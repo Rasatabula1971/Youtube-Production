@@ -26,6 +26,7 @@ from typing import Any
 from vidiq_mcp import (
     ALLOWED_PAID_TOOLS,
     BUDGET_FILE,
+    BudgetStateUnreadable,
     DEFAULT_MCP_URL,
     ENV_FILE,
     HARD_CREDIT_CAP,
@@ -306,7 +307,22 @@ def run_enrichment(
     missing_tools = [
         logical for logical in TOOL_ORDER if selected.get(logical) is None
     ]
-    state = load_budget_state(BUDGET_FILE)
+    try:
+        state = load_budget_state(BUDGET_FILE)
+    except BudgetStateUnreadable as exc:
+        payload = {
+            "artifact": "vidiq_opportunity_enrichment",
+            "status": "FAIL_CLOSED_BUDGET_STATE_UNREADABLE",
+            "source_study_set_sha256": source_hash,
+            "created_at": utc_now(),
+            "paid_calls_this_run": 0,
+            "provider_remaining_credits": remaining,
+            "reason": "budget_state_unreadable",
+            "message": str(exc),
+        }
+        write_json(ENRICHMENT_FILE, payload)
+        return payload
+
     run_limit = max_paid_calls_per_run()
     paid_calls = 0
     run_reserved_credits = 0

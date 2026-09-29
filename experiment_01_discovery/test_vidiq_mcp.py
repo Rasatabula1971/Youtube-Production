@@ -166,5 +166,39 @@ class VidIQMCPTests(unittest.TestCase):
         self.assertEqual(on_disk["charged_credits"], 5)
 
 
+    def test_missing_budget_file_starts_fresh_period(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "budget.json"
+            state = module.load_budget_state(path)
+
+        self.assertEqual(state["period"], module.current_period())
+        self.assertEqual(state["charged_credits"], 0)
+        self.assertEqual(state["paid_calls_dispatched"], 0)
+
+    def test_corrupt_existing_budget_file_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "budget.json"
+            path.write_text('{"period":', encoding="utf-8")
+
+            with self.assertRaises(module.BudgetStateUnreadable):
+                module.load_budget_state(path)
+
+    def test_atomic_budget_write_leaves_valid_complete_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "budget.json"
+            payload = {
+                "period": module.current_period(),
+                "charged_credits": 15,
+                "paid_calls_dispatched": 3,
+            }
+            module.write_json(path, payload)
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            leftovers = list(root.glob("budget.json.*.tmp"))
+
+        self.assertEqual(loaded, payload)
+        self.assertEqual(leftovers, [])
+
+
 if __name__ == "__main__":
     unittest.main()

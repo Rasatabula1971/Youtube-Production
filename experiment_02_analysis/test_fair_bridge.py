@@ -55,7 +55,10 @@ class FakeFair:
 
 class BrokenFair:
     def __init__(self, **kwargs):
-        raise TypeError("constructor contract changed")
+        raise TypeError(
+            "constructor contract changed api_key=SUPERSECRET "
+            "url=https://provider.test/?token=URLSECRET"
+        )
 
 
 class CloseFailingFair(FakeFair):
@@ -65,7 +68,9 @@ class CloseFailingFair(FakeFair):
 
 class SolveFailingFair(FakeFair):
     async def solve(self, prompt, **kwargs):
-        raise RuntimeError("provider connection dropped after dispatch")
+        raise RuntimeError(
+            "provider connection dropped after dispatch Bearer BEARERSECRET"
+        )
 
 
 def fake_module(fair_class):
@@ -173,6 +178,9 @@ class FairBridgeTests(unittest.TestCase):
         self.assertEqual(result["status"], "BRIDGE_ERROR")
         self.assertEqual(result["error_type"], "TypeError")
         self.assertFalse(result["paid_inference_executed"])
+        self.assertNotIn("SUPERSECRET", result["error_detail"])
+        self.assertNotIn("URLSECRET", result["error_detail"])
+        self.assertIn("[REDACTED]", result["error_detail"])
 
     def test_solve_exception_after_dispatch_has_unknown_cost_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -182,6 +190,32 @@ class FairBridgeTests(unittest.TestCase):
         self.assertEqual(result["status"], "BRIDGE_ERROR")
         self.assertIsNone(result["paid_inference_executed"])
         self.assertEqual(result["cost_state"], "UNKNOWN_AFTER_DISPATCH")
+        self.assertNotIn("BEARERSECRET", result["error_detail"])
+        self.assertIn("Bearer [REDACTED]", result["error_detail"])
+
+
+    def test_safe_attempt_redacts_provider_error_detail(self):
+        attempt = {
+            "attempt_number": 1,
+            "provider_id": "provider-x",
+            "error_type": "ProviderError",
+            "error_detail": 'request failed password=PLAINSECRET {"api_key":"JSONSECRET"}',
+        }
+        safe = fair_bridge.safe_attempt(attempt)
+        self.assertNotIn("PLAINSECRET", safe["error_detail"])
+        self.assertNotIn("JSONSECRET", safe["error_detail"])
+        self.assertIn("[REDACTED]", safe["error_detail"])
+
+    def test_redact_error_detail_handles_query_and_bearer_secrets(self):
+        value = (
+            "GET https://provider.test/run?key=QUERYSECRET&x=1 "
+            "Authorization: Bearer TOKENVALUE"
+        )
+        redacted = fair_bridge.redact_error_detail(value)
+        self.assertNotIn("QUERYSECRET", redacted)
+        self.assertNotIn("TOKENVALUE", redacted)
+        self.assertIn("key=[REDACTED]", redacted)
+        self.assertIn("Bearer [REDACTED]", redacted)
 
 
 if __name__ == "__main__":
