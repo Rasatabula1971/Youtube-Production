@@ -16,7 +16,7 @@ class FakeClient:
         self.calls: list[tuple[str, dict]] = []
         self.tools = [
             {
-                "name": "credit_balance",
+                "name": "vidiq_balance",
                 "description": "Check remaining AI credit balance",
                 "inputSchema": {
                     "type": "object",
@@ -63,7 +63,7 @@ class FakeClient:
 
     def call_tool(self, name, arguments):
         self.calls.append((name, dict(arguments)))
-        if name == "credit_balance":
+        if name == "vidiq_balance":
             return {
                 "structuredContent": {
                     "remainingCredits": self.remaining,
@@ -120,7 +120,7 @@ class VidIQEnrichmentTests(unittest.TestCase):
         self.assertEqual(result["status"], "COMPLETE")
         self.assertEqual(result["paid_calls_this_run"], 3)
         self.assertEqual(result["credits_reserved_this_run"], 15)
-        paid = [name for name, _ in client.calls if name != "credit_balance"]
+        paid = [name for name, _ in client.calls if name != "vidiq_balance"]
         self.assertEqual(
             paid,
             ["keyword_research", "outliers", "trending_videos"],
@@ -147,14 +147,14 @@ class VidIQEnrichmentTests(unittest.TestCase):
                     study_set=self.study_set(),
                 )
                 before = len(
-                    [name for name, _ in client.calls if name != "credit_balance"]
+                    [name for name, _ in client.calls if name != "vidiq_balance"]
                 )
                 second = enrich.run_enrichment(
                     client=client,
                     study_set=self.study_set(),
                 )
                 after = len(
-                    [name for name, _ in client.calls if name != "credit_balance"]
+                    [name for name, _ in client.calls if name != "vidiq_balance"]
                 )
 
         self.assertEqual(first["paid_calls_this_run"], 3)
@@ -195,14 +195,14 @@ class VidIQEnrichmentTests(unittest.TestCase):
 
         self.assertEqual(result["paid_calls_this_run"], 0)
         self.assertEqual(result["status"], "NO_PAID_RESULTS")
-        paid = [name for name, _ in client.calls if name != "credit_balance"]
+        paid = [name for name, _ in client.calls if name != "vidiq_balance"]
         self.assertEqual(paid, [])
 
     def test_unknown_provider_balance_fails_closed(self):
         class UnknownBalanceClient(FakeClient):
             def call_tool(self, name, arguments):
                 self.calls.append((name, dict(arguments)))
-                if name == "credit_balance":
+                if name == "vidiq_balance":
                     return {"content": [{"type": "text", "text": "No balance data"}]}
                 raise AssertionError("Paid tool must never be called")
 

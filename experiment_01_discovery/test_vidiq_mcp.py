@@ -45,6 +45,39 @@ class VidIQMCPTests(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertEqual(reason, "local_149_credit_cap_would_be_crossed")
 
+    def test_credit_balance_tool_never_fuzzy_matches_paid_research_tool(self):
+        tools = [
+            {
+                "name": "vidiq_outliers",
+                "description": "Find outliers. Uses 5 credits from your balance.",
+            },
+            {
+                "name": "vidiq_balance",
+                "description": "Get current credit balance.",
+            },
+        ]
+        found = module.find_credit_balance_tool(tools)
+        self.assertEqual(found["name"], "vidiq_balance")
+
+    def test_credit_balance_tool_returns_none_without_known_free_utility(self):
+        tools = [
+            {
+                "name": "vidiq_outliers",
+                "description": "Find outliers. Uses 5 credits from your balance.",
+            }
+        ]
+        self.assertIsNone(module.find_credit_balance_tool(tools))
+
+    def test_extract_credit_balance_prefers_renewable_over_add_on(self):
+        result = {
+            "structuredContent": {
+                "totalCredits": 240,
+                "renewableCredits": 140,
+                "addOnCredits": 100,
+            }
+        }
+        self.assertEqual(module.extract_credit_balance(result), 140)
+
     def test_extract_credit_balance_from_structured_content(self):
         result = {
             "structuredContent": {

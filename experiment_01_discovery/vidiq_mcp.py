@@ -363,15 +363,16 @@ def find_tool(
 def find_credit_balance_tool(
     tools: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
+    """Return only the known free vidIQ balance utility.
+
+    Do not use description-based fuzzy matching here: paid research tools may
+    mention credit usage in their descriptions and must never be mistaken for
+    the free balance utility.
+    """
+    accepted_names = {"vidiq_balance", "balance"}
     for tool in tools:
-        name = str(tool.get("name") or "").casefold()
-        desc = str(tool.get("description") or "").casefold()
-        haystack = f"{name} {desc}"
-        if "credit" in haystack and (
-            "balance" in haystack
-            or "remaining" in haystack
-            or "usage" in haystack
-        ):
+        name = str(tool.get("name") or "").strip().casefold()
+        if name in accepted_names:
             return tool
     return None
 
@@ -394,45 +395,55 @@ def _tool_text(result: Any) -> str:
 
 
 def extract_credit_balance(result: Any) -> int | None:
-    keys = {
+    """Extract renewable/monthly credits only.
+
+    vidIQ's balance utility can also report add-on credits. The Opportunity
+    Engine intentionally ignores add-on/top-up credits so this integration
+    cannot rely on purchased credit pools.
+    """
+
+    priority_keys = (
+        "renewablecredits",
         "remainingcredits",
         "creditsremaining",
         "creditbalance",
         "balance",
         "remaining",
-    }
+    )
 
-    def walk(value: Any) -> int | None:
+    def number(value: Any) -> int | None:
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def walk_for_key(value: Any, target: str) -> int | None:
         if isinstance(value, dict):
             for key, item in value.items():
                 normalized = re.sub(r"[^a-z]", "", str(key).casefold())
-                if normalized in keys or (
-                    "credit" in normalized
-                    and ("remain" in normalized or "balance" in normalized)
-                ):
-                    try:
-                        number = int(float(item))
-                    except (TypeError, ValueError):
-                        number = None
-                    if number is not None:
-                        return number
+                if normalized == target:
+                    parsed = number(item)
+                    if parsed is not None:
+                        return parsed
             for item in value.values():
-                found = walk(item)
+                found = walk_for_key(item, target)
                 if found is not None:
                     return found
         elif isinstance(value, list):
             for item in value:
-                found = walk(item)
+                found = walk_for_key(item, target)
                 if found is not None:
                     return found
         return None
 
-    direct = walk(result)
-    if direct is not None:
-        return direct
+    for key in priority_keys:
+        found = walk_for_key(result, key)
+        if found is not None:
+            return found
 
     text = _tool_text(result)
     patterns = [
+        r"(?i)renewable[^0-9]{0,30}(\d+(?:\.\d+)?)\s*(?:ai\s*)?credits?",
         r"(?i)(?:remaining|balance)[^0-9]{0,30}(\d+(?:\.\d+)?)\s*(?:ai\s*)?credits?",
         r"(?i)(\d+(?:\.\d+)?)\s*(?:ai\s*)?credits?\s*(?:remaining|left)",
     ]
