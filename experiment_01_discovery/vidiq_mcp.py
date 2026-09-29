@@ -1,4 +1,9 @@
-"""Minimal vidIQ MCP client and fail-closed credit guard.
+"""vidIQ MCP stdio bridge and fail-closed credit guard.
+
+vidIQ's MCP endpoint uses OAuth 2.0. There is no vidIQ API key to paste into
+this project. The local project launches the open-source mcp-remote bridge
+through npx; mcp-remote performs the browser OAuth flow against vidIQ and stores
+its OAuth state outside this repository.
 
 The adapter deliberately permits only the small read-only tool allowlist used by
 Experiment 01 opportunity research. It never calls a paid MCP tool unless:
@@ -12,11 +17,12 @@ calls cost 5 credits. This project therefore budgets credits, not "calls".
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
-import urllib.error
-import urllib.request
+import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -27,12 +33,12 @@ OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "vidiq"
 BUDGET_FILE = OUTPUT_DIR / "budget_state.json"
 
 DEFAULT_MCP_URL = "https://mcp.vidiq.com/mcp"
+DEFAULT_MCP_REMOTE_PACKAGE = "mcp-remote@0.1.38"
 FREE_PLAN_ALLOWANCE = 150
 HARD_CREDIT_CAP = 149
 PROVIDER_RESERVE_CREDITS = 1
 DEFAULT_MAX_PAID_CALLS_PER_RUN = 9
 
-# Only these read-only research tools are allowed to spend credits.
 ALLOWED_PAID_TOOLS = {
     "keyword_research": 5,
     "outliers": 5,
@@ -98,7 +104,6 @@ def max_paid_calls_per_run() -> int:
         requested = int(raw)
     except ValueError:
         requested = DEFAULT_MAX_PAID_CALLS_PER_RUN
-    # 29 x 5 = 145, the largest number of 5-credit calls below 149.
     return max(0, min(requested, 29))
 
 
@@ -158,99 +163,116 @@ def reserve_budget(
     return updated
 
 
-def _parse_sse(body: str) -> dict[str, Any]:
-    candidates: list[dict[str, Any]] = []
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if not line.startswith("data:"):
-            continue
-        payload = line[5:].strip()
-        if not payload or payload == "[DONE]":
-            continue
-        try:
-            value = json.loads(payload)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            candidates.append(value)
-    if not candidates:
-        return {}
-    return candidates[-1]
+def npx_path() -> str | None:
+    return shutil.which("npx") or shutil.which("npx.cmd")
+
+
+def proxy_available() -> bool:
+    return npx_path() is not None
 
 
 class VidIQMCPClient:
+    """Small stdio MCP client backed by mcp-remote OAuth bridging."""
+
     def __init__(
         self,
         *,
-        api_key: str,
         url: str = DEFAULT_MCP_URL,
-        transport: Callable[
-            [dict[str, Any], str | None], tuple[dict[str, Any], str | None]
-        ]
-        | None = None,
+        package: str | None = None,
+        transport: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
-        self.api_key = api_key.strip()
         self.url = url.strip() or DEFAULT_MCP_URL
-        self.session_id: str | None = None
+        self.package = (
+            package
+            or os.getenv("VIDIQ_MCP_REMOTE_PACKAGE", DEFAULT_MCP_REMOTE_PACKAGE)
+        ).strip()
         self._transport_override = transport
         self._next_id = 1
         self.initialized = False
+        self.process: subprocess.Popen[str] | None = None
+        atexit.register(self.close)
 
-    def _http_transport(
-        self,
-        payload: dict[str, Any],
-        session_id: str | None,
-    ) -> tuple[dict[str, Any], str | None]:
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-            "User-Agent": "YouTube-Production-vidIQ-MCP/1.0",
-            "MCP-Protocol-Version": "2025-06-18",
-        }
-        if session_id:
-            headers["Mcp-Session-Id"] = session_id
-
-        request = urllib.request.Request(
-            self.url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=45) as response:
-                raw = response.read().decode("utf-8", errors="replace")
-                content_type = str(response.headers.get("Content-Type", ""))
-                new_session = response.headers.get("Mcp-Session-Id") or session_id
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
+    def _start_proxy(self) -> None:
+        if self._transport_override is not None or self.process is not None:
+            return
+        executable = npx_path()
+        if not executable:
             raise RuntimeError(
-                f"vidIQ MCP HTTP {exc.code}: {body[:500]}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"vidIQ MCP transport failed: {exc}") from exc
+                "npx was not found. Install Node.js/npm before using vidIQ MCP."
+            )
 
-        if not raw.strip():
-            return {}, new_session
-        if "text/event-stream" in content_type:
-            return _parse_sse(raw), new_session
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("vidIQ MCP returned non-JSON data") from exc
-        if not isinstance(parsed, dict):
-            raise RuntimeError("vidIQ MCP returned an unexpected response shape")
-        return parsed, new_session
+        self.process = subprocess.Popen(
+            [
+                executable,
+                "-y",
+                self.package,
+                self.url,
+                "--transport",
+                "http-only",
+            ],
+            cwd=PROJECT_ROOT,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=None,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+        )
 
-    def _transport(
-        self,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        transport = self._transport_override or self._http_transport
-        response, session = transport(payload, self.session_id)
-        if session:
-            self.session_id = session
-        return response
+    def _write_message(self, payload: dict[str, Any]) -> None:
+        self._start_proxy()
+        if self.process is None or self.process.stdin is None:
+            raise RuntimeError("vidIQ MCP proxy stdin is unavailable.")
+        self.process.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        self.process.stdin.flush()
+
+    def _stdio_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._write_message(payload)
+        request_id = payload.get("id")
+        if request_id is None:
+            return {}
+
+        if self.process is None or self.process.stdout is None:
+            raise RuntimeError("vidIQ MCP proxy stdout is unavailable.")
+
+        while True:
+            line = self.process.stdout.readline()
+            if line == "":
+                code = self.process.poll()
+                raise RuntimeError(
+                    "vidIQ MCP OAuth bridge closed unexpectedly"
+                    + (f" with exit code {code}" if code is not None else "")
+                    + "."
+                )
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(message, dict):
+                continue
+
+            if message.get("id") == request_id and (
+                "result" in message or "error" in message
+            ):
+                return message
+
+            # Keep the bridge alive if the remote server pings the client.
+            if message.get("method") == "ping" and message.get("id") is not None:
+                self._write_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": message["id"],
+                        "result": {},
+                    }
+                )
+
+    def _transport(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._transport_override is not None:
+            return self._transport_override(payload)
+        return self._stdio_transport(payload)
 
     def _rpc(self, method: str, params: dict[str, Any] | None = None) -> Any:
         request_id = self._next_id
@@ -302,6 +324,23 @@ class VidIQMCPClient:
             "tools/call",
             {"name": name, "arguments": arguments},
         )
+
+    def close(self) -> None:
+        if self.process is None:
+            return
+        process = self.process
+        self.process = None
+        try:
+            if process.stdin:
+                process.stdin.close()
+        except OSError:
+            pass
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
 
 def find_tool(

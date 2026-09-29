@@ -199,7 +199,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ),
     },
     "vidiq_doctor": {
-        "label": "Run vidIQ Doctor (0 paid credits)",
+        "label": "Connect / Check vidIQ (0 paid credits)",
         "stage": "OPPORTUNITY",
         "command": [
             sys.executable,
@@ -208,8 +208,9 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "doctor",
         ],
         "description": (
-            "Checks vidIQ MCP authentication, required research tools and the "
-            "free credit balance. It does not call any paid research tool."
+            "Uses vidIQ's OAuth MCP connection, opens browser authorization on "
+            "first use, then checks required research tools and the free credit "
+            "balance without calling any paid research tool."
         ),
     },
     "vidiq_enrich": {

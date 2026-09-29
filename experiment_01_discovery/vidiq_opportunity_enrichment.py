@@ -39,6 +39,7 @@ from vidiq_mcp import (
     load_budget_state,
     load_env_file,
     max_paid_calls_per_run,
+    proxy_available,
     reserve_budget,
     result_preview,
 )
@@ -118,11 +119,10 @@ def unique_opportunities(study_set: list[dict[str, Any]]) -> list[dict[str, Any]
 
 def configured_client() -> VidIQMCPClient | None:
     load_env_file(ENV_FILE)
-    key = os.getenv("VIDIQ_MCP_API_KEY", "").strip()
-    if not key:
+    if not proxy_available():
         return None
     url = os.getenv("VIDIQ_MCP_URL", DEFAULT_MCP_URL).strip() or DEFAULT_MCP_URL
-    return VidIQMCPClient(api_key=key, url=url)
+    return VidIQMCPClient(url=url)
 
 
 def tool_inventory(
@@ -158,7 +158,10 @@ def doctor(client: VidIQMCPClient | None = None) -> dict[str, Any]:
             "configured": False,
             "paid_calls": 0,
             "hard_credit_cap": HARD_CREDIT_CAP,
-            "message": "VIDIQ_MCP_API_KEY is not configured in the project .env.",
+            "message": (
+                "Node.js/npm npx was not found. vidIQ MCP uses OAuth, not an API key. "
+                "Install Node.js/npm so the local OAuth bridge can run."
+            ),
         }
         write_json(DOCTOR_FILE, payload)
         return payload
@@ -233,7 +236,9 @@ def run_enrichment(
         return {
             "status": "NOT_CONFIGURED",
             "paid_calls_this_run": 0,
-            "message": "Add VIDIQ_MCP_API_KEY to C:\\Youtube Production\\.env first.",
+            "message": (
+                "Node.js/npm npx was not found. vidIQ MCP uses OAuth, not an API key."
+            ),
         }
 
     if study_set is None:
@@ -409,6 +414,7 @@ def run_enrichment(
         "created_at": utc_now(),
         "provider": "vidIQ MCP",
         "mcp_url": os.getenv("VIDIQ_MCP_URL", DEFAULT_MCP_URL),
+        "authentication": "OAuth 2.0 via mcp-remote",
         "hard_credit_cap": configured_credit_cap(),
         "free_plan_reference_allowance": 150,
         "provider_reserve_credits": 1,
