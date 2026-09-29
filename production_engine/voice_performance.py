@@ -460,7 +460,7 @@ def run_prepare(
                         "request": str(dest),
                     }
                 )
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, KeyError) as exc:
             failures.append(
                 {
                     "approved_format_plan": str(path),
