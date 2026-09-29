@@ -15,6 +15,7 @@ import re
 import shutil
 import statistics
 import sys
+from collections.abc import Sequence
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -123,7 +124,7 @@ def release_refresh_lock(
         pass
 
 
-def median_or_none(values: list[float | int]) -> float | None:
+def median_or_none(values: Sequence[float | int]) -> float | None:
     return round(float(statistics.median(values)), 2) if values else None
 
 
@@ -1015,7 +1016,7 @@ def cohort_discovery_readiness(
             channels[(str(topic), fmt)].add(channel_id)
 
     topic_niches = topic_niche_map(config)
-    cells = []
+    cells: list[dict[str, Any]] = []
     for (topic, fmt), channel_ids in sorted(channels.items()):
         cells.append(
             {
