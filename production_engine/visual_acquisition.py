@@ -367,7 +367,7 @@ def route_requirement(
         raise ValueError("requirement candidates must be a list")
 
     priority = _source_priority(config)
-    evaluated = []
+    evaluated: list[dict[str, Any]] = []
     for index, candidate in enumerate(candidates):
         if not isinstance(candidate, dict):
             continue
