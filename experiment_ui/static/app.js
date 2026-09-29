@@ -1793,15 +1793,16 @@ function renderScriptReview(snapshot, force) {
       (snapshot.accepted || 0) + " accepted · " +
       (snapshot.rework || 0) + " rework · " +
       (snapshot.rejected || 0) + " rejected";
+    const readyConcepts = snapshot.production_ready_concept_ids || [];
     scriptReviewStatus.textContent =
-      (snapshot.accepted || 0) > 0 ? "READY FOR PRODUCTION" : "NO APPROVED SCRIPT";
+      readyConcepts.length ? "ALL REQUIRED BRANCHES APPROVED" : "BRANCH WORK INCOMPLETE";
     scriptReviewStatus.className =
-      "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
+      "status-chip " + (readyConcepts.length ? "success" : "failed");
     scriptDetail.innerHTML =
       '<div class="concept-complete">' +
-      ((snapshot.accepted || 0) > 0
-        ? "Approved script is ready for the Production stage."
-        : "No script was approved. Rework or regenerate before production.") +
+      (readyConcepts.length
+        ? "All required format-specific scripts are approved and bundled for Format planning."
+        : "All branch decisions are recorded, but at least one required branch was rejected or sent for rework.") +
       '</div>';
     scriptCriteria.innerHTML = "";
     scriptNote.hidden = true;
@@ -1826,7 +1827,13 @@ function renderScriptReview(snapshot, force) {
       '<h4>' + escapeHtml(section.section_id || "SECTION") + ' · ' +
       escapeHtml(section.purpose || "") + '</h4>' +
       '<p>' + escapeHtml(section.narration || "") + '</p>' +
-      '<div class="concept-meta"><span>Claims: ' +
+      '<div class="concept-meta"><span>Psychology: ' +
+      escapeHtml(section.psychology_mechanism || "—") +
+      '</span><span>Reward: ' +
+      escapeHtml(section.reward_type || "—") +
+      '</span><span>Story beats: ' +
+      escapeHtml((section.source_story_beat_ids || []).join(", ") || "none") +
+      '</span><span>Claims: ' +
       escapeHtml((section.claim_ids || []).join(", ") || "none") +
       '</span></div></div>';
   }).join("");
@@ -1834,7 +1841,8 @@ function renderScriptReview(snapshot, force) {
   scriptReviewPanel.hidden = false;
   scriptNote.hidden = false;
   scriptReviewTitle.textContent =
-    "Script " + (scriptCursor + 1) + " of " + items.length;
+    humanizeToken(script.format || "script") + " Script · " +
+    (scriptCursor + 1) + " of " + items.length;
   scriptReviewSummary.textContent =
     (snapshot.pending || 0) + " pending · " +
     (snapshot.accepted || 0) + " accepted · " +
@@ -1848,7 +1856,17 @@ function renderScriptReview(snapshot, force) {
         ? "failed"
         : "running");
 
+  const profile = script.psychology_profile || {};
+  const refreshWindow = profile.attention_refresh_window_seconds || [];
   scriptDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>FORMAT PSYCHOLOGY</h4><p>' +
+      '<strong>Branch:</strong> ' + escapeHtml(humanizeToken(script.format || "")) +
+      '<br><strong>Reward density:</strong> ' + escapeHtml(profile.reward_density || "—") +
+      '<br><strong>Hook target:</strong> ' +
+      escapeHtml(profile.hook_target_seconds == null ? "No fixed target" : profile.hook_target_seconds + "s hypothesis") +
+      '<br><strong>Attention refresh:</strong> ' +
+      escapeHtml(refreshWindow.length ? refreshWindow.join("–") + "s hypothesis" : "No fixed interval") +
+      '</p></div>' +
     '<div class="concept-detail-card"><h4>APPROVED PACKAGE</h4><h3>' +
       escapeHtml(pkg.title || script.title || script.concept_id) + '</h3>' +
       '<p><strong>Promise:</strong> ' + escapeHtml(pkg.one_sentence_promise || "") +
@@ -1861,7 +1879,9 @@ function renderScriptReview(snapshot, force) {
           return escapeHtml((match.blocking ? "BLOCK " : "WARN ") + match.word_count + " words: " + match.overlap_text);
         }).join("<br>") + '</p></div>'
       : '') +
-    '<div class="concept-detail-card"><h4>OPENING HOOK</h4><p>' +
+    '<div class="concept-detail-card"><h4>OPENING HOOK · ' +
+      escapeHtml(humanizeToken(script.opening_hook_mechanism || "")) +
+      '</h4><p>' +
       escapeHtml(script.opening_hook || "") + '</p></div>' +
     sections +
     '<div class="concept-detail-card"><h4>CLOSING</h4><p>' +
@@ -1914,6 +1934,7 @@ async function submitScriptDecision(decision) {
       method: "POST",
       body: JSON.stringify({
         concept_id: script.concept_id,
+        format: script.format,
         decision: decision,
         criteria: collectScriptCriteria(),
         note: scriptNote.value
@@ -1926,7 +1947,7 @@ async function submitScriptDecision(decision) {
     renderScriptReview(payload, true);
     showToast(
       decision === "ACCEPT"
-        ? "Script accepted for production."
+        ? humanizeToken(script.format || "Script") + " branch accepted."
         : decision === "REWORK"
           ? "Script sent for rework."
           : "Script rejected.",
