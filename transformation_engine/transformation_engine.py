@@ -216,6 +216,29 @@ def validate_concept(
         if not str(concept.get(field, "")).strip():
             errors.append(f"{field} is required")
 
+    viewer_need_evidence = concept.get("viewer_need_evidence")
+    if not isinstance(viewer_need_evidence, dict):
+        errors.append("viewer_need_evidence must be an object")
+    else:
+        need_status = str(
+            viewer_need_evidence.get("status", "")
+        ).strip().upper()
+        if need_status not in {"OBSERVED", "INFERRED", "HYPOTHESIS"}:
+            errors.append(
+                "viewer_need_evidence.status must be OBSERVED, INFERRED, or HYPOTHESIS"
+            )
+        need_basis = viewer_need_evidence.get("evidence_basis")
+        if not isinstance(need_basis, list):
+            errors.append("viewer_need_evidence.evidence_basis must be a list")
+        elif need_status == "OBSERVED" and not [
+            item for item in need_basis if str(item).strip()
+        ]:
+            errors.append(
+                "OBSERVED viewer_need_evidence requires concrete evidence_basis"
+            )
+        if not str(viewer_need_evidence.get("rationale", "")).strip():
+            errors.append("viewer_need_evidence.rationale is required")
+
     content_gap = concept.get("content_gap")
     if not isinstance(content_gap, dict):
         errors.append("content_gap must be an object")
