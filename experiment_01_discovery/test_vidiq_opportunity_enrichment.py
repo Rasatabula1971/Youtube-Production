@@ -25,7 +25,7 @@ class FakeClient:
             },
             {
                 "name": "keyword_research",
-                "description": "Keyword research",
+                "description": "Keyword research. Uses 5 credits.",
                 "inputSchema": {
                     "type": "object",
                     "required": ["query"],
@@ -36,7 +36,7 @@ class FakeClient:
             },
             {
                 "name": "outliers",
-                "description": "Find outlier videos",
+                "description": "Find outlier videos. Uses 5 credits.",
                 "inputSchema": {
                     "type": "object",
                     "required": ["query"],
@@ -47,7 +47,7 @@ class FakeClient:
             },
             {
                 "name": "trending_videos",
-                "description": "Find trending videos",
+                "description": "Find trending videos. Uses 5 credits.",
                 "inputSchema": {
                     "type": "object",
                     "required": ["query"],
@@ -197,6 +197,36 @@ class VidIQEnrichmentTests(unittest.TestCase):
         self.assertEqual(result["status"], "NO_PAID_RESULTS")
         paid = [name for name, _ in client.calls if name != "vidiq_balance"]
         self.assertEqual(paid, [])
+
+    def test_unverified_live_tool_cost_is_never_called(self):
+        class UnknownCostClient(FakeClient):
+            def __init__(self):
+                super().__init__()
+                for tool in self.tools:
+                    if tool["name"] == "keyword_research":
+                        tool["description"] = "Keyword research."
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = UnknownCostClient()
+            with (
+                patch.object(enrich, "ENRICHMENT_FILE", root / "enrichment.json"),
+                patch.object(enrich, "BUDGET_FILE", root / "budget.json"),
+            ):
+                result = enrich.run_enrichment(
+                    client=client,
+                    study_set=self.study_set(),
+                )
+
+        keyword_calls = [
+            name for name, _ in client.calls if name == "keyword_research"
+        ]
+        self.assertEqual(keyword_calls, [])
+        item = next(iter(result["opportunities"].values()))
+        self.assertEqual(
+            item["tools"]["keyword_research"]["status"],
+            "SKIPPED_UNVERIFIED_COST",
+        )
 
     def test_unknown_provider_balance_fails_closed(self):
         class UnknownBalanceClient(FakeClient):

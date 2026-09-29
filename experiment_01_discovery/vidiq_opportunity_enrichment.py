@@ -33,6 +33,7 @@ from vidiq_mcp import (
     budget_check,
     build_topic_arguments,
     configured_credit_cap,
+    declared_tool_credit_cost,
     extract_credit_balance,
     find_credit_balance_tool,
     find_tool,
@@ -185,11 +186,29 @@ def doctor(client: VidIQMCPClient | None = None) -> dict[str, Any]:
         for logical in TOOL_ORDER
         if selected.get(logical) is None
     ]
+    declared_costs = {
+        logical: (
+            declared_tool_credit_cost(selected[logical])
+            if isinstance(selected.get(logical), dict)
+            else None
+        )
+        for logical in TOOL_ORDER
+    }
+    unsafe_costs = [
+        logical
+        for logical in TOOL_ORDER
+        if selected.get(logical) is not None
+        and declared_costs.get(logical) != ALLOWED_PAID_TOOLS[logical]
+    ]
     if selected.get("credit_balance") is None:
         missing.append("credit_balance_utility")
 
     payload = {
-        "status": "READY" if not missing and remaining is not None else "PARTIAL",
+        "status": (
+            "READY"
+            if not missing and not unsafe_costs and remaining is not None
+            else "PARTIAL"
+        ),
         "configured": True,
         "paid_calls": 0,
         "hard_credit_cap": configured_credit_cap(),
@@ -204,6 +223,8 @@ def doctor(client: VidIQMCPClient | None = None) -> dict[str, Any]:
             for key, value in selected.items()
         },
         "missing": missing,
+        "declared_credit_costs": declared_costs,
+        "unsafe_credit_cost_tools": unsafe_costs,
         "message": (
             "Doctor uses only protocol operations and the free credit-balance utility; no paid research tool is called."
         ),
@@ -328,9 +349,26 @@ def run_enrichment(
                 }
                 continue
 
+            expected_cost = int(ALLOWED_PAID_TOOLS[logical])
+            live_cost = declared_tool_credit_cost(tool)
+            if live_cost != expected_cost:
+                tool_results[logical] = {
+                    "status": "SKIPPED_UNVERIFIED_COST",
+                    "query": query,
+                    "tool_name": str(tool.get("name") or ""),
+                    "expected_credit_cost": expected_cost,
+                    "declared_credit_cost": live_cost,
+                    "reason": (
+                        "Live vidIQ tool metadata did not declare the exact "
+                        "allowed credit cost."
+                    ),
+                }
+                stopped_reason = "live_tool_cost_unverified"
+                continue
+
             # Re-check provider balance immediately before every paid call.
             remaining, _ = provider_balance(client, balance_tool)
-            cost = int(ALLOWED_PAID_TOOLS[logical])
+            cost = live_cost
             allowed, reason = budget_check(
                 state=state,
                 cost=cost,
@@ -426,6 +464,14 @@ def run_enrichment(
         "per_run_paid_call_limit": run_limit,
         "stopped_reason": stopped_reason,
         "missing_tools": missing_tools,
+        "declared_credit_costs": {
+            logical: (
+                declared_tool_credit_cost(selected[logical])
+                if isinstance(selected.get(logical), dict)
+                else None
+            )
+            for logical in TOOL_ORDER
+        },
         "tools_visible": len(tools),
         "opportunities": output_opportunities,
         "notes": [

@@ -46,6 +46,23 @@ ALLOWED_PAID_TOOLS = {
 }
 
 
+def declared_tool_credit_cost(tool: dict[str, Any]) -> int | None:
+    """Return an unambiguous credit cost declared by the live tool metadata.
+
+    The integration fails closed when the live MCP metadata does not advertise
+    a single exact credit amount matching our allowlist expectation.
+    """
+    description = str(tool.get("description") or "")
+    matches = re.findall(
+        r"(?i)(\d+)\s*(?:AI\s*)?credits?\b",
+        description,
+    )
+    values = {int(value) for value in matches}
+    if len(values) == 1:
+        return values.pop()
+    return None
+
+
 def load_env_file(path: Path = ENV_FILE) -> None:
     if not path.exists():
         return
