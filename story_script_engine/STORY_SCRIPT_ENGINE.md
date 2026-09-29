@@ -5,17 +5,17 @@ Flow:
 ```text
 Verified Research
       ↓
-Prepare Story Plan Requests
+Shared Story Plan
       ↓
-Generate + Validate Story Plans
-      ↓
-Prepare Script Requests
-      ↓
-Generate + Validate Script Drafts
-      ↓
-Human Script Gate
-      ↓
-Ready for Format
+Resolve Required Format Branches + Psychology Profiles
+      ├── Long-form Script
+      └── Shorts Script
+              ↓
+Human Script Gate — review each required branch
+              ↓
+Approved Script Bundle
+              ↓
+Format Production Planning
 ```
 
 The engine consumes only `research_engine/output/verified_packages/*` packages
@@ -28,10 +28,18 @@ question, opening-hook intent, ordered viewer journey, factual claim placement,
 reveal/payoff, closing intent, viewer state and the primary psychology function
 of each beat. It does not write final narration.
 
-**Script Draft owns wording.** It converts the approved Story Plan into spoken
-language. Every section maps to exactly one Story Plan beat with
-`story_beat_id`, its factual `claim_ids` must match that beat, and its
-`psychology_mechanism` must match the beat's planned mechanism.
+**Format-specific Script Drafts own wording.** The shared Story Plan is not the
+final narration. The engine resolves the approved `format_intent` before
+writing, then generates a separate script for each required branch.
+
+- `long_form` prioritizes sustained curiosity, comprehension, explanation and
+  meaningful delayed payoff.
+- `short` prioritizes immediate swipe-defense, low cognitive branching, rapid
+  meaningful progress and frequent micro-payoffs.
+
+Each section cites one or more `source_story_beat_ids`. Factual `claim_ids`
+must be available from those cited beats, so a branch may compress or combine
+the shared story without escaping verified research.
 
 ## Audience psychology contract
 
@@ -55,9 +63,11 @@ The Story Plan must explicitly model:
 - **tension/release and payoff** — tension exists to advance understanding and
   the final payoff must satisfy the approved package promise.
 
-There is deliberately no fixed "hook at N seconds", visual-reset interval or
-universal retention target. Those are hypotheses to test against actual channel
-analytics.
+There is no **universal** fixed hook or reset interval. Long-form has no fixed
+timing target. Shorts currently carries two explicit starting hypotheses:
+`hook_target_seconds = 3` and an attention/reward refresh window of roughly
+`4–6` seconds. These are production hypotheses for the Learning Engine to test
+against actual Shorts retention, not claimed physiological laws.
 
 The high-impact opening rule is **truth constrained**. A factual opening may use
 only Research Gate accepted claims. The Script Writer must not convert a valid
@@ -78,8 +88,10 @@ promise the rest of the system must fulfill.
 
 - Only Research Gate accepted claims are available as factual support.
 - Story Plan factual beats may reference only accepted `claim_id` values.
-- Script sections must map one-to-one to Story Plan beats.
-- Script claim IDs must match the mapped Story Plan beat.
+- Long-form must cover the full shared Story Plan; Shorts may compress or
+  combine beats while preserving the core question and payoff.
+- Every script section cites one or more source Story Plan beats.
+- Script claim IDs must come from the cited Story Plan beats.
 - Unknown claim IDs fail deterministic validation.
 - Source-video wording, story, personality, footage and exact execution are not
   inputs for copying.
@@ -87,8 +99,13 @@ promise the rest of the system must fulfill.
 - A model-validated draft is not production-ready until the Human Script Gate
   accepts it.
 
-The Human Script Gate checks package-promise delivery, factual scope, claim
-mapping, originality/source independence, Story Plan adherence, whether the
-opening is both high-impact and truthful, whether the psychology arc serves
-viewer understanding, and story/payoff clarity. ACCEPT produces an approved
-script artifact with provenance.
+The Human Script Gate reviews each required format branch independently. It
+checks package-promise delivery, factual scope, claim mapping,
+originality/source independence, Story Plan fidelity, whether the opening is
+both high-impact and truthful, whether the branch-specific psychology serves
+viewer understanding, and payoff clarity.
+
+A concept moves forward only when **all required branches** are accepted. The
+gate then writes one provenance-bound approved script bundle containing the
+separate immutable narrations. Identical branch scripts, or a Short that is only
+a prefix/truncation of long-form narration, fail closed.
