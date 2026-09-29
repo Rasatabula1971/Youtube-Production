@@ -202,7 +202,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                     "enum": tension_levels,
                                 },
                                 "open_loop_id": {
-                                    "type": ["string", "null"],
+                                    "type": "string",
                                 },
                                 "loop_action": {
                                     "type": "string",
