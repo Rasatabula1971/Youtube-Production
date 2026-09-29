@@ -188,6 +188,28 @@ Planned gates:
 - rough-cut gate;
 - final human review.
 
+### Automatic machine flow between human gates
+
+The routine control flow is now **human-gate driven** rather than step-button
+driven.
+
+Deterministic machine work runs in order until one of four boundaries is reached:
+
+- a Human Gate requires a decision;
+- a prerequisite is not yet available;
+- a bounded external-resource guard blocks the next call; or
+- a machine step fails or makes no progress.
+
+The operator does not need separate routine Run buttons for Experiment 02
+preparation/acquisition/analysis, Transformation, Packaging, Research or Script
+substeps. Those atomic controls remain in **Tools & Diagnostics** for debugging
+and recovery.
+
+When a Human Gate completes with a valid downstream handoff, the local UI starts
+the next deterministic machine segment automatically. This preserves human
+control over creative/evidentiary decisions while removing mechanical handoff
+clicks.
+
 ### 09 — Learning Engine
 
 Once content is published, actual channel performance should increasingly replace generic internet benchmarks.
