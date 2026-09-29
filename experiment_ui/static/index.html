@@ -349,6 +349,33 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="performanceReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN PERFORMANCE GATE</p>
+                <h2 id="performanceReviewTitle">Review voice performance</h2>
+                <p class="muted" id="performanceReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="performanceReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="performanceDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-criteria" id="performanceCriteria"></div>
+                <label class="vision-label" for="performanceNote">Review note</label>
+                <textarea id="performanceNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="performancePrev" type="button">← Previous</button>
+                  <button class="danger" id="performanceReject" type="button">Reject</button>
+                  <button class="ghost" id="performanceRework" type="button">Rework</button>
+                  <button id="performanceAccept" type="button">Accept performance</button>
+                  <button class="ghost" id="performanceNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
