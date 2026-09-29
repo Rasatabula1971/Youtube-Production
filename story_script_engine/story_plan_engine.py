@@ -252,7 +252,7 @@ def run_prepare(
     for path in paths:
         try:
             pending.append(build_story_plan_request(load_json(path), path))
-        except Exception as exc:
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             failures.append(
                 {
                     "package": str(path),
