@@ -13,6 +13,7 @@ if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import (
+    SUCCESS_STATUSES,
     atomic_write_json,
     atomic_write_text,
     batch_status,
@@ -40,6 +41,7 @@ from story_plan_engine import (
     STORY_PLAN_RESPONSES_DIR,
     STORY_PLANS_DIR,
     validate_story_plan_response,
+    validation_contract_sha256,
 )
 from story_script_engine import (
     OUTPUT_DIR,
@@ -154,6 +156,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
 
     slug = safe_slug(concept_id)
     request_hash = sha256_file(path)
+    validation_contract = validation_contract_sha256()
     report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
     response_path = STORY_PLAN_RESPONSES_DIR / f"{slug}.json"
     plan_path = STORY_PLANS_DIR / f"{slug}.story_plan.json"
@@ -164,8 +167,12 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         provenance = plan.get("plan_provenance", {})
         if (
             existing.get("status") == "VALIDATED"
+            and existing.get("validation_contract_sha256")
+            == validation_contract
             and isinstance(provenance, dict)
             and provenance.get("request_sha256") == request_hash
+            and provenance.get("validation_contract_sha256")
+            == validation_contract
         ):
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
@@ -219,6 +226,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "concept_id": concept_id,
         "request_source": str(path),
         "request_sha256": request_hash,
+        "validation_contract_sha256": validation_contract,
         "fair_request_id": result.get("request_id"),
         "fair_status": result.get("status"),
         "fair_reason_code": result.get("reason_code"),
@@ -281,6 +289,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
     response["response_provenance"] = {
         "request_source": str(path),
         "request_sha256": request_hash,
+        "validation_contract_sha256": validation_contract,
         "provider_id": result.get("provider_id"),
         "model_id": result.get("model_id"),
     }
@@ -350,6 +359,13 @@ def run_batch(
         expected_count=len(paths),
         processed_count=len(results),
     )
+    if (
+        len(results) < len(paths)
+        and invoked >= limit
+        and results
+        and all(str(item.get("status") or "") in SUCCESS_STATUSES for item in results)
+    ):
+        status = "BATCH_PROGRESS"
     summary = {
         "status": status,
         "requests_found": len(paths),
@@ -386,6 +402,8 @@ def main() -> None:
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if args.mode == "batch":
+        if result["status"] == "BATCH_PROGRESS":
+            raise SystemExit(0)
         raise SystemExit(exit_code_for_status(result["status"]))
 
 
