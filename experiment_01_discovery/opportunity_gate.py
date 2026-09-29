@@ -275,8 +275,8 @@ def _materialize_approved(
                 approved = []
                 break
 
-            for video_id in opportunity.get("selected_video_ids", []):
-                video_id = str(video_id)
+            for raw_video_id in opportunity.get("selected_video_ids", []):
+                video_id = str(raw_video_id)
                 item = lookup.get(video_id)
                 if not item:
                     gate_complete = False
@@ -349,8 +349,8 @@ def gate_snapshot() -> dict[str, Any]:
             continue
 
         selected_examples = []
-        for video_id in opportunity.get("selected_video_ids", []):
-            video_id = str(video_id)
+        for raw_video_id in opportunity.get("selected_video_ids", []):
+            video_id = str(raw_video_id)
             item = lookup.get(video_id, {})
             selected_examples.append(
                 {
