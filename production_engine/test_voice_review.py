@@ -85,6 +85,62 @@ class VoiceReviewTests(unittest.TestCase):
                     request, response, gate_config()
                 )
 
+    def test_rework_note_invalidates_spec_and_updates_planner_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            specs = root / "specs"
+            requests = root / "requests"
+            responses = root / "responses"
+            approved = root / "approved"
+            specs.mkdir()
+            planner_request = root / "concept-1.long_form.voice_request.json"
+            planner_request.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "concept-1",
+                        "format": "long_form",
+                        "human_rework_iteration": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            payload = spec()
+            payload["spec_provenance"] = {
+                "request_source": str(planner_request),
+            }
+            source = specs / "concept-1.long_form.voice_performance_spec.json"
+            source.write_text(json.dumps(payload), encoding="utf-8")
+
+            with (
+                patch.object(voice_review, "SPECS_DIR", specs),
+                patch.object(voice_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(voice_review, "RESPONSES_DIR", responses),
+                patch.object(voice_review, "APPROVED_DIR", approved),
+                patch.object(voice_review, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                voice_review.prepare(gate_config())
+                criteria = {
+                    name: False
+                    for name in gate_config()["required_accept_criteria"]
+                }
+                voice_review.apply_action(
+                    concept_id="concept-1",
+                    format="long_form",
+                    decision="REWORK",
+                    criteria=criteria,
+                    note="Slow the reveal and reduce the emotional jump.",
+                )
+
+            self.assertFalse(source.exists())
+            revised_request = json.loads(
+                planner_request.read_text(encoding="utf-8")
+            )
+            self.assertEqual(revised_request["human_rework_iteration"], 1)
+            self.assertEqual(
+                revised_request["human_rework_note"],
+                "Slow the reveal and reduce the emotional jump.",
+            )
+
     def test_accept_creates_approved_spec_without_rendering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
