@@ -157,5 +157,48 @@ class ScriptReviewTests(unittest.TestCase):
                 self.assertFalse((approved / "c1.approved_script.json").exists())
 
 
+    def test_snapshot_accept_response_counts_without_status_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requests = root / "requests"
+            responses = root / "responses"
+            requests.mkdir()
+            responses.mkdir()
+            draft = root / "draft.json"
+            draft.write_text(
+                json.dumps({"concept_id": "c1", "title": "Current"}),
+                encoding="utf-8",
+            )
+            req = script_review.build_review_request(
+                {"concept_id": "c1", "title": "Current"},
+                draft,
+            )
+            (requests / "c1.script_review_request.json").write_text(
+                json.dumps(req),
+                encoding="utf-8",
+            )
+            (responses / "c1.script_review_response.json").write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "decision": "ACCEPT",
+                        "criteria": {key: True for key in script_review.CRITERIA},
+                        "script_draft_sha256": script_review.sha256_file(draft),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+            ):
+                snap = script_review.snapshot()
+
+        self.assertEqual(snap["accepted"], 1)
+        self.assertEqual(snap["pending"], 0)
+        self.assertTrue(snap["complete"])
+
+
 if __name__ == "__main__":
     unittest.main()
