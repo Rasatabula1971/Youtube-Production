@@ -1,0 +1,20 @@
+{
+  "provider": "higgsfield",
+  "provider_contract": {
+    "schema_verified": false,
+    "endpoint": null,
+    "documentation_url": null,
+    "verified_at": null
+  },
+  "max_regenerations_per_segment": 2,
+  "quote_currency": "USD",
+  "require_provider_quote": true,
+  "audio_qc": {
+    "ffmpeg_binary": "ffmpeg",
+    "ffprobe_binary": "ffprobe",
+    "duration_tolerance_ratio": 0.3,
+    "unexpected_silence_seconds": 0.8,
+    "silence_noise_db": -50.0,
+    "clipping_peak_dbfs": -0.1
+  }
+}
