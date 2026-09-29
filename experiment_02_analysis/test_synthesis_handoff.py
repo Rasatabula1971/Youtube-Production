@@ -137,10 +137,25 @@ class SynthesisHandoffTests(unittest.TestCase):
             ],
             self.experiment_config,
             self.synthesis_config,
+            reviewed_video_ids={"v1", "v2"},
         )
         self.assertEqual(
             library["mechanisms"][0]["state"],
             "HUMAN_CONFIRMED_PATTERN",
+        )
+
+    def test_plain_review_completed_flag_is_not_enough_for_confirmation(self):
+        library = build_mechanism_library(
+            [
+                self.profile("v1", "c1", reviewed=True),
+                self.profile("v2", "c2", reviewed=True),
+            ],
+            self.experiment_config,
+            self.synthesis_config,
+        )
+        self.assertEqual(
+            library["mechanisms"][0]["state"],
+            "MODEL_SYNTHESIS_DRAFT",
         )
 
     def test_same_channel_does_not_meet_replication_gate(self):
@@ -208,6 +223,7 @@ class SynthesisHandoffTests(unittest.TestCase):
             ],
             self.experiment_config,
             self.synthesis_config,
+            reviewed_video_ids={"v1", "v2"},
         )
         handoff = build_transformation_handoff(
             library,
