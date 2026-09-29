@@ -53,7 +53,19 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "format_model_batch_summary.json"
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed_claims = list(request.get("accepted_claim_ids", []))
-    allowed_sections = list(request.get("script_section_ids", []))
+    by_branch = request.get("script_section_ids_by_branch", {})
+    allowed_sections = sorted(
+        {
+            str(section_id)
+            for values in (
+                by_branch.values()
+                if isinstance(by_branch, dict)
+                else []
+            )
+            if isinstance(values, list)
+            for section_id in values
+        }
+    )
     branches = list(request.get("required_branches", []))
     return {
         "type": "object",
@@ -173,8 +185,10 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
             existing.get("status") == "VALIDATED"
             and isinstance(provenance, dict)
             and provenance.get("request_sha256") == request_hash
-            and plan.get("master_story_package") == request.get("master_story_package")
-            and plan.get("script_section_ids") == request.get("script_section_ids")
+            and plan.get("branch_story_packages")
+            == request.get("branch_story_packages")
+            and plan.get("script_section_ids_by_branch")
+            == request.get("script_section_ids_by_branch")
         ):
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
@@ -290,8 +304,10 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "required_branches": request.get("required_branches", []),
         "branch_constraints": request.get("branch_constraints", {}),
         "package": request.get("package", {}),
-        "master_story_package": request.get("master_story_package", {}),
-        "script_section_ids": request.get("script_section_ids", []),
+        "branch_story_packages": request.get("branch_story_packages", {}),
+        "script_section_ids_by_branch": request.get(
+            "script_section_ids_by_branch", {}
+        ),
         "accepted_claims": request.get("accepted_claims", []),
         "validation": validation,
         "plan_provenance": response["response_provenance"],
