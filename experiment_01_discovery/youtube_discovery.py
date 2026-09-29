@@ -217,6 +217,9 @@ def api_get(
     api_key: str,
     **params: Any,
 ) -> dict[str, Any]:
+    allowed_resources = {"search", "videos", "channels", "playlistItems"}
+    if resource not in allowed_resources:
+        raise ValueError(f"Unsupported YouTube API resource: {resource}")
 
     params["key"] = api_key
 
@@ -233,7 +236,9 @@ def api_get(
 
         try:
 
-            with urllib.request.urlopen(
+            # URL is constructed from the fixed HTTPS YouTube API base and
+            # an allowlisted resource above.
+            with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 request,
                 timeout=30,
             ) as response:
