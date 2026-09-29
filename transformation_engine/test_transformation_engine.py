@@ -56,6 +56,13 @@ class TransformationEngineTests(unittest.TestCase):
             "viewer_problem": "Why do racing brakes behave poorly in conditions that suit road brakes?",
             "viewer_moment": "Trying to understand a counterintuitive race-car engineering tradeoff.",
             "desired_outcome": "Understand the thermal constraint and why the obvious road-car solution fails.",
+            "viewer_need_evidence": {
+                "status": "INFERRED",
+                "evidence_basis": [
+                    "Replicated automotive mechanism evidence suggests this is a plausible viewer question."
+                ],
+                "rationale": "The viewer need is inferred from the studied content pattern, not directly observed in audience comments or search queries.",
+            },
             "content_gap": {
                 "hypothesis": "Existing explanations may describe hot brakes without connecting temperature to the design tradeoff.",
                 "evidence_status": "HYPOTHESIS",
@@ -213,6 +220,30 @@ class TransformationEngineTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "viewer_problem is required" in error
+                for error in result["rejected"][0]["errors"]
+            )
+        )
+
+    def test_observed_viewer_need_requires_evidence_basis(self):
+        request = build_concept_request(self.entry, self.config)
+        concept = self.valid_concept()
+        concept["viewer_need_evidence"]["status"] = "OBSERVED"
+        concept["viewer_need_evidence"]["evidence_basis"] = []
+
+        result = validate_response(
+            {
+                "mechanism_id": "curiosity_gap",
+                "concepts": [concept],
+            },
+            request,
+            self.config,
+        )
+
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertTrue(
+            any(
+                "OBSERVED viewer_need_evidence requires concrete evidence_basis"
+                in error
                 for error in result["rejected"][0]["errors"]
             )
         )
