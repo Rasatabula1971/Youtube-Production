@@ -173,6 +173,8 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
             existing.get("status") == "VALIDATED"
             and isinstance(provenance, dict)
             and provenance.get("request_sha256") == request_hash
+            and plan.get("master_story_package") == request.get("master_story_package")
+            and plan.get("script_section_ids") == request.get("script_section_ids")
         ):
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
@@ -288,6 +290,8 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "required_branches": request.get("required_branches", []),
         "branch_constraints": request.get("branch_constraints", {}),
         "package": request.get("package", {}),
+        "master_story_package": request.get("master_story_package", {}),
+        "script_section_ids": request.get("script_section_ids", []),
         "accepted_claims": request.get("accepted_claims", []),
         "validation": validation,
         "plan_provenance": response["response_provenance"],
