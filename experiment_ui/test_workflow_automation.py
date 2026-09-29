@@ -52,6 +52,50 @@ class WorkflowAutomationTests(unittest.TestCase):
         )
         self.assertEqual(result["workflow_state"], "HUMAN_VISION_GATE")
 
+    def test_repeats_same_batched_action_when_progress_changes(self):
+        state = {"completed": 0}
+
+        def readiness():
+            if state["completed"] == 0:
+                return {
+                    "concept_generate": {
+                        "enabled": True,
+                        "reason": "Concept generation progress: 0/5 current responses.",
+                    }
+                }
+            if state["completed"] == 1:
+                return {
+                    "concept_generate": {
+                        "enabled": True,
+                        "reason": "Concept generation progress: 4/5 current responses.",
+                    }
+                }
+            return {}
+
+        def fake_run(_action_id):
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "HUMAN_CONCEPT_GATE",
+                    "current_title": "Review Concept Candidates",
+                },
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["completed_actions"],
+            ["concept_generate", "concept_generate"],
+        )
+
     def test_stops_if_successful_command_makes_no_progress(self):
         readiness = {
             "exp2_prepare": {
