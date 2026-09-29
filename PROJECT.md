@@ -168,19 +168,33 @@ Potential capabilities:
 
 - narration/voice;
 - controlled source-footage use;
-- B-roll;
-- graphics;
-- animation;
+- reusable asset-library search;
+- licensed/free B-roll and public-domain material;
+- graphics and motion treatments;
+- selective third-party editorial excerpts with human rights/context review;
+- low-cost AI generation;
+- Higgsfield premium generation when cheaper acceptable sources are exhausted;
 - music/SFX;
 - editing/composition;
 - rendering.
 
 Visuals should support the narration or story rather than exist only to create motion.
 
+The Production Engine uses a **cheap-first visual acquisition policy**. During
+pre-monetization testing, it searches project-owned/reusable assets and verified
+free sources before paying for generated footage. A short clip is never treated
+as permission merely because it is short; editorial excerpts remain behind a
+human source/copyright/licensing review.
+
+The default pre-monetization visual budget targets US$5 per video and hard-stops
+automated paid visual routing at US$10. These are configurable operating limits,
+not permanent production rules.
+
 OpenMontage and related production tooling belong here. Production tooling is the backend, not the creative decision-maker.
 
 Narration is planned by the Voice Performance Layer and rendered by Higgsfield.
-See D-061.
+Higgsfield remains a premium generated-video fallback rather than the default
+visual source. See D-061 and D-062.
 
 ### 08 — Quality Gates
 
