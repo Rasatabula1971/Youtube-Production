@@ -99,7 +99,9 @@ The project-owned Python code is intentionally **standard-library only**; there
 is no root Python package manifest because the repository itself has no
 third-party Python package dependency. External tools such as yt-dlp / Agent
 Reach and the separate FAIR repository are invoked as external executables or
-subprocesses rather than imported as project dependencies.
+subprocesses rather than imported as project dependencies. Optional vidIQ MCP
+support follows the same pattern: it uses Node/npm `npx` to launch the pinned
+open-source `mcp-remote` OAuth bridge, so no vidIQ API key is required.
 
 Copy `.env.example` to `.env` and add only the local values you need.
 The FAIR subprocess coupling and override variables are documented in
