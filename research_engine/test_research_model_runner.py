@@ -20,6 +20,7 @@ class ResearchModelRunnerTests(unittest.TestCase):
     def evidence(self):
         return {
             "concept_id": "c1",
+            "status": "COMPLETE",
             "pages": [
                 {
                     "source_id": "web001",
