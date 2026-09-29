@@ -486,8 +486,8 @@ def run_apply() -> dict[str, Any]:
             )
             continue
 
-        for package in result["accepted"]:
-            package = dict(package)
+        for accepted_package in result["accepted"]:
+            package = dict(accepted_package)
             model_package_id = str(package["package_id"]).strip()
             package_id, renamed = reserve_generated_id(
                 raw_id=model_package_id,
