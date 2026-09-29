@@ -33,6 +33,16 @@ class ExperimentUiTests(unittest.TestCase):
 
         server.Handler._send_json(FakeHandler(), {"status": "ok"})
 
+    def test_human_gate_mutations_are_locked_while_job_runs(self):
+        with patch.object(server.JOB_MANAGER, "running", return_value=True):
+            for route in server.HUMAN_GATE_MUTATION_ROUTES:
+                self.assertIsNotNone(
+                    server.human_gate_mutation_block_reason(route)
+                )
+            self.assertIsNone(
+                server.human_gate_mutation_block_reason("/api/stop")
+            )
+
     def test_ui_v3_routes_are_registered(self):
         self.assertEqual(
             server.APP_ROUTES,
