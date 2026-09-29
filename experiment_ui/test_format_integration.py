@@ -110,5 +110,78 @@ class FormatUiIntegrationTests(unittest.TestCase):
         self.assertEqual(workflow["current_title"], "Review Format Plan")
 
 
+    def test_visual_manifest_ready_is_next_production_boundary(self):
+        with (
+            patch.object(
+                server,
+                "opportunity_gate_snapshot",
+                return_value={"ready_for_experiment_02": True, "opportunities": []},
+            ),
+            patch.object(server, "opportunity_research_state", return_value={}),
+            patch.object(
+                server,
+                "vision_review_snapshot",
+                return_value={"awaiting_human_review": False, "complete": True},
+            ),
+            patch.object(
+                server,
+                "human_analysis_review_snapshot",
+                return_value={"status": "COMPLETE"},
+            ),
+            patch.object(
+                server,
+                "transformation_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "concept_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "packaging_artifact_state",
+                return_value={
+                    "candidates_ready": True,
+                    "packaging_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "research_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "research_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "story_script_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "script_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "format_artifact_state",
+                return_value={
+                    "plans_ready": True,
+                    "production_engine_ready": True,
+                    "format_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "production_visual_artifact_state",
+                return_value={"manifests_ready": True},
+            ),
+        ):
+            workflow = server.workflow_guidance({})
+
+        self.assertEqual(workflow["state"], "VISUAL_ACQUISITION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Visual acquisition manifest ready",
+        )
+
 if __name__ == "__main__":
     unittest.main()
