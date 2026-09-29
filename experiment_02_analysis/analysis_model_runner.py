@@ -443,7 +443,7 @@ def bridge_payload(
     paths: dict[str, Path],
 ) -> dict[str, Any]:
     fair_config = config["fair"]
-    payload = {
+    payload: dict[str, Any] = {
         "action": action,
         "fair_repo_path": str(paths["repo"]),
         "env_file": str(paths["env_file"]),
