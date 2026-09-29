@@ -315,6 +315,14 @@ def run_one(
             "STALE_RESEARCH_EVIDENCE: acquired evidence does not match current research plan"
         )
     evidence_hash = sha256_file(evidence_path)
+    if evidence.get("status") != "COMPLETE":
+        return {
+            "status": "WAITING_FOR_COMPLETE_EVIDENCE",
+            "concept_id": concept_id,
+            "evidence_status": evidence.get("status"),
+            "unresolved_question_ids": evidence.get("unresolved_question_ids", []),
+        }
+
     slug = safe_slug(concept_id)
     report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
     response_path = RESPONSES_DIR / f"{slug}.json"
