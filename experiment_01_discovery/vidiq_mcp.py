@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -44,6 +45,10 @@ ALLOWED_PAID_TOOLS = {
     "outliers": 5,
     "trending_videos": 5,
 }
+
+
+class BudgetStateUnreadable(RuntimeError):
+    """Raised when an existing vidIQ budget ledger cannot be trusted."""
 
 
 def declared_tool_credit_cost(tool: dict[str, Any]) -> int | None:
@@ -96,11 +101,23 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Atomically replace JSON so a crash cannot truncate the credit ledger."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
+    fd, temp_name = tempfile.mkstemp(
+        prefix=path.name + ".",
+        suffix=".tmp",
+        dir=str(path.parent),
     )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
 
 
 def configured_credit_cap() -> int:
@@ -126,19 +143,50 @@ def max_paid_calls_per_run() -> int:
 
 def load_budget_state(path: Path = BUDGET_FILE) -> dict[str, Any]:
     period = current_period()
-    state = read_json(path)
-    if state.get("period") != period:
+    if not path.exists():
         return {
             "period": period,
             "charged_credits": 0,
             "paid_calls_dispatched": 0,
             "updated_at": utc_now(),
         }
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BudgetStateUnreadable(
+            "Existing vidIQ budget ledger is unreadable; refusing paid calls."
+        ) from exc
+    if not isinstance(raw, dict):
+        raise BudgetStateUnreadable(
+            "Existing vidIQ budget ledger has an invalid root type."
+        )
+
+    if raw.get("period") != period:
+        return {
+            "period": period,
+            "charged_credits": 0,
+            "paid_calls_dispatched": 0,
+            "updated_at": utc_now(),
+        }
+
+    try:
+        charged = int(raw["charged_credits"])
+        calls = int(raw["paid_calls_dispatched"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BudgetStateUnreadable(
+            "Existing vidIQ budget ledger is missing valid counters."
+        ) from exc
+    if charged < 0 or calls < 0:
+        raise BudgetStateUnreadable(
+            "Existing vidIQ budget ledger contains negative counters."
+        )
+
     return {
         "period": period,
-        "charged_credits": int(state.get("charged_credits") or 0),
-        "paid_calls_dispatched": int(state.get("paid_calls_dispatched") or 0),
-        "updated_at": state.get("updated_at") or utc_now(),
+        "charged_credits": charged,
+        "paid_calls_dispatched": calls,
+        "updated_at": raw.get("updated_at") or utc_now(),
     }
 
 
