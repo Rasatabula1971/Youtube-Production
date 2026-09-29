@@ -98,6 +98,26 @@ class VidIQMCPTests(unittest.TestCase):
         }
         self.assertEqual(module.extract_credit_balance(result), 82)
 
+    def test_declared_tool_credit_cost_parses_single_live_cost(self):
+        tool = {
+            "description": "Search current YouTube trends. Uses 5 credits per call."
+        }
+        self.assertEqual(module.declared_tool_credit_cost(tool), 5)
+
+    def test_declared_tool_credit_cost_fails_closed_when_missing(self):
+        self.assertIsNone(
+            module.declared_tool_credit_cost(
+                {"description": "Search current YouTube trends."}
+            )
+        )
+
+    def test_declared_tool_credit_cost_fails_closed_when_ambiguous(self):
+        self.assertIsNone(
+            module.declared_tool_credit_cost(
+                {"description": "Uses 5 credits normally; 10 credits for deep mode."}
+            )
+        )
+
     def test_find_tool_accepts_prefixed_names(self):
         tools = [
             {
