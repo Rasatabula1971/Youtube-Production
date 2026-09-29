@@ -14,7 +14,6 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from story_script_engine import (
-    PROJECT_ROOT,
     RESEARCH_VERIFIED_DIR,
     OUTPUT_DIR,
     assert_unique_slug_ids,
