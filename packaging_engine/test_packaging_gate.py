@@ -1,3 +1,4 @@
+import copy
 import unittest
 
 from packaging_gate import (
@@ -234,11 +235,11 @@ class PackagingGateTests(unittest.TestCase):
 
 
     def test_apply_rejects_stale_candidates_with_same_package_ids(self):
-        candidates = self.candidates()
+        candidates = copy.deepcopy(self.candidates)
         request = build_review_request(candidates, self.config)
         response = self.response(request)
 
-        regenerated = self.candidates()
+        regenerated = copy.deepcopy(self.candidates)
         regenerated["packages"][0]["title"] = "Changed after human review began"
 
         with self.assertRaisesRegex(ValueError, "STALE_REVIEW_REQUEST"):
