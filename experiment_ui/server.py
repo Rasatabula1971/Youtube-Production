@@ -172,6 +172,8 @@ from script_review import (
 )
 
 STORY_OUTPUT = STORY_DIR / "output"
+STORY_PLAN_REQUESTS_DIR = STORY_OUTPUT / "story_plan_requests"
+STORY_PLANS_DIR = STORY_OUTPUT / "story_plans"
 SCRIPT_REQUESTS_DIR = STORY_OUTPUT / "script_requests"
 SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
 SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
@@ -217,6 +219,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "research_acquire",
     "research_generate",
     "research_gate_prepare",
+    "story_prepare",
+    "story_generate",
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
@@ -732,6 +736,34 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Prepares the compact human claim-by-claim Research Gate before Script."
+        ),
+    },
+    "story_prepare": {
+        "label": "Prepare Story Plan Requests",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/story_plan_engine.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds story-structure requests from verified research and the "
+            "approved title/package before any narration is written."
+        ),
+    },
+    "story_generate": {
+        "label": "Generate Story Plans",
+        "stage": "07",
+        "command": [
+            sys.executable,
+            "story_script_engine/story_plan_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to plan the hook, viewer journey, "
+            "reveal and payoff while keeping the approved title immutable."
         ),
     },
     "script_prepare": {
@@ -1544,9 +1576,9 @@ def story_script_artifact_state() -> dict[str, Any]:
             if concept_id:
                 verified_hashes[concept_id] = sha256_file(path)
 
-    request_hashes: dict[str, str] = {}
-    if SCRIPT_REQUESTS_DIR.exists():
-        for path in SCRIPT_REQUESTS_DIR.glob("*.script_request.json"):
+    story_request_hashes: dict[str, str] = {}
+    if STORY_PLAN_REQUESTS_DIR.exists():
+        for path in STORY_PLAN_REQUESTS_DIR.glob("*.story_plan_request.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict):
                 continue
@@ -1557,6 +1589,39 @@ def story_script_artifact_state() -> dict[str, Any]:
                 and isinstance(provenance, dict)
                 and provenance.get("verified_research_sha256")
                 == verified_hashes[concept_id]
+            ):
+                story_request_hashes[concept_id] = sha256_file(path)
+
+    story_plan_hashes: dict[str, str] = {}
+    if STORY_PLANS_DIR.exists():
+        for path in STORY_PLANS_DIR.glob("*.story_plan.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("plan_provenance", {})
+            if (
+                concept_id in story_request_hashes
+                and payload.get("status") == "STORY_PLAN_READY"
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256")
+                == story_request_hashes[concept_id]
+            ):
+                story_plan_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if SCRIPT_REQUESTS_DIR.exists():
+        for path in SCRIPT_REQUESTS_DIR.glob("*.script_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in story_plan_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("story_plan_sha256")
+                == story_plan_hashes[concept_id]
             ):
                 request_hashes[concept_id] = sha256_file(path)
 
@@ -1592,7 +1657,13 @@ def story_script_artifact_state() -> dict[str, Any]:
         if isinstance(item, dict) and item.get("decision") == "ACCEPT"
     }
 
-    requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(
+    story_requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(
+        story_request_hashes
+    )
+    story_plans_ready = story_requests_ready and set(verified_hashes).issubset(
+        story_plan_hashes
+    )
+    requests_ready = story_plans_ready and set(verified_hashes).issubset(
         request_hashes
     )
     drafts_ready = requests_ready and set(verified_hashes).issubset(draft_ids)
@@ -1603,8 +1674,12 @@ def story_script_artifact_state() -> dict[str, Any]:
     )
     return {
         "verified_concept_ids": sorted(verified_hashes),
+        "story_request_concept_ids": sorted(story_request_hashes),
+        "story_plan_concept_ids": sorted(story_plan_hashes),
         "request_concept_ids": sorted(request_hashes),
         "draft_concept_ids": sorted(draft_ids),
+        "story_requests_ready": story_requests_ready,
+        "story_plans_ready": story_plans_ready,
         "requests_ready": requests_ready,
         "drafts_ready": drafts_ready,
         "script_gate": gate,
@@ -2050,6 +2125,8 @@ def stage_statuses() -> list[dict[str, Any]]:
     research_gate_complete = bool(research["research_gate_complete"])
     story_ready = bool(research["story_ready"])
     story = story_script_artifact_state()
+    story_requests_ready = bool(story["story_requests_ready"])
+    story_plans_ready = bool(story["story_plans_ready"])
     script_requests_ready = bool(story["requests_ready"])
     script_drafts_ready = bool(story["drafts_ready"])
     script_gate = story["script_gate"]
@@ -2201,6 +2278,8 @@ def stage_statuses() -> list[dict[str, Any]]:
         script_tone = "complete"
         script_next = "Proceed to Format."
     elif active_action in {
+        "story_prepare",
+        "story_generate",
         "script_prepare",
         "script_generate",
         "script_gate_prepare",
@@ -2212,10 +2291,18 @@ def stage_statuses() -> list[dict[str, Any]]:
         script_human = "WAITING FOR VERIFIED RESEARCH"
         script_tone = "blocked"
         script_next = "Complete the Research Gate first."
+    elif not story_requests_ready:
+        script_human = "READY TO PLAN STORY"
+        script_tone = "ready"
+        script_next = "Run Prepare Story Plan Requests."
+    elif not story_plans_ready:
+        script_human = "STORY PLANNING NEEDED"
+        script_tone = "action"
+        script_next = "Run Generate Story Plans."
     elif not script_requests_ready:
         script_human = "READY TO PREPARE SCRIPTS"
         script_tone = "ready"
-        script_next = "Run Prepare Script Requests."
+        script_next = "Build Script Requests from current Story Plans."
     elif not script_drafts_ready:
         script_human = "SCRIPT DRAFTING NEEDED"
         script_tone = "action"
@@ -2702,6 +2789,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     )
     research_gate_complete = bool(research["research_gate_complete"])
     story = story_script_artifact_state()
+    story_requests_ready = bool(story["story_requests_ready"])
+    story_plans_ready = bool(story["story_plans_ready"])
     script_requests_ready = bool(story["requests_ready"])
     script_drafts_ready = bool(story["drafts_ready"])
     script_gate = story["script_gate"]
@@ -3274,15 +3363,39 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
-        "script_prepare": {
-            "enabled": bool(research["story_ready"]) and not script_requests_ready,
+        "story_prepare": {
+            "enabled": bool(research["story_ready"]) and not story_requests_ready,
             "reason": (
-                "Verified research and the approved package are ready for script requests."
-                if bool(research["story_ready"]) and not script_requests_ready
+                "Verified research and the approved package are ready for Story Plan requests."
+                if bool(research["story_ready"]) and not story_requests_ready
+                else (
+                    "Story Plan requests are already current."
+                    if story_requests_ready
+                    else "Complete the Human Research Gate first."
+                )
+            ),
+        },
+        "story_generate": {
+            "enabled": story_requests_ready and not story_plans_ready,
+            "reason": (
+                "Current Story Plan requests are ready for FAIR planning."
+                if story_requests_ready and not story_plans_ready
+                else (
+                    "Current Story Plans already exist."
+                    if story_plans_ready
+                    else "Prepare current Story Plan requests first."
+                )
+            ),
+        },
+        "script_prepare": {
+            "enabled": story_plans_ready and not script_requests_ready,
+            "reason": (
+                "Current Story Plans are ready to become narration requests."
+                if story_plans_ready and not script_requests_ready
                 else (
                     "Script requests are already current."
                     if script_requests_ready
-                    else "Complete the Human Research Gate first."
+                    else "Generate current Story Plans first."
                 )
             ),
         },
