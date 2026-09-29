@@ -324,6 +324,17 @@ class PipelineContractTests(unittest.TestCase):
             "title": "Why F1 Brakes Work Backwards",
             "story_question": "Why do racing brakes need conditions that seem wrong for road cars?",
             "opening_hook_intent": "Open on the apparent contradiction and make the viewer want the mechanism.",
+            "viewer_state": {
+                "awareness": "The viewer knows race brakes operate in extreme conditions.",
+                "expectation": "Better brakes should behave like stronger road brakes.",
+                "desired_resolution": "Understand why heat changes the design target.",
+            },
+            "opening_psychology": {
+                "mechanism": "CONTRADICTION",
+                "impact_intent": "State the apparent backwards behavior immediately.",
+                "justification_intent": "Move directly into verified constraints that explain it.",
+                "claim_ids": [],
+            },
             "beats": [
                 {
                     "beat_id": "b1",
@@ -332,6 +343,14 @@ class PipelineContractTests(unittest.TestCase):
                     "viewer_progress": "The viewer understands the puzzle.",
                     "claim_ids": [],
                     "transition_intent": "Move from the visible contradiction to the governing constraint.",
+                    "psychology": {
+                        "primary_mechanism": "CURIOSITY",
+                        "viewer_expectation": "A stronger brake should simply work better.",
+                        "cognitive_load_instruction": "Establish only the contradiction before explaining the mechanism.",
+                        "tension_level": "HIGH",
+                        "open_loop_id": "main",
+                        "loop_action": "OPEN",
+                    },
                 },
                 {
                     "beat_id": "b2",
@@ -340,6 +359,14 @@ class PipelineContractTests(unittest.TestCase):
                     "viewer_progress": "The viewer understands the mechanism.",
                     "claim_ids": claim_ids[:1],
                     "transition_intent": "Use the mechanism to reframe heat as intentional.",
+                    "psychology": {
+                        "primary_mechanism": "CLARITY",
+                        "viewer_expectation": "Heat should only be a problem to remove.",
+                        "cognitive_load_instruction": "Explain one verified constraint before adding consequences.",
+                        "tension_level": "MEDIUM",
+                        "open_loop_id": "main",
+                        "loop_action": "ADVANCE",
+                    },
                 },
                 {
                     "beat_id": "b3",
@@ -348,6 +375,14 @@ class PipelineContractTests(unittest.TestCase):
                     "viewer_progress": "The approved title promise is fulfilled.",
                     "claim_ids": claim_ids,
                     "transition_intent": "Close on the resolved engineering tradeoff.",
+                    "psychology": {
+                        "primary_mechanism": "PAYOFF",
+                        "viewer_expectation": "The apparent contradiction should now have one coherent explanation.",
+                        "cognitive_load_instruction": "Resolve the main question without introducing a new mechanism.",
+                        "tension_level": "LOW",
+                        "open_loop_id": "main",
+                        "loop_action": "PAYOFF",
+                    },
                 },
             ],
             "payoff_intent": "Show that the apparently wrong behavior follows from the verified design constraints.",
@@ -367,6 +402,7 @@ class PipelineContractTests(unittest.TestCase):
             "concept": story_request["concept"],
             "accepted_claims": story_request["accepted_claims"],
             "accepted_claim_ids": story_request["accepted_claim_ids"],
+            "psychology_contract": story_request["psychology_contract"],
             "validation": story_validation,
             "plan_provenance": {"request_sha256": "contract"},
         }
@@ -391,11 +427,13 @@ class PipelineContractTests(unittest.TestCase):
             "concept_id": "c1",
             "title": "Why F1 Brakes Work Backwards",
             "opening_hook": "A road car would hate the conditions these brakes are built to need.",
+            "opening_hook_mechanism": "CONTRADICTION",
             "sections": [
                 {
                     "section_id": "s1",
                     "story_beat_id": "b1",
                     "purpose": "Establish the contradiction",
+                    "psychology_mechanism": "CURIOSITY",
                     "narration": "At first glance, the race-car solution seems backwards.",
                     "claim_ids": [],
                 },
@@ -403,6 +441,7 @@ class PipelineContractTests(unittest.TestCase):
                     "section_id": "s2",
                     "story_beat_id": "b2",
                     "purpose": "Explain the constraint",
+                    "psychology_mechanism": "CLARITY",
                     "narration": "The verified constraint changes what the brake must tolerate.",
                     "claim_ids": claim_ids[:1],
                 },
@@ -410,6 +449,7 @@ class PipelineContractTests(unittest.TestCase):
                     "section_id": "s3",
                     "story_beat_id": "b3",
                     "purpose": "Deliver the payoff",
+                    "psychology_mechanism": "PAYOFF",
                     "narration": "Once the constraints are included, heat becomes part of the design target rather than a contradiction.",
                     "claim_ids": claim_ids,
                 },
@@ -425,6 +465,7 @@ class PipelineContractTests(unittest.TestCase):
             "accepted_claims": request["accepted_claims"],
             "package": request["package"],
             "story_plan": request["story_plan"],
+            "psychology_contract": request["psychology_contract"],
             "validation": validation,
             "draft_provenance": {"request_sha256": "contract"},
         }
