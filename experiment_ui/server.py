@@ -2139,8 +2139,8 @@ def stage_statuses() -> list[dict[str, Any]]:
     research_gate_complete = bool(research["research_gate_complete"])
     story_ready = bool(research["story_ready"])
     story = story_script_artifact_state()
-    story_requests_ready = bool(story["story_requests_ready"])
-    story_plans_ready = bool(story["story_plans_ready"])
+    story_requests_ready = bool(story.get("story_requests_ready", False))
+    story_plans_ready = bool(story.get("story_plans_ready", False))
     script_requests_ready = bool(story["requests_ready"])
     script_drafts_ready = bool(story["drafts_ready"])
     script_gate = story["script_gate"]
@@ -2803,8 +2803,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     )
     research_gate_complete = bool(research["research_gate_complete"])
     story = story_script_artifact_state()
-    story_requests_ready = bool(story["story_requests_ready"])
-    story_plans_ready = bool(story["story_plans_ready"])
+    story_requests_ready = bool(story.get("story_requests_ready", False))
+    story_plans_ready = bool(story.get("story_plans_ready", False))
     script_requests_ready = bool(story["requests_ready"])
     script_drafts_ready = bool(story["drafts_ready"])
     script_gate = story["script_gate"]
