@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,12 @@ REVIEW_REQUESTS_DIR = OUTPUT_DIR / "format_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "format_review_responses"
 APPROVED_DIR = OUTPUT_DIR / "approved_format_plans"
 SUMMARY_FILE = OUTPUT_DIR / "format_gate_summary.json"
-UI_REVIEWER = "local-operator"
+REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DEFAULT_REVIEWER = "local-operator"
+
+
+def reviewer_id() -> str:
+    return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER
 
 CRITERIA_DESCRIPTIONS = {
     "branches_are_separate_productions": (
@@ -294,7 +300,7 @@ def apply_action(
     request = load_json(request_path)
     payload = {
         "concept_id": concept_id,
-        "reviewer": UI_REVIEWER,
+        "reviewer": reviewer_id(),
         "decision": decision,
         "criteria": criteria,
         "note": str(note or ""),
