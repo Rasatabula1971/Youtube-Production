@@ -286,7 +286,7 @@ def build_mechanism_library(
         occurrences = occurrence_map[mechanism_id]
         video_ids = unique_nonempty([item.get("video_id") for item in occurrences])
         channel_ids = unique_nonempty([item.get("channel_id") for item in occurrences])
-        reviewed_video_ids = unique_nonempty(
+        reviewed_occurrence_video_ids = unique_nonempty(
             [
                 item.get("video_id")
                 for item in occurrences
@@ -310,7 +310,7 @@ def build_mechanism_library(
         state = mechanism_state(
             video_count=len(video_ids),
             channel_count=len(channel_ids),
-            reviewed_video_count=len(reviewed_video_ids),
+            reviewed_video_count=len(reviewed_occurrence_video_ids),
             reviewed_channel_count=len(reviewed_channel_ids),
             minimum_videos=minimum_videos,
             minimum_channels=minimum_channels,
@@ -368,13 +368,13 @@ def build_mechanism_library(
                 "replication": {
                     "video_count": len(video_ids),
                     "unique_channels": len(channel_ids),
-                    "reviewed_video_count": len(reviewed_video_ids),
+                    "reviewed_video_count": len(reviewed_occurrence_video_ids),
                     "reviewed_unique_channels": len(reviewed_channel_ids),
                     "minimum_videos": minimum_videos,
                     "minimum_channels": minimum_channels,
                     "video_ids": video_ids,
                     "channel_ids": channel_ids,
-                    "reviewed_video_ids": reviewed_video_ids,
+                    "reviewed_video_ids": reviewed_occurrence_video_ids,
                     "reviewed_channel_ids": reviewed_channel_ids,
                 },
                 "scope": {
