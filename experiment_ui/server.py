@@ -170,6 +170,12 @@ from script_review import (
 from script_review import (
     snapshot as script_gate_snapshot,
 )
+from story_plan_engine import (
+    validation_contract_sha256 as story_plan_validation_contract_sha256,
+)
+from story_script_engine import (
+    validation_contract_sha256 as script_validation_contract_sha256,
+)
 
 STORY_OUTPUT = STORY_DIR / "output"
 STORY_PLAN_REQUESTS_DIR = STORY_OUTPUT / "story_plan_requests"
@@ -1563,6 +1569,8 @@ def research_artifact_state() -> dict[str, Any]:
 
 def story_script_artifact_state() -> dict[str, Any]:
     upstream = research_artifact_state()
+    story_plan_contract = story_plan_validation_contract_sha256()
+    script_contract = script_validation_contract_sha256()
     verified_hashes: dict[str, str] = {}
     if upstream.get("story_ready") and RESEARCH_VERIFIED_DIR.exists():
         for path in RESEARCH_VERIFIED_DIR.glob("*.verified_research_package.json"):
@@ -1606,6 +1614,8 @@ def story_script_artifact_state() -> dict[str, Any]:
                 and isinstance(provenance, dict)
                 and provenance.get("request_sha256")
                 == story_request_hashes[concept_id]
+                and provenance.get("validation_contract_sha256")
+                == story_plan_contract
             ):
                 story_plan_hashes[concept_id] = sha256_file(path)
 
@@ -1637,6 +1647,8 @@ def story_script_artifact_state() -> dict[str, Any]:
                 concept_id in request_hashes
                 and isinstance(provenance, dict)
                 and provenance.get("request_sha256") == request_hashes[concept_id]
+                and provenance.get("validation_contract_sha256")
+                == script_contract
             ):
                 draft_ids.add(concept_id)
 
@@ -1673,6 +1685,8 @@ def story_script_artifact_state() -> dict[str, Any]:
         and set(verified_hashes).issubset(approved_ids)
     )
     return {
+        "story_plan_validation_contract_sha256": story_plan_contract,
+        "script_validation_contract_sha256": script_contract,
         "verified_concept_ids": sorted(verified_hashes),
         "story_request_concept_ids": sorted(story_request_hashes),
         "story_plan_concept_ids": sorted(story_plan_hashes),
@@ -3378,7 +3392,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "story_generate": {
             "enabled": story_requests_ready and not story_plans_ready,
             "reason": (
-                "Current Story Plan requests are ready for FAIR planning."
+                (
+                    "Story Plan generation progress: "
+                    f"{len(story['story_plan_concept_ids'])}/"
+                    f"{len(story['verified_concept_ids'])} current plans."
+                )
                 if story_requests_ready and not story_plans_ready
                 else (
                     "Current Story Plans already exist."
@@ -3402,7 +3420,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "script_generate": {
             "enabled": script_requests_ready and not script_drafts_ready,
             "reason": (
-                "Current script requests are ready for FAIR drafting."
+                (
+                    "Script drafting progress: "
+                    f"{len(story['draft_concept_ids'])}/"
+                    f"{len(story['request_concept_ids'])} current drafts."
+                )
                 if script_requests_ready and not script_drafts_ready
                 else (
                     "Current script drafts already exist."
