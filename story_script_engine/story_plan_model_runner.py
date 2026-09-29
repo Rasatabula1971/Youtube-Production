@@ -211,7 +211,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
                 config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, TimeoutError) as exc:
         report = {
             "concept_id": concept_id,
             "request_source": str(path),
@@ -265,7 +265,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
     try:
         response = parse_model_json(raw)
         validation = validate_story_plan_response(response, request)
-    except Exception as exc:
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
         report = {
             **base,
             "status": "MODEL_OUTPUT_VALIDATION_ERROR",
@@ -338,7 +338,7 @@ def run_batch(
             break
         try:
             item = run_one(path, force, config)
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             item = {
                 "status": "RUNNER_ERROR",
                 "error_type": type(exc).__name__,
