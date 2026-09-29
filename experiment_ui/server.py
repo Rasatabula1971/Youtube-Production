@@ -42,6 +42,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/research-gate",
     "/api/script-gate",
     "/api/format-gate",
+    "/api/performance-gate",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -201,7 +202,22 @@ FORMAT_PLANS_DIR = FORMAT_OUTPUT / "format_plans"
 FORMAT_APPROVED_DIR = FORMAT_OUTPUT / "approved_format_plans"
 
 PRODUCTION_DIR = PROJECT_ROOT / "production_engine"
+if str(PRODUCTION_DIR) not in sys.path:
+    sys.path.insert(0, str(PRODUCTION_DIR))
+
+from voice_performance import (
+    validation_contract_sha256 as voice_validation_contract_sha256,
+)
+from voice_review import (
+    apply_action as apply_performance_gate_action,
+)
+from voice_review import (
+    snapshot as performance_gate_snapshot,
+)
+
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
+PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
+PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
 
 AUTO_MACHINE_ACTION_ORDER = [
@@ -233,6 +249,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
+    "voice_prepare",
+    "voice_generate",
+    "voice_gate_prepare",
     "production_visual_prepare",
 ]
 
@@ -848,6 +867,48 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Prepares the human Format Gate before the Production Engine."
+        ),
+    },
+    "voice_prepare": {
+        "label": "Prepare Voice Performance Requests",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/voice_performance.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Binds each accepted format beat to immutable approved narration "
+            "before any voice rendering or paid provider call."
+        ),
+    },
+    "voice_generate": {
+        "label": "Generate Voice Performance Plans",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/voice_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-only routing to annotate emotion, pace, pauses and "
+            "emphasis without changing spoken words."
+        ),
+    },
+    "voice_gate_prepare": {
+        "label": "Prepare Performance Gate",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/voice_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the mandatory Human Performance Gate before any paid "
+            "narration render can be introduced."
         ),
     },
     "production_visual_prepare": {
@@ -1786,6 +1847,147 @@ def format_artifact_state() -> dict[str, Any]:
         "format_gate": gate,
         "format_gate_complete": bool(gate.get("complete")),
         "production_engine_ready": production_engine_ready,
+    }
+
+
+def voice_performance_artifact_state() -> dict[str, Any]:
+    """Return provenance-aware Voice Performance coverage and gate state."""
+    fmt = format_artifact_state()
+    if not fmt.get("production_engine_ready"):
+        return {
+            "expected_branches": [],
+            "request_branches": [],
+            "spec_branches": [],
+            "requests_ready": False,
+            "specs_ready": False,
+            "performance_gate": {
+                "status": "WAITING_FOR_VOICE_PERFORMANCE_SPECS",
+                "complete": False,
+                "specs": [],
+            },
+            "performance_gate_complete": False,
+            "visual_ready": False,
+        }
+
+    gate = fmt.get("format_gate", {})
+    plans_value = gate.get("plans", []) if isinstance(gate, dict) else []
+    accepted_ids = {
+        str(item.get("concept_id") or "").strip()
+        for item in plans_value
+        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    }
+    accepted_ids.discard("")
+
+    plan_hashes: dict[str, str] = {}
+    expected: set[tuple[str, str]] = set()
+    if FORMAT_APPROVED_DIR.exists():
+        for path in FORMAT_APPROVED_DIR.glob("*.approved_format_plan.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if concept_id not in accepted_ids:
+                continue
+            plan_hashes[concept_id] = sha256_file(path)
+            branches = payload.get("branches", [])
+            if not isinstance(branches, list):
+                continue
+            for branch in branches:
+                if not isinstance(branch, dict):
+                    continue
+                branch_format = str(branch.get("format") or "").strip()
+                if branch_format:
+                    expected.add((concept_id, branch_format))
+
+    request_hashes: dict[tuple[str, str], str] = {}
+    if PRODUCTION_VOICE_REQUESTS_DIR.exists():
+        for path in PRODUCTION_VOICE_REQUESTS_DIR.glob("*.voice_request.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            key = (
+                str(payload.get("concept_id") or "").strip(),
+                str(payload.get("format") or "").strip(),
+            )
+            provenance = payload.get("request_provenance", {})
+            if (
+                key in expected
+                and isinstance(provenance, dict)
+                and provenance.get("approved_format_plan_sha256")
+                == plan_hashes.get(key[0])
+            ):
+                request_hashes[key] = sha256_file(path)
+
+    contract_hash = voice_validation_contract_sha256()
+    spec_keys: set[tuple[str, str]] = set()
+    if PRODUCTION_VOICE_SPECS_DIR.exists():
+        for path in PRODUCTION_VOICE_SPECS_DIR.glob(
+            "*.voice_performance_spec.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            key = (
+                str(payload.get("concept_id") or "").strip(),
+                str(payload.get("format") or "").strip(),
+            )
+            provenance = payload.get("spec_provenance", {})
+            if (
+                key in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256") == request_hashes[key]
+                and provenance.get("validation_contract_sha256")
+                == contract_hash
+            ):
+                spec_keys.add(key)
+
+    requests_ready = bool(expected) and expected.issubset(request_hashes)
+    specs_ready = requests_ready and expected.issubset(spec_keys)
+    performance_gate = (
+        performance_gate_snapshot()
+        if specs_ready
+        else {
+            "status": "WAITING_FOR_VOICE_PERFORMANCE_SPECS",
+            "complete": False,
+            "specs": [],
+        }
+    )
+    gate_specs = (
+        performance_gate.get("specs", [])
+        if isinstance(performance_gate, dict)
+        else []
+    )
+    accepted = {
+        (
+            str(item.get("concept_id") or "").strip(),
+            str(item.get("format") or "").strip(),
+        )
+        for item in gate_specs
+        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    }
+    gate_complete = bool(
+        isinstance(performance_gate, dict)
+        and performance_gate.get("complete")
+    )
+    visual_ready = specs_ready and gate_complete and expected.issubset(accepted)
+    return {
+        "expected_branches": [
+            {"concept_id": concept_id, "format": branch_format}
+            for concept_id, branch_format in sorted(expected)
+        ],
+        "request_branches": [
+            {"concept_id": concept_id, "format": branch_format}
+            for concept_id, branch_format in sorted(request_hashes)
+        ],
+        "spec_branches": [
+            {"concept_id": concept_id, "format": branch_format}
+            for concept_id, branch_format in sorted(spec_keys)
+        ],
+        "requests_ready": requests_ready,
+        "specs_ready": specs_ready,
+        "performance_gate": performance_gate,
+        "performance_gate_complete": gate_complete,
+        "visual_ready": visual_ready,
     }
 
 
@@ -2818,6 +3020,16 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     format_gate_status = str(format_gate.get("status") or "WAITING_FOR_FORMAT_PLANS")
     format_gate_complete = bool(fmt["format_gate_complete"])
     production_engine_ready = bool(fmt["production_engine_ready"])
+    voice = voice_performance_artifact_state()
+    voice_requests_ready = bool(voice["requests_ready"])
+    voice_specs_ready = bool(voice["specs_ready"])
+    performance_gate = voice["performance_gate"]
+    performance_gate_status = str(
+        performance_gate.get("status")
+        or "WAITING_FOR_VOICE_PERFORMANCE_SPECS"
+    )
+    performance_gate_complete = bool(voice["performance_gate_complete"])
+    voice_visual_ready = bool(voice["visual_ready"])
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
     agent_reach_installed = shutil.which("agent-reach") is not None
@@ -3504,15 +3716,67 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
-        "production_visual_prepare": {
-            "enabled": production_engine_ready and not visual_manifests_ready,
+        "voice_prepare": {
+            "enabled": production_engine_ready and not voice_requests_ready,
             "reason": (
-                "Accepted format branches are ready for cheap-first visual manifests."
-                if production_engine_ready and not visual_manifests_ready
+                "Accepted format branches are ready for immutable narration binding."
+                if production_engine_ready and not voice_requests_ready
+                else (
+                    "Voice Performance requests are already current."
+                    if voice_requests_ready
+                    else "Complete and accept the Human Format Gate first."
+                )
+            ),
+        },
+        "voice_generate": {
+            "enabled": voice_requests_ready and not voice_specs_ready,
+            "reason": (
+                "Current Voice Performance requests are ready for FAIR planning."
+                if voice_requests_ready and not voice_specs_ready
+                else (
+                    "Voice Performance specs are already current."
+                    if voice_specs_ready
+                    else "Prepare current Voice Performance requests first."
+                )
+            ),
+        },
+        "voice_gate_prepare": {
+            "enabled": (
+                voice_specs_ready
+                and (
+                    performance_gate_status == "READY_TO_PREPARE"
+                    or (
+                        performance_gate_complete
+                        and not voice_visual_ready
+                    )
+                )
+            ),
+            "reason": (
+                "Validated Voice Performance specs are ready for human review."
+                if voice_specs_ready
+                and performance_gate_status == "READY_TO_PREPARE"
+                else (
+                    "No Voice Performance spec was accepted; reopen the gate."
+                    if voice_specs_ready
+                    and performance_gate_complete
+                    and not voice_visual_ready
+                    else (
+                        "Performance Gate is already prepared or complete."
+                        if voice_specs_ready
+                        else "Generate current Voice Performance specs first."
+                    )
+                )
+            ),
+        },
+        "production_visual_prepare": {
+            "enabled": voice_visual_ready and not visual_manifests_ready,
+            "reason": (
+                "Human-approved performance plans unlock cheap-first visual manifests."
+                if voice_visual_ready and not visual_manifests_ready
                 else (
                     "Visual acquisition manifests are already current."
                     if visual_manifests_ready
-                    else "Complete and accept the Human Format Gate first."
+                    else "Complete and accept the Human Performance Gate first."
                 )
             ),
         },
@@ -3877,6 +4141,24 @@ def workflow_guidance(
                 "deliver the approved promise within accepted claims."
             ),
             "next_action_id": "auto_continue",
+            "next_title": "Automatic Voice Performance planning",
+        }
+
+    voice = voice_performance_artifact_state()
+    performance_gate = voice.get("performance_gate", {})
+    if (
+        voice.get("specs_ready")
+        and performance_gate.get("status") == "AWAITING_HUMAN_DECISION"
+    ):
+        return {
+            "state": "HUMAN_PERFORMANCE_GATE",
+            "current_action_id": None,
+            "current_title": "Review Voice Performance",
+            "current_detail": (
+                "Review emotion, pace, pauses and emphasis for each immutable "
+                "narration beat. This gate spends no provider credits."
+            ),
+            "next_action_id": "auto_continue",
             "next_title": "Prepare Visual Acquisition",
         }
 
@@ -3944,6 +4226,7 @@ def status_payload() -> dict[str, Any]:
     research = research_artifact_state()
     story = story_script_artifact_state()
     fmt = format_artifact_state()
+    voice = voice_performance_artifact_state()
     production_visual = production_visual_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
@@ -3997,6 +4280,8 @@ def status_payload() -> dict[str, Any]:
         "script_gate": story["script_gate"],
         "format": fmt,
         "format_gate": fmt["format_gate"],
+        "voice_performance": voice,
+        "performance_gate": voice["performance_gate"],
         "production_visual": production_visual,
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
@@ -4086,6 +4371,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/format-gate":
             self._send_json(format_gate_snapshot())
+            return
+        if route == "/api/performance-gate":
+            self._send_json(performance_gate_snapshot())
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -4263,6 +4551,20 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/format-gate":
                 payload = apply_format_gate_action(
                     concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/performance-gate":
+                payload = apply_performance_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
