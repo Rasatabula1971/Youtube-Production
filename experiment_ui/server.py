@@ -28,6 +28,16 @@ STATIC_DIR = HERE / "static"
 APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
 IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
+HUMAN_GATE_MUTATION_ROUTES = {
+    "/api/opportunity-gate",
+    "/api/vision-review",
+    "/api/human-analysis-review",
+    "/api/concept-gate",
+    "/api/packaging-gate",
+    "/api/research-gate",
+    "/api/script-gate",
+    "/api/format-gate",
+}
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
@@ -3398,6 +3408,15 @@ class JobManager:
 JOB_MANAGER = JobManager()
 
 
+def human_gate_mutation_block_reason(route: str) -> str | None:
+    if route in HUMAN_GATE_MUTATION_ROUTES and JOB_MANAGER.running():
+        return (
+            "Human Gate changes are locked while an automatic or diagnostic "
+            "pipeline job is running."
+        )
+    return None
+
+
 def maybe_start_automatic_workflow() -> dict[str, Any] | None:
     """Start deterministic downstream work after a human gate completes.
 
@@ -3822,6 +3841,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw.decode("utf-8") or "{}")
         except json.JSONDecodeError:
             self._send_json({"error": "Invalid JSON body."}, 400)
+            return
+
+        gate_lock_error = human_gate_mutation_block_reason(route)
+        if gate_lock_error:
+            self._send_json({"error": gate_lock_error}, 409)
             return
 
         try:
