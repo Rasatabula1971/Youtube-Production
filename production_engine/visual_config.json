@@ -1,0 +1,33 @@
+{
+  "production_phase": "pre_monetization",
+  "paid_visual_target_usd": 5.0,
+  "paid_visual_hard_cap_usd": 10.0,
+  "preferred_source_order": [
+    "OWN_LIBRARY",
+    "FREE_COMMERCIAL_LICENSE",
+    "PUBLIC_DOMAIN",
+    "CREATIVE_COMMONS_ALLOWED",
+    "EDITORIAL_EXCERPT",
+    "MOTION_GRAPHIC",
+    "CHEAP_AI",
+    "HIGGSFIELD_PREMIUM"
+  ],
+  "verified_rights_source_tiers": [
+    "OWN_LIBRARY",
+    "FREE_COMMERCIAL_LICENSE",
+    "PUBLIC_DOMAIN",
+    "CREATIVE_COMMONS_ALLOWED"
+  ],
+  "human_review_required_source_tiers": [
+    "EDITORIAL_EXCERPT",
+    "UNKNOWN"
+  ],
+  "generated_source_tiers": [
+    "MOTION_GRAPHIC",
+    "CHEAP_AI",
+    "HIGGSFIELD_PREMIUM"
+  ],
+  "max_paid_generated_share": 0.1,
+  "never_treat_clip_duration_as_permission": true,
+  "require_source_url_or_local_path": true
+}
