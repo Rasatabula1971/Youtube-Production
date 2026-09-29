@@ -48,6 +48,19 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
+    owners: dict[str, str] = {}
+    for raw in values:
+        slug = safe_slug(raw)
+        previous = owners.get(slug)
+        if previous is not None and previous != raw:
+            raise ValueError(
+                f"{label} IDs collide after filesystem normalization: "
+                f"{previous!r} and {raw!r} -> {slug!r}"
+            )
+        owners[slug] = raw
+
+
 def build_script_request(package: dict[str, Any], package_path: Path) -> dict[str, Any]:
     if package.get("status") != "READY_FOR_STORY_SCRIPT":
         raise ValueError("Verified research package is not READY_FOR_STORY_SCRIPT")
@@ -206,18 +219,33 @@ def run_prepare(verified_dir: Path = RESEARCH_VERIFIED_DIR) -> dict[str, Any]:
     )
     prepared = []
     failures = []
+    pending: list[tuple[Path, dict[str, Any]]] = []
     for path in paths:
         try:
             request = build_script_request(load_json(path), path)
-            dest = (
-                REQUESTS_DIR / f"{safe_slug(request['concept_id'])}.script_request.json"
-            )
-            dest.write_text(
-                json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-            prepared.append({"concept_id": request["concept_id"], "request": str(dest)})
+            pending.append((path, request))
         except Exception as exc:
             failures.append({"package": str(path), "error_type": type(exc).__name__})
+
+    assert_unique_slug_ids(
+        [str(request["concept_id"]) for _, request in pending],
+        label="concept",
+    )
+
+    current_destinations: set[Path] = set()
+    for _, request in pending:
+        dest = (
+            REQUESTS_DIR / f"{safe_slug(request['concept_id'])}.script_request.json"
+        )
+        dest.write_text(
+            json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        current_destinations.add(dest.resolve())
+        prepared.append({"concept_id": request["concept_id"], "request": str(dest)})
+
+    for stale_path in REQUESTS_DIR.glob("*.script_request.json"):
+        if stale_path.resolve() not in current_destinations:
+            stale_path.unlink()
     summary = {
         "status": (
             "SCRIPT_REQUESTS_READY" if prepared else "WAITING_FOR_VERIFIED_RESEARCH"
