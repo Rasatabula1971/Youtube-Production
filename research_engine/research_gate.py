@@ -137,6 +137,9 @@ def build_review_request(
         "research_questions": package.get("research_questions", []),
         "claim_count": len(items),
         "items": items,
+        "request_provenance": {
+            "draft_content_sha256": content_sha256(package),
+        },
         "criteria": {
             "source_traceable": (
                 "The claim can be traced to the cited source and locator."
@@ -277,6 +280,19 @@ def apply_gate(
     response: dict[str, Any],
     config: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    provenance = request.get("request_provenance", {})
+    expected_hash = (
+        provenance.get("draft_content_sha256")
+        if isinstance(provenance, dict)
+        else None
+    )
+    current_hash = content_sha256(package)
+    if expected_hash != current_hash:
+        raise ValueError(
+            "STALE_REVIEW_REQUEST: draft research package changed after the "
+            "Research Gate request was prepared"
+        )
+
     mapped = validate_decisions(
         request,
         response,
