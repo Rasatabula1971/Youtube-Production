@@ -175,6 +175,8 @@ from story_plan_engine import (
     validation_contract_sha256 as story_plan_validation_contract_sha256,
 )
 from story_script_engine import (
+    load_script_psychology_config,
+    resolve_script_branches,
     validation_contract_sha256 as script_validation_contract_sha256,
 )
 
@@ -1632,6 +1634,8 @@ def story_script_artifact_state() -> dict[str, Any]:
     upstream = research_artifact_state()
     story_plan_contract = story_plan_validation_contract_sha256()
     script_contract = script_validation_contract_sha256()
+    script_profile_config = load_script_psychology_config()
+
     verified_hashes: dict[str, str] = {}
     if upstream.get("story_ready") and RESEARCH_VERIFIED_DIR.exists():
         for path in RESEARCH_VERIFIED_DIR.glob("*.verified_research_package.json"):
@@ -1662,6 +1666,7 @@ def story_script_artifact_state() -> dict[str, Any]:
                 story_request_hashes[concept_id] = sha256_file(path)
 
     story_plan_hashes: dict[str, str] = {}
+    expected_branch_ids: set[str] = set()
     if STORY_PLANS_DIR.exists():
         for path in STORY_PLANS_DIR.glob("*.story_plan.json"):
             payload = safe_load_json(path)
@@ -1679,6 +1684,17 @@ def story_script_artifact_state() -> dict[str, Any]:
                 == story_plan_contract
             ):
                 story_plan_hashes[concept_id] = sha256_file(path)
+                package = payload.get("package", {})
+                if isinstance(package, dict):
+                    try:
+                        branches = resolve_script_branches(
+                            str(package.get("format_intent") or ""),
+                            script_profile_config,
+                        )
+                    except ValueError:
+                        branches = []
+                    for fmt in branches:
+                        expected_branch_ids.add(f"{concept_id}:{fmt}")
 
     request_hashes: dict[str, str] = {}
     if SCRIPT_REQUESTS_DIR.exists():
@@ -1687,14 +1703,17 @@ def story_script_artifact_state() -> dict[str, Any]:
             if not isinstance(payload, dict):
                 continue
             concept_id = str(payload.get("concept_id") or "").strip()
+            fmt = str(payload.get("format") or "").strip()
+            branch_id = f"{concept_id}:{fmt}" if concept_id and fmt else ""
             provenance = payload.get("request_provenance", {})
             if (
-                concept_id in story_plan_hashes
+                branch_id in expected_branch_ids
+                and concept_id in story_plan_hashes
                 and isinstance(provenance, dict)
                 and provenance.get("story_plan_sha256")
                 == story_plan_hashes[concept_id]
             ):
-                request_hashes[concept_id] = sha256_file(path)
+                request_hashes[branch_id] = sha256_file(path)
 
     draft_ids: set[str] = set()
     if SCRIPT_DRAFTS_DIR.exists():
@@ -1703,15 +1722,17 @@ def story_script_artifact_state() -> dict[str, Any]:
             if not isinstance(payload, dict):
                 continue
             concept_id = str(payload.get("concept_id") or "").strip()
+            fmt = str(payload.get("format") or "").strip()
+            branch_id = f"{concept_id}:{fmt}" if concept_id and fmt else ""
             provenance = payload.get("draft_provenance", {})
             if (
-                concept_id in request_hashes
+                branch_id in request_hashes
                 and isinstance(provenance, dict)
-                and provenance.get("request_sha256") == request_hashes[concept_id]
+                and provenance.get("request_sha256") == request_hashes[branch_id]
                 and provenance.get("validation_contract_sha256")
                 == script_contract
             ):
-                draft_ids.add(concept_id)
+                draft_ids.add(branch_id)
 
     gate = (
         script_gate_snapshot()
@@ -1720,14 +1741,13 @@ def story_script_artifact_state() -> dict[str, Any]:
             "status": "WAITING_FOR_SCRIPT_DRAFTS",
             "complete": False,
             "scripts": [],
+            "production_ready_concept_ids": [],
         }
     )
-    scripts_value = gate.get("scripts", [])
-    scripts = scripts_value if isinstance(scripts_value, list) else []
-    approved_ids = {
-        str(item.get("concept_id"))
-        for item in scripts
-        if isinstance(item, dict) and item.get("decision") == "ACCEPT"
+    ready_ids = {
+        str(item)
+        for item in gate.get("production_ready_concept_ids", [])
+        if str(item).strip()
     }
 
     story_requests_ready = bool(verified_hashes) and set(verified_hashes).issubset(
@@ -1736,14 +1756,15 @@ def story_script_artifact_state() -> dict[str, Any]:
     story_plans_ready = story_requests_ready and set(verified_hashes).issubset(
         story_plan_hashes
     )
-    requests_ready = story_plans_ready and set(verified_hashes).issubset(
-        request_hashes
+    requests_ready = (
+        story_plans_ready
+        and bool(expected_branch_ids)
+        and expected_branch_ids.issubset(request_hashes)
     )
-    drafts_ready = requests_ready and set(verified_hashes).issubset(draft_ids)
+    drafts_ready = requests_ready and expected_branch_ids.issubset(draft_ids)
     production_ready = (
         drafts_ready
-        and bool(gate.get("complete"))
-        and set(verified_hashes).issubset(approved_ids)
+        and set(verified_hashes).issubset(ready_ids)
     )
     return {
         "story_plan_validation_contract_sha256": story_plan_contract,
@@ -1751,8 +1772,15 @@ def story_script_artifact_state() -> dict[str, Any]:
         "verified_concept_ids": sorted(verified_hashes),
         "story_request_concept_ids": sorted(story_request_hashes),
         "story_plan_concept_ids": sorted(story_plan_hashes),
-        "request_concept_ids": sorted(request_hashes),
-        "draft_concept_ids": sorted(draft_ids),
+        "expected_branch_ids": sorted(expected_branch_ids),
+        "request_branch_ids": sorted(request_hashes),
+        "draft_branch_ids": sorted(draft_ids),
+        "request_concept_ids": sorted(
+            {item.split(":", 1)[0] for item in request_hashes}
+        ),
+        "draft_concept_ids": sorted(
+            {item.split(":", 1)[0] for item in draft_ids}
+        ),
         "story_requests_ready": story_requests_ready,
         "story_plans_ready": story_plans_ready,
         "requests_ready": requests_ready,
@@ -3633,8 +3661,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "reason": (
                 (
                     "Script drafting progress: "
-                    f"{len(story['draft_concept_ids'])}/"
-                    f"{len(story['request_concept_ids'])} current drafts."
+                    f"{len(story['draft_branch_ids'])}/"
+                    f"{len(story['request_branch_ids'])} current branches."
                 )
                 if script_requests_ready and not script_drafts_ready
                 else (
@@ -3670,7 +3698,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         },        "format_prepare": {
             "enabled": production_ready and not format_requests_ready,
             "reason": (
-                "Approved scripts are ready for per-branch format requests."
+                "All required branch scripts are approved and ready for production-format planning."
                 if production_ready and not format_requests_ready
                 else (
                     "Format requests are already current."
@@ -4525,6 +4553,7 @@ class Handler(BaseHTTPRequestHandler):
             if route == "/api/script-gate":
                 payload = apply_script_gate_action(
                     concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
