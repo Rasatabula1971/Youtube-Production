@@ -80,7 +80,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "sections": {
                 "type": "array",
                 "minItems": len(beat_ids) if beat_ids else 1,
-                "maxItems": len(beat_ids) if beat_ids else None,
+                **({"maxItems": len(beat_ids)} if beat_ids else {}),
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
