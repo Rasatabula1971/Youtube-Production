@@ -43,6 +43,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
+    "voice_prepare",
+    "voice_generate",
+    "voice_gate_prepare",
     "production_visual_prepare",
 ]
 

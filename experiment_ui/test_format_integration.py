@@ -14,11 +14,14 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 5],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 8],
             [
                 "format_prepare",
                 "format_generate",
                 "format_gate_prepare",
+                "voice_prepare",
+                "voice_generate",
+                "voice_gate_prepare",
                 "production_visual_prepare",
             ],
         )
@@ -167,6 +170,15 @@ class FormatUiIntegrationTests(unittest.TestCase):
                     "plans_ready": True,
                     "production_engine_ready": True,
                     "format_gate": {"status": "COMPLETE"},
+                },
+            ),
+            patch.object(
+                server,
+                "voice_performance_artifact_state",
+                return_value={
+                    "visual_ready": True,
+                    "specs_ready": True,
+                    "performance_gate": {"status": "COMPLETE", "complete": True},
                 },
             ),
             patch.object(
