@@ -114,6 +114,7 @@ def build_concept_request(
         "scope": entry.get("scope", {}),
         "transferable_descriptions": entry.get("transferable_descriptions", []),
         "observed_examples": entry.get("observed_examples", []),
+        "viewer_need_signal_context": entry.get("viewer_need_signal_context", []),
         "source_specific_elements_to_avoid": entry.get(
             "source_specific_elements_to_avoid", []
         ),
