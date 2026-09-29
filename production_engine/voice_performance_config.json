@@ -1,0 +1,25 @@
+{
+  "provider": "higgsfield",
+  "planning_policy": "FAIR_FREE_ONLY",
+  "allowed_emotions": [
+    "neutral",
+    "curious",
+    "serious",
+    "concerned",
+    "tense",
+    "reflective",
+    "surprised"
+  ],
+  "surprised_requires_reveal_beat": true,
+  "max_intensity": 0.7,
+  "max_adjacent_intensity_delta": 0.3,
+  "speed_min": 0.9,
+  "speed_max": 1.1,
+  "pause_ms_max": 1200,
+  "emphasis_terms_max": 4,
+  "voice_identity": {
+    "voice_id": null,
+    "license_reference": null,
+    "calibration_artifact": null
+  }
+}
