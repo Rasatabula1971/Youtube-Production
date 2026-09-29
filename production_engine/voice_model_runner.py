@@ -141,7 +141,8 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "5. Emphasis terms must occur verbatim in that beat's immutable_narration.\n"
         "6. Respect all numeric control bounds in the request.\n"
         "7. Do not score virality, retention, quality or choose a winning take.\n"
-        "8. This is planning only. Do not claim audio was rendered.\n\n"
+        "8. This is planning only. Do not claim audio was rendered.\n"
+        "9. If human_rework_note is present, address it only by changing delivery controls.\n\n"
         "VOICE PERFORMANCE REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
