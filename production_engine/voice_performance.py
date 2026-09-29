@@ -147,8 +147,12 @@ def _approved_identity(plan: dict[str, Any]) -> str:
 
 def _script_sections(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str]:
     package = plan.get("package", {})
-    master = plan.get("master_story_package", {})
-    if not isinstance(package, dict) or not isinstance(master, dict):
+    master = plan.get("master_story_package")
+    if (
+        not isinstance(package, dict)
+        or not isinstance(master, dict)
+        or not master
+    ):
         raise ValueError("Approved format plan is missing immutable script context")
     title = str(package.get("title") or "").strip()
     if not title or str(master.get("title") or "") != title:
