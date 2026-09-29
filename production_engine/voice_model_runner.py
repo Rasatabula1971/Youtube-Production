@@ -220,7 +220,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
                 config["runner"].get("subprocess_timeout_seconds", 300)
             ),
         )
-    except Exception as exc:
+    except (OSError, TimeoutError, RuntimeError, ValueError, TypeError, KeyError) as exc:
         report = {
             "concept_id": concept_id,
             "format": fmt,
@@ -269,7 +269,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
     try:
         response = parse_model_json(raw)
         validation = validate_response(response, request)
-    except Exception as exc:
+    except (OSError, TimeoutError, RuntimeError, ValueError, TypeError, KeyError) as exc:
         report = {
             **base,
             "status": "MODEL_OUTPUT_VALIDATION_ERROR",
@@ -346,7 +346,7 @@ def run_batch(
             break
         try:
             item = run_one(path, force, config)
-        except Exception as exc:
+        except (OSError, TimeoutError, RuntimeError, ValueError, TypeError, KeyError) as exc:
             item = {
                 "status": "RUNNER_ERROR",
                 "request_source": str(path),
