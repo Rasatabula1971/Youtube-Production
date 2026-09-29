@@ -68,10 +68,33 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         for beat in beats
         if isinstance(beat, dict) and str(beat.get("beat_id", "")).strip()
     ]
+    opening_psychology = (
+        story_plan.get("opening_psychology", {})
+        if isinstance(story_plan, dict)
+        else {}
+    )
+    planned_hook_mechanism = str(
+        opening_psychology.get("mechanism", "")
+        if isinstance(opening_psychology, dict)
+        else ""
+    )
+    psychology_contract = request.get("psychology_contract", {})
+    beat_mechanisms = list(
+        psychology_contract.get("beat_mechanisms", [])
+        if isinstance(psychology_contract, dict)
+        else []
+    )
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["concept_id", "title", "opening_hook", "sections", "closing"],
+        "required": [
+            "concept_id",
+            "title",
+            "opening_hook",
+            "opening_hook_mechanism",
+            "sections",
+            "closing",
+        ],
         "properties": {
             "concept_id": {
                 "type": "string",
@@ -79,6 +102,10 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             },
             "title": {"type": "string", "const": approved_title},
             "opening_hook": {"type": "string", "minLength": 1},
+            "opening_hook_mechanism": {
+                "type": "string",
+                "const": planned_hook_mechanism,
+            },
             "sections": {
                 "type": "array",
                 "minItems": len(beat_ids) if beat_ids else 1,
@@ -90,6 +117,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                         "section_id",
                         "story_beat_id",
                         "purpose",
+                        "psychology_mechanism",
                         "narration",
                         "claim_ids",
                     ],
@@ -100,6 +128,10 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                             "enum": beat_ids,
                         },
                         "purpose": {"type": "string", "minLength": 1},
+                        "psychology_mechanism": {
+                            "type": "string",
+                            "enum": beat_mechanisms,
+                        },
                         "narration": {"type": "string", "minLength": 1},
                         "claim_ids": {
                             "type": "array",
@@ -121,13 +153,20 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "Rules:\n"
         "1. Return the approved Packaging title EXACTLY. Do not rewrite, optimize, or replace it.\n"
         "2. Follow the supplied Story Plan in order. Do not invent a new story structure.\n"
-        "3. Create exactly one script section for each Story Plan beat and map it with story_beat_id.\n"
-        "4. Each section must carry exactly the claim_ids assigned to its Story Plan beat.\n"
-        "5. Use only accepted_claims for factual assertions. Never invent a factual detail.\n"
-        "6. Original connective narration is allowed only when it does not add factual claims.\n"
-        "7. Do not copy source-video wording, story sequence, personality, or exact execution.\n"
-        "8. Do not mention claim IDs or story beat IDs in spoken narration.\n"
-        "9. Turn the Story Plan intent into natural spoken language with a strong hook, progression, payoff and concise close.\n\n"
+        "3. The opening_hook is the FIRST SPOKEN LINE. It must be high-impact and use exactly the planned opening_psychology mechanism.\n"
+        "4. High-impact means immediate contradiction, surprise, stakes, expectation violation, specific curiosity, or a bold specific promise as planned. Never manufacture drama or overstate the verified research.\n"
+        "5. The narration immediately after the hook must justify, contextualize, or begin proving it. Avoid generic introductions and throat-clearing.\n"
+        "6. Create exactly one script section for each Story Plan beat and map it with story_beat_id.\n"
+        "7. Each section must carry exactly the claim_ids assigned to its Story Plan beat.\n"
+        "8. Each section must report and preserve the beat's primary psychology_mechanism.\n"
+        "9. Use only accepted_claims for factual assertions. Never invent a factual detail.\n"
+        "10. Use the beat cognitive_load_instruction: explain one primary new idea at a time when complexity is high, and connect it to what the viewer now understands.\n"
+        "11. Preserve OPEN, ADVANCE and PAYOFF behavior for planned open loops. Do not add fake unresolved loops.\n"
+        "12. Original connective narration is allowed only when it does not add factual claims.\n"
+        "13. Do not copy source-video wording, story sequence, personality, or exact execution.\n"
+        "14. Do not mention claim IDs, psychology labels, or story beat IDs in spoken narration.\n"
+        "15. Do not use arbitrary fixed hook-second or pattern-interrupt timing rules.\n"
+        "16. Deliver the planned payoff and end concisely after the promise is satisfied.\n\n"
         "SCRIPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -292,6 +331,8 @@ def run_one(
         **response,
         "accepted_claims": request.get("accepted_claims", []),
         "package": request.get("package", {}),
+        "story_plan": request.get("story_plan", {}),
+        "psychology_contract": request.get("psychology_contract", {}),
         "validation": validation,
         "draft_provenance": response["response_provenance"],
     }
