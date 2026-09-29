@@ -613,7 +613,7 @@ class PipelineContractTests(unittest.TestCase):
         return approved_path
 
 
-    # ---- seam 7: Format Gate → Production    # ---- seam 7: Format Gate → Production -----------------------------------
+    # ---- seam 7: Format Gate → Production -----------------------------------
 
     def approved_format_plan(self, approved_script_path: Path) -> dict:
         config = format_engine.load_config()
