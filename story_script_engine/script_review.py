@@ -5,9 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+if str(_INTEGRITY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRITY_ROOT))
+
+from pipeline_integrity import atomic_write_json
 
 from story_script_engine import (
     DRAFTS_DIR,
@@ -78,7 +85,7 @@ def prepare() -> dict[str, Any]:
             REVIEW_REQUESTS_DIR
             / f"{safe_slug(req['concept_id'])}.script_review_request.json"
         )
-        dest.write_text(json.dumps(req, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(dest, req)
         prepared.append({"concept_id": req["concept_id"], "request": str(dest)})
     return {
         "status": "SCRIPT_GATE_READY" if prepared else "WAITING_FOR_SCRIPT_DRAFTS",
@@ -154,19 +161,13 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
             "script_draft_sha256": sha256_file(source),
         }
         APPROVED_DIR.mkdir(parents=True, exist_ok=True)
-        approved_path.write_text(
-            json.dumps(draft, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        atomic_write_json(approved_path, draft)
         summary["approved_script"] = str(approved_path)
     elif approved_path.exists():
         approved_path.unlink()
 
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    atomic_write_json(SUMMARY_FILE, summary)
     return summary
 
 
@@ -272,7 +273,7 @@ def apply_action(
         **normalized,
         "script_draft_sha256": sha256_file(source),
     }
-    dest.write_text(json.dumps(saved, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(dest, saved)
     return snapshot()
 
 
