@@ -252,5 +252,29 @@ class VidIQEnrichmentTests(unittest.TestCase):
         self.assertEqual(result["paid_calls_this_run"], 0)
 
 
+    def test_corrupt_budget_ledger_refuses_all_paid_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            budget = root / "budget.json"
+            budget.write_text('{"period":', encoding="utf-8")
+            client = FakeClient()
+            with (
+                patch.object(enrich, "ENRICHMENT_FILE", root / "enrichment.json"),
+                patch.object(enrich, "BUDGET_FILE", budget),
+            ):
+                result = enrich.run_enrichment(
+                    client=client,
+                    study_set=self.study_set(),
+                )
+
+        self.assertEqual(
+            result["status"],
+            "FAIL_CLOSED_BUDGET_STATE_UNREADABLE",
+        )
+        self.assertEqual(result["paid_calls_this_run"], 0)
+        paid = [name for name, _ in client.calls if name != "vidiq_balance"]
+        self.assertEqual(paid, [])
+
+
 if __name__ == "__main__":
     unittest.main()
