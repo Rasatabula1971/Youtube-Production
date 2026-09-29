@@ -248,7 +248,6 @@ def finalize_opportunity_handoff(
     python_executable: str,
     refresh_attempts: int,
 ) -> dict[str, Any]:
-    remove_continuation_task()
     vidiq_status, vidiq_message = run_vidiq_supplemental(
         python_executable=python_executable,
     )
@@ -352,6 +351,7 @@ def continue_research(
     refresh_attempts = int(state.get("refresh_attempts") or 0)
 
     if study_set_ready():
+        remove_continuation_task()
         return finalize_opportunity_handoff(
             python_executable=python_executable,
             refresh_attempts=refresh_attempts,
