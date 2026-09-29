@@ -20,6 +20,7 @@ STUDY_SET_FILE = OUTPUT_DIR / "study_set.json"
 HANDOFF_PACKETS_FILE = OUTPUT_DIR / "handoff_packets.json"
 DECISION_FILE = OUTPUT_DIR / "human_opportunity_decision.json"
 APPROVED_STUDY_SET_FILE = OUTPUT_DIR / "approved_study_set.json"
+VIDIQ_ENRICHMENT_FILE = HERE / "output" / "vidiq" / "opportunity_enrichment.json"
 
 SCHEMA_VERSION = "1.1"
 
@@ -139,6 +140,20 @@ def save_state(state: dict[str, Any]) -> None:
         json.dumps(state, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def _vidiq_payload(study_set: list[dict[str, Any]]) -> dict[str, Any]:
+    if not VIDIQ_ENRICHMENT_FILE.exists():
+        return {}
+    try:
+        payload = load_json(VIDIQ_ENRICHMENT_FILE)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    if payload.get("source_study_set_sha256") != canonical_sha256(study_set):
+        return {}
+    return payload
 
 
 def _packet_lookup(
@@ -313,6 +328,11 @@ def gate_snapshot() -> dict[str, Any]:
     if not isinstance(packets, list):
         packets = []
 
+    vidiq_payload = _vidiq_payload(study_set)
+    vidiq_opportunities = vidiq_payload.get("opportunities", {})
+    if not isinstance(vidiq_opportunities, dict):
+        vidiq_opportunities = {}
+
     state = load_state(study_set)
     ready, approved = _materialize_approved(
         state,
@@ -378,6 +398,7 @@ def gate_snapshot() -> dict[str, Any]:
                 "can_approve": _all_examples_kept(opportunity),
                 "alternatives_available": alternative_count,
                 "topic_evidence": topic_evidence,
+                "vidiq_evidence": vidiq_opportunities.get(key, {}),
                 "selected_examples": selected_examples,
             }
         )
@@ -406,6 +427,29 @@ def gate_snapshot() -> dict[str, Any]:
         "source_study_set_sha256": state.get("source_study_set_sha256"),
         "decision_file": str(DECISION_FILE),
         "approved_study_set": str(APPROVED_STUDY_SET_FILE),
+        "vidiq": {
+            "status": vidiq_payload.get("status") if vidiq_payload else "NOT_RUN",
+            "provider_remaining_credits": (
+                vidiq_payload.get("provider_remaining_credits")
+                if vidiq_payload
+                else None
+            ),
+            "local_charged_credits": (
+                vidiq_payload.get("local_charged_credits")
+                if vidiq_payload
+                else None
+            ),
+            "hard_credit_cap": (
+                vidiq_payload.get("hard_credit_cap")
+                if vidiq_payload
+                else 149
+            ),
+            "paid_calls_this_run": (
+                vidiq_payload.get("paid_calls_this_run")
+                if vidiq_payload
+                else 0
+            ),
+        },
         "opportunities": opportunities_payload,
     }
 
