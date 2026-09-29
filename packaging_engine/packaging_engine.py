@@ -73,7 +73,9 @@ def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
     for raw in values:
         slug = safe_slug(raw)
         previous = owners.get(slug)
-        if previous is not None and previous != raw:
+        if previous is not None:
+            if previous == raw:
+                raise ValueError(f"Duplicate {label} ID: {raw!r}")
             raise ValueError(
                 f"{label} IDs collide after filesystem normalization: "
                 f"{previous!r} and {raw!r} -> {slug!r}"
