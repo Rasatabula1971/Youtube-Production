@@ -25,6 +25,7 @@ RESEARCH_VERIFIED_DIR = (
     PROJECT_ROOT / "research_engine" / "output" / "verified_packages"
 )
 OUTPUT_DIR = HERE / "output"
+STORY_PLANS_DIR = OUTPUT_DIR / "story_plans"
 REQUESTS_DIR = OUTPUT_DIR / "script_requests"
 RESPONSES_DIR = OUTPUT_DIR / "script_responses"
 DRAFTS_DIR = OUTPUT_DIR / "script_drafts"
@@ -63,82 +64,76 @@ def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
         owners[slug] = raw
 
 
-def build_script_request(package: dict[str, Any], package_path: Path) -> dict[str, Any]:
-    if package.get("status") != "READY_FOR_STORY_SCRIPT":
-        raise ValueError("Verified research package is not READY_FOR_STORY_SCRIPT")
-    concept_id = str(package.get("concept_id", "")).strip()
+def build_script_request(plan: dict[str, Any], plan_path: Path) -> dict[str, Any]:
+    if plan.get("status") != "STORY_PLAN_READY":
+        raise ValueError("Story Plan is not STORY_PLAN_READY")
+
+    concept_id = str(plan.get("concept_id", "")).strip()
     if not concept_id:
-        raise ValueError("Verified research package requires concept_id")
-    concept = package.get("concept", {})
+        raise ValueError("Story Plan requires concept_id")
+
+    package = plan.get("package", {})
+    if not isinstance(package, dict):
+        raise ValueError("Story Plan package must be an object")
+    title = str(package.get("title") or "").strip()
+    if not title:
+        raise ValueError("Story Plan requires the approved Packaging title")
+    if str(plan.get("title", "")) != title:
+        raise ValueError("Story Plan title must match the approved Packaging title")
+
+    concept = plan.get("concept", {})
     if not isinstance(concept, dict):
-        raise ValueError("concept must be an object")
-    packaging = concept.get("packaging", {})
-    if not isinstance(packaging, dict):
-        packaging = {}
-    claims = package.get("claims", [])
+        concept = {}
+
+    claims = plan.get("accepted_claims", [])
     if not isinstance(claims, list) or not claims:
-        raise ValueError("Story / Script requires at least one accepted research claim")
-    accepted = []
-    claim_ids = []
+        raise ValueError("Script requires accepted research claims")
+
+    claim_ids: list[str] = []
+    accepted: list[dict[str, Any]] = []
     for claim in claims:
+        if not isinstance(claim, dict):
+            raise ValueError("Every accepted claim must be an object")
         claim_id = str(claim.get("claim_id", "")).strip()
         statement = str(claim.get("statement", "")).strip()
         if not claim_id or not statement:
             raise ValueError("Every accepted claim requires claim_id and statement")
         claim_ids.append(claim_id)
-        accepted.append(
-            {
-                "claim_id": claim_id,
-                "statement": statement,
-                "role": claim.get("role"),
-                "question_ids": list(claim.get("question_ids", [])),
-                "coverage": claim.get("coverage", {}),
-            }
-        )
+        accepted.append(dict(claim))
+
+    beats = plan.get("beats", [])
+    if not isinstance(beats, list) or not beats:
+        raise ValueError("Story Plan requires story beats before script drafting")
+
     return {
         "artifact": "script_request",
         "concept_id": concept_id,
-        "package": {
-            "title": packaging.get("title") or concept.get("working_title"),
-            "thumbnail": packaging.get("thumbnail", {}),
-            "opening_frame": packaging.get("opening_frame", {}),
-            "one_sentence_promise": packaging.get("one_sentence_promise")
-            or packaging.get("core_promise")
-            or concept.get("audience_promise"),
-            "expected_payoff": packaging.get("expected_payoff"),
-            "viewer_problem": packaging.get("viewer_problem")
-            or concept.get("viewer_problem"),
-            "viewer_moment": packaging.get("viewer_moment")
-            or concept.get("viewer_moment"),
-            "desired_outcome": packaging.get("desired_outcome")
-            or concept.get("desired_outcome"),
-            "format_intent": packaging.get("format_intent")
-            or concept.get("format_intent"),
+        "package": package,
+        "concept": concept,
+        "story_plan": {
+            "title": plan.get("title"),
+            "story_question": plan.get("story_question"),
+            "opening_hook_intent": plan.get("opening_hook_intent"),
+            "beats": beats,
+            "payoff_intent": plan.get("payoff_intent"),
+            "closing_intent": plan.get("closing_intent"),
         },
-        "concept": {
-            "premise": concept.get("premise"),
-            "audience_promise": concept.get("audience_promise"),
-            "viewer_problem": concept.get("viewer_problem"),
-            "viewer_moment": concept.get("viewer_moment"),
-            "desired_outcome": concept.get("desired_outcome"),
-            "mechanism_id": concept.get("mechanism_id"),
-            "mechanism_label": concept.get("mechanism_label"),
-        },
-        "accepted_claim_ids": sorted(claim_ids),
+        "accepted_claim_ids": sorted(set(claim_ids)),
         "accepted_claims": accepted,
         "instructions": [
-            "Write an original YouTube script that fulfills the approved package promise.",
+            "Write the narration from the approved Story Plan rather than inventing a new structure.",
+            "Return the approved Packaging title exactly; do not rewrite or optimize it.",
             "Do not copy or closely paraphrase source-video wording.",
             "Do not introduce factual claims beyond the accepted research claims supplied here.",
-            "Every factual section must cite one or more accepted claim_ids.",
+            "Every scripted section must map to exactly one story beat using story_beat_id.",
+            "Each section must use the same factual claim_ids assigned to that story beat.",
             "Connective narration, transitions, questions and framing may be original but must not add unsupported facts.",
-            "Preserve viewer problem, viewer moment, desired outcome and expected payoff.",
-            "Use a strong opening hook, progressive reveal and clear payoff.",
+            "Preserve the planned hook intent, progressive viewer journey, reveal/payoff and closing intent.",
             "Do not claim virality, guaranteed performance or facts not present in accepted_claims.",
         ],
         "request_provenance": {
-            "verified_research_package": str(package_path.resolve()),
-            "verified_research_sha256": sha256_file(package_path),
+            "story_plan": str(plan_path.resolve()),
+            "story_plan_sha256": sha256_file(plan_path),
         },
     }
 
@@ -146,50 +141,105 @@ def build_script_request(package: dict[str, Any], package_path: Path) -> dict[st
 def validate_script_response(
     response: dict[str, Any], request: dict[str, Any]
 ) -> dict[str, Any]:
-    errors = []
+    errors: list[str] = []
     if str(response.get("concept_id", "")) != str(request.get("concept_id", "")):
         errors.append("concept_id mismatch")
-    if not str(response.get("title", "")).strip():
-        errors.append("title is required")
+
+    approved_title = str(request.get("package", {}).get("title") or "")
+    if str(response.get("title", "")) != approved_title:
+        errors.append("title must exactly match the approved Packaging title")
+
     if not str(response.get("opening_hook", "")).strip():
         errors.append("opening_hook is required")
     if not str(response.get("closing", "")).strip():
         errors.append("closing is required")
+
     sections = response.get("sections")
     if not isinstance(sections, list) or not sections:
         errors.append("sections must be a non-empty list")
         sections = []
+
+    story_plan = request.get("story_plan", {})
+    story_beats = (
+        story_plan.get("beats", [])
+        if isinstance(story_plan, dict)
+        else []
+    )
+    if not isinstance(story_beats, list) or not story_beats:
+        errors.append("request Story Plan beats are missing")
+        story_beats = []
+
+    beat_claims: dict[str, set[str]] = {}
+    for beat in story_beats:
+        if not isinstance(beat, dict):
+            continue
+        beat_id = str(beat.get("beat_id", "")).strip()
+        if beat_id:
+            ids = beat.get("claim_ids", [])
+            beat_claims[beat_id] = (
+                {str(item) for item in ids}
+                if isinstance(ids, list)
+                else set()
+            )
+
+    if story_beats and len(sections) != len(story_beats):
+        errors.append("script must contain exactly one section per Story Plan beat")
+
     allowed = set(request.get("accepted_claim_ids", []))
-    used = set()
-    seen = set()
+    used: set[str] = set()
+    seen_sections: set[str] = set()
+    seen_beats: set[str] = set()
+
     for index, section in enumerate(sections):
         if not isinstance(section, dict):
             errors.append(f"section {index} must be an object")
             continue
+
         sid = str(section.get("section_id", "")).strip()
         if not sid:
             errors.append(f"section {index} requires section_id")
-        elif sid in seen:
+        elif sid in seen_sections:
             errors.append(f"duplicate section_id: {sid}")
-        seen.add(sid)
+        seen_sections.add(sid)
+
+        beat_id = str(section.get("story_beat_id", "")).strip()
+        if not beat_id:
+            errors.append(f"{sid or index} requires story_beat_id")
+        elif beat_id not in beat_claims:
+            errors.append(f"{sid or index} references unknown story_beat_id {beat_id}")
+        elif beat_id in seen_beats:
+            errors.append(f"duplicate story_beat_id mapping: {beat_id}")
+        seen_beats.add(beat_id)
+
         if not str(section.get("purpose", "")).strip():
             errors.append(f"{sid or index} requires purpose")
         if not str(section.get("narration", "")).strip():
             errors.append(f"{sid or index} requires narration")
+
         ids = section.get("claim_ids")
         if not isinstance(ids, list):
             errors.append(f"{sid or index} claim_ids must be a list")
             continue
-        if not ids:
-            errors.append(f"{sid or index} requires at least one accepted claim_id")
-        for cid in ids:
-            normalized_cid = str(cid)
-            if normalized_cid not in allowed:
-                errors.append(
-                    f"{sid or index} uses unapproved claim_id {normalized_cid}"
-                )
+
+        normalized_ids = {str(cid) for cid in ids}
+        for cid in normalized_ids:
+            if cid not in allowed:
+                errors.append(f"{sid or index} uses unapproved claim_id {cid}")
             else:
-                used.add(normalized_cid)
+                used.add(cid)
+
+        if beat_id in beat_claims and normalized_ids != beat_claims[beat_id]:
+            errors.append(
+                f"{sid or index} claim_ids must match Story Plan beat {beat_id}"
+            )
+
+    missing_beats = set(beat_claims) - seen_beats
+    if missing_beats:
+        errors.append(
+            "script is missing Story Plan beat(s): "
+            + ", ".join(sorted(missing_beats))
+        )
+
     overlap = check_texts(
         [
             {"field": "title", "text": response.get("title", "")},
@@ -205,31 +255,40 @@ def validate_script_response(
     if overlap.get("blocking"):
         match = overlap.get("matches", [{}])[0]
         errors.append("source overlap block: " + str(match.get("overlap_text") or ""))
+
     return {
         "valid": not errors,
         "errors": errors,
         "claim_usage": sorted(used),
         "unused_accepted_claim_ids": sorted(allowed - used),
         "source_overlap": overlap,
+        "story_plan_beat_ids": sorted(beat_claims),
     }
 
 
-def run_prepare(verified_dir: Path = RESEARCH_VERIFIED_DIR) -> dict[str, Any]:
+def run_prepare(story_plans_dir: Path = STORY_PLANS_DIR) -> dict[str, Any]:
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
     paths = (
-        sorted(verified_dir.glob("*.verified_research_package.json"))
-        if verified_dir.exists()
+        sorted(story_plans_dir.glob("*.story_plan.json"))
+        if story_plans_dir.exists()
         else []
     )
-    prepared = []
-    failures = []
+
+    prepared: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
     pending: list[tuple[Path, dict[str, Any]]] = []
     for path in paths:
         try:
             request = build_script_request(load_json(path), path)
             pending.append((path, request))
         except Exception as exc:
-            failures.append({"package": str(path), "error_type": type(exc).__name__})
+            failures.append(
+                {
+                    "story_plan": str(path),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
 
     assert_unique_slug_ids(
         [str(request["concept_id"]) for _, request in pending],
@@ -239,29 +298,34 @@ def run_prepare(verified_dir: Path = RESEARCH_VERIFIED_DIR) -> dict[str, Any]:
     current_destinations: set[Path] = set()
     for _, request in pending:
         dest = (
-            REQUESTS_DIR / f"{safe_slug(request['concept_id'])}.script_request.json"
+            REQUESTS_DIR / f"{safe_slug(str(request['concept_id']))}.script_request.json"
         )
         dest.write_text(
-            json.dumps(request, indent=2, ensure_ascii=False), encoding="utf-8"
+            json.dumps(request, indent=2, ensure_ascii=False),
+            encoding="utf-8",
         )
         current_destinations.add(dest.resolve())
-        prepared.append({"concept_id": request["concept_id"], "request": str(dest)})
+        prepared.append(
+            {"concept_id": request["concept_id"], "request": str(dest)}
+        )
 
     for stale_path in REQUESTS_DIR.glob("*.script_request.json"):
         if stale_path.resolve() not in current_destinations:
             stale_path.unlink()
+
     summary = {
         "status": (
-            "SCRIPT_REQUESTS_READY" if prepared else "WAITING_FOR_VERIFIED_RESEARCH"
+            "SCRIPT_REQUESTS_READY" if prepared else "WAITING_FOR_STORY_PLANS"
         ),
-        "verified_packages_found": len(paths),
+        "story_plans_found": len(paths),
         "prepared": len(prepared),
         "failures": failures,
         "requests_dir": str(REQUESTS_DIR),
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     SUMMARY_FILE.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(summary, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
     return summary
 
@@ -269,10 +333,14 @@ def run_prepare(verified_dir: Path = RESEARCH_VERIFIED_DIR) -> dict[str, Any]:
 def main() -> None:
     p = argparse.ArgumentParser(description="Story / Script Engine")
     p.add_argument("--mode", choices=("prepare",), required=True)
-    p.add_argument("--verified-dir", type=Path, default=RESEARCH_VERIFIED_DIR)
+    p.add_argument("--story-plans-dir", type=Path, default=STORY_PLANS_DIR)
     a = p.parse_args()
     print(
-        json.dumps(run_prepare(a.verified_dir.resolve()), indent=2, ensure_ascii=False)
+        json.dumps(
+            run_prepare(a.story_plans_dir.resolve()),
+            indent=2,
+            ensure_ascii=False,
+        )
     )
 
 
