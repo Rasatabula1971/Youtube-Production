@@ -1118,6 +1118,7 @@ function renderConceptReview(snapshot, force) {
   }
 
   const concept = items[conceptCursor] || {};
+  const needEvidence = concept.viewer_need_evidence || {};
   const gap = concept.content_gap || {};
   const fit = concept.channel_fit || {};
   const titleTest = concept.title_clarity_test || {};
@@ -1146,6 +1147,9 @@ function renderConceptReview(snapshot, force) {
   }).join("");
   const questions = (concept.research_questions || []).map(function (question) {
     return "<li>" + escapeHtml(question) + "</li>";
+  }).join("");
+  const needBasis = (needEvidence.evidence_basis || []).map(function (item) {
+    return "<li>" + escapeHtml(item) + "</li>";
   }).join("");
 
   conceptDetail.innerHTML =
@@ -1177,7 +1181,10 @@ function renderConceptReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>VIEWER NEED</h4><p><strong>Problem:</strong> ' +
       escapeHtml(concept.viewer_problem || "") + '<br><strong>Moment:</strong> ' +
       escapeHtml(concept.viewer_moment || "") + '<br><strong>Outcome:</strong> ' +
-      escapeHtml(concept.desired_outcome || "") + '</p></div>' +
+      escapeHtml(concept.desired_outcome || "") + '<br><strong>Evidence state:</strong> ' +
+      escapeHtml(needEvidence.status || "HYPOTHESIS") + '<br><strong>Why:</strong> ' +
+      escapeHtml(needEvidence.rationale || "") + '</p>' +
+      (needBasis ? '<ul>' + needBasis + '</ul>' : '') + '</div>' +
     '<div class="concept-detail-card"><h4>CONTENT GAP / CHANNEL FIT</h4><p>' +
       '<strong>' + escapeHtml(gap.evidence_status || "UNASSESSED") + ':</strong> ' +
       escapeHtml(gap.hypothesis || "") + '<br><strong>Fit ' +

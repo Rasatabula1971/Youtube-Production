@@ -83,6 +83,7 @@ def save_idea(item: dict[str, Any], *, note: str, reviewer: str) -> dict[str, An
         "premise": str(item.get("premise") or ""),
         "audience_promise": str(item.get("audience_promise") or ""),
         "viewer_problem": str(item.get("viewer_problem") or ""),
+        "viewer_need_evidence": item.get("viewer_need_evidence", {}),
         "mechanism_id": item.get("mechanism_id"),
         "mechanism_label": item.get("mechanism_label"),
         "format_intent": item.get("format_intent"),

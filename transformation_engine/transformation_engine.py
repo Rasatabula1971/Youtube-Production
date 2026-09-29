@@ -114,6 +114,7 @@ def build_concept_request(
         "scope": entry.get("scope", {}),
         "transferable_descriptions": entry.get("transferable_descriptions", []),
         "observed_examples": entry.get("observed_examples", []),
+        "viewer_need_signal_context": entry.get("viewer_need_signal_context", []),
         "source_specific_elements_to_avoid": entry.get(
             "source_specific_elements_to_avoid", []
         ),
@@ -128,6 +129,7 @@ def build_concept_request(
             "Do not reuse source titles, scripts, footage, story sequences, personalities, or exact examples.",
             "Each concept must have a distinct premise and audience promise.",
             "Define the specific viewer problem, the moment the viewer is in, and the desired outcome.",
+            "Classify viewer-need support as OBSERVED, INFERRED, or HYPOTHESIS. OBSERVED requires concrete audience-signal evidence supplied in the request, such as repeated questions, comments, or search-intent evidence. Do not invent audience evidence.",
             "State a content-gap hypothesis separately from evidence; do not claim a gap is proven without a concrete evidence basis.",
             "State channel fit explicitly. Use REVIEW or UNASSESSED when fit is not yet defensible.",
             "Run a three-title clarity test before accepting the concept as packaging-ready.",
@@ -147,6 +149,11 @@ def build_concept_request(
                     "viewer_problem": "specific problem, question, or curiosity the viewer is trying to resolve",
                     "viewer_moment": "the situation or decision state the viewer is in when this matters",
                     "desired_outcome": "what the viewer wants to understand, fix, avoid, or decide",
+                    "viewer_need_evidence": {
+                        "status": "OBSERVED|INFERRED|HYPOTHESIS",
+                        "evidence_basis": [],
+                        "rationale": "why the viewer problem has this evidence state",
+                    },
                     "content_gap": {
                         "hypothesis": "what existing content may leave unanswered, too broad, outdated, or poorly served",
                         "evidence_status": "SUPPORTED|HYPOTHESIS|UNASSESSED",
@@ -208,6 +215,29 @@ def validate_concept(
     ):
         if not str(concept.get(field, "")).strip():
             errors.append(f"{field} is required")
+
+    viewer_need_evidence = concept.get("viewer_need_evidence")
+    if not isinstance(viewer_need_evidence, dict):
+        errors.append("viewer_need_evidence must be an object")
+    else:
+        need_status = str(
+            viewer_need_evidence.get("status", "")
+        ).strip().upper()
+        if need_status not in {"OBSERVED", "INFERRED", "HYPOTHESIS"}:
+            errors.append(
+                "viewer_need_evidence.status must be OBSERVED, INFERRED, or HYPOTHESIS"
+            )
+        need_basis = viewer_need_evidence.get("evidence_basis")
+        if not isinstance(need_basis, list):
+            errors.append("viewer_need_evidence.evidence_basis must be a list")
+        elif need_status == "OBSERVED" and not [
+            item for item in need_basis if str(item).strip()
+        ]:
+            errors.append(
+                "OBSERVED viewer_need_evidence requires concrete evidence_basis"
+            )
+        if not str(viewer_need_evidence.get("rationale", "")).strip():
+            errors.append("viewer_need_evidence.rationale is required")
 
     content_gap = concept.get("content_gap")
     if not isinstance(content_gap, dict):

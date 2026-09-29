@@ -2,7 +2,9 @@ import unittest
 from unittest.mock import patch
 
 from concept_triage import (
+    build_prompt,
     build_shortlist_payload,
+    compact_concepts,
     chunk_concepts,
     merge_full_audit,
     normalize_scored_triage,
@@ -76,6 +78,21 @@ class ConceptTriageTests(unittest.TestCase):
             "shortlist_ids": ["c1", "c2", "c3"],
             "summary": "three strongest",
         }
+
+    def test_legacy_concepts_get_hypothesis_viewer_need_evidence(self):
+        compact = compact_concepts(self.candidates()["concepts"])
+        self.assertTrue(
+            all(
+                item["viewer_need_evidence"]["status"] == "HYPOTHESIS"
+                for item in compact
+            )
+        )
+
+    def test_prompt_requires_honest_viewer_need_evidence(self):
+        payload = self.candidates()
+        prompt = build_prompt(payload, 95000, phase="chunk")
+        self.assertIn("viewer_need_evidence", prompt)
+        self.assertIn("validated audience demand", prompt)
 
     def test_valid_triage_requires_all_candidates(self):
         result = validate_triage(self.response(), self.candidates()["concepts"])

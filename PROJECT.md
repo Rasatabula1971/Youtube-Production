@@ -425,6 +425,7 @@ Learning
 The following are useful working principles:
 
 - a topic is not yet a finished idea; the concept should identify a specific viewer problem, viewer moment and desired outcome;
+- viewer needs must preserve whether support is OBSERVED, INFERRED or HYPOTHESIS so a plausible model-generated problem is not mistaken for validated audience demand;
 - content-gap claims should preserve whether they are SUPPORTED, HYPOTHESIS or UNASSESSED rather than being inferred from popularity;
 - channel fit is a separate human judgment from demand;
 - three working title options are used as an idea-clarity test before packaging;
@@ -640,6 +641,7 @@ Concept candidates record:
 
 - viewer problem;
 - viewer moment;
+- viewer-need evidence state/basis/rationale;
 - desired outcome;
 - content-gap hypothesis/evidence state;
 - channel-fit state/rationale;
@@ -649,7 +651,10 @@ Packaging candidates then restate that intent as a one-sentence promise and
 must preserve problem, gap and channel-fit alignment through the Packaging Gate.
 
 Opportunity metrics do not by themselves prove an unanswered viewer need.
-Comment/question mining is a planned future evidence source for validating
-content-gap hypotheses.
+Concept generation now labels viewer-need support as OBSERVED, INFERRED or
+HYPOTHESIS and the Human Concept Gate checks that the evidence state is honest.
+Automated comment/question acquisition remains a planned evidence source; until
+it is wired, a viewer need cannot be called OBSERVED unless a concrete audience
+signal is already present in the request.
 
 See `transformation_engine/VIEWER_NEED_FRAMING.md`.

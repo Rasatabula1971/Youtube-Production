@@ -73,6 +73,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "viewer_problem",
             "viewer_moment",
             "desired_outcome",
+            "viewer_need_evidence",
             "content_gap",
             "channel_fit",
             "title_clarity_test",
@@ -91,6 +92,22 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "viewer_problem": {"type": "string", "minLength": 1},
             "viewer_moment": {"type": "string", "minLength": 1},
             "desired_outcome": {"type": "string", "minLength": 1},
+            "viewer_need_evidence": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["status", "evidence_basis", "rationale"],
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["OBSERVED", "INFERRED", "HYPOTHESIS"],
+                    },
+                    "evidence_basis": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "rationale": {"type": "string", "minLength": 1},
+                },
+            },
             "content_gap": {
                 "type": "object",
                 "additionalProperties": False,
@@ -194,16 +211,20 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "examples, personalities, or source video IDs.\n"
         "3. Treat observed examples as evidence about a mechanism, not material to copy.\n"
         "4. Every concept must identify a specific viewer problem, viewer moment, "
-        "desired outcome, and an honest content-gap evidence state.\n"
-        "5. Do not invent evidence for a content gap. If not proven, use HYPOTHESIS "
-        "or UNASSESSED.\n"
-        "6. Do not predict views, virality, CTR, retention, or recommendation.\n"
-        "7. Channel fit may be REVIEW or UNASSESSED when it cannot be defended.\n"
-        "8. Provide at least three clear working-title options as an idea clarity test.\n"
-        "9. Include at least two independent research questions before scripting.\n"
-        "10. The Source Dependency Test must pass: the concept must keep its main "
+        "desired outcome, and an honest viewer-need evidence state.\n"
+        "5. Set viewer_need_evidence.status to OBSERVED only when the request contains "
+        "concrete audience-signal evidence such as repeated questions, comments, or "
+        "search-intent evidence. Use INFERRED when the need is a reasoned inference "
+        "from available market/source evidence, and HYPOTHESIS when it is unverified.\n"
+        "6. Do not invent audience evidence or content-gap evidence. If a content gap "
+        "is not proven, use HYPOTHESIS or UNASSESSED.\n"
+        "7. Do not predict views, virality, CTR, retention, or recommendation.\n"
+        "8. Channel fit may be REVIEW or UNASSESSED when it cannot be defended.\n"
+        "9. Provide at least three clear working-title options as an idea clarity test.\n"
+        "10. Include at least two independent research questions before scripting.\n"
+        "11. The Source Dependency Test must pass: the concept must keep its main "
         "value without source wording, footage, story, personality, or exact execution.\n"
-        "11. Do not rank or score concepts.\n\n"
+        "12. Do not rank or score concepts.\n\n"
         "CONCEPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )

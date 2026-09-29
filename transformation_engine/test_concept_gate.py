@@ -16,6 +16,7 @@ class ConceptGateTests(unittest.TestCase):
                 "audience_promise_clear",
                 "viewer_problem_specific",
                 "viewer_moment_clear",
+                "viewer_need_evidence_honest",
                 "desired_outcome_specific",
                 "content_gap_honest",
                 "channel_fit_confirmed",
@@ -163,6 +164,8 @@ class ConceptGateTests(unittest.TestCase):
         first = request["items"][0]
         self.assertIn("viewer_problem", first)
         self.assertIn("viewer_moment", first)
+        self.assertIn("viewer_need_evidence", first)
+        self.assertEqual(first["viewer_need_evidence"]["status"], "HYPOTHESIS")
         self.assertIn("content_gap", first)
         self.assertIn("channel_fit", first)
         self.assertIn("title_clarity_test", first)
@@ -233,6 +236,10 @@ class ConceptGateTests(unittest.TestCase):
         self.assertEqual(
             handoff["concepts"][0]["concept_id"],
             "c1",
+        )
+        self.assertEqual(
+            handoff["concepts"][0]["viewer_need_evidence"]["status"],
+            "HYPOTHESIS",
         )
 
     def test_rework_is_preserved_but_not_handed_to_research(self):

@@ -127,6 +127,7 @@ class ConceptReviewTests(unittest.TestCase):
             "audience_promise_clear": True,
             "viewer_problem_specific": True,
             "viewer_moment_clear": True,
+            "viewer_need_evidence_honest": True,
             "desired_outcome_specific": True,
             "content_gap_honest": True,
             "channel_fit_confirmed": True,

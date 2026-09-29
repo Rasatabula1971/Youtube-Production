@@ -56,6 +56,48 @@ def load_config() -> dict[str, Any]:
     return config
 
 
+def normalized_viewer_need_evidence(
+    concept: dict[str, Any],
+) -> dict[str, Any]:
+    raw = concept.get("viewer_need_evidence")
+    if not isinstance(raw, dict):
+        return {
+            "status": "HYPOTHESIS",
+            "evidence_basis": [],
+            "rationale": (
+                "No explicit audience-signal evidence was recorded for this "
+                "existing concept; treat the stated viewer need as unverified."
+            ),
+        }
+
+    status = str(raw.get("status", "")).strip().upper()
+    basis = raw.get("evidence_basis")
+    if not isinstance(basis, list):
+        basis = []
+    basis = [str(item).strip() for item in basis if str(item).strip()]
+    rationale = str(raw.get("rationale", "")).strip()
+
+    if status not in {"OBSERVED", "INFERRED", "HYPOTHESIS"}:
+        status = "HYPOTHESIS"
+    if status == "OBSERVED" and not basis:
+        status = "HYPOTHESIS"
+        rationale = (
+            rationale
+            or "OBSERVED was downgraded because no concrete audience-signal basis was recorded."
+        )
+    if not rationale:
+        rationale = (
+            "Viewer need is retained with its declared evidence state; human review "
+            "must confirm that the state matches the recorded basis."
+        )
+
+    return {
+        "status": status,
+        "evidence_basis": basis,
+        "rationale": rationale,
+    }
+
+
 def build_review_request(
     candidates_payload: dict[str, Any],
     config: dict[str, Any],
@@ -92,6 +134,7 @@ def build_review_request(
                 "viewer_problem": concept.get("viewer_problem"),
                 "viewer_moment": concept.get("viewer_moment"),
                 "desired_outcome": concept.get("desired_outcome"),
+                "viewer_need_evidence": normalized_viewer_need_evidence(concept),
                 "content_gap": concept.get("content_gap"),
                 "channel_fit": concept.get("channel_fit"),
                 "title_clarity_test": concept.get("title_clarity_test"),
@@ -122,6 +165,9 @@ def build_review_request(
             ),
             "viewer_moment_clear": (
                 "The situation or decision moment in which the viewer needs this video is understandable."
+            ),
+            "viewer_need_evidence_honest": (
+                "The viewer need is labeled OBSERVED, INFERRED, or HYPOTHESIS consistently with the recorded audience-signal basis; an unverified need is not presented as validated demand."
             ),
             "desired_outcome_specific": (
                 "The viewer's intended learning, fix, avoidance, or decision outcome is concrete."
@@ -321,6 +367,7 @@ def apply_gate(
                 "viewer_problem": concept.get("viewer_problem"),
                 "viewer_moment": concept.get("viewer_moment"),
                 "desired_outcome": concept.get("desired_outcome"),
+                "viewer_need_evidence": normalized_viewer_need_evidence(concept),
                 "content_gap": concept.get("content_gap", {}),
                 "channel_fit": concept.get("channel_fit", {}),
                 "title_clarity_test": concept.get("title_clarity_test", {}),
