@@ -287,6 +287,7 @@ def snapshot() -> dict[str, Any]:
             "rejected": 0,
         }
     specs: list[dict[str, Any]] = []
+    stale_requests = 0
     counts = {"pending": 0, "accepted": 0, "rework": 0, "rejected": 0}
     decision_key = {
         "ACCEPT": "accepted",
@@ -301,6 +302,11 @@ def snapshot() -> dict[str, Any]:
         fmt = str(request.get("format") or "")
         saved_path = response_path(concept_id, fmt)
         saved = load_json(saved_path) if saved_path.exists() else {}
+        try:
+            assert_current_spec(request)
+        except ValueError:
+            stale_requests += 1
+            saved = {}
         if not isinstance(saved, dict) or not _response_is_current(request, saved):
             saved = {}
         decision = str(saved.get("decision") or "PENDING").upper()
@@ -313,11 +319,19 @@ def snapshot() -> dict[str, Any]:
                 "note": saved.get("note", ""),
             }
         )
-    complete = bool(specs) and counts["pending"] == 0
+    complete = bool(specs) and counts["pending"] == 0 and stale_requests == 0
+    status = (
+        "READY_TO_PREPARE"
+        if stale_requests
+        else "COMPLETE"
+        if complete
+        else "AWAITING_HUMAN_DECISION"
+    )
     return {
-        "status": "COMPLETE" if complete else "AWAITING_HUMAN_DECISION",
+        "status": status,
         "complete": complete,
         "specs": specs,
+        "stale_requests": stale_requests,
         **counts,
     }
 
