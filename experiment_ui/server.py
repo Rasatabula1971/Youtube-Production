@@ -2491,54 +2491,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     research_waiting = research_status in {
         "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
         "DISCOVERY_RUNNING",
-        "format_prepare": {
-            "enabled": production_ready and not format_requests_ready,
-            "reason": (
-                "Approved scripts are ready for per-branch format requests."
-                if production_ready and not format_requests_ready
-                else (
-                    "Format requests are already current."
-                    if format_requests_ready
-                    else "Complete the Human Script Gate first."
-                )
-            ),
-        },
-        "format_generate": {
-            "enabled": format_requests_ready and not format_plans_ready,
-            "reason": (
-                "Current format requests are ready for FAIR planning."
-                if format_requests_ready and not format_plans_ready
-                else (
-                    "Current format plans already exist."
-                    if format_plans_ready
-                    else "Prepare current format requests first."
-                )
-            ),
-        },
-        "format_gate_prepare": {
-            "enabled": (
-                format_plans_ready
-                and (
-                    format_gate_status == "READY_TO_PREPARE"
-                    or (format_gate_complete and not production_engine_ready)
-                )
-            ),
-            "reason": (
-                "Validated format plans are ready for human review."
-                if format_plans_ready and format_gate_status == "READY_TO_PREPARE"
-                else (
-                    "No format plan was approved; reopen the Format Gate."
-                    if format_plans_ready
-                    and format_gate_complete
-                    and not production_engine_ready
-                    else (
-                        "Format Gate is already prepared or complete."
-                        if format_plans_ready
-                        else "Generate current format plans first."
-                    )
-                )
-            ),
-        },
+
     }
     human_gate = opportunity_gate_snapshot()
     human_gate_ready = bool(human_gate.get("ready_for_experiment_02"))
@@ -3202,7 +3155,55 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     )
                 )
             ),
+        },        "format_prepare": {
+            "enabled": production_ready and not format_requests_ready,
+            "reason": (
+                "Approved scripts are ready for per-branch format requests."
+                if production_ready and not format_requests_ready
+                else (
+                    "Format requests are already current."
+                    if format_requests_ready
+                    else "Complete the Human Script Gate first."
+                )
+            ),
         },
+        "format_generate": {
+            "enabled": format_requests_ready and not format_plans_ready,
+            "reason": (
+                "Current format requests are ready for FAIR planning."
+                if format_requests_ready and not format_plans_ready
+                else (
+                    "Current format plans already exist."
+                    if format_plans_ready
+                    else "Prepare current format requests first."
+                )
+            ),
+        },
+        "format_gate_prepare": {
+            "enabled": (
+                format_plans_ready
+                and (
+                    format_gate_status == "READY_TO_PREPARE"
+                    or (format_gate_complete and not production_engine_ready)
+                )
+            ),
+            "reason": (
+                "Validated format plans are ready for human review."
+                if format_plans_ready and format_gate_status == "READY_TO_PREPARE"
+                else (
+                    "No format plan was approved; reopen the Format Gate."
+                    if format_plans_ready
+                    and format_gate_complete
+                    and not production_engine_ready
+                    else (
+                        "Format Gate is already prepared or complete."
+                        if format_plans_ready
+                        else "Generate current format plans first."
+                    )
+                )
+            ),
+        },
+
     }
 
     ready_machine_steps = [
