@@ -17,6 +17,7 @@ calls cost 5 credits. This project therefore budgets credits, not "calls".
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
@@ -189,6 +190,7 @@ class VidIQMCPClient:
         self._next_id = 1
         self.initialized = False
         self.process: subprocess.Popen[str] | None = None
+        atexit.register(self.close)
 
     def _start_proxy(self) -> None:
         if self._transport_override is not None or self.process is not None:
