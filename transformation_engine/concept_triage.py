@@ -138,6 +138,17 @@ def compact_concepts(concepts: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "viewer_problem": item.get("viewer_problem"),
                 "viewer_moment": item.get("viewer_moment"),
                 "desired_outcome": item.get("desired_outcome"),
+                "viewer_need_evidence": item.get(
+                    "viewer_need_evidence",
+                    {
+                        "status": "HYPOTHESIS",
+                        "evidence_basis": [],
+                        "rationale": (
+                            "No explicit audience-signal evidence was recorded "
+                            "for this existing concept."
+                        ),
+                    },
+                ),
                 "content_gap": item.get("content_gap", {}),
                 "channel_fit": item.get("channel_fit", {}),
                 "title_clarity_test": item.get("title_clarity_test", {}),
@@ -190,13 +201,17 @@ def build_prompt(
         "1. Prefer concepts aligned with the intended channel/audience direction.\n"
         "2. Penalize promises that assume research conclusions before research exists.\n"
         "3. Penalize unrealistic, unsafe, or highly specialized original testing.\n"
-        "4. Treat content_gap HYPOTHESIS/UNASSESSED honestly.\n"
-        "5. Prefer concepts independently researchable with credible sources.\n"
-        "6. Prefer clear viewer moments, concrete outcomes, and packageable payoff.\n"
-        "7. Penalize terminology errors, false precision, and category mistakes.\n"
-        "8. Do not reward a concept merely because it has a catchy title.\n"
-        "9. Account for every concept exactly once.\n"
-        "10. Return only scores and rationales; Python code derives decisions.\n\n"
+        "4. Treat viewer_need_evidence honestly. OBSERVED should only increase "
+        "confidence when evidence_basis contains concrete audience signals. INFERRED "
+        "and HYPOTHESIS may still be strong ideas, but must not be scored as validated "
+        "audience demand.\n"
+        "5. Treat content_gap HYPOTHESIS/UNASSESSED honestly.\n"
+        "6. Prefer concepts independently researchable with credible sources.\n"
+        "7. Prefer clear viewer moments, concrete outcomes, and packageable payoff.\n"
+        "8. Penalize terminology errors, false precision, and category mistakes.\n"
+        "9. Do not reward a concept merely because it has a catchy title.\n"
+        "10. Account for every concept exactly once.\n"
+        "11. Return only scores and rationales; Python code derives decisions.\n\n"
         "CANDIDATES:\n"
         + json.dumps(
             compact_concepts(concepts),
