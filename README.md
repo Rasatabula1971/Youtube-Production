@@ -219,21 +219,35 @@ See `packaging_engine/PACKAGING_ENGINE.md` and
 `packaging_engine/PACKAGING_GATE.md`.
 
 
+## Story / Script and Format split
+
+The Story / Script Engine now keeps one shared, verified Story Plan but writes
+final narration **per required format before the Human Script Gate**. The approved
+concept `format_intent` decides whether the concept requires `long_form`,
+`short`, or both.
+
+The two script profiles are deliberately different. Long-form prioritizes
+sustained curiosity and comprehension. Shorts uses a high reward-density profile
+with a 3-second opening-hook target and roughly 4–6 second attention/reward
+refreshes as starting hypotheses for channel testing. These are not universal
+physiological claims.
+
+Every required script branch is reviewed independently. Only when all required
+branches are accepted does the gate create one approved script bundle.
+
 ## Format Engine
 
-The repository now includes the Format Engine and human Format Gate.
+The Format Engine and Human Format Gate consume that approved bundle. At this
+point narration is immutable. Format planning owns scene structure, visual
+treatment, duration intent, aspect ratio and production pacing; it may not
+rewrite, shorten or substitute a branch script.
 
-A Script Gate approved script is converted into one production plan per required
-branch. The approved concept `format_intent` decides which branches are required:
-`long_form`, `short`, or both when the intent is `either`.
+Each production branch may reference only sections from its matching approved
+script. Production plans that collapse into identical branches or simple
+timeline truncations fail deterministic validation.
 
-Long-form and Shorts share source understanding, research, accepted facts and the
-master story package, but they are planned as separate productions. Plans that are
-identical across branches, or that differ only by truncating one timeline, fail
-deterministic validation before a human ever sees them.
-
-Every beat carrying factual material cites human-accepted research claims and traces
-back to the approved script sections it is built from.
+Every factual production beat cites human-accepted research claims and traces
+back to approved branch-script sections.
 
 No format score, predicted retention or automatic branch winner is produced.
 

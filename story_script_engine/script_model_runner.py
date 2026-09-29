@@ -55,80 +55,162 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "script_model_batch_summary.json"
 
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
-    allowed = list(request.get("accepted_claim_ids", []))
+    allowed_claims = list(request.get("accepted_claim_ids", []))
     approved_title = str(request.get("package", {}).get("title") or "")
+    fmt = str(request.get("format") or "")
     story_plan = request.get("story_plan", {})
-    beats = (
-        story_plan.get("beats", [])
-        if isinstance(story_plan, dict)
-        else []
-    )
+    beats = story_plan.get("beats", []) if isinstance(story_plan, dict) else []
     beat_ids = [
         str(beat.get("beat_id", ""))
         for beat in beats
         if isinstance(beat, dict) and str(beat.get("beat_id", "")).strip()
     ]
+    psychology_contract = request.get("psychology_contract", {})
+    opening_line = (
+        psychology_contract.get("opening_line", {})
+        if isinstance(psychology_contract, dict)
+        else {}
+    )
+    hook_mechanisms = list(opening_line.get("allowed_mechanisms", []))
+    beat_mechanisms = list(
+        psychology_contract.get("beat_mechanisms", [])
+        if isinstance(psychology_contract, dict)
+        else []
+    )
+    reward_types = list(request.get("reward_types", []))
+    profile_value = request.get("psychology_profile", {})
+    profile = profile_value if isinstance(profile_value, dict) else {}
+    minimum_value = profile.get("min_sections")
+    maximum_value = profile.get("max_sections")
+    minimum = (
+        minimum_value
+        if isinstance(minimum_value, int) and not isinstance(minimum_value, bool)
+        else 1
+    )
+    maximum = (
+        maximum_value
+        if isinstance(maximum_value, int) and not isinstance(maximum_value, bool)
+        else None
+    )
+    section_schema: dict[str, Any] = {
+        "type": "array",
+        "minItems": minimum,
+        "items": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "section_id",
+                "source_story_beat_ids",
+                "purpose",
+                "psychology_mechanism",
+                "reward_type",
+                "narration",
+                "claim_ids",
+            ],
+            "properties": {
+                "section_id": {"type": "string", "minLength": 1},
+                "source_story_beat_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"type": "string", "enum": beat_ids},
+                    "uniqueItems": True,
+                },
+                "purpose": {"type": "string", "minLength": 1},
+                "psychology_mechanism": {
+                    "type": "string",
+                    "enum": beat_mechanisms,
+                },
+                "reward_type": {
+                    "type": "string",
+                    "enum": reward_types,
+                },
+                "narration": {"type": "string", "minLength": 1},
+                "claim_ids": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": allowed_claims},
+                    "uniqueItems": True,
+                },
+            },
+        },
+    }
+    if maximum is not None:
+        section_schema["maxItems"] = maximum
+
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["concept_id", "title", "opening_hook", "sections", "closing"],
+        "required": [
+            "concept_id",
+            "format",
+            "title",
+            "opening_hook",
+            "opening_hook_mechanism",
+            "opening_hook_claim_ids",
+            "sections",
+            "closing",
+        ],
         "properties": {
             "concept_id": {
                 "type": "string",
                 "const": str(request.get("concept_id", "")),
             },
+            "format": {"type": "string", "const": fmt},
             "title": {"type": "string", "const": approved_title},
             "opening_hook": {"type": "string", "minLength": 1},
-            "sections": {
-                "type": "array",
-                "minItems": len(beat_ids) if beat_ids else 1,
-                **({"maxItems": len(beat_ids)} if beat_ids else {}),
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": [
-                        "section_id",
-                        "story_beat_id",
-                        "purpose",
-                        "narration",
-                        "claim_ids",
-                    ],
-                    "properties": {
-                        "section_id": {"type": "string", "minLength": 1},
-                        "story_beat_id": {
-                            "type": "string",
-                            "enum": beat_ids,
-                        },
-                        "purpose": {"type": "string", "minLength": 1},
-                        "narration": {"type": "string", "minLength": 1},
-                        "claim_ids": {
-                            "type": "array",
-                            "items": {"type": "string", "enum": allowed},
-                            "uniqueItems": True,
-                        },
-                    },
-                },
+            "opening_hook_mechanism": {
+                "type": "string",
+                "enum": hook_mechanisms,
             },
+            "opening_hook_claim_ids": {
+                "type": "array",
+                "items": {"type": "string", "enum": allowed_claims},
+                "uniqueItems": True,
+            },
+            "sections": section_schema,
             "closing": {"type": "string", "minLength": 1},
         },
     }
 
 
 def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
+    fmt = str(request.get("format") or "")
+    profile = request.get("psychology_profile", {})
     prompt = (
-        "You are writing the narration for an original YouTube video from an "
-        "approved Story Plan and human-verified research. Return JSON only.\n\n"
+        "You are writing one FORMAT-SPECIFIC branch of an original YouTube "
+        "video from a shared approved Story Plan and human-verified research. "
+        "Return JSON only.\n\n"
+        f"TARGET FORMAT: {fmt}\n"
         "Rules:\n"
-        "1. Return the approved Packaging title EXACTLY. Do not rewrite, optimize, or replace it.\n"
-        "2. Follow the supplied Story Plan in order. Do not invent a new story structure.\n"
-        "3. Create exactly one script section for each Story Plan beat and map it with story_beat_id.\n"
-        "4. Each section must carry exactly the claim_ids assigned to its Story Plan beat.\n"
-        "5. Use only accepted_claims for factual assertions. Never invent a factual detail.\n"
-        "6. Original connective narration is allowed only when it does not add factual claims.\n"
-        "7. Do not copy source-video wording, story sequence, personality, or exact execution.\n"
-        "8. Do not mention claim IDs or story beat IDs in spoken narration.\n"
-        "9. Turn the Story Plan intent into natural spoken language with a strong hook, progression, payoff and concise close.\n\n"
-        "SCRIPT REQUEST:\n"
+        "1. Return the approved Packaging title EXACTLY. Do not rewrite it.\n"
+        "2. Return the exact target format supplied in the request.\n"
+        "3. The opening_hook is the FIRST SPOKEN LINE. Make it high-impact, truthful and directly tied to the package promise.\n"
+        "4. Choose an allowed opening_hook_mechanism appropriate to THIS format; do not manufacture drama or overstate verified research.\n"
+        "5. Record opening_hook_claim_ids for any verified factual claims the hook relies on.\n"
+        "6. Build sections specifically for this format. Each section must cite one or more source_story_beat_ids from the shared Story Plan.\n"
+        "7. You may compress or combine Story Plan beats when the format profile allows it, but you may not invent facts or lose the main payoff.\n"
+        "8. Section claim_ids must come from the cited Story Plan beats and accepted research.\n"
+        "9. Use psychology_mechanism and reward_type to describe the intended viewer experience; never speak those labels aloud.\n"
+        "10. Follow the supplied psychology_profile. It overrides generic pacing folklore.\n"
+        "11. Do not copy source-video wording, story sequence, personality or exact execution.\n"
+        "12. Do not claim virality or guaranteed performance.\n"
+    )
+    if fmt == "short":
+        prompt += (
+            "13. SHORTS: defend against the swipe immediately. The 3-second hook target is a production hypothesis that will be measured after audio rendering, not guessed from text length.\n"
+            "14. SHORTS: every section must create meaningful progress through PROOF, NOVELTY, REVEAL, EXPECTATION_SHIFT, MICRO_PAYOFF or PROGRESS.\n"
+            "15. SHORTS: aim for a meaningful attention/reward refresh roughly every 4-6 seconds as a testable hypothesis; keep one core idea and low cognitive branching.\n"
+            "16. SHORTS: close loops quickly and finish with a strong payoff.\n"
+        )
+    else:
+        prompt += (
+            "13. LONG FORM: prioritize sustained curiosity, comprehension and meaningful delayed payoff over constant interruption.\n"
+            "14. LONG FORM: use setup, examples and breathing room where they reduce cognitive load.\n"
+            "15. LONG FORM: cover the full Story Plan rather than reducing it to a short-form summary.\n"
+        )
+    prompt += (
+        "\nPSYCHOLOGY PROFILE:\n"
+        + json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
+        + "\n\nSCRIPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
     if len(prompt) > maximum_chars:
@@ -146,13 +228,17 @@ def run_one(
     concept_id = str(request.get("concept_id", "")).strip()
     if not concept_id:
         raise ValueError("Script request requires concept_id")
+    fmt = str(request.get("format", "")).strip()
+    if not fmt:
+        raise ValueError("Script request requires format")
 
     slug = safe_slug(concept_id)
+    branch_slug = f"{slug}.{safe_slug(fmt)}"
     request_hash = sha256_file(path)
     validation_contract = validation_contract_sha256()
-    report_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
-    response_path = RESPONSES_DIR / f"{slug}.json"
-    draft_path = DRAFTS_DIR / f"{slug}.script_draft.json"
+    report_path = MODEL_RUNS_DIR / f"{branch_slug}.model_run.json"
+    response_path = RESPONSES_DIR / f"{branch_slug}.json"
+    draft_path = DRAFTS_DIR / f"{branch_slug}.script_draft.json"
 
     if report_path.exists() and draft_path.exists() and not force:
         existing = tolerant_load_json(report_path) or {}
@@ -170,6 +256,7 @@ def run_one(
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
                 "concept_id": concept_id,
+                "format": fmt,
                 "report": str(report_path),
             }
 
@@ -217,6 +304,7 @@ def run_one(
 
     base = {
         "concept_id": concept_id,
+        "format": fmt,
         "request_source": str(path),
         "request_sha256": request_hash,
         "validation_contract_sha256": validation_contract,
@@ -252,7 +340,7 @@ def run_one(
         return report
 
     raw = str(result.get("output") or "")
-    raw_path = RAW_OUTPUTS_DIR / f"{slug}.txt"
+    raw_path = RAW_OUTPUTS_DIR / f"{branch_slug}.txt"
     atomic_write_text(raw_path, raw)
 
     try:
@@ -292,6 +380,10 @@ def run_one(
         **response,
         "accepted_claims": request.get("accepted_claims", []),
         "package": request.get("package", {}),
+        "required_branches": request.get("required_branches", []),
+        "story_plan": request.get("story_plan", {}),
+        "psychology_contract": request.get("psychology_contract", {}),
+        "psychology_profile": request.get("psychology_profile", {}),
         "validation": validation,
         "draft_provenance": response["response_provenance"],
     }

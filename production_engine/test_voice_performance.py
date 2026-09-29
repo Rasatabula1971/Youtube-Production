@@ -13,20 +13,44 @@ def approved_plan() -> dict:
         "concept_id": "concept-1",
         "format_gate": {"status": "READY_FOR_PRODUCTION_ENGINE"},
         "package": {"title": "The Locked Title"},
-        "master_story_package": {
-            "title": "The Locked Title",
-            "opening_hook": "Hook.",
-            "sections": [
-                {
-                    "section_id": "s1",
-                    "narration": "The first fact changes what we expect.",
+        "branch_story_packages": {
+            "long_form": {
+                "format": "long_form",
+                "title": "The Locked Title",
+                "opening_hook": "Long hook.",
+                "sections": [
+                    {
+                        "section_id": "lf1",
+                        "narration": "The first fact changes what we expect.",
+                    },
+                    {
+                        "section_id": "lf2",
+                        "narration": "Then the reveal explains why it happened.",
+                    },
+                ],
+                "closing": "Long close.",
+                "psychology_profile": {"reward_density": "MODERATE"},
+            },
+            "short": {
+                "format": "short",
+                "title": "The Locked Title",
+                "opening_hook": "Short hook.",
+                "sections": [
+                    {
+                        "section_id": "sh1",
+                        "narration": "Short proof hits immediately.",
+                    },
+                    {
+                        "section_id": "sh2",
+                        "narration": "Short payoff lands fast.",
+                    },
+                ],
+                "closing": "Short close.",
+                "psychology_profile": {
+                    "reward_density": "HIGH",
+                    "hook_target_seconds": 3,
                 },
-                {
-                    "section_id": "s2",
-                    "narration": "Then the reveal explains why it happened.",
-                },
-            ],
-            "closing": "Close.",
+            },
         },
         "branches": [
             {
@@ -40,17 +64,39 @@ def approved_plan() -> dict:
                         "purpose": "setup",
                         "treatment": "Build curiosity",
                         "claim_ids": ["c1"],
-                        "source_section_ids": ["s1"],
+                        "source_section_ids": ["lf1"],
                     },
                     {
                         "beat_id": "b2",
                         "purpose": "reveal",
                         "treatment": "Reveal the cause",
                         "claim_ids": ["c2"],
-                        "source_section_ids": ["s2"],
+                        "source_section_ids": ["lf2"],
                     },
                 ],
-            }
+            },
+            {
+                "format": "short",
+                "duration_intent_seconds": 30,
+                "promise_delivery": "Deliver the promise fast",
+                "payoff": "Land the mechanism",
+                "beats": [
+                    {
+                        "beat_id": "s1",
+                        "purpose": "proof",
+                        "treatment": "Immediate proof",
+                        "claim_ids": ["c1"],
+                        "source_section_ids": ["sh1"],
+                    },
+                    {
+                        "beat_id": "s2",
+                        "purpose": "reveal",
+                        "treatment": "Fast reveal",
+                        "claim_ids": ["c2"],
+                        "source_section_ids": ["sh2"],
+                    },
+                ],
+            },
         ],
     }
 
@@ -84,14 +130,16 @@ def config() -> dict:
 
 
 class VoicePerformanceTests(unittest.TestCase):
-    def build(self) -> dict:
+    def build(self, fmt="long_form") -> dict:
+        plan = approved_plan()
+        branch = next(item for item in plan["branches"] if item["format"] == fmt)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "concept.approved_format_plan.json"
-            path.write_text(json.dumps(approved_plan()), encoding="utf-8")
+            path.write_text(json.dumps(plan), encoding="utf-8")
             return voice_performance.build_request(
-                approved_plan(),
+                plan,
                 path,
-                approved_plan()["branches"][0],
+                branch,
                 config(),
             )
 
@@ -121,14 +169,24 @@ class VoicePerformanceTests(unittest.TestCase):
             ],
         }
 
-    def test_request_carries_locked_title_and_exact_narration(self) -> None:
-        request = self.build()
-        self.assertEqual(request["title"], "The Locked Title")
+    def test_request_carries_only_matching_branch_narration(self) -> None:
+        long_request = self.build("long_form")
+        short_request = self.build("short")
+        self.assertEqual(long_request["title"], "The Locked Title")
         self.assertEqual(
-            request["beats"][0]["immutable_narration"],
+            long_request["beats"][0]["immutable_narration"],
             "The first fact changes what we expect.",
         )
-        self.assertFalse(request["render_prerequisites_configured"])
+        self.assertEqual(
+            short_request["beats"][0]["immutable_narration"],
+            "Short proof hits immediately.",
+        )
+        self.assertEqual(short_request["opening_hook"], "Short hook.")
+        self.assertEqual(
+            short_request["script_psychology_profile"]["hook_target_seconds"],
+            3,
+        )
+        self.assertFalse(long_request["render_prerequisites_configured"])
 
     def test_valid_response_passes(self) -> None:
         result = voice_performance.validate_response(
@@ -160,13 +218,13 @@ class VoicePerformanceTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertTrue(any("not in immutable narration" in item for item in result["errors"]))
 
-    def test_missing_master_story_context_fails_closed(self) -> None:
+    def test_missing_matching_branch_context_fails_closed(self) -> None:
         plan = approved_plan()
-        plan.pop("master_story_package")
+        plan["branch_story_packages"].pop("long_form")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "plan.json"
             path.write_text(json.dumps(plan), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "immutable script context"):
+            with self.assertRaisesRegex(ValueError, "long_form script context"):
                 voice_performance.build_request(
                     plan,
                     path,

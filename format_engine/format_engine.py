@@ -117,53 +117,93 @@ def build_format_request(
 ) -> dict[str, Any]:
     gate = script.get("script_gate", {})
     if not isinstance(gate, dict) or gate.get("status") != READY_STATUS:
-        raise ValueError("Approved script is not READY_FOR_PRODUCTION")
+        raise ValueError("Approved script bundle is not READY_FOR_PRODUCTION")
 
     concept_id = str(script.get("concept_id", "")).strip()
     if not concept_id:
-        raise ValueError("Approved script requires concept_id")
+        raise ValueError("Approved script bundle requires concept_id")
 
     package = script.get("package", {})
     if not isinstance(package, dict):
         package = {}
     approved_title = str(package.get("title") or "").strip()
     if not approved_title:
-        raise ValueError("Approved script requires Packaging title")
+        raise ValueError("Approved script bundle requires Packaging title")
     if str(script.get("title") or "") != approved_title:
         raise ValueError(
-            "Approved script title does not match the Packaging title contract"
+            "Approved script bundle title does not match the Packaging title contract"
         )
 
-    sections = script.get("sections", [])
-    if not isinstance(sections, list) or not sections:
-        raise ValueError("Approved script requires at least one section")
+    required_branches = resolve_branches(
+        str(package.get("format_intent") or ""),
+        config,
+    )
+    bundle_required = script.get("required_branches", [])
+    if not isinstance(bundle_required, list) or set(bundle_required) != set(required_branches):
+        raise ValueError(
+            "Approved script bundle branches do not match format_intent"
+        )
 
-    section_ids = []
-    for section in sections:
-        if not isinstance(section, dict):
-            raise ValueError("Every approved script section must be an object")
-        section_id = str(section.get("section_id", "")).strip()
-        if not section_id:
-            raise ValueError("Every approved script section requires section_id")
-        section_ids.append(section_id)
+    branch_scripts = script.get("branch_scripts")
+    if not isinstance(branch_scripts, dict) or not branch_scripts:
+        raise ValueError("Approved script bundle requires branch_scripts")
+    if set(branch_scripts) != set(required_branches):
+        raise ValueError("Approved script bundle is missing a required branch script")
 
     claims = script.get("accepted_claims", [])
     if not isinstance(claims, list) or not claims:
         raise ValueError("Format planning requires at least one accepted claim")
-    claim_ids = []
+    claim_ids: list[str] = []
     for claim in claims:
+        if not isinstance(claim, dict):
+            raise ValueError("Every accepted claim must be an object")
         claim_id = str(claim.get("claim_id", "")).strip()
         if not claim_id:
             raise ValueError("Every accepted claim requires claim_id")
         claim_ids.append(claim_id)
 
-    branches = resolve_branches(str(package.get("format_intent") or ""), config)
+    branch_story_packages: dict[str, dict[str, Any]] = {}
+    section_ids_by_branch: dict[str, list[str]] = {}
+    for fmt in required_branches:
+        branch_script = branch_scripts.get(fmt)
+        if not isinstance(branch_script, dict):
+            raise ValueError(f"Approved script bundle is missing {fmt} script")
+        if str(branch_script.get("format") or "") != fmt:
+            raise ValueError(f"Approved {fmt} script has wrong format identity")
+        if str(branch_script.get("title") or "") != approved_title:
+            raise ValueError(f"Approved {fmt} script violates Packaging title")
+        sections = branch_script.get("sections", [])
+        if not isinstance(sections, list) or not sections:
+            raise ValueError(f"Approved {fmt} script requires sections")
+        section_ids: list[str] = []
+        for section in sections:
+            if not isinstance(section, dict):
+                raise ValueError(f"Every {fmt} script section must be an object")
+            section_id = str(section.get("section_id", "")).strip()
+            if not section_id:
+                raise ValueError(f"Every {fmt} script section requires section_id")
+            if section_id in section_ids:
+                raise ValueError(f"Duplicate {fmt} script section_id: {section_id}")
+            section_ids.append(section_id)
+        section_ids_by_branch[fmt] = sorted(section_ids)
+        branch_story_packages[fmt] = {
+            "format": fmt,
+            "title": branch_script.get("title"),
+            "opening_hook": branch_script.get("opening_hook"),
+            "opening_hook_mechanism": branch_script.get(
+                "opening_hook_mechanism"
+            ),
+            "sections": sections,
+            "closing": branch_script.get("closing"),
+            "psychology_profile": branch_script.get("psychology_profile", {}),
+        }
+
     constraints = {
         branch: dict(config["branch_constraints"][branch])
-        for branch in branches
+        for branch in required_branches
         if branch in config["branch_constraints"]
     }
-    missing_constraints = sorted(set(branches) - set(constraints))
+    missing_constraints = sorted(set(required_branches) - set(constraints))
     if missing_constraints:
         raise ValueError(
             "Missing branch constraints for: " + ", ".join(missing_constraints)
@@ -173,7 +213,7 @@ def build_format_request(
         "artifact": "format_request",
         "concept_id": concept_id,
         "format_intent": str(package.get("format_intent", "")).strip(),
-        "required_branches": branches,
+        "required_branches": required_branches,
         "branch_constraints": constraints,
         "package": {
             "title": package.get("title"),
@@ -185,24 +225,19 @@ def build_format_request(
             "thumbnail": package.get("thumbnail", {}),
             "opening_frame": package.get("opening_frame", {}),
         },
-        "master_story_package": {
-            "title": script.get("title"),
-            "opening_hook": script.get("opening_hook"),
-            "sections": sections,
-            "closing": script.get("closing"),
-        },
-        "script_section_ids": sorted(set(section_ids)),
+        "branch_story_packages": branch_story_packages,
+        "script_section_ids_by_branch": section_ids_by_branch,
         "accepted_claim_ids": sorted(set(claim_ids)),
         "accepted_claims": claims,
         "instructions": [
-            "Plan each required production branch separately.",
-            "Branches share research, accepted facts and the master story package.",
-            "Branches must not be identical edits or truncations of one timeline.",
+            "Plan production treatment for each already-approved script branch.",
+            "Do not rewrite, shorten, combine or substitute the approved branch narration.",
+            "Every production branch must use only section IDs from its matching approved script branch.",
+            "Branches must not collapse into identical edits or a simple truncation of one production timeline.",
             "Every branch must deliver the approved package promise in its own shape.",
             "Attach accepted claim_ids to every beat carrying factual material.",
             "Do not introduce factual claims beyond the accepted claims supplied here.",
-            "Trace every beat to the approved script sections it is built from.",
-            "Respect the duration and beat-count constraints for each branch.",
+            "Respect duration and beat-count constraints for each branch.",
             "Do not copy source-video wording, footage, story beats or execution.",
             "Do not claim virality or guaranteed performance.",
         ],
@@ -221,7 +256,6 @@ def _validate_branch(
 ) -> tuple[str, set[str]]:
     constraints_by_branch = request.get("branch_constraints", {})
     allowed_claims = set(request.get("accepted_claim_ids", []))
-    allowed_sections = set(request.get("script_section_ids", []))
 
     fmt = str(branch.get("format", "")).strip()
     label = fmt or f"branch {index}"
@@ -231,6 +265,12 @@ def _validate_branch(
         errors.append(f"branch {index} requires format")
         return label, used
 
+    section_ids_by_branch = request.get("script_section_ids_by_branch", {})
+    allowed_sections = set(
+        section_ids_by_branch.get(fmt, [])
+        if isinstance(section_ids_by_branch, dict)
+        else []
+    )
     constraints = constraints_by_branch.get(fmt, {})
 
     duration = branch.get("duration_intent_seconds")

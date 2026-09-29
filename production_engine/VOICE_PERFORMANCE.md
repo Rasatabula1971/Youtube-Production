@@ -47,8 +47,14 @@ operating hypotheses, not proven audience-performance rules.
 
 ## Immutable narration
 
-Every branch beat is bound to the exact approved Script section narration
-identified by the Format plan's `source_section_ids`.
+Every branch beat is bound only to the exact approved narration from the
+**matching format-specific script branch** identified by the Format plan's
+`source_section_ids`. A Shorts performance request cannot read long-form
+sections, and a long-form request cannot read Shorts sections.
+
+The branch's script psychology profile is carried forward as context, including
+the Shorts hook/refresh hypotheses where applicable. Voice Performance may
+adjust delivery only; it cannot alter the branch script.
 
 The model response has no narration field. It therefore cannot silently rewrite
 the spoken text. Emphasis terms must already occur in that immutable narration.

@@ -138,34 +138,37 @@ Produces:
 
 - evidence and primary-source research where practical;
 - fact verification;
-- an approved-title-bound Story Plan;
+- an approved-title-bound shared Story Plan;
 - hook intent, narrative progression, reveal and payoff structure;
-- evidence-backed narration written only after the Story Plan exists;
+- explicit audience-psychology guidance;
+- separate evidence-backed long-form and/or Shorts narration branches written
+  only after the Story Plan exists;
 - visual directions.
 
 The approved Packaging title is the viewer contract and is immutable downstream.
-Story Planning decides **what happens and in what order**. Script Writing decides
-**the exact spoken words**. The two are separate machine steps before the Human
-Script Gate. See D-063.
+Story Planning decides the shared **truthful viewer journey**. Script Writing then
+resolves the approved `format_intent` and decides the **exact spoken words for
+each required format** before the Human Script Gate. Long-form and Shorts may
+therefore share the same research and story promise while using different
+attention, cognitive-load and payoff strategies. See D-063 through D-065.
 
-A useful default is narrative progress rather than disconnected facts, but individual formats may justify other structures.
+A concept moves past the Human Script Gate only when every required branch is
+accepted. The resulting approved script bundle preserves the narrations
+separately.
 
 ### 06 — Format Engine
 
-Long-form and Shorts are separate production branches.
+Long-form and Shorts arrive here as separate, already-approved script branches.
 
-They may share:
+The Format Engine owns production treatment rather than narration rewriting:
+scene/beat planning, visual treatment, duration intent, aspect ratio and
+production traceability. Each production branch may use only the approved
+sections from its matching script branch.
 
-- source understanding;
-- research;
-- facts;
-- master story package.
-
-They should not be treated as identical edits of the same timeline.
-
-This stage is implemented as an offline framework in `format_engine/`. Branch
-separation is enforced deterministically before the Human Format Gate, and only
-gate-accepted plans reach the Production Engine. See D-060.
+Branches must not collapse into identical productions or simple truncations.
+The offline framework in `format_engine/` enforces branch separation before
+the Human Format Gate, and only gate-accepted plans reach the Production Engine.
+See D-060 and D-065.
 
 ### 07 — Production Engine
 

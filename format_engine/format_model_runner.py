@@ -53,7 +53,19 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "format_model_batch_summary.json"
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed_claims = list(request.get("accepted_claim_ids", []))
-    allowed_sections = list(request.get("script_section_ids", []))
+    by_branch = request.get("script_section_ids_by_branch", {})
+    allowed_sections = sorted(
+        {
+            str(section_id)
+            for values in (
+                by_branch.values()
+                if isinstance(by_branch, dict)
+                else []
+            )
+            if isinstance(values, list)
+            for section_id in values
+        }
+    )
     branches = list(request.get("required_branches", []))
     return {
         "type": "object",
@@ -135,15 +147,16 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         f"Required branches: {branches}\n\n"
         "Rules:\n"
         "1. Plan every required branch, and only the required branches.\n"
-        "2. Branches share research and accepted facts but are separate "
-        "productions. Never submit one timeline re-cut or truncated.\n"
-        "3. Each branch delivers the approved package promise in its own shape.\n"
-        "4. Attach accepted claim_ids to every beat carrying factual material.\n"
-        "5. Never introduce facts outside accepted_claims.\n"
-        "6. Trace every beat to the approved script sections it is built from.\n"
-        "7. Respect each branch's duration and beat-count constraints.\n"
-        "8. Do not copy source-video wording, footage, story beats or execution.\n"
-        "9. Do not mention claim IDs in on-screen or spoken text.\n\n"
+        "2. Each branch already has HUMAN-APPROVED narration in branch_story_packages. Treat that narration as immutable.\n"
+        "3. Do not rewrite, shorten, combine, paraphrase or substitute approved narration. This stage owns production treatment, not script writing.\n"
+        "4. Branches share research and accepted facts but are separate productions. Never submit one timeline re-cut or truncated.\n"
+        "5. Each branch delivers the approved package promise in its own shape.\n"
+        "6. Attach accepted claim_ids to every beat carrying factual material.\n"
+        "7. Never introduce facts outside accepted_claims.\n"
+        "8. Trace every beat only to script sections from its MATCHING format branch.\n"
+        "9. Respect each branch's duration and beat-count constraints.\n"
+        "10. Do not copy source-video wording, footage, story beats or execution.\n"
+        "11. Do not mention claim IDs in on-screen or spoken text.\n\n"
         "FORMAT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -173,8 +186,10 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
             existing.get("status") == "VALIDATED"
             and isinstance(provenance, dict)
             and provenance.get("request_sha256") == request_hash
-            and plan.get("master_story_package") == request.get("master_story_package")
-            and plan.get("script_section_ids") == request.get("script_section_ids")
+            and plan.get("branch_story_packages")
+            == request.get("branch_story_packages")
+            and plan.get("script_section_ids_by_branch")
+            == request.get("script_section_ids_by_branch")
         ):
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
@@ -290,8 +305,10 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "required_branches": request.get("required_branches", []),
         "branch_constraints": request.get("branch_constraints", {}),
         "package": request.get("package", {}),
-        "master_story_package": request.get("master_story_package", {}),
-        "script_section_ids": request.get("script_section_ids", []),
+        "branch_story_packages": request.get("branch_story_packages", {}),
+        "script_section_ids_by_branch": request.get(
+            "script_section_ids_by_branch", {}
+        ),
         "accepted_claims": request.get("accepted_claims", []),
         "validation": validation,
         "plan_provenance": response["response_provenance"],

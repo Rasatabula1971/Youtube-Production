@@ -41,6 +41,38 @@ ALLOWED_ROLES = {
     "PAYOFF",
 }
 
+HOOK_MECHANISMS = {
+    "CONTRADICTION",
+    "SURPRISING_FACT",
+    "STAKES",
+    "EXPECTATION_VIOLATION",
+    "SPECIFIC_CURIOSITY",
+    "BOLD_PROMISE",
+}
+
+BEAT_PSYCHOLOGY_MECHANISMS = {
+    "CURIOSITY",
+    "PREDICTION",
+    "TENSION",
+    "STAKES",
+    "NOVELTY",
+    "EXPECTATION_VIOLATION",
+    "CLARITY",
+    "PAYOFF",
+}
+
+OPENING_BEAT_MECHANISMS = {
+    "CURIOSITY",
+    "PREDICTION",
+    "TENSION",
+    "STAKES",
+    "NOVELTY",
+    "EXPECTATION_VIOLATION",
+}
+
+LOOP_ACTIONS = {"NONE", "OPEN", "ADVANCE", "PAYOFF"}
+TENSION_LEVELS = {"LOW", "MEDIUM", "HIGH"}
+
 
 def validation_contract_sha256() -> str:
     """Fingerprint deterministic Story Plan acceptance rules."""
@@ -139,11 +171,46 @@ def build_story_plan_request(
     return {
         "artifact": "story_plan_request",
         **{key: value for key, value in base.items() if not key.startswith("source_")},
+        "psychology_contract": {
+            "opening_line": {
+                "required": True,
+                "allowed_mechanisms": sorted(HOOK_MECHANISMS),
+                "rule": (
+                    "Plan a high-impact first spoken line that creates immediate "
+                    "curiosity, stakes, surprise, contradiction, expectation "
+                    "violation, or a specific promise tied to the approved package."
+                ),
+                "truth_rule": (
+                    "Bold framing may not exaggerate beyond accepted research; "
+                    "factual hook claims must cite accepted claim_ids."
+                ),
+                "support_rule": (
+                    "The narration immediately following the hook must justify, "
+                    "contextualize, or begin proving it."
+                ),
+            },
+            "beat_mechanisms": sorted(BEAT_PSYCHOLOGY_MECHANISMS),
+            "loop_actions": sorted(LOOP_ACTIONS),
+            "tension_levels": sorted(TENSION_LEVELS),
+            "principles": [
+                "Create curiosity through a real information gap, not fake withholding.",
+                "Make viewer expectations explicit so contradiction or surprise has a target.",
+                "Introduce one primary new idea at a time when complexity is high.",
+                "Use tension and release in service of understanding, not manufactured drama.",
+                "Every opened loop must be advanced and ultimately paid off.",
+                "The final payoff must satisfy the approved title/thumbnail promise.",
+                "No fixed hook-second or pattern-interrupt timing rule is assumed.",
+            ],
+        },
         "instructions": [
             "Plan the story before writing narration.",
             "The approved package title is immutable. Return it exactly as supplied.",
             "Do not write final narration or prose paragraphs.",
-            "Design a clear viewer journey: opening tension, progressive understanding, reveal/payoff, and close.",
+            "Design a clear viewer journey: high-impact opening, progressive understanding, reveal/payoff, and close.",
+            "Make the viewer state explicit: what they know, expect, and want resolved.",
+            "Assign one primary audience-psychology function to every beat.",
+            "Track open loops explicitly; every OPEN must later receive a PAYOFF.",
+            "Control cognitive load by stating what each beat should make easier to understand.",
             "Every factual beat may use only accepted claim_ids supplied here.",
             "Framing can be original, but it must not introduce unsupported factual assertions.",
             "Do not copy source-video wording, sequence, personality, or exact execution.",
@@ -177,6 +244,32 @@ def validate_story_plan_response(
         if not str(response.get(field, "")).strip():
             errors.append(f"{field} is required")
 
+    viewer_state = response.get("viewer_state")
+    if not isinstance(viewer_state, dict):
+        errors.append("viewer_state is required")
+        viewer_state = {}
+    for field in ("awareness", "expectation", "desired_resolution"):
+        if not str(viewer_state.get(field, "")).strip():
+            errors.append(f"viewer_state requires {field}")
+
+    opening_psychology = response.get("opening_psychology")
+    if not isinstance(opening_psychology, dict):
+        errors.append("opening_psychology is required")
+        opening_psychology = {}
+    hook_mechanism = str(opening_psychology.get("mechanism", "")).strip().upper()
+    if hook_mechanism not in HOOK_MECHANISMS:
+        errors.append(
+            "opening_psychology mechanism must be one of "
+            + ", ".join(sorted(HOOK_MECHANISMS))
+        )
+    for field in ("impact_intent", "justification_intent"):
+        if not str(opening_psychology.get(field, "")).strip():
+            errors.append(f"opening_psychology requires {field}")
+    opening_claim_ids = opening_psychology.get("claim_ids")
+    if not isinstance(opening_claim_ids, list):
+        errors.append("opening_psychology claim_ids must be a list")
+        opening_claim_ids = []
+
     beats = response.get("beats")
     if not isinstance(beats, list) or len(beats) < 3:
         errors.append("beats must contain at least 3 story beats")
@@ -186,6 +279,17 @@ def validate_story_plan_response(
     used_claims: set[str] = set()
     seen_ids: set[str] = set()
     payoff_seen = False
+    opened_loops: set[str] = set()
+    paid_loops: set[str] = set()
+
+    for claim_id in opening_claim_ids:
+        normalized = str(claim_id)
+        if normalized not in allowed_claims:
+            errors.append(
+                f"opening_psychology uses unapproved claim_id {normalized}"
+            )
+        else:
+            used_claims.add(normalized)
 
     for index, beat in enumerate(beats):
         if not isinstance(beat, dict):
@@ -211,6 +315,66 @@ def validate_story_plan_response(
             if not str(beat.get(field, "")).strip():
                 errors.append(f"{beat_id or index} requires {field}")
 
+        psychology = beat.get("psychology")
+        if not isinstance(psychology, dict):
+            errors.append(f"{beat_id or index} requires psychology")
+            psychology = {}
+
+        primary = str(psychology.get("primary_mechanism", "")).strip().upper()
+        if primary not in BEAT_PSYCHOLOGY_MECHANISMS:
+            errors.append(
+                f"{beat_id or index} psychology primary_mechanism must be one of "
+                + ", ".join(sorted(BEAT_PSYCHOLOGY_MECHANISMS))
+            )
+        if index == 0 and primary not in OPENING_BEAT_MECHANISMS:
+            errors.append(
+                f"{beat_id or index} opening beat must use a high-impact psychology mechanism"
+            )
+
+        for field in ("viewer_expectation", "cognitive_load_instruction"):
+            if not str(psychology.get(field, "")).strip():
+                errors.append(f"{beat_id or index} psychology requires {field}")
+
+        tension = str(psychology.get("tension_level", "")).strip().upper()
+        if tension not in TENSION_LEVELS:
+            errors.append(
+                f"{beat_id or index} psychology tension_level must be one of "
+                + ", ".join(sorted(TENSION_LEVELS))
+            )
+
+        loop_action = str(psychology.get("loop_action", "")).strip().upper()
+        loop_id = str(psychology.get("open_loop_id") or "").strip()
+        if loop_action not in LOOP_ACTIONS:
+            errors.append(
+                f"{beat_id or index} psychology loop_action must be one of "
+                + ", ".join(sorted(LOOP_ACTIONS))
+            )
+        elif loop_action == "NONE":
+            if loop_id:
+                errors.append(
+                    f"{beat_id or index} open_loop_id must be empty when loop_action is NONE"
+                )
+        elif not loop_id:
+            errors.append(
+                f"{beat_id or index} psychology requires open_loop_id for {loop_action}"
+            )
+        elif loop_action == "OPEN":
+            if loop_id in opened_loops:
+                errors.append(f"{beat_id or index} reopens existing loop {loop_id}")
+            else:
+                opened_loops.add(loop_id)
+        elif loop_action in {"ADVANCE", "PAYOFF"}:
+            if loop_id not in opened_loops:
+                errors.append(
+                    f"{beat_id or index} references unopened loop {loop_id}"
+                )
+            elif loop_id in paid_loops:
+                errors.append(
+                    f"{beat_id or index} references already paid-off loop {loop_id}"
+                )
+            elif loop_action == "PAYOFF":
+                paid_loops.add(loop_id)
+
         claim_ids = beat.get("claim_ids")
         if not isinstance(claim_ids, list):
             errors.append(f"{beat_id or index} claim_ids must be a list")
@@ -226,6 +390,12 @@ def validate_story_plan_response(
 
     if beats and not payoff_seen:
         errors.append("story plan requires a PAYOFF beat")
+    unresolved_loops = opened_loops - paid_loops
+    if unresolved_loops:
+        errors.append(
+            "story plan leaves open loop(s) unresolved: "
+            + ", ".join(sorted(unresolved_loops))
+        )
     if beats and not used_claims:
         errors.append("story plan must use at least one accepted claim")
 

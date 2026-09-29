@@ -1053,3 +1053,113 @@ This separation exists to prevent one model call from simultaneously inventing
 structure and wording, which can produce informative but shapeless scripts or
 allow the story to drift away from the approved package promise.
 
+## D-064 — Audience psychology is explicit in Story Planning and Script Writing
+
+**Status:** Accepted
+
+The Story / Script Engine makes audience psychology an explicit, auditable
+planning layer instead of leaving "engagement" as an unstructured model
+instruction.
+
+The first spoken line is a hard design requirement: it must be high-impact and
+directly connected to the approved Packaging promise. Allowed opening
+mechanisms are contradiction, surprising fact, stakes, expectation violation,
+specific curiosity and bold promise. "High-impact" does not mean unsupported
+sensationalism. Factual hook claims remain bounded by Research Gate accepted
+claims, and the narration immediately following the hook must justify,
+contextualize or begin proving it.
+
+Each Story Plan beat records one primary audience mechanism, the viewer
+expectation being acted on, a cognitive-load instruction, tension level and
+open-loop action. Explicit open loops are stateful: every OPEN must ultimately
+receive a PAYOFF. A plan with an unresolved open loop fails deterministic
+validation.
+
+The mechanisms available to beats are curiosity, prediction, tension, stakes,
+novelty, expectation violation, clarity and payoff. They describe the intended
+viewer experience; they are not claims that a given mechanism guarantees
+retention or virality.
+
+The design intentionally avoids universal timing rules such as "hook by three
+seconds" or "pattern interrupt every five seconds." YouTube's own retention
+guidance emphasizes that the opening should match the title/thumbnail promise,
+keep the audience interested, and be tested against actual retention data. The
+Learning Engine should therefore refine these hypotheses from channel evidence
+rather than hard-code generic timing folklore.
+
+External evidence also supports a narrower distinction: higher-arousal emotion
+has been associated with greater online sharing, including in research on viral
+video, but sharing evidence does not prove that simply making narration more
+dramatic improves YouTube retention. The system therefore optimizes for
+high-impact, credible openings rather than maximum emotional intensity.
+
+Evidence references:
+- YouTube Help, "Measure key moments for audience retention":
+  https://support.google.com/youtube/answer/9314415
+- YouTube Help, "Understand your content performance for YouTube's recommendation system":
+  https://support.google.com/youtube/answer/16559650
+- Berger & Milkman (2012), "What Makes Online Content Viral?":
+  https://doi.org/10.1509/jmr.10.0353
+- Nelson-Field, Riebe & Newstead (2013), "The emotions that drive viral video":
+  https://doi.org/10.1016/j.ausmj.2013.07.003
+
+## D-065 — Final narration splits by format before the Human Script Gate
+
+**Status:** Accepted
+
+D-065 refines D-060, D-063 and D-064. The **Story Plan remains shared**, but
+final spoken wording no longer waits until the Format Engine to become
+format-specific.
+
+After the shared Story Plan is validated, the Story / Script Engine resolves the
+approved `format_intent` and writes one script request per required branch.
+`either` therefore produces a `long_form` script and a `short` script before
+the Human Script Gate.
+
+### Long-form psychology profile
+
+Long-form keeps the high-impact truthful opening requirement but does not carry
+a fixed timing interval. It prioritizes sustained curiosity, progressive
+understanding, lower cognitive overload, examples/breathing room where useful,
+and larger delayed payoffs.
+
+### Shorts psychology profile
+
+Shorts uses a high reward-density profile. Its starting production hypotheses
+are:
+
+- first spoken hook target: **3 seconds**;
+- meaningful attention/reward refresh: roughly **every 4–6 seconds**;
+- low cognitive branching and one dominant idea;
+- repeated progress through proof, novelty, reveal, expectation shift or
+  micro-payoff;
+- rapid loop closure and a strong final payoff.
+
+These numbers are **hypotheses to be tested against actual Shorts retention**,
+not universal neurological or physiological laws. The system does not claim to
+measure dopamine. "Reward density" is an operational storytelling label for
+frequent meaningful viewer progress.
+
+The 3-second target is not guessed from text length. After narration rendering,
+actual audio timing can determine whether the opening meets the target. A miss
+should become a rework signal rather than silent speeding or rewriting.
+
+### Gate and downstream contract
+
+The Human Script Gate reviews each required branch independently. A concept is
+not production-ready until every required branch is accepted. Only then is one
+approved script bundle emitted.
+
+The bundle keeps the branch narrations separate. Identical narration sequences,
+or a Short that is merely a prefix/truncation of the long-form script, fail
+closed.
+
+The Format Engine now owns **production treatment only**. It may plan scenes,
+visuals, duration intent, aspect ratio and production beats around the approved
+branch narration, but it may not rewrite, paraphrase, shorten, combine or
+substitute that narration.
+
+Voice Performance subsequently binds each production branch only to the
+matching approved script sections, preserving branch isolation through audio
+planning.
+

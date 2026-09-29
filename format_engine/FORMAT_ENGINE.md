@@ -11,15 +11,21 @@ The engine consumes only `story_script_engine/output/approved_scripts/*` artifac
 
 ## Why this stage exists
 
-Long-form and Shorts are separate production branches. They may share:
+Long-form and Shorts already arrive here as **separately written and
+Human-Script-Gate-approved narrations**. The Format Engine no longer decides how
+one master narration should become two formats.
 
-- source understanding;
-- research;
-- accepted facts;
-- the master story package.
+Its job is production planning around each immutable branch script:
 
-They are not identical edits of the same timeline. The Format Engine is where that
-separation becomes an explicit, checkable artifact instead of an assumption.
+- scene and beat structure;
+- visual treatment and proof;
+- duration intent;
+- aspect ratio;
+- source-section traceability;
+- production pacing and producibility.
+
+The branches still share research, accepted facts, the package promise and the
+shared upstream Story Plan, but their narration is already format-specific.
 
 ## Branch resolution
 
@@ -37,7 +43,11 @@ branch. Branch duration bounds, beat minimums and aspect ratios live in
 
 ## Hard boundaries
 
-- Only Script Gate approved scripts enter format planning.
+- Only a complete approved script bundle enters format planning.
+- Each production branch may reference only section IDs from its matching
+  approved script branch.
+- Format planning may not rewrite, paraphrase, shorten, combine or substitute
+  approved narration.
 - Only Research Gate accepted claims are available as factual support.
 - Every beat carrying factual material references approved `claim_id` values.
 - Every beat traces to the approved script `section_id` values it is built from.
