@@ -33,6 +33,9 @@ STATE_FILE = OUTPUT_ROOT / "opportunity_research_state.json"
 EXP13_SCRIPT = HERE / "experiment_01_3.py"
 EXP14_SCRIPT = HERE / "experiment_01_4.py"
 EXP15_SCRIPT = HERE / "experiment_01_5.py"
+VIDIQ_SCRIPT = HERE / "vidiq_opportunity_enrichment.py"
+VIDIQ_DOCTOR_FILE = OUTPUT_ROOT / "vidiq" / "doctor.json"
+VIDIQ_ENRICHMENT_FILE = OUTPUT_ROOT / "vidiq" / "opportunity_enrichment.json"
 EXP14_CONFIG = HERE / "experiment_01_4_config.json"
 INSTALL_SCHEDULER = (
     PROJECT_ROOT / "scripts" / "install_experiment_01_3_auto_refresh.ps1"
@@ -64,6 +67,8 @@ def write_state(
     refresh_attempts: int,
     next_refresh_due_at: str | None = None,
     scheduler_armed: bool = False,
+    vidiq_status: str | None = None,
+    vidiq_message: str | None = None,
 ) -> dict[str, Any]:
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -75,6 +80,8 @@ def write_state(
         "refresh_interval_hours": DEFAULT_REFRESH_INTERVAL_HOURS,
         "next_refresh_due_at": next_refresh_due_at,
         "scheduler_armed": scheduler_armed,
+        "vidiq_status": vidiq_status,
+        "vidiq_message": vidiq_message,
     }
     STATE_FILE.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False),
@@ -178,6 +185,82 @@ def remove_continuation_task() -> None:
     )
 
 
+def run_vidiq_supplemental(
+    *,
+    python_executable: str,
+) -> tuple[str, str]:
+    """Run vidIQ only when the zero-cost doctor confirms the live safety contract.
+
+    vidIQ is supplemental. Any unavailable, partial, or fail-closed state skips
+    paid research and still allows the Human Opportunity Gate to open.
+    """
+    doctor_code = run_command(
+        [
+            python_executable,
+            str(VIDIQ_SCRIPT),
+            "--mode",
+            "doctor",
+        ],
+        "AUTOMATIC SUPPLEMENT — CHECK vidIQ SAFETY",
+    )
+    doctor = read_json(VIDIQ_DOCTOR_FILE)
+    doctor_status = str(doctor.get("status") or "UNAVAILABLE")
+    if doctor_code != 0 or doctor_status != "READY":
+        return (
+            f"SKIPPED_{doctor_status}",
+            "vidIQ supplemental evidence was skipped because its free-credit "
+            "safety check was not READY.",
+        )
+
+    enrich_code = run_command(
+        [
+            python_executable,
+            str(VIDIQ_SCRIPT),
+            "--mode",
+            "enrich",
+        ],
+        "AUTOMATIC SUPPLEMENT — vidIQ OPPORTUNITY CHECK",
+    )
+    enrichment = read_json(VIDIQ_ENRICHMENT_FILE)
+    enrich_status = str(enrichment.get("status") or "UNAVAILABLE")
+    if enrich_code != 0:
+        return (
+            f"SKIPPED_{enrich_status}",
+            "vidIQ supplemental evidence failed closed; canonical YouTube "
+            "evidence remains available for human review.",
+        )
+
+    if enrich_status in {"COMPLETE", "PARTIAL", "NO_PAID_RESULTS"}:
+        return (
+            enrich_status,
+            "vidIQ supplemental validation finished under the project credit guards.",
+        )
+
+    return (
+        f"SKIPPED_{enrich_status}",
+        "vidIQ supplemental evidence was unavailable; canonical YouTube "
+        "evidence remains available for human review.",
+    )
+
+
+def finalize_opportunity_handoff(
+    *,
+    python_executable: str,
+    refresh_attempts: int,
+) -> dict[str, Any]:
+    remove_continuation_task()
+    vidiq_status, vidiq_message = run_vidiq_supplemental(
+        python_executable=python_executable,
+    )
+    return write_state(
+        "AWAITING_HUMAN_OPPORTUNITY_REVIEW",
+        "Opportunity research is complete. Review the selected opportunity and examples.",
+        refresh_attempts=refresh_attempts,
+        vidiq_status=vidiq_status,
+        vidiq_message=vidiq_message,
+    )
+
+
 def advance_downstream(
     *,
     python_executable: str,
@@ -252,9 +335,8 @@ def advance_downstream(
             refresh_attempts=refresh_attempts,
         )
 
-    return write_state(
-        "AWAITING_HUMAN_OPPORTUNITY_REVIEW",
-        "Opportunity research is complete. Review the selected opportunity and examples.",
+    return finalize_opportunity_handoff(
+        python_executable=python_executable,
         refresh_attempts=refresh_attempts,
     )
 
@@ -270,10 +352,8 @@ def continue_research(
     refresh_attempts = int(state.get("refresh_attempts") or 0)
 
     if study_set_ready():
-        remove_continuation_task()
-        return write_state(
-            "AWAITING_HUMAN_OPPORTUNITY_REVIEW",
-            "Opportunity handoff already exists. Human review is required.",
+        return finalize_opportunity_handoff(
+            python_executable=python_executable,
             refresh_attempts=refresh_attempts,
         )
 
