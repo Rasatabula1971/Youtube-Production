@@ -646,21 +646,7 @@ def merge_analysis_response(
         if "notes" in payload:
             result["analysis"][dimension]["notes"] = str(payload.get("notes") or "")
 
-    transfer_response = response.get("transfer")
-    if not isinstance(transfer_response, dict):
-        raise ValueError("analysis response must contain a transfer object")
-    required_transfer_keys = {
-        "transferable_mechanisms",
-        "source_specific_elements",
-        "transformation_opportunities",
-    }
-    missing_transfer = sorted(required_transfer_keys - set(transfer_response))
-    if missing_transfer:
-        raise ValueError(
-            "analysis response is missing required transfer fields: "
-            + ", ".join(missing_transfer)
-        )
-
+    transfer_response = response.get("transfer", {})
     transfer_result = result.setdefault(
         "transfer",
         {
@@ -674,6 +660,8 @@ def merge_analysis_response(
         ("transferable_mechanisms", "description", True),
         ("source_specific_elements", "element", False),
     ):
+        if key not in transfer_response:
+            continue
         accepted_items: list[dict[str, Any]] = []
         items = transfer_response.get(key, []) or []
         if not isinstance(items, list):
@@ -703,6 +691,7 @@ def merge_analysis_response(
         transfer_result[key] = accepted_items
 
     accepted_transformations: list[dict[str, Any]] = []
+    transformations_present = "transformation_opportunities" in transfer_response
     transformations = transfer_response.get("transformation_opportunities", []) or []
     if not isinstance(transformations, list):
         raise ValueError("transfer.transformation_opportunities must be a list")
@@ -752,7 +741,8 @@ def merge_analysis_response(
                 }
             )
 
-    transfer_result["transformation_opportunities"] = accepted_transformations
+    if transformations_present:
+        transfer_result["transformation_opportunities"] = accepted_transformations
 
     explicit_hypotheses = response.get("working_hypotheses", []) or []
     if not isinstance(explicit_hypotheses, list):
