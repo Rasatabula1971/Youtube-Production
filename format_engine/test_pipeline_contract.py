@@ -307,7 +307,6 @@ class PipelineContractTests(unittest.TestCase):
         verified_path = write_json(
             self.root / "c1.verified_research_package.json", verified
         )
-
         story_request = story_plan_engine.build_story_plan_request(
             verified,
             verified_path,
@@ -322,8 +321,12 @@ class PipelineContractTests(unittest.TestCase):
         story_response = {
             "concept_id": "c1",
             "title": "Why F1 Brakes Work Backwards",
-            "story_question": "Why do racing brakes need conditions that seem wrong for road cars?",
-            "opening_hook_intent": "Open on the apparent contradiction and make the viewer want the mechanism.",
+            "story_question": (
+                "Why do racing brakes need conditions that seem wrong for road cars?"
+            ),
+            "opening_hook_intent": (
+                "Open on the apparent contradiction and make the viewer want the mechanism."
+            ),
             "viewer_state": {
                 "awareness": "The viewer knows race brakes operate in extreme conditions.",
                 "expectation": "Better brakes should behave like stronger road brakes.",
@@ -332,7 +335,9 @@ class PipelineContractTests(unittest.TestCase):
             "opening_psychology": {
                 "mechanism": "CONTRADICTION",
                 "impact_intent": "State the apparent backwards behavior immediately.",
-                "justification_intent": "Move directly into verified constraints that explain it.",
+                "justification_intent": (
+                    "Move directly into verified constraints that explain it."
+                ),
                 "claim_ids": [],
             },
             "beats": [
@@ -342,11 +347,17 @@ class PipelineContractTests(unittest.TestCase):
                     "purpose": "Establish the race-brake contradiction.",
                     "viewer_progress": "The viewer understands the puzzle.",
                     "claim_ids": [],
-                    "transition_intent": "Move from the visible contradiction to the governing constraint.",
+                    "transition_intent": (
+                        "Move from the visible contradiction to the governing constraint."
+                    ),
                     "psychology": {
                         "primary_mechanism": "CURIOSITY",
-                        "viewer_expectation": "A stronger brake should simply work better.",
-                        "cognitive_load_instruction": "Establish only the contradiction before explaining the mechanism.",
+                        "viewer_expectation": (
+                            "A stronger brake should simply work better."
+                        ),
+                        "cognitive_load_instruction": (
+                            "Establish only the contradiction before explaining the mechanism."
+                        ),
                         "tension_level": "HIGH",
                         "open_loop_id": "main",
                         "loop_action": "OPEN",
@@ -358,11 +369,15 @@ class PipelineContractTests(unittest.TestCase):
                     "purpose": "Explain the verified constraint and temperature behavior.",
                     "viewer_progress": "The viewer understands the mechanism.",
                     "claim_ids": claim_ids[:1],
-                    "transition_intent": "Use the mechanism to reframe heat as intentional.",
+                    "transition_intent": (
+                        "Use the mechanism to reframe heat as intentional."
+                    ),
                     "psychology": {
                         "primary_mechanism": "CLARITY",
                         "viewer_expectation": "Heat should only be a problem to remove.",
-                        "cognitive_load_instruction": "Explain one verified constraint before adding consequences.",
+                        "cognitive_load_instruction": (
+                            "Explain one verified constraint before adding consequences."
+                        ),
                         "tension_level": "MEDIUM",
                         "open_loop_id": "main",
                         "loop_action": "ADVANCE",
@@ -374,18 +389,26 @@ class PipelineContractTests(unittest.TestCase):
                     "purpose": "Resolve why the design only seems backwards.",
                     "viewer_progress": "The approved title promise is fulfilled.",
                     "claim_ids": claim_ids,
-                    "transition_intent": "Close on the resolved engineering tradeoff.",
+                    "transition_intent": (
+                        "Close on the resolved engineering tradeoff."
+                    ),
                     "psychology": {
                         "primary_mechanism": "PAYOFF",
-                        "viewer_expectation": "The apparent contradiction should now have one coherent explanation.",
-                        "cognitive_load_instruction": "Resolve the main question without introducing a new mechanism.",
+                        "viewer_expectation": (
+                            "The apparent contradiction should now have one coherent explanation."
+                        ),
+                        "cognitive_load_instruction": (
+                            "Resolve the main question without introducing a new mechanism."
+                        ),
                         "tension_level": "LOW",
                         "open_loop_id": "main",
                         "loop_action": "PAYOFF",
                     },
                 },
             ],
-            "payoff_intent": "Show that the apparently wrong behavior follows from the verified design constraints.",
+            "payoff_intent": (
+                "Show that the apparently wrong behavior follows from verified constraints."
+            ),
             "closing_intent": "Leave one clear mental model of the tradeoff.",
         }
         story_validation = story_plan_engine.validate_story_plan_response(
@@ -411,93 +434,186 @@ class PipelineContractTests(unittest.TestCase):
             story_plan,
         )
 
-        request = story_script_engine.build_script_request(
-            story_plan,
-            story_plan_path,
-        )
-        self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
-        self.assertEqual(request["package"]["format_intent"], "either")
-        self.assertEqual(request["accepted_claim_ids"], claim_ids)
-        self.assertEqual(
-            request["title"] if "title" in request else request["package"]["title"],
-            "Why F1 Brakes Work Backwards",
-        )
-
-        response = {
-            "concept_id": "c1",
-            "title": "Why F1 Brakes Work Backwards",
-            "opening_hook": "A road car would hate the conditions these brakes are built to need.",
-            "opening_hook_mechanism": "CONTRADICTION",
-            "sections": [
-                {
-                    "section_id": "s1",
-                    "story_beat_id": "b1",
-                    "purpose": "Establish the contradiction",
-                    "psychology_mechanism": "CURIOSITY",
-                    "narration": "At first glance, the race-car solution seems backwards.",
-                    "claim_ids": [],
-                },
-                {
-                    "section_id": "s2",
-                    "story_beat_id": "b2",
-                    "purpose": "Explain the constraint",
-                    "psychology_mechanism": "CLARITY",
-                    "narration": "The verified constraint changes what the brake must tolerate.",
-                    "claim_ids": claim_ids[:1],
-                },
-                {
-                    "section_id": "s3",
-                    "story_beat_id": "b3",
-                    "purpose": "Deliver the payoff",
-                    "psychology_mechanism": "PAYOFF",
-                    "narration": "Once the constraints are included, heat becomes part of the design target rather than a contradiction.",
-                    "claim_ids": claim_ids,
-                },
-            ],
-            "closing": "That is why the design looks wrong only until you see the problem it is solving.",
-        }
-        validation = story_script_engine.validate_script_response(response, request)
-        self.assertTrue(validation["valid"], validation["errors"])
-        self.assertEqual(validation["unused_accepted_claim_ids"], [])
-
-        draft = {
-            **response,
-            "accepted_claims": request["accepted_claims"],
-            "package": request["package"],
-            "story_plan": request["story_plan"],
-            "psychology_contract": request["psychology_contract"],
-            "validation": validation,
-            "draft_provenance": {"request_sha256": "contract"},
-        }
-        draft_path = write_json(self.root / "c1.script_draft.json", draft)
-        review_request = script_review.build_review_request(draft, draft_path)
-        request_path = write_json(
-            self.root / "c1.script_review_request.json", review_request
-        )
         approved_dir = self.root / "approved_scripts"
+        review_requests = self.root / "script_review_requests"
+        review_responses = self.root / "script_review_responses"
+        approved_dir.mkdir()
+        review_requests.mkdir()
+        review_responses.mkdir()
+
+        branch_drafts = {
+            "long_form": {
+                "opening_hook": (
+                    "A road car would hate the conditions these brakes are built to need."
+                ),
+                "sections": [
+                    {
+                        "section_id": "lf1",
+                        "source_story_beat_ids": ["b1"],
+                        "purpose": "Establish the contradiction",
+                        "psychology_mechanism": "CURIOSITY",
+                        "reward_type": "NONE",
+                        "narration": (
+                            "At first glance, the race-car solution seems backwards."
+                        ),
+                        "claim_ids": [],
+                    },
+                    {
+                        "section_id": "lf2",
+                        "source_story_beat_ids": ["b2"],
+                        "purpose": "Explain the verified constraint",
+                        "psychology_mechanism": "CLARITY",
+                        "reward_type": "PROGRESS",
+                        "narration": (
+                            "The verified constraint changes what the brake must tolerate."
+                        ),
+                        "claim_ids": claim_ids[:1],
+                    },
+                    {
+                        "section_id": "lf3",
+                        "source_story_beat_ids": ["b3"],
+                        "purpose": "Deliver the full payoff",
+                        "psychology_mechanism": "PAYOFF",
+                        "reward_type": "NONE",
+                        "narration": (
+                            "Once the constraints are included, heat becomes part of "
+                            "the design target rather than a contradiction."
+                        ),
+                        "claim_ids": claim_ids,
+                    },
+                ],
+                "closing": (
+                    "That is why the design looks wrong only until you see the "
+                    "problem it is solving."
+                ),
+            },
+            "short": {
+                "opening_hook": "Race brakes can work worse when they are too cold.",
+                "sections": [
+                    {
+                        "section_id": "sh1",
+                        "source_story_beat_ids": ["b1", "b2"],
+                        "purpose": "Hook plus immediate proof",
+                        "psychology_mechanism": "EXPECTATION_VIOLATION",
+                        "reward_type": "PROOF",
+                        "narration": (
+                            "The strange part is that heat is not just damage here."
+                        ),
+                        "claim_ids": claim_ids[:1],
+                    },
+                    {
+                        "section_id": "sh2",
+                        "source_story_beat_ids": ["b2"],
+                        "purpose": "Fast mechanism reveal",
+                        "psychology_mechanism": "CLARITY",
+                        "reward_type": "REVEAL",
+                        "narration": "The verified constraint changes the target.",
+                        "claim_ids": claim_ids[:1],
+                    },
+                    {
+                        "section_id": "sh3",
+                        "source_story_beat_ids": ["b3"],
+                        "purpose": "Fast payoff",
+                        "psychology_mechanism": "PAYOFF",
+                        "reward_type": "MICRO_PAYOFF",
+                        "narration": (
+                            "That is why race-brake behavior can look backwards."
+                        ),
+                        "claim_ids": claim_ids,
+                    },
+                ],
+                "closing": "Heat is part of the solution, not just the problem.",
+            },
+        }
+
         with (
             patch.object(script_review, "APPROVED_DIR", approved_dir),
+            patch.object(script_review, "REVIEW_REQUESTS_DIR", review_requests),
+            patch.object(script_review, "RESPONSES_DIR", review_responses),
             patch.object(
-                script_review, "SUMMARY_FILE", self.root / "script_summary.json"
+                script_review,
+                "SUMMARY_FILE",
+                self.root / "script_summary.json",
             ),
         ):
-            summary = script_review.apply_payload(
-                request_path,
-                {
+            final_summary = None
+            for fmt in ("long_form", "short"):
+                request = story_script_engine.build_script_request(
+                    story_plan,
+                    story_plan_path,
+                    fmt,
+                )
+                self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
+                self.assertEqual(request["accepted_claim_ids"], claim_ids)
+                if fmt == "short":
+                    self.assertEqual(
+                        request["psychology_profile"]["hook_target_seconds"],
+                        3,
+                    )
+
+                response = {
                     "concept_id": "c1",
-                    "reviewer": "contract-test",
-                    "decision": "ACCEPT",
-                    "criteria": all_true(list(script_review.CRITERIA)),
-                    "note": "",
-                },
-            )
-        self.assertEqual(summary["status"], "READY_FOR_PRODUCTION")
-        approved_path = Path(summary["approved_script"])
+                    "format": fmt,
+                    "title": "Why F1 Brakes Work Backwards",
+                    "opening_hook": branch_drafts[fmt]["opening_hook"],
+                    "opening_hook_mechanism": "CONTRADICTION",
+                    "opening_hook_claim_ids": [],
+                    "sections": branch_drafts[fmt]["sections"],
+                    "closing": branch_drafts[fmt]["closing"],
+                }
+                validation = story_script_engine.validate_script_response(
+                    response,
+                    request,
+                )
+                self.assertTrue(validation["valid"], validation["errors"])
+
+                draft = {
+                    **response,
+                    "accepted_claims": request["accepted_claims"],
+                    "package": request["package"],
+                    "required_branches": request["required_branches"],
+                    "story_plan": request["story_plan"],
+                    "psychology_contract": request["psychology_contract"],
+                    "psychology_profile": request["psychology_profile"],
+                    "validation": validation,
+                    "draft_provenance": {"request_sha256": "contract"},
+                }
+                draft_path = write_json(
+                    self.root / f"c1.{fmt}.script_draft.json",
+                    draft,
+                )
+                review_request = script_review.build_review_request(
+                    draft,
+                    draft_path,
+                )
+                request_path = write_json(
+                    review_requests / f"c1.{fmt}.script_review_request.json",
+                    review_request,
+                )
+                final_summary = script_review.apply_payload(
+                    request_path,
+                    {
+                        "concept_id": "c1",
+                        "format": fmt,
+                        "reviewer": "contract-test",
+                        "decision": "ACCEPT",
+                        "criteria": all_true(list(script_review.CRITERIA)),
+                        "note": "",
+                    },
+                )
+
+        self.assertIsNotNone(final_summary)
+        approved_path = Path(final_summary["approved_script"])
         self.assertTrue(approved_path.exists())
+        bundle = json.loads(approved_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            sorted(bundle["branch_scripts"]),
+            ["long_form", "short"],
+        )
         return approved_path
 
 
-    # ---- seam 7: Format Gate → Production -----------------------------------
+    # ---- seam 7: Format Gate → Production    # ---- seam 7: Format Gate → Production -----------------------------------
 
     def approved_format_plan(self, approved_script_path: Path) -> dict:
         config = format_engine.load_config()
@@ -511,7 +627,14 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(request["required_branches"], ["long_form", "short"])
         # The promise has now crossed four stages untouched.
         self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
-        self.assertEqual(request["script_section_ids"], ["s1", "s2", "s3"])
+        self.assertEqual(
+            request["script_section_ids_by_branch"]["long_form"],
+            ["lf1", "lf2", "lf3"],
+        )
+        self.assertEqual(
+            request["script_section_ids_by_branch"]["short"],
+            ["sh1", "sh2", "sh3"],
+        )
         # This is the hash the Experiment UI uses to decide the request is current.
         self.assertEqual(
             request["request_provenance"]["approved_script_sha256"],
@@ -538,10 +661,10 @@ class PipelineContractTests(unittest.TestCase):
                     "promise_delivery": "Full walk through the constraint and payoff.",
                     "payoff": "Viewer understands the whole tradeoff.",
                     "beats": [
-                        beat("lf1", "hook", "Open on the corner.", ["s1"], []),
-                        beat("lf2", "context", "Normal brakes.", ["s1"], claim_ids[:1]),
-                        beat("lf3", "reveal", "The rule.", ["s1"], claim_ids),
-                        beat("lf4", "payoff", "Heat as target.", ["s3"], claim_ids),
+                        beat("lf1", "hook", "Open on the corner.", ["lf1"], []),
+                        beat("lf2", "context", "Normal brakes.", ["lf2"], claim_ids[:1]),
+                        beat("lf3", "reveal", "The rule.", ["lf2"], claim_ids[:1]),
+                        beat("lf4", "payoff", "Heat as target.", ["lf3"], claim_ids),
                     ],
                 },
                 {
@@ -550,9 +673,9 @@ class PipelineContractTests(unittest.TestCase):
                     "promise_delivery": "One counterintuitive fact, fast.",
                     "payoff": "Viewer leaves with the single mechanism.",
                     "beats": [
-                        beat("sh1", "cold open", "State the claim.", ["s3"], claim_ids),
-                        beat("sh2", "proof", "One visual.", ["s1"], claim_ids[:1]),
-                        beat("sh3", "close", "Restate in a line.", ["s3"], claim_ids),
+                        beat("sh1", "cold open", "State the claim.", ["sh1"], claim_ids[:1]),
+                        beat("sh2", "proof", "One visual.", ["sh2"], claim_ids[:1]),
+                        beat("sh3", "close", "Restate in a line.", ["sh3"], claim_ids),
                     ],
                 },
             ],
@@ -568,6 +691,10 @@ class PipelineContractTests(unittest.TestCase):
             "required_branches": request["required_branches"],
             "branch_constraints": request["branch_constraints"],
             "package": request["package"],
+            "branch_story_packages": request["branch_story_packages"],
+            "script_section_ids_by_branch": request[
+                "script_section_ids_by_branch"
+            ],
             "accepted_claims": request["accepted_claims"],
             "validation": validation,
             "plan_provenance": {"request_sha256": "contract"},
@@ -682,7 +809,13 @@ class PipelineContractTests(unittest.TestCase):
             packaging_engine.load_config()["allowed_format_intents"]
         )
         format_intents = set(format_engine.load_config()["format_intent_branches"])
+        script_intents = set(
+            story_script_engine.load_script_psychology_config()[
+                "format_intent_branches"
+            ]
+        )
         self.assertEqual(packaging_intents, format_intents)
+        self.assertEqual(packaging_intents, script_intents)
 
 
 if __name__ == "__main__":
