@@ -145,21 +145,29 @@ def _approved_identity(plan: dict[str, Any]) -> str:
     return concept_id
 
 
-def _script_sections(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], str]:
+def _script_context(
+    plan: dict[str, Any],
+    fmt: str,
+) -> tuple[dict[str, dict[str, Any]], str, dict[str, Any]]:
     package = plan.get("package", {})
-    master = plan.get("master_story_package")
+    branch_packages = plan.get("branch_story_packages")
     if (
         not isinstance(package, dict)
-        or not isinstance(master, dict)
-        or not master
+        or not isinstance(branch_packages, dict)
+        or not branch_packages
     ):
-        raise ValueError("Approved format plan is missing immutable script context")
+        raise ValueError(
+            "Approved format plan is missing immutable branch script context"
+        )
+    branch_story = branch_packages.get(fmt)
+    if not isinstance(branch_story, dict) or not branch_story:
+        raise ValueError(f"Approved format plan is missing {fmt} script context")
     title = str(package.get("title") or "").strip()
-    if not title or str(master.get("title") or "") != title:
+    if not title or str(branch_story.get("title") or "") != title:
         raise ValueError("Approved format plan violates immutable Packaging title")
-    sections = master.get("sections", [])
+    sections = branch_story.get("sections", [])
     if not isinstance(sections, list) or not sections:
-        raise ValueError("Approved format plan requires master_story_package sections")
+        raise ValueError(f"Approved format plan requires {fmt} script sections")
     by_id: dict[str, dict[str, Any]] = {}
     for section in sections:
         if not isinstance(section, dict):
@@ -169,9 +177,9 @@ def _script_sections(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], s
         if not section_id or not narration:
             raise ValueError("Every script section requires section_id and narration")
         if section_id in by_id:
-            raise ValueError(f"Duplicate script section_id: {section_id}")
+            raise ValueError(f"Duplicate {fmt} script section_id: {section_id}")
         by_id[section_id] = section
-    return by_id, title
+    return by_id, title, branch_story
 
 
 def _reveal_beat(beat: dict[str, Any]) -> bool:
@@ -192,10 +200,10 @@ def build_request(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     concept_id = _approved_identity(plan)
-    sections, title = _script_sections(plan)
     fmt = str(branch.get("format") or "").strip()
     if not fmt:
         raise ValueError("Every format branch requires format")
+    sections, title, branch_story = _script_context(plan, fmt)
     beats = branch.get("beats", [])
     if not isinstance(beats, list) or not beats:
         raise ValueError(f"{fmt} requires beats")
@@ -247,8 +255,11 @@ def build_request(
         "duration_intent_seconds": branch.get("duration_intent_seconds"),
         "promise_delivery": branch.get("promise_delivery"),
         "payoff": branch.get("payoff"),
-        "opening_hook": plan.get("master_story_package", {}).get("opening_hook"),
-        "closing": plan.get("master_story_package", {}).get("closing"),
+        "opening_hook": branch_story.get("opening_hook"),
+        "closing": branch_story.get("closing"),
+        "script_psychology_profile": branch_story.get(
+            "psychology_profile", {}
+        ),
         "beats": request_beats,
         "performance_controls": {
             "allowed_emotions": list(config["allowed_emotions"]),
