@@ -1,0 +1,10 @@
+{
+  "required_accept_criteria": [
+    "narration_text_unchanged",
+    "delivery_matches_branch_intent",
+    "emotion_curve_is_restrained",
+    "pace_and_pauses_support_comprehension",
+    "emphasis_is_grounded_in_spoken_words"
+  ],
+  "require_reviewer_name": true
+}
