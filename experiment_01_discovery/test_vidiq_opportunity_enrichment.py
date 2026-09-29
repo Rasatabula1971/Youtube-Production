@@ -16,7 +16,7 @@ class FakeClient:
         self.calls: list[tuple[str, dict]] = []
         self.tools = [
             {
-                "name": "credit_balance",
+                "name": "vidiq_balance",
                 "description": "Check remaining AI credit balance",
                 "inputSchema": {
                     "type": "object",
@@ -63,7 +63,7 @@ class FakeClient:
 
     def call_tool(self, name, arguments):
         self.calls.append((name, dict(arguments)))
-        if name == "credit_balance":
+        if name == "vidiq_balance":
             return {
                 "structuredContent": {
                     "remainingCredits": self.remaining,
@@ -120,7 +120,7 @@ class VidIQEnrichmentTests(unittest.TestCase):
         self.assertEqual(result["status"], "COMPLETE")
         self.assertEqual(result["paid_calls_this_run"], 3)
         self.assertEqual(result["credits_reserved_this_run"], 15)
-        paid = [name for name, _ in client.calls if name != "credit_balance"]
+        paid = [name for name, _ in client.calls if name != "vidiq_balance"]
         self.assertEqual(
             paid,
             ["keyword_research", "outliers", "trending_videos"],
