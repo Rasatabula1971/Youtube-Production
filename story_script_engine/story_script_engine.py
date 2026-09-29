@@ -97,6 +97,18 @@ def build_script_request(plan: dict[str, Any], plan_path: Path) -> dict[str, Any
     if not isinstance(concept, dict):
         concept = {}
 
+    psychology_contract = plan.get("psychology_contract")
+    if not isinstance(psychology_contract, dict) or not psychology_contract:
+        raise ValueError("Story Plan requires the audience psychology contract")
+
+    viewer_state = plan.get("viewer_state")
+    if not isinstance(viewer_state, dict):
+        raise ValueError("Story Plan requires viewer_state")
+
+    opening_psychology = plan.get("opening_psychology")
+    if not isinstance(opening_psychology, dict):
+        raise ValueError("Story Plan requires opening_psychology")
+
     claims = plan.get("accepted_claims", [])
     if not isinstance(claims, list) or not claims:
         raise ValueError("Script requires accepted research claims")
@@ -116,16 +128,22 @@ def build_script_request(plan: dict[str, Any], plan_path: Path) -> dict[str, Any
     beats = plan.get("beats", [])
     if not isinstance(beats, list) or not beats:
         raise ValueError("Story Plan requires story beats before script drafting")
+    for index, beat in enumerate(beats):
+        if not isinstance(beat, dict) or not isinstance(beat.get("psychology"), dict):
+            raise ValueError(f"Story Plan beat {index} requires psychology metadata")
 
     return {
         "artifact": "script_request",
         "concept_id": concept_id,
         "package": package,
         "concept": concept,
+        "psychology_contract": psychology_contract,
         "story_plan": {
             "title": plan.get("title"),
             "story_question": plan.get("story_question"),
             "opening_hook_intent": plan.get("opening_hook_intent"),
+            "viewer_state": viewer_state,
+            "opening_psychology": opening_psychology,
             "beats": beats,
             "payoff_intent": plan.get("payoff_intent"),
             "closing_intent": plan.get("closing_intent"),
@@ -135,12 +153,19 @@ def build_script_request(plan: dict[str, Any], plan_path: Path) -> dict[str, Any
         "instructions": [
             "Write the narration from the approved Story Plan rather than inventing a new structure.",
             "Return the approved Packaging title exactly; do not rewrite or optimize it.",
+            "The opening_hook is the first spoken line. Make it high-impact using the planned opening psychology mechanism.",
+            "A high-impact hook may create contradiction, surprise, stakes, expectation violation, specific curiosity, or a bold promise; it may not exaggerate beyond verified research.",
+            "Immediately justify, contextualize, or begin proving the opening hook rather than leaving unsupported drama hanging.",
             "Do not copy or closely paraphrase source-video wording.",
             "Do not introduce factual claims beyond the accepted research claims supplied here.",
             "Every scripted section must map to exactly one story beat using story_beat_id.",
             "Each section must use the same factual claim_ids assigned to that story beat.",
+            "Each section must preserve the Story Plan beat's primary psychology mechanism.",
+            "Use the beat cognitive-load instruction to keep the explanation easy to follow; avoid stacking unrelated new ideas into one beat.",
+            "Preserve planned open-loop OPEN, ADVANCE and PAYOFF behavior. Do not create fake unresolved loops.",
             "Connective narration, transitions, questions and framing may be original but must not add unsupported facts.",
-            "Preserve the planned hook intent, progressive viewer journey, reveal/payoff and closing intent.",
+            "Preserve the planned viewer journey, reveal/payoff and closing intent.",
+            "Do not use arbitrary fixed hook-second or pattern-interrupt timing rules.",
             "Do not claim virality, guaranteed performance or facts not present in accepted_claims.",
         ],
         "request_provenance": {
@@ -166,33 +191,56 @@ def validate_script_response(
     if not str(response.get("closing", "")).strip():
         errors.append("closing is required")
 
+    story_plan = request.get("story_plan", {})
+    if not isinstance(story_plan, dict):
+        errors.append("request Story Plan is missing")
+        story_plan = {}
+
+    opening_psychology = story_plan.get("opening_psychology", {})
+    if not isinstance(opening_psychology, dict):
+        opening_psychology = {}
+    planned_hook_mechanism = str(
+        opening_psychology.get("mechanism", "")
+    ).strip().upper()
+    actual_hook_mechanism = str(
+        response.get("opening_hook_mechanism", "")
+    ).strip().upper()
+    if not actual_hook_mechanism:
+        errors.append("opening_hook_mechanism is required")
+    elif actual_hook_mechanism != planned_hook_mechanism:
+        errors.append(
+            "opening_hook_mechanism must match Story Plan opening psychology"
+        )
+
     sections = response.get("sections")
     if not isinstance(sections, list) or not sections:
         errors.append("sections must be a non-empty list")
         sections = []
 
-    story_plan = request.get("story_plan", {})
-    story_beats = (
-        story_plan.get("beats", [])
-        if isinstance(story_plan, dict)
-        else []
-    )
+    story_beats = story_plan.get("beats", [])
     if not isinstance(story_beats, list) or not story_beats:
         errors.append("request Story Plan beats are missing")
         story_beats = []
 
     beat_claims: dict[str, set[str]] = {}
+    beat_psychology: dict[str, str] = {}
     for beat in story_beats:
         if not isinstance(beat, dict):
             continue
         beat_id = str(beat.get("beat_id", "")).strip()
-        if beat_id:
-            ids = beat.get("claim_ids", [])
-            beat_claims[beat_id] = (
-                {str(item) for item in ids}
-                if isinstance(ids, list)
-                else set()
-            )
+        if not beat_id:
+            continue
+        ids = beat.get("claim_ids", [])
+        beat_claims[beat_id] = (
+            {str(item) for item in ids}
+            if isinstance(ids, list)
+            else set()
+        )
+        psychology = beat.get("psychology", {})
+        if isinstance(psychology, dict):
+            beat_psychology[beat_id] = str(
+                psychology.get("primary_mechanism", "")
+            ).strip().upper()
 
     if story_beats and len(sections) != len(story_beats):
         errors.append("script must contain exactly one section per Story Plan beat")
@@ -227,6 +275,17 @@ def validate_script_response(
             errors.append(f"{sid or index} requires purpose")
         if not str(section.get("narration", "")).strip():
             errors.append(f"{sid or index} requires narration")
+
+        actual_psychology = str(
+            section.get("psychology_mechanism", "")
+        ).strip().upper()
+        planned_psychology = beat_psychology.get(beat_id, "")
+        if not actual_psychology:
+            errors.append(f"{sid or index} requires psychology_mechanism")
+        elif actual_psychology != planned_psychology:
+            errors.append(
+                f"{sid or index} psychology_mechanism must match Story Plan beat {beat_id}"
+            )
 
         ids = section.get("claim_ids")
         if not isinstance(ids, list):
@@ -275,6 +334,8 @@ def validate_script_response(
         "unused_accepted_claim_ids": sorted(allowed - used),
         "source_overlap": overlap,
         "story_plan_beat_ids": sorted(beat_claims),
+        "opening_hook_mechanism": actual_hook_mechanism,
+        "psychology_mechanisms": sorted(set(beat_psychology.values())),
     }
 
 
