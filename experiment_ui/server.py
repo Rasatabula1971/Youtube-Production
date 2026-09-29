@@ -156,8 +156,7 @@ SCRIPT_REQUESTS_DIR = STORY_OUTPUT / "script_requests"
 SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
 SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
 
-WORKFLOW_ACTION_ORDER = [
-    "opportunity_research",
+AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
     "exp2_acquire",
     "exp2_visual",
@@ -183,6 +182,11 @@ WORKFLOW_ACTION_ORDER = [
     "script_gate_prepare",
 ]
 
+WORKFLOW_ACTION_ORDER = [
+    "opportunity_research",
+    "auto_continue",
+]
+
 ACTION_DEFS: dict[str, dict[str, Any]] = {
     "opportunity_research": {
         "label": "Run Opportunity Research",
@@ -196,6 +200,18 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Automatically runs discovery, timed velocity validation, "
             "depth expansion and opportunity handoff, then stops for human review."
+        ),
+    },
+    "auto_continue": {
+        "label": "Continue Automatically to Human Gate",
+        "stage": "AUTO",
+        "command": [
+            sys.executable,
+            "experiment_ui/workflow_automation.py",
+        ],
+        "description": (
+            "Runs every currently ready deterministic machine step in order and "
+            "stops automatically at the next human gate, prerequisite wait, or error."
         ),
     },
     "vidiq_doctor": {
@@ -2221,7 +2237,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_satisfied = visual_complete or visual_attempted or not visual_available
     vision_satisfied = (not visual_complete) or vision_complete
 
-    return {
+    result = {
         "opportunity_research": {
             "enabled": not study_set and not research_waiting,
             "reason": (
@@ -2815,6 +2831,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
     }
+
+    ready_machine_steps = [
+        action_id
+        for action_id in AUTO_MACHINE_ACTION_ORDER
+        if result.get(action_id, {}).get("enabled")
+    ]
+    result["auto_continue"] = {
+        "enabled": bool(ready_machine_steps),
+        "reason": (
+            "Automatic machine work is ready: "
+            + ACTION_DEFS[ready_machine_steps[0]]["label"]
+            if ready_machine_steps
+            else "Waiting at a human gate, prerequisite, or completed workflow."
+        ),
+    }
+    return result
 
 
 class JobManager:
