@@ -311,7 +311,7 @@ def apply_gate(
     reviewer = str(response.get("reviewer", "")).strip()
     reviewed_at = datetime.now(timezone.utc).isoformat()
 
-    buckets = {
+    buckets: dict[str, list[dict[str, Any]]] = {
         "accepted": [],
         "rework": [],
         "rejected": [],
