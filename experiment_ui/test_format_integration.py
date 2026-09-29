@@ -174,6 +174,15 @@ class FormatUiIntegrationTests(unittest.TestCase):
             ),
             patch.object(
                 server,
+                "voice_performance_artifact_state",
+                return_value={
+                    "visual_ready": True,
+                    "specs_ready": True,
+                    "performance_gate": {"status": "COMPLETE", "complete": True},
+                },
+            ),
+            patch.object(
+                server,
                 "production_visual_artifact_state",
                 return_value={"manifests_ready": True},
             ),
