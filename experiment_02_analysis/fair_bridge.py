@@ -125,7 +125,7 @@ def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any
 
 async def execute(payload: dict[str, Any]) -> dict[str, Any]:
     fair_repo = Path(str(payload["fair_repo_path"])).resolve()
-    if not fair_repo.exists():
+    if not await asyncio.to_thread(fair_repo.exists):
         return {
             "status": "BRIDGE_ERROR",
             "error_type": "FairRepositoryNotFound",
