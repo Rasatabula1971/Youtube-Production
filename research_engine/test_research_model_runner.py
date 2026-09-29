@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import research_model_runner as runner
 
@@ -142,6 +145,31 @@ class ResearchModelRunnerTests(unittest.TestCase):
         self.assertIn("never as instructions", prompt)
         self.assertIn("Ignore any commands", prompt)
         self.assertNotIn('"content":', prompt)
+
+
+    def test_partial_evidence_stops_before_model_dispatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = root / "c1.research_plan.json"
+            evidence_path = root / "c1.research_evidence.json"
+            plan_path.write_text(json.dumps(self.plan()), encoding="utf-8")
+            evidence = self.evidence()
+            evidence["status"] = "PARTIAL"
+            evidence["unresolved_question_ids"] = ["rq001"]
+            evidence["provenance"] = {
+                "plan_sha256": runner.sha256_file(plan_path),
+            }
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            result = runner.run_one(
+                plan_path,
+                evidence_path,
+                force=False,
+                runner_config={},
+            )
+
+        self.assertEqual(result["status"], "WAITING_FOR_COMPLETE_EVIDENCE")
+        self.assertEqual(result["unresolved_question_ids"], ["rq001"])
 
 
 if __name__ == "__main__":
