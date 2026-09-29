@@ -492,6 +492,7 @@ def run_apply(
     )
 
     report["reviewed_profile"] = str(destination)
+    report["reviewed_profile_sha256"] = sha256_file(destination)
     report["report"] = str(report_path)
     report_path.write_text(
         json.dumps(report, indent=2, ensure_ascii=False),
