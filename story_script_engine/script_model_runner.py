@@ -54,6 +54,18 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "script_model_batch_summary.json"
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed = list(request.get("accepted_claim_ids", []))
+    approved_title = str(request.get("package", {}).get("title") or "")
+    story_plan = request.get("story_plan", {})
+    beats = (
+        story_plan.get("beats", [])
+        if isinstance(story_plan, dict)
+        else []
+    )
+    beat_ids = [
+        str(beat.get("beat_id", ""))
+        for beat in beats
+        if isinstance(beat, dict) and str(beat.get("beat_id", "")).strip()
+    ]
     return {
         "type": "object",
         "additionalProperties": False,
@@ -63,17 +75,28 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "const": str(request.get("concept_id", "")),
             },
-            "title": {"type": "string", "minLength": 1},
+            "title": {"type": "string", "const": approved_title},
             "opening_hook": {"type": "string", "minLength": 1},
             "sections": {
                 "type": "array",
-                "minItems": 2,
+                "minItems": len(beat_ids) if beat_ids else 1,
+                "maxItems": len(beat_ids) if beat_ids else None,
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["section_id", "purpose", "narration", "claim_ids"],
+                    "required": [
+                        "section_id",
+                        "story_beat_id",
+                        "purpose",
+                        "narration",
+                        "claim_ids",
+                    ],
                     "properties": {
                         "section_id": {"type": "string", "minLength": 1},
+                        "story_beat_id": {
+                            "type": "string",
+                            "enum": beat_ids,
+                        },
                         "purpose": {"type": "string", "minLength": 1},
                         "narration": {"type": "string", "minLength": 1},
                         "claim_ids": {
@@ -91,15 +114,19 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
 
 def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
     prompt = (
-        "You are writing an original YouTube script from a human-approved package and human-verified research. Return JSON only.\n\n"
+        "You are writing the narration for an original YouTube video from an "
+        "approved Story Plan and human-verified research. Return JSON only.\n\n"
         "Rules:\n"
-        "1. Deliver the approved package promise and expected payoff.\n"
-        "2. Use only accepted_claims for factual assertions. Never invent a factual detail.\n"
-        "3. Attach claim_ids to each section containing factual material.\n"
-        "4. Original connective narration is allowed only when it does not add factual claims.\n"
-        "5. Do not copy source-video wording, story beats, personality or exact execution.\n"
-        "6. Build a hook, escalating explanation, payoff and concise close.\n"
-        "7. Do not mention claim IDs in spoken narration.\n\nSCRIPT REQUEST:\n"
+        "1. Return the approved Packaging title EXACTLY. Do not rewrite, optimize, or replace it.\n"
+        "2. Follow the supplied Story Plan in order. Do not invent a new story structure.\n"
+        "3. Create exactly one script section for each Story Plan beat and map it with story_beat_id.\n"
+        "4. Each section must carry exactly the claim_ids assigned to its Story Plan beat.\n"
+        "5. Use only accepted_claims for factual assertions. Never invent a factual detail.\n"
+        "6. Original connective narration is allowed only when it does not add factual claims.\n"
+        "7. Do not copy source-video wording, story sequence, personality, or exact execution.\n"
+        "8. Do not mention claim IDs or story beat IDs in spoken narration.\n"
+        "9. Turn the Story Plan intent into natural spoken language with a strong hook, progression, payoff and concise close.\n\n"
+        "SCRIPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
     if len(prompt) > maximum_chars:
