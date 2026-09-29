@@ -27,6 +27,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
                 {"description": "Open with a concrete unanswered question."}
             ],
             "observed_examples": [],
+            "viewer_need_signal_context": [],
             "source_specific_elements_to_avoid": [{"element": "Exact source wording."}],
             "existing_transformation_directions": [],
             "source_video_ids": ["source1", "source2"],
@@ -45,6 +46,11 @@ class ConceptModelRunnerTests(unittest.TestCase):
             "viewer_problem": "Why do racing tyres look damaged after only a short run?",
             "viewer_moment": "Watching race footage and noticing shredded-looking tyre surfaces.",
             "desired_outcome": "Understand what the visible tyre surface changes mean.",
+            "viewer_need_evidence": {
+                "status": "HYPOTHESIS",
+                "evidence_basis": [],
+                "rationale": "No direct audience-question evidence is present in this test request.",
+            },
             "content_gap": {
                 "hypothesis": "Many clips show the visual effect without explaining the mechanism.",
                 "evidence_status": "HYPOTHESIS",
@@ -107,6 +113,12 @@ class ConceptModelRunnerTests(unittest.TestCase):
             schema["properties"]["mechanism_id"]["const"],
             "curiosity_gap",
         )
+        need_evidence = schema["properties"]["concepts"]["items"]["properties"][
+            "viewer_need_evidence"
+        ]["properties"]
+        self.assertIn("OBSERVED", need_evidence["status"]["enum"])
+        self.assertIn("INFERRED", need_evidence["status"]["enum"])
+        self.assertIn("HYPOTHESIS", need_evidence["status"]["enum"])
         dependency = schema["properties"]["concepts"]["items"]["properties"][
             "source_dependency_test"
         ]["properties"]
@@ -120,6 +132,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         )
         self.assertIn("Do not rank or score concepts", prompt)
         self.assertIn("not rewrites of the source videos", prompt)
+        self.assertIn("viewer_need_evidence.status", prompt)
+        self.assertIn("OBSERVED", prompt)
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
