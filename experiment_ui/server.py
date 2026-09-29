@@ -2389,8 +2389,8 @@ def stage_statuses() -> list[dict[str, Any]]:
             "complete": story_ready,
             "ready": packaging_research_ready,
             "current": packaging_research_ready and not story_ready,
-        },,
-{
+        },
+        {
             "id": "07",
             "title": "Story / Script",
             "state": script_gate_status if script_drafts_ready else (
