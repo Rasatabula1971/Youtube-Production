@@ -9,121 +9,139 @@ from story_script_engine import build_script_request, validate_script_response
 
 
 class StoryScriptTests(unittest.TestCase):
-    def package(self):
+    def plan(self):
         return {
-            "status": "READY_FOR_STORY_SCRIPT",
+            "artifact": "story_plan",
+            "status": "STORY_PLAN_READY",
             "concept_id": "c1",
-            "concept": {
-                "working_title": "Why Brakes Work Backwards",
-                "audience_promise": "Understand the system",
-                "viewer_problem": "Confusing behavior",
-                "viewer_moment": "Watching a race",
-                "desired_outcome": "Understand why",
-                "packaging": {
-                    "title": "Why Racing Brakes Work Backwards",
-                    "one_sentence_promise": "Explain the counterintuitive behavior",
-                    "expected_payoff": "A clear explanation",
-                    "thumbnail": {"message": "Backwards?"},
-                },
+            "title": "Why Racing Brakes Work Backwards",
+            "package": {
+                "title": "Why Racing Brakes Work Backwards",
+                "one_sentence_promise": "Explain the counterintuitive behavior",
+                "expected_payoff": "A clear explanation",
+                "thumbnail": {"message": "Backwards?"},
             },
-            "claims": [
+            "concept": {
+                "premise": "Explain why race brakes can behave counterintuitively.",
+                "audience_promise": "Understand the system",
+            },
+            "story_question": "Why can racing brakes seem backwards?",
+            "opening_hook_intent": "Open on the contradiction.",
+            "beats": [
+                {
+                    "beat_id": "b1",
+                    "role": "SETUP",
+                    "purpose": "Establish the puzzle.",
+                    "viewer_progress": "The viewer sees the contradiction.",
+                    "claim_ids": [],
+                    "transition_intent": "Ask what changes.",
+                },
+                {
+                    "beat_id": "b2",
+                    "role": "EXPLANATION",
+                    "purpose": "Explain heat behavior.",
+                    "viewer_progress": "The viewer learns the mechanism.",
+                    "claim_ids": ["clm001"],
+                    "transition_intent": "Connect the mechanism to the puzzle.",
+                },
+                {
+                    "beat_id": "b3",
+                    "role": "PAYOFF",
+                    "purpose": "Resolve the title promise.",
+                    "viewer_progress": "The contradiction now makes sense.",
+                    "claim_ids": ["clm001"],
+                    "transition_intent": "Close on the resolved idea.",
+                },
+            ],
+            "payoff_intent": "Resolve the apparent contradiction.",
+            "closing_intent": "Leave one clear mental model.",
+            "accepted_claims": [
                 {
                     "claim_id": "clm001",
                     "statement": "Heat changes braking behavior.",
-                    "role": "core",
-                    "question_ids": ["rq001"],
-                    "coverage": {"state": "MULTI_SOURCE"},
                 }
             ],
         }
 
-    def test_request_preserves_package_and_claims(self):
+    def request(self):
         with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "pkg.json"
-            p.write_text(json.dumps(self.package()), encoding="utf-8")
-            req = build_script_request(self.package(), p)
-        self.assertEqual(req["accepted_claim_ids"], ["clm001"])
-        self.assertEqual(req["package"]["title"], "Why Racing Brakes Work Backwards")
+            path = Path(tmp) / "plan.json"
+            path.write_text(json.dumps(self.plan()), encoding="utf-8")
+            return build_script_request(self.plan(), path)
 
-    def test_unapproved_claim_id_is_rejected(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "pkg.json"
-            p.write_text(json.dumps(self.package()), encoding="utf-8")
-            req = build_script_request(self.package(), p)
-        response = {
+    def valid_response(self):
+        return {
             "concept_id": "c1",
-            "title": "T",
-            "opening_hook": "Hook",
+            "title": "Why Racing Brakes Work Backwards",
+            "opening_hook": "At first, the brakes can seem to be doing the opposite of what you expect.",
             "sections": [
                 {
                     "section_id": "s1",
-                    "purpose": "Explain",
-                    "narration": "Text",
-                    "claim_ids": ["bad"],
-                }
-            ],
-            "closing": "Close",
-        }
-        result = validate_script_response(response, req)
-        self.assertFalse(result["valid"])
-        self.assertTrue(any("unapproved claim_id" in e for e in result["errors"]))
-
-    def test_valid_claim_mapping_passes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "pkg.json"
-            p.write_text(json.dumps(self.package()), encoding="utf-8")
-            req = build_script_request(self.package(), p)
-        response = {
-            "concept_id": "c1",
-            "title": "T",
-            "opening_hook": "Hook",
-            "sections": [
-                {
-                    "section_id": "s1",
-                    "purpose": "Explain",
-                    "narration": "Text",
-                    "claim_ids": ["clm001"],
+                    "story_beat_id": "b1",
+                    "purpose": "Establish the puzzle.",
+                    "narration": "The strange part is the behavior itself.",
+                    "claim_ids": [],
                 },
                 {
                     "section_id": "s2",
-                    "purpose": "Payoff",
-                    "narration": "Text",
+                    "story_beat_id": "b2",
+                    "purpose": "Explain heat behavior.",
+                    "narration": "Temperature changes how the braking system behaves.",
+                    "claim_ids": ["clm001"],
+                },
+                {
+                    "section_id": "s3",
+                    "story_beat_id": "b3",
+                    "purpose": "Resolve the title promise.",
+                    "narration": "That is why the behavior only looks backwards until you account for heat.",
                     "claim_ids": ["clm001"],
                 },
             ],
-            "closing": "Close",
+            "closing": "The puzzle disappears once temperature is part of the picture.",
         }
-        result = validate_script_response(response, req)
-        self.assertTrue(result["valid"])
-        self.assertEqual(result["claim_usage"], ["clm001"])
 
-    def test_empty_claim_mapping_is_rejected(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "pkg.json"
-            p.write_text(json.dumps(self.package()), encoding="utf-8")
-            req = build_script_request(self.package(), p)
-        response = {
-            "concept_id": "c1",
-            "title": "T",
-            "opening_hook": "Hook",
-            "sections": [
-                {
-                    "section_id": "s1",
-                    "purpose": "Explain",
-                    "narration": "Unsupported factual narration",
-                    "claim_ids": [],
-                }
-            ],
-            "closing": "Close",
-        }
+    def test_request_preserves_story_plan_and_title(self):
+        req = self.request()
+        self.assertEqual(req["accepted_claim_ids"], ["clm001"])
+        self.assertEqual(req["package"]["title"], "Why Racing Brakes Work Backwards")
+        self.assertEqual(len(req["story_plan"]["beats"]), 3)
+
+    def test_script_cannot_rewrite_approved_title(self):
+        req = self.request()
+        response = self.valid_response()
+        response["title"] = "New Title"
         result = validate_script_response(response, req)
         self.assertFalse(result["valid"])
         self.assertTrue(
-            any(
-                "requires at least one accepted claim_id" in e for e in result["errors"]
-            )
+            any("approved Packaging title" in error for error in result["errors"])
         )
 
+    def test_script_must_map_every_story_beat_once(self):
+        req = self.request()
+        response = self.valid_response()
+        response["sections"][2]["story_beat_id"] = "b2"
+        result = validate_script_response(response, req)
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("duplicate story_beat_id" in error for error in result["errors"])
+        )
+
+    def test_script_claims_must_match_story_beat(self):
+        req = self.request()
+        response = self.valid_response()
+        response["sections"][1]["claim_ids"] = []
+        result = validate_script_response(response, req)
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("claim_ids must match Story Plan beat" in error for error in result["errors"])
+        )
+
+    def test_valid_story_bound_script_passes(self):
+        req = self.request()
+        result = validate_script_response(self.valid_response(), req)
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["claim_usage"], ["clm001"])
+        self.assertEqual(result["story_plan_beat_ids"], ["b1", "b2", "b3"])
 
     def test_slug_collision_is_rejected_before_script_request_writes(self):
         with self.assertRaisesRegex(ValueError, "collide"):
