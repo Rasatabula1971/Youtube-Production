@@ -3028,7 +3028,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         performance_gate.get("status")
         or "WAITING_FOR_VOICE_PERFORMANCE_SPECS"
     )
-    performance_gate_complete = bool(voice["performance_gate_complete"])
     voice_visual_ready = bool(voice["visual_ready"])
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
