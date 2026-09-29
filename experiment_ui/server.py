@@ -1192,7 +1192,7 @@ def transformation_artifact_state() -> dict[str, Any]:
             ):
                 request_hashes[mechanism_id] = sha256_file(path)
 
-    current_response_ids: set[str] = set()
+    current_response_hashes: dict[str, str] = {}
     if TRANSFORM_RESPONSES_DIR.exists():
         for path in TRANSFORM_RESPONSES_DIR.glob("*.json"):
             payload = safe_load_json(path)
@@ -1205,7 +1205,7 @@ def transformation_artifact_state() -> dict[str, Any]:
                 and isinstance(provenance, dict)
                 and provenance.get("request_sha256") == request_hashes[mechanism_id]
             ):
-                current_response_ids.add(mechanism_id)
+                current_response_hashes[mechanism_id] = sha256_file(path)
 
     candidates = safe_load_json(TRANSFORM_CANDIDATES_FILE)
     candidate_count = (
@@ -1230,9 +1230,18 @@ def transformation_artifact_state() -> dict[str, Any]:
     )
     requests_ready = bool(request_hashes)
     responses_complete = requests_ready and set(request_hashes).issubset(
-        current_response_ids
+        current_response_hashes
     )
-    candidates_ready = responses_complete and candidate_count > 0
+    candidate_provenance = (
+        candidates.get("source_response_sha256", {})
+        if isinstance(candidates, dict)
+        else {}
+    )
+    candidates_current = (
+        isinstance(candidate_provenance, dict)
+        and candidate_provenance == current_response_hashes
+    )
+    candidates_ready = responses_complete and candidate_count > 0 and candidates_current
     gate = (
         concept_gate_snapshot()
         if candidates_ready and triage_ready
@@ -1255,7 +1264,8 @@ def transformation_artifact_state() -> dict[str, Any]:
     return {
         "handoff_sha256": handoff_hash,
         "request_mechanism_ids": sorted(request_hashes),
-        "current_response_mechanism_ids": sorted(current_response_ids),
+        "current_response_mechanism_ids": sorted(current_response_hashes),
+        "candidate_provenance_current": candidates_current,
         "requests_ready": requests_ready,
         "responses_complete": responses_complete,
         "candidate_count": candidate_count,
@@ -1291,7 +1301,7 @@ def packaging_artifact_state() -> dict[str, Any]:
             ):
                 request_hashes[concept_id] = sha256_file(path)
 
-    current_response_ids: set[str] = set()
+    current_response_hashes: dict[str, str] = {}
     if PACKAGING_RESPONSES_DIR.exists():
         for path in PACKAGING_RESPONSES_DIR.glob("*.json"):
             payload = safe_load_json(path)
@@ -1304,7 +1314,7 @@ def packaging_artifact_state() -> dict[str, Any]:
                 and isinstance(provenance, dict)
                 and provenance.get("request_sha256") == request_hashes[concept_id]
             ):
-                current_response_ids.add(concept_id)
+                current_response_hashes[concept_id] = sha256_file(path)
 
     candidates = safe_load_json(PACKAGING_CANDIDATES_FILE)
     candidate_count = (
@@ -1312,9 +1322,18 @@ def packaging_artifact_state() -> dict[str, Any]:
     )
     requests_ready = bool(request_hashes)
     responses_complete = requests_ready and set(request_hashes).issubset(
-        current_response_ids
+        current_response_hashes
     )
-    candidates_ready = responses_complete and candidate_count > 0
+    candidate_provenance = (
+        candidates.get("source_response_sha256", {})
+        if isinstance(candidates, dict)
+        else {}
+    )
+    candidates_current = (
+        isinstance(candidate_provenance, dict)
+        and candidate_provenance == current_response_hashes
+    )
+    candidates_ready = responses_complete and candidate_count > 0 and candidates_current
     gate = (
         packaging_gate_snapshot()
         if candidates_ready
@@ -1333,7 +1352,8 @@ def packaging_artifact_state() -> dict[str, Any]:
     return {
         "handoff_sha256": handoff_hash,
         "request_concept_ids": sorted(request_hashes),
-        "current_response_concept_ids": sorted(current_response_ids),
+        "current_response_concept_ids": sorted(current_response_hashes),
+        "candidate_provenance_current": candidates_current,
         "requests_ready": requests_ready,
         "responses_complete": responses_complete,
         "candidate_count": candidate_count,
