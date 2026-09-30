@@ -379,16 +379,16 @@ def apply_action(
         )
 
     required = list(item.get("required_accept_criteria", []))
-    if value == "ACCEPT":
-        normalized = {criterion: True for criterion in required}
-    elif value == "REWORK":
+    if value == "REWORK":
         normalized = normalize_criteria(criteria, required)
         if normalized and all(normalized.values()):
             raise ValueError(
                 "REWORK must leave at least one criterion unchecked to mark what changes"
             )
     else:
-        normalized = {criterion: False for criterion in required}
+        # ACCEPT / REJECT / SAVE_IDEA are single-click choices in the UI.
+        # concept_gate.validate_decisions() normalizes the final audit semantics.
+        normalized = {}
 
     state.setdefault("decisions", {})[concept_id] = {
         "concept_id": concept_id,
