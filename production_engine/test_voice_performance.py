@@ -63,6 +63,8 @@ def approved_plan() -> dict:
                         "beat_id": "b1",
                         "purpose": "setup",
                         "treatment": "Build curiosity",
+                        "drama_level": 7,
+                        "tempo_level": 6,
                         "claim_ids": ["c1"],
                         "source_section_ids": ["lf1"],
                     },
@@ -70,6 +72,8 @@ def approved_plan() -> dict:
                         "beat_id": "b2",
                         "purpose": "reveal",
                         "treatment": "Reveal the cause",
+                        "drama_level": 8,
+                        "tempo_level": 4,
                         "claim_ids": ["c2"],
                         "source_section_ids": ["lf2"],
                     },
@@ -85,6 +89,8 @@ def approved_plan() -> dict:
                         "beat_id": "s1",
                         "purpose": "proof",
                         "treatment": "Immediate proof",
+                        "drama_level": 7,
+                        "tempo_level": 8,
                         "claim_ids": ["c1"],
                         "source_section_ids": ["sh1"],
                     },
@@ -92,6 +98,8 @@ def approved_plan() -> dict:
                         "beat_id": "s2",
                         "purpose": "reveal",
                         "treatment": "Fast reveal",
+                        "drama_level": 8,
+                        "tempo_level": 7,
                         "claim_ids": ["c2"],
                         "source_section_ids": ["sh2"],
                     },
@@ -187,6 +195,10 @@ class VoicePerformanceTests(unittest.TestCase):
             3,
         )
         self.assertFalse(long_request["render_prerequisites_configured"])
+        self.assertEqual(long_request["beats"][0]["drama_level"], 7)
+        self.assertEqual(long_request["beats"][0]["tempo_level"], 6)
+        self.assertEqual(long_request["beats"][1]["drama_level"], 8)
+        self.assertEqual(long_request["beats"][1]["tempo_level"], 4)
 
     def test_valid_response_passes(self) -> None:
         result = voice_performance.validate_response(
