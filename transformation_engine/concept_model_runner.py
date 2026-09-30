@@ -476,12 +476,18 @@ def run_batch(
         expected_count=len(paths),
         processed_count=len(results),
     )
+    successful_results = sum(
+        str(item.get("status") or "") in SUCCESS_STATUSES for item in results
+    )
     if (
-        len(results) < len(paths)
-        and invoked >= limit
+        provider_batch_status == "PARTIAL"
         and results
-        and all(str(item.get("status") or "") in SUCCESS_STATUSES for item in results)
+        and successful_results > 0
     ):
+        # A mixed batch can still make durable progress: validated/skipped
+        # responses are cached while unavailable providers are retried on the
+        # next bounded pass. The automatic workflow compares readiness before
+        # and after the pass to detect a real stall.
         provider_batch_status = "BATCH_PROGRESS"
 
     merge_status = str(merge_summary.get("status") or "")
