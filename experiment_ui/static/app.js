@@ -146,6 +146,17 @@ const visualShotPrev = document.getElementById("visualShotPrev");
 const visualRejectAll = document.getElementById("visualRejectAll");
 const visualNeedsBetter = document.getElementById("visualNeedsBetter");
 const visualShotNext = document.getElementById("visualShotNext");
+const storyboardCreativeInstruction = document.getElementById("storyboardCreativeInstruction");
+const storyboardDesiredVisual = document.getElementById("storyboardDesiredVisual");
+const storyboardSearchTerms = document.getElementById("storyboardSearchTerms");
+const storyboardFraming = document.getElementById("storyboardFraming");
+const storyboardCameraAngle = document.getElementById("storyboardCameraAngle");
+const storyboardCameraMovement = document.getElementById("storyboardCameraMovement");
+const storyboardLens = document.getElementById("storyboardLens");
+const storyboardLighting = document.getElementById("storyboardLighting");
+const storyboardTransition = document.getElementById("storyboardTransition");
+const storyboardSaveRevision = document.getElementById("storyboardSaveRevision");
+
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -200,6 +211,7 @@ let performanceEditing = false;
 let latestPreviewSnapshot = null;
 let latestVisualCandidateSnapshot = null;
 let visualShotCursor = 0;
+let latestStoryboardSnapshot = null;
 
 const ROUTES = {
   "/": {
@@ -2541,6 +2553,43 @@ function renderVisualCandidateReview(snapshot) {
   visualShotPrev.disabled = visualShotCursor === 0;
   visualShotNext.disabled = visualShotCursor >= items.length - 1;
   visualCandidateNote.value = decision && decision.note ? decision.note : "";
+  const boards = (latestStoryboardSnapshot && latestStoryboardSnapshot.items) || [];
+  const board = boards.find(function (x) { return x.concept_id === packet.concept_id && x.format === packet.format; });
+  const card = board && (board.cards || []).find(function (x) { return x.shot_id === shot.shot_id; });
+  if (card) {
+    const cine = card.cinematic_direction || {};
+    storyboardCreativeInstruction.value = card.creative_instruction || "";
+    storyboardDesiredVisual.value = card.desired_visual || "";
+    storyboardSearchTerms.value = (card.search_terms || []).join(", ");
+    storyboardFraming.value = cine.framing || "";
+    storyboardCameraAngle.value = cine.camera_angle || "";
+    storyboardCameraMovement.value = cine.camera_movement || "";
+    storyboardLens.value = cine.lens_feel || "";
+    storyboardLighting.value = cine.lighting || "";
+    storyboardTransition.value = cine.transition || "";
+    storyboardSaveRevision.dataset.storyboardFile = board.storyboard_file || "";
+    storyboardSaveRevision.dataset.shotId = shot.shot_id || "";
+  }
+}
+
+async function saveStoryboardRevision() {
+  const file = storyboardSaveRevision.dataset.storyboardFile, shotId = storyboardSaveRevision.dataset.shotId;
+  if (!file || !shotId) return;
+  try {
+    await api("/api/storyboard-review", {method:"POST", body:JSON.stringify({
+      storyboard_file:file, shot_id:shotId, instruction:storyboardCreativeInstruction.value,
+      changes:{
+        desired_visual:storyboardDesiredVisual.value,
+        search_terms:storyboardSearchTerms.value.split(",").map(function(x){return x.trim();}).filter(Boolean),
+        cinematic_direction:{framing:storyboardFraming.value,camera_angle:storyboardCameraAngle.value,
+          camera_movement:storyboardCameraMovement.value,lens_feel:storyboardLens.value,
+          lighting:storyboardLighting.value,transition:storyboardTransition.value}
+      }
+    })});
+    latestStoryboardSnapshot = await api("/api/storyboard-review");
+    showToast("Shot revised. Its old visual approvals are now stale; re-search this shot.", false);
+    renderVisualCandidateReview(latestVisualCandidateSnapshot);
+  } catch(error) { showToast(error.message,true); }
 }
 
 async function submitVisualCandidateDecision(action, candidateId) {
@@ -2604,7 +2653,7 @@ function renderAnalysis(data) {
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
-  api("/api/visual-candidate-review").then(renderVisualCandidateReview).catch(function () {});
+  Promise.all([api("/api/storyboard-review"), api("/api/visual-candidate-review")]).then(function (values) { latestStoryboardSnapshot=values[0]; renderVisualCandidateReview(values[1]); }).catch(function () {});
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -3109,6 +3158,7 @@ previewPerformance.addEventListener("click", function () {
 previewSound.addEventListener("click", function () {
   submitPreviewDecision("REWORK_MUSIC_SFX");
 });
+storyboardSaveRevision.addEventListener("click", saveStoryboardRevision);
 visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.max(0, visualShotCursor - 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
 visualShotNext.addEventListener("click", function () { visualShotCursor = Math.min(visualReviewItems().length - 1, visualShotCursor + 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
 visualRejectAll.addEventListener("click", function () { submitVisualCandidateDecision("REJECT_ALL"); });
