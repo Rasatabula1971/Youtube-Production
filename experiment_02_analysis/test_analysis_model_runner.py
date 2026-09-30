@@ -434,7 +434,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertNotIn("uniqueItems", tags)
         self.assertNotIn("maxLength", tags["items"])
 
-    def test_direct_gemini_backup_is_explicitly_authorized_not_marked_free(self):
+    def test_direct_gemini_backup_is_free_tier_authorized_and_tracks_usage(self):
         class FakeResponse:
             def __enter__(self):
                 return self
@@ -451,7 +451,12 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                                     "parts": [{"text": '{"scores":[],"summary":"ok"}'}]
                                 }
                             }
-                        ]
+                        ],
+                        "usageMetadata": {
+                            "promptTokenCount": 120,
+                            "candidatesTokenCount": 30,
+                            "totalTokenCount": 150,
+                        },
                     }
                 ).encode("utf-8")
 
@@ -477,7 +482,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "os.environ",
                 {
                     "DIRECT_GEMINI_API_KEY": "test-key",
-                    "DIRECT_GEMINI_MODEL": "gemini-test",
+                    "DIRECT_GEMINI_MODELS": "gemini-test",
                 },
                 clear=False,
             ),
@@ -501,9 +506,104 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["provider_id"], "direct_gemini_backup")
         self.assertEqual(result["model_id"], "gemini-test")
         self.assertTrue(result["direct_backup_used"])
-        self.assertTrue(result["direct_backup_may_bill"])
+        self.assertTrue(result["direct_backup_free_tier_only"])
+        self.assertFalse(result["direct_backup_may_bill"])
+        self.assertEqual(result["direct_backup_usage"]["total_token_count"], 150)
         self.assertIsNone(result["paid_inference_executed"])
         self.assertTrue(inference_cost_authorized(result))
+
+    def test_direct_gemini_falls_back_from_flash_lite_to_flash(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [{"text": '{"summary":"ok"}'}]
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
+
+        fair_result = {
+            "status": "ESCALATION_REQUIRED",
+            "reason_code": "ALL_FREE_MODELS_UNAVAILABLE",
+            "paid_inference_executed": False,
+            "attempts": [],
+        }
+        payload = {
+            "prompt": "score concepts",
+            "expected_schema": {
+                "type": "object",
+                "properties": {"summary": {"type": "string"}},
+                "required": ["summary"],
+            },
+        }
+
+        def fake_urlopen(request, **_kwargs):
+            if "gemini-3.5-flash-lite" in request.full_url:
+                body = json.dumps(
+                    {
+                        "error": {
+                            "code": 503,
+                            "status": "UNAVAILABLE",
+                            "message": "model is experiencing high demand",
+                        }
+                    }
+                ).encode("utf-8")
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    503,
+                    "Service Unavailable",
+                    None,
+                    io.BytesIO(body),
+                )
+            return FakeResponse()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "DIRECT_GEMINI_API_KEY": "test-key",
+                    "DIRECT_GEMINI_MODELS": (
+                        "gemini-3.5-flash-lite,gemini-3.5-flash"
+                    ),
+                },
+                clear=False,
+            ),
+            patch(
+                "analysis_model_runner.urllib.request.urlopen",
+                side_effect=fake_urlopen,
+            ) as urlopen,
+        ):
+            result = call_direct_gemini_backup(
+                payload,
+                timeout_seconds=30,
+                fair_result=fair_result,
+            )
+
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(result["status"], "ACCEPTED")
+        self.assertEqual(result["model_id"], "gemini-3.5-flash")
+        direct_attempts = [
+            item
+            for item in result["attempts"]
+            if item["provider_id"] == "direct_gemini_backup"
+        ]
+        self.assertEqual(
+            [item["model_id"] for item in direct_attempts],
+            ["gemini-3.5-flash-lite", "gemini-3.5-flash"],
+        )
+        self.assertIn("HTTP_503", direct_attempts[0]["error_detail"])
+        self.assertEqual(direct_attempts[1]["disposition"], "ACCEPTED")
 
     def test_direct_gemini_http_error_preserves_safe_google_message(self):
         fair_result = {
@@ -541,7 +641,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "os.environ",
                 {
                     "DIRECT_GEMINI_API_KEY": "secret-test-key",
-                    "DIRECT_GEMINI_MODEL": "gemini-test",
+                    "DIRECT_GEMINI_MODELS": "gemini-test",
                 },
                 clear=False,
             ),
@@ -563,7 +663,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertIn("unsupported field", attempt["error_detail"])
         self.assertNotIn("secret-test-key", attempt["error_detail"])
 
-    def test_shared_bridge_uses_direct_backup_after_clean_fair_escalation(self):
+    def test_shared_bridge_uses_direct_backup_after_free_pool_exhaustion(self):
         class Completed:
             returncode = 0
 
@@ -592,6 +692,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "provider_id": "direct_gemini_backup",
                 "paid_inference_executed": None,
                 "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
                 "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
             }
             with (
@@ -617,6 +718,53 @@ class AnalysisModelRunnerTests(unittest.TestCase):
 
         self.assertEqual(result["provider_id"], "direct_gemini_backup")
         direct_backup.assert_called_once()
+
+    def test_shared_bridge_does_not_backup_fair_quality_failure(self):
+        class Completed:
+            returncode = 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            python = root / "python.exe"
+            python.write_text("", encoding="utf-8")
+
+            def fake_run(args, **_kwargs):
+                output = Path(args[args.index("--output") + 1])
+                output.write_text(
+                    json.dumps(
+                        {
+                            "status": "ESCALATION_REQUIRED",
+                            "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+                            "paid_inference_executed": False,
+                            "attempts": [],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return Completed()
+
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"DIRECT_GEMINI_API_KEY": "test-key"},
+                    clear=False,
+                ),
+                patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch(
+                    "analysis_model_runner.call_direct_gemini_backup"
+                ) as direct_backup,
+            ):
+                result = call_fair_bridge(
+                    {
+                        "prompt": "test",
+                        "expected_schema": {"type": "object"},
+                    },
+                    python_executable=python,
+                    timeout_seconds=30,
+                )
+
+        self.assertEqual(result["reason_code"], "ALL_FREE_MODELS_FAILED_QUALITY")
+        direct_backup.assert_not_called()
 
     def test_shared_bridge_does_not_backup_unknown_fair_cost(self):
         class Completed:

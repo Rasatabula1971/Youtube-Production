@@ -1220,3 +1220,32 @@ reinventing or flattening it downstream.
 No stage may manufacture catastrophe, danger or certainty merely to raise the
 drama score.
 
+## D-068 — FAIR remains primary; repo Gemini is free-tier exhaustion fallback
+
+**Status:** Accepted
+
+All FAIR-backed YouTube stages must call FAIR first. The repo-local
+`DIRECT_GEMINI_API_KEY` is not a peer provider and is not part of normal FAIR
+routing.
+
+Direct Gemini is eligible only when FAIR returns `ESCALATION_REQUIRED`,
+confirms `paid_inference_executed: false`, and reports a recognized free-route
+exhaustion/unavailability state. FAIR quality failures, bridge/internal
+failures, validation failures, disagreement, system stops, or unknown cost
+states must not bypass FAIR into Gemini.
+
+The default repo-Gemini order is:
+
+1. `gemini-3.5-flash-lite`
+2. `gemini-3.5-flash`
+
+Temporary capacity/rate failures may advance to the next configured free-tier
+model. If the chain cannot return a valid response, the pipeline preserves its
+current artifacts and remains partial for a later retry. No paid-inference
+route is permitted.
+
+Gemini quota values are not hard-coded from documentation examples. The app
+records provider-returned token usage when available and relies on the actual
+Google project/model limits and HTTP quota/capacity responses. The former
+1,000,000-token assumption is not treated as a daily ceiling.
+

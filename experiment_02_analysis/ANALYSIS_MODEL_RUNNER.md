@@ -264,26 +264,54 @@ eligible free provider or local model when one is configured and admitted.
 If FAIR changes provider/model capabilities again, update the YouTube bridge
 contract and tests before model execution rather than weakening the schema gate.
 
-## Direct Gemini backup
+## Direct Gemini free-tier backup
 
-The shared FAIR adapter supports an optional direct Gemini backup for all
-FAIR-backed stages in this repository: Analysis, Concept Generation, Concept
-Triage, Packaging, Research, and Script. FAIR is always attempted first.
+The shared adapter supports a repo-local Gemini fallback for all FAIR-backed
+stages. FAIR remains authoritative and is always attempted first.
 
-Set these values in the YouTube project's root `.env`, not FAIR's `.env`:
+The routing contract is:
 
-```text
+~~~text
+YouTube stage
+  ↓
+FAIR free-provider pool
+  ↓
+FAIR ACCEPTED? -> use FAIR result
+  ↓ no
+FAIR explicitly reports free routes exhausted/unavailable?
+  ↓ yes
+repo Gemini free-tier chain
+  1. gemini-3.5-flash-lite
+  2. gemini-3.5-flash
+  ↓
+all unavailable/rate-limited -> PARTIAL / retry later
+~~~
+
+Direct Gemini is eligible only when FAIR returns `ESCALATION_REQUIRED`,
+confirms `paid_inference_executed: false`, and reports an accepted free-route
+exhaustion/unavailability reason. FAIR quality failures, bridge errors,
+validation-service failures, system stops, disagreement, and unknown
+post-dispatch cost states do not bypass to Gemini.
+
+Configure the YouTube repo's root `.env`, not FAIR's `.env`:
+
+~~~text
 DIRECT_GEMINI_API_KEY=...
-DIRECT_GEMINI_MODEL=gemini-3.5-flash
-```
+DIRECT_GEMINI_MODELS=gemini-3.5-flash-lite,gemini-3.5-flash
+~~~
 
-The direct call is attempted only when FAIR returns a non-accepted result and
-explicitly reports `paid_inference_executed: false`. If FAIR's post-dispatch
-cost state is unknown, the pipeline still fails closed and does not call the
-backup.
+`DIRECT_GEMINI_MODEL` is retained for backward compatibility. When the ordered
+`DIRECT_GEMINI_MODELS` setting is absent, Flash-Lite stays first and the
+legacy model becomes the second fallback.
 
-A successful backup is recorded as `provider_id: direct_gemini_backup` with
-`billing_authorization: USER_APPROVED_DIRECT_GEMINI_BACKUP`. It is never
-reported as verified-free; the configured Gemini key may be subject to the
-quota or billing rules of its Google AI project.
+The application does not hard-code a 1,000,000-token daily ceiling. Gemini
+rate/quota limits are project/model-specific. When Google returns
+`usageMetadata`, the adapter records prompt, candidate, and total token counts
+for observability. HTTP 429 and temporary 5xx capacity failures may move to the
+next configured free Gemini model; if the chain is exhausted, the pipeline
+preserves state and waits for a later retry. It never moves to paid inference.
 
+A successful repo-Gemini result is recorded as
+`provider_id: direct_gemini_backup` with
+`direct_backup_free_tier_only: true` and
+`direct_backup_may_bill: false`.
