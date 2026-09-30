@@ -17,12 +17,15 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             server.AUTO_MACHINE_ACTION_ORDER[
-                format_gate_index + 1 : format_gate_index + 5
+                format_gate_index + 1 : format_gate_index + 8
             ],
             [
                 "voice_prepare",
                 "voice_generate",
                 "voice_gate_prepare",
+                "narration_prepare",
+                "narration_spend_gate_prepare",
+                "narration_audio_qc",
                 "production_visual_prepare",
             ],
         )
