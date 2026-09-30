@@ -135,6 +135,16 @@ const performanceReject = document.getElementById("performanceReject");
 const performanceRework = document.getElementById("performanceRework");
 const performanceAccept = document.getElementById("performanceAccept");
 const performanceNext = document.getElementById("performanceNext");
+const previewReviewPanel = document.getElementById("previewReviewPanel");
+const previewReviewTitle = document.getElementById("previewReviewTitle");
+const previewReviewSummary = document.getElementById("previewReviewSummary");
+const previewReviewStatus = document.getElementById("previewReviewStatus");
+const previewDetail = document.getElementById("previewDetail");
+const previewNote = document.getElementById("previewNote");
+const previewScript = document.getElementById("previewScript");
+const previewPerformance = document.getElementById("previewPerformance");
+const previewSound = document.getElementById("previewSound");
+const previewApprove = document.getElementById("previewApprove");
 
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
@@ -176,6 +186,7 @@ let formatEditing = false;
 let latestPerformanceSnapshot = null;
 let performanceCursor = 0;
 let performanceEditing = false;
+let latestPreviewSnapshot = null;
 
 const ROUTES = {
   "/": {
@@ -2397,6 +2408,73 @@ async function submitPerformanceDecision(decision) {
   }
 }
 
+function currentPreviewItem() {
+  const items = (latestPreviewSnapshot && latestPreviewSnapshot.items) || [];
+  return items.find(function (item) { return !item.approved_for_paid_quote; }) || items[0] || null;
+}
+
+function renderPreviewReview(snapshot) {
+  latestPreviewSnapshot = snapshot || {};
+  const items = (snapshot && snapshot.items) || [];
+  if (!items.length) {
+    previewReviewPanel.hidden = true;
+    return;
+  }
+  previewReviewPanel.hidden = false;
+  const item = currentPreviewItem();
+  if (!item) return;
+  previewReviewTitle.textContent = snapshot.complete
+    ? "Free audio prototype approved"
+    : "Listen before spending";
+  previewReviewSummary.textContent =
+    "This is a zero-cost draft for judging story, tone, spacing and sound design. Paid narration remains locked.";
+  previewReviewStatus.textContent = item.decision || "PENDING";
+  previewReviewStatus.className =
+    "status-chip " + (item.approved_for_paid_quote ? "success" : "running");
+  const audio = item.audio_ready
+    ? '<audio controls preload="metadata" style="width:100%" src="/api/narration-preview-audio?concept_id=' +
+      encodeURIComponent(item.concept_id || "") + '&format=' +
+      encodeURIComponent(item.format || "") + '"></audio>'
+    : '<p><strong>Audio not ready.</strong> Run the free local preview renderer first.</p>';
+  previewDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>ZERO-COST PROTOTYPE</h4>' +
+    '<h3>' + escapeHtml(item.concept_id || "Narration preview") + '</h3>' +
+    '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(item.format || "")) + '</p>' +
+    audio +
+    '<p class="muted">Music/SFX are draft editorial cues using local/free-compatible assets. Approval unlocks quote preparation only; it does not spend money.</p></div>';
+  previewApprove.disabled = !item.audio_ready || Boolean(item.approved_for_paid_quote);
+  previewScript.disabled = Boolean(item.approved_for_paid_quote);
+  previewPerformance.disabled = Boolean(item.approved_for_paid_quote);
+  previewSound.disabled = Boolean(item.approved_for_paid_quote);
+  if (snapshot.complete) previewNote.value = "";
+}
+
+async function submitPreviewDecision(decision) {
+  const item = currentPreviewItem();
+  if (!item) return;
+  try {
+    const payload = await api("/api/narration-preview-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        format: item.format,
+        decision: decision,
+        note: previewNote.value
+      })
+    });
+    renderPreviewReview(payload);
+    showToast(
+      decision === "APPROVE_FINAL"
+        ? "Free prototype approved. Paid quote preparation is now unlocked."
+        : "Prototype sent back for " + humanizeToken(decision).toLowerCase() + ".",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -2406,7 +2484,8 @@ function renderAnalysis(data) {
     "HUMAN_RESEARCH_GATE",
     "HUMAN_SCRIPT_GATE",
     "HUMAN_FORMAT_GATE",
-    "HUMAN_PERFORMANCE_GATE"
+    "HUMAN_PERFORMANCE_GATE",
+    "HUMAN_NARRATION_PREVIEW_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -2441,6 +2520,7 @@ function renderAnalysis(data) {
   renderScriptReview(data.script_gate || {}, false);
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
+  renderPreviewReview(data.narration_preview_gate || {});
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -2935,6 +3015,18 @@ performanceRework.addEventListener("click", function () {
 });
 performanceAccept.addEventListener("click", function () {
   submitPerformanceDecision("ACCEPT");
+});
+previewScript.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_SCRIPT");
+});
+previewPerformance.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_PERFORMANCE");
+});
+previewSound.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_MUSIC_SFX");
+});
+previewApprove.addEventListener("click", function () {
+  submitPreviewDecision("APPROVE_FINAL");
 });
 
 renderRoute({ scroll: true });
