@@ -42,6 +42,7 @@ from analysis_model_runner import (
     safe_attempts,
 )
 from evidence_ingest import sha256_file
+from human_framing import response_schema as human_framing_response_schema
 
 from transformation_engine import (
     OUTPUT_DIR,
@@ -75,6 +76,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "viewer_problem",
             "viewer_moment",
             "desired_outcome",
+            "human_framing",
             "viewer_need_evidence",
             "content_gap",
             "channel_fit",
@@ -94,6 +96,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "viewer_problem": {"type": "string", "minLength": 1},
             "viewer_moment": {"type": "string", "minLength": 1},
             "desired_outcome": {"type": "string", "minLength": 1},
+            "human_framing": human_framing_response_schema(),
             "viewer_need_evidence": {
                 "type": "object",
                 "additionalProperties": False,
@@ -226,7 +229,23 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "10. Include at least two independent research questions before scripting.\n"
         "11. The Source Dependency Test must pass: the concept must keep its main "
         "value without source wording, footage, story, personality, or exact execution.\n"
-        "12. Do not rank or score concepts.\n\n"
+        "12. Build the human framing BEFORE settling on the technical title. Start with "
+        "what the viewer can see, experience, lose, fear, question, compare, or find "
+        "contradictory; the mechanism is usually the answer, not the doorway.\n"
+        "13. Drama has a hard floor of 4/10. Treat 5/10 as the normal center, but "
+        "actively raise it when the real opportunity supports stronger consequence, "
+        "danger, loss, surprise, transformation, scale, conflict, or decision tension.\n"
+        "14. Never manufacture drama. Record both the truthful drama source and a "
+        "constraint on what must not be exaggerated. Levels 9-10 require genuinely "
+        "extreme real-world stakes or spectacle.\n"
+        "15. Do not waste a high-drama opportunity with textbook framing. The selected "
+        "target may not sit more than three points below the assessed drama capacity.\n"
+        "16. Use a changing drama curve with rises and releases, never a flat line. "
+        "Use a separate changing tempo curve; tempo may slow while drama remains high.\n"
+        "17. The visual opening plan must SHOW the problem, contradiction, consequence, "
+        "transformation, decision, or mystery before asking the viewer to absorb the "
+        "technical explanation.\n"
+        "18. Do not rank or score concepts.\n\n"
         "CONCEPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
