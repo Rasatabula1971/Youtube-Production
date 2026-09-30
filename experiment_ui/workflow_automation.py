@@ -57,7 +57,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "production_visual_prepare",
     "storyboard_prepare",
     "visual_search_prepare",
-    "visual_rough_cut_prepare",
+    "visual_search_acquire",
 ]
 
 MAX_STEPS_PER_RUN = 40
