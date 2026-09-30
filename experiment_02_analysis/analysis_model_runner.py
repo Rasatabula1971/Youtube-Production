@@ -548,7 +548,23 @@ def gemini_compatible_schema(value: Any) -> Any:
     }
     output: dict[str, Any] = {}
     if "const" in value and "enum" not in value:
-        output["enum"] = [value["const"]]
+        const_value = value["const"]
+        # Gemini documents enum support for strings and numbers, not booleans.
+        # Preserve boolean const shape as a boolean type and let the project's
+        # deterministic validator enforce the exact True/False value afterward.
+        if isinstance(const_value, bool):
+            output["type"] = "boolean"
+        elif isinstance(const_value, str):
+            output["type"] = "string"
+            output["enum"] = [const_value]
+        elif isinstance(const_value, int):
+            output["type"] = "integer"
+            output["enum"] = [const_value]
+        elif isinstance(const_value, float):
+            output["type"] = "number"
+            output["enum"] = [const_value]
+        elif const_value is None:
+            output["type"] = "null"
 
     for key, item in value.items():
         if key == "const" or key not in allowed:
