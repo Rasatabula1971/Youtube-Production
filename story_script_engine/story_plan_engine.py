@@ -153,6 +153,7 @@ def _base_from_verified_package(
             "viewer_problem": concept.get("viewer_problem"),
             "viewer_moment": concept.get("viewer_moment"),
             "desired_outcome": concept.get("desired_outcome"),
+            "human_framing": concept.get("human_framing", {}),
             "mechanism_id": concept.get("mechanism_id"),
             "mechanism_label": concept.get("mechanism_label"),
         },
@@ -192,11 +193,17 @@ def build_story_plan_request(
             "beat_mechanisms": sorted(BEAT_PSYCHOLOGY_MECHANISMS),
             "loop_actions": sorted(LOOP_ACTIONS),
             "tension_levels": sorted(TENSION_LEVELS),
+            "drama_floor": 4,
+            "drama_center": 5,
+            "human_framing": base["concept"].get("human_framing", {}),
             "principles": [
                 "Create curiosity through a real information gap, not fake withholding.",
                 "Make viewer expectations explicit so contradiction or surprise has a target.",
                 "Introduce one primary new idea at a time when complexity is high.",
-                "Use tension and release in service of understanding, not manufactured drama.",
+                "Drama never deliberately falls below 4/10; 5/10 is the normal center, with higher peaks when the accepted framing truthfully supports them.",
+                "Use tension and release instead of flat intensity; a lower beat is breathing room, not permission to become boring.",
+                "Tempo is independent of drama and must also change across the story; a slow-motion beat can remain high drama.",
+                "Do not manufacture catastrophe or exaggerate beyond accepted research.",
                 "Every opened loop must be advanced and ultimately paid off.",
                 "The final payoff must satisfy the approved title/thumbnail promise.",
                 "No fixed hook-second or pattern-interrupt timing rule is assumed.",
@@ -209,6 +216,9 @@ def build_story_plan_request(
             "Design a clear viewer journey: high-impact opening, progressive understanding, reveal/payoff, and close.",
             "Make the viewer state explicit: what they know, expect, and want resolved.",
             "Assign one primary audience-psychology function to every beat.",
+            "Assign every beat a drama_level from 4-10 and a separate tempo_level from 1-10.",
+            "Use the accepted Human Framing drama and tempo curves as directional shape: create rises and releases, do not flatten them into one constant level.",
+            "The story must reach at least the accepted concept drama target while remaining inside the truthful drama constraint.",
             "Track open loops explicitly; every OPEN must later receive a PAYOFF.",
             "Control cognitive load by stating what each beat should make easier to understand.",
             "Every factual beat may use only accepted claim_ids supplied here.",
@@ -281,6 +291,8 @@ def validate_story_plan_response(
     payoff_seen = False
     opened_loops: set[str] = set()
     paid_loops: set[str] = set()
+    drama_levels: list[int] = []
+    tempo_levels: list[int] = []
 
     for claim_id in opening_claim_ids:
         normalized = str(claim_id)
@@ -342,6 +354,30 @@ def validate_story_plan_response(
                 + ", ".join(sorted(TENSION_LEVELS))
             )
 
+        drama_level = psychology.get("drama_level")
+        if (
+            not isinstance(drama_level, int)
+            or isinstance(drama_level, bool)
+            or not 4 <= drama_level <= 10
+        ):
+            errors.append(
+                f"{beat_id or index} psychology drama_level must be an integer from 4-10"
+            )
+        else:
+            drama_levels.append(drama_level)
+
+        tempo_level = psychology.get("tempo_level")
+        if (
+            not isinstance(tempo_level, int)
+            or isinstance(tempo_level, bool)
+            or not 1 <= tempo_level <= 10
+        ):
+            errors.append(
+                f"{beat_id or index} psychology tempo_level must be an integer from 1-10"
+            )
+        else:
+            tempo_levels.append(tempo_level)
+
         loop_action = str(psychology.get("loop_action", "")).strip().upper()
         loop_id = str(psychology.get("open_loop_id") or "").strip()
         if loop_action not in LOOP_ACTIONS:
@@ -387,6 +423,21 @@ def validate_story_plan_response(
                 )
             else:
                 used_claims.add(normalized)
+
+    if beats and len(drama_levels) == len(beats):
+        if len(set(drama_levels)) < 2:
+            errors.append("story plan drama_level must pulse; a flat drama curve is not allowed")
+        framing = request.get("concept", {}).get("human_framing", {})
+        drama = framing.get("drama", {}) if isinstance(framing, dict) else {}
+        target = drama.get("target") if isinstance(drama, dict) else None
+        if isinstance(target, int) and not isinstance(target, bool):
+            if max(drama_levels) < target:
+                errors.append(
+                    "story plan drama curve never reaches the accepted Human Framing target"
+                )
+
+    if beats and len(tempo_levels) == len(beats) and len(set(tempo_levels)) < 2:
+        errors.append("story plan tempo_level must change; a flat tempo curve is not allowed")
 
     if beats and not payoff_seen:
         errors.append("story plan requires a PAYOFF beat")
