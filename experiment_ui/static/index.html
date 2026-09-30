@@ -433,6 +433,26 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="previewDetail"></div>
               <div class="concept-decision-pane">
+                <details class="technical-details creative-director-editor">
+                  <summary>Edit narration delivery by segment</summary>
+                  <div class="technical-body">
+                    <label class="vision-label" for="narrationSegmentSelect">Segment</label>
+                    <select id="narrationSegmentSelect"></select>
+                    <div id="narrationLockedWords" class="concept-detail-card"></div>
+                    <label class="vision-label" for="narrationCreativeInstruction">Your direction</label>
+                    <textarea id="narrationCreativeInstruction" class="vision-observation" rows="3" maxlength="1000" placeholder="Example: quieter opening, longer pause before the reveal, then increase intensity."></textarea>
+                    <div class="creative-grid">
+                      <label>Emotion<input id="narrationEmotion" type="text"></label>
+                      <label>Intensity<input id="narrationIntensity" type="number" min="1" max="10"></label>
+                      <label>Speed<input id="narrationSpeed" type="number" min="0.5" max="2" step="0.05"></label>
+                      <label>Pause before ms<input id="narrationPauseBefore" type="number" min="0"></label>
+                      <label>Pause after ms<input id="narrationPauseAfter" type="number" min="0"></label>
+                      <label>Emphasis terms<input id="narrationEmphasis" type="text" placeholder="comma, separated"></label>
+                    </div>
+                    <button id="narrationSaveRevision" type="button">Save segment revision → Re-render preview</button>
+                    <p class="muted">The approved words are locked here. Use Rework Script if the wording itself should change.</p>
+                  </div>
+                </details>
                 <label class="vision-label" for="previewNote">What should change?</label>
                 <textarea id="previewNote" class="vision-observation" rows="5" maxlength="1400" placeholder="Required when requesting rework."></textarea>
                 <div class="concept-review-actions">
