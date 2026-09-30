@@ -35,6 +35,10 @@ class ConceptTriageTests(unittest.TestCase):
             "researchability": 4,
             "originality": 4,
             "overclaim_safety": 4,
+            "human_pull": 5,
+            "visual_hook": 5,
+            "payoff_strength": 5,
+            "drama_use": 5,
         }
         return {
             "decisions": [
@@ -122,6 +126,10 @@ class ConceptTriageTests(unittest.TestCase):
                 "researchability",
                 "originality",
                 "overclaim_safety",
+                "human_pull",
+                "visual_hook",
+                "payoff_strength",
+                "drama_use",
             )
         }
         response = {
@@ -182,6 +190,10 @@ class ConceptTriageTests(unittest.TestCase):
                                 "researchability",
                                 "originality",
                                 "overclaim_safety",
+                                "human_pull",
+                                "visual_hook",
+                                "payoff_strength",
+                                "drama_use",
                             )
                         },
                     }
@@ -207,6 +219,10 @@ class ConceptTriageTests(unittest.TestCase):
                 "researchability",
                 "originality",
                 "overclaim_safety",
+                "human_pull",
+                "visual_hook",
+                "payoff_strength",
+                "drama_use",
             )
         }
         response = {

@@ -70,6 +70,39 @@ def accepted_concept_candidates() -> dict:
                     "Trying to understand a surprising race-car engineering tradeoff."
                 ),
                 "desired_outcome": "Understand why temperature changes the brake design.",
+                "human_framing": {
+                    "hook_experience": {
+                        "archetype": "EXPECTATION_VIOLATION",
+                        "description": "A racing brake appears to need the very heat a road brake tries to avoid.",
+                    },
+                    "viewer_question": "Why do racing brakes need conditions that seem wrong for road cars?",
+                    "psychological_pull": {
+                        "primary_pull": "CONTRADICTION",
+                        "viewer_expectation": "Better brakes should work best when they are cool.",
+                        "violation_or_tension": "The racing system becomes useful in extreme heat.",
+                        "stakes": "The wrong mental model makes the design look backwards.",
+                        "information_gap": "Why does heat change the target?",
+                        "desired_resolution": "Understand the engineering tradeoff behind the apparent contradiction.",
+                    },
+                    "explanation_payoff": "The viewer understands why the race-brake design target differs from a road car.",
+                    "visual_opening_plan": {
+                        "moments": [
+                            {"visual": "Show a normal road-brake temperature state.", "purpose": "Establish expectation."},
+                            {"visual": "Cut to a glowing racing brake.", "purpose": "Create the contradiction."},
+                            {"visual": "Freeze on the heat difference.", "purpose": "Hold the unanswered question."},
+                        ],
+                        "opening_narration_intent": "Road brakes hate this much heat. Racing brakes are built around it. Why?",
+                    },
+                    "drama": {
+                        "capacity": 7,
+                        "target": 6,
+                        "source": "A safety-critical component appears to need an extreme condition normally treated as harmful.",
+                        "constraint": "Do not claim heat is always beneficial or that all race brakes behave identically.",
+                        "hook_level": 6,
+                        "story_curve": [6, 5, 7, 5],
+                        "tempo_curve": [6, 4, 7, 5],
+                    },
+                },
                 "content_gap": {
                     "hypothesis": "Explanations show hot brakes without the consequence.",
                     "evidence_status": "HYPOTHESIS",
@@ -177,6 +210,10 @@ class PipelineContractTests(unittest.TestCase):
         _, handoff = concept_gate.apply_gate(candidates, request, response, config)
         self.assertEqual(handoff["status"], "READY_FOR_RESEARCH")
         self.assertEqual(handoff["concept_count"], 1)
+        self.assertEqual(
+            handoff["concepts"][0]["human_framing"]["drama"]["target"],
+            6,
+        )
         return handoff
 
     # ---- seam 4 → 5: Packaging Gate → Research ------------------------------
@@ -240,6 +277,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn("rq001", question_ids)
         self.assertIn("pkgq001", question_ids)
         self.assertEqual(plan["packaging"]["one_sentence_promise"], PROMISE)
+        self.assertEqual(plan["human_framing"]["drama"]["target"], 6)
 
         source = {
             "source_id": "src001",
@@ -316,6 +354,10 @@ class PipelineContractTests(unittest.TestCase):
             "Why F1 Brakes Work Backwards",
         )
         self.assertEqual(story_request["package"]["one_sentence_promise"], PROMISE)
+        self.assertEqual(
+            story_request["psychology_contract"]["human_framing"]["drama"]["target"],
+            6,
+        )
 
         claim_ids = story_request["accepted_claim_ids"]
         story_response = {
@@ -359,6 +401,8 @@ class PipelineContractTests(unittest.TestCase):
                             "Establish only the contradiction before explaining the mechanism."
                         ),
                         "tension_level": "HIGH",
+                        "drama_level": 7,
+                        "tempo_level": 7,
                         "open_loop_id": "main",
                         "loop_action": "OPEN",
                     },
@@ -379,6 +423,8 @@ class PipelineContractTests(unittest.TestCase):
                             "Explain one verified constraint before adding consequences."
                         ),
                         "tension_level": "MEDIUM",
+                        "drama_level": 5,
+                        "tempo_level": 4,
                         "open_loop_id": "main",
                         "loop_action": "ADVANCE",
                     },
@@ -401,6 +447,8 @@ class PipelineContractTests(unittest.TestCase):
                             "Resolve the main question without introducing a new mechanism."
                         ),
                         "tension_level": "LOW",
+                        "drama_level": 6,
+                        "tempo_level": 5,
                         "open_loop_id": "main",
                         "loop_action": "PAYOFF",
                     },
@@ -644,10 +692,15 @@ class PipelineContractTests(unittest.TestCase):
         claim_ids = request["accepted_claim_ids"]
 
         def beat(beat_id, purpose, treatment, sections, claims):
+            key = purpose.lower()
+            drama = 7 if "hook" in key or "cold" in key else 8 if "reveal" in key else 6 if "payoff" in key or "close" in key else 5
+            tempo = 7 if "hook" in key or "cold" in key else 6 if "reveal" in key else 4 if "payoff" in key or "close" in key else 5
             return {
                 "beat_id": beat_id,
                 "purpose": purpose,
                 "treatment": treatment,
+                "drama_level": drama,
+                "tempo_level": tempo,
                 "claim_ids": claims,
                 "source_section_ids": sections,
             }
@@ -692,6 +745,8 @@ class PipelineContractTests(unittest.TestCase):
             "branch_constraints": request["branch_constraints"],
             "package": request["package"],
             "branch_story_packages": request["branch_story_packages"],
+            "story_plan": request["story_plan"],
+            "psychology_contract": request["psychology_contract"],
             "script_section_ids_by_branch": request[
                 "script_section_ids_by_branch"
             ],

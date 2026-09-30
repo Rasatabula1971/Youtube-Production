@@ -138,6 +138,7 @@ def build_review_request(
                 "viewer_problem": concept.get("viewer_problem"),
                 "viewer_moment": concept.get("viewer_moment"),
                 "desired_outcome": concept.get("desired_outcome"),
+                "human_framing": concept.get("human_framing", {}),
                 "viewer_need_evidence": normalized_viewer_need_evidence(concept),
                 "content_gap": concept.get("content_gap"),
                 "channel_fit": concept.get("channel_fit"),
@@ -193,6 +194,12 @@ def build_review_request(
             ),
             "researchable": (
                 "The concept can be supported through independent research before scripting."
+            ),
+            "human_framing_compelling": (
+                "The hook experience, viewer question, psychological pull, payoff, and visual opening give a normal viewer a reason to care before the technical explanation begins."
+            ),
+            "drama_truthful": (
+                "Drama stays at or above the system floor, uses available real stakes without flattening the opportunity, changes intensity over time, and does not exaggerate beyond what research can verify."
             ),
         },
         "items": items,
@@ -378,6 +385,7 @@ def apply_gate(
                 "viewer_problem": concept.get("viewer_problem"),
                 "viewer_moment": concept.get("viewer_moment"),
                 "desired_outcome": concept.get("desired_outcome"),
+                "human_framing": concept.get("human_framing", {}),
                 "viewer_need_evidence": normalized_viewer_need_evidence(concept),
                 "content_gap": concept.get("content_gap", {}),
                 "channel_fit": concept.get("channel_fit", {}),

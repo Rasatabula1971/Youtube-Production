@@ -1186,3 +1186,37 @@ is already complete, Save Idea remains a bookmark-only action.
 This keeps human review explicit without forcing repetitive confirmation clicks
 that add no new decision information.
 
+## D-067 — Human Framing uses a drama floor and changing tempo
+
+**Status:** Accepted
+
+Concept generation now includes a Human Framing Layer before a technical topic
+is allowed to become the final concept. Every concept must define a Hook
+Experience, Viewer Question, Psychological Pull, Explanation Payoff and Visual
+Opening Plan.
+
+Drama is an editorial scale, not a biological measurement or a prediction of
+retention. Normal production uses a **4/10 floor** and a **5/10 center**. The
+system actively raises intensity when the opportunity truthfully contains
+stronger danger, consequence, loss, contradiction, transformation, scale or
+decision tension. Levels 9-10 are reserved for opportunities that genuinely
+support extreme stakes or spectacle.
+
+Each concept records both **drama capacity** and **drama target**. Target may not
+exceed capacity and may not underuse capacity by more than three points. This
+prevents high-drama opportunities from being reduced to low-energy technical
+framings.
+
+Drama is not held constant. Story Planning and Format Planning use changing
+beat-level drama values from 4-10. Tempo is a separate 1-10 control and must
+also change. A slow beat can therefore remain high drama, and a lower-drama beat
+can provide breathing room without becoming boring.
+
+The framing contract is preserved through Packaging and Research. Research must
+verify factual assumptions inside the hook, stakes, drama source and payoff.
+Story, Format and Voice Performance inherit the accepted framing rather than
+reinventing or flattening it downstream.
+
+No stage may manufacture catastrophe, danger or certainty merely to raise the
+drama score.
+

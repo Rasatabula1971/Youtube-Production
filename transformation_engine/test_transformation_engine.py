@@ -59,6 +59,39 @@ class TransformationEngineTests(unittest.TestCase):
             "viewer_problem": "Why do racing brakes behave poorly in conditions that suit road brakes?",
             "viewer_moment": "Trying to understand a counterintuitive race-car engineering tradeoff.",
             "desired_outcome": "Understand the thermal constraint and why the obvious road-car solution fails.",
+            "human_framing": {
+                "hook_experience": {
+                    "archetype": "EXPECTATION_VIOLATION",
+                    "description": "A race car behaves normally, then the visible tyre condition suddenly looks destroyed."
+                },
+                "viewer_question": "How can a tyre look ruined so quickly and still be doing its job?",
+                "psychological_pull": {
+                    "primary_pull": "EXPECTATION_VIOLATION",
+                    "viewer_expectation": "A healthy tyre should continue looking smooth and intact.",
+                    "violation_or_tension": "The tyre surface rapidly looks torn up even during normal high-load use.",
+                    "stakes": "The viewer cannot tell normal racing behaviour from actual tyre failure.",
+                    "information_gap": "What physical process makes the surface look destroyed?",
+                    "desired_resolution": "Understand what the visible surface change means and when it is actually a problem."
+                },
+                "explanation_payoff": "The viewer can distinguish dramatic-looking normal tyre behaviour from genuine failure by understanding the underlying mechanism.",
+                "visual_opening_plan": {
+                    "moments": [
+                        {"visual": "Show a clean racing tyre before a hard run.", "purpose": "Establish the expected normal state."},
+                        {"visual": "Cut to the same type of tyre with a visibly rough surface.", "purpose": "Create the visual contradiction."},
+                        {"visual": "Freeze on the damaged-looking surface.", "purpose": "Hold the unanswered question before explaining it."}
+                    ],
+                    "opening_narration_intent": "This tyre looks destroyed after only a few laps. So why can that be normal?"
+                },
+                "drama": {
+                    "capacity": 7,
+                    "target": 5,
+                    "source": "The tyre appears severely damaged even when the underlying process may be normal racing use.",
+                    "constraint": "Do not imply the tyre is safe or failed until independent research verifies the actual condition.",
+                    "hook_level": 6,
+                    "story_curve": [6, 5, 7, 5],
+                    "tempo_curve": [7, 4, 6, 5]
+                }
+            },
             "viewer_need_evidence": {
                 "status": "INFERRED",
                 "evidence_basis": [

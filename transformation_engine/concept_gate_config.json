@@ -11,7 +11,9 @@
     "title_clarity_passes",
     "source_independent",
     "feasible",
-    "researchable"
+    "researchable",
+    "human_framing_compelling",
+    "drama_truthful"
   ],
   "require_reviewer_name": true
 }

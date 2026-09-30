@@ -226,6 +226,8 @@ def build_format_request(
             "opening_frame": package.get("opening_frame", {}),
         },
         "branch_story_packages": branch_story_packages,
+        "story_plan": script.get("story_plan", {}),
+        "psychology_contract": script.get("psychology_contract", {}),
         "script_section_ids_by_branch": section_ids_by_branch,
         "accepted_claim_ids": sorted(set(claim_ids)),
         "accepted_claims": claims,
@@ -238,6 +240,8 @@ def build_format_request(
             "Attach accepted claim_ids to every beat carrying factual material.",
             "Do not introduce factual claims beyond the accepted claims supplied here.",
             "Respect duration and beat-count constraints for each branch.",
+            "Preserve the accepted drama/tempo pulse in production treatment: every format beat must carry drama_level 4-10 and tempo_level 1-10.",
+            "Drama and tempo are separate controls. Use rises and releases rather than a flat production rhythm, and reach the accepted concept drama target without inventing unsupported spectacle.",
             "Do not copy source-video wording, footage, story beats or execution.",
             "Do not claim virality or guaranteed performance.",
         ],
@@ -298,6 +302,8 @@ def _validate_branch(
         errors.append(f"{label} requires at least {minimum_beats} beats")
 
     seen: set[str] = set()
+    drama_levels: list[int] = []
+    tempo_levels: list[int] = []
     for beat_index, beat in enumerate(beats):
         if not isinstance(beat, dict):
             errors.append(f"{label} beat {beat_index} must be an object")
@@ -313,6 +319,26 @@ def _validate_branch(
         for field in ("purpose", "treatment"):
             if not str(beat.get(field, "")).strip():
                 errors.append(f"{beat_label} requires {field}")
+
+        drama_level = beat.get("drama_level")
+        if (
+            not isinstance(drama_level, int)
+            or isinstance(drama_level, bool)
+            or not 4 <= drama_level <= 10
+        ):
+            errors.append(f"{beat_label} drama_level must be an integer from 4-10")
+        else:
+            drama_levels.append(drama_level)
+
+        tempo_level = beat.get("tempo_level")
+        if (
+            not isinstance(tempo_level, int)
+            or isinstance(tempo_level, bool)
+            or not 1 <= tempo_level <= 10
+        ):
+            errors.append(f"{beat_label} tempo_level must be an integer from 1-10")
+        else:
+            tempo_levels.append(tempo_level)
 
         claim_ids = beat.get("claim_ids")
         if not isinstance(claim_ids, list):
@@ -342,8 +368,29 @@ def _validate_branch(
     if not used:
         errors.append(f"{label} requires at least one beat carrying an accepted claim")
 
-    return label, used
+    if len(drama_levels) == len(beats):
+        if len(set(drama_levels)) < 2:
+            errors.append(
+                f"{label} drama_level must pulse; a flat drama curve is not allowed"
+            )
+        contract = request.get("psychology_contract", {})
+        framing = (
+            contract.get("human_framing", {})
+            if isinstance(contract, dict)
+            else {}
+        )
+        drama = framing.get("drama", {}) if isinstance(framing, dict) else {}
+        target = drama.get("target") if isinstance(drama, dict) else None
+        if isinstance(target, int) and not isinstance(target, bool):
+            if max(drama_levels) < target:
+                errors.append(f"{label} never reaches the accepted drama target")
 
+    if len(tempo_levels) == len(beats) and len(set(tempo_levels)) < 2:
+        errors.append(
+            f"{label} tempo_level must change; a flat tempo curve is not allowed"
+        )
+
+    return label, used
 
 def _check_branch_separation(
     branches: list[dict[str, Any]], errors: list[str]

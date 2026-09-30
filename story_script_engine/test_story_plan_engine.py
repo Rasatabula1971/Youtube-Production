@@ -40,11 +40,15 @@ class StoryPlanEngineTests(unittest.TestCase):
         }
 
     def psychology(self, primary, action, loop_id):
+        drama_by_action = {"OPEN": 7, "ADVANCE": 5, "PAYOFF": 6, "NONE": 5}
+        tempo_by_action = {"OPEN": 7, "ADVANCE": 4, "PAYOFF": 5, "NONE": 5}
         return {
             "primary_mechanism": primary,
             "viewer_expectation": "The obvious explanation should be enough.",
             "cognitive_load_instruction": "Introduce one new idea and connect it to the puzzle.",
             "tension_level": "HIGH" if action == "OPEN" else "MEDIUM",
+            "drama_level": drama_by_action[action],
+            "tempo_level": tempo_by_action[action],
             "open_loop_id": loop_id,
             "loop_action": action,
         }

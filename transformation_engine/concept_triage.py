@@ -71,6 +71,10 @@ DIMENSIONS = (
     "researchability",
     "originality",
     "overclaim_safety",
+    "human_pull",
+    "visual_hook",
+    "payoff_strength",
+    "drama_use",
 )
 
 
@@ -138,6 +142,7 @@ def compact_concepts(concepts: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "viewer_problem": item.get("viewer_problem"),
                 "viewer_moment": item.get("viewer_moment"),
                 "desired_outcome": item.get("desired_outcome"),
+                "human_framing": item.get("human_framing", {}),
                 "viewer_need_evidence": item.get(
                     "viewer_need_evidence",
                     {
@@ -189,9 +194,10 @@ def build_prompt(
         "system. Infer the intended channel/audience direction from the candidate "
         "pool and each candidate's channel_fit evidence. Return JSON only.\n\n"
         + purpose
-        + "\n\nEvaluate EVERY concept independently and comparatively on seven "
+        + "\n\nEvaluate EVERY concept independently and comparatively on eleven "
         "dimensions, scored 0-5: channel_fit, viewer_problem, promise_clarity, "
-        "feasibility, researchability, originality, overclaim_safety. Also provide "
+        "feasibility, researchability, originality, overclaim_safety, human_pull, "
+        "visual_hook, payoff_strength, drama_use. Also provide "
         "an overall_score from 0-100 and a concise rationale.\n\n"
         "Scoring guidance:\n"
         "- 70-100 means strong enough to be eligible for the final shortlist.\n"
@@ -208,10 +214,22 @@ def build_prompt(
         "5. Treat content_gap HYPOTHESIS/UNASSESSED honestly.\n"
         "6. Prefer concepts independently researchable with credible sources.\n"
         "7. Prefer clear viewer moments, concrete outcomes, and packageable payoff.\n"
-        "8. Penalize terminology errors, false precision, and category mistakes.\n"
-        "9. Do not reward a concept merely because it has a catchy title.\n"
-        "10. Account for every concept exactly once.\n"
-        "11. Return only scores and rationales; Python code derives decisions.\n\n"
+        "8. human_pull: reward a natural viewer question driven by a real consequence, "
+        "contradiction, transformation, mystery, loss, decision, or other meaningful "
+        "psychological pull. Penalize textbook framing that asks the viewer to care "
+        "about the mechanism before giving them a human reason.\n"
+        "9. visual_hook: reward an opening that can SHOW the problem or surprise before "
+        "the technical explanation. Generic topic footage is weak.\n"
+        "10. payoff_strength: reward a satisfying resolution that clearly answers the "
+        "opening question and changes what the viewer understands.\n"
+        "11. drama_use: drama must stay truthful, never below the configured floor, "
+        "and should use more of the available drama capacity when the opportunity "
+        "contains real danger, consequence, loss, transformation, scale, or decision "
+        "tension. Penalize wasted high-drama capacity and flat drama/tempo curves.\n"
+        "12. Penalize terminology errors, false precision, and category mistakes.\n"
+        "13. Do not reward a concept merely because it has a catchy title.\n"
+        "14. Account for every concept exactly once.\n"
+        "15. Return only scores and rationales; Python code derives decisions.\n\n"
         "CANDIDATES:\n"
         + json.dumps(
             compact_concepts(concepts),
