@@ -55,6 +55,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "narration_spend_gate_prepare",
     "narration_audio_qc",
     "production_visual_prepare",
+    "storyboard_prepare",
+    "visual_search_prepare",
+    "visual_rough_cut_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40
