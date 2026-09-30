@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import narration_render
@@ -79,12 +80,32 @@ class NarrationRenderTests(unittest.TestCase):
         path = Path(temp.name) / "approved.json"
         payload = approved_spec(configured=configured)
         path.write_text(json.dumps(payload), encoding="utf-8")
-        request = narration_render.build_render_request(
-            payload,
-            path,
-            config(verified=verified),
-        )
+        with patch.object(narration_render, "_preview_approved", return_value=True):
+            request = narration_render.build_render_request(
+                payload,
+                path,
+                config(verified=verified),
+            )
         return request, path, temp
+
+
+    def test_free_preview_approval_is_mandatory_before_final_quote(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        try:
+            path = Path(temp.name) / "approved.json"
+            payload = approved_spec()
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with patch.object(narration_render, "_preview_approved", return_value=False):
+                request = narration_render.build_render_request(
+                    payload,
+                    path,
+                    config(verified=True),
+                )
+            self.assertEqual(request["status"], "BLOCKED")
+            self.assertIn("FREE_PREVIEW_NOT_APPROVED", request["render_blockers"])
+            self.assertFalse(request["paid_render_authorized"])
+        finally:
+            temp.cleanup()
 
     def test_unverified_provider_contract_fails_closed(self) -> None:
         request, _, temp = self.build(verified=False)
