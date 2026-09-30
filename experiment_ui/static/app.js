@@ -1280,8 +1280,10 @@ function renderConceptReview(snapshot, force) {
   conceptNext.disabled = conceptCursor >= items.length - 1;
   conceptReject.disabled = false;
   conceptRework.disabled = false;
-  conceptSaveIdea.disabled = Boolean(concept.idea_saved);
-  conceptSaveIdea.textContent = concept.idea_saved ? "Idea saved" : "Save idea";
+  conceptSaveIdea.disabled = false;
+  conceptSaveIdea.textContent = concept.idea_saved
+    ? "Save idea (already banked)"
+    : "Save idea";
   conceptAccept.disabled = false;
   conceptEditing = false;
 }
