@@ -121,10 +121,7 @@ class ConceptGateTests(unittest.TestCase):
                 {
                     "concept_id": item["concept_id"],
                     "decision": "ACCEPT",
-                    "criteria": {
-                        criterion: True
-                        for criterion in self.config["required_accept_criteria"]
-                    },
+                    "criteria": {},
                     "note": "",
                 }
                 for item in request["items"]
@@ -170,30 +167,58 @@ class ConceptGateTests(unittest.TestCase):
         self.assertIn("channel_fit", first)
         self.assertIn("title_clarity_test", first)
 
-    def test_accept_requires_all_criteria_true(self):
+    def test_accept_requires_no_checkbox_confirmation(self):
         request = build_review_request(
             self.candidates,
             self.config,
         )
         response = self.response(request)
-        response["decisions"][0]["criteria"]["researchable"] = False
 
-        with self.assertRaises(ValueError):
-            validate_decisions(
-                request,
-                response,
-                self.config,
-            )
+        mapped = validate_decisions(
+            request,
+            response,
+            self.config,
+        )
 
-    def test_rework_requires_note(self):
+        self.assertTrue(all(mapped["c1"]["criteria"].values()))
+        self.assertTrue(all(mapped["c2"]["criteria"].values()))
+
+    def test_rework_uses_checked_criteria_as_keep_list(self):
         request = build_review_request(
             self.candidates,
             self.config,
         )
         response = self.response(request)
         response["decisions"][0]["decision"] = "REWORK"
+        response["decisions"][0]["criteria"] = {
+            "originality_clear": True,
+            "audience_promise_clear": True,
+        }
 
-        with self.assertRaises(ValueError):
+        mapped = validate_decisions(
+            request,
+            response,
+            self.config,
+        )
+
+        self.assertTrue(mapped["c1"]["criteria"]["originality_clear"])
+        self.assertTrue(mapped["c1"]["criteria"]["audience_promise_clear"])
+        self.assertFalse(mapped["c1"]["criteria"]["researchable"])
+        self.assertEqual(mapped["c1"]["note"], "")
+
+    def test_rework_rejects_all_checked_because_nothing_would_change(self):
+        request = build_review_request(
+            self.candidates,
+            self.config,
+        )
+        response = self.response(request)
+        response["decisions"][0]["decision"] = "REWORK"
+        response["decisions"][0]["criteria"] = {
+            criterion: True
+            for criterion in self.config["required_accept_criteria"]
+        }
+
+        with self.assertRaisesRegex(ValueError, "at least one criterion unchecked"):
             validate_decisions(
                 request,
                 response,
@@ -249,8 +274,10 @@ class ConceptGateTests(unittest.TestCase):
         )
         response = self.response(request)
         response["decisions"][0]["decision"] = "REWORK"
-        response["decisions"][0]["criteria"]["audience_promise_clear"] = False
-        response["decisions"][0]["note"] = "Clarify the viewer payoff."
+        response["decisions"][0]["criteria"] = {
+            "originality_clear": True,
+            "source_independent": True,
+        }
 
         reviewed, handoff = apply_gate(
             self.candidates,
@@ -266,6 +293,26 @@ class ConceptGateTests(unittest.TestCase):
             "c2",
         )
 
+    def test_save_idea_is_terminal_and_excluded_from_research(self):
+        request = build_review_request(
+            self.candidates,
+            self.config,
+        )
+        response = self.response(request)
+        response["decisions"][0]["decision"] = "SAVE_IDEA"
+
+        reviewed, handoff = apply_gate(
+            self.candidates,
+            request,
+            response,
+            self.config,
+        )
+
+        self.assertEqual(reviewed["counts"]["saved"], 1)
+        self.assertEqual(reviewed["counts"]["accepted"], 1)
+        self.assertEqual(handoff["concept_count"], 1)
+        self.assertEqual(handoff["concepts"][0]["concept_id"], "c2")
+
     def test_stale_candidates_cannot_receive_old_human_accept(self):
         candidates_v1 = {"concepts": [deepcopy(self.candidates["concepts"][0])]}
         request = build_review_request(candidates_v1, self.config)
@@ -275,9 +322,7 @@ class ConceptGateTests(unittest.TestCase):
                 {
                     "concept_id": "c1",
                     "decision": "ACCEPT",
-                    "criteria": {
-                        key: True for key in self.config["required_accept_criteria"]
-                    },
+                    "criteria": {},
                     "note": "",
                 }
             ],
