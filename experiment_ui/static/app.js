@@ -135,6 +135,17 @@ const performanceReject = document.getElementById("performanceReject");
 const performanceRework = document.getElementById("performanceRework");
 const performanceAccept = document.getElementById("performanceAccept");
 const performanceNext = document.getElementById("performanceNext");
+const visualCandidateReviewPanel = document.getElementById("visualCandidateReviewPanel");
+const visualCandidateReviewTitle = document.getElementById("visualCandidateReviewTitle");
+const visualCandidateReviewSummary = document.getElementById("visualCandidateReviewSummary");
+const visualCandidateReviewStatus = document.getElementById("visualCandidateReviewStatus");
+const visualShotDetail = document.getElementById("visualShotDetail");
+const visualCandidateCards = document.getElementById("visualCandidateCards");
+const visualCandidateNote = document.getElementById("visualCandidateNote");
+const visualShotPrev = document.getElementById("visualShotPrev");
+const visualRejectAll = document.getElementById("visualRejectAll");
+const visualNeedsBetter = document.getElementById("visualNeedsBetter");
+const visualShotNext = document.getElementById("visualShotNext");
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -187,6 +198,8 @@ let latestPerformanceSnapshot = null;
 let performanceCursor = 0;
 let performanceEditing = false;
 let latestPreviewSnapshot = null;
+let latestVisualCandidateSnapshot = null;
+let visualShotCursor = 0;
 
 const ROUTES = {
   "/": {
@@ -2475,6 +2488,76 @@ async function submitPreviewDecision(decision) {
   }
 }
 
+function visualReviewItems() {
+  const packets = (latestVisualCandidateSnapshot && latestVisualCandidateSnapshot.packets) || [];
+  const items = [];
+  packets.forEach(function (packet) {
+    (packet.shots || []).forEach(function (shot) { items.push({ packet: packet, shot: shot }); });
+  });
+  return items;
+}
+
+function renderVisualCandidateReview(snapshot) {
+  latestVisualCandidateSnapshot = snapshot || {};
+  const items = visualReviewItems();
+  visualCandidateReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+  visualShotCursor = Math.max(0, Math.min(visualShotCursor, items.length - 1));
+  const current = items[visualShotCursor], shot = current.shot, packet = current.packet;
+  const decision = (packet.decisions || {})[shot.shot_id];
+  visualCandidateReviewTitle.textContent = "Choose visual — " + (shot.shot_id || "");
+  visualCandidateReviewSummary.textContent = (visualShotCursor + 1) + " of " + items.length + " storyboard shots";
+  visualCandidateReviewStatus.textContent = decision ? humanizeToken(decision.status || decision.action) : "PENDING";
+  visualCandidateReviewStatus.className = "status-chip " + (decision ? "success" : "running");
+  visualShotDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>STORYBOARD TARGET</h4><h3>' + escapeHtml(shot.shot_id || "") + '</h3>' +
+    '<p><strong>Search gap:</strong> ' + (shot.search_gap ? "Yes" : "No") + '</p>' +
+    '<p><strong>Premium candidate:</strong> ' + (shot.premium_generation_candidate ? "Yes — only if existing visuals fail" : "No") + '</p>' +
+    '<p class="muted">Select the visual that best serves the planned shot. Creator excerpts remain subject to the separate rights/context gate.</p></div>';
+  const candidates = shot.candidates || [];
+  visualCandidateCards.innerHTML = candidates.length ? candidates.map(function (candidate) {
+    const thumb = candidate.thumbnail_url
+      ? '<img class="visual-candidate-thumb" src="' + escapeHtml(candidate.thumbnail_url) + '" alt="">'
+      : '<div class="visual-candidate-placeholder">No preview</div>';
+    const review = candidate.state === "HUMAN_REVIEW_REQUIRED"
+      ? '<span class="status-chip running">RIGHTS REVIEW</span>'
+      : candidate.state === "ELIGIBLE"
+        ? '<span class="status-chip success">ELIGIBLE</span>'
+        : '<span class="status-chip failed">BLOCKED</span>';
+    const source = candidate.source_url
+      ? '<a class="external-button" href="' + escapeHtml(candidate.source_url) + '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
+      : '';
+    const choose = candidate.state !== "BLOCKED"
+      ? '<button class="gate-button approve visual-select-candidate" data-candidate-id="' + escapeHtml(candidate.candidate_id) + '">Select</button>'
+      : '';
+    return '<article class="visual-candidate-card">' + thumb + '<div><strong>' + escapeHtml(candidate.title || candidate.candidate_id) +
+      '</strong><p>' + escapeHtml(candidate.creator || "Unknown creator") + ' · ' + escapeHtml(candidate.source_tier || "") +
+      '</p><p>' + escapeHtml(candidate.license || "Licence requires review") + '</p><div class="visual-candidate-actions">' +
+      review + source + choose + '</div></div></article>';
+  }).join("") : '<p class="empty-state">No usable existing visual was found. Keep this as a gap for the next sourcing/generation stage.</p>';
+  visualCandidateCards.querySelectorAll(".visual-select-candidate").forEach(function (button) {
+    button.addEventListener("click", function () { submitVisualCandidateDecision("SELECT", button.dataset.candidateId); });
+  });
+  visualShotPrev.disabled = visualShotCursor === 0;
+  visualShotNext.disabled = visualShotCursor >= items.length - 1;
+  visualCandidateNote.value = decision && decision.note ? decision.note : "";
+}
+
+async function submitVisualCandidateDecision(action, candidateId) {
+  const items = visualReviewItems(), current = items[visualShotCursor];
+  if (!current) return;
+  try {
+    await api("/api/visual-candidate-review", { method:"POST", body:JSON.stringify({
+      result_file: current.packet.result_file, shot_id: current.shot.shot_id,
+      action: action, candidate_id: candidateId || null, note: visualCandidateNote.value
+    })});
+    const refreshed = await api("/api/visual-candidate-review");
+    renderVisualCandidateReview(refreshed);
+    showToast(action === "SELECT" ? "Visual selected." : "Shot preserved as a visual gap.", false);
+    await loadStatus();
+  } catch (error) { showToast(error.message, true); }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -2521,6 +2604,7 @@ function renderAnalysis(data) {
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
+  api("/api/visual-candidate-review").then(renderVisualCandidateReview).catch(function () {});
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -3025,6 +3109,11 @@ previewPerformance.addEventListener("click", function () {
 previewSound.addEventListener("click", function () {
   submitPreviewDecision("REWORK_MUSIC_SFX");
 });
+visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.max(0, visualShotCursor - 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
+visualShotNext.addEventListener("click", function () { visualShotCursor = Math.min(visualReviewItems().length - 1, visualShotCursor + 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
+visualRejectAll.addEventListener("click", function () { submitVisualCandidateDecision("REJECT_ALL"); });
+visualNeedsBetter.addEventListener("click", function () { submitVisualCandidateDecision("NEEDS_BETTER_VISUAL"); });
+
 previewApprove.addEventListener("click", function () {
   submitPreviewDecision("APPROVE_FINAL");
 });
