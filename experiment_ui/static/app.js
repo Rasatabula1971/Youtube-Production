@@ -1180,6 +1180,11 @@ function renderConceptReview(snapshot, force) {
 
   const concept = items[conceptCursor] || {};
   const needEvidence = concept.viewer_need_evidence || {};
+  const framing = concept.human_framing || {};
+  const hookExperience = framing.hook_experience || {};
+  const pull = framing.psychological_pull || {};
+  const visualOpening = framing.visual_opening_plan || {};
+  const drama = framing.drama || {};
   const gap = concept.content_gap || {};
   const fit = concept.channel_fit || {};
   const titleTest = concept.title_clarity_test || {};
@@ -1213,6 +1218,14 @@ function renderConceptReview(snapshot, force) {
     return "<li>" + escapeHtml(item) + "</li>";
   }).join("");
 
+  const openingMoments = (visualOpening.moments || []).map(function (moment, index) {
+    return "<li><strong>" + escapeHtml("Moment " + (index + 1)) + ":</strong> " +
+      escapeHtml(moment.visual || "") + " <span class=\"muted\">— " +
+      escapeHtml(moment.purpose || "") + "</span></li>";
+  }).join("");
+  const dramaCurve = (drama.story_curve || []).join(" → ");
+  const tempoCurve = (drama.tempo_curve || []).join(" → ");
+
   conceptDetail.innerHTML =
     '<div class="concept-detail-card">' +
       '<h4>WORKING CONCEPT</h4>' +
@@ -1239,6 +1252,40 @@ function renderConceptReview(snapshot, force) {
       escapeHtml(concept.premise || "") + '</p></div>' +
     '<div class="concept-detail-card"><h4>AUDIENCE PROMISE</h4><p>' +
       escapeHtml(concept.audience_promise || "") + '</p></div>' +
+    '<div class="concept-detail-card"><h4>HUMAN FRAMING</h4><p>' +
+      '<strong>Hook experience:</strong> ' +
+      escapeHtml(hookExperience.description || "") +
+      '<br><strong>Hook archetype:</strong> ' +
+      escapeHtml(humanizeToken(hookExperience.archetype || "")) +
+      '<br><strong>Viewer question:</strong> ' +
+      escapeHtml(framing.viewer_question || "") +
+      '<br><strong>Primary pull:</strong> ' +
+      escapeHtml(humanizeToken(pull.primary_pull || "")) +
+      '<br><strong>Expectation:</strong> ' +
+      escapeHtml(pull.viewer_expectation || "") +
+      '<br><strong>Tension:</strong> ' +
+      escapeHtml(pull.violation_or_tension || "") +
+      '<br><strong>Stakes:</strong> ' +
+      escapeHtml(pull.stakes || "") +
+      '<br><strong>Information gap:</strong> ' +
+      escapeHtml(pull.information_gap || "") +
+      '<br><strong>Payoff:</strong> ' +
+      escapeHtml(framing.explanation_payoff || "") +
+      '</p></div>' +
+    '<div class="concept-detail-card"><h4>DRAMA / TEMPO</h4><p>' +
+      '<strong>Capacity:</strong> ' + escapeHtml(drama.capacity == null ? "—" : drama.capacity + "/10") +
+      '<br><strong>Target:</strong> ' + escapeHtml(drama.target == null ? "—" : drama.target + "/10") +
+      '<br><strong>Hook:</strong> ' + escapeHtml(drama.hook_level == null ? "—" : drama.hook_level + "/10") +
+      '<br><strong>Drama source:</strong> ' + escapeHtml(drama.source || "") +
+      '<br><strong>Do not exaggerate:</strong> ' + escapeHtml(drama.constraint || "") +
+      '<br><strong>Drama curve:</strong> ' + escapeHtml(dramaCurve || "—") +
+      '<br><strong>Tempo curve:</strong> ' + escapeHtml(tempoCurve || "—") +
+      '</p></div>' +
+    '<div class="concept-detail-card"><h4>VISUAL OPENING PLAN</h4>' +
+      (openingMoments ? '<ol>' + openingMoments + '</ol>' : '<p>—</p>') +
+      '<p><strong>Narration intent:</strong> ' +
+      escapeHtml(visualOpening.opening_narration_intent || "") +
+      '</p></div>' +
     '<div class="concept-detail-card"><h4>VIEWER NEED</h4><p><strong>Problem:</strong> ' +
       escapeHtml(concept.viewer_problem || "") + '<br><strong>Moment:</strong> ' +
       escapeHtml(concept.viewer_moment || "") + '<br><strong>Outcome:</strong> ' +
