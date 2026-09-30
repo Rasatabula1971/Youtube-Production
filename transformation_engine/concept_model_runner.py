@@ -452,7 +452,7 @@ def run_batch(
             break
 
     merge_summary = run_apply()
-    status = batch_status(
+    provider_batch_status = batch_status(
         results,
         expected_count=len(paths),
         processed_count=len(results),
@@ -463,10 +463,18 @@ def run_batch(
         and results
         and all(str(item.get("status") or "") in SUCCESS_STATUSES for item in results)
     ):
-        status = "BATCH_PROGRESS"
+        provider_batch_status = "BATCH_PROGRESS"
+
+    merge_status = str(merge_summary.get("status") or "")
+    status = (
+        "CONCEPT_CANDIDATES_READY"
+        if merge_status == "CONCEPT_CANDIDATES_READY"
+        else provider_batch_status
+    )
 
     summary = {
         "status": status,
+        "provider_batch_status": provider_batch_status,
         "requests_found": len(paths),
         "model_runs_invoked": invoked,
         "batch_limit": limit,
