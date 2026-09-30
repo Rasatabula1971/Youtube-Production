@@ -1,8 +1,12 @@
 """Human Concept Gate for Transformation Engine candidates.
 
-Requires an explicit ACCEPT / REWORK / REJECT decision for every concept.
-ACCEPT requires all configured human criteria to be affirmed. Only accepted
-concepts enter the Research Engine handoff.
+Requires one explicit terminal choice for every active concept:
+ACCEPT / REWORK / REJECT / SAVE_IDEA.
+
+ACCEPT means the human approves the concept as-is. REWORK uses the criteria as
+"keep/change" dimensions: checked criteria are preserved and unchecked criteria
+are the parts to revise. SAVE_IDEA parks the concept for later without sending
+it forward. Only accepted concepts enter the Research Engine handoff.
 
 No model or network calls are made.
 """
@@ -200,21 +204,22 @@ def build_review_request(
             "decisions": [
                 {
                     "concept_id": "exact concept_id",
-                    "decision": "ACCEPT|REWORK|REJECT",
+                    "decision": "ACCEPT|REWORK|REJECT|SAVE_IDEA",
                     "criteria": {
                         criterion: True
                         for criterion in config["required_accept_criteria"]
                     },
-                    "note": "required when REWORK, optional otherwise",
+                    "note": "optional",
                 }
             ],
             "overall_note": "optional",
         },
         "notes": [
             "No concept score is calculated.",
-            "ACCEPT requires every configured criterion to be true.",
-            "REWORK preserves the concept for revision but does not send it to research.",
+            "ACCEPT approves the concept as-is; criteria checkboxes are not required.",
+            "REWORK uses criteria as keep/change dimensions: checked means keep, unchecked means revise.",
             "REJECT removes the concept from the forward handoff.",
+            "SAVE_IDEA parks the concept in the idea bank and does not send it to research.",
         ],
     }
 
@@ -246,32 +251,33 @@ def validate_decisions(
             raise ValueError(f"Duplicate decision for concept_id: {concept_id}")
 
         value = str(decision.get("decision", "")).strip().upper()
-        if value not in {"ACCEPT", "REWORK", "REJECT"}:
+        if value not in {"ACCEPT", "REWORK", "REJECT", "SAVE_IDEA"}:
             raise ValueError(f"Invalid decision for {concept_id}: {value!r}")
 
+        required_criteria = config["required_accept_criteria"]
         criteria = decision.get("criteria")
         if not isinstance(criteria, dict):
-            raise ValueError(f"Decision criteria are required for {concept_id}")
+            criteria = {}
 
-        required_criteria = config["required_accept_criteria"]
-        missing_criteria = [
-            criterion for criterion in required_criteria if criterion not in criteria
-        ]
-        if missing_criteria:
-            raise ValueError(
-                f"Missing criteria for {concept_id}: " + ", ".join(missing_criteria)
-            )
-
-        normalized_criteria = {
-            criterion: criteria.get(criterion) is True
-            for criterion in required_criteria
-        }
+        if value == "ACCEPT":
+            normalized_criteria = {
+                criterion: True for criterion in required_criteria
+            }
+        elif value == "REWORK":
+            normalized_criteria = {
+                criterion: criteria.get(criterion) is True
+                for criterion in required_criteria
+            }
+            if normalized_criteria and all(normalized_criteria.values()):
+                raise ValueError(
+                    f"REWORK must leave at least one criterion unchecked for {concept_id}"
+                )
+        else:
+            normalized_criteria = {
+                criterion: False for criterion in required_criteria
+            }
 
         note = str(decision.get("note", "") or "").strip()
-        if value == "ACCEPT" and not all(normalized_criteria.values()):
-            raise ValueError(f"ACCEPT requires every criterion true for {concept_id}")
-        if value == "REWORK" and not note:
-            raise ValueError(f"REWORK requires a note for {concept_id}")
 
         mapped[concept_id] = {
             "concept_id": concept_id,
@@ -315,6 +321,7 @@ def apply_gate(
         "accepted": [],
         "rework": [],
         "rejected": [],
+        "saved": [],
     }
 
     for concept_id in sorted(mapped):
@@ -332,6 +339,8 @@ def apply_gate(
             buckets["accepted"].append(concept)
         elif decision["decision"] == "REWORK":
             buckets["rework"].append(concept)
+        elif decision["decision"] == "SAVE_IDEA":
+            buckets["saved"].append(concept)
         else:
             buckets["rejected"].append(concept)
 
@@ -343,10 +352,12 @@ def apply_gate(
         "accepted": buckets["accepted"],
         "rework": buckets["rework"],
         "rejected": buckets["rejected"],
+        "saved": buckets["saved"],
         "counts": {key: len(value) for key, value in buckets.items()},
         "notes": [
             "No concept ranking or composite score is calculated.",
             "Only ACCEPT concepts are eligible for the Research Engine handoff.",
+            "SAVE_IDEA concepts are parked for later and excluded from the forward handoff.",
         ],
     }
 
@@ -468,6 +479,7 @@ def run_apply(
         "accepted": reviewed["counts"]["accepted"],
         "rework": reviewed["counts"]["rework"],
         "rejected": reviewed["counts"]["rejected"],
+        "saved": reviewed["counts"]["saved"],
         "reviewed_file": str(REVIEWED_FILE),
         "research_handoff": str(RESEARCH_HANDOFF_FILE),
     }

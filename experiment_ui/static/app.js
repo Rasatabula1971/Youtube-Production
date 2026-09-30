@@ -1142,7 +1142,7 @@ function renderConceptReview(snapshot, force) {
       (snapshot.accepted || 0) + " accepted · " +
       (snapshot.rework || 0) + " rework · " +
       (snapshot.rejected || 0) + " rejected · " +
-      (snapshot.saved_idea_count || 0) + " saved";
+      (snapshot.saved || 0) + " saved for later";
     conceptReviewStatus.textContent = snapshot.research_status || "COMPLETE";
     conceptReviewStatus.className =
       "status-chip " + ((snapshot.accepted || 0) > 0 ? "success" : "failed");
@@ -1261,22 +1261,29 @@ function renderConceptReview(snapshot, force) {
   const criteriaDescriptions = snapshot.criteria || {};
   const checked = concept.criteria_decisions || {};
   const required = concept.required_accept_criteria || Object.keys(criteriaDescriptions);
-  conceptCriteria.innerHTML = required.map(function (criterion) {
-    const id = "concept-criterion-" + conceptCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) + '" data-concept-criterion="' +
-      escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  conceptCriteria.innerHTML =
+    '<div class="concept-criteria-help">' +
+      '<strong>Rework only:</strong> check what you want to keep. ' +
+      'Leave unchecked anything you want changed. Accept, Reject and Save Idea ignore these boxes.' +
+    '</div>' +
+    required.map(function (criterion) {
+      const id = "concept-criterion-" + conceptCursor + "-" + criterion;
+      return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+        '<input type="checkbox" id="' + escapeHtml(id) + '" data-concept-criterion="' +
+        escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
+        '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+        escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
+    }).join("");
 
   conceptNote.value = concept.note || "";
   conceptPrev.disabled = conceptCursor <= 0;
   conceptNext.disabled = conceptCursor >= items.length - 1;
   conceptReject.disabled = false;
   conceptRework.disabled = false;
-  conceptSaveIdea.disabled = Boolean(concept.idea_saved);
-  conceptSaveIdea.textContent = concept.idea_saved ? "Idea saved" : "Save idea";
+  conceptSaveIdea.disabled = false;
+  conceptSaveIdea.textContent = concept.idea_saved
+    ? "Save idea (already banked)"
+    : "Save idea";
   conceptAccept.disabled = false;
   conceptEditing = false;
 }
@@ -1343,7 +1350,7 @@ async function submitConceptDecision(decision) {
       body: JSON.stringify({
         concept_id: concept.concept_id,
         decision: decision,
-        criteria: collectConceptCriteria(),
+        criteria: decision === "REWORK" ? collectConceptCriteria() : {},
         note: conceptNote.value
       })
     });
@@ -1356,8 +1363,10 @@ async function submitConceptDecision(decision) {
       decision === "ACCEPT"
         ? "Concept accepted."
         : decision === "REWORK"
-          ? "Concept sent for rework."
-          : "Concept rejected.",
+          ? "Concept marked for rework."
+          : decision === "SAVE_IDEA"
+            ? "Concept saved for later."
+            : "Concept rejected.",
       false
     );
     await loadStatus();
@@ -2770,9 +2779,7 @@ conceptRework.addEventListener("click", function () {
   submitConceptDecision("REWORK");
 });
 conceptSaveIdea.addEventListener("click", function () {
-  const current = currentConceptItem();
-  if (!current) return;
-  saveConceptIdea(current.item.concept_id, conceptNote.value);
+  submitConceptDecision("SAVE_IDEA");
 });
 conceptAccept.addEventListener("click", function () {
   submitConceptDecision("ACCEPT");

@@ -154,27 +154,7 @@ class ConceptReviewTests(unittest.TestCase):
             all(item["decision"] == "PENDING" for item in snapshot["concepts"])
         )
 
-    def test_accept_requires_every_criterion_true(self):
-        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
-            root = Path(tmp)
-            self.patch_paths(stack, root)
-            review.DEFAULT_CANDIDATES.write_text(
-                json.dumps(self.candidates()),
-                encoding="utf-8",
-            )
-            review.prepare_state()
-            criteria = self.criteria()
-            criteria["source_independent"] = False
-
-            with self.assertRaises(ValueError):
-                review.apply_action(
-                    concept_id="c1",
-                    decision="ACCEPT",
-                    criteria=criteria,
-                    note="",
-                )
-
-    def test_rework_requires_note(self):
+    def test_accept_needs_no_checkbox_clicks(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             self.patch_paths(stack, root)
@@ -184,13 +164,43 @@ class ConceptReviewTests(unittest.TestCase):
             )
             review.prepare_state()
 
-            with self.assertRaises(ValueError):
-                review.apply_action(
-                    concept_id="c1",
-                    decision="REWORK",
-                    criteria=self.criteria(),
-                    note="",
-                )
+            snapshot = review.apply_action(
+                concept_id="c1",
+                decision="ACCEPT",
+                criteria={},
+                note="",
+            )
+
+        self.assertFalse(snapshot["complete"])
+        accepted = snapshot["concepts"][0]
+        self.assertEqual(accepted["decision"], "ACCEPT")
+        self.assertEqual(accepted["criteria_decisions"], {})
+
+    def test_rework_checkboxes_mean_keep_and_note_is_optional(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(self.candidates()),
+                encoding="utf-8",
+            )
+            review.prepare_state()
+
+            snapshot = review.apply_action(
+                concept_id="c1",
+                decision="REWORK",
+                criteria={
+                    "originality_clear": True,
+                    "source_independent": True,
+                },
+                note="",
+            )
+
+        item = snapshot["concepts"][0]
+        self.assertEqual(item["decision"], "REWORK")
+        self.assertTrue(item["criteria_decisions"]["originality_clear"])
+        self.assertTrue(item["criteria_decisions"]["source_independent"])
+        self.assertFalse(item["criteria_decisions"]["researchable"])
 
     def test_handoff_waits_until_every_concept_decided(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -205,7 +215,7 @@ class ConceptReviewTests(unittest.TestCase):
             first = review.apply_action(
                 concept_id="c1",
                 decision="ACCEPT",
-                criteria=self.criteria(),
+                criteria={},
                 note="",
             )
             self.assertFalse(first["complete"])
@@ -306,7 +316,7 @@ class ConceptReviewTests(unittest.TestCase):
         self.assertEqual(final["accepted"], 1)
         self.assertEqual(final["rejected"], 1)
 
-    def test_save_idea_does_not_change_gate_decision(self):
+    def test_save_idea_is_terminal_for_active_concept(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             self.patch_paths(stack, root)
@@ -327,8 +337,9 @@ class ConceptReviewTests(unittest.TestCase):
             )
 
         self.assertFalse(saved["complete"])
-        self.assertEqual(saved["pending"], 2)
+        self.assertEqual(saved["pending"], 1)
         self.assertEqual(saved["saved_idea_count"], 1)
+        self.assertEqual(saved["concepts"][0]["decision"], "SAVE_IDEA")
         self.assertTrue(saved["concepts"][0]["idea_saved"])
         self.assertEqual(bank["ideas"][0]["working_title"], "Why Racing Tyres Look Destroyed")
         self.assertEqual(bank["ideas"][0]["note"], "Strong title; revisit later.")

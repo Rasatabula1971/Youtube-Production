@@ -1163,3 +1163,26 @@ Voice Performance subsequently binds each production branch only to the
 matching approved script sections, preserving branch isolation through audio
 planning.
 
+## D-066 — Concept Gate uses four direct human choices
+
+**Status:** Accepted
+
+The Human Concept Gate uses four mutually exclusive choices that map directly
+to reviewer intent:
+
+- **ACCEPT** — approve the concept as-is and send it forward.
+- **REJECT** — discard it from the forward workflow.
+- **REWORK** — keep the concept but revise selected parts.
+- **SAVE IDEA** — park it in the Idea / Title Bank for possible future use.
+
+The criteria checkboxes are **not acceptance gates**. They are REWORK controls:
+checked criteria mean "keep this part"; unchecked criteria mean "change this
+part." ACCEPT, REJECT and SAVE IDEA ignore checkbox state.
+
+SAVE IDEA is terminal for an active gate concept: it counts as reviewed but does
+not enter Packaging/Research. From a non-active override card, or after the gate
+is already complete, Save Idea remains a bookmark-only action.
+
+This keeps human review explicit without forcing repetitive confirmation clicks
+that add no new decision information.
+
