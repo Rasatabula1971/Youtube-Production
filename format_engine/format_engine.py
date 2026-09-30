@@ -267,21 +267,7 @@ def _validate_branch(
 
     if not fmt:
         errors.append(f"branch {index} requires format")
-        if len(drama_levels) == len(beats):
-        if len(set(drama_levels)) < 2:
-            errors.append(f"{label} drama_level must pulse; a flat drama curve is not allowed")
-        contract = request.get("psychology_contract", {})
-        framing = contract.get("human_framing", {}) if isinstance(contract, dict) else {}
-        drama = framing.get("drama", {}) if isinstance(framing, dict) else {}
-        target = drama.get("target") if isinstance(drama, dict) else None
-        if isinstance(target, int) and not isinstance(target, bool):
-            if max(drama_levels) < target:
-                errors.append(f"{label} never reaches the accepted drama target")
-
-    if len(tempo_levels) == len(beats) and len(set(tempo_levels)) < 2:
-        errors.append(f"{label} tempo_level must change; a flat tempo curve is not allowed")
-
-    return label, used
+        return label, used
 
     section_ids_by_branch = request.get("script_section_ids_by_branch", {})
     allowed_sections = set(
@@ -382,8 +368,29 @@ def _validate_branch(
     if not used:
         errors.append(f"{label} requires at least one beat carrying an accepted claim")
 
-    return label, used
+    if len(drama_levels) == len(beats):
+        if len(set(drama_levels)) < 2:
+            errors.append(
+                f"{label} drama_level must pulse; a flat drama curve is not allowed"
+            )
+        contract = request.get("psychology_contract", {})
+        framing = (
+            contract.get("human_framing", {})
+            if isinstance(contract, dict)
+            else {}
+        )
+        drama = framing.get("drama", {}) if isinstance(framing, dict) else {}
+        target = drama.get("target") if isinstance(drama, dict) else None
+        if isinstance(target, int) and not isinstance(target, bool):
+            if max(drama_levels) < target:
+                errors.append(f"{label} never reaches the accepted drama target")
 
+    if len(tempo_levels) == len(beats) and len(set(tempo_levels)) < 2:
+        errors.append(
+            f"{label} tempo_level must change; a flat tempo curve is not allowed"
+        )
+
+    return label, used
 
 def _check_branch_separation(
     branches: list[dict[str, Any]], errors: list[str]
