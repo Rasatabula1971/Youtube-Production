@@ -4386,6 +4386,24 @@ def workflow_guidance(
             "next_title": "Prepare Visual Acquisition",
         }
 
+    preview_gate = narration_preview_gate_snapshot()
+    if (
+        preview_gate.get("items")
+        and not preview_gate.get("complete")
+        and any(item.get("audio_ready") for item in preview_gate.get("items", []))
+    ):
+        return {
+            "state": "HUMAN_NARRATION_PREVIEW_GATE",
+            "current_action_id": None,
+            "current_title": "Listen to Free Audio Prototype",
+            "current_detail": (
+                "Hear the story with draft tone, pacing and pauses before spending. "
+                "Approve final, or send the script, performance, or music/SFX plan back for rework."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Prepare Final Narration Quote",
+        }
+
     production_visual = production_visual_artifact_state()
     if voice.get("visual_ready") and production_visual.get("manifests_ready"):
         return {
