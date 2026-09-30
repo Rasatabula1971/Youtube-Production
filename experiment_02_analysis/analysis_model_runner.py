@@ -618,7 +618,7 @@ def call_direct_gemini_backup(
         ],
         "generationConfig": {
             "responseMimeType": "application/json",
-            "responseSchema": gemini_compatible_schema(schema),
+            "responseJsonSchema": gemini_compatible_schema(schema),
             "temperature": 0.2,
         },
     }
@@ -667,7 +667,34 @@ def call_direct_gemini_backup(
             raise ValueError("Gemini returned an empty structured response")
     except urllib.error.HTTPError as exc:
         attempt["error_type"] = "HTTP_ERROR"
-        attempt["error_detail"] = f"HTTP_{exc.code}"
+        detail = f"HTTP_{exc.code}"
+        try:
+            raw_error = exc.read(4096).decode("utf-8", errors="replace")
+        except (OSError, ValueError):
+            raw_error = ""
+        if api_key and raw_error:
+            raw_error = raw_error.replace(api_key, "[REDACTED]")
+        if raw_error:
+            try:
+                parsed_error = json.loads(raw_error)
+                error = parsed_error.get("error", {})
+                if isinstance(error, dict):
+                    status = str(error.get("status") or "").strip()
+                    message = " ".join(
+                        str(error.get("message") or "").split()
+                    )
+                    parts = [part for part in (status, message) if part]
+                    if parts:
+                        detail += ": " + ": ".join(parts)
+                else:
+                    compact = " ".join(raw_error.split())
+                    if compact:
+                        detail += ": " + compact
+            except json.JSONDecodeError:
+                compact = " ".join(raw_error.split())
+                if compact:
+                    detail += ": " + compact
+        attempt["error_detail"] = detail[:1000]
         return {
             **fair_result,
             "reason_code": "FAIR_AND_DIRECT_GEMINI_FAILED",
