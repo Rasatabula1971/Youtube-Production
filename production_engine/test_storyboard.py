@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+import storyboard
+
+
+class StoryboardTests(unittest.TestCase):
+    def _paths(self, root: Path) -> tuple[Path, Path]:
+        t, v = root / "timing.json", root / "visual.json"
+        t.write_text("{}", encoding="utf-8"); v.write_text("{}", encoding="utf-8")
+        return t, v
+
+    def test_high_value_unfilled_hook_becomes_candidate_not_authorized(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t, v = self._paths(Path(tmp))
+            timing = {"concept_id":"c1","format":"shorts","status":"READY_FOR_ROUGH_CUT","segments":[{"segment_id":"b1","audio_start_seconds":0.0,"audio_end_seconds":3.0}]}
+            visual = {"concept_id":"c1","format":"shorts","requirements":[{"beat_id":"b1","narrative_purpose":"hook","visual_treatment":"dramatic steel impact","routing":{"selected_candidate_id":None}}]}
+            result = storyboard.build_storyboard(timing, visual, t, v)
+        card = result["cards"][0]
+        self.assertTrue(card["premium_generation_candidate"])
+        self.assertFalse(card["premium_generation_authorized"])
+        self.assertTrue(card["source_strategy"]["search_existing_first"])
+
+    def test_existing_asset_prevents_premium_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t, v = self._paths(Path(tmp))
+            timing = {"concept_id":"c1","format":"long_form","status":"READY_FOR_ROUGH_CUT","segments":[{"segment_id":"b1","audio_start_seconds":0.0,"audio_end_seconds":5.0}]}
+            visual = {"concept_id":"c1","format":"long_form","requirements":[{"beat_id":"b1","narrative_purpose":"climax","visual_treatment":"wide reveal","routing":{"selected_candidate_id":"archive-1"}}]}
+            result = storyboard.build_storyboard(timing, visual, t, v)
+        self.assertFalse(result["cards"][0]["premium_generation_candidate"])
+
+    def test_creator_excerpt_is_never_auto_approved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t, v = self._paths(Path(tmp))
+            timing = {"concept_id":"c1","format":"long_form","status":"READY_FOR_ROUGH_CUT","segments":[{"segment_id":"b1","audio_start_seconds":0.0,"audio_end_seconds":5.0}]}
+            visual = {"concept_id":"c1","format":"long_form","requirements":[{"beat_id":"b1","narrative_purpose":"supporting_explanation","visual_treatment":"creator demonstration","routing":{"selected_candidate_id":None}}]}
+            result = storyboard.build_storyboard(timing, visual, t, v)
+        self.assertTrue(result["cards"][0]["source_strategy"]["creator_excerpt_allowed_only_after_human_rights_context_review"])
+
+
+if __name__ == "__main__":
+    unittest.main()
