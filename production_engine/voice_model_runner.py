@@ -31,6 +31,7 @@ if str(EXP2_DIR) not in sys.path:
 from analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
+    inference_cost_authorized,
     load_runner_config,
     parse_model_json,
     resolve_fair_paths,
@@ -245,10 +246,16 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "provider_id": result.get("provider_id"),
         "model_id": result.get("model_id"),
         "paid_inference_executed": result.get("paid_inference_executed"),
+        "direct_backup_used": result.get("direct_backup_used", False),
+        "direct_backup_free_tier_only": result.get(
+            "direct_backup_free_tier_only", False
+        ),
+        "direct_backup_may_bill": result.get("direct_backup_may_bill", False),
+        "billing_authorization": result.get("billing_authorization"),
         "attempts": safe_attempts(result),
     }
 
-    if result.get("paid_inference_executed") is not False:
+    if not inference_cost_authorized(result):
         report = {**base, "status": "COST_POLICY_VIOLATION"}
         atomic_write_json(report_path, report)
         return report
@@ -315,7 +322,11 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
             "validation_contract_sha256": contract_hash,
             "provider_id": result.get("provider_id"),
             "model_id": result.get("model_id"),
-            "paid_inference_executed": False,
+            "paid_inference_executed": result.get("paid_inference_executed"),
+            "direct_backup_used": result.get("direct_backup_used", False),
+            "direct_backup_free_tier_only": result.get(
+                "direct_backup_free_tier_only", False
+            ),
         },
     }
     atomic_write_json(spec_path, spec)
