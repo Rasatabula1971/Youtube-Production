@@ -245,6 +245,8 @@ PRODUCTION_PREVIEW_AUDIO_DIR = PRODUCTION_OUTPUT / "narration_preview_audio"
 PRODUCTION_NARRATION_RENDER_RESULTS_DIR = PRODUCTION_OUTPUT / "narration_render_results"
 PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
+PRODUCTION_STORYBOARD_DIR = PRODUCTION_OUTPUT / "storyboards"
+PRODUCTION_VISUAL_SEARCH_RESULT_DIR = PRODUCTION_OUTPUT / "visual_search_results"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -287,6 +289,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "narration_spend_gate_prepare",
     "narration_audio_qc",
     "production_visual_prepare",
+    "storyboard_prepare",
+    "visual_search_prepare",
+    "visual_search_acquire",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -992,6 +997,24 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [sys.executable, "production_engine/narration_audio_qc.py", "--mode", "batch"],
         "description": "Runs local deterministic audio checks and writes narration timing maps.",
+    },
+    "storyboard_prepare": {
+        "label": "Build Cinematic Storyboard",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/storyboard.py", "--mode", "prepare"],
+        "description": "Turns final narration timing into search-first shot cards with cinematic direction; no paid generation is authorized.",
+    },
+    "visual_search_prepare": {
+        "label": "Prepare Visual Search",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_search.py", "--mode", "prepare"],
+        "description": "Builds rights-aware search requests from storyboard shots.",
+    },
+    "visual_search_acquire": {
+        "label": "Search Free / Existing Visuals",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_search_acquire.py", "--mode", "acquire"],
+        "description": "Searches configured zero-cost stock and creator-discovery adapters, then stops for human candidate review.",
     },
     "production_visual_prepare": {
         "label": "Prepare Visual Acquisition Manifest",
@@ -4034,6 +4057,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 if narration_spend_accepted and narration_render_results_present and not narration_audio_ready
                 else ("Narration Audio QC has passed and timing maps are ready." if narration_audio_ready else ("Import current narration render results after spend approval." if narration_spend_accepted else "Complete the Human Narration Spend Gate first."))
             ),
+        },
+        "storyboard_prepare": {
+            "enabled": visual_manifests_ready and not has_json_files(PRODUCTION_STORYBOARD_DIR),
+            "reason": "Build the cinematic storyboard from current narration timing and visual requirements." if visual_manifests_ready else "Visual requirements are not ready.",
+        },
+        "visual_search_prepare": {
+            "enabled": has_json_files(PRODUCTION_STORYBOARD_DIR) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else has_json_files(PRODUCTION_STORYBOARD_DIR),
+            "reason": "Prepare storyboard-driven visual search requests.",
+        },
+        "visual_search_acquire": {
+            "enabled": any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_results.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else False,
+            "reason": "Search zero-cost/existing visual sources, then stop for human candidate review.",
         },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
