@@ -45,6 +45,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/performance-gate",
     "/api/narration-preview-gate",
     "/api/narration-spend-gate",
+    "/api/visual-candidate-review",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -226,6 +227,10 @@ from narration_preview_review import (
 from narration_cost_review import (
     apply_action as apply_narration_spend_gate_action,
     snapshot as narration_spend_gate_snapshot,
+)
+from visual_candidate_review import (
+    apply_action as apply_visual_candidate_review_action,
+    snapshot as visual_candidate_review_snapshot,
 )
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
@@ -4691,6 +4696,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/narration-spend-gate":
             self._send_json(narration_spend_gate_snapshot())
             return
+        if route == "/api/visual-candidate-review":
+            self._send_json(visual_candidate_review_snapshot())
+            return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
             video_id = str((query.get("video_id") or [""])[0])
@@ -4902,6 +4910,17 @@ class Handler(BaseHTTPRequestHandler):
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-candidate-review":
+                payload = apply_visual_candidate_review_action(
+                    result_file=str(body.get("result_file", "")),
+                    shot_id=str(body.get("shot_id", "")),
+                    action=str(body.get("action", "")),
+                    candidate_id=(str(body["candidate_id"]) if body.get("candidate_id") is not None else None),
+                    note=str(body.get("note") or ""),
+                )
                 self._send_json(payload)
                 return
 
