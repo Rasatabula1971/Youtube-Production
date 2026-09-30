@@ -43,6 +43,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/script-gate",
     "/api/format-gate",
     "/api/performance-gate",
+    "/api/narration-preview-gate",
     "/api/narration-spend-gate",
 }
 
@@ -218,6 +219,10 @@ from voice_review import (
     snapshot as performance_gate_snapshot,
 )
 from narration_render import snapshot as narration_render_snapshot
+from narration_preview_review import (
+    apply_action as apply_narration_preview_gate_action,
+    snapshot as narration_preview_gate_snapshot,
+)
 from narration_cost_review import (
     apply_action as apply_narration_spend_gate_action,
     snapshot as narration_spend_gate_snapshot,
@@ -227,6 +232,8 @@ PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
 PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
 PRODUCTION_ENGAGEMENT_SUMMARY = PRODUCTION_OUTPUT / "pre_render_engagement_summary.json"
+PRODUCTION_PREVIEW_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_summary.json"
+PRODUCTION_PREVIEW_RENDER_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_render_summary.json"
 PRODUCTION_NARRATION_RENDER_RESULTS_DIR = PRODUCTION_OUTPUT / "narration_render_results"
 PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
@@ -264,6 +271,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "voice_generate",
     "voice_gate_prepare",
     "pre_render_engagement",
+    "narration_preview_prepare",
+    "narration_preview_render",
     "narration_prepare",
     "narration_spend_gate_prepare",
     "narration_audio_qc",
@@ -931,6 +940,18 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [sys.executable, "production_engine/pre_render_engagement.py", "--mode", "batch"],
         "description": "Deterministically checks hook, problem/tension, payoff, exposition length and delivery variation before narration spend.",
+    },
+    "narration_preview_prepare": {
+        "label": "Prepare Free Narration Prototype",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_preview.py", "--mode", "prepare"],
+        "description": "Builds a zero-cost narration prototype with delivery plus music/SFX suggestions; no paid provider is allowed.",
+    },
+    "narration_preview_render": {
+        "label": "Render Free Narration Prototype",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_preview_render.py", "--mode", "batch"],
+        "description": "Renders the listenable prototype locally with Kokoro. Missing local TTS stops fail-closed; there is no paid fallback.",
     },
     "narration_prepare": {
         "label": "Prepare Narration Render + Cost Boundary",
@@ -3168,6 +3189,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         engagement.get("status") == "PASS"
         and int(engagement.get("processed") or 0) > 0
     )
+    preview_prepare_payload = safe_load_json(PRODUCTION_PREVIEW_SUMMARY)
+    preview_prepare = preview_prepare_payload if isinstance(preview_prepare_payload, dict) else {
+        "status": "WAITING_FOR_ENGAGEMENT_VALIDATION", "prepared": 0
+    }
+    preview_render_payload = safe_load_json(PRODUCTION_PREVIEW_RENDER_SUMMARY)
+    preview_render = preview_render_payload if isinstance(preview_render_payload, dict) else {
+        "status": "WAITING_FOR_PREVIEW_MANIFESTS", "rendered": 0
+    }
+    preview_gate = narration_preview_gate_snapshot()
+    preview_prepared = preview_prepare.get("status") == "READY_FOR_FREE_PREVIEW_RENDER"
+    preview_rendered = preview_render.get("status") == "READY_FOR_LISTEN_GATE"
+    preview_approved = bool(preview_gate.get("complete"))
     narration = narration_artifact_state()
     narration_render = narration["render"]
     narration_spend_gate = narration["spend_gate"]
@@ -3918,12 +3951,28 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 else ("Pre-render engagement validation passed." if engagement_passed else ("Pre-render engagement validation blocked narration; revise the script/performance plan." if engagement.get("status") == "BLOCKED" else "Complete and accept the Human Performance Gate first."))
             ),
         },
-        "narration_prepare": {
-            "enabled": engagement_passed and not narration_prepared,
+        "narration_preview_prepare": {
+            "enabled": engagement_passed and not preview_prepared,
             "reason": (
-                "Engagement validation passed; prepare narration render and cost boundaries."
-                if engagement_passed and not narration_prepared
-                else ("Narration render preparation already exists." if narration_prepared else "Pre-render engagement validation must pass first.")
+                "Engagement validation passed; prepare the zero-cost audio prototype."
+                if engagement_passed and not preview_prepared
+                else ("Free prototype manifest is ready." if preview_prepared else "Pre-render engagement validation must pass first.")
+            ),
+        },
+        "narration_preview_render": {
+            "enabled": preview_prepared and not preview_rendered,
+            "reason": (
+                "Render the free local Kokoro prototype for listening."
+                if preview_prepared and not preview_rendered
+                else ("Free prototype audio is ready for human listening." if preview_rendered else "Prepare the free prototype first.")
+            ),
+        },
+        "narration_prepare": {
+            "enabled": preview_approved and not narration_prepared,
+            "reason": (
+                "The free audio prototype was heard and approved; final provider quote preparation may now begin."
+                if preview_approved and not narration_prepared
+                else ("Final narration preparation already exists." if narration_prepared else "Listen to and approve the free narration prototype before any paid-provider quote.")
             ),
         },
         "narration_spend_gate_prepare": {
@@ -4401,6 +4450,9 @@ def status_payload() -> dict[str, Any]:
     story = story_script_artifact_state()
     fmt = format_artifact_state()
     voice = voice_performance_artifact_state()
+    engagement_payload = safe_load_json(PRODUCTION_ENGAGEMENT_SUMMARY)
+    engagement = engagement_payload if isinstance(engagement_payload, dict) else {}
+    preview_gate = narration_preview_gate_snapshot()
     narration = narration_artifact_state()
     production_visual = production_visual_artifact_state()
     actions = []
@@ -4458,6 +4510,7 @@ def status_payload() -> dict[str, Any]:
         "voice_performance": voice,
         "performance_gate": voice["performance_gate"],
         "pre_render_engagement": engagement,
+        "narration_preview_gate": preview_gate,
         "narration": narration,
         "narration_spend_gate": narration["spend_gate"],
         "production_visual": production_visual,
@@ -4552,6 +4605,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/performance-gate":
             self._send_json(performance_gate_snapshot())
+            return
+        if route == "/api/narration-preview-gate":
+            self._send_json(narration_preview_gate_snapshot())
             return
         if route == "/api/narration-spend-gate":
             self._send_json(narration_spend_gate_snapshot())
@@ -4750,6 +4806,19 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-preview-gate":
+                payload = apply_narration_preview_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
