@@ -301,14 +301,17 @@ def validate(payload: Any) -> list[str]:
                 f"human_framing.drama.{key} must be an integer from {DRAMA_FLOOR}-10"
             )
 
-    if _valid_level(capacity, minimum=DRAMA_FLOOR) and _valid_level(
-        target, minimum=DRAMA_FLOOR
+    if (
+        isinstance(capacity, int)
+        and not isinstance(capacity, bool)
+        and DRAMA_FLOOR <= capacity <= DRAMA_MAX
+        and isinstance(target, int)
+        and not isinstance(target, bool)
+        and DRAMA_FLOOR <= target <= DRAMA_MAX
     ):
-        capacity_level = int(capacity)
-        target_level = int(target)
-        if target_level > capacity_level:
+        if target > capacity:
             errors.append("human_framing.drama.target cannot exceed capacity")
-        if capacity_level - target_level > MAX_UNUSED_DRAMA_CAPACITY:
+        if capacity - target > MAX_UNUSED_DRAMA_CAPACITY:
             errors.append(
                 "human_framing underuses a high-drama opportunity; target is more than "
                 f"{MAX_UNUSED_DRAMA_CAPACITY} points below capacity"
