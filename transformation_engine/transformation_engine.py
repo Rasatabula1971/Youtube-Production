@@ -21,6 +21,7 @@ if str(_OVERLAP_ROOT) not in sys.path:
     sys.path.insert(0, str(_OVERLAP_ROOT))
 
 from source_overlap import check_texts
+from human_framing import generation_contract, validate as validate_human_framing
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -63,6 +64,7 @@ def validation_contract_sha256() -> str:
         Path(__file__).resolve(),
         CONFIG_FILE.resolve(),
         (PROJECT_ROOT / "source_overlap.py").resolve(),
+        (HERE / "human_framing.py").resolve(),
     )
     for path in dependencies:
         relative = (
@@ -155,6 +157,7 @@ def build_concept_request(
         "source_video_ids": source_video_ids,
         "concept_count_requested": int(config["concepts_per_mechanism"]),
         "allowed_format_intents": list(config["allowed_format_intents"]),
+        "human_framing_contract": generation_contract(),
         "instructions": [
             "Generate genuinely new video concepts that use the transferable mechanism without copying source expression.",
             "Do not reuse source titles, scripts, footage, story sequences, personalities, or exact examples.",
@@ -168,6 +171,12 @@ def build_concept_request(
             "Do not claim the mechanism will cause views, virality, retention, or recommendation.",
             "Do not rank the concepts.",
             "Include concrete research questions that would need independent answers before scripting.",
+            "Before settling on a concept, find the strongest truthful human framing: what can the viewer see or realize first that makes them need the explanation?",
+            "Generate a Hook Experience, natural Viewer Question, explicit Psychological Pull, Explanation Payoff, and Visual Opening Plan for every concept.",
+            "Drama has a hard floor of 4/10 and a normal center of 5/10. Actively raise it when the opportunity truthfully supports stronger consequence, danger, loss, surprise, transformation, contradiction, scale, or decision tension.",
+            "Never flatten a naturally dramatic opportunity into textbook framing. If drama capacity is high, the chosen target must use a meaningful share of it.",
+            "Use a changing drama curve and a separate changing tempo curve. Tension should rise and release; a slower beat may still be highly dramatic.",
+            "Drama must be truthful. Record the source of the drama and a constraint describing what must not be exaggerated.",
         ],
         "response_schema": {
             "mechanism_id": mechanism_id,
@@ -180,6 +189,40 @@ def build_concept_request(
                     "viewer_problem": "specific problem, question, or curiosity the viewer is trying to resolve",
                     "viewer_moment": "the situation or decision state the viewer is in when this matters",
                     "desired_outcome": "what the viewer wants to understand, fix, avoid, or decide",
+                    "human_framing": {
+                        "hook_experience": {
+                            "archetype": "FAILURE_CONSEQUENCE|EXPECTATION_VIOLATION|CONTRADICTION|TRANSFORMATION|BEFORE_AFTER|HIDDEN_CAUSE|PREDICTION|DECISION_PRESSURE|MISTAKE_MYTH|SCALE|DEMONSTRATION|MYSTERY|LOSS_COST|PERSONAL_STAKES",
+                            "description": "what the viewer sees/hears/realizes first that creates the need for explanation"
+                        },
+                        "viewer_question": "natural question a normal viewer would ask after the hook experience",
+                        "psychological_pull": {
+                            "primary_pull": "supported pull type",
+                            "viewer_expectation": "what the viewer expects",
+                            "violation_or_tension": "what conflicts with or pressures that expectation",
+                            "stakes": "why the answer matters",
+                            "information_gap": "what remains unexplained",
+                            "desired_resolution": "what the viewer wants resolved"
+                        },
+                        "explanation_payoff": "what the viewer will understand by staying",
+                        "visual_opening_plan": {
+                            "moments": [
+                                {
+                                    "visual": "specific opening visual beat",
+                                    "purpose": "psychological function of this beat"
+                                }
+                            ],
+                            "opening_narration_intent": "short line/question intent that converts the visual into an information gap"
+                        },
+                        "drama": {
+                            "capacity": "integer 4-10",
+                            "target": "integer 4-10, normally centered near 5 but raised when justified",
+                            "source": "truthful property of the opportunity that creates drama",
+                            "constraint": "what must not be exaggerated",
+                            "hook_level": "integer 4-10",
+                            "story_curve": ["4-10 drama levels with rises/releases"],
+                            "tempo_curve": ["1-10 tempo levels, changing independently of drama"]
+                        }
+                    },
                     "viewer_need_evidence": {
                         "status": "OBSERVED|INFERRED|HYPOTHESIS",
                         "evidence_basis": [],
@@ -246,6 +289,8 @@ def validate_concept(
     ):
         if not str(concept.get(field, "")).strip():
             errors.append(f"{field} is required")
+
+    errors.extend(validate_human_framing(concept.get("human_framing")))
 
     viewer_need_evidence = concept.get("viewer_need_evidence")
     if not isinstance(viewer_need_evidence, dict):
@@ -442,6 +487,13 @@ def validate_response(
             "Concept must retain its main value without source wording, "
             "footage, story, personality, or exact execution."
         )
+        framing = normalized.get("human_framing", {})
+        hook = framing.get("hook_experience", {}) if isinstance(framing, dict) else {}
+        visual = (
+            framing.get("visual_opening_plan", {})
+            if isinstance(framing, dict)
+            else {}
+        )
         overlap = check_texts(
             [
                 {"field": "working_title", "text": normalized.get("working_title", "")},
@@ -457,6 +509,30 @@ def validate_response(
                 {
                     "field": "transformation_method",
                     "text": normalized.get("transformation_method", ""),
+                },
+                {
+                    "field": "human_framing.viewer_question",
+                    "text": framing.get("viewer_question", "")
+                    if isinstance(framing, dict)
+                    else "",
+                },
+                {
+                    "field": "human_framing.hook_experience",
+                    "text": hook.get("description", "")
+                    if isinstance(hook, dict)
+                    else "",
+                },
+                {
+                    "field": "human_framing.explanation_payoff",
+                    "text": framing.get("explanation_payoff", "")
+                    if isinstance(framing, dict)
+                    else "",
+                },
+                {
+                    "field": "human_framing.opening_narration_intent",
+                    "text": visual.get("opening_narration_intent", "")
+                    if isinstance(visual, dict)
+                    else "",
                 },
             ]
         )
