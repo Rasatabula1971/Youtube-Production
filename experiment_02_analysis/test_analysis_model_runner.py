@@ -408,6 +408,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     "const": "c1",
                     "minLength": 1,
                 },
+                "must_pass": {
+                    "const": True,
+                },
                 "tags": {
                     "type": "array",
                     "uniqueItems": True,
@@ -419,10 +422,13 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         }
         normalized = gemini_compatible_schema(schema)
         concept = normalized["properties"]["concept_id"]
+        must_pass = normalized["properties"]["must_pass"]
         tags = normalized["properties"]["tags"]
         self.assertEqual(concept["enum"], ["c1"])
         self.assertNotIn("const", concept)
         self.assertNotIn("minLength", concept)
+        self.assertEqual(must_pass["type"], "boolean")
+        self.assertNotIn("enum", must_pass)
         self.assertNotIn("uniqueItems", tags)
         self.assertNotIn("maxLength", tags["items"])
 
