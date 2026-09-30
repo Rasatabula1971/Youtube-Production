@@ -1390,11 +1390,26 @@ def transformation_artifact_state() -> dict[str, Any]:
         if isinstance(candidates, dict)
         else {}
     )
+    candidate_pool_ready = (
+        candidates.get("ready_for_triage") is True
+        if isinstance(candidates, dict)
+        else False
+    )
+    minimum_candidates = (
+        int(candidates.get("minimum_candidates_for_triage") or 0)
+        if isinstance(candidates, dict)
+        else 0
+    )
     candidates_current = (
         isinstance(candidate_provenance, dict)
+        and bool(candidate_provenance)
         and candidate_provenance == current_response_hashes
     )
-    candidates_ready = responses_complete and candidate_count > 0 and candidates_current
+    candidates_ready = (
+        candidate_pool_ready
+        and candidate_count >= minimum_candidates
+        and candidates_current
+    )
     gate = (
         concept_gate_snapshot()
         if candidates_ready and triage_ready
@@ -1420,6 +1435,18 @@ def transformation_artifact_state() -> dict[str, Any]:
         "request_mechanism_ids": sorted(request_hashes),
         "current_response_mechanism_ids": sorted(current_response_hashes),
         "candidate_provenance_current": candidates_current,
+        "candidate_pool_ready": candidate_pool_ready,
+        "minimum_candidates_for_triage": minimum_candidates,
+        "mechanism_coverage_complete": (
+            bool(candidates.get("mechanism_coverage_complete"))
+            if isinstance(candidates, dict)
+            else False
+        ),
+        "missing_mechanism_ids": (
+            list(candidates.get("missing_mechanism_ids", []))
+            if isinstance(candidates, dict)
+            else []
+        ),
         "requests_ready": requests_ready,
         "responses_complete": responses_complete,
         "candidate_count": candidate_count,
