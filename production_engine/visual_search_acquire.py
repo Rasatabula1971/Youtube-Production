@@ -1,0 +1,51 @@
+"""Run configured zero-cost visual discovery adapters for storyboard requests."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from pipeline_integrity import atomic_write_json
+from visual_acquisition import load_json
+from visual_search import RESULT_DIR, RAW_DIR, SUMMARY_FILE
+from visual_search_adapters import discover
+
+
+def acquire() -> dict:
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    requests = sorted(RESULT_DIR.glob("*.visual_search_request.json")) if RESULT_DIR.exists() else []
+    items = []
+    for request_path in requests:
+        request = load_json(request_path)
+        shots = {}
+        for shot in request.get("shots", []):
+            shot_id = str(shot.get("shot_id") or "")
+            terms = [str(x).strip() for x in shot.get("search_terms", []) if str(x).strip()]
+            query = " ".join(terms)[:100] or str(shot.get("desired_visual") or "").strip()
+            found = discover(query, int(shot.get("max_candidates_per_source") or 5))
+            shots[shot_id] = [candidate for group in found.values() for candidate in group]
+        raw = {
+            "artifact": "visual_search_raw",
+            "concept_id": request.get("concept_id"),
+            "format": request.get("format"),
+            "shots": shots,
+            "policy": {"discovery_only": True, "no_media_downloaded": True, "paid_calls_allowed": False},
+        }
+        destination = RAW_DIR / request_path.name.replace(".visual_search_request.json", ".visual_search_raw.json")
+        atomic_write_json(destination, raw)
+        items.append({"concept_id": request.get("concept_id"), "format": request.get("format"), "raw_results": str(destination), "candidates": sum(len(x) for x in shots.values())})
+    summary = {"status": "SEARCH_COMPLETE" if items else "WAITING_FOR_SEARCH_REQUESTS", "processed": len(items), "items": items, "paid_calls_allowed": False}
+    atomic_write_json(SUMMARY_FILE, summary)
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Acquire zero-cost storyboard visual candidates")
+    parser.add_argument("--mode", choices=("acquire",), required=True)
+    parser.parse_args()
+    print(json.dumps(acquire(), indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
