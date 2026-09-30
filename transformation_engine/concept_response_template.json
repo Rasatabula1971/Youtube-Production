@@ -6,22 +6,66 @@
       "working_title": "",
       "premise": "",
       "audience_promise": "",
-      "format_intent": "long_form",
-      "mechanism_application": "",
-      "transformation_method": "",
-      "research_questions": [
-        "",
-        ""
-      ],
-      "source_specific_elements_used": [],
-      "source_dependency_test": {
-        "passes": true,
-        "source_assets_required": false,
-        "rationale": ""
-      },
       "viewer_problem": "",
       "viewer_moment": "",
       "desired_outcome": "",
+      "human_framing": {
+        "hook_experience": {
+          "archetype": "EXPECTATION_VIOLATION",
+          "description": ""
+        },
+        "viewer_question": "",
+        "psychological_pull": {
+          "primary_pull": "EXPECTATION_VIOLATION",
+          "viewer_expectation": "",
+          "violation_or_tension": "",
+          "stakes": "",
+          "information_gap": "",
+          "desired_resolution": ""
+        },
+        "explanation_payoff": "",
+        "visual_opening_plan": {
+          "moments": [
+            {
+              "visual": "",
+              "purpose": ""
+            },
+            {
+              "visual": "",
+              "purpose": ""
+            },
+            {
+              "visual": "",
+              "purpose": ""
+            }
+          ],
+          "opening_narration_intent": ""
+        },
+        "drama": {
+          "capacity": 5,
+          "target": 5,
+          "source": "",
+          "constraint": "",
+          "hook_level": 5,
+          "story_curve": [
+            5,
+            6,
+            7,
+            5
+          ],
+          "tempo_curve": [
+            6,
+            4,
+            7,
+            5
+          ]
+        }
+      },
+      "viewer_need_evidence": {
+        "status": "HYPOTHESIS",
+        "evidence_basis": [],
+        "rationale": ""
+      },
       "content_gap": {
         "hypothesis": "",
         "evidence_status": "HYPOTHESIS",
@@ -38,6 +82,19 @@
           ""
         ],
         "result": "REFRAME",
+        "rationale": ""
+      },
+      "format_intent": "long_form",
+      "mechanism_application": "",
+      "transformation_method": "",
+      "research_questions": [
+        "",
+        ""
+      ],
+      "source_specific_elements_used": [],
+      "source_dependency_test": {
+        "passes": true,
+        "source_assets_required": false,
         "rationale": ""
       }
     }
