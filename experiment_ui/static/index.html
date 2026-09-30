@@ -377,6 +377,31 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="visualCandidateReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">VISUAL CANDIDATE GATE</p>
+                <h2 id="visualCandidateReviewTitle">Choose the shot</h2>
+                <p class="muted" id="visualCandidateReviewSummary">Compare the storyboard intent with discovered footage before rough cut.</p>
+              </div>
+              <span class="status-chip running" id="visualCandidateReviewStatus">PENDING</span>
+            </div>
+            <div class="visual-candidate-layout">
+              <div class="concept-detail" id="visualShotDetail"></div>
+              <div class="visual-candidate-pane">
+                <div id="visualCandidateCards" class="visual-candidate-cards"></div>
+                <label class="vision-label" for="visualCandidateNote">Review note</label>
+                <textarea id="visualCandidateNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional unless you want to explain what a better visual needs."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualShotPrev" type="button">← Previous shot</button>
+                  <button class="danger" id="visualRejectAll" type="button">Reject all</button>
+                  <button class="ghost" id="visualNeedsBetter" type="button">Needs better visual</button>
+                  <button class="ghost" id="visualShotNext" type="button">Next shot →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>
