@@ -90,6 +90,7 @@ def load_config() -> dict[str, Any]:
         "allowed_format_intents",
         "require_ready_handoff",
         "minimum_research_questions",
+        "minimum_candidates_for_triage",
     }
     missing = sorted(required - set(config))
     if missing:
@@ -709,8 +710,10 @@ def merge_candidate_files() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
 def run_apply() -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     validation_contract = validation_contract_sha256()
+    config = load_config()
     accepted, rejected = merge_candidate_files()
 
+    request_mechanism_ids: set[str] = set()
     handoff_hashes = set()
     if REQUESTS_DIR.exists():
         for request_path in REQUESTS_DIR.glob("*.concept_request.json"):
@@ -718,6 +721,9 @@ def run_apply() -> dict[str, Any]:
                 request = load_json(request_path)
             except (OSError, json.JSONDecodeError):
                 continue
+            mechanism_id = str(request.get("mechanism_id", "")).strip()
+            if mechanism_id:
+                request_mechanism_ids.add(mechanism_id)
             provenance = request.get("request_provenance", {})
             if isinstance(provenance, dict) and provenance.get("handoff_sha256"):
                 handoff_hashes.add(str(provenance["handoff_sha256"]))
@@ -725,37 +731,58 @@ def run_apply() -> dict[str, Any]:
         next(iter(handoff_hashes)) if len(handoff_hashes) == 1 else None
     )
 
+    contributing_paths = {
+        Path(str(item.get("response_source")))
+        for item in accepted
+        if str(item.get("response_source") or "").strip()
+    }
     current_response_hashes: dict[str, str] = {}
-    if RESPONSES_DIR.exists():
-        for response_path in sorted(RESPONSES_DIR.glob("*.json")):
-            try:
-                response = load_json(response_path)
-            except (OSError, json.JSONDecodeError):
-                continue
-            mechanism_id = str(response.get("mechanism_id", "")).strip()
-            request_path = REQUESTS_DIR / f"{safe_slug(mechanism_id)}.concept_request.json"
-            if not request_path.exists():
-                continue
-            provenance = response.get("response_provenance", {})
-            if (
-                isinstance(provenance, dict)
-                and provenance.get("request_sha256") == sha256_file(request_path)
-                and provenance.get("validation_contract_sha256")
-                == validation_contract
-            ):
-                current_response_hashes[mechanism_id] = sha256_file(response_path)
+    for response_path in sorted(contributing_paths):
+        if not response_path.exists():
+            continue
+        try:
+            response = load_json(response_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        mechanism_id = str(response.get("mechanism_id", "")).strip()
+        request_path = REQUESTS_DIR / f"{safe_slug(mechanism_id)}.concept_request.json"
+        if not request_path.exists():
+            continue
+        provenance = response.get("response_provenance", {})
+        if (
+            isinstance(provenance, dict)
+            and provenance.get("request_sha256") == sha256_file(request_path)
+            and provenance.get("validation_contract_sha256")
+            == validation_contract
+        ):
+            current_response_hashes[mechanism_id] = sha256_file(response_path)
+
+    minimum_candidates = int(config["minimum_candidates_for_triage"])
+    ready_for_triage = (
+        len(accepted) >= minimum_candidates
+        and bool(current_response_hashes)
+    )
+    contributed = sorted(current_response_hashes)
+    missing_mechanisms = sorted(request_mechanism_ids - set(contributed))
 
     CANDIDATES_FILE.write_text(
         json.dumps(
             {
                 "artifact": "concept_candidates",
                 "count": len(accepted),
+                "minimum_candidates_for_triage": minimum_candidates,
+                "ready_for_triage": ready_for_triage,
+                "requested_mechanism_ids": sorted(request_mechanism_ids),
+                "contributing_mechanism_ids": contributed,
+                "missing_mechanism_ids": missing_mechanisms,
+                "mechanism_coverage_complete": not missing_mechanisms,
                 "source_response_sha256": current_response_hashes,
                 "concepts": accepted,
                 "notes": [
                     "Concepts are not ranked.",
                     "Acceptance here means structural/source-dependency validation only.",
                     "Human Concept Gate approval is still required.",
+                    "Provider coverage may be partial when the current validated candidate pool meets the triage minimum.",
                 ],
             },
             indent=2,
@@ -776,11 +803,22 @@ def run_apply() -> dict[str, Any]:
         encoding="utf-8",
     )
 
+    if ready_for_triage:
+        status = "CONCEPT_CANDIDATES_READY"
+    elif accepted:
+        status = "INSUFFICIENT_CONCEPT_CANDIDATES"
+    else:
+        status = "NO_VALID_CONCEPT_CANDIDATES"
+
     summary = {
-        "status": (
-            "CONCEPT_CANDIDATES_READY" if accepted else "NO_VALID_CONCEPT_CANDIDATES"
-        ),
+        "status": status,
         "accepted_concepts": len(accepted),
+        "minimum_candidates_for_triage": minimum_candidates,
+        "ready_for_triage": ready_for_triage,
+        "requested_mechanisms": len(request_mechanism_ids),
+        "contributing_mechanisms": len(contributed),
+        "missing_mechanism_ids": missing_mechanisms,
+        "partial_mechanism_coverage": bool(missing_mechanisms),
         "rejected_concepts": len(rejected),
         "candidates_file": str(CANDIDATES_FILE),
         "rejected_file": str(REJECTED_FILE),
