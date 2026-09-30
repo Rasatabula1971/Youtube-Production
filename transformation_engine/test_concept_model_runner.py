@@ -388,6 +388,43 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "BATCH_PROGRESS")
         self.assertEqual(result["provider_batch_status"], "BATCH_PROGRESS")
 
+    @patch("concept_model_runner.run_apply")
+    @patch("concept_model_runner.run_one")
+    def test_mixed_success_and_escalation_reports_batch_progress(
+        self,
+        run_one,
+        run_apply,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            requests = Path(tmp)
+            for index in range(5):
+                (requests / f"m{index}.concept_request.json").write_text(
+                    json.dumps({"mechanism_id": f"m{index}"}),
+                    encoding="utf-8",
+                )
+            run_one.side_effect = [
+                {"status": "VALIDATED", "mechanism_id": "m0"},
+                {"status": "MODEL_ESCALATION_REQUIRED", "mechanism_id": "m1"},
+                {"status": "VALIDATED", "mechanism_id": "m2"},
+                {"status": "MODEL_ESCALATION_REQUIRED", "mechanism_id": "m3"},
+            ]
+            run_apply.return_value = {
+                "status": "INSUFFICIENT_CONCEPT_CANDIDATES",
+                "accepted_concepts": 2,
+            }
+
+            result = runner.run_batch(
+                requests,
+                force=False,
+                maximum_requests=None,
+                config=self.runner_config(),
+            )
+
+        self.assertEqual(result["status"], "BATCH_PROGRESS")
+        self.assertEqual(result["provider_batch_status"], "BATCH_PROGRESS")
+        self.assertEqual(result["model_runs_invoked"], 4)
+        self.assertEqual(run_one.call_count, 4)
+
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
     def test_paid_inference_fails_closed(self, call_bridge, resolve_paths):

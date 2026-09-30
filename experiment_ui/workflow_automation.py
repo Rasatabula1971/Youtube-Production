@@ -93,7 +93,7 @@ def run_until_human_gate() -> dict[str, Any]:
 
         before_reason = str(readiness[action_id].get("reason") or "")
         code = run_action(action_id)
-        if code != 0:
+        if code not in {0, 2}:
             return {
                 "status": "FAILED",
                 "failed_action": action_id,
@@ -101,25 +101,30 @@ def run_until_human_gate() -> dict[str, Any]:
                 "completed_actions": completed_actions,
             }
 
-        completed_actions.append(action_id)
-
         after = control.action_readiness()
         next_id = next_enabled_action(after)
         if next_id == action_id:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
                 return {
-                    "status": "NO_PROGRESS",
+                    "status": "PARTIAL" if code == 2 else "NO_PROGRESS",
                     "failed_action": action_id,
+                    "return_code": code,
                     "completed_actions": completed_actions,
                     "before_reason": before_reason,
                     "after_reason": after_reason,
                 }
             # The same batched action is still ready, but its readiness reason
-            # changed (for example 0/5 -> 4/5 current concept responses).
+            # changed (for example 0/5 -> 2/5 current concept responses).
             # That is measurable progress, so allow the bounded loop to run the
             # next batch rather than misclassifying it as a stall.
+            completed_actions.append(action_id)
             continue
+
+        # A partial command may still have produced enough durable artifacts to
+        # unlock the next machine step or a human boundary. Re-evaluate rather
+        # than converting exit code 2 into a red workflow failure.
+        completed_actions.append(action_id)
 
     return {
         "status": "SAFETY_STOP",
@@ -144,6 +149,8 @@ def main() -> None:
         for action_id in result["completed_actions"]:
             print(f"  - {action_id}")
 
+    if result["status"] == "PARTIAL":
+        raise SystemExit(2)
     if result["status"] in {"FAILED", "NO_PROGRESS", "SAFETY_STOP"}:
         raise SystemExit(1)
 

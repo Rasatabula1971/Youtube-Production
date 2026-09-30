@@ -1,4 +1,6 @@
+import io
 import json
+import urllib.error
 import tempfile
 import unittest
 from pathlib import Path
@@ -482,6 +484,70 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             patch(
                 "analysis_model_runner.urllib.request.urlopen",
                 return_value=FakeResponse(),
+            ) as urlopen,
+        ):
+            result = call_direct_gemini_backup(
+                payload,
+                timeout_seconds=30,
+                fair_result=fair_result,
+            )
+
+        request = urlopen.call_args.args[0]
+        request_body = json.loads(request.data.decode("utf-8"))
+        generation = request_body["generationConfig"]
+        self.assertIn("responseJsonSchema", generation)
+        self.assertNotIn("responseSchema", generation)
+        self.assertEqual(result["status"], "ACCEPTED")
+        self.assertEqual(result["provider_id"], "direct_gemini_backup")
+        self.assertEqual(result["model_id"], "gemini-test")
+        self.assertTrue(result["direct_backup_used"])
+        self.assertTrue(result["direct_backup_may_bill"])
+        self.assertIsNone(result["paid_inference_executed"])
+        self.assertTrue(inference_cost_authorized(result))
+
+    def test_direct_gemini_http_error_preserves_safe_google_message(self):
+        fair_result = {
+            "status": "ESCALATION_REQUIRED",
+            "reason_code": "ALL_FREE_MODELS_UNAVAILABLE",
+            "paid_inference_executed": False,
+            "attempts": [],
+        }
+        payload = {
+            "prompt": "score concepts",
+            "expected_schema": {
+                "type": "object",
+                "properties": {"summary": {"type": "string"}},
+                "required": ["summary"],
+            },
+        }
+        error_body = json.dumps(
+            {
+                "error": {
+                    "code": 400,
+                    "status": "INVALID_ARGUMENT",
+                    "message": "responseJsonSchema contains an unsupported field",
+                }
+            }
+        ).encode("utf-8")
+        http_error = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,
+            fp=io.BytesIO(error_body),
+        )
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "DIRECT_GEMINI_API_KEY": "secret-test-key",
+                    "DIRECT_GEMINI_MODEL": "gemini-test",
+                },
+                clear=False,
+            ),
+            patch(
+                "analysis_model_runner.urllib.request.urlopen",
+                side_effect=http_error,
             ),
         ):
             result = call_direct_gemini_backup(
@@ -490,13 +556,12 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 fair_result=fair_result,
             )
 
-        self.assertEqual(result["status"], "ACCEPTED")
-        self.assertEqual(result["provider_id"], "direct_gemini_backup")
-        self.assertEqual(result["model_id"], "gemini-test")
-        self.assertTrue(result["direct_backup_used"])
-        self.assertTrue(result["direct_backup_may_bill"])
-        self.assertIsNone(result["paid_inference_executed"])
-        self.assertTrue(inference_cost_authorized(result))
+        attempt = result["attempts"][-1]
+        self.assertEqual(attempt["error_type"], "HTTP_ERROR")
+        self.assertIn("HTTP_400", attempt["error_detail"])
+        self.assertIn("INVALID_ARGUMENT", attempt["error_detail"])
+        self.assertIn("unsupported field", attempt["error_detail"])
+        self.assertNotIn("secret-test-key", attempt["error_detail"])
 
     def test_shared_bridge_uses_direct_backup_after_clean_fair_escalation(self):
         class Completed:
