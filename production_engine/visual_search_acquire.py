@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json
-from visual_search import RESULT_DIR, RAW_DIR, SUMMARY_FILE
+from visual_search import RESULT_DIR, RAW_DIR, SUMMARY_FILE, compile_results
 from visual_search_adapters import discover
 
 
@@ -34,6 +34,9 @@ def acquire() -> dict:
         }
         destination = RAW_DIR / request_path.name.replace(".visual_search_request.json", ".visual_search_raw.json")
         atomic_write_json(destination, raw)
+        compiled = compile_results(request, request_path, raw)
+        compiled_path = RESULT_DIR / request_path.name.replace(".visual_search_request.json", ".visual_search_results.json")
+        atomic_write_json(compiled_path, compiled)
         items.append({"concept_id": request.get("concept_id"), "format": request.get("format"), "raw_results": str(destination), "candidates": sum(len(x) for x in shots.values())})
     summary = {"status": "SEARCH_COMPLETE" if items else "WAITING_FOR_SEARCH_REQUESTS", "processed": len(items), "items": items, "paid_calls_allowed": False}
     atomic_write_json(SUMMARY_FILE, summary)
