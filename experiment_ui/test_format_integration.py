@@ -14,7 +14,7 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 8],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 11],
             [
                 "format_prepare",
                 "format_generate",
@@ -22,6 +22,9 @@ class FormatUiIntegrationTests(unittest.TestCase):
                 "voice_prepare",
                 "voice_generate",
                 "voice_gate_prepare",
+                "narration_prepare",
+                "narration_spend_gate_prepare",
+                "narration_audio_qc",
                 "production_visual_prepare",
             ],
         )
