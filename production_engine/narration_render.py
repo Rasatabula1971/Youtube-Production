@@ -1,9 +1,10 @@
 """Narration render preparation and cost boundary.
 
 This module consumes Human Performance Gate approved voice specifications and
-prepares immutable, provider-bound narration render requests. It never calls a
-paid provider. A provider contract and a current provider quote must be supplied
-before a human spend gate can authorize rendering.
+prepares immutable, provider-bound FINAL narration render requests. It never
+calls a paid provider. A zero-cost narration prototype must first be rendered,
+heard and explicitly approved. Only then may a provider quote reach the human
+spend gate.
 
 The Higgsfield narration API contract is intentionally fail-closed until a
 documented endpoint and request schema are verified.
@@ -25,6 +26,7 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json
 from voice_performance import load_json, safe_slug, sha256_file, sha256_text
 from voice_review import APPROVED_DIR as APPROVED_VOICE_DIR
+from narration_preview_review import APPROVED_DIR as APPROVED_PREVIEW_DIR
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "narration_render_config.json"
@@ -127,6 +129,20 @@ def _voice_prerequisites(spec: dict[str, Any]) -> list[str]:
     return blockers
 
 
+def _preview_approved(concept_id: str, fmt: str, spec_path: Path) -> bool:
+    key = artifact_key(concept_id, fmt)
+    path = APPROVED_PREVIEW_DIR / f"{key}.approved_preview.json"
+    if not path.exists():
+        return False
+    payload = load_json(path)
+    return bool(
+        isinstance(payload, dict)
+        and payload.get("decision") == "APPROVE_FINAL"
+        and str(payload.get("concept_id") or "") == concept_id
+        and str(payload.get("format") or "") == fmt
+    )
+
+
 def build_render_request(
     spec: dict[str, Any],
     spec_path: Path,
@@ -192,6 +208,8 @@ def build_render_request(
         )
 
     blockers = _voice_prerequisites(spec)
+    if not _preview_approved(concept_id, fmt, spec_path):
+        blockers.append("FREE_PREVIEW_NOT_APPROVED")
     identity = spec.get("voice_identity", {})
     if str(identity.get("provider") or "").strip() != str(config["provider"]):
         blockers.append("VOICE_PROVIDER_MISMATCH")
