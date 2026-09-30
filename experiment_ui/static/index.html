@@ -376,6 +376,30 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">FREE AUDIO LISTEN GATE</p>
+                <h2 id="previewReviewTitle">Listen before spending</h2>
+                <p class="muted" id="previewReviewSummary">Review story flow, tone, spacing, music and SFX suggestions before any paid narration quote.</p>
+              </div>
+              <span class="status-chip running" id="previewReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="previewDetail"></div>
+              <div class="concept-decision-pane">
+                <label class="vision-label" for="previewNote">What should change?</label>
+                <textarea id="previewNote" class="vision-observation" rows="5" maxlength="1400" placeholder="Required when requesting rework."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="previewScript" type="button">Rework Script</button>
+                  <button class="ghost" id="previewPerformance" type="button">Rework Performance</button>
+                  <button class="ghost" id="previewSound" type="button">Rework Music / SFX</button>
+                  <button id="previewApprove" type="button">Approve Final → Get Paid Quote</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
