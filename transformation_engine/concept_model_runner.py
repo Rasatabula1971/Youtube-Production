@@ -19,7 +19,6 @@ if str(_INTEGRITY_ROOT) not in sys.path:
 from typing import Any
 
 from pipeline_integrity import (
-    SUCCESS_STATUSES,
     atomic_write_json,
     atomic_write_text,
     batch_status,
