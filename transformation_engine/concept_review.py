@@ -229,12 +229,14 @@ def snapshot() -> dict[str, Any]:
     accepted = 0
     rework = 0
     rejected = 0
+    saved = 0
     if REVIEWED_FILE.exists() and state.get("status") == "COMPLETE":
         reviewed = load_json(REVIEWED_FILE)
         counts = reviewed.get("counts", {})
         accepted = int(counts.get("accepted", 0))
         rework = int(counts.get("rework", 0))
         rejected = int(counts.get("rejected", 0))
+        saved = int(counts.get("saved", 0))
     if RESEARCH_HANDOFF_FILE.exists() and state.get("status") == "COMPLETE":
         research_status = load_json(RESEARCH_HANDOFF_FILE).get("status")
 
@@ -247,6 +249,7 @@ def snapshot() -> dict[str, Any]:
         "accepted": accepted,
         "rework": rework,
         "rejected": rejected,
+        "saved": saved,
         "research_status": research_status,
         "criteria": request.get("criteria", {}),
         "concepts": items,
@@ -306,6 +309,7 @@ def finalize_if_complete(
             "accepted": reviewed["counts"]["accepted"],
             "rework": reviewed["counts"]["rework"],
             "rejected": reviewed["counts"]["rejected"],
+            "saved": reviewed["counts"]["saved"],
             "reviewed_file": str(REVIEWED_FILE),
             "research_handoff": str(RESEARCH_HANDOFF_FILE),
         },
@@ -339,13 +343,24 @@ def apply_action(
         raise ValueError("Unknown concept_id")
 
     value = str(decision or "").strip().upper()
+    clean_note = str(note or "").strip()
+    active = set(state.get("active_override_ids", []))
+    is_active = (
+        item.get("triage_default") is True
+        or concept_id in active
+    )
+
     if value == "SAVE_IDEA":
         save_idea(
             item,
-            note=str(note or "").strip(),
+            note=clean_note,
             reviewer=str(state.get("reviewer") or DEFAULT_REVIEWER),
         )
-        return snapshot()
+        # Saving from the closed gate or from the non-active override bank is a
+        # bookmark-only action. Saving an active gate concept is a terminal
+        # fourth decision that parks it and lets the gate move on.
+        if state.get("status") == "COMPLETE" or not is_active:
+            return snapshot()
 
     if state.get("status") == "COMPLETE":
         raise ValueError("Concept Gate is already complete")
@@ -353,26 +368,27 @@ def apply_action(
     if value == "OVERRIDE":
         if item.get("triage_default") is True:
             raise ValueError("Concept is already in the default Human Gate shortlist")
-        active = set(state.get("active_override_ids", []))
         active.add(concept_id)
         state["active_override_ids"] = sorted(active)
         state["status"] = "AWAITING_HUMAN_DECISION"
         write_json(STATE_FILE, state)
         return snapshot()
-    if value not in {"ACCEPT", "REWORK", "REJECT"}:
-        raise ValueError("Decision must be ACCEPT, REWORK, or REJECT")
+    if value not in {"ACCEPT", "REWORK", "REJECT", "SAVE_IDEA"}:
+        raise ValueError(
+            "Decision must be ACCEPT, REWORK, REJECT, or SAVE_IDEA"
+        )
 
     required = list(item.get("required_accept_criteria", []))
-    normalized = normalize_criteria(criteria, required)
-    clean_note = str(note or "").strip()
-
-    if value == "ACCEPT" and not all(normalized.values()):
-        missing = [key for key, passed in normalized.items() if not passed]
-        raise ValueError(
-            "ACCEPT requires every criterion confirmed: " + ", ".join(missing)
-        )
-    if value == "REWORK" and not clean_note:
-        raise ValueError("REWORK requires a note explaining what must change")
+    if value == "ACCEPT":
+        normalized = {criterion: True for criterion in required}
+    elif value == "REWORK":
+        normalized = normalize_criteria(criteria, required)
+        if normalized and all(normalized.values()):
+            raise ValueError(
+                "REWORK must leave at least one criterion unchecked to mark what changes"
+            )
+    else:
+        normalized = {criterion: False for criterion in required}
 
     state.setdefault("decisions", {})[concept_id] = {
         "concept_id": concept_id,
