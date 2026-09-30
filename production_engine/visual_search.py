@@ -53,15 +53,18 @@ def build_search_request(board: dict[str, Any], board_path: Path) -> dict[str, A
             continue
         shots.append({
             "shot_id": card.get("shot_id"),
+            "creative_version": int(card.get("creative_version") or 1),
             "beat_id": card.get("beat_id"),
             "time_range": card.get("time_range"),
             "desired_visual": card.get("desired_visual"),
             "search_terms": card.get("search_terms", []),
             "cinematic_direction": card.get("cinematic_direction", {}),
+            "creative_instruction": card.get("creative_instruction"),
             "source_priority": SOURCE_PRIORITY,
             "max_candidates_per_source": 5,
             "creator_search_allowed": bool(strategy.get("creator_excerpt_allowed_only_after_human_rights_context_review")),
             "premium_generation_candidate": bool(card.get("premium_generation_candidate")),
+            "shot_fingerprint": __import__("hashlib").sha256(json.dumps(card, sort_keys=True).encode("utf-8")).hexdigest(),
         })
     return {
         "artifact": "visual_search_request",
