@@ -174,7 +174,7 @@ class ConceptReviewTests(unittest.TestCase):
         self.assertFalse(snapshot["complete"])
         accepted = snapshot["concepts"][0]
         self.assertEqual(accepted["decision"], "ACCEPT")
-        self.assertTrue(all(accepted["criteria_decisions"].values()))
+        self.assertEqual(accepted["criteria_decisions"], {})
 
     def test_rework_checkboxes_mean_keep_and_note_is_optional(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
