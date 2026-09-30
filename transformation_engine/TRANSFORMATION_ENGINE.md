@@ -186,6 +186,24 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
+### Degraded provider coverage
+
+Concept generation is artifact-driven rather than provider-count-driven.
+
+The system still prepares one request per transferable mechanism, but it no
+longer blocks the entire workflow solely because every provider-backed request
+did not succeed. If the deterministic merge produces a current,
+provenance-valid pool that meets `minimum_candidates_for_triage`, the pool may
+advance to Concept Triage while the batch report records partial mechanism
+coverage and the missing mechanism IDs.
+
+The default minimum is five candidates, matching one full
+`concepts_per_mechanism` response. Fewer than the minimum remains blocked and
+generation continues.
+
+Provider failures remain visible in the batch report; degraded readiness does
+not convert failed model calls into successful ones.
+
 ### Provenance
 
 Every prepared concept request records the SHA-256 of the current Experiment 02
