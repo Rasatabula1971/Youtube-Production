@@ -311,6 +311,14 @@ for observability. HTTP 429 and temporary 5xx capacity failures may move to the
 next configured free Gemini model; if the chain is exhausted, the pipeline
 preserves state and waits for a later retry. It never moves to paid inference.
 
+Gemini structured output has an additional compatibility fallback. The adapter
+first requests the full deterministic JSON schema. If Google rejects that
+structured-output schema with HTTP 400 INVALID_ARGUMENT, the same free Gemini
+model is retried in JSON-only mode (`application/json`) without the response
+schema. The stage's existing deterministic validator then enforces the complete
+contract before any artifact is accepted. JSON-only mode therefore relaxes only
+the provider-side schema transport, not the pipeline's validation rules.
+
 A successful repo-Gemini result is recorded as
 `provider_id: direct_gemini_backup` with
 `direct_backup_free_tier_only: true` and

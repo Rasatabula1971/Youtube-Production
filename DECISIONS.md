@@ -1249,3 +1249,23 @@ records provider-returned token usage when available and relies on the actual
 Google project/model limits and HTTP quota/capacity responses. The former
 1,000,000-token assumption is not treated as a daily ceiling.
 
+## D-069 — Gemini schema rejection falls back to deterministic JSON mode
+
+**Status:** Accepted
+
+The repo-local Gemini free-tier backup first requests structured JSON using the
+stage's response schema. Google documents that very large or deeply nested
+structured-output schemas may be rejected even when their individual JSON
+Schema keywords are supported.
+
+When Direct Gemini returns HTTP 400 while the full response schema is attached,
+the adapter retries the same free model once in JSON-only mode using
+`application/json` without a response schema. The generated JSON is still
+parsed and passed through the exact same stage-specific deterministic validator;
+no concept, research, script, format, or voice artifact is accepted merely
+because JSON mode returned syntactically valid JSON.
+
+Quota/capacity errors retain the D-068 routing behavior: 429/temporary 5xx may
+advance to the next configured free Gemini model, and exhaustion preserves
+partial state for a later retry. Paid inference remains prohibited.
+

@@ -605,6 +605,105 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertIn("HTTP_503", direct_attempts[0]["error_detail"])
         self.assertEqual(direct_attempts[1]["disposition"], "ACCEPTED")
 
+    def test_direct_gemini_retries_schema_400_in_json_only_mode(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [{"text": '{"summary":"ok"}'}]
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
+
+        fair_result = {
+            "status": "ESCALATION_REQUIRED",
+            "reason_code": "ALL_FREE_MODELS_UNAVAILABLE",
+            "paid_inference_executed": False,
+            "attempts": [],
+        }
+        payload = {
+            "prompt": "return JSON only",
+            "expected_schema": {
+                "type": "object",
+                "properties": {"summary": {"type": "string"}},
+                "required": ["summary"],
+            },
+        }
+
+        calls = {"count": 0}
+
+        def fake_urlopen(request, **_kwargs):
+            calls["count"] += 1
+            body = json.loads(request.data.decode("utf-8"))
+            generation = body["generationConfig"]
+            if calls["count"] == 1:
+                self.assertIn("responseJsonSchema", generation)
+                error_body = json.dumps(
+                    {
+                        "error": {
+                            "code": 400,
+                            "status": "INVALID_ARGUMENT",
+                            "message": "Request contains an invalid argument.",
+                        }
+                    }
+                ).encode("utf-8")
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    400,
+                    "Bad Request",
+                    None,
+                    io.BytesIO(error_body),
+                )
+            self.assertNotIn("responseJsonSchema", generation)
+            self.assertEqual(generation["responseMimeType"], "application/json")
+            return FakeResponse()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "DIRECT_GEMINI_API_KEY": "test-key",
+                    "DIRECT_GEMINI_MODELS": "gemini-test",
+                },
+                clear=False,
+            ),
+            patch(
+                "analysis_model_runner.urllib.request.urlopen",
+                side_effect=fake_urlopen,
+            ),
+        ):
+            result = call_direct_gemini_backup(
+                payload,
+                timeout_seconds=30,
+                fair_result=fair_result,
+            )
+
+        self.assertEqual(calls["count"], 2)
+        self.assertEqual(result["status"], "ACCEPTED")
+        self.assertEqual(result["direct_backup_response_mode"], "JSON_ONLY")
+        attempts = [
+            item
+            for item in result["attempts"]
+            if item["provider_id"] == "direct_gemini_backup"
+        ]
+        self.assertEqual(
+            [item["response_mode"] for item in attempts],
+            ["STRUCTURED_SCHEMA", "JSON_ONLY"],
+        )
+        self.assertIn("HTTP_400", attempts[0]["error_detail"])
+        self.assertEqual(attempts[1]["disposition"], "ACCEPTED")
+
     def test_direct_gemini_http_error_preserves_safe_google_message(self):
         fair_result = {
             "status": "ESCALATION_REQUIRED",
@@ -620,22 +719,27 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "required": ["summary"],
             },
         }
-        error_body = json.dumps(
-            {
-                "error": {
-                    "code": 400,
-                    "status": "INVALID_ARGUMENT",
-                    "message": "responseJsonSchema contains an unsupported field",
+        def http_error(*_args, **_kwargs):
+            error_body = json.dumps(
+                {
+                    "error": {
+                        "code": 400,
+                        "status": "INVALID_ARGUMENT",
+                        "message": "responseJsonSchema contains an unsupported field",
+                    }
                 }
-            }
-        ).encode("utf-8")
-        http_error = urllib.error.HTTPError(
-            url="https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent",
-            code=400,
-            msg="Bad Request",
-            hdrs=None,
-            fp=io.BytesIO(error_body),
-        )
+            ).encode("utf-8")
+            return urllib.error.HTTPError(
+                url="https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent",
+                code=400,
+                msg="Bad Request",
+                hdrs=None,
+                fp=io.BytesIO(error_body),
+            )
+
+        def raise_http_error(*args, **kwargs):
+            raise http_error(*args, **kwargs)
+
         with (
             patch.dict(
                 "os.environ",
@@ -647,7 +751,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             ),
             patch(
                 "analysis_model_runner.urllib.request.urlopen",
-                side_effect=http_error,
+                side_effect=raise_http_error,
             ),
         ):
             result = call_direct_gemini_backup(
