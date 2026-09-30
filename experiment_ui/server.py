@@ -226,6 +226,7 @@ from narration_cost_review import (
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
 PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
+PRODUCTION_ENGAGEMENT_SUMMARY = PRODUCTION_OUTPUT / "pre_render_engagement_summary.json"
 PRODUCTION_NARRATION_RENDER_RESULTS_DIR = PRODUCTION_OUTPUT / "narration_render_results"
 PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
@@ -262,6 +263,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "voice_prepare",
     "voice_generate",
     "voice_gate_prepare",
+    "pre_render_engagement",
     "narration_prepare",
     "narration_spend_gate_prepare",
     "narration_audio_qc",
@@ -923,6 +925,12 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Prepares the mandatory Human Performance Gate before any paid "
             "narration render can be introduced."
         ),
+    },
+    "pre_render_engagement": {
+        "label": "Validate Pre-Render Engagement",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/pre_render_engagement.py", "--mode", "batch"],
+        "description": "Deterministically checks hook, problem/tension, payoff, exposition length and delivery variation before narration spend.",
     },
     "narration_prepare": {
         "label": "Prepare Narration Render + Cost Boundary",
@@ -3152,6 +3160,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         or "WAITING_FOR_VOICE_PERFORMANCE_SPECS"
     )
     voice_visual_ready = bool(voice["visual_ready"])
+    engagement_payload = safe_load_json(PRODUCTION_ENGAGEMENT_SUMMARY)
+    engagement = engagement_payload if isinstance(engagement_payload, dict) else {
+        "status": "WAITING_FOR_APPROVED_PERFORMANCE", "processed": 0, "passed": 0, "blocked": 0, "items": []
+    }
+    engagement_passed = bool(
+        engagement.get("status") == "PASS"
+        and int(engagement.get("processed") or 0) > 0
+    )
     narration = narration_artifact_state()
     narration_render = narration["render"]
     narration_spend_gate = narration["spend_gate"]
@@ -3894,12 +3910,20 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
-        "narration_prepare": {
-            "enabled": voice_visual_ready and not narration_prepared,
+        "pre_render_engagement": {
+            "enabled": voice_visual_ready and not engagement_passed and engagement.get("status") != "BLOCKED",
             "reason": (
-                "Accepted performance plans are ready for narration render and cost preparation."
-                if voice_visual_ready and not narration_prepared
-                else ("Narration render preparation already exists." if narration_prepared else "Complete and accept the Human Performance Gate first.")
+                "Human-approved performance plans are ready for deterministic engagement validation."
+                if voice_visual_ready and not engagement_passed and engagement.get("status") != "BLOCKED"
+                else ("Pre-render engagement validation passed." if engagement_passed else ("Pre-render engagement validation blocked narration; revise the script/performance plan." if engagement.get("status") == "BLOCKED" else "Complete and accept the Human Performance Gate first."))
+            ),
+        },
+        "narration_prepare": {
+            "enabled": engagement_passed and not narration_prepared,
+            "reason": (
+                "Engagement validation passed; prepare narration render and cost boundaries."
+                if engagement_passed and not narration_prepared
+                else ("Narration render preparation already exists." if narration_prepared else "Pre-render engagement validation must pass first.")
             ),
         },
         "narration_spend_gate_prepare": {
@@ -4433,6 +4457,7 @@ def status_payload() -> dict[str, Any]:
         "format_gate": fmt["format_gate"],
         "voice_performance": voice,
         "performance_gate": voice["performance_gate"],
+        "pre_render_engagement": engagement,
         "narration": narration,
         "narration_spend_gate": narration["spend_gate"],
         "production_visual": production_visual,
