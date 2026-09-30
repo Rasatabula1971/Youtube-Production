@@ -1,123 +1,64 @@
-"""Build a zero/low-cost visual rough-cut timeline before premium generation.
+"""Build storyboard-aware rough-cut manifests from reviewed visual candidates.
 
-Consumes narration timing maps and visual acquisition manifests. It never calls
-a paid visual provider. Selected verified free/owned assets are used when
-available; otherwise the timeline carries explicit placeholders for human review.
+Only owned/licence-verified candidates or creator/editorial excerpts explicitly
+approved at the human rights/context gate may enter the rough cut. Paid visual
+generation remains locked.
 """
-
 from __future__ import annotations
-
-import argparse
-import json
+import argparse,json
 from pathlib import Path
 from typing import Any
-
 from pipeline_integrity import atomic_write_json
-from visual_acquisition import load_json, safe_slug, sha256_file
+from visual_acquisition import load_json,safe_slug,sha256_file
 
-HERE = Path(__file__).resolve().parent
-OUTPUT_DIR = HERE / "output"
-TIMING_DIR = OUTPUT_DIR / "narration_timing_maps"
-VISUAL_DIR = OUTPUT_DIR / "visual_manifests"
-ROUGH_DIR = OUTPUT_DIR / "visual_rough_cuts"
-SUMMARY_FILE = OUTPUT_DIR / "visual_rough_cut_summary.json"
+HERE=Path(__file__).resolve().parent; OUTPUT=HERE/"output"
+STORYBOARD_DIR=OUTPUT/"storyboards"; RESULT_DIR=OUTPUT/"visual_search_results"
+REVIEW_DIR=OUTPUT/"visual_candidate_reviews"; RIGHTS_DIR=OUTPUT/"visual_rights_reviews"
+ROUGH_DIR=OUTPUT/"visual_rough_cuts"; SUMMARY=OUTPUT/"visual_rough_cut_summary.json"
 
+def _key(cid:str,fmt:str)->str:return f"{safe_slug(cid)}.{safe_slug(fmt)}"
 
-def _key(concept_id: str, fmt: str) -> str:
-    return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
+def build(board:dict[str,Any],review:dict[str,Any],rights:dict[str,Any]|None,board_path:Path,review_path:Path)->dict[str,Any]:
+    if board.get("status")!="READY_FOR_VISUAL_SEARCH": raise ValueError("Storyboard is not current for rough cut")
+    if review.get("status")!="READY_FOR_ROUGH_CUT": raise ValueError("Candidate review is incomplete")
+    if (board.get("concept_id"),board.get("format"))!=(review.get("concept_id"),review.get("format")): raise ValueError("Storyboard/review identity mismatch")
+    decisions=review.get("decisions",{}); rights_decisions=(rights or {}).get("decisions",{})
+    scenes=[]
+    for i,card in enumerate(board.get("cards",[])):
+        sid=str(card.get("shot_id") or ""); d=decisions.get(sid,{})
+        assignment={"status":"PLACEHOLDER","candidate_id":None,"source_url":None,"reason":"UNRESOLVED_VISUAL_GAP"}
+        if d.get("status")=="SELECTED":
+            assignment={"status":"APPROVED_EXISTING_ASSET","candidate_id":d.get("candidate_id"),"source_url":d.get("candidate_source_url"),"reason":"VERIFIED_REUSE_RIGHTS"}
+        elif d.get("status")=="SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
+            rd=rights_decisions.get(sid,{})
+            if rd.get("approved_for_rough_cut") is True:
+                assignment={"status":"APPROVED_EDITORIAL_EXCERPT","candidate_id":d.get("candidate_id"),"source_url":d.get("candidate_source_url"),"reason":"HUMAN_RIGHTS_CONTEXT_APPROVED"}
+            else:
+                assignment["reason"]="RIGHTS_CONTEXT_APPROVAL_REQUIRED_OR_REJECTED"
+        scenes.append({"scene_index":i,"shot_id":sid,"beat_id":card.get("beat_id"),"time_range":card.get("time_range"),
+            "story_purpose":card.get("story_purpose"),"desired_visual":card.get("desired_visual"),
+            "cinematic_direction":card.get("cinematic_direction",{}),"visual_value_score":card.get("visual_value_score",{}),
+            "premium_generation_candidate":card.get("premium_generation_candidate",False),"visual_assignment":assignment})
+    gaps=[x for x in scenes if x["visual_assignment"]["status"]=="PLACEHOLDER"]
+    return {"artifact":"visual_rough_cut_manifest","concept_id":board.get("concept_id"),"format":board.get("format"),
+        "status":"READY_FOR_HUMAN_ROUGH_CUT_GATE","premium_generation_allowed":False,"scenes":scenes,
+        "summary":{"scenes":len(scenes),"placeholders":len(gaps),"existing_assets":len(scenes)-len(gaps)},
+        "gate_policy":{"human_review_required_before_premium_visual_generation":True,"paid_visual_calls_allowed":False},
+        "provenance":{"storyboard":str(board_path.resolve()),"storyboard_sha256":sha256_file(board_path),
+            "candidate_review":str(review_path.resolve()),"candidate_review_sha256":sha256_file(review_path)}}
 
-
-def build_rough_cut(timing: dict[str, Any], visual: dict[str, Any], timing_path: Path, visual_path: Path) -> dict[str, Any]:
-    if timing.get("status") != "READY_FOR_ROUGH_CUT":
-        raise ValueError("Narration timing map is not ready for rough cut")
-    if timing.get("concept_id") != visual.get("concept_id") or timing.get("format") != visual.get("format"):
-        raise ValueError("Timing map and visual manifest identity mismatch")
-
-    requirements = {str(item.get("beat_id")): item for item in visual.get("requirements", []) if isinstance(item, dict)}
-    scenes = []
-    for index, segment in enumerate(timing.get("segments", [])):
-        segment_id = str(segment.get("segment_id") or "")
-        requirement = requirements.get(segment_id)
-        if requirement is None:
-            # Format/voice beat IDs should normally align. Preserve a visible
-            # placeholder rather than inventing or purchasing a visual.
-            assignment = {"status": "PLACEHOLDER", "reason": "NO_MATCHING_VISUAL_REQUIREMENT", "candidate_id": None}
-            purpose = None
-            treatment = None
-        else:
-            routing = requirement.get("routing", {})
-            selected = routing.get("selected_candidate_id") if isinstance(routing, dict) else None
-            assignment = {
-                "status": "FREE_OR_VERIFIED_ASSET" if selected else "PLACEHOLDER",
-                "reason": routing.get("reason") if isinstance(routing, dict) else "ACQUISITION_REQUIRED",
-                "candidate_id": selected,
-            }
-            purpose = requirement.get("narrative_purpose")
-            treatment = requirement.get("visual_treatment")
-        scenes.append({
-            "scene_index": index,
-            "segment_id": segment_id,
-            "start_seconds": segment.get("audio_start_seconds"),
-            "end_seconds": segment.get("audio_end_seconds"),
-            "timeline_end_seconds": segment.get("timeline_end_seconds"),
-            "narrative_purpose": purpose,
-            "visual_treatment": treatment,
-            "visual_assignment": assignment,
-        })
-
-    placeholders = sum(scene["visual_assignment"]["status"] == "PLACEHOLDER" for scene in scenes)
-    return {
-        "artifact": "visual_rough_cut_manifest",
-        "concept_id": timing.get("concept_id"),
-        "format": timing.get("format"),
-        "status": "READY_FOR_HUMAN_ROUGH_CUT_GATE",
-        "premium_generation_allowed": False,
-        "timeline_duration_seconds": timing.get("total_duration_seconds"),
-        "scenes": scenes,
-        "summary": {"scenes": len(scenes), "placeholders": placeholders},
-        "gate_policy": {
-            "human_review_required_before_premium_visual_generation": True,
-            "rough_cut_may_contain_placeholders": True,
-            "paid_visual_calls_allowed": False,
-        },
-        "provenance": {
-            "narration_timing_map": str(timing_path.resolve()),
-            "narration_timing_map_sha256": sha256_file(timing_path),
-            "visual_manifest": str(visual_path.resolve()),
-            "visual_manifest_sha256": sha256_file(visual_path),
-        },
-    }
-
-
-def prepare() -> dict[str, Any]:
-    ROUGH_DIR.mkdir(parents=True, exist_ok=True)
-    items = []
-    for timing_path in sorted(TIMING_DIR.glob("*.narration_timing_map.json")) if TIMING_DIR.exists() else []:
-        timing = load_json(timing_path)
-        key = _key(str(timing.get("concept_id") or ""), str(timing.get("format") or ""))
-        visual_path = VISUAL_DIR / f"{key}.visual_manifest.json"
-        if not visual_path.exists():
-            continue
-        rough = build_rough_cut(timing, load_json(visual_path), timing_path, visual_path)
-        destination = ROUGH_DIR / f"{key}.visual_rough_cut.json"
-        atomic_write_json(destination, rough)
-        items.append({"concept_id": rough["concept_id"], "format": rough["format"], "rough_cut": str(destination), "placeholders": rough["summary"]["placeholders"]})
-    result = {
-        "status": "READY_FOR_HUMAN_ROUGH_CUT_GATE" if items else "WAITING_FOR_AUDIO_AND_VISUAL_MANIFESTS",
-        "prepared": len(items),
-        "items": items,
-        "paid_visual_calls_allowed": False,
-    }
-    atomic_write_json(SUMMARY_FILE, result)
-    return result
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Prepare visual rough-cut manifests")
-    parser.add_argument("--mode", choices=("prepare",), required=True)
-    parser.parse_args()
-    print(json.dumps(prepare(), indent=2, ensure_ascii=False))
-
-
-if __name__ == "__main__":
-    main()
+def prepare()->dict[str,Any]:
+    ROUGH_DIR.mkdir(parents=True,exist_ok=True); items=[]
+    for board_path in sorted(STORYBOARD_DIR.glob("*.storyboard.json")) if STORYBOARD_DIR.exists() else []:
+        board=load_json(board_path); key=_key(str(board.get("concept_id") or ""),str(board.get("format") or ""))
+        review_path=REVIEW_DIR/f"{key}.visual_candidate_review.json"
+        if not review_path.exists(): continue
+        review=load_json(review_path); rights_path=RIGHTS_DIR/f"{key}.visual_rights_review.json"
+        rights=load_json(rights_path) if rights_path.exists() else None
+        rough=build(board,review,rights,board_path,review_path); dest=ROUGH_DIR/f"{key}.visual_rough_cut.json"
+        atomic_write_json(dest,rough); items.append({"concept_id":rough["concept_id"],"format":rough["format"],"rough_cut":str(dest),**rough["summary"]})
+    out={"status":"READY_FOR_HUMAN_ROUGH_CUT_GATE" if items else "WAITING_FOR_REVIEWED_VISUALS","prepared":len(items),"items":items,"paid_visual_calls_allowed":False}
+    atomic_write_json(SUMMARY,out); return out
+def main()->None:
+    argparse.ArgumentParser().parse_args(); print(json.dumps(prepare(),indent=2,ensure_ascii=False))
+if __name__=="__main__":main()
