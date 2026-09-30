@@ -234,6 +234,8 @@ PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
 PRODUCTION_ENGAGEMENT_SUMMARY = PRODUCTION_OUTPUT / "pre_render_engagement_summary.json"
 PRODUCTION_PREVIEW_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_summary.json"
 PRODUCTION_PREVIEW_RENDER_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_render_summary.json"
+PRODUCTION_SOUND_REFERENCE_SUMMARY = PRODUCTION_OUTPUT / "prototype_sound_summary.json"
+PRODUCTION_SOUND_BRIEF_SUMMARY = PRODUCTION_OUTPUT / "sound_design_brief_summary.json"
 PRODUCTION_PREVIEW_AUDIO_DIR = PRODUCTION_OUTPUT / "narration_preview_audio"
 PRODUCTION_NARRATION_RENDER_RESULTS_DIR = PRODUCTION_OUTPUT / "narration_render_results"
 PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
@@ -273,7 +275,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "voice_gate_prepare",
     "pre_render_engagement",
     "narration_preview_prepare",
+    "prototype_sound_prepare",
     "narration_preview_render",
+    "sound_design_brief_prepare",
     "narration_prepare",
     "narration_spend_gate_prepare",
     "narration_audio_qc",
@@ -948,11 +952,23 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "command": [sys.executable, "production_engine/narration_preview.py", "--mode", "prepare"],
         "description": "Builds a zero-cost narration prototype with delivery plus music/SFX suggestions; no paid provider is allowed.",
     },
+    "prototype_sound_prepare": {
+        "label": "Prepare Reference Music + SFX",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/prototype_sound.py", "--mode", "prepare"],
+        "description": "Prepares local AudioGen/MusicGen reference prompts only. Generated media is quarantined and forbidden from final export.",
+    },
     "narration_preview_render": {
         "label": "Render Free Narration Prototype",
         "stage": "09",
         "command": [sys.executable, "production_engine/narration_preview_render.py", "--mode", "batch"],
         "description": "Renders the listenable prototype locally with Kokoro. Missing local TTS stops fail-closed; there is no paid fallback.",
+    },
+    "sound_design_brief_prepare": {
+        "label": "Build Approved Sound Design Brief",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/sound_design_brief.py", "--mode", "prepare"],
+        "description": "After the free listen gate, transfers descriptive sound intent only; no prototype AudioGen/MusicGen media crosses into final production.",
     },
     "narration_prepare": {
         "label": "Prepare Narration Render + Cost Boundary",
@@ -3201,7 +3217,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     preview_gate = narration_preview_gate_snapshot()
     preview_prepared = preview_prepare.get("status") == "READY_FOR_FREE_PREVIEW_RENDER"
     preview_rendered = preview_render.get("status") == "READY_FOR_LISTEN_GATE"
+    sound_reference_payload = safe_load_json(PRODUCTION_SOUND_REFERENCE_SUMMARY)
+    sound_reference = sound_reference_payload if isinstance(sound_reference_payload, dict) else {}
+    sound_reference_prepared = sound_reference.get("status") == "READY_FOR_REFERENCE_SOUND_GENERATION"
     preview_approved = bool(preview_gate.get("complete"))
+    sound_brief_payload = safe_load_json(PRODUCTION_SOUND_BRIEF_SUMMARY)
+    sound_brief = sound_brief_payload if isinstance(sound_brief_payload, dict) else {}
+    sound_brief_ready = sound_brief.get("status") == "READY_FOR_FINAL_PROVIDER_HANDOFF"
     narration = narration_artifact_state()
     narration_render = narration["render"]
     narration_spend_gate = narration["spend_gate"]
@@ -3960,6 +3982,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 else ("Free prototype manifest is ready." if preview_prepared else "Pre-render engagement validation must pass first.")
             ),
         },
+        "prototype_sound_prepare": {
+            "enabled": preview_prepared and not sound_reference_prepared,
+            "reason": (
+                "Prepare AudioGen/MusicGen research-reference prompts for the rough audio experience."
+                if preview_prepared and not sound_reference_prepared
+                else ("Reference sound plan is prepared." if sound_reference_prepared else "Prepare the free narration prototype first.")
+            ),
+        },
         "narration_preview_render": {
             "enabled": preview_prepared and not preview_rendered,
             "reason": (
@@ -3968,11 +3998,19 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 else ("Free prototype audio is ready for human listening." if preview_rendered else "Prepare the free prototype first.")
             ),
         },
-        "narration_prepare": {
-            "enabled": preview_approved and not narration_prepared,
+        "sound_design_brief_prepare": {
+            "enabled": preview_approved and not sound_brief_ready,
             "reason": (
-                "The free audio prototype was heard and approved; final provider quote preparation may now begin."
-                if preview_approved and not narration_prepared
+                "Free prototype approved; convert the accepted sound intent into a descriptive final-provider brief."
+                if preview_approved and not sound_brief_ready
+                else ("Sound Design Brief is ready." if sound_brief_ready else "Approve the free audio prototype first.")
+            ),
+        },
+        "narration_prepare": {
+            "enabled": preview_approved and sound_brief_ready and not narration_prepared,
+            "reason": (
+                "The free prototype and Sound Design Brief are approved; final provider quote preparation may now begin."
+                if preview_approved and sound_brief_ready and not narration_prepared
                 else ("Final narration preparation already exists." if narration_prepared else "Listen to and approve the free narration prototype before any paid-provider quote.")
             ),
         },
