@@ -105,6 +105,8 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                     "beat_id",
                                     "purpose",
                                     "treatment",
+                                    "drama_level",
+                                    "tempo_level",
                                     "claim_ids",
                                     "source_section_ids",
                                 ],
@@ -112,6 +114,16 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                     "beat_id": {"type": "string", "minLength": 1},
                                     "purpose": {"type": "string", "minLength": 1},
                                     "treatment": {"type": "string", "minLength": 1},
+                                    "drama_level": {
+                                        "type": "integer",
+                                        "minimum": 4,
+                                        "maximum": 10,
+                                    },
+                                    "tempo_level": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10,
+                                    },
                                     "claim_ids": {
                                         "type": "array",
                                         "items": {
@@ -155,8 +167,10 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "7. Never introduce facts outside accepted_claims.\n"
         "8. Trace every beat only to script sections from its MATCHING format branch.\n"
         "9. Respect each branch's duration and beat-count constraints.\n"
-        "10. Do not copy source-video wording, footage, story beats or execution.\n"
-        "11. Do not mention claim IDs in on-screen or spoken text.\n\n"
+        "10. Preserve the Human Framing/Story drama pulse in production: every beat needs drama_level 4-10 and tempo_level 1-10; both must vary across a branch. Drama and tempo are independent.\n"
+        "11. Reach the accepted concept drama target when truthfully supported, but never manufacture spectacle or violate the accepted drama constraint.\n"
+        "12. Do not copy source-video wording, footage, story beats or execution.\n"
+        "13. Do not mention claim IDs in on-screen or spoken text.\n\n"
         "FORMAT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
