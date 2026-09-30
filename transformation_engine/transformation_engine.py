@@ -90,11 +90,14 @@ def load_config() -> dict[str, Any]:
         "allowed_format_intents",
         "require_ready_handoff",
         "minimum_research_questions",
-        "minimum_candidates_for_triage",
     }
     missing = sorted(required - set(config))
     if missing:
         raise SystemExit("Transformation config is missing: " + ", ".join(missing))
+    config.setdefault(
+        "minimum_candidates_for_triage",
+        int(config["concepts_per_mechanism"]),
+    )
     return config
 
 
@@ -757,7 +760,12 @@ def run_apply() -> dict[str, Any]:
         ):
             current_response_hashes[mechanism_id] = sha256_file(response_path)
 
-    minimum_candidates = int(config["minimum_candidates_for_triage"])
+    minimum_candidates = int(
+        config.get(
+            "minimum_candidates_for_triage",
+            config.get("concepts_per_mechanism", 5),
+        )
+    )
     ready_for_triage = (
         len(accepted) >= minimum_candidates
         and bool(current_response_hashes)
