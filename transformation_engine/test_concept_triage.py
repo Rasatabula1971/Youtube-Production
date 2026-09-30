@@ -190,6 +190,10 @@ class ConceptTriageTests(unittest.TestCase):
                                 "researchability",
                                 "originality",
                                 "overclaim_safety",
+                                "human_pull",
+                                "visual_hook",
+                                "payoff_strength",
+                                "drama_use",
                             )
                         },
                     }
