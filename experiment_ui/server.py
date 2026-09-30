@@ -234,6 +234,7 @@ PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
 PRODUCTION_ENGAGEMENT_SUMMARY = PRODUCTION_OUTPUT / "pre_render_engagement_summary.json"
 PRODUCTION_PREVIEW_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_summary.json"
 PRODUCTION_PREVIEW_RENDER_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_render_summary.json"
+PRODUCTION_PREVIEW_AUDIO_DIR = PRODUCTION_OUTPUT / "narration_preview_audio"
 PRODUCTION_NARRATION_RENDER_RESULTS_DIR = PRODUCTION_OUTPUT / "narration_render_results"
 PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
@@ -4608,6 +4609,28 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/narration-preview-gate":
             self._send_json(narration_preview_gate_snapshot())
+            return
+        if route == "/api/narration-preview-audio":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0])
+            fmt = str((query.get("format") or [""])[0])
+            match = next(
+                (
+                    item for item in narration_preview_gate_snapshot().get("items", [])
+                    if str(item.get("concept_id") or "") == concept_id
+                    and str(item.get("format") or "") == fmt
+                    and item.get("audio_ready")
+                ),
+                None,
+            )
+            if not match or not match.get("audio"):
+                self._send_json({"error": "Free preview audio is not ready."}, 404)
+                return
+            audio_path = Path(str(match["audio"])).resolve()
+            if PRODUCTION_PREVIEW_AUDIO_DIR.resolve() not in audio_path.parents:
+                self._send_json({"error": "Invalid preview audio path."}, 403)
+                return
+            self._send_static(audio_path, "audio/wav")
             return
         if route == "/api/narration-spend-gate":
             self._send_json(narration_spend_gate_snapshot())
