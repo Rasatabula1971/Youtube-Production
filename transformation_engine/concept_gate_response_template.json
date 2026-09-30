@@ -4,21 +4,8 @@
     {
       "concept_id": "CONCEPT_ID",
       "decision": "ACCEPT",
-      "criteria": {
-        "originality_clear": true,
-        "audience_promise_clear": true,
-        "viewer_problem_specific": true,
-        "viewer_moment_clear": true,
-        "viewer_need_evidence_honest": true,
-        "desired_outcome_specific": true,
-        "content_gap_honest": true,
-        "channel_fit_confirmed": true,
-        "title_clarity_passes": true,
-        "source_independent": true,
-        "feasible": true,
-        "researchable": true
-      },
-      "note": ""
+      "criteria": {},
+      "note": "Optional. For REWORK, checked criteria mean keep; unchecked criteria mean change."
     }
   ],
   "overall_note": ""
