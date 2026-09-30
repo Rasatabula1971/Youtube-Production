@@ -47,6 +47,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "voice_generate",
     "voice_gate_prepare",
     "pre_render_engagement",
+    "narration_preview_prepare",
+    "narration_preview_render",
     "narration_prepare",
     "narration_spend_gate_prepare",
     "narration_audio_qc",
