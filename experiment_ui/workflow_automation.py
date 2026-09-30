@@ -106,8 +106,22 @@ def run_until_human_gate() -> dict[str, Any]:
         if next_id == action_id:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
+                if code == 2:
+                    return {
+                        "status": "PARTIAL",
+                        "failed_action": action_id,
+                        "return_code": code,
+                        "completed_actions": completed_actions,
+                        "before_reason": before_reason,
+                        "after_reason": after_reason,
+                        "message": (
+                            "Current artifacts were preserved, but the active "
+                            "provider/model did not produce new validated output. "
+                            "Retry Continue Automatically later."
+                        ),
+                    }
                 return {
-                    "status": "PARTIAL" if code == 2 else "NO_PROGRESS",
+                    "status": "NO_PROGRESS",
                     "failed_action": action_id,
                     "return_code": code,
                     "completed_actions": completed_actions,

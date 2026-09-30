@@ -160,6 +160,7 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["status"], "PARTIAL")
         self.assertEqual(result["return_code"], 2)
         self.assertEqual(result["failed_action"], "concept_generate")
+        self.assertIn("Retry Continue Automatically later", result["message"])
 
     def test_stops_if_successful_command_makes_no_progress(self):
         readiness = {

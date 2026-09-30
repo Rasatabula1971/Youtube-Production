@@ -19,7 +19,6 @@ if str(_INTEGRITY_ROOT) not in sys.path:
 from typing import Any
 
 from pipeline_integrity import (
-    SUCCESS_STATUSES,
     atomic_write_json,
     atomic_write_text,
     batch_status,
@@ -476,18 +475,17 @@ def run_batch(
         expected_count=len(paths),
         processed_count=len(results),
     )
-    successful_results = sum(
-        str(item.get("status") or "") in SUCCESS_STATUSES for item in results
+    newly_validated_results = sum(
+        str(item.get("status") or "") == "VALIDATED" for item in results
     )
     if (
         provider_batch_status == "PARTIAL"
         and results
-        and successful_results > 0
+        and newly_validated_results > 0
     ):
-        # A mixed batch can still make durable progress: validated/skipped
-        # responses are cached while unavailable providers are retried on the
-        # next bounded pass. The automatic workflow compares readiness before
-        # and after the pass to detect a real stall.
+        # Only newly validated responses count as progress. Cached/skipped
+        # responses preserve prior work but must not make a provider stall look
+        # like fresh progress.
         provider_batch_status = "BATCH_PROGRESS"
 
     merge_status = str(merge_summary.get("status") or "")
