@@ -112,10 +112,15 @@ class FormatEngineTests(unittest.TestCase):
             return build_format_request(script, path, self.config())
 
     def beat(self, beat_id, purpose, treatment, section_id, claim_ids=("clm001",)):
+        key = purpose.lower()
+        drama = 7 if "hook" in key or "cold" in key else 8 if "reveal" in key else 6 if "payoff" in key or "close" in key else 5
+        tempo = 7 if "hook" in key or "cold" in key else 6 if "reveal" in key else 4 if "payoff" in key or "close" in key else 5
         return {
             "beat_id": beat_id,
             "purpose": purpose,
             "treatment": treatment,
+            "drama_level": drama,
+            "tempo_level": tempo,
             "claim_ids": list(claim_ids),
             "source_section_ids": [section_id],
         }
