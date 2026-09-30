@@ -167,6 +167,17 @@ const previewScript = document.getElementById("previewScript");
 const previewPerformance = document.getElementById("previewPerformance");
 const previewSound = document.getElementById("previewSound");
 const previewApprove = document.getElementById("previewApprove");
+const narrationSegmentSelect = document.getElementById("narrationSegmentSelect");
+const narrationLockedWords = document.getElementById("narrationLockedWords");
+const narrationCreativeInstruction = document.getElementById("narrationCreativeInstruction");
+const narrationEmotion = document.getElementById("narrationEmotion");
+const narrationIntensity = document.getElementById("narrationIntensity");
+const narrationSpeed = document.getElementById("narrationSpeed");
+const narrationPauseBefore = document.getElementById("narrationPauseBefore");
+const narrationPauseAfter = document.getElementById("narrationPauseAfter");
+const narrationEmphasis = document.getElementById("narrationEmphasis");
+const narrationSaveRevision = document.getElementById("narrationSaveRevision");
+
 
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
@@ -209,6 +220,7 @@ let latestPerformanceSnapshot = null;
 let performanceCursor = 0;
 let performanceEditing = false;
 let latestPreviewSnapshot = null;
+let latestNarrationPerformanceSnapshot = null;
 let latestVisualCandidateSnapshot = null;
 let visualShotCursor = 0;
 let latestStoryboardSnapshot = null;
@@ -2438,6 +2450,41 @@ function currentPreviewItem() {
   return items.find(function (item) { return !item.approved_for_paid_quote; }) || items[0] || null;
 }
 
+function narrationCurrentItem() {
+  const items=(latestNarrationPerformanceSnapshot&&latestNarrationPerformanceSnapshot.items)||[];
+  if(!items.length)return null;
+  const previewItems=(latestPreviewSnapshot&&latestPreviewSnapshot.items)||[];
+  const active=previewItems[0]||{};
+  return items.find(function(x){return x.concept_id===active.concept_id&&x.format===active.format;})||items[0];
+}
+function fillNarrationSegmentEditor() {
+  const item=narrationCurrentItem(); if(!item)return;
+  const segments=item.segments||[];
+  const currentId=narrationSegmentSelect.value||String((segments[0]||{}).segment_id||"");
+  narrationSegmentSelect.innerHTML=segments.map(function(s){return '<option value="'+escapeHtml(s.segment_id)+'">'+escapeHtml(s.segment_id)+' · v'+escapeHtml(s.performance_version||1)+'</option>';}).join("");
+  narrationSegmentSelect.value=segments.some(function(s){return String(s.segment_id)===currentId;})?currentId:String((segments[0]||{}).segment_id||"");
+  const s=segments.find(function(x){return String(x.segment_id)===narrationSegmentSelect.value;});if(!s)return;
+  const d=s.delivery||{};
+  narrationLockedWords.innerHTML='<h4>LOCKED APPROVED WORDS</h4><p>'+escapeHtml(s.immutable_narration||"")+'</p>';
+  narrationCreativeInstruction.value=s.creative_instruction||"";
+  narrationEmotion.value=d.emotion||"";narrationIntensity.value=d.intensity||"";
+  narrationSpeed.value=d.speed||1;narrationPauseBefore.value=d.pause_before_ms||0;narrationPauseAfter.value=d.pause_after_ms||0;
+  narrationEmphasis.value=(d.emphasis_terms||[]).join(", ");
+  narrationSaveRevision.dataset.manifestFile=item.manifest_file||"";narrationSaveRevision.dataset.segmentId=s.segment_id||"";
+}
+async function saveNarrationSegmentRevision(){
+ try{
+  await api("/api/narration-performance-review",{method:"POST",body:JSON.stringify({
+   manifest_file:narrationSaveRevision.dataset.manifestFile,segment_id:narrationSaveRevision.dataset.segmentId,
+   instruction:narrationCreativeInstruction.value,delivery_changes:{emotion:narrationEmotion.value,
+    intensity:Number(narrationIntensity.value),speed:Number(narrationSpeed.value),pause_before_ms:Number(narrationPauseBefore.value),
+    pause_after_ms:Number(narrationPauseAfter.value),emphasis_terms:narrationEmphasis.value.split(",").map(function(x){return x.trim();}).filter(Boolean)}
+  })});
+  latestNarrationPerformanceSnapshot=await api("/api/narration-performance-review");fillNarrationSegmentEditor();
+  showToast("Narration segment revised. Re-render the free preview before approval.",false);
+ }catch(error){showToast(error.message,true);}
+}
+
 function renderPreviewReview(snapshot) {
   latestPreviewSnapshot = snapshot || {};
   const items = (snapshot && snapshot.items) || [];
@@ -2653,6 +2700,7 @@ function renderAnalysis(data) {
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
+  api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
   Promise.all([api("/api/storyboard-review"), api("/api/visual-candidate-review")]).then(function (values) { latestStoryboardSnapshot=values[0]; renderVisualCandidateReview(values[1]); }).catch(function () {});
 
   let activeIndex = 0;
@@ -3164,6 +3212,8 @@ visualShotNext.addEventListener("click", function () { visualShotCursor = Math.m
 visualRejectAll.addEventListener("click", function () { submitVisualCandidateDecision("REJECT_ALL"); });
 visualNeedsBetter.addEventListener("click", function () { submitVisualCandidateDecision("NEEDS_BETTER_VISUAL"); });
 
+narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
+narrationSaveRevision.addEventListener("click", saveNarrationSegmentRevision);
 previewApprove.addEventListener("click", function () {
   submitPreviewDecision("APPROVE_FINAL");
 });
