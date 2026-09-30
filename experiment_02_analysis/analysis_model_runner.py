@@ -57,7 +57,17 @@ DEFAULT_FAIR_REPO = PROJECT_ROOT.parent / "FAIR Free AI Router"
 PROJECT_ENV_FILE = PROJECT_ROOT / ".env"
 DIRECT_GEMINI_KEY_ENV = "DIRECT_GEMINI_API_KEY"
 DIRECT_GEMINI_MODEL_ENV = "DIRECT_GEMINI_MODEL"
-DEFAULT_DIRECT_GEMINI_MODEL = "gemini-3.5-flash"
+DIRECT_GEMINI_MODELS_ENV = "DIRECT_GEMINI_MODELS"
+DEFAULT_DIRECT_GEMINI_MODELS = (
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+)
+DIRECT_GEMINI_FAIR_FALLBACK_REASONS = {
+    "NO_ELIGIBLE_FREE_MODELS",
+    "ALL_FREE_MODELS_UNAVAILABLE",
+    "QUALITY_VERIFICATION_UNAVAILABLE",
+    "INDEPENDENT_VERIFIER_UNAVAILABLE",
+}
 
 
 def load_runner_config() -> dict[str, Any]:
@@ -426,6 +436,9 @@ def safe_attempts(bridge_result: dict[str, Any]) -> list[dict[str, Any]]:
         "error_type",
         "error_detail",
         "role",
+        "prompt_token_count",
+        "candidate_token_count",
+        "total_token_count",
     }
     return [
         {key: value for key, value in attempt.items() if key in allowed_keys}
@@ -485,32 +498,56 @@ def bridge_payload(
     return payload
 
 
-def direct_gemini_settings() -> dict[str, str]:
+def direct_gemini_settings() -> dict[str, Any]:
     project_env = read_env_file(PROJECT_ENV_FILE)
-    return {
-        "api_key": os.getenv(
-            DIRECT_GEMINI_KEY_ENV,
-            project_env.get(DIRECT_GEMINI_KEY_ENV, ""),
-        ).strip(),
-        "model": os.getenv(
+    api_key = os.getenv(
+        DIRECT_GEMINI_KEY_ENV,
+        project_env.get(DIRECT_GEMINI_KEY_ENV, ""),
+    ).strip()
+
+    raw_models = os.getenv(
+        DIRECT_GEMINI_MODELS_ENV,
+        project_env.get(DIRECT_GEMINI_MODELS_ENV, ""),
+    ).strip()
+    if raw_models:
+        candidates = [item.strip() for item in raw_models.split(",") if item.strip()]
+    else:
+        legacy_model = os.getenv(
             DIRECT_GEMINI_MODEL_ENV,
-            project_env.get(
-                DIRECT_GEMINI_MODEL_ENV,
-                DEFAULT_DIRECT_GEMINI_MODEL,
-            ),
+            project_env.get(DIRECT_GEMINI_MODEL_ENV, ""),
         ).strip()
-        or DEFAULT_DIRECT_GEMINI_MODEL,
+        candidates = [DEFAULT_DIRECT_GEMINI_MODELS[0]]
+        candidates.append(legacy_model or DEFAULT_DIRECT_GEMINI_MODELS[1])
+
+    models: list[str] = []
+    for model in candidates:
+        if model not in models:
+            models.append(model)
+
+    return {
+        "api_key": api_key,
+        "models": models,
     }
 
 
 def direct_gemini_available() -> bool:
-    return bool(direct_gemini_settings()["api_key"])
+    settings = direct_gemini_settings()
+    return bool(settings["api_key"] and settings["models"])
+
+
+def fair_allows_direct_gemini_fallback(result: dict[str, Any]) -> bool:
+    return (
+        result.get("status") == "ESCALATION_REQUIRED"
+        and result.get("paid_inference_executed") is False
+        and str(result.get("reason_code") or "") in DIRECT_GEMINI_FAIR_FALLBACK_REASONS
+    )
 
 
 def inference_cost_authorized(result: dict[str, Any]) -> bool:
     if (
         result.get("direct_backup_used") is True
         and result.get("billing_authorization") == "USER_APPROVED_DIRECT_GEMINI_BACKUP"
+        and result.get("direct_backup_free_tier_only") is True
     ):
         return True
     return result.get("paid_inference_executed") is False
@@ -579,61 +616,43 @@ def gemini_compatible_schema(value: Any) -> Any:
     return output
 
 
-def call_direct_gemini_backup(
-    payload: dict[str, Any],
+def _gemini_error_detail(exc: urllib.error.HTTPError, api_key: str) -> str:
+    detail = f"HTTP_{exc.code}"
+    try:
+        raw_error = exc.read(4096).decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        raw_error = ""
+    if api_key and raw_error:
+        raw_error = raw_error.replace(api_key, "[REDACTED]")
+    if raw_error:
+        try:
+            parsed_error = json.loads(raw_error)
+            error = parsed_error.get("error", {})
+            if isinstance(error, dict):
+                status = str(error.get("status") or "").strip()
+                message = " ".join(str(error.get("message") or "").split())
+                parts = [part for part in (status, message) if part]
+                if parts:
+                    detail += ": " + ": ".join(parts)
+            else:
+                compact = " ".join(raw_error.split())
+                if compact:
+                    detail += ": " + compact
+        except json.JSONDecodeError:
+            compact = " ".join(raw_error.split())
+            if compact:
+                detail += ": " + compact
+    return detail[:1000]
+
+
+def _gemini_attempt(
     *,
-    timeout_seconds: float,
-    fair_result: dict[str, Any],
+    fair_attempt_count: int,
+    prior_direct_attempts: int,
+    model: str,
 ) -> dict[str, Any]:
-    settings = direct_gemini_settings()
-    api_key = settings["api_key"]
-    model = settings["model"]
-    if not api_key:
-        return fair_result
-
-    prompt = str(payload.get("prompt") or "")
-    schema = payload.get("expected_schema")
-    if not prompt or not isinstance(schema, dict):
-        return fair_result
-
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", model):
-        raise ValueError("DIRECT_GEMINI_MODEL contains unsupported characters")
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        + model
-        + ":generateContent"
-    )
-    parsed_endpoint = urllib.parse.urlparse(endpoint)
-    if (
-        parsed_endpoint.scheme != "https"
-        or parsed_endpoint.hostname != "generativelanguage.googleapis.com"
-    ):
-        raise ValueError("Direct Gemini endpoint failed host validation")
-    body = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": prompt}],
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseJsonSchema": gemini_compatible_schema(schema),
-            "temperature": 0.2,
-        },
-    }
-    request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "x-goog-api-key": api_key,
-        },
-        method="POST",
-    )
-
-    attempt = {
-        "attempt_number": len(fair_result.get("attempts", [])) + 1,
+    return {
+        "attempt_number": fair_attempt_count + prior_direct_attempts + 1,
         "provider_id": "direct_gemini_backup",
         "model_id": model,
         "selection_score": None,
@@ -643,108 +662,169 @@ def call_direct_gemini_backup(
         "error_type": None,
         "error_detail": None,
         "role": "BACKUP",
+        "prompt_token_count": None,
+        "candidate_token_count": None,
+        "total_token_count": None,
     }
-    try:
-        # Endpoint is validated to the fixed Google Gemini HTTPS host above.
-        with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-            request,
-            timeout=min(max(timeout_seconds, 5.0), 180.0),
-        ) as response:
-            raw_response = response.read().decode("utf-8")
-        parsed = json.loads(raw_response)
-        candidates = parsed.get("candidates")
-        if not isinstance(candidates, list) or not candidates:
-            raise ValueError("Gemini returned no candidates")
-        content = candidates[0].get("content", {})
-        parts = content.get("parts", [])
-        text_parts = [
-            str(part.get("text") or "")
-            for part in parts
-            if isinstance(part, dict) and part.get("text")
-        ]
-        output = "".join(text_parts).strip()
-        if not output:
-            raise ValueError("Gemini returned an empty structured response")
-    except urllib.error.HTTPError as exc:
-        attempt["error_type"] = "HTTP_ERROR"
-        detail = f"HTTP_{exc.code}"
-        try:
-            raw_error = exc.read(4096).decode("utf-8", errors="replace")
-        except (OSError, ValueError):
-            raw_error = ""
-        if api_key and raw_error:
-            raw_error = raw_error.replace(api_key, "[REDACTED]")
-        if raw_error:
-            try:
-                parsed_error = json.loads(raw_error)
-                error = parsed_error.get("error", {})
-                if isinstance(error, dict):
-                    status = str(error.get("status") or "").strip()
-                    message = " ".join(
-                        str(error.get("message") or "").split()
-                    )
-                    parts = [part for part in (status, message) if part]
-                    if parts:
-                        detail += ": " + ": ".join(parts)
-                else:
-                    compact = " ".join(raw_error.split())
-                    if compact:
-                        detail += ": " + compact
-            except json.JSONDecodeError:
-                compact = " ".join(raw_error.split())
-                if compact:
-                    detail += ": " + compact
-        attempt["error_detail"] = detail[:1000]
-        return {
-            **fair_result,
-            "reason_code": "FAIR_AND_DIRECT_GEMINI_FAILED",
-            "direct_backup_attempted": True,
-            "direct_backup_used": False,
-            "direct_backup_model": model,
-            "attempts": [*fair_result.get("attempts", []), attempt],
-        }
-    except (
-        urllib.error.URLError,
-        TimeoutError,
-        OSError,
-        json.JSONDecodeError,
-        ValueError,
-    ) as exc:
-        attempt["error_type"] = type(exc).__name__
-        attempt["error_detail"] = str(exc)[:300]
-        return {
-            **fair_result,
-            "reason_code": "FAIR_AND_DIRECT_GEMINI_FAILED",
-            "direct_backup_attempted": True,
-            "direct_backup_used": False,
-            "direct_backup_model": model,
-            "attempts": [*fair_result.get("attempts", []), attempt],
-        }
 
-    attempt["disposition"] = "ACCEPTED"
-    fair_summary = {
-        "status": fair_result.get("status"),
-        "reason_code": fair_result.get("reason_code"),
-        "provider_id": fair_result.get("provider_id"),
-        "model_id": fair_result.get("model_id"),
-        "paid_inference_executed": fair_result.get("paid_inference_executed"),
-    }
+
+def call_direct_gemini_backup(
+    payload: dict[str, Any],
+    *,
+    timeout_seconds: float,
+    fair_result: dict[str, Any],
+) -> dict[str, Any]:
+    settings = direct_gemini_settings()
+    api_key = str(settings["api_key"])
+    models = list(settings["models"])
+    if not api_key or not models:
+        return fair_result
+
+    prompt = str(payload.get("prompt") or "")
+    schema = payload.get("expected_schema")
+    if not prompt or not isinstance(schema, dict):
+        return fair_result
+
+    base_attempts = list(fair_result.get("attempts", []))
+    direct_attempts: list[dict[str, Any]] = []
+
+    for model in models:
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", model):
+            raise ValueError("DIRECT_GEMINI model contains unsupported characters")
+
+        endpoint = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            + model
+            + ":generateContent"
+        )
+        parsed_endpoint = urllib.parse.urlparse(endpoint)
+        if (
+            parsed_endpoint.scheme != "https"
+            or parsed_endpoint.hostname != "generativelanguage.googleapis.com"
+        ):
+            raise ValueError("Direct Gemini endpoint failed host validation")
+
+        body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                }
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseJsonSchema": gemini_compatible_schema(schema),
+                "temperature": 0.2,
+            },
+        }
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            method="POST",
+        )
+        attempt = _gemini_attempt(
+            fair_attempt_count=len(base_attempts),
+            prior_direct_attempts=len(direct_attempts),
+            model=model,
+        )
+
+        try:
+            # Endpoint is validated to Google's fixed Gemini HTTPS host above.
+            with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+                request,
+                timeout=min(max(timeout_seconds, 5.0), 180.0),
+            ) as response:
+                raw_response = response.read().decode("utf-8")
+            parsed = json.loads(raw_response)
+            candidates = parsed.get("candidates")
+            if not isinstance(candidates, list) or not candidates:
+                raise ValueError("Gemini returned no candidates")
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            text_parts = [
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict) and part.get("text")
+            ]
+            output = "".join(text_parts).strip()
+            if not output:
+                raise ValueError("Gemini returned an empty structured response")
+
+            usage = parsed.get("usageMetadata", {})
+            if isinstance(usage, dict):
+                attempt["prompt_token_count"] = usage.get("promptTokenCount")
+                attempt["candidate_token_count"] = usage.get("candidatesTokenCount")
+                attempt["total_token_count"] = usage.get("totalTokenCount")
+            attempt["disposition"] = "ACCEPTED"
+            direct_attempts.append(attempt)
+
+            fair_summary = {
+                "status": fair_result.get("status"),
+                "reason_code": fair_result.get("reason_code"),
+                "provider_id": fair_result.get("provider_id"),
+                "model_id": fair_result.get("model_id"),
+                "paid_inference_executed": fair_result.get(
+                    "paid_inference_executed"
+                ),
+            }
+            return {
+                "status": "ACCEPTED",
+                "reason_code": "DIRECT_GEMINI_BACKUP",
+                "request_id": "direct-gemini-" + uuid.uuid4().hex,
+                "output": output,
+                "provider_id": "direct_gemini_backup",
+                "model_id": model,
+                "best_quality_score": None,
+                "verification_state": "STRUCTURE_REQUESTED",
+                "paid_inference_executed": None,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+                "direct_backup_attempted": True,
+                "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
+                "direct_backup_may_bill": False,
+                "fair_primary_result": fair_summary,
+                "direct_backup_usage": {
+                    "prompt_token_count": attempt["prompt_token_count"],
+                    "candidate_token_count": attempt["candidate_token_count"],
+                    "total_token_count": attempt["total_token_count"],
+                },
+                "attempts": [*base_attempts, *direct_attempts],
+            }
+        except urllib.error.HTTPError as exc:
+            attempt["error_type"] = "HTTP_ERROR"
+            attempt["error_detail"] = _gemini_error_detail(exc, api_key)
+            direct_attempts.append(attempt)
+            # Quota/rate pressure, transient capacity, and a missing model are
+            # model-specific enough to justify trying the next configured free
+            # Gemini model. Authentication/schema errors are not.
+            if exc.code not in {404, 429, 500, 502, 503, 504}:
+                break
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+            json.JSONDecodeError,
+            ValueError,
+        ) as exc:
+            attempt["error_type"] = type(exc).__name__
+            attempt["error_detail"] = str(exc)[:300]
+            direct_attempts.append(attempt)
+            # Network/capacity failures can differ across model backends.
+            continue
+
     return {
-        "status": "ACCEPTED",
-        "reason_code": "DIRECT_GEMINI_BACKUP",
-        "request_id": "direct-gemini-" + uuid.uuid4().hex,
-        "output": output,
-        "provider_id": "direct_gemini_backup",
-        "model_id": model,
-        "best_quality_score": None,
-        "verification_state": "STRUCTURE_REQUESTED",
-        "paid_inference_executed": None,
-        "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+        **fair_result,
+        "reason_code": "FAIR_AND_DIRECT_GEMINI_FAILED",
         "direct_backup_attempted": True,
-        "direct_backup_used": True,
-        "direct_backup_may_bill": True,
-        "fair_primary_result": fair_summary,
-        "attempts": [*fair_result.get("attempts", []), attempt],
+        "direct_backup_used": False,
+        "direct_backup_free_tier_only": True,
+        "direct_backup_may_bill": False,
+        "direct_backup_models": models,
+        "attempts": [*base_attempts, *direct_attempts],
     }
 
 
@@ -801,18 +881,13 @@ def call_fair_bridge(
         result = load_json(output_path)
         if not isinstance(result, dict):
             raise RuntimeError("FAIR bridge result must be a JSON object")
-        if (
-            result.get("status") != "ACCEPTED"
-            and result.get("paid_inference_executed") is False
-            and direct_gemini_available()
-        ):
+        if fair_allows_direct_gemini_fallback(result) and direct_gemini_available():
             return call_direct_gemini_backup(
                 payload,
                 timeout_seconds=timeout_seconds,
                 fair_result=result,
             )
         return result
-
 
 def resolve_profile_path(
     request: dict[str, Any],
