@@ -46,6 +46,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/narration-preview-gate",
     "/api/narration-spend-gate",
     "/api/visual-candidate-review",
+    "/api/storyboard-review",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -231,6 +232,10 @@ from narration_cost_review import (
 from visual_candidate_review import (
     apply_action as apply_visual_candidate_review_action,
     snapshot as visual_candidate_review_snapshot,
+)
+from storyboard_review import (
+    revise as revise_storyboard_shot,
+    snapshot as storyboard_review_snapshot,
 )
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
@@ -4734,6 +4739,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/visual-candidate-review":
             self._send_json(visual_candidate_review_snapshot())
             return
+        if route == "/api/storyboard-review":
+            self._send_json(storyboard_review_snapshot())
+            return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
             video_id = str((query.get("video_id") or [""])[0])
@@ -4945,6 +4953,16 @@ class Handler(BaseHTTPRequestHandler):
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/storyboard-review":
+                payload = revise_storyboard_shot(
+                    storyboard_file=str(body.get("storyboard_file", "")),
+                    shot_id=str(body.get("shot_id", "")),
+                    instruction=str(body.get("instruction") or ""),
+                    changes=body.get("changes") if isinstance(body.get("changes"), dict) else {},
+                )
                 self._send_json(payload)
                 return
 
