@@ -7,11 +7,12 @@ concept candidates and the future Research Engine.
 
 It does not score concepts and does not automatically select a winner.
 
-Every concept receives one explicit decision:
+Every active concept receives one explicit decision:
 
 - ACCEPT
 - REWORK
 - REJECT
+- SAVE IDEA
 
 ## Prepare
 
@@ -25,25 +26,29 @@ This creates:
 transformation_engine/output/concept_gate_request.json
 ~~~
 
-## Acceptance criteria
+## Decision logic
 
-An ACCEPT decision requires all configured criteria to be true:
+**ACCEPT** means the human approves the concept as-is. No criteria checkboxes are
+required.
 
-- originality_clear
-- audience_promise_clear
-- source_independent
-- feasible
-- researchable
+**REWORK** keeps the concept for revision. The criteria become keep/change
+dimensions:
 
-These are human checks, not automated performance predictions.
+- checked = keep this part;
+- unchecked = change this part.
 
-## REWORK
-
-REWORK keeps the concept for revision.
-
-A note is required explaining what needs to change.
+At least one criterion must remain unchecked, otherwise there is nothing to
+rework. A note is optional because the criteria already record the requested
+direction.
 
 REWORK concepts do not enter the Research Engine handoff.
+
+**SAVE IDEA** stores the concept in the Idea / Title Bank, marks the active
+concept as reviewed, and does not send it forward. If Save Idea is used from a
+non-active override card or after the gate is complete, it behaves as a
+bookmark-only action.
+
+These are human decisions, not automated performance predictions.
 
 ## REJECT
 
@@ -66,7 +71,8 @@ transformation_engine/output/
 └── concept_gate_summary.json
 ~~~
 
-Only ACCEPT concepts enter research_handoff.json.
+Only ACCEPT concepts enter research_handoff.json. REWORK, REJECT, and SAVE IDEA
+concepts do not move forward.
 
 ## Research handoff
 
@@ -96,7 +102,8 @@ predict performance.
 
 ## Viewer need / gap / fit criteria
 
-Concept ACCEPT now also requires explicit human confirmation that:
+The following criteria are retained as REWORK dimensions so the reviewer can
+mark what should be preserved versus changed:
 
 - the viewer problem is specific rather than merely a broad topic;
 - the viewer moment is understandable;
