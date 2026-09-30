@@ -289,7 +289,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
 
     @patch("concept_model_runner.run_apply")
     @patch("concept_model_runner.run_one")
-    def test_clean_batch_limit_reports_progress(
+    def test_merge_ready_overrides_partial_provider_batch(
         self,
         run_one,
         run_apply,
@@ -317,9 +317,43 @@ class ConceptModelRunnerTests(unittest.TestCase):
                 config=self.runner_config(),
             )
 
-        self.assertEqual(result["status"], "BATCH_PROGRESS")
+        self.assertEqual(result["status"], "CONCEPT_CANDIDATES_READY")
+        self.assertEqual(result["provider_batch_status"], "BATCH_PROGRESS")
         self.assertEqual(result["model_runs_invoked"], 4)
         self.assertEqual(run_one.call_count, 4)
+
+    @patch("concept_model_runner.run_apply")
+    @patch("concept_model_runner.run_one")
+    def test_clean_batch_limit_still_reports_progress_without_ready_pool(
+        self,
+        run_one,
+        run_apply,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            requests = Path(tmp)
+            for index in range(5):
+                (requests / f"m{index}.concept_request.json").write_text(
+                    json.dumps({"mechanism_id": f"m{index}"}),
+                    encoding="utf-8",
+                )
+            run_one.side_effect = [
+                {"status": "VALIDATED", "mechanism_id": f"m{index}"}
+                for index in range(4)
+            ]
+            run_apply.return_value = {
+                "status": "INSUFFICIENT_CONCEPT_CANDIDATES",
+                "accepted_concepts": 3,
+            }
+
+            result = runner.run_batch(
+                requests,
+                force=False,
+                maximum_requests=None,
+                config=self.runner_config(),
+            )
+
+        self.assertEqual(result["status"], "BATCH_PROGRESS")
+        self.assertEqual(result["provider_batch_status"], "BATCH_PROGRESS")
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
