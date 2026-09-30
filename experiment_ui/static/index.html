@@ -389,6 +389,25 @@
             <div class="visual-candidate-layout">
               <div class="concept-detail" id="visualShotDetail"></div>
               <div class="visual-candidate-pane">
+                <details class="technical-details creative-director-editor">
+                  <summary>Edit this storyboard shot</summary>
+                  <div class="technical-body">
+                    <label class="vision-label" for="storyboardCreativeInstruction">Your creative direction</label>
+                    <textarea id="storyboardCreativeInstruction" class="vision-observation" rows="3" maxlength="1200" placeholder="Example: Lower camera, tighter hammer impact, darker workshop, then reveal the craftsman."></textarea>
+                    <div class="creative-grid">
+                      <label>Desired visual<input id="storyboardDesiredVisual" type="text"></label>
+                      <label>Search terms<input id="storyboardSearchTerms" type="text" placeholder="comma, separated, terms"></label>
+                      <label>Framing<input id="storyboardFraming" type="text"></label>
+                      <label>Camera angle<input id="storyboardCameraAngle" type="text"></label>
+                      <label>Camera movement<input id="storyboardCameraMovement" type="text"></label>
+                      <label>Lens feel<input id="storyboardLens" type="text"></label>
+                      <label>Lighting<input id="storyboardLighting" type="text"></label>
+                      <label>Transition<input id="storyboardTransition" type="text"></label>
+                    </div>
+                    <button id="storyboardSaveRevision" type="button">Save shot revision → Re-search this shot</button>
+                    <p class="muted">Narration and timing stay locked. This revision invalidates only this shot's downstream visual approvals.</p>
+                  </div>
+                </details>
                 <div id="visualCandidateCards" class="visual-candidate-cards"></div>
                 <label class="vision-label" for="visualCandidateNote">Review note</label>
                 <textarea id="visualCandidateNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional unless you want to explain what a better visual needs."></textarea>
