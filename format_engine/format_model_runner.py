@@ -320,6 +320,8 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "branch_constraints": request.get("branch_constraints", {}),
         "package": request.get("package", {}),
         "branch_story_packages": request.get("branch_story_packages", {}),
+        "story_plan": request.get("story_plan", {}),
+        "psychology_contract": request.get("psychology_contract", {}),
         "script_section_ids_by_branch": request.get(
             "script_section_ids_by_branch", {}
         ),
