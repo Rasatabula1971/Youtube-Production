@@ -304,9 +304,11 @@ def validate(payload: Any) -> list[str]:
     if _valid_level(capacity, minimum=DRAMA_FLOOR) and _valid_level(
         target, minimum=DRAMA_FLOOR
     ):
-        if target > capacity:
+        capacity_level = int(capacity)
+        target_level = int(target)
+        if target_level > capacity_level:
             errors.append("human_framing.drama.target cannot exceed capacity")
-        if capacity - target > MAX_UNUSED_DRAMA_CAPACITY:
+        if capacity_level - target_level > MAX_UNUSED_DRAMA_CAPACITY:
             errors.append(
                 "human_framing underuses a high-drama opportunity; target is more than "
                 f"{MAX_UNUSED_DRAMA_CAPACITY} points below capacity"
