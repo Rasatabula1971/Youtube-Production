@@ -47,6 +47,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/narration-spend-gate",
     "/api/visual-candidate-review",
     "/api/storyboard-review",
+    "/api/narration-performance-review",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -221,6 +222,10 @@ from voice_review import (
     snapshot as performance_gate_snapshot,
 )
 from narration_render import snapshot as narration_render_snapshot
+from narration_performance_review import (
+    revise as revise_narration_performance,
+    snapshot as narration_performance_revision_snapshot,
+)
 from narration_preview_review import (
     apply_action as apply_narration_preview_gate_action,
     snapshot as narration_preview_gate_snapshot,
@@ -4742,6 +4747,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/storyboard-review":
             self._send_json(storyboard_review_snapshot())
             return
+        if route == "/api/narration-performance-review":
+            self._send_json(narration_performance_revision_snapshot())
+            return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
             video_id = str((query.get("video_id") or [""])[0])
@@ -4953,6 +4961,16 @@ class Handler(BaseHTTPRequestHandler):
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-performance-review":
+                payload = revise_narration_performance(
+                    manifest_file=str(body.get("manifest_file", "")),
+                    segment_id=str(body.get("segment_id", "")),
+                    instruction=str(body.get("instruction") or ""),
+                    delivery_changes=body.get("delivery_changes") if isinstance(body.get("delivery_changes"), dict) else {},
+                )
                 self._send_json(payload)
                 return
 
