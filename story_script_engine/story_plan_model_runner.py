@@ -181,6 +181,8 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                 "viewer_expectation",
                                 "cognitive_load_instruction",
                                 "tension_level",
+                                "drama_level",
+                                "tempo_level",
                                 "open_loop_id",
                                 "loop_action",
                             ],
@@ -200,6 +202,16 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                 "tension_level": {
                                     "type": "string",
                                     "enum": tension_levels,
+                                },
+                                "drama_level": {
+                                    "type": "integer",
+                                    "minimum": 4,
+                                    "maximum": 10,
+                                },
+                                "tempo_level": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10,
                                 },
                                 "open_loop_id": {
                                     "type": "string",
@@ -228,15 +240,18 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "2. Decide the viewer journey before wording: high-impact hook, setup, escalation/explanation, reveal, payoff, close.\n"
         "3. Model the viewer state explicitly: what they already know, what they expect, and what they want resolved.\n"
         "4. Plan a high-impact FIRST SPOKEN LINE using one allowed opening mechanism. Bold is good; unsupported drama is not.\n"
-        "5. The material immediately after the hook must justify, contextualize, or begin proving the hook.\n"
-        "6. Assign one primary audience-psychology mechanism to every beat and make each beat change the viewer's state.\n"
-        "7. Manage cognitive load deliberately. Prefer one primary new idea per beat when the explanation is complex.\n"
-        "8. Track open loops with open_loop_id and loop_action. Every OPEN must later receive a PAYOFF; never create a fake unresolved hook.\n"
-        "9. Use tension, novelty and expectation violation only when they serve the verified story and approved promise.\n"
-        "10. Use only accepted_claim_ids for factual beats and factual opening claims.\n"
-        "11. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
-        "12. At least one beat must be PAYOFF.\n"
-        "13. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n\n"
+        "5. Inherit the accepted Human Framing contract. Preserve the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama source instead of collapsing back into a technical lecture.\n"
+        "6. Assign every beat drama_level 4-10 and a separate tempo_level 1-10. Drama and tempo are independent. Both curves must change across the story.\n"
+        "7. Treat drama 5 as the normal center. Never deliberately use drama 1-3. Reach at least the accepted concept drama target, but never invent stakes or violate the accepted drama constraint.\n"
+        "8. The material immediately after the hook must justify, contextualize, or begin proving the hook.\n"
+        "9. Assign one primary audience-psychology mechanism to every beat and make each beat change the viewer's state.\n"
+        "10. Manage cognitive load deliberately. Prefer one primary new idea per beat when the explanation is complex.\n"
+        "11. Track open loops with open_loop_id and loop_action. Every OPEN must later receive a PAYOFF; never create a fake unresolved hook.\n"
+        "12. Use tension, novelty and expectation violation only when they serve the verified story and approved promise.\n"
+        "13. Use only accepted_claim_ids for factual beats and factual opening claims.\n"
+        "14. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
+        "15. At least one beat must be PAYOFF.\n"
+        "16. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n\n"
         "STORY PLAN REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
