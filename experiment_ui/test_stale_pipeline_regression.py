@@ -180,6 +180,85 @@ class StalePipelineRegressionTests(unittest.TestCase):
         self.assertFalse(state["candidate_provenance_current"])
         self.assertFalse(state["candidates_ready"])
 
+    def test_partial_mechanism_coverage_can_still_produce_ready_candidate_pool(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            synthesis = write_json(root / "synthesis.json", {"v": 2})
+            requests = root / "concept_requests"
+            responses = root / "concept_responses"
+            runs = root / "concept_model_runs"
+            validation_contract = server.transformation_validation_contract_sha256()
+
+            request_one = write_json(
+                requests / "m1.concept_request.json",
+                {
+                    "mechanism_id": "m1",
+                    "request_provenance": {"handoff_sha256": sha(synthesis)},
+                },
+            )
+            write_json(
+                requests / "m2.concept_request.json",
+                {
+                    "mechanism_id": "m2",
+                    "request_provenance": {"handoff_sha256": sha(synthesis)},
+                },
+            )
+            response_one = write_json(
+                responses / "m1.json",
+                {
+                    "mechanism_id": "m1",
+                    "response_provenance": {
+                        "request_sha256": sha(request_one),
+                        "validation_contract_sha256": validation_contract,
+                    },
+                },
+            )
+            write_json(
+                runs / "m1.model_run.json",
+                {
+                    "status": "VALIDATED",
+                    "request_sha256": sha(request_one),
+                    "validation_contract_sha256": validation_contract,
+                },
+            )
+            candidates = write_json(
+                root / "concept_candidates.json",
+                {
+                    "count": 5,
+                    "minimum_candidates_for_triage": 5,
+                    "ready_for_triage": True,
+                    "mechanism_coverage_complete": False,
+                    "missing_mechanism_ids": ["m2"],
+                    "source_response_sha256": {"m1": sha(response_one)},
+                    "concepts": [
+                        {"concept_id": f"c{index}"}
+                        for index in range(5)
+                    ],
+                },
+            )
+
+            stack.enter_context(patch.object(server, "EXP2_SYNTHESIS_FILE", synthesis))
+            stack.enter_context(patch.object(server, "TRANSFORM_REQUESTS_DIR", requests))
+            stack.enter_context(patch.object(server, "TRANSFORM_RESPONSES_DIR", responses))
+            stack.enter_context(patch.object(server, "TRANSFORM_MODEL_RUNS_DIR", runs))
+            stack.enter_context(patch.object(server, "TRANSFORM_CANDIDATES_FILE", candidates))
+            stack.enter_context(patch.object(server, "TRANSFORM_TRIAGE_FILE", root / "triage.json"))
+            stack.enter_context(
+                patch.object(server, "TRANSFORM_TRIAGED_CANDIDATES_FILE", root / "triaged.json")
+            )
+            stack.enter_context(
+                patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", root / "handoff.json")
+            )
+
+            state = server.transformation_artifact_state()
+
+        self.assertFalse(state["responses_complete"])
+        self.assertTrue(state["candidate_provenance_current"])
+        self.assertTrue(state["candidate_pool_ready"])
+        self.assertTrue(state["candidates_ready"])
+        self.assertFalse(state["mechanism_coverage_complete"])
+        self.assertEqual(state["missing_mechanism_ids"], ["m2"])
+
     def test_package_candidates_must_match_current_response_hashes(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
