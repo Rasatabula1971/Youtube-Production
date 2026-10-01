@@ -676,6 +676,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 )
             self.assertNotIn("responseJsonSchema", generation)
             self.assertEqual(generation["responseMimeType"], "application/json")
+            prompt_text = body["contents"][0]["parts"][0]["text"]
+            self.assertIn("EXPECTED JSON SCHEMA", prompt_text)
+            self.assertIn('"required":["summary"]', prompt_text.replace(" ", ""))
             return FakeResponse()
 
         with (
