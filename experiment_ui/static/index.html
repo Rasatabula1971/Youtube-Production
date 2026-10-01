@@ -521,6 +521,38 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="generatedVisualImportPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">PREMIUM VISUAL RETURN</p>
+                <h2 id="generatedVisualImportTitle">Register generated visual</h2>
+                <p class="muted" id="generatedVisualImportSummary"></p>
+              </div>
+              <span class="status-chip running" id="generatedVisualImportStatus">WAITING FOR ASSET</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="generatedVisualImportDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Generate this shot externally with the approved brief. This form only registers the finished local file; it does not call Higgsfield or spend money.</div>
+                <label class="vision-label" for="generatedVisualAssetPath">Local generated file path</label>
+                <input id="generatedVisualAssetPath" type="text" placeholder="C:\path\to\generated-shot.mp4">
+                <label class="vision-label" for="generatedVisualActualCost">Actual cost for this shot (USD)</label>
+                <input id="generatedVisualActualCost" type="number" min="0" step="0.01" value="0">
+                <label class="vision-label" for="generatedVisualProvider">Provider</label>
+                <input id="generatedVisualProvider" type="text" value="higgsfield">
+                <label class="vision-label" for="generatedVisualProviderJobId">Provider job ID / reference (optional)</label>
+                <input id="generatedVisualProviderJobId" type="text" placeholder="Optional provider reference">
+                <label class="vision-label" for="generatedVisualNote">Note</label>
+                <textarea id="generatedVisualNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional note about the generated result."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="generatedVisualPrev" type="button">← Previous</button>
+                  <button id="generatedVisualRegister" type="button">Register generated asset</button>
+                  <button class="ghost" id="generatedVisualNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>
