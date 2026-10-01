@@ -138,13 +138,22 @@
             <span class="creation-tab">Produce</span>
           </div>
 
-          <section class="panel">
+          <section class="panel" id="analysisCurrentPanel">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">CURRENT WORK</p>
                 <h2 id="analysisCurrentTitle">Waiting for approval</h2>
                 <p class="muted" id="analysisCurrentDetail"></p>
               </div>
+            </div>
+            <div class="running-activity" id="analysisRunningActivity" hidden aria-live="polite">
+              <div class="running-spinner" aria-hidden="true"></div>
+              <div class="running-activity-copy">
+                <strong id="analysisRunningLabel">Working…</strong>
+                <span id="analysisRunningElapsed">Elapsed 0s</span>
+                <span id="analysisRunningHeartbeat">Process active</span>
+              </div>
+              <div class="running-dots" aria-hidden="true"><span></span><span></span><span></span></div>
             </div>
             <div class="action-groups" id="analysisActions"></div>
           </section>
