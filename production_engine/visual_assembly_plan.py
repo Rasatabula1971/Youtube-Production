@@ -121,6 +121,15 @@ def _managed_asset_record(
         or record.get("asset_sha256") != sha256_file(asset_path)
     ):
         return None
+    rights_source = str(provenance.get("rights_review") or "")
+    if rights_source:
+        rights_path = Path(rights_source)
+        if (
+            not rights_path.exists()
+            or provenance.get("rights_review_sha256")
+            != sha256_file(rights_path)
+        ):
+            return None
     return {
         "asset_file": str(asset_path),
         "asset_sha256": record.get("asset_sha256"),
