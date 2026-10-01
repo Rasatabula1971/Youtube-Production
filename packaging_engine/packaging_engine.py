@@ -122,6 +122,7 @@ def build_package_request(
             "Title and thumbnail should complement rather than repeat each other.",
             "Each package must communicate one main promise and one expected payoff.",
             "Define the intended viewer and their awareness level explicitly.",
+            "Do not invent a specialist persona just to make the viewer definition specific. Broadly relatable concepts may target a broad general audience unless specialist knowledge is essential to the accepted concept.",
             "Preserve the accepted viewer problem, viewer moment, desired outcome, and Human Framing contract.",
             "Packaging may sharpen wording, but it must preserve the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama intent rather than reverting to a technical topic label.",
             "Use the Visual Opening Plan as the starting psychological intention for the thumbnail/opening frame; do not promise unsupported spectacle.",
