@@ -319,6 +319,21 @@ def apply_action(
         "candidate_source_url": (
             candidate.get("source_url") if candidate else None
         ),
+        "candidate_asset_url": (
+            candidate.get("asset_url") if candidate else None
+        ),
+        "candidate_local_path": (
+            candidate.get("local_path") if candidate else None
+        ),
+        "candidate_media_type": (
+            candidate.get("media_type") if candidate else None
+        ),
+        "candidate_license": (
+            candidate.get("license") if candidate else None
+        ),
+        "candidate_search_provider": (
+            candidate.get("search_provider") if candidate else None
+        ),
         "candidate_source_tier": (
             candidate.get("source_tier") if candidate else None
         ),
