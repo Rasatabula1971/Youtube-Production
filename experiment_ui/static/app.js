@@ -180,6 +180,7 @@ const visualRoughCutReviewTitle = document.getElementById("visualRoughCutReviewT
 const visualRoughCutReviewSummary = document.getElementById("visualRoughCutReviewSummary");
 const visualRoughCutReviewStatus = document.getElementById("visualRoughCutReviewStatus");
 const visualRoughCutDetail = document.getElementById("visualRoughCutDetail");
+const visualRoughCutShotSelect = document.getElementById("visualRoughCutShotSelect");
 const visualRoughCutNote = document.getElementById("visualRoughCutNote");
 const visualRoughCutPrev = document.getElementById("visualRoughCutPrev");
 const visualRoughCutVisual = document.getElementById("visualRoughCutVisual");
@@ -2819,6 +2820,13 @@ function renderVisualRoughCutReview(snapshot) {
     '</h3><p class="muted">This is the structural rough cut. Missing visuals may remain as placeholders; paid generation is still locked.</p></div>' +
     sceneHtml;
 
+  visualRoughCutShotSelect.innerHTML = scenes.map(function (scene) {
+    const shotId = String(scene.shot_id || scene.scene_id || "");
+    return '<option value="' + escapeHtml(shotId) + '">' +
+      escapeHtml(shotId || "Unnamed shot") + '</option>';
+  }).join("");
+  visualRoughCutShotSelect.disabled = scenes.length === 0;
+
   visualRoughCutNote.value =
     decision && decision.note ? decision.note : "";
   visualRoughCutPrev.disabled = visualRoughCutCursor === 0;
@@ -2834,6 +2842,7 @@ async function submitVisualRoughCutDecision(decision) {
       method: "POST",
       body: JSON.stringify({
         rough_cut_file: item.rough_cut_file,
+        shot_id: visualRoughCutShotSelect.value || null,
         decision: decision,
         note: visualRoughCutNote.value
       })
