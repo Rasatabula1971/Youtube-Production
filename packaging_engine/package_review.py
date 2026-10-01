@@ -32,6 +32,7 @@ from packaging_gate import (
 from packaging_engine import OUTPUT_DIR
 
 STATE_FILE = OUTPUT_DIR / "packaging_gate_ui_state.json"
+SAVED_PACKAGES_FILE = OUTPUT_DIR / "saved_package_ideas.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
 
@@ -181,6 +182,11 @@ def snapshot() -> dict[str, Any]:
         "accepted": accepted,
         "rework": rework,
         "rejected": rejected,
+        "saved": (
+            len(load_json(SAVED_PACKAGES_FILE).get("items", []))
+            if SAVED_PACKAGES_FILE.exists()
+            else 0
+        ),
         "research_status": research_status,
         "criteria": request.get("criteria", {}),
         "packages": items,
@@ -191,6 +197,51 @@ def normalize_criteria(criteria: Any, required: list[str]) -> dict[str, bool]:
     if not isinstance(criteria, dict):
         criteria = {}
     return {criterion: criteria.get(criterion) is True for criterion in required}
+
+
+def save_package_idea(
+    item: dict[str, Any],
+    *,
+    note: str,
+    reviewer: str,
+) -> None:
+    payload: dict[str, Any] = {
+        "artifact": "saved_package_ideas",
+        "items": [],
+    }
+    if SAVED_PACKAGES_FILE.exists():
+        loaded = load_json(SAVED_PACKAGES_FILE)
+        if isinstance(loaded, dict):
+            payload = loaded
+    items = payload.get("items")
+    if not isinstance(items, list):
+        items = []
+
+    fingerprint = package_fingerprint(item)
+    saved = {
+        "package_id": str(item.get("package_id") or ""),
+        "concept_id": str(item.get("concept_id") or ""),
+        "title": item.get("title"),
+        "thumbnail": item.get("thumbnail"),
+        "opening_frame": item.get("opening_frame"),
+        "expected_viewer": item.get("expected_viewer"),
+        "one_sentence_promise": item.get("one_sentence_promise"),
+        "note": note,
+        "reviewer": reviewer,
+        "package_fingerprint": fingerprint,
+    }
+    items = [
+        existing
+        for existing in items
+        if not (
+            isinstance(existing, dict)
+            and existing.get("package_fingerprint") == fingerprint
+        )
+    ]
+    items.append(saved)
+    payload["items"] = items
+    payload["count"] = len(items)
+    write_json(SAVED_PACKAGES_FILE, payload)
 
 
 def finalize_if_complete(
@@ -297,6 +348,9 @@ def _apply_rework_feedback(
     request["human_rework_change_criteria"] = sorted(
         key for key, passed in criteria.items() if not passed
     )
+    request["human_rework_mode"] = (
+        "CRITERIA_GUIDED" if criteria else "HUMAN_INSTRUCTION_ONLY"
+    )
     request["human_rework_original_package"] = {
         key: value
         for key, value in package.items()
@@ -345,18 +399,31 @@ def apply_action(
         raise ValueError("Unknown package_id")
 
     value = str(decision or "").strip().upper()
-    if value not in {"ACCEPT", "REWORK", "REJECT"}:
-        raise ValueError("Decision must be ACCEPT, REWORK, or REJECT")
+    if value not in {"ACCEPT", "REWORK", "REJECT", "SAVE_IDEA"}:
+        raise ValueError(
+            "Decision must be ACCEPT, REWORK, REJECT, or SAVE_IDEA"
+        )
 
     required = list(item.get("required_accept_criteria", []))
-    normalized = normalize_criteria(criteria, required)
     clean_note = str(note or "").strip()
 
-    if value == "ACCEPT" and not all(normalized.values()):
-        missing = [key for key, passed in normalized.items() if not passed]
-        raise ValueError(
-            "ACCEPT requires every criterion confirmed: " + ", ".join(missing)
+    if value == "SAVE_IDEA":
+        save_package_idea(
+            item,
+            note=clean_note,
+            reviewer=str(state.get("reviewer") or DEFAULT_REVIEWER),
         )
+        return snapshot()
+
+    # The human gate is intentionally a decision gate, not a checklist form.
+    # Lower-level audit contracts still receive explicit criteria.
+    normalized = (
+        {criterion: True for criterion in required}
+        if value == "ACCEPT"
+        else {criterion: False for criterion in required}
+        if value == "REJECT"
+        else {}
+    )
     if value == "REWORK" and not clean_note:
         raise ValueError("REWORK requires a note explaining what must change")
 
