@@ -435,11 +435,14 @@ function primaryTargetForWorkflow(workflow) {
   if (workflow.state === "HUMAN_CONCEPT_GATE") {
     return { type: "route", value: "/analysis", label: "Review concepts" };
   }
-  if (workflow.current_action_id === "opportunity_research") {
-    return { type: "action", value: "opportunity_research", label: "Run now" };
-  }
   if (workflow.current_action_id) {
-    return { type: "route", value: "/analysis", label: "Continue" };
+    return {
+      type: "action",
+      value: workflow.current_action_id,
+      label: workflow.current_action_id === "opportunity_research"
+        ? "Run now"
+        : "Continue Automatically"
+    };
   }
   if (workflow.state === "WAITING_AUTOMATIC" || workflow.state === "RUNNING_AUTOMATIC") {
     return { type: "disabled", value: "", label: "Continuing automatically" };
@@ -1465,6 +1468,9 @@ async function submitConceptDecision(decision) {
       false
     );
     await loadStatus();
+    if (payload.complete) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   } catch (error) {
     showToast(error.message, true);
   }
