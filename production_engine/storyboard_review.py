@@ -52,11 +52,12 @@ def revise(*,storyboard_file:str,shot_id:str,instruction:str,changes:dict[str,An
   elif key in {"time_range","beat_id","premium_generation_authorized","source_strategy"}:
    raise ValueError(f"{key} is locked at the shot-local creative gate")
   else: raise ValueError(f"Unsupported storyboard field: {key}")
+ card["creative_instruction"]=instruction.strip()
  if card==before: raise ValueError("Revision made no storyboard changes")
  rp=_revision_path(p);hist=load_json(rp) if rp.exists() else {"artifact":"storyboard_revision_history","concept_id":board.get("concept_id"),"format":board.get("format"),"shots":{}}
  versions=hist["shots"].setdefault(shot_id,[]);version=len(versions)+2
  versions.append({"from_version":version-1,"to_version":version,"instruction":instruction.strip(),"before":before,"after":card})
- card["creative_version"]=version;card["creative_instruction"]=instruction.strip();cards[idx]=card
+ card["creative_version"]=version;cards[idx]=card
  board["cards"]=cards;board["status"]="READY_FOR_VISUAL_SEARCH";board["premium_generation_authorized"]=False
  board.setdefault("policy",{})["shot_local_revision_invalidates_only_edited_shot"]=True
  atomic_write_json(p,board)
