@@ -32,6 +32,10 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     "concepts": [{"concept_id": "old_c1"}],
                 },
             )
+            config = write_json(
+                root / "packaging_config.json",
+                {"packages_per_concept": 3},
+            )
             requests = root / "package_requests"
             write_json(
                 requests / "old_c1.package_request.json",
@@ -51,6 +55,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                 )
             )
             stack.enter_context(patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", handoff))
+            stack.enter_context(patch.object(server, "PACKAGING_CONFIG_FILE", config))
             stack.enter_context(patch.object(server, "PACKAGING_REQUESTS_DIR", requests))
             stack.enter_context(
                 patch.object(server, "PACKAGING_RESPONSES_DIR", root / "package_responses")
@@ -263,6 +268,10 @@ class StalePipelineRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             handoff = write_json(root / "handoff.json", {"status": "READY_FOR_RESEARCH"})
+            config = write_json(
+                root / "packaging_config.json",
+                {"packages_per_concept": 3},
+            )
             requests = root / "package_requests"
             responses = root / "package_responses"
             request = write_json(
@@ -271,6 +280,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     "concept_id": "c1",
                     "request_provenance": {
                         "concept_handoff_sha256": sha(handoff),
+                        "packaging_config_sha256": sha(config),
                     },
                 },
             )
@@ -300,6 +310,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                 )
             )
             stack.enter_context(patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", handoff))
+            stack.enter_context(patch.object(server, "PACKAGING_CONFIG_FILE", config))
             stack.enter_context(patch.object(server, "PACKAGING_REQUESTS_DIR", requests))
             stack.enter_context(patch.object(server, "PACKAGING_RESPONSES_DIR", responses))
             stack.enter_context(patch.object(server, "PACKAGING_CANDIDATES_FILE", candidates))
@@ -313,6 +324,78 @@ class StalePipelineRegressionTests(unittest.TestCase):
         self.assertFalse(state["candidate_provenance_current"])
         self.assertFalse(state["candidates_ready"])
 
+
+    def test_changed_packaging_config_invalidates_existing_requests(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            handoff = write_json(
+                root / "handoff.json",
+                {"status": "READY_FOR_RESEARCH"},
+            )
+            old_config = write_json(
+                root / "old_packaging_config.json",
+                {"packages_per_concept": 5},
+            )
+            current_config = write_json(
+                root / "packaging_config.json",
+                {"packages_per_concept": 3},
+            )
+            requests = root / "package_requests"
+            write_json(
+                requests / "c1.package_request.json",
+                {
+                    "concept_id": "c1",
+                    "package_count_requested": 5,
+                    "request_provenance": {
+                        "concept_handoff_sha256": sha(handoff),
+                        "packaging_config_sha256": sha(old_config),
+                    },
+                },
+            )
+
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "transformation_artifact_state",
+                    return_value={"research_ready": True},
+                )
+            )
+            stack.enter_context(
+                patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", handoff)
+            )
+            stack.enter_context(
+                patch.object(server, "PACKAGING_CONFIG_FILE", current_config)
+            )
+            stack.enter_context(
+                patch.object(server, "PACKAGING_REQUESTS_DIR", requests)
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PACKAGING_RESPONSES_DIR",
+                    root / "package_responses",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PACKAGING_CANDIDATES_FILE",
+                    root / "package_candidates.json",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PACKAGING_RESEARCH_HANDOFF",
+                    root / "research_handoff.json",
+                )
+            )
+
+            state = server.packaging_artifact_state()
+
+        self.assertFalse(state["requests_ready"])
+        self.assertFalse(state["candidates_ready"])
+        self.assertFalse(state["research_ready"])
 
     def test_changed_human_reviews_make_existing_synthesis_rebuildable(self):
         stale_state = {
