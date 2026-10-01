@@ -142,6 +142,7 @@ from package_review import (
     snapshot as packaging_gate_snapshot,
 )
 
+PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
 PACKAGING_REQUESTS_DIR = PACKAGING_OUTPUT / "package_requests"
 PACKAGING_RESPONSES_DIR = PACKAGING_OUTPUT / "package_responses"
@@ -1580,8 +1581,13 @@ def packaging_artifact_state() -> dict[str, Any]:
         if upstream.get("research_ready") and TRANSFORM_RESEARCH_HANDOFF.exists()
         else None
     )
+    packaging_config_hash = (
+        sha256_file(PACKAGING_CONFIG_FILE)
+        if PACKAGING_CONFIG_FILE.exists()
+        else None
+    )
     request_hashes: dict[str, str] = {}
-    if handoff_hash and PACKAGING_REQUESTS_DIR.exists():
+    if handoff_hash and packaging_config_hash and PACKAGING_REQUESTS_DIR.exists():
         for path in PACKAGING_REQUESTS_DIR.glob("*.package_request.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict):
@@ -1592,6 +1598,8 @@ def packaging_artifact_state() -> dict[str, Any]:
                 concept_id
                 and isinstance(provenance, dict)
                 and provenance.get("concept_handoff_sha256") == handoff_hash
+                and provenance.get("packaging_config_sha256")
+                == packaging_config_hash
             ):
                 request_hashes[concept_id] = sha256_file(path)
 
@@ -1645,6 +1653,7 @@ def packaging_artifact_state() -> dict[str, Any]:
     )
     return {
         "handoff_sha256": handoff_hash,
+        "packaging_config_sha256": packaging_config_hash,
         "request_concept_ids": sorted(request_hashes),
         "current_response_concept_ids": sorted(current_response_hashes),
         "candidate_provenance_current": candidates_current,
