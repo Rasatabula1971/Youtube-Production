@@ -18,26 +18,83 @@ def acquire() -> dict:
     items = []
     for request_path in requests:
         request = load_json(request_path)
+        destination = RAW_DIR / request_path.name.replace(
+            ".visual_search_request.json",
+            ".visual_search_raw.json",
+        )
+        previous = load_json(destination) if destination.exists() else {}
+        previous_shots = (
+            previous.get("shots", {})
+            if isinstance(previous, dict)
+            and isinstance(previous.get("shots"), dict)
+            else {}
+        )
+        previous_fingerprints = (
+            previous.get("shot_fingerprints", {})
+            if isinstance(previous, dict)
+            and isinstance(previous.get("shot_fingerprints"), dict)
+            else {}
+        )
         shots = {}
+        shot_fingerprints = {}
+        searched = 0
+        reused = 0
         for shot in request.get("shots", []):
             shot_id = str(shot.get("shot_id") or "")
-            terms = [str(x).strip() for x in shot.get("search_terms", []) if str(x).strip()]
-            query = " ".join(terms)[:100] or str(shot.get("desired_visual") or "").strip()
-            found = discover(query, int(shot.get("max_candidates_per_source") or 5))
-            shots[shot_id] = [candidate for group in found.values() for candidate in group]
+            fingerprint = str(shot.get("shot_fingerprint") or "")
+            shot_fingerprints[shot_id] = fingerprint
+            if (
+                shot_id
+                and fingerprint
+                and previous_fingerprints.get(shot_id) == fingerprint
+                and isinstance(previous_shots.get(shot_id), list)
+            ):
+                shots[shot_id] = previous_shots[shot_id]
+                reused += 1
+                continue
+            terms = [
+                str(x).strip()
+                for x in shot.get("search_terms", [])
+                if str(x).strip()
+            ]
+            query = (
+                " ".join(terms)[:100]
+                or str(shot.get("desired_visual") or "").strip()
+            )
+            found = discover(
+                query,
+                int(shot.get("max_candidates_per_source") or 5),
+            )
+            shots[shot_id] = [
+                candidate
+                for group in found.values()
+                for candidate in group
+            ]
+            searched += 1
         raw = {
             "artifact": "visual_search_raw",
             "concept_id": request.get("concept_id"),
             "format": request.get("format"),
             "shots": shots,
-            "policy": {"discovery_only": True, "no_media_downloaded": True, "paid_calls_allowed": False},
+            "shot_fingerprints": shot_fingerprints,
+            "policy": {
+                "discovery_only": True,
+                "no_media_downloaded": True,
+                "paid_calls_allowed": False,
+            },
         }
-        destination = RAW_DIR / request_path.name.replace(".visual_search_request.json", ".visual_search_raw.json")
         atomic_write_json(destination, raw)
         compiled = compile_results(request, request_path, raw)
         compiled_path = RESULT_DIR / request_path.name.replace(".visual_search_request.json", ".visual_search_results.json")
         atomic_write_json(compiled_path, compiled)
-        items.append({"concept_id": request.get("concept_id"), "format": request.get("format"), "raw_results": str(destination), "candidates": sum(len(x) for x in shots.values())})
+        items.append({
+            "concept_id": request.get("concept_id"),
+            "format": request.get("format"),
+            "raw_results": str(destination),
+            "candidates": sum(len(x) for x in shots.values()),
+            "shots_searched": searched,
+            "shots_reused": reused,
+        })
     summary = {"status": "SEARCH_COMPLETE" if items else "WAITING_FOR_SEARCH_REQUESTS", "processed": len(items), "items": items, "paid_calls_allowed": False}
     atomic_write_json(SUMMARY_FILE, summary)
     return summary
