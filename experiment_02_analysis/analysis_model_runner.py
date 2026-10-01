@@ -441,6 +441,12 @@ def safe_attempts(bridge_result: dict[str, Any]) -> list[dict[str, Any]]:
         "candidate_token_count",
         "total_token_count",
         "response_mode",
+        # The bridge already reduces FAIR's quality report to overall_score,
+        # hard_reject, reject_reasons, verification_state and validator_results.
+        # Dropping it here is what left a model run saying only "QUALITY_FAILURE,
+        # score 0.0" with no record of whether the JSON broke the schema, arrived
+        # truncated or came back empty -- the one thing needed to act on it.
+        "quality",
     }
     return [
         {key: value for key, value in attempt.items() if key in allowed_keys}
@@ -483,6 +489,16 @@ def bridge_payload(
                 fair_config.get("cross_check_required", False)
             ),
             "max_output_tokens": int(fair_config.get("max_output_tokens", 4096)),
+            # The least an answer can be complete within. FAIR admits a route on
+            # this and asks it for min(max_output_tokens, its own ceiling), so
+            # raising max_output_tokens buys headroom without dropping the routes
+            # whose ceiling is lower. Omitted, FAIR treats the whole budget as the
+            # floor and those routes go unused.
+            "min_output_tokens": (
+                int(fair_config["min_output_tokens"])
+                if fair_config.get("min_output_tokens") is not None
+                else None
+            ),
             "expected_schema_present": bool(schema is not None or action == "doctor"),
             "application_id": str(
                 fair_config.get("application_id", "youtube-production")
