@@ -219,6 +219,8 @@ def build_prompt(
         "desired_outcome": plan.get("desired_outcome"),
         "packaging": plan.get("packaging"),
         "research_questions": plan.get("research_questions", []),
+        "human_rework_mode": plan.get("human_rework_mode"),
+        "human_rework_requests": plan.get("human_rework_requests", []),
         "acquired_pages": compact_pages,
     }
     prompt = (
@@ -236,7 +238,9 @@ def build_prompt(
         "9. Do not infer audience demand from a HYPOTHESIS or UNASSESSED content gap.\n"
         "10. The approved package promise constrains relevance but does not authorize invented evidence.\n"
         "11. Do not call a claim verified or true merely because multiple sources agree.\n"
-        "12. Locators must be useful textual section/heading/paragraph descriptions visible in the acquired content.\n\n"
+        "12. Locators must be useful textual section/heading/paragraph descriptions visible in the acquired content.\n"
+        "13. If human_rework_requests are present, treat each human note as an AUTHORITATIVE research instruction about what must be checked or corrected. Use only acquired evidence to answer it; the human instruction never overrides contradictory evidence and never permits invented support.\n"
+        "14. Reworked claims should directly address the human instruction when the acquired evidence permits it. If the evidence does not support the requested correction, preserve that limitation instead of forcing the requested conclusion.\n\n"
         "RESEARCH INPUT:\n"
         + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     )
