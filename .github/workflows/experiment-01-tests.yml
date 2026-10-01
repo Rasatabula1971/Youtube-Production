@@ -11,6 +11,7 @@ on:
       - "packaging_engine/**"
       - "source_acquisition/**"
       - "story_script_engine/**"
+      - "channel_profiles/**"
       - "format_engine/**"
       - "production_engine/**"
       - "Start Experiment UI.bat"
@@ -26,6 +27,7 @@ on:
       - "packaging_engine/**"
       - "source_acquisition/**"
       - "story_script_engine/**"
+      - "channel_profiles/**"
       - "format_engine/**"
       - "production_engine/**"
       - "Start Experiment UI.bat"
@@ -63,6 +65,9 @@ jobs:
       - name: Run Source Acquisition tests
         if: always()
         run: python -m unittest discover -s source_acquisition -p "test_*.py" -v
+      - name: Run Channel Profile tests
+        if: always()
+        run: python -m unittest discover -s channel_profiles -p "test_*.py" -v
       - name: Run Story Script Engine tests
         if: always()
         run: python -m unittest discover -s story_script_engine -p "test_*.py" -v
