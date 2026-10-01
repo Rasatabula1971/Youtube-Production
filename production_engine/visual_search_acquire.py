@@ -57,10 +57,16 @@ def acquire() -> dict:
                 for x in shot.get("search_terms", [])
                 if str(x).strip()
             ]
-            query = (
-                " ".join(terms)[:100]
-                or str(shot.get("desired_visual") or "").strip()
-            )
+            desired = str(shot.get("desired_visual") or "").strip()
+            instruction = str(
+                shot.get("creative_instruction") or ""
+            ).strip()
+            query_parts = [*terms]
+            if desired and desired not in query_parts:
+                query_parts.append(desired)
+            if instruction:
+                query_parts.append(instruction)
+            query = " ".join(query_parts)[:180]
             found = discover(
                 query,
                 int(shot.get("max_candidates_per_source") or 5),
