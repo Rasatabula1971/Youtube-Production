@@ -210,14 +210,40 @@ def snapshot() -> dict[str, Any]:
                 "stale_shot_ids": stale_shot_ids,
             }
         )
+    shots_total = sum(
+        len(packet.get("shots", []))
+        for packet in packets
+    )
+    decided_total = sum(
+        len(packet.get("decisions", {}))
+        for packet in packets
+    )
+    rights_context_required = sum(
+        decision.get("status") == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+        for packet in packets
+        for decision in packet.get("decisions", {}).values()
+        if isinstance(decision, dict)
+    )
+    complete = (
+        bool(packets)
+        and stale_total == 0
+        and shots_total > 0
+        and decided_total == shots_total
+    )
     return {
         "status": (
             "VISUAL_SEARCH_STALE"
             if stale_total
+            else "COMPLETE"
+            if complete
             else "READY_FOR_VISUAL_CANDIDATE_REVIEW"
             if packets
             else "WAITING_FOR_VISUAL_SEARCH_RESULTS"
         ),
+        "complete": complete,
+        "shots_total": shots_total,
+        "shots_decided": decided_total,
+        "rights_context_required": rights_context_required,
         "stale_shots": stale_total,
         "packets": packets,
     }
