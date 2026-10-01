@@ -318,5 +318,72 @@ class PackageReviewTests(unittest.TestCase):
         )
 
 
+    def test_accept_requires_and_persists_short_and_long_title_choices(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            candidates = self.candidates()
+            angles = ["curiosity", "stakes", "unexpected", "mystery", "payoff"]
+            candidates["packages"][0]["titles"] = {
+                "short": [
+                    {
+                        "candidate_id": f"short-{angle}",
+                        "angle": angle,
+                        "title": f"Short {angle}",
+                    }
+                    for angle in angles
+                ],
+                "long_form": [
+                    {
+                        "candidate_id": f"long-{angle}",
+                        "angle": angle,
+                        "title": f"Long title {angle}",
+                    }
+                    for angle in angles
+                ],
+            }
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(candidates), encoding="utf-8"
+            )
+            review.prepare_state()
+
+            with self.assertRaisesRegex(ValueError, "requires one Short title"):
+                review.apply_action(
+                    package_id="p1",
+                    decision="ACCEPT",
+                    criteria={},
+                    note="",
+                )
+
+            final = review.apply_action(
+                package_id="p1",
+                decision="ACCEPT",
+                criteria={},
+                note="",
+                selected_titles={
+                    "short": {
+                        "candidate_id": "short-curiosity",
+                        "title": "Short curiosity",
+                    },
+                    "long_form": {
+                        "candidate_id": "long-stakes",
+                        "title": "Long title stakes",
+                    },
+                },
+            )
+            handoff = json.loads(
+                review.RESEARCH_HANDOFF_FILE.read_text(encoding="utf-8")
+            )
+
+        self.assertTrue(final["complete"])
+        packaging = handoff["concepts"][0]["packaging"]
+        self.assertEqual(packaging["selected_titles"]["short"]["title"], "Short curiosity")
+        self.assertEqual(
+            packaging["selected_titles"]["long_form"]["title"],
+            "Long title stakes",
+        )
+        self.assertEqual(packaging["title"], "Long title stakes")
+
+
+
 if __name__ == "__main__":
     unittest.main()
