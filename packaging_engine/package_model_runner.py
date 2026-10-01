@@ -91,7 +91,13 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         ],
         "properties": {
             "package_id": {"type": "string", "minLength": 1},
-            "title": {"type": "string", "minLength": 1},
+            "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": int(
+                    (request.get("title_contract") or {}).get("max_chars", 56)
+                ),
+            },
             "thumbnail": {
                 "type": "object",
                 "additionalProperties": False,
@@ -168,9 +174,9 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "3. Treat title and thumbnail as one communication unit; they should complement, not repeat.\n"
         "4. Generate exactly three genuinely different human hook angles, not wording variants. Prefer truthful consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when supported by the accepted concept.\n"
         "5. The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain. Do not lead like a lecture, textbook chapter, or engineering lesson.\n"
-        "6. TITLE CONTRACT: title is the proposed PUBLIC YouTube title, not an internal label. Keep it normally 3-8 words, punchy, conversational, and front-load the strongest truthful dramatic tension. Never exceed the configured title limits in PACKAGE REQUEST.\n"
+        "6. TITLE CONTRACT: title is the proposed PUBLIC YouTube title, not an internal label. Target 3-7 words, stay within the hard limits in PACKAGE REQUEST, keep it punchy and conversational, and push toward the strongest truthful dramatic tension supported by the concept.\n"
         "7. Do not use lecture-title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or materials/technology lists. Put those details in the payoff, not the title.\n"
-        "8. Prefer a title that makes a normal viewer think 'wait—what?' or 'how is that possible?' without inventing danger or certainty.\n"
+        "8. Prefer a title that makes a normal viewer think 'wait—what?', 'how is that possible?', or 'that happens to me?' without inventing danger or certainty. Keep technical mechanism/material names out of the title unless the term itself creates the human hook.\n"
         "9. Every package must make one honest promise and define the payoff the video must deliver.\n"
         "10. Do not invent facts, evidence, urgency, controversy, or certainty.\n"
         "11. Do not upgrade HYPOTHESIS or UNASSESSED content-gap evidence into a proven fact.\n"
