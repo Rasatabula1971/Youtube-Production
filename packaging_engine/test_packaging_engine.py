@@ -16,7 +16,7 @@ from packaging_engine import (
 class PackagingEngineTests(unittest.TestCase):
     def setUp(self):
         self.config = {
-            "packages_per_concept": 5,
+            "packages_per_concept": 3,
             "allowed_format_intents": [
                 "long_form",
                 "short",
@@ -107,7 +107,7 @@ class PackagingEngineTests(unittest.TestCase):
         self.assertEqual(request["concept_id"], "c1")
         self.assertEqual(
             request["package_count_requested"],
-            5,
+            3,
         )
         self.assertNotIn("score", request)
         self.assertNotIn("rank", request)
