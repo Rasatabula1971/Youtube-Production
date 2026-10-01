@@ -8,6 +8,7 @@ third-party footage, and it never calls paid generation providers.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,35 @@ def _key(concept_id: str, fmt: str) -> str:
     return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
 
 
+def shot_fingerprint(card: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        card,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def raw_matches_request(
+    request: dict[str, Any],
+    raw: dict[str, Any],
+) -> bool:
+    fingerprints = raw.get("shot_fingerprints", {})
+    if not isinstance(fingerprints, dict):
+        return False
+    for shot in request.get("shots", []):
+        if not isinstance(shot, dict):
+            continue
+        shot_id = str(shot.get("shot_id") or "")
+        if (
+            not shot_id
+            or fingerprints.get(shot_id) != shot.get("shot_fingerprint")
+        ):
+            return False
+    return True
+
+
 def build_search_request(board: dict[str, Any], board_path: Path) -> dict[str, Any]:
     if board.get("status") != "READY_FOR_VISUAL_SEARCH":
         raise ValueError("Storyboard is not ready for visual search")
@@ -64,7 +94,7 @@ def build_search_request(board: dict[str, Any], board_path: Path) -> dict[str, A
             "max_candidates_per_source": 5,
             "creator_search_allowed": bool(strategy.get("creator_excerpt_allowed_only_after_human_rights_context_review")),
             "premium_generation_candidate": bool(card.get("premium_generation_candidate")),
-            "shot_fingerprint": __import__("hashlib").sha256(json.dumps(card, sort_keys=True).encode("utf-8")).hexdigest(),
+            "shot_fingerprint": shot_fingerprint(card),
         })
     return {
         "artifact": "visual_search_request",
@@ -135,6 +165,8 @@ def compile_results(request: dict[str, Any], request_path: Path, raw: dict[str, 
         candidates.sort(key=lambda x: (0 if x["state"] == "ELIGIBLE" else 1 if x["state"] == "HUMAN_REVIEW_REQUIRED" else 2, priority.get(x["source_tier"], 99), x["estimated_cost_usd"]))
         results.append({
             "shot_id": shot_id,
+            "creative_version": int(shot.get("creative_version") or 1),
+            "shot_fingerprint": shot.get("shot_fingerprint"),
             "candidates": candidates,
             "eligible": sum(x["state"] == "ELIGIBLE" for x in candidates),
             "human_review_required": sum(x["state"] == "HUMAN_REVIEW_REQUIRED" for x in candidates),
@@ -162,11 +194,25 @@ def prepare() -> dict[str, Any]:
         request_path = RESULT_DIR / f"{key}.visual_search_request.json"
         atomic_write_json(request_path, request)
         raw_path = RAW_DIR / f"{key}.visual_search_raw.json"
+        result_path = RESULT_DIR / f"{key}.visual_search_results.json"
+        raw_current = False
         if raw_path.exists():
-            result = compile_results(request, request_path, load_json(raw_path))
-            result_path = RESULT_DIR / f"{key}.visual_search_results.json"
-            atomic_write_json(result_path, result)
-        prepared.append({"concept_id": board.get("concept_id"), "format": board.get("format"), "request": str(request_path), "raw_results_present": raw_path.exists()})
+            raw = load_json(raw_path)
+            raw_current = isinstance(raw, dict) and raw_matches_request(
+                request, raw
+            )
+            if raw_current:
+                result = compile_results(request, request_path, raw)
+                atomic_write_json(result_path, result)
+            elif result_path.exists():
+                result_path.unlink()
+        prepared.append({
+            "concept_id": board.get("concept_id"),
+            "format": board.get("format"),
+            "request": str(request_path),
+            "raw_results_present": raw_path.exists(),
+            "raw_results_current": raw_current,
+        })
     summary = {
         "status": "READY_FOR_SEARCH_ADAPTERS" if prepared else "WAITING_FOR_STORYBOARDS",
         "prepared": len(prepared),
