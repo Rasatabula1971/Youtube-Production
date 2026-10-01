@@ -225,6 +225,7 @@ def build_format_request(
         "branch_constraints": constraints,
         "package": {
             "title": package.get("title"),
+            "selected_titles": package.get("selected_titles", {}),
             "one_sentence_promise": package.get("one_sentence_promise"),
             "expected_payoff": package.get("expected_payoff"),
             "viewer_problem": package.get("viewer_problem"),
