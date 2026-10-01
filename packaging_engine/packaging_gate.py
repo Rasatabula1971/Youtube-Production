@@ -113,6 +113,9 @@ def build_review_request(
             "promise_clear": (
                 "The package communicates one understandable main promise."
             ),
+            "human_hook_present": (
+                "The package leads with a truthful human tension, surprise, consequence, mystery, or personal relevance that creates curiosity before the technical explanation begins; it does not read like a lecture or textbook topic."
+            ),
             "viewer_problem_aligned": (
                 "The package addresses the specific viewer problem accepted at the Concept Gate rather than drifting back to a broad topic."
             ),
