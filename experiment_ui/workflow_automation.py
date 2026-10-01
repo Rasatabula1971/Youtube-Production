@@ -58,6 +58,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "storyboard_prepare",
     "visual_search_prepare",
     "visual_search_acquire",
+    "visual_rough_cut_prepare",
+    "visual_gap_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40
