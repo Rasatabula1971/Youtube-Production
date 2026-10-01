@@ -256,15 +256,17 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="packagingDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="packagingCriteria"></div>
+                <div class="concept-complete">Human decision only. System criteria are retained for audit; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="packagingCriteria" hidden></div>
                 <label class="vision-label" for="packagingNote">Human instruction / review note</label>
                 <textarea id="packagingNote" class="vision-observation" rows="4" maxlength="1000" placeholder="For Rework, state exactly what must change. This instruction is authoritative. Optional for Reject or Accept."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="packagingPrev" type="button">← Previous</button>
                   <button class="danger" id="packagingReject" type="button">Reject</button>
                   <button class="ghost" id="packagingRework" type="button">Rework</button>
-                  <button id="packagingAccept" type="button">Accept package</button>
-                  <button class="ghost" id="packagingNext" type="button">Next →</button>
+                  <button class="ghost" id="packagingSaveIdea" type="button">Save</button>
+                  <button id="packagingAccept" type="button">Accept</button>
+                  <button class="ghost" id="packagingNext" type="button">Next idea →</button>
                 </div>
               </div>
             </div>
