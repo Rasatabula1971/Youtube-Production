@@ -23,6 +23,9 @@ class PackagingEngineTests(unittest.TestCase):
                 "either",
             ],
             "minimum_research_dependencies": 0,
+            "title_max_words": 8,
+            "title_max_chars": 56,
+            "title_style_contract": "human_hook_v2",
         }
         self.concept = {
             "concept_id": "c1",
@@ -111,6 +114,36 @@ class PackagingEngineTests(unittest.TestCase):
         )
         self.assertNotIn("score", request)
         self.assertNotIn("rank", request)
+
+    def test_long_public_title_is_rejected(self):
+        request = build_package_request(self.concept, self.config)
+        package = self.valid_package()
+        package["title"] = "Why This Airplane Tire Somehow Survives Every Violent Runway Impact"
+        result = validate_response(
+            {"concept_id": "c1", "packages": [package]},
+            request,
+            self.config,
+        )
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertIn(
+            "title must be at most 8 words",
+            result["rejected"][0]["errors"],
+        )
+
+    def test_lecture_style_public_title_is_rejected(self):
+        request = build_package_request(self.concept, self.config)
+        package = self.valid_package()
+        package["title"] = "The Physics of Racing Brakes"
+        result = validate_response(
+            {"concept_id": "c1", "packages": [package]},
+            request,
+            self.config,
+        )
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertIn(
+            "title uses lecture-style framing",
+            result["rejected"][0]["errors"],
+        )
 
     def test_valid_package_passes(self):
         request = build_package_request(
