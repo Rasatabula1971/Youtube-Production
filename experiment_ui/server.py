@@ -46,6 +46,8 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/narration-preview-gate",
     "/api/narration-spend-gate",
     "/api/visual-candidate-review",
+    "/api/visual-rights-review",
+    "/api/visual-rough-cut-review",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -239,6 +241,14 @@ from visual_candidate_review import (
     apply_action as apply_visual_candidate_review_action,
     snapshot as visual_candidate_review_snapshot,
 )
+from visual_rights_review import (
+    apply_action as apply_visual_rights_review_action,
+    snapshot as visual_rights_review_snapshot,
+)
+from visual_rough_cut_review import (
+    apply_action as apply_visual_rough_cut_review_action,
+    snapshot as visual_rough_cut_review_snapshot,
+)
 from storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
@@ -258,6 +268,11 @@ PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summar
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
 PRODUCTION_STORYBOARD_DIR = PRODUCTION_OUTPUT / "storyboards"
 PRODUCTION_VISUAL_SEARCH_RESULT_DIR = PRODUCTION_OUTPUT / "visual_search_results"
+PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_candidate_reviews"
+PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rights_reviews"
+PRODUCTION_VISUAL_ROUGH_CUT_DIR = PRODUCTION_OUTPUT / "visual_rough_cuts"
+PRODUCTION_VISUAL_ROUGH_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rough_cut_reviews"
+PRODUCTION_VISUAL_GAP_PLAN_DIR = PRODUCTION_OUTPUT / "visual_gap_plans"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -303,6 +318,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "storyboard_prepare",
     "visual_search_prepare",
     "visual_search_acquire",
+    "visual_rough_cut_prepare",
+    "visual_gap_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1026,6 +1043,24 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [sys.executable, "production_engine/visual_search_acquire.py", "--mode", "acquire"],
         "description": "Searches configured zero-cost stock and creator-discovery adapters, then stops for human candidate review.",
+    },
+    "visual_rough_cut_prepare": {
+        "label": "Build Visual Rough Cut",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_rough_cut.py"],
+        "description": (
+            "Builds a storyboard-aware rough-cut manifest only after current "
+            "visual selections and any required rights/context decisions are complete."
+        ),
+    },
+    "visual_gap_prepare": {
+        "label": "Plan Remaining Visual Gaps",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_gap_planner.py"],
+        "description": (
+            "Plans unresolved visual gaps after human rough-cut approval. "
+            "This step never authorizes paid generation."
+        ),
     },
     "production_visual_prepare": {
         "label": "Prepare Visual Acquisition Manifest",
@@ -2287,6 +2322,144 @@ def production_visual_artifact_state() -> dict[str, Any]:
     }
 
 
+def visual_post_search_artifact_state() -> dict[str, Any]:
+    candidate_gate = visual_candidate_review_snapshot()
+    rights_gate = visual_rights_review_snapshot()
+    candidate_complete = bool(candidate_gate.get("complete"))
+    rights_complete = bool(rights_gate.get("complete"))
+
+    expected: set[tuple[str, str]] = set()
+    rough_current: set[tuple[str, str]] = set()
+    for packet in candidate_gate.get("packets", []):
+        if not isinstance(packet, dict):
+            continue
+        concept_id = str(packet.get("concept_id") or "")
+        branch_format = str(packet.get("format") or "")
+        result_file = Path(str(packet.get("result_file") or ""))
+        if not concept_id or not branch_format or not result_file.name:
+            continue
+        expected.add((concept_id, branch_format))
+        base = result_file.name.replace(".visual_search_results.json", "")
+        board_path = PRODUCTION_STORYBOARD_DIR / f"{base}.storyboard.json"
+        review_path = (
+            PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR
+            / f"{base}.visual_candidate_review.json"
+        )
+        rights_path = (
+            PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR
+            / f"{base}.visual_rights_review.json"
+        )
+        rough_path = (
+            PRODUCTION_VISUAL_ROUGH_CUT_DIR
+            / f"{base}.visual_rough_cut.json"
+        )
+        if not (
+            board_path.exists()
+            and review_path.exists()
+            and rough_path.exists()
+        ):
+            continue
+        rough = safe_load_json(rough_path)
+        if not isinstance(rough, dict):
+            continue
+        provenance = rough.get("provenance", {})
+        if not isinstance(provenance, dict):
+            continue
+        if (
+            provenance.get("storyboard_sha256") != sha256_file(board_path)
+            or provenance.get("candidate_review_sha256")
+            != sha256_file(review_path)
+        ):
+            continue
+        rights_required = any(
+            isinstance(decision, dict)
+            and decision.get("status")
+            == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+            for decision in packet.get("decisions", {}).values()
+        )
+        if rights_required:
+            if (
+                not rights_path.exists()
+                or provenance.get("rights_review_sha256")
+                != sha256_file(rights_path)
+            ):
+                continue
+        elif provenance.get("rights_review_sha256") not in {None, ""}:
+            continue
+        rough_current.add((concept_id, branch_format))
+
+    rough_cuts_ready = (
+        candidate_complete
+        and rights_complete
+        and bool(expected)
+        and expected.issubset(rough_current)
+    )
+    rough_gate = (
+        visual_rough_cut_review_snapshot()
+        if rough_cuts_ready
+        else {
+            "status": "WAITING_FOR_ROUGH_CUT",
+            "complete": False,
+            "items": [],
+        }
+    )
+
+    gap_current: set[tuple[str, str]] = set()
+    if bool(rough_gate.get("complete")):
+        for item in rough_gate.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            concept_id = str(item.get("concept_id") or "")
+            branch_format = str(item.get("format") or "")
+            rough_path = Path(str(item.get("rough_cut_file") or ""))
+            if not concept_id or not branch_format or not rough_path.exists():
+                continue
+            base = rough_path.name.replace(".visual_rough_cut.json", "")
+            review_path = (
+                PRODUCTION_VISUAL_ROUGH_REVIEW_DIR
+                / f"{base}.visual_rough_cut_review.json"
+            )
+            gap_path = (
+                PRODUCTION_VISUAL_GAP_PLAN_DIR
+                / f"{base}.visual_gap_plan.json"
+            )
+            if not review_path.exists() or not gap_path.exists():
+                continue
+            gap = safe_load_json(gap_path)
+            provenance = (
+                gap.get("provenance", {})
+                if isinstance(gap, dict)
+                else {}
+            )
+            if (
+                isinstance(provenance, dict)
+                and provenance.get("rough_cut_sha256")
+                == sha256_file(rough_path)
+                and provenance.get("rough_cut_review_sha256")
+                == sha256_file(review_path)
+            ):
+                gap_current.add((concept_id, branch_format))
+
+    gap_plans_ready = (
+        bool(rough_gate.get("complete"))
+        and bool(expected)
+        and expected.issubset(gap_current)
+    )
+    return {
+        "candidate_gate": candidate_gate,
+        "candidate_complete": candidate_complete,
+        "rights_gate": rights_gate,
+        "rights_complete": rights_complete,
+        "expected_branches": sorted(expected),
+        "rough_current_branches": sorted(rough_current),
+        "rough_cuts_ready": rough_cuts_ready,
+        "rough_gate": rough_gate,
+        "rough_gate_complete": bool(rough_gate.get("complete")),
+        "gap_current_branches": sorted(gap_current),
+        "gap_plans_ready": gap_plans_ready,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -3297,6 +3470,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     narration_audio_ready = bool(narration.get("audio_ready"))
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
+    visual_post = visual_post_search_artifact_state()
+    visual_candidate_complete = bool(visual_post["candidate_complete"])
+    visual_rights_complete = bool(visual_post["rights_complete"])
+    visual_rough_cuts_ready = bool(visual_post["rough_cuts_ready"])
+    visual_rough_gate_complete = bool(visual_post["rough_gate_complete"])
+    visual_gap_plans_ready = bool(visual_post["gap_plans_ready"])
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -4097,6 +4276,37 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "enabled": any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_results.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else False,
             "reason": "Search zero-cost/existing visual sources, then stop for human candidate review.",
         },
+        "visual_rough_cut_prepare": {
+            "enabled": (
+                visual_candidate_complete
+                and visual_rights_complete
+                and not visual_rough_cuts_ready
+            ),
+            "reason": (
+                "Current visual selections and rights/context decisions are ready; build the rough cut."
+                if visual_candidate_complete and visual_rights_complete and not visual_rough_cuts_ready
+                else (
+                    "Current rough-cut manifests are ready."
+                    if visual_rough_cuts_ready
+                    else "Complete Visual Candidate Review and any required Rights/Context Review first."
+                )
+            ),
+        },
+        "visual_gap_prepare": {
+            "enabled": (
+                visual_rough_gate_complete
+                and not visual_gap_plans_ready
+            ),
+            "reason": (
+                "Human-approved rough cuts are ready for unresolved-gap planning."
+                if visual_rough_gate_complete and not visual_gap_plans_ready
+                else (
+                    "Current visual gap plans are ready."
+                    if visual_gap_plans_ready
+                    else "Complete the Human Rough-Cut Gate first."
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -4638,6 +4848,10 @@ def status_payload() -> dict[str, Any]:
         "narration": narration,
         "narration_spend_gate": narration["spend_gate"],
         "production_visual": production_visual,
+        "visual_post_search": visual_post_search_artifact_state(),
+        "visual_candidate_gate": visual_candidate_review_snapshot(),
+        "visual_rights_gate": visual_rights_review_snapshot(),
+        "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -4760,6 +4974,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/visual-candidate-review":
             self._send_json(visual_candidate_review_snapshot())
+            return
+        if route == "/api/visual-rights-review":
+            self._send_json(visual_rights_review_snapshot())
+            return
+        if route == "/api/visual-rough-cut-review":
+            self._send_json(visual_rough_cut_review_snapshot())
             return
         if route == "/api/storyboard-review":
             self._send_json(storyboard_review_snapshot())
@@ -5009,6 +5229,39 @@ class Handler(BaseHTTPRequestHandler):
                     candidate_id=(str(body["candidate_id"]) if body.get("candidate_id") is not None else None),
                     note=str(body.get("note") or ""),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-rights-review":
+                payload = apply_visual_rights_review_action(
+                    candidate_review_file=str(
+                        body.get("candidate_review_file", "")
+                    ),
+                    shot_id=str(body.get("shot_id", "")),
+                    decision=str(body.get("decision", "")),
+                    transformative_purpose=str(
+                        body.get("transformative_purpose") or ""
+                    ),
+                    context_note=str(body.get("context_note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-rough-cut-review":
+                payload = apply_visual_rough_cut_review_action(
+                    rough_cut_file=str(body.get("rough_cut_file", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
