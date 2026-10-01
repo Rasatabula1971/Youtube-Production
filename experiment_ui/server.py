@@ -2487,6 +2487,101 @@ def visual_post_search_artifact_state() -> dict[str, Any]:
     }
 
 
+def visual_generation_handoff_artifact_state() -> dict[str, Any]:
+    spend = visual_spend_review_snapshot()
+    expected: dict[tuple[str, str, str], float] = {}
+    for item in spend.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        concept_id = str(item.get("concept_id") or "")
+        branch_format = str(item.get("format") or "")
+        decisions = item.get("decisions", {})
+        if not isinstance(decisions, dict):
+            continue
+        for shot_id, decision in decisions.items():
+            if (
+                isinstance(decision, dict)
+                and decision.get("paid_generation_authorized") is True
+                and str(decision.get("decision") or "")
+                == "AUTHORIZE_GENERATION"
+            ):
+                expected[(concept_id, branch_format, str(shot_id))] = round(
+                    float(decision.get("max_cost_usd") or 0),
+                    2,
+                )
+
+    current: dict[tuple[str, str, str], float] = {}
+    stale = 0
+    if PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.exists():
+        for path in PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.glob(
+            "*.visual_generation_request.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+                str(payload.get("shot_id") or ""),
+            )
+            provenance = payload.get("provenance", {})
+            authorization = payload.get("spend_authorization", {})
+            if not isinstance(provenance, dict) or not isinstance(
+                authorization, dict
+            ):
+                stale += 1
+                continue
+            gap_path = Path(str(provenance.get("gap_plan") or ""))
+            spend_path = Path(
+                str(provenance.get("visual_spend_review") or "")
+            )
+            if (
+                not gap_path.exists()
+                or not spend_path.exists()
+                or provenance.get("gap_plan_sha256") != sha256_file(gap_path)
+                or provenance.get("visual_spend_review_sha256")
+                != sha256_file(spend_path)
+                or authorization.get("human_authorized") is not True
+                or authorization.get("execution_authorized") is not False
+            ):
+                stale += 1
+                continue
+            max_cost = round(
+                float(authorization.get("max_cost_usd") or 0),
+                2,
+            )
+            if key not in expected or expected[key] != max_cost:
+                stale += 1
+                continue
+            current[key] = max_cost
+
+    ready = bool(expected) and expected == current and stale == 0
+    return {
+        "status": (
+            "READY_FOR_PROVIDER_HANDOFF"
+            if ready
+            else "STALE_OR_INCOMPLETE"
+            if expected
+            else "NO_PAID_VISUAL_GENERATION_AUTHORIZED"
+        ),
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "authorized_max_total_usd": round(sum(expected.values()), 2),
+        "requests": [
+            {
+                "concept_id": key[0],
+                "format": key[1],
+                "shot_id": key[2],
+                "max_cost_usd": value,
+            }
+            for key, value in sorted(current.items())
+        ],
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -3509,18 +3604,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_spend = visual_spend_review_snapshot()
     visual_spend_complete = bool(visual_spend.get("complete"))
     visual_spend_authorized = int(visual_spend.get("authorized") or 0)
-    visual_generation_handoff_payload = safe_load_json(
-        PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY
-    )
-    visual_generation_handoff = (
-        visual_generation_handoff_payload
-        if isinstance(visual_generation_handoff_payload, dict)
-        else {}
-    )
+    visual_generation_handoff = visual_generation_handoff_artifact_state()
     visual_generation_handoff_ready = bool(
-        visual_generation_handoff.get("status")
-        == "READY_FOR_PROVIDER_HANDOFF"
-        and int(visual_generation_handoff.get("prepared") or 0) > 0
+        visual_generation_handoff.get("ready")
     )
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
@@ -4887,14 +4973,8 @@ def workflow_guidance(
             }
         if hero_count > 0 and spend_gate.get("complete"):
             authorized = int(spend_gate.get("authorized") or 0)
-            handoff_payload = safe_load_json(
-                PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY
-            )
-            handoff_ready = bool(
-                isinstance(handoff_payload, dict)
-                and handoff_payload.get("status") == "READY_FOR_PROVIDER_HANDOFF"
-                and int(handoff_payload.get("prepared") or 0) > 0
-            )
+            handoff_state = visual_generation_handoff_artifact_state()
+            handoff_ready = bool(handoff_state.get("ready"))
             if authorized > 0 and not handoff_ready:
                 return {
                     "state": "ACTION_REQUIRED",
@@ -5082,11 +5162,7 @@ def status_payload() -> dict[str, Any]:
         "visual_rights_gate": visual_rights_review_snapshot(),
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "visual_spend_gate": visual_spend_review_snapshot(),
-        "visual_generation_handoff": (
-            safe_load_json(PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY)
-            if PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY.exists()
-            else {}
-        ),
+        "visual_generation_handoff": visual_generation_handoff_artifact_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
