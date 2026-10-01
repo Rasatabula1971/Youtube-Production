@@ -66,6 +66,15 @@ def sha256_file(path: Path) -> str:
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     concept_id = str(request.get("concept_id", ""))
     allowed_formats = list(request.get("allowed_format_intents", []))
+    title_angles = [
+        str(value)
+        for value in request.get(
+            "title_angles",
+            ["curiosity", "stakes", "unexpected", "mystery", "payoff"],
+        )
+        if str(value).strip()
+    ]
+    title_count = int(request.get("title_variations_per_format", 5))
     package_schema = {
         "type": "object",
         "additionalProperties": False,
@@ -115,8 +124,8 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "properties": {
                     "short": {
                         "type": "array",
-                        "minItems": 5,
-                        "maxItems": 5,
+                        "minItems": title_count,
+                        "maxItems": title_count,
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
@@ -125,13 +134,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                 "candidate_id": {"type": "string", "minLength": 1},
                                 "angle": {
                                     "type": "string",
-                                    "enum": [
-                                        "curiosity",
-                                        "stakes",
-                                        "unexpected",
-                                        "mystery",
-                                        "payoff",
-                                    ],
+                                    "enum": title_angles,
                                 },
                                 "title": {
                                     "type": "string",
@@ -147,8 +150,8 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                     },
                     "long_form": {
                         "type": "array",
-                        "minItems": 5,
-                        "maxItems": 5,
+                        "minItems": title_count,
+                        "maxItems": title_count,
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
@@ -157,13 +160,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                                 "candidate_id": {"type": "string", "minLength": 1},
                                 "angle": {
                                     "type": "string",
-                                    "enum": [
-                                        "curiosity",
-                                        "stakes",
-                                        "unexpected",
-                                        "mystery",
-                                        "payoff",
-                                    ],
+                                    "enum": title_angles,
                                 },
                                 "title": {
                                     "type": "string",
