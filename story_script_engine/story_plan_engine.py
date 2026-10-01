@@ -132,6 +132,7 @@ def _base_from_verified_package(
         "concept_id": concept_id,
         "package": {
             "title": title,
+            "selected_titles": packaging.get("selected_titles", {}),
             "thumbnail": packaging.get("thumbnail", {}),
             "opening_frame": packaging.get("opening_frame", {}),
             "one_sentence_promise": packaging.get("one_sentence_promise")
