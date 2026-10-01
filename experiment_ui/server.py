@@ -4719,6 +4719,80 @@ def workflow_guidance(
             "next_title": "Prepare Final Narration Quote",
         }
 
+    visual_post = visual_post_search_artifact_state()
+    candidate_gate = visual_post.get("candidate_gate", {})
+    if (
+        candidate_gate.get("packets")
+        and not visual_post.get("candidate_complete")
+    ):
+        return {
+            "state": "HUMAN_VISUAL_CANDIDATE_GATE",
+            "current_action_id": None,
+            "current_title": (
+                "Re-search Revised Visual Shots"
+                if int(candidate_gate.get("stale_shots") or 0) > 0
+                else "Choose Visual Candidates"
+            ),
+            "current_detail": (
+                "One or more storyboard shots changed and their old search "
+                "results are stale. Continue Automatically to re-search them."
+                if int(candidate_gate.get("stale_shots") or 0) > 0
+                else "Choose a current visual, reject the available options, "
+                "or preserve the shot as a visual gap."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Rights review or automatic rough cut",
+        }
+
+    rights_gate = visual_post.get("rights_gate", {})
+    if (
+        visual_post.get("candidate_complete")
+        and int(rights_gate.get("required") or 0) > 0
+        and not visual_post.get("rights_complete")
+    ):
+        return {
+            "state": "HUMAN_VISUAL_RIGHTS_GATE",
+            "current_action_id": None,
+            "current_title": "Review Creator Footage Context",
+            "current_detail": (
+                "Creator/editorial footage is never auto-approved. Document "
+                "the intended transformative/editorial purpose or reject its use."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Build Visual Rough Cut",
+        }
+
+    rough_gate = visual_post.get("rough_gate", {})
+    if (
+        visual_post.get("rough_cuts_ready")
+        and not visual_post.get("rough_gate_complete")
+    ):
+        return {
+            "state": "HUMAN_ROUGH_CUT_GATE",
+            "current_action_id": None,
+            "current_title": "Review Visual Rough Cut",
+            "current_detail": (
+                "Review the full storyboard-to-visual assignment before gap "
+                "planning. Approving with gaps does not authorize paid generation."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Plan Remaining Visual Gaps",
+        }
+
+    if visual_post.get("gap_plans_ready"):
+        return {
+            "state": "VISUAL_GAP_PLAN_READY",
+            "current_action_id": None,
+            "current_title": "Visual Gap Plan Ready",
+            "current_detail": (
+                "Unresolved shots are classified for another existing-asset "
+                "attempt or a separate human spend decision. No paid generation "
+                "has been authorized."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Visual Spend Gate",
+        }
+
     production_visual = production_visual_artifact_state()
     if voice.get("visual_ready") and production_visual.get("manifests_ready"):
         return {
