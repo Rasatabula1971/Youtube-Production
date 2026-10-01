@@ -175,6 +175,17 @@ const visualRightsReject = document.getElementById("visualRightsReject");
 const visualRightsApprove = document.getElementById("visualRightsApprove");
 const visualRightsNext = document.getElementById("visualRightsNext");
 
+const managedVisualImportPanel = document.getElementById("managedVisualImportPanel");
+const managedVisualImportTitle = document.getElementById("managedVisualImportTitle");
+const managedVisualImportSummary = document.getElementById("managedVisualImportSummary");
+const managedVisualImportStatus = document.getElementById("managedVisualImportStatus");
+const managedVisualImportDetail = document.getElementById("managedVisualImportDetail");
+const managedVisualAssetPath = document.getElementById("managedVisualAssetPath");
+const managedVisualNote = document.getElementById("managedVisualNote");
+const managedVisualPrev = document.getElementById("managedVisualPrev");
+const managedVisualRegister = document.getElementById("managedVisualRegister");
+const managedVisualNext = document.getElementById("managedVisualNext");
+
 const visualRoughCutReviewPanel = document.getElementById("visualRoughCutReviewPanel");
 const visualRoughCutReviewTitle = document.getElementById("visualRoughCutReviewTitle");
 const visualRoughCutReviewSummary = document.getElementById("visualRoughCutReviewSummary");
@@ -291,6 +302,9 @@ let visualShotCursor = 0;
 let latestStoryboardSnapshot = null;
 let latestVisualRightsSnapshot = null;
 let visualRightsCursor = 0;
+let latestManagedVisualAcquisition = null;
+let latestManagedVisualAssets = null;
+let managedVisualCursor = 0;
 let latestVisualRoughCutSnapshot = null;
 let visualRoughCutCursor = 0;
 let latestVisualSpendSnapshot = null;
@@ -2794,6 +2808,119 @@ async function submitVisualRightsDecision(decision) {
   }
 }
 
+function managedVisualKey(item) {
+  return [
+    String((item && item.concept_id) || ""),
+    String((item && item.format) || ""),
+    String((item && item.shot_id) || "")
+  ].join("::");
+}
+
+function managedVisualPendingItems(acquisition, assets) {
+  const registered = new Set(
+    (((assets && assets.items) || [])).map(managedVisualKey)
+  );
+  return (((acquisition && acquisition.manual_items) || [])).filter(
+    function (item) {
+      return !registered.has(managedVisualKey(item));
+    }
+  );
+}
+
+function renderManagedVisualImport(acquisition, assets) {
+  latestManagedVisualAcquisition = acquisition || {};
+  latestManagedVisualAssets = assets || {};
+  const items = managedVisualPendingItems(
+    latestManagedVisualAcquisition,
+    latestManagedVisualAssets
+  );
+
+  managedVisualImportPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  managedVisualCursor = Math.max(
+    0,
+    Math.min(managedVisualCursor, items.length - 1)
+  );
+  const item = items[managedVisualCursor] || {};
+
+  managedVisualImportTitle.textContent =
+    "Supply approved visual — " + (item.shot_id || "");
+  managedVisualImportSummary.textContent =
+    (managedVisualCursor + 1) + " of " + items.length +
+    " local assets required";
+  managedVisualImportStatus.textContent = "LOCAL FILE REQUIRED";
+  managedVisualImportStatus.className = "status-chip running";
+
+  managedVisualImportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>APPROVED EXISTING VISUAL</h4>' +
+    '<h3>' + escapeHtml(item.shot_id || "") + '</h3>' +
+    '<p><strong>Concept:</strong> ' + escapeHtml(item.concept_id || "") +
+    '<br><strong>Format:</strong> ' +
+    escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Candidate:</strong> ' +
+    escapeHtml(item.candidate_id || "") +
+    '<br><strong>Creator:</strong> ' + escapeHtml(item.creator || "—") +
+    '<br><strong>License/context:</strong> ' +
+    escapeHtml(item.license || "Human context approval required") +
+    '<br><strong>Source:</strong> ' +
+    escapeHtml(item.source_url || "") +
+    '</p><p class="muted">' +
+    escapeHtml(humanizeToken(item.reason || "")) +
+    '</p></div>';
+
+  managedVisualAssetPath.value = "";
+  managedVisualNote.value = "";
+  managedVisualPrev.disabled = managedVisualCursor === 0;
+  managedVisualNext.disabled = managedVisualCursor >= items.length - 1;
+}
+
+async function registerManagedVisualAsset() {
+  const items = managedVisualPendingItems(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+  const item = items[managedVisualCursor];
+  if (!item) return;
+
+  const assetPath = managedVisualAssetPath.value.trim();
+  if (!assetPath) {
+    showToast("Enter the local approved visual file path.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/managed-visual-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        candidate_review_file: item.candidate_review_file,
+        shot_id: item.shot_id,
+        asset_file: assetPath,
+        note: managedVisualNote.value
+      })
+    });
+    latestManagedVisualAssets = payload.managed_visual_assets || {};
+    const remaining = managedVisualPendingItems(
+      latestManagedVisualAcquisition || {},
+      latestManagedVisualAssets
+    );
+    if (managedVisualCursor >= remaining.length) {
+      managedVisualCursor = Math.max(0, remaining.length - 1);
+    }
+    renderManagedVisualImport(
+      latestManagedVisualAcquisition || {},
+      latestManagedVisualAssets
+    );
+    showToast(
+      "Approved visual registered. Current assembly can now use the local asset.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function visualRoughCutItems(snapshot) {
   return (snapshot && snapshot.items || []).filter(function (item) {
     return item && item.review_current !== false;
@@ -3274,6 +3401,10 @@ function renderAnalysis(data) {
   renderPreviewReview(data.narration_preview_gate || {});
   renderVisualCandidateReview(data.visual_candidate_gate || {});
   renderVisualRightsReview(data.visual_rights_gate || {});
+  renderManagedVisualImport(
+    data.visual_asset_acquisition || {},
+    data.managed_visual_assets || {}
+  );
   renderVisualRoughCutReview(data.visual_rough_cut_gate || {});
   renderVisualSpendReview(
     ["HUMAN_VISUAL_SPEND_GATE", "VISUAL_GENERATION_AUTHORIZED"].includes(
@@ -3805,6 +3936,29 @@ visualRightsReject.addEventListener("click", function () {
 visualRightsApprove.addEventListener("click", function () {
   submitVisualRightsDecision("APPROVE_CONTEXT_USE");
 });
+managedVisualPrev.addEventListener("click", function () {
+  managedVisualCursor = Math.max(0, managedVisualCursor - 1);
+  renderManagedVisualImport(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+});
+managedVisualNext.addEventListener("click", function () {
+  const items = managedVisualPendingItems(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+  managedVisualCursor = Math.min(
+    Math.max(0, items.length - 1),
+    managedVisualCursor + 1
+  );
+  renderManagedVisualImport(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+});
+managedVisualRegister.addEventListener("click", registerManagedVisualAsset);
+
 visualRoughCutPrev.addEventListener("click", function () {
   visualRoughCutCursor = Math.max(0, visualRoughCutCursor - 1);
   renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
