@@ -1567,7 +1567,7 @@ function renderPackagingReview(snapshot, force) {
 
   packagingDetail.innerHTML =
     '<div class="concept-detail-card">' +
-      '<h4>PACKAGE</h4>' +
+      '<h4>PUBLIC TITLE</h4>' +
       '<h3>' + escapeHtml(pkg.title || pkg.package_id) + '</h3>' +
       '<div class="concept-meta">' +
         '<span>' + escapeHtml(humanizeToken(pkg.format_intent)) + '</span>' +
