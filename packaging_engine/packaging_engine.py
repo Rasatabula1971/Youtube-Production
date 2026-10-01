@@ -116,20 +116,23 @@ def build_package_request(
         },
         "package_count_requested": int(config["packages_per_concept"]),
         "allowed_format_intents": list(config["allowed_format_intents"]),
-        "title_contract": {
-            "role": "PUBLIC_YOUTUBE_TITLE",
-            "target_words": "3-7",
-            "max_words": int(config.get("title_max_words", 8)),
-            "max_chars": int(config.get("title_max_chars", 56)),
-            "drama_instruction": (
-                "Use the strongest truthful tension supported by the concept. "
-                "Raise intensity toward the high end of its documented drama capacity "
-                "without inventing danger, certainty, or stakes."
-            ),
-            "technical_detail_rule": (
-                "Mechanism, material, and engineering detail normally belong in the "
-                "payoff, not the title, unless the technical term itself is the hook."
-            ),
+        "title_contracts": {
+            "short": {
+                **dict(config.get("short_title_contract", {})),
+                "role": "PUBLIC_YOUTUBE_TITLE",
+                "drama_instruction": (
+                    "Lead with a concrete event, tension, contradiction, danger, "
+                    "astonishment, or personal relevance. Hide the explanation."
+                ),
+            },
+            "long_form": {
+                **dict(config.get("long_title_contract", {})),
+                "role": "PUBLIC_YOUTUBE_TITLE",
+                "drama_instruction": (
+                    "Use curiosity and truthful tension, but include enough subject "
+                    "context that an 8-15 minute viewer understands the promise."
+                ),
+            },
         },
         "instructions": [
             "Create package options before script drafting.",
@@ -143,7 +146,7 @@ def build_package_request(
             "Generate exactly three meaningfully different package angles, not three paraphrases. Each option should lead with a different truthful human hook such as consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when the concept supports it.",
             "The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain; reveal the engineering or science as the satisfying answer.",
             "The title is the proposed PUBLIC YouTube title, not an internal idea label.",
-            "Keep the public title punchy: target 3-7 words and never exceed the configured hard limit.",
+            "Use the title contract for the package format: Shorts target 3-7 words with event/tension first and explanation hidden; long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear.",
             "Use the strongest truthful dramatic tension the concept can support. Prefer consequence, contradiction, danger, astonishment, mystery, or personal relevance over explanation-first wording.",
             "Avoid lecture-style title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or ingredient/material lists. Those are payoff language, not title language.",
             "A non-specialist should understand why the package is interesting before they understand the mechanism.",
@@ -207,15 +210,19 @@ def validate_package(
 
     title = str(package.get("title", "")).strip()
     if title:
+        format_intent_for_title = str(package.get("format_intent", "")).strip()
+        title_config = (
+            config.get("short_title_contract", {})
+            if format_intent_for_title == "short"
+            else config.get("long_title_contract", {})
+        )
         title_words = [word for word in title.replace("—", " ").split() if word]
-        if len(title_words) > int(config.get("title_max_words", 9)):
-            errors.append(
-                f"title must be at most {int(config.get('title_max_words', 9))} words"
-            )
-        if len(title) > int(config.get("title_max_chars", 62)):
-            errors.append(
-                f"title must be at most {int(config.get('title_max_chars', 62))} characters"
-            )
+        max_words = int(title_config.get("max_words", 10))
+        max_chars = int(title_config.get("max_chars", 70))
+        if len(title_words) > max_words:
+            errors.append(f"title must be at most {max_words} words")
+        if len(title) > max_chars:
+            errors.append(f"title must be at most {max_chars} characters")
         lowered = title.lower().strip()
         lecture_patterns = (
             "the physics of ",
