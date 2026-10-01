@@ -22,6 +22,7 @@ from pipeline_integrity import atomic_write_json
 from voice_performance import (
     SPECS_DIR,
     OUTPUT_DIR,
+    REQUESTS_DIR,
     load_json,
     safe_slug,
     sha256_file,
@@ -176,16 +177,17 @@ def validate_response(
     decision = str(response.get("decision") or "").strip().upper()
     if decision not in {"ACCEPT", "REWORK", "REJECT"}:
         raise ValueError("invalid decision")
-    supplied = response.get("criteria")
-    if not isinstance(supplied, dict):
-        raise ValueError("criteria are required")
     names = tuple(
         str(item) for item in request.get("required_accept_criteria", ())
     ) or criteria_names(config)
-    criteria = {name: supplied.get(name) is True for name in names}
     note = str(response.get("note") or "").strip()
-    if decision == "ACCEPT" and not all(criteria.values()):
-        raise ValueError("ACCEPT requires all criteria true")
+    criteria = (
+        {name: True for name in names}
+        if decision == "ACCEPT"
+        else {name: False for name in names}
+        if decision == "REJECT"
+        else {}
+    )
     if decision == "REWORK" and not note:
         raise ValueError("REWORK requires note")
     return {
@@ -342,9 +344,18 @@ def _apply_rework_feedback(source: Path, note: str) -> None:
     provenance = spec.get("spec_provenance", {})
     if not isinstance(provenance, dict):
         raise ValueError("Voice Performance spec is missing provenance")
-    request_source = Path(str(provenance.get("request_source") or ""))
-    if not request_source.exists():
-        raise ValueError("Voice Performance request for rework is missing")
+    request_source = Path(
+        str(provenance.get("request_source") or "")
+    ).resolve()
+    requests_root = REQUESTS_DIR.resolve()
+    if (
+        not request_source.exists()
+        or requests_root not in request_source.parents
+    ):
+        raise ValueError(
+            "Voice Performance request for rework is missing or outside "
+            "the current request directory"
+        )
     request = load_json(request_source)
     if not isinstance(request, dict):
         raise ValueError("Voice Performance request must be an object")
@@ -368,12 +379,13 @@ def apply_action(
     if not request_path.exists():
         raise ValueError("Voice Performance review request not found")
     request = load_json(request_path)
+    value = str(decision or "").strip().upper()
     payload = {
         "concept_id": concept_id,
         "format": format,
         "reviewer": reviewer_id(),
-        "decision": decision,
-        "criteria": criteria,
+        "decision": value,
+        "criteria": {},
         "note": str(note or ""),
     }
     normalized = validate_response(request, payload)
