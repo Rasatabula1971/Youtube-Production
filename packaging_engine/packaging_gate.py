@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from packaging_engine import load_config as load_packaging_config
+
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_gate_config.json"
 
@@ -237,6 +239,7 @@ def validate_decisions(
 
         selected_titles = decision.get("selected_titles", {})
         if value == "ACCEPT":
+            title_config = load_packaging_config()
             item_title_sets = items[package_id].get("titles", {})
             has_new_title_sets = (
                 isinstance(item_title_sets, dict)
@@ -265,6 +268,22 @@ def validate_decisions(
                 if not selected_text:
                     raise ValueError(
                         f"ACCEPT requires non-empty selected_titles.{fmt}.title"
+                    )
+                contract_key = (
+                    "short_title_contract"
+                    if fmt == "short"
+                    else "long_title_contract"
+                )
+                contract = title_config.get(contract_key, {})
+                max_chars = int(contract.get("max_chars", 48 if fmt == "short" else 70))
+                max_words = int(contract.get("max_words", 7 if fmt == "short" else 10))
+                if len(selected_text) > max_chars:
+                    raise ValueError(
+                        f"Selected {fmt} title must be at most {max_chars} characters"
+                    )
+                if len(selected_text.replace("—", " ").split()) > max_words:
+                    raise ValueError(
+                        f"Selected {fmt} title must be at most {max_words} words"
                     )
                 candidate_id = str(selection.get("candidate_id") or "").strip()
                 if candidate_id and candidate_id not in {"manual", "legacy"}:
