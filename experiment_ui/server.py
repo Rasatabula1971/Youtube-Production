@@ -284,6 +284,12 @@ PRODUCTION_VISUAL_GENERATION_REQUEST_DIR = (
 PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY = (
     PRODUCTION_OUTPUT / "visual_generation_handoff_summary.json"
 )
+PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR = (
+    PRODUCTION_OUTPUT / "visual_assembly_plans"
+)
+PRODUCTION_VISUAL_ASSEMBLY_SUMMARY = (
+    PRODUCTION_OUTPUT / "visual_assembly_plan_summary.json"
+)
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -332,6 +338,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_rough_cut_prepare",
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
+    "visual_assembly_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1087,6 +1094,21 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Converts only human-authorized unresolved hero shots into "
             "provider-neutral generation briefs with cinematic direction and "
             "hard per-shot cost ceilings. No provider is called and no money is spent."
+        ),
+    },
+    "visual_assembly_prepare": {
+        "label": "Build Visual Edit Assembly Plan",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_assembly_plan.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds a deterministic edit timeline from approved existing assets, "
+            "editorial excerpts, placeholders and premium-generation slots. "
+            "It renders no media and makes no provider calls."
         ),
     },
     "production_visual_prepare": {
@@ -2582,6 +2604,89 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
     }
 
 
+def visual_assembly_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    waiting_for_premium = 0
+    ready_for_edit = 0
+
+    if PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.exists():
+        for path in PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.glob(
+            "*.visual_assembly_plan.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            provenance = payload.get("provenance", {})
+            if not isinstance(provenance, dict):
+                stale += 1
+                continue
+
+            checks = (
+                ("rough_cut", "rough_cut_sha256"),
+                ("rough_cut_review", "rough_cut_review_sha256"),
+                ("gap_plan", "gap_plan_sha256"),
+            )
+            valid = True
+            for path_key, hash_key in checks:
+                source = Path(str(provenance.get(path_key) or ""))
+                if (
+                    not source.exists()
+                    or provenance.get(hash_key) != sha256_file(source)
+                ):
+                    valid = False
+                    break
+
+            spend_source = str(provenance.get("spend_review") or "")
+            if valid and spend_source:
+                spend_path = Path(spend_source)
+                if (
+                    not spend_path.exists()
+                    or provenance.get("spend_review_sha256")
+                    != sha256_file(spend_path)
+                ):
+                    valid = False
+
+            if not valid or (expected and key not in expected):
+                stale += 1
+                continue
+
+            current.add(key)
+            if payload.get("status") == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
+                waiting_for_premium += 1
+            elif payload.get("status") == "READY_FOR_EDIT_ASSEMBLY":
+                ready_for_edit += 1
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": (
+            "ASSEMBLY_PLANS_READY"
+            if ready
+            else "STALE_OR_INCOMPLETE"
+            if expected
+            else "WAITING_FOR_VISUAL_GAP_PLANS"
+        ),
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "waiting_for_premium_assets": waiting_for_premium,
+        "ready_for_edit_assembly": ready_for_edit,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -3608,6 +3713,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_generation_handoff_ready = bool(
         visual_generation_handoff.get("ready")
     )
+    visual_assembly = visual_assembly_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    visual_assembly_ready = bool(visual_assembly.get("ready"))
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -4483,6 +4592,40 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "visual_assembly_prepare": {
+            "enabled": (
+                visual_gap_plans_ready
+                and visual_spend_complete
+                and (
+                    visual_spend_authorized == 0
+                    or visual_generation_handoff_ready
+                )
+                and not visual_assembly_ready
+            ),
+            "reason": (
+                "Current visual decisions are ready for deterministic edit "
+                "assembly planning."
+                if (
+                    visual_gap_plans_ready
+                    and visual_spend_complete
+                    and (
+                        visual_spend_authorized == 0
+                        or visual_generation_handoff_ready
+                    )
+                    and not visual_assembly_ready
+                )
+                else (
+                    "Visual edit assembly plans are already current."
+                    if visual_assembly_ready
+                    else (
+                        "Prepare current premium-generation briefs first."
+                        if visual_spend_authorized > 0
+                        and not visual_generation_handoff_ready
+                        else "Complete visual gap and spend decisions first."
+                    )
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -4988,40 +5131,81 @@ def workflow_guidance(
                     "next_action_id": None,
                     "next_title": "Review provider-ready generation briefs",
                 }
-            if authorized > 0 and handoff_ready:
+            assembly_state = visual_assembly_artifact_state(
+                visual_post.get("expected_branches", [])
+            )
+            if not assembly_state.get("ready"):
                 return {
-                    "state": "VISUAL_GENERATION_HANDOFF_READY",
-                    "current_action_id": None,
-                    "current_title": "Premium Visual Briefs Ready",
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Build Visual Edit Assembly Plan",
                     "current_detail": (
-                        "Authorized hero shots now have provider-neutral generation "
-                        "briefs with cinematic direction and exact human cost ceilings. "
-                        "No paid provider has been called."
+                        "Visual sourcing and spend decisions are complete. Build the "
+                        "zero-cost edit timeline contract. Premium-generated shots, "
+                        "if any, remain pending assets rather than provider calls."
                     ),
                     "next_action_id": None,
-                    "next_title": "Connect the selected generation provider when ready",
+                    "next_title": "Review final assembly readiness",
                 }
             return {
-                "state": "VISUAL_ASSEMBLY_READY",
+                "state": (
+                    "WAITING_FOR_PREMIUM_GENERATED_ASSETS"
+                    if int(
+                        assembly_state.get("waiting_for_premium_assets") or 0
+                    ) > 0
+                    else "VISUAL_ASSEMBLY_READY"
+                ),
                 "current_action_id": None,
-                "current_title": "Visual Plan Ready for Assembly",
+                "current_title": (
+                    "Assembly Plan Waiting for Premium Assets"
+                    if int(
+                        assembly_state.get("waiting_for_premium_assets") or 0
+                    ) > 0
+                    else "Visual Assembly Plan Ready"
+                ),
                 "current_detail": (
-                    "All premium candidates were kept as placeholders or returned "
-                    "to existing-asset sourcing. No paid visual generation is authorized."
+                    "The edit timeline is current. Existing/reused visuals and "
+                    "placeholders are mapped; authorized premium slots are waiting "
+                    "for externally generated assets."
+                    if int(
+                        assembly_state.get("waiting_for_premium_assets") or 0
+                    ) > 0
+                    else "The edit timeline is current and requires no paid visual generation."
                 ),
                 "next_action_id": None,
-                "next_title": "Assemble current visual plan",
+                "next_title": (
+                    "Import generated visual assets"
+                    if int(
+                        assembly_state.get("waiting_for_premium_assets") or 0
+                    ) > 0
+                    else "Proceed to edit/render assembly"
+                ),
+            }
+        assembly_state = visual_assembly_artifact_state(
+            visual_post.get("expected_branches", [])
+        )
+        if not assembly_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Visual Edit Assembly Plan",
+                "current_detail": (
+                    "No premium generation is required. Build the deterministic "
+                    "edit timeline from the approved existing visuals and placeholders."
+                ),
+                "next_action_id": None,
+                "next_title": "Proceed to edit/render assembly",
             }
         return {
             "state": "VISUAL_ASSEMBLY_READY",
             "current_action_id": None,
-            "current_title": "Visual Plan Ready for Assembly",
+            "current_title": "Visual Assembly Plan Ready",
             "current_detail": (
                 "No unresolved shot met the premium-generation threshold. "
-                "The current plan can proceed without paid visual generation."
+                "The current edit timeline can proceed without paid visual generation."
             ),
             "next_action_id": None,
-            "next_title": "Assemble current visual plan",
+            "next_title": "Proceed to edit/render assembly",
         }
 
     production_visual = production_visual_artifact_state()
@@ -5163,6 +5347,9 @@ def status_payload() -> dict[str, Any]:
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "visual_spend_gate": visual_spend_review_snapshot(),
         "visual_generation_handoff": visual_generation_handoff_artifact_state(),
+        "visual_assembly": visual_assembly_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
