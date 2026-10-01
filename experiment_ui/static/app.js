@@ -3009,17 +3009,17 @@ async function submitVisualSpendDecision(decision) {
 
 function generatedVisualKey(item) {
   return [
-    String(item && item.concept_id || ""),
-    String(item && item.format || ""),
-    String(item && item.shot_id || "")
+    String((item && item.concept_id) || ""),
+    String((item && item.format) || ""),
+    String((item && item.shot_id) || "")
   ].join("::");
 }
 
 function generatedVisualPendingItems(handoff, assets) {
   const registered = new Set(
-    ((assets && assets.items) || []).map(generatedVisualKey)
+    (((assets && assets.items) || [])).map(generatedVisualKey)
   );
-  return ((handoff && handoff.requests) || []).filter(function (item) {
+  return (((handoff && handoff.requests) || [])).filter(function (item) {
     return !registered.has(generatedVisualKey(item));
   });
 }
@@ -3047,7 +3047,7 @@ function renderGeneratedVisualImport(handoff, assets) {
     "Register generated visual — " + (item.shot_id || "");
   generatedVisualImportSummary.textContent =
     (generatedVisualCursor + 1) + " of " + items.length +
-    " waiting · max $" + Number(item.max_cost_usd || 0).toFixed(2) + " USD";
+    " waiting · max USD " + Number(item.max_cost_usd || 0).toFixed(2);
   generatedVisualImportStatus.textContent = "WAITING FOR ASSET";
   generatedVisualImportStatus.className = "status-chip running";
 
@@ -3058,7 +3058,88 @@ function renderGeneratedVisualImport(handoff, assets) {
     '<br><strong>Format:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
     '<br><strong>Story purpose:</strong> ' + escapeHtml(item.story_purpose || "") +
     '<br><strong>Desired visual:</strong> ' + escapeHtml(item.desired_visual || "") +
-    '<br><strong>Authorized ceiling:</strong>   const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+    '<br><strong>Authorized ceiling:</strong> USD ' +
+    Number(item.max_cost_usd || 0).toFixed(2) + '</p></div>' +
+    '<div class="concept-detail-card"><h4>CINEMATIC BRIEF</h4><p>' +
+    '<strong>Subject/action:</strong> ' + escapeHtml(brief.subject_and_action || "") +
+    '<br><strong>Narrative intent:</strong> ' + escapeHtml(brief.narrative_intent || "") +
+    '<br><strong>Camera:</strong> ' +
+    escapeHtml([
+      brief.camera_angle,
+      brief.framing,
+      brief.camera_movement
+    ].filter(Boolean).join(" · ")) +
+    '<br><strong>Lens:</strong> ' + escapeHtml(brief.lens_feel || "") +
+    '<br><strong>Lighting:</strong> ' + escapeHtml(brief.lighting || "") +
+    '<br><strong>Motion:</strong> ' + escapeHtml(brief.motion_speed || "") +
+    '</p><p class="muted">Preferred provider: ' +
+    escapeHtml(provider.preferred_provider || "higgsfield") +
+    '. The app has not called the provider.</p></div>';
+
+  generatedVisualActualCost.max = String(Number(item.max_cost_usd || 0));
+  generatedVisualActualCost.value = "0";
+  generatedVisualProvider.value =
+    provider.preferred_provider || generatedVisualProvider.value || "higgsfield";
+  generatedVisualAssetPath.value = "";
+  generatedVisualProviderJobId.value = "";
+  generatedVisualNote.value = "";
+  generatedVisualPrev.disabled = generatedVisualCursor === 0;
+  generatedVisualNext.disabled = generatedVisualCursor >= items.length - 1;
+}
+
+async function registerGeneratedVisualAsset() {
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+  const item = items[generatedVisualCursor];
+  if (!item) return;
+
+  const assetPath = generatedVisualAssetPath.value.trim();
+  if (!assetPath) {
+    showToast("Enter the local generated file path.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/generated-visual-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        request_file: item.request_file,
+        asset_file: assetPath,
+        actual_cost_usd: Number(generatedVisualActualCost.value || 0),
+        provider: generatedVisualProvider.value || "higgsfield",
+        provider_job_id: generatedVisualProviderJobId.value,
+        note: generatedVisualNote.value
+      })
+    });
+    latestGeneratedVisualAssets = payload.generated_visual_assets || {};
+    const remaining = generatedVisualPendingItems(
+      latestGeneratedVisualHandoff || {},
+      latestGeneratedVisualAssets
+    );
+    if (generatedVisualCursor >= remaining.length) {
+      generatedVisualCursor = Math.max(0, remaining.length - 1);
+    }
+    renderGeneratedVisualImport(
+      latestGeneratedVisualHandoff || {},
+      latestGeneratedVisualAssets
+    );
+    showToast(
+      "Generated visual registered. Assembly plan will rebuild from the current asset.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function formatElapsed(milliseconds) {
+  const totalSeconds = Math.max(
+    0,
+    Math.floor(Number(milliseconds || 0) / 1000)
+  );
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -3066,6 +3147,7 @@ function renderGeneratedVisualImport(handoff, assets) {
   if (minutes) return minutes + "m " + seconds + "s";
   return seconds + "s";
 }
+
 function updateRunningActivity(job) {
   const running = Boolean(
     job && (job.status === "RUNNING" || job.status === "STOPPING")
