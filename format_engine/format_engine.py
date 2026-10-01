@@ -170,8 +170,16 @@ def build_format_request(
             raise ValueError(f"Approved script bundle is missing {fmt} script")
         if str(branch_script.get("format") or "") != fmt:
             raise ValueError(f"Approved {fmt} script has wrong format identity")
-        if str(branch_script.get("title") or "") != approved_title:
-            raise ValueError(f"Approved {fmt} script violates Packaging title")
+        expected_title = approved_title
+        selected_titles = package.get("selected_titles", {})
+        if isinstance(selected_titles, dict):
+            selection = selected_titles.get(fmt, {})
+            if isinstance(selection, dict):
+                expected_title = str(selection.get("title") or "").strip() or approved_title
+        if str(branch_script.get("title") or "") != expected_title:
+            raise ValueError(
+                f"Approved {fmt} script violates format-specific Packaging title"
+            )
         sections = branch_script.get("sections", [])
         if not isinstance(sections, list) or not sections:
             raise ValueError(f"Approved {fmt} script requires sections")
