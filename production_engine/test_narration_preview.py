@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from unittest.mock import patch
 
@@ -197,6 +198,97 @@ class NarrationPreviewTests(unittest.TestCase):
                     audio_dir / "c1.short.preview.wav"
                 ),
             )
+
+    def test_segment_cache_rerenders_only_changed_segment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            segment_dir = root / "segments"
+            destination = root / "audio" / "c1.short.preview.wav"
+            manifest = {
+                "concept_id": "c1",
+                "format": "short",
+                "segments": [
+                    {
+                        "segment_id": "s1",
+                        "immutable_narration": "First line.",
+                        "delivery": {
+                            "speed": 1.0,
+                            "pause_before_ms": 0,
+                            "pause_after_ms": 50,
+                        },
+                    },
+                    {
+                        "segment_id": "s2",
+                        "immutable_narration": "Second line.",
+                        "delivery": {
+                            "speed": 1.0,
+                            "pause_before_ms": 0,
+                            "pause_after_ms": 50,
+                        },
+                    },
+                ],
+            }
+
+            def fake_segment_render(_segment, path, _pipeline):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with wave.open(str(path), "wb") as handle:
+                    handle.setnchannels(1)
+                    handle.setsampwidth(2)
+                    handle.setframerate(narration_preview_render.SAMPLE_RATE)
+                    handle.writeframes(b"\x00\x00" * 24)
+
+            with (
+                patch.object(
+                    narration_preview_render,
+                    "SEGMENT_AUDIO_DIR",
+                    segment_dir,
+                ),
+                patch.object(
+                    narration_preview_render,
+                    "_load_local_pipeline",
+                    return_value=object(),
+                ) as load_pipeline,
+                patch.object(
+                    narration_preview_render,
+                    "_render_segment",
+                    side_effect=fake_segment_render,
+                ) as render_segment,
+            ):
+                first = narration_preview_render.render_manifest(
+                    manifest,
+                    destination,
+                )
+                changed = {
+                    **manifest,
+                    "segments": [
+                        {
+                            **manifest["segments"][0],
+                            "delivery": {
+                                **manifest["segments"][0]["delivery"],
+                                "speed": 0.9,
+                            },
+                        },
+                        manifest["segments"][1],
+                    ],
+                }
+                second = narration_preview_render.render_manifest(
+                    changed,
+                    destination,
+                )
+                third = narration_preview_render.render_manifest(
+                    changed,
+                    destination,
+                )
+
+            self.assertEqual(first["segments_rendered"], 2)
+            self.assertEqual(first["segments_reused"], 0)
+            self.assertEqual(second["segments_rendered"], 1)
+            self.assertEqual(second["segments_reused"], 1)
+            self.assertEqual(third["segments_rendered"], 0)
+            self.assertEqual(third["segments_reused"], 2)
+            self.assertEqual(render_segment.call_count, 3)
+            self.assertEqual(load_pipeline.call_count, 2)
+            self.assertTrue(destination.exists())
 
     def test_paid_quote_approval_requires_preview_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
