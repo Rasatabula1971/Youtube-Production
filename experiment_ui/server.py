@@ -321,6 +321,12 @@ PRODUCTION_EDIT_PREVIEW_RESULT_DIR = PRODUCTION_OUTPUT / "edit_preview_results"
 PRODUCTION_EDIT_PREVIEW_SUMMARY = (
     PRODUCTION_OUTPUT / "edit_preview_render_summary.json"
 )
+PRODUCTION_FINAL_HANDOFF_DIR = (
+    PRODUCTION_OUTPUT / "final_production_handoffs"
+)
+PRODUCTION_FINAL_HANDOFF_SUMMARY = (
+    PRODUCTION_OUTPUT / "final_production_handoff_summary.json"
+)
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -373,6 +379,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_assembly_prepare",
     "edit_manifest_prepare",
     "edit_preview_render",
+    "final_production_handoff_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1188,6 +1195,21 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Uses local FFmpeg to render a non-publishable preview with current "
             "visual assets/placeholders and QC-passed narration. No paid provider "
             "or generated music/SFX is used."
+        ),
+    },
+    "final_production_handoff_prepare": {
+        "label": "Prepare Final Production Handoff",
+        "stage": "11",
+        "command": [
+            sys.executable,
+            "production_engine/final_production_handoff.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds a provenance-bound provider-neutral final production package "
+            "from the approved structural edit, current visual assets, narration "
+            "and sound-design intent. It makes no provider call and spends nothing."
         ),
     },
     "production_visual_prepare": {
@@ -2975,6 +2997,91 @@ def edit_preview_artifact_state(
     }
 
 
+def final_production_handoff_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    blocked = 0
+    ready_for_sound = 0
+
+    if PRODUCTION_FINAL_HANDOFF_DIR.exists():
+        for path in PRODUCTION_FINAL_HANDOFF_DIR.glob(
+            "*.final_production_handoff.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            provenance = payload.get("provenance", {})
+            if not isinstance(provenance, dict):
+                stale += 1
+                continue
+
+            valid = True
+            for path_key, hash_key in (
+                ("approved_edit_preview", "approved_edit_preview_sha256"),
+                ("edit_preview_result", "edit_preview_result_sha256"),
+                ("edit_manifest", "edit_manifest_sha256"),
+            ):
+                source = Path(str(provenance.get(path_key) or ""))
+                if (
+                    not source.exists()
+                    or provenance.get(hash_key) != sha256_file(source)
+                ):
+                    valid = False
+                    break
+
+            sound_source = str(provenance.get("sound_design_brief") or "")
+            if valid and sound_source:
+                sound_path = Path(sound_source)
+                if (
+                    not sound_path.exists()
+                    or provenance.get("sound_design_brief_sha256")
+                    != sha256_file(sound_path)
+                ):
+                    valid = False
+
+            if not valid or (expected and key not in expected):
+                stale += 1
+                continue
+
+            current.add(key)
+            if payload.get("status") == "BLOCKED":
+                blocked += 1
+            elif (
+                payload.get("status")
+                == "READY_FOR_FINAL_SOUND_PROVIDER_OR_ASSET_REGISTRATION"
+            ):
+                ready_for_sound += 1
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": (
+            "CURRENT"
+            if ready
+            else "STALE_OR_INCOMPLETE"
+            if expected
+            else "WAITING_FOR_APPROVED_EDIT_DIRECTION"
+        ),
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "blocked": blocked,
+        "ready_for_final_sound": ready_for_sound,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -4017,6 +4124,11 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     edit_preview_ready = bool(edit_preview_state.get("ready"))
+    edit_gate_state = edit_preview_review_snapshot()
+    final_handoff_state = final_production_handoff_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_handoff_ready = bool(final_handoff_state.get("ready"))
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -4978,6 +5090,41 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "final_production_handoff_prepare": {
+            "enabled": (
+                edit_preview_ready
+                and bool(edit_gate_state.get("complete"))
+                and int(edit_gate_state.get("rework") or 0) == 0
+                and int(
+                    visual_assembly.get("waiting_for_premium_assets") or 0
+                ) == 0
+                and int(
+                    visual_assembly.get("waiting_for_local_assets") or 0
+                ) == 0
+                and not final_handoff_ready
+            ),
+            "reason": (
+                "Approved edit direction and current final visual/audio assets are "
+                "ready for a zero-cost final production handoff."
+                if (
+                    edit_preview_ready
+                    and bool(edit_gate_state.get("complete"))
+                    and int(edit_gate_state.get("rework") or 0) == 0
+                    and int(
+                        visual_assembly.get("waiting_for_premium_assets") or 0
+                    ) == 0
+                    and int(
+                        visual_assembly.get("waiting_for_local_assets") or 0
+                    ) == 0
+                    and not final_handoff_ready
+                )
+                else (
+                    "Final production handoff is current."
+                    if final_handoff_ready
+                    else "Approve the structural edit and register all final visual assets first."
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -5747,6 +5894,9 @@ def status_payload() -> dict[str, Any]:
             visual_post_search_artifact_state().get("expected_branches", [])
         ),
         "edit_preview_gate": edit_preview_review_snapshot(),
+        "final_production_handoff": final_production_handoff_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
