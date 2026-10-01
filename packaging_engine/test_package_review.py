@@ -170,6 +170,103 @@ class PackageReviewTests(unittest.TestCase):
                     note="",
                 )
 
+    def test_rework_note_is_written_into_model_request_and_invalidates_response(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            output = root / "output"
+            requests = output / "package_requests"
+            responses = output / "package_responses"
+            requests.mkdir()
+            responses.mkdir()
+
+            request_path = requests / "c1.package_request.json"
+            response_path = responses / "c1.json"
+            request_path.write_text(
+                json.dumps({
+                    "concept_id": "c1",
+                    "package_count_requested": 2,
+                }),
+                encoding="utf-8",
+            )
+
+            candidates = self.candidates()
+            for package in candidates["packages"]:
+                package["response_source"] = str(response_path)
+            response_path.write_text(
+                json.dumps({
+                    "concept_id": "c1",
+                    "packages": [
+                        {
+                            key: value
+                            for key, value in package.items()
+                            if key != "response_source"
+                        }
+                        for package in candidates["packages"]
+                    ],
+                    "response_provenance": {
+                        "request_source": str(request_path),
+                        "request_sha256": "old",
+                    },
+                }),
+                encoding="utf-8",
+            )
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(candidates), encoding="utf-8"
+            )
+            review.prepare_state()
+
+            criteria = self.criteria()
+            criteria["viewer_awareness_fit"] = False
+            result = review.apply_action(
+                package_id="p1",
+                decision="REWORK",
+                criteria=criteria,
+                note="Audience must be anyone who flies, not a specialist group.",
+            )
+            updated = json.loads(request_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            updated["human_rework_note"],
+            "Audience must be anyone who flies, not a specialist group.",
+        )
+        self.assertEqual(updated["human_rework_package_id"], "p1")
+        self.assertEqual(updated["human_rework_iteration"], 1)
+        self.assertIn(
+            "viewer_awareness_fit",
+            updated["human_rework_change_criteria"],
+        )
+        self.assertEqual(len(updated["human_rework_original_packages"]), 2)
+        self.assertFalse(response_path.exists())
+        self.assertEqual(result["status"], "AWAITING_HUMAN_DECISION")
+
+    def test_prepare_preserves_unchanged_non_rework_decisions(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            original = self.candidates()
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(original), encoding="utf-8"
+            )
+            review.prepare_state()
+            review.apply_action(
+                package_id="p2",
+                decision="REJECT",
+                criteria={key: False for key in self.criteria()},
+                note="",
+            )
+
+            changed = self.candidates()
+            changed["packages"][0]["expected_viewer"] = "Anyone who flies"
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(changed), encoding="utf-8"
+            )
+            snapshot = review.prepare_state()
+            p2 = next(item for item in snapshot["packages"] if item["package_id"] == "p2")
+            p1 = next(item for item in snapshot["packages"] if item["package_id"] == "p1")
+
+        self.assertEqual(p2["decision"], "REJECT")
+        self.assertEqual(p1["decision"], "PENDING")
+
     def test_complete_gate_writes_research_handoff(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.patch_paths(stack, Path(tmp))
