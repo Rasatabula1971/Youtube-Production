@@ -1801,18 +1801,7 @@ function renderResearchReview(snapshot, force) {
       escapeHtml(questions.join(" | ")) + '</p></div>' +
     evidence;
 
-  const descriptions = claim.criteria_descriptions || {};
-  const checked = claim.criteria_decisions || {};
-  const required = claim.required_accept_criteria || Object.keys(descriptions);
-  researchCriteria.innerHTML = required.map(function (criterion) {
-    const id = "research-criterion-" + researchCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-research-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  researchCriteria.innerHTML = "";
 
   researchNote.value = claim.note || "";
   researchPrev.disabled = researchCursor <= 0;
@@ -1853,7 +1842,7 @@ async function submitResearchDecision(decision) {
         concept_id: claim.concept_id,
         claim_id: claim.claim_id,
         decision: decision,
-        criteria: collectResearchCriteria(),
+        criteria: {},
         note: researchNote.value
       })
     });
@@ -3212,9 +3201,6 @@ packagingAccept.addEventListener("click", function () {
   submitPackagingDecision("ACCEPT");
 });
 researchNote.addEventListener("input", function () {
-  researchEditing = true;
-});
-researchCriteria.addEventListener("change", function () {
   researchEditing = true;
 });
 researchPrev.addEventListener("click", function () {
