@@ -188,6 +188,16 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         },
     }
 
+    rework_concept_id = str(
+        request.get("human_rework_concept_id") or ""
+    ).strip()
+    rework_mode = bool(request.get("human_rework_note") and rework_concept_id)
+    if rework_mode:
+        concept_schema["properties"]["concept_id"] = {
+            "type": "string",
+            "const": rework_concept_id,
+        }
+
     return {
         "type": "object",
         "additionalProperties": False,
@@ -200,7 +210,9 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "concepts": {
                 "type": "array",
                 "minItems": 1,
-                "maxItems": int(request.get("concept_count_requested", 5)),
+                "maxItems": (
+                    1 if rework_mode else int(request.get("concept_count_requested", 5))
+                ),
                 "items": concept_schema,
             },
         },
@@ -246,7 +258,9 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "17. The visual opening plan must SHOW the problem, contradiction, consequence, "
         "transformation, decision, or mystery before asking the viewer to absorb the "
         "technical explanation.\n"
-        "18. Do not rank or score concepts.\n\n"
+        "18. Do not rank or score concepts.\n"
+        "19. If human_rework_note is present, it is an AUTHORITATIVE human instruction for the one concept identified by human_rework_concept_id. Return exactly one revised concept with that same concept_id. Correct the requested issue while preserving unrelated strengths where possible.\n"
+        "20. Human rework never authorizes invented audience evidence, unsupported drama, source copying, or false certainty. If the instruction conflicts with evidence constraints, preserve the constraint and make the safest valid correction.\n\n"
         "CONCEPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -257,6 +271,48 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         )
     return prompt
 
+
+
+def _merge_human_rework_response(
+    request: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    note = str(request.get("human_rework_note") or "").strip()
+    target = str(request.get("human_rework_concept_id") or "").strip()
+    if not note or not target:
+        return response
+
+    generated = response.get("concepts")
+    if not isinstance(generated, list) or len(generated) != 1:
+        raise ValueError("Human concept rework must return exactly one revised concept")
+    replacement = generated[0]
+    if (
+        not isinstance(replacement, dict)
+        or str(replacement.get("concept_id") or "") != target
+    ):
+        raise ValueError("Human concept rework concept_id must remain stable")
+
+    originals = request.get("human_rework_original_concepts")
+    if not isinstance(originals, list) or not originals:
+        raise ValueError("Human concept rework is missing the original concept set")
+
+    merged: list[dict[str, Any]] = []
+    replaced = False
+    for item in originals:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("concept_id") or "") == target:
+            merged.append(replacement)
+            replaced = True
+        else:
+            merged.append(item)
+    if not replaced:
+        raise ValueError("Human concept rework target is missing from original set")
+
+    return {
+        "mechanism_id": response.get("mechanism_id"),
+        "concepts": merged,
+    }
 
 
 def _rejection_error_summary(validation: dict[str, Any]) -> list[dict[str, Any]]:
@@ -418,6 +474,7 @@ def run_one(
 
     try:
         response = parse_model_json(raw_output)
+        response = _merge_human_rework_response(request, response)
         validation = validate_response(
             response,
             request,
@@ -461,6 +518,9 @@ def run_one(
             atomic_write_text(repair_raw_path, repaired_raw)
             try:
                 repaired_response = parse_model_json(repaired_raw)
+                repaired_response = _merge_human_rework_response(
+                    request, repaired_response
+                )
                 repaired_validation = validate_response(
                     repaired_response,
                     request,
