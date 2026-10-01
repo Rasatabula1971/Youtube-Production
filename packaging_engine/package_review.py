@@ -358,6 +358,11 @@ def _apply_rework_feedback(
         for key, value in package.items()
         if key not in {"response_source", "source_overlap"}
     }
+    request["human_rework_original_titles"] = (
+        response.get("titles", {})
+        if isinstance(response.get("titles"), dict)
+        else package.get("titles", {})
+    )
     request["human_rework_original_packages"] = [
         {
             key: value
