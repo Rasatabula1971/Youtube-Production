@@ -322,15 +322,16 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="scriptDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="scriptCriteria"></div>
-                <label class="vision-label" for="scriptNote">Review note</label>
-                <textarea id="scriptNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-complete">Human decision only. Script quality criteria remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="scriptCriteria" hidden></div>
+                <label class="vision-label" for="scriptNote">Human instruction / review note</label>
+                <textarea id="scriptNote" class="vision-observation" rows="4" maxlength="1400" placeholder="For Rework, state exactly what this branch must change. The instruction is authoritative. Optional for Accept or Reject."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="scriptPrev" type="button">← Previous</button>
                   <button class="danger" id="scriptReject" type="button">Reject</button>
                   <button class="ghost" id="scriptRework" type="button">Rework</button>
-                  <button id="scriptAccept" type="button">Accept script</button>
-                  <button class="ghost" id="scriptNext" type="button">Next →</button>
+                  <button id="scriptAccept" type="button">Accept</button>
+                  <button class="ghost" id="scriptNext" type="button">Next branch →</button>
                 </div>
               </div>
             </div>
