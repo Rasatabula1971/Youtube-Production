@@ -1,49 +1,76 @@
 """Human rights/context gate for selected creator/editorial visual excerpts."""
 
 from __future__ import annotations
+
 import hashlib
 import json
 from pathlib import Path
 from typing import Any
+
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, sha256_file
 
-HERE=Path(__file__).resolve().parent
-OUTPUT=HERE/"output"
-CANDIDATE_REVIEW_DIR=OUTPUT/"visual_candidate_reviews"
-SEARCH_RESULT_DIR=OUTPUT/"visual_search_results"
-RIGHTS_DIR=OUTPUT/"visual_rights_reviews"
+HERE = Path(__file__).resolve().parent
+OUTPUT = HERE / "output"
+CANDIDATE_REVIEW_DIR = OUTPUT / "visual_candidate_reviews"
+SEARCH_RESULT_DIR = OUTPUT / "visual_search_results"
+RIGHTS_DIR = OUTPUT / "visual_rights_reviews"
 
-def _path(review_path: Path)->Path:
-    RIGHTS_DIR.mkdir(parents=True,exist_ok=True)
-    return RIGHTS_DIR/review_path.name.replace(".visual_candidate_review.json",".visual_rights_review.json")
 
-def _candidate(review: dict[str,Any], shot_id:str)->dict[str,Any]|None:
-    result_path=Path(str(review.get("source_result") or ""))
-    if not result_path.exists() or result_path.parent.resolve()!=SEARCH_RESULT_DIR.resolve():
+def _path(review_path: Path) -> Path:
+    RIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    return RIGHTS_DIR / review_path.name.replace(
+        ".visual_candidate_review.json",
+        ".visual_rights_review.json",
+    )
+
+
+def _candidate(
+    review: dict[str, Any],
+    shot_id: str,
+) -> dict[str, Any] | None:
+    result_path = Path(str(review.get("source_result") or ""))
+    if (
+        not result_path.exists()
+        or result_path.parent.resolve() != SEARCH_RESULT_DIR.resolve()
+    ):
         return None
-    result=load_json(result_path)
-    decision=review.get("decisions",{}).get(shot_id,{})
-    cid=str(decision.get("candidate_id") or "")
-    shot=next((x for x in result.get("shots",[]) if str(x.get("shot_id"))==shot_id),{})
-    result_fingerprint=hashlib.sha256(
+    result = load_json(result_path)
+    decision = review.get("decisions", {}).get(shot_id, {})
+    cid = str(decision.get("candidate_id") or "")
+    shot = next(
+        (
+            item
+            for item in result.get("shots", [])
+            if str(item.get("shot_id")) == shot_id
+        ),
+        {},
+    )
+    result_fingerprint = hashlib.sha256(
         json.dumps(
             shot,
             sort_keys=True,
-            separators=(",",":"),
+            separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
     ).hexdigest()
     if decision.get("result_fingerprint") != result_fingerprint:
         return None
-    candidate=next((x for x in shot.get("candidates",[]) if str(x.get("candidate_id"))==cid),None)
+    candidate = next(
+        (
+            item
+            for item in shot.get("candidates", [])
+            if str(item.get("candidate_id")) == cid
+        ),
+        None,
+    )
     if candidate is None:
         return None
-    candidate_fingerprint=hashlib.sha256(
+    candidate_fingerprint = hashlib.sha256(
         json.dumps(
             candidate,
             sort_keys=True,
-            separators=(",",":"),
+            separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
     ).hexdigest()
@@ -51,102 +78,238 @@ def _candidate(review: dict[str,Any], shot_id:str)->dict[str,Any]|None:
         return None
     return candidate
 
-def snapshot()->dict[str,Any]:
-    items=[]
-    required_total=0
-    decided_total=0
-    approved_total=0
-    stale_total=0
-    paths=sorted(CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")) if CANDIDATE_REVIEW_DIR.exists() else []
-    for review_path in paths:
-        review=load_json(review_path)
-        rights_path=_path(review_path)
-        rights=load_json(rights_path) if rights_path.exists() else {"decisions":{}}
-        current_review_hash=sha256_file(review_path)
-        rights_current=(
-            isinstance(rights,dict)
-            and rights.get("source_candidate_review_sha256")==current_review_hash
+
+def _selection_current(
+    review: dict[str, Any],
+    shot_id: str,
+    rights_decision: dict[str, Any],
+) -> bool:
+    selection = review.get("decisions", {}).get(shot_id)
+    if (
+        not isinstance(selection, dict)
+        or selection.get("status")
+        != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+    ):
+        return False
+    candidate = _candidate(review, shot_id)
+    return bool(
+        candidate is not None
+        and rights_decision.get("candidate_id") == candidate.get("candidate_id")
+        and rights_decision.get("selection_candidate_fingerprint")
+        == selection.get("candidate_fingerprint")
+        and rights_decision.get("selection_result_fingerprint")
+        == selection.get("result_fingerprint")
+    )
+
+
+def _reconcile(
+    review_path: Path,
+    review: dict[str, Any],
+    rights: dict[str, Any],
+) -> tuple[dict[str, Any], int]:
+    old_decisions = (
+        rights.get("decisions", {})
+        if isinstance(rights, dict)
+        and isinstance(rights.get("decisions"), dict)
+        else {}
+    )
+    current_decisions: dict[str, Any] = {}
+    stale = 0
+    for shot_id, rights_decision in old_decisions.items():
+        if (
+            isinstance(rights_decision, dict)
+            and _selection_current(review, shot_id, rights_decision)
+        ):
+            current_decisions[shot_id] = rights_decision
+        else:
+            stale += 1
+
+    reconciled = {
+        "artifact": "visual_rights_review",
+        "concept_id": review.get("concept_id"),
+        "format": review.get("format"),
+        "source_candidate_review": str(review_path.resolve()),
+        "source_candidate_review_sha256": sha256_file(review_path),
+        "decisions": current_decisions,
+    }
+    return reconciled, stale
+
+
+def snapshot() -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    required_total = 0
+    decided_total = 0
+    approved_total = 0
+    stale_total = 0
+    paths = (
+        sorted(
+            CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")
         )
-        rights_decisions=rights.get("decisions",{}) if rights_current and isinstance(rights.get("decisions"),dict) else {}
-        pending=[]
-        for shot_id,selection in review.get("decisions",{}).items():
-            if not isinstance(selection,dict) or selection.get("status")!="SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
+        if CANDIDATE_REVIEW_DIR.exists()
+        else []
+    )
+    for review_path in paths:
+        review = load_json(review_path)
+        rights_path = _path(review_path)
+        stored = (
+            load_json(rights_path)
+            if rights_path.exists()
+            else {"decisions": {}}
+        )
+        rights, stale = _reconcile(review_path, review, stored)
+        stale_total += stale
+        if rights_path.exists() and rights != stored:
+            atomic_write_json(rights_path, rights)
+
+        pending: list[dict[str, Any]] = []
+        for shot_id, selection in review.get("decisions", {}).items():
+            if (
+                not isinstance(selection, dict)
+                or selection.get("status")
+                != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+            ):
                 continue
-            required_total+=1
-            candidate=_candidate(review,shot_id)
-            decision=rights_decisions.get(shot_id)
-            decision_current=(
-                candidate is not None
-                and isinstance(decision,dict)
-                and decision.get("candidate_id")==candidate.get("candidate_id")
+            required_total += 1
+            candidate = _candidate(review, shot_id)
+            decision = rights["decisions"].get(shot_id)
+            if isinstance(decision, dict):
+                decided_total += 1
+                approved_total += int(
+                    decision.get("approved_for_rough_cut") is True
+                )
+            pending.append(
+                {
+                    "shot_id": shot_id,
+                    "candidate": candidate,
+                    "decision": decision,
+                }
             )
-            if decision_current:
-                decided_total+=1
-                approved_total+=int(decision.get("approved_for_rough_cut") is True)
-            elif decision is not None or not rights_current:
-                stale_total+=1
-                decision=None
-            pending.append({
-                "shot_id":shot_id,
-                "candidate":candidate,
-                "decision":decision if decision_current else None,
-            })
+
         if pending:
-            items.append({
-                "concept_id":review.get("concept_id"),
-                "format":review.get("format"),
-                "candidate_review_file":str(review_path),
-                "candidate_review_sha256":current_review_hash,
-                "rights_review_current":rights_current,
-                "pending":pending,
-            })
-    complete=required_total==0 or (required_total==decided_total and stale_total==0)
+            items.append(
+                {
+                    "concept_id": review.get("concept_id"),
+                    "format": review.get("format"),
+                    "candidate_review_file": str(review_path),
+                    "candidate_review_sha256": sha256_file(review_path),
+                    "pending": pending,
+                }
+            )
+
+    complete = required_total == 0 or required_total == decided_total
     return {
-        "status":(
+        "status": (
             "NO_RIGHTS_CONTEXT_REVIEW_REQUIRED"
-            if required_total==0
+            if required_total == 0
             else "COMPLETE"
             if complete
             else "READY_FOR_RIGHTS_CONTEXT_REVIEW"
         ),
-        "complete":complete,
-        "required":required_total,
-        "decided":decided_total,
-        "approved":approved_total,
-        "stale":stale_total,
-        "items":items,
+        "complete": complete,
+        "required": required_total,
+        "decided": decided_total,
+        "approved": approved_total,
+        "stale_removed": stale_total,
+        "items": items,
     }
 
-def apply_action(*,candidate_review_file:str,shot_id:str,decision:str,transformative_purpose:str="",context_note:str="")->dict[str,Any]:
-    review_path=Path(candidate_review_file)
-    if not review_path.exists() or review_path.parent.resolve()!=CANDIDATE_REVIEW_DIR.resolve():
+
+def apply_action(
+    *,
+    candidate_review_file: str,
+    shot_id: str,
+    decision: str,
+    transformative_purpose: str = "",
+    context_note: str = "",
+) -> dict[str, Any]:
+    review_path = Path(candidate_review_file)
+    if (
+        not review_path.exists()
+        or review_path.parent.resolve() != CANDIDATE_REVIEW_DIR.resolve()
+    ):
         raise ValueError("Invalid candidate review file")
-    review=load_json(review_path); selected=review.get("decisions",{}).get(shot_id)
-    if not selected or selected.get("status")!="SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
+
+    review = load_json(review_path)
+    selected = review.get("decisions", {}).get(shot_id)
+    if (
+        not selected
+        or selected.get("status")
+        != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+    ):
         raise ValueError("Shot is not awaiting rights/context review")
-    if decision not in {"APPROVE_CONTEXT_USE","REJECT_USE"}:
+
+    if decision not in {"APPROVE_CONTEXT_USE", "REJECT_USE"}:
         raise ValueError("Unsupported rights/context decision")
-    if decision=="APPROVE_CONTEXT_USE" and not transformative_purpose.strip():
-        raise ValueError("Approval requires a documented transformative/editorial purpose")
-    candidate=_candidate(review,shot_id)
+    if (
+        decision == "APPROVE_CONTEXT_USE"
+        and not transformative_purpose.strip()
+    ):
+        raise ValueError(
+            "Approval requires a documented transformative/editorial purpose"
+        )
+
+    candidate = _candidate(review, shot_id)
     if not candidate:
         raise ValueError("Selected candidate is unavailable or stale")
-    rights_path=_path(review_path)
-    rights=load_json(rights_path) if rights_path.exists() else {"artifact":"visual_rights_review","concept_id":review.get("concept_id"),
-        "format":review.get("format"),"source_candidate_review":str(review_path.resolve()),"source_candidate_review_sha256":sha256_file(review_path),"decisions":{}}
-    if rights.get("source_candidate_review_sha256")!=sha256_file(review_path):
-        raise ValueError("STALE_RIGHTS_REVIEW: candidate selections changed")
-    rights["decisions"][shot_id]={"decision":decision,"candidate_id":candidate.get("candidate_id"),
-        "source_url":candidate.get("source_url"),"creator":candidate.get("creator"),"license":candidate.get("license"),
-        "transformative_purpose":transformative_purpose.strip(),"context_note":context_note.strip(),
-        "approved_for_rough_cut":decision=="APPROVE_CONTEXT_USE",
-        "policy_note":"Human approval records editorial intent; it is not a legal determination of fair use."}
-    expected=sum(x.get("status")=="SELECTED_PENDING_RIGHTS_CONTEXT_GATE" for x in review.get("decisions",{}).values())
-    rights["summary"]={"required":expected,"decided":len(rights["decisions"]),
-        "approved":sum(x.get("approved_for_rough_cut") is True for x in rights["decisions"].values())}
-    rights["status"]="COMPLETE" if len(rights["decisions"])==expected else "REVIEW_IN_PROGRESS"
-    atomic_write_json(rights_path,rights); return rights
 
-def main()->None:
-    print(json.dumps(snapshot(),indent=2,ensure_ascii=False))
-if __name__=="__main__": main()
+    rights_path = _path(review_path)
+    stored = (
+        load_json(rights_path)
+        if rights_path.exists()
+        else {"decisions": {}}
+    )
+    rights, _ = _reconcile(review_path, review, stored)
+    rights["decisions"][shot_id] = {
+        "decision": decision,
+        "candidate_id": candidate.get("candidate_id"),
+        "source_url": candidate.get("source_url"),
+        "creator": candidate.get("creator"),
+        "license": candidate.get("license"),
+        "selection_candidate_fingerprint": selected.get(
+            "candidate_fingerprint"
+        ),
+        "selection_result_fingerprint": selected.get("result_fingerprint"),
+        "transformative_purpose": transformative_purpose.strip(),
+        "context_note": context_note.strip(),
+        "approved_for_rough_cut": decision == "APPROVE_CONTEXT_USE",
+        "policy_note": (
+            "Human approval records editorial intent; it is not a legal "
+            "determination of fair use."
+        ),
+    }
+
+    expected_ids = {
+        sid
+        for sid, item in review.get("decisions", {}).items()
+        if isinstance(item, dict)
+        and item.get("status") == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+    }
+    rights["decisions"] = {
+        sid: item
+        for sid, item in rights["decisions"].items()
+        if sid in expected_ids
+    }
+    rights["source_candidate_review_sha256"] = sha256_file(review_path)
+    rights["summary"] = {
+        "required": len(expected_ids),
+        "decided": len(rights["decisions"]),
+        "approved": sum(
+            item.get("approved_for_rough_cut") is True
+            for item in rights["decisions"].values()
+        ),
+    }
+    rights["status"] = (
+        "COMPLETE"
+        if len(rights["decisions"]) == len(expected_ids)
+        else "REVIEW_IN_PROGRESS"
+    )
+    atomic_write_json(rights_path, rights)
+    return rights
+
+
+def main() -> None:
+    print(json.dumps(snapshot(), indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
