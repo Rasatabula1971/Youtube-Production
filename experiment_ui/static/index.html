@@ -237,16 +237,17 @@
                 </details>
               </div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="conceptCriteria"></div>
-                <label class="vision-label" for="conceptNote">Review note</label>
-                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Optional note. For Rework, the checkboxes already show what to keep and what to change."></textarea>
+                <div class="concept-complete">Human decision only. Concept criteria remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="conceptCriteria" hidden></div>
+                <label class="vision-label" for="conceptNote">Human instruction / review note</label>
+                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="For Rework, state exactly what must change. This instruction is authoritative. Optional for Accept, Reject, or Save."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="conceptPrev" type="button">← Previous</button>
                   <button class="danger" id="conceptReject" type="button">Reject</button>
                   <button class="ghost" id="conceptRework" type="button">Rework</button>
                   <button class="ghost" id="conceptSaveIdea" type="button">Save idea</button>
-                  <button id="conceptAccept" type="button">Accept concept</button>
-                  <button class="ghost" id="conceptNext" type="button">Next →</button>
+                  <button id="conceptAccept" type="button">Accept</button>
+                  <button class="ghost" id="conceptNext" type="button">Next idea →</button>
                 </div>
               </div>
             </div>
