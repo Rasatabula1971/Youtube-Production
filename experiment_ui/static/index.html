@@ -477,13 +477,15 @@
               <div class="concept-detail" id="visualRoughCutDetail"></div>
               <div class="concept-decision-pane">
                 <div class="concept-complete">Approve the current visual structure or send the relevant production layer back for rework. Approval with gaps still authorizes zero paid generation.</div>
+                <label class="vision-label" for="visualRoughCutShotSelect">Shot for visual rework</label>
+                <select id="visualRoughCutShotSelect"></select>
                 <label class="vision-label" for="visualRoughCutNote">Human instruction / review note</label>
                 <textarea id="visualRoughCutNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for rework. State exactly what feels wrong or what must change."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="visualRoughCutPrev" type="button">← Previous</button>
                   <button class="ghost" id="visualRoughCutVisual" type="button">Rework visual</button>
                   <button class="ghost" id="visualRoughCutPacing" type="button">Rework pacing</button>
-                  <button class="ghost" id="visualRoughCutAudio" type="button">Rework audio</button>
+                  <button class="ghost" id="visualRoughCutAudio" type="button">Rework audio / delivery</button>
                   <button id="visualRoughCutApprove" type="button">Approve with gaps</button>
                   <button class="ghost" id="visualRoughCutNext" type="button">Next →</button>
                 </div>
