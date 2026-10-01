@@ -168,6 +168,83 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertIn("viewer_need_evidence.status", prompt)
         self.assertIn("OBSERVED", prompt)
 
+    def test_rework_schema_targets_one_stable_concept(self):
+        request = self.request()
+        original = self.valid_concept()
+        request.update(
+            {
+                "human_rework_note": "Make the hook more human and less technical.",
+                "human_rework_concept_id": original["concept_id"],
+                "human_rework_original_concept": original,
+                "human_rework_original_concepts": [
+                    original,
+                    {
+                        **original,
+                        "concept_id": "curiosity_gap-002",
+                        "working_title": "Keep This Sibling",
+                    },
+                ],
+            }
+        )
+        schema = runner.response_schema(request)
+        concepts = schema["properties"]["concepts"]
+        concept_id = concepts["items"]["properties"]["concept_id"]
+
+        self.assertEqual(concepts["maxItems"], 1)
+        self.assertEqual(concept_id["const"], original["concept_id"])
+
+    def test_rework_prompt_marks_human_instruction_authoritative(self):
+        request = self.request()
+        request.update(
+            {
+                "human_rework_note": "Make the hook about what an ordinary viewer notices.",
+                "human_rework_concept_id": self.valid_concept()["concept_id"],
+            }
+        )
+        prompt = runner.build_prompt(request, maximum_chars=95000)
+
+        self.assertIn("AUTHORITATIVE human instruction", prompt)
+        self.assertIn("exactly one revised concept", prompt)
+        self.assertIn("same concept_id", prompt)
+        self.assertIn("ordinary viewer notices", prompt)
+
+    def test_rework_merge_replaces_only_target_concept(self):
+        target = self.valid_concept()
+        sibling = {
+            **self.valid_concept(),
+            "concept_id": "curiosity_gap-002",
+            "working_title": "Keep This Sibling",
+        }
+        request = self.request()
+        request.update(
+            {
+                "human_rework_note": "Raise the human tension.",
+                "human_rework_concept_id": target["concept_id"],
+                "human_rework_original_concepts": [target, sibling],
+            }
+        )
+        replacement = {
+            **target,
+            "working_title": "The Tire Shouldn't Look Like This",
+        }
+        merged = runner._merge_human_rework_response(
+            request,
+            {
+                "mechanism_id": "curiosity_gap",
+                "concepts": [replacement],
+            },
+        )
+
+        self.assertEqual(len(merged["concepts"]), 2)
+        self.assertEqual(
+            merged["concepts"][0]["working_title"],
+            "The Tire Shouldn't Look Like This",
+        )
+        self.assertEqual(
+            merged["concepts"][1]["working_title"],
+            "Keep This Sibling",
+        )
+
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
     def test_valid_free_response_is_written_with_request_hash(
