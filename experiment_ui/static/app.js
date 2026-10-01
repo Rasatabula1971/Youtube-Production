@@ -2330,18 +2330,7 @@ function renderPerformanceReview(snapshot, force) {
       '</p></div>' +
     beats;
 
-  const descriptions = spec.criteria || {};
-  const checked = spec.criteria_decisions || {};
-  const required = spec.required_accept_criteria || Object.keys(descriptions);
-  performanceCriteria.innerHTML = required.map(function (criterion) {
-    const id = "performance-criterion-" + performanceCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-performance-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  performanceCriteria.innerHTML = "";
 
   performanceNote.value = spec.note || "";
   performancePrev.disabled = performanceCursor <= 0;
@@ -2384,7 +2373,7 @@ async function submitPerformanceDecision(decision) {
         concept_id: spec.concept_id,
         format: spec.format,
         decision: decision,
-        criteria: collectPerformanceCriteria(),
+        criteria: {},
         note: performanceNote.value
       })
     });
@@ -3214,9 +3203,6 @@ formatAccept.addEventListener("click", function () {
   submitFormatDecision("ACCEPT");
 });
 performanceNote.addEventListener("input", function () {
-  performanceEditing = true;
-});
-performanceCriteria.addEventListener("change", function () {
   performanceEditing = true;
 });
 performancePrev.addEventListener("click", function () {
