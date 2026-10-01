@@ -17,6 +17,7 @@ _OVERLAP_ROOT = Path(__file__).resolve().parent.parent
 if str(_OVERLAP_ROOT) not in sys.path:
     sys.path.insert(0, str(_OVERLAP_ROOT))
 
+from channel_profiles.channel_profile import normalize_binding, unconfigured_binding
 from source_overlap import check_texts
 
 HERE = Path(__file__).resolve().parent
@@ -160,6 +161,14 @@ def build_script_request(
     if not isinstance(psychology_contract, dict) or not psychology_contract:
         raise ValueError("Story Plan requires the audience psychology contract")
 
+    channel_voice_value = plan.get("channel_voice")
+    channel_voice = (
+        normalize_binding(channel_voice_value)
+        if channel_voice_value is not None
+        else unconfigured_binding()
+    )
+    voice_is_active = bool(channel_voice["apply_to_generation"])
+
     viewer_state = plan.get("viewer_state")
     if not isinstance(viewer_state, dict):
         raise ValueError("Story Plan requires viewer_state")
@@ -206,6 +215,17 @@ def build_script_request(
         "Every script section must cite one or more source_story_beat_ids.",
         "Section claim_ids may use only claims available from those source Story Plan beats.",
         "Use the supplied format psychology profile rather than generic engagement advice.",
+        (
+            "Apply the approved Channel Voice Profile to wording, narrator posture, "
+            "technical-language treatment and prohibited-style rules. Research, "
+            "Packaging and format psychology remain higher-priority constraints."
+            if voice_is_active
+            else (
+                "No approved Channel Voice Profile exists. Do not invent a persistent "
+                "channel personality from the niche, title, source videos or generic "
+                "creator advice."
+            )
+        ),
         "Do not copy or closely paraphrase source-video wording.",
         "Do not claim virality, guaranteed performance or unsupported facts.",
     ]
@@ -237,6 +257,7 @@ def build_script_request(
         "concept": concept,
         "psychology_contract": psychology_contract,
         "psychology_profile": dict(profile),
+        "channel_voice": channel_voice,
         "reward_types": reward_types,
         "story_plan": {
             "title": plan.get("title"),
