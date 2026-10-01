@@ -278,6 +278,12 @@ PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rights_reviews
 PRODUCTION_VISUAL_ROUGH_CUT_DIR = PRODUCTION_OUTPUT / "visual_rough_cuts"
 PRODUCTION_VISUAL_ROUGH_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rough_cut_reviews"
 PRODUCTION_VISUAL_GAP_PLAN_DIR = PRODUCTION_OUTPUT / "visual_gap_plans"
+PRODUCTION_VISUAL_GENERATION_REQUEST_DIR = (
+    PRODUCTION_OUTPUT / "visual_generation_requests"
+)
+PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY = (
+    PRODUCTION_OUTPUT / "visual_generation_handoff_summary.json"
+)
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -325,6 +331,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_search_acquire",
     "visual_rough_cut_prepare",
     "visual_gap_prepare",
+    "visual_generation_handoff_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1065,6 +1072,21 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Plans unresolved visual gaps after human rough-cut approval. "
             "This step never authorizes paid generation."
+        ),
+    },
+    "visual_generation_handoff_prepare": {
+        "label": "Prepare Premium Visual Generation Briefs",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_generation_handoff.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Converts only human-authorized unresolved hero shots into "
+            "provider-neutral generation briefs with cinematic direction and "
+            "hard per-shot cost ceilings. No provider is called and no money is spent."
         ),
     },
     "production_visual_prepare": {
@@ -3484,6 +3506,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_rough_cuts_ready = bool(visual_post["rough_cuts_ready"])
     visual_rough_gate_complete = bool(visual_post["rough_gate_complete"])
     visual_gap_plans_ready = bool(visual_post["gap_plans_ready"])
+    visual_spend = visual_spend_review_snapshot()
+    visual_spend_complete = bool(visual_spend.get("complete"))
+    visual_spend_authorized = int(visual_spend.get("authorized") or 0)
+    visual_generation_handoff_payload = safe_load_json(
+        PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY
+    )
+    visual_generation_handoff = (
+        visual_generation_handoff_payload
+        if isinstance(visual_generation_handoff_payload, dict)
+        else {}
+    )
+    visual_generation_handoff_ready = bool(
+        visual_generation_handoff.get("status")
+        == "READY_FOR_PROVIDER_HANDOFF"
+        and int(visual_generation_handoff.get("prepared") or 0) > 0
+    )
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -4332,6 +4370,33 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "visual_generation_handoff_prepare": {
+            "enabled": (
+                visual_gap_plans_ready
+                and visual_spend_complete
+                and visual_spend_authorized > 0
+                and not visual_generation_handoff_ready
+            ),
+            "reason": (
+                "Human-authorized premium visual gaps are ready for zero-cost "
+                "provider handoff preparation."
+                if (
+                    visual_gap_plans_ready
+                    and visual_spend_complete
+                    and visual_spend_authorized > 0
+                    and not visual_generation_handoff_ready
+                )
+                else (
+                    "Premium visual generation briefs are already current."
+                    if visual_generation_handoff_ready
+                    else (
+                        "No paid visual generation was authorized."
+                        if visual_spend_complete and visual_spend_authorized == 0
+                        else "Complete the Human Visual Spend Gate first."
+                    )
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -4822,33 +4887,50 @@ def workflow_guidance(
             }
         if hero_count > 0 and spend_gate.get("complete"):
             authorized = int(spend_gate.get("authorized") or 0)
+            handoff_payload = safe_load_json(
+                PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY
+            )
+            handoff_ready = bool(
+                isinstance(handoff_payload, dict)
+                and handoff_payload.get("status") == "READY_FOR_PROVIDER_HANDOFF"
+                and int(handoff_payload.get("prepared") or 0) > 0
+            )
+            if authorized > 0 and not handoff_ready:
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Premium Visual Generation Briefs",
+                    "current_detail": (
+                        "Human spend decisions are complete. The next zero-cost "
+                        "step converts only authorized hero gaps into provider-ready "
+                        "cinematic briefs. No provider call or spend occurs."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Review provider-ready generation briefs",
+                }
+            if authorized > 0 and handoff_ready:
+                return {
+                    "state": "VISUAL_GENERATION_HANDOFF_READY",
+                    "current_action_id": None,
+                    "current_title": "Premium Visual Briefs Ready",
+                    "current_detail": (
+                        "Authorized hero shots now have provider-neutral generation "
+                        "briefs with cinematic direction and exact human cost ceilings. "
+                        "No paid provider has been called."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Connect the selected generation provider when ready",
+                }
             return {
-                "state": (
-                    "VISUAL_GENERATION_AUTHORIZED"
-                    if authorized > 0
-                    else "VISUAL_ASSEMBLY_READY"
-                ),
+                "state": "VISUAL_ASSEMBLY_READY",
                 "current_action_id": None,
-                "current_title": (
-                    "Visual Generation Authorized"
-                    if authorized > 0
-                    else "Visual Plan Ready for Assembly"
-                ),
+                "current_title": "Visual Plan Ready for Assembly",
                 "current_detail": (
-                    "Human spend decisions are complete. Authorized shots remain "
-                    "bounded by their exact per-shot and workflow cost ceilings; "
-                    "no provider call is made by the Spend Gate itself."
-                    if authorized > 0
-                    else "All premium candidates were kept as placeholders or "
-                    "returned to existing-asset sourcing. No paid visual generation "
-                    "is authorized."
+                    "All premium candidates were kept as placeholders or returned "
+                    "to existing-asset sourcing. No paid visual generation is authorized."
                 ),
                 "next_action_id": None,
-                "next_title": (
-                    "Prepare provider-neutral generation requests"
-                    if authorized > 0
-                    else "Assemble current visual plan"
-                ),
+                "next_title": "Assemble current visual plan",
             }
         return {
             "state": "VISUAL_ASSEMBLY_READY",
@@ -5000,6 +5082,11 @@ def status_payload() -> dict[str, Any]:
         "visual_rights_gate": visual_rights_review_snapshot(),
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "visual_spend_gate": visual_spend_review_snapshot(),
+        "visual_generation_handoff": (
+            safe_load_json(PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY)
+            if PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY.exists()
+            else {}
+        ),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
