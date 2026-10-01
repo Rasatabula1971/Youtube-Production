@@ -3263,7 +3263,15 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     }
     preview_gate = narration_preview_gate_snapshot()
     preview_prepared = preview_prepare.get("status") == "READY_FOR_FREE_PREVIEW_RENDER"
-    preview_rendered = preview_render.get("status") == "READY_FOR_LISTEN_GATE"
+    preview_items = (
+        preview_gate.get("items", [])
+        if isinstance(preview_gate, dict)
+        else []
+    )
+    preview_rendered = bool(preview_items) and all(
+        isinstance(item, dict) and item.get("audio_ready") is True
+        for item in preview_items
+    )
     sound_reference_payload = safe_load_json(PRODUCTION_SOUND_REFERENCE_SUMMARY)
     sound_reference = sound_reference_payload if isinstance(sound_reference_payload, dict) else {}
     sound_reference_prepared = sound_reference.get("status") == "READY_FOR_REFERENCE_SOUND_GENERATION"
