@@ -37,6 +37,34 @@ def _key(concept_id: str, fmt: str) -> str:
     return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
 
 
+def _render_metadata_path(audio_path: Path) -> Path:
+    return audio_path.with_suffix(".meta.json")
+
+
+def current_render(
+    manifest_path: Path,
+    audio_path: Path,
+) -> dict[str, Any] | None:
+    metadata_path = _render_metadata_path(audio_path)
+    if (
+        not manifest_path.exists()
+        or not audio_path.exists()
+        or not metadata_path.exists()
+    ):
+        return None
+    try:
+        metadata = load_json(metadata_path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(metadata, dict):
+        return None
+    if metadata.get("manifest_sha256") != sha256_file(manifest_path):
+        return None
+    if metadata.get("audio_sha256") != sha256_file(audio_path):
+        return None
+    return metadata
+
+
 def snapshot() -> dict[str, Any]:
     manifests = sorted(PREVIEW_DIR.glob("*.narration_preview.json")) if PREVIEW_DIR.exists() else []
     items: list[dict[str, Any]] = []
@@ -48,23 +76,39 @@ def snapshot() -> dict[str, Any]:
         audio = RENDER_DIR / f"{key}.preview.wav"
         response_path = RESPONSES_DIR / f"{key}.preview_review.json"
         response = load_json(response_path) if response_path.exists() else {}
-        current = (
+        render_metadata = current_render(path, audio)
+        response_current = (
             isinstance(response, dict)
+            and render_metadata is not None
             and response.get("preview_manifest_sha256") == sha256_file(path)
-            and response.get("decision") == "APPROVE_FINAL"
+            and response.get("preview_audio_sha256")
+            == render_metadata.get("audio_sha256")
         )
-        if current:
+        approved = bool(
+            response_current and response.get("decision") == "APPROVE_FINAL"
+        )
+        if approved:
             accepted += 1
         else:
             pending += 1
         items.append({
             "concept_id": manifest.get("concept_id"),
             "format": manifest.get("format"),
-            "audio_ready": audio.exists(),
-            "audio": str(audio) if audio.exists() else None,
-            "decision": response.get("decision", "PENDING") if isinstance(response, dict) else "PENDING",
-            "approved_for_paid_quote": current,
+            "audio_ready": render_metadata is not None,
+            "audio": str(audio) if render_metadata is not None else None,
+            "decision": (
+                response.get("decision", "PENDING")
+                if response_current
+                else "PENDING"
+            ),
+            "approved_for_paid_quote": approved,
             "manifest": str(path),
+            "manifest_sha256": sha256_file(path),
+            "audio_sha256": (
+                render_metadata.get("audio_sha256")
+                if render_metadata is not None
+                else None
+            ),
         })
     return {
         "status": "APPROVED_FOR_PAID_QUOTE" if items and accepted == len(items) else "AWAITING_FREE_PREVIEW" if items else "WAITING_FOR_PREVIEW_MANIFESTS",
@@ -84,8 +128,12 @@ def apply_action(*, concept_id: str, format: str, decision: str, note: str = "")
     audio_path = RENDER_DIR / f"{key}.preview.wav"
     if not manifest_path.exists():
         raise ValueError("Preview manifest not found")
-    if decision == "APPROVE_FINAL" and not audio_path.exists():
-        raise ValueError("Cannot approve final rendering before listening artifact exists")
+    render_metadata = current_render(manifest_path, audio_path)
+    if decision == "APPROVE_FINAL" and render_metadata is None:
+        raise ValueError(
+            "Cannot approve final rendering before listening artifact exists "
+            "for the current preview manifest"
+        )
     if decision != "APPROVE_FINAL" and not note.strip():
         raise ValueError("Rework decisions require a note")
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
@@ -96,7 +144,14 @@ def apply_action(*, concept_id: str, format: str, decision: str, note: str = "")
         "decision": decision,
         "note": note.strip(),
         "preview_manifest_sha256": sha256_file(manifest_path),
-        "preview_audio": str(audio_path) if audio_path.exists() else None,
+        "preview_audio": (
+            str(audio_path) if render_metadata is not None else None
+        ),
+        "preview_audio_sha256": (
+            render_metadata.get("audio_sha256")
+            if render_metadata is not None
+            else None
+        ),
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
     }
     atomic_write_json(RESPONSES_DIR / f"{key}.preview_review.json", payload)
