@@ -202,6 +202,20 @@ const visualSpendKeep = document.getElementById("visualSpendKeep");
 const visualSpendAuthorize = document.getElementById("visualSpendAuthorize");
 const visualSpendNext = document.getElementById("visualSpendNext");
 
+const generatedVisualImportPanel = document.getElementById("generatedVisualImportPanel");
+const generatedVisualImportTitle = document.getElementById("generatedVisualImportTitle");
+const generatedVisualImportSummary = document.getElementById("generatedVisualImportSummary");
+const generatedVisualImportStatus = document.getElementById("generatedVisualImportStatus");
+const generatedVisualImportDetail = document.getElementById("generatedVisualImportDetail");
+const generatedVisualAssetPath = document.getElementById("generatedVisualAssetPath");
+const generatedVisualActualCost = document.getElementById("generatedVisualActualCost");
+const generatedVisualProvider = document.getElementById("generatedVisualProvider");
+const generatedVisualProviderJobId = document.getElementById("generatedVisualProviderJobId");
+const generatedVisualNote = document.getElementById("generatedVisualNote");
+const generatedVisualPrev = document.getElementById("generatedVisualPrev");
+const generatedVisualRegister = document.getElementById("generatedVisualRegister");
+const generatedVisualNext = document.getElementById("generatedVisualNext");
+
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -281,6 +295,9 @@ let latestVisualRoughCutSnapshot = null;
 let visualRoughCutCursor = 0;
 let latestVisualSpendSnapshot = null;
 let visualSpendCursor = 0;
+let latestGeneratedVisualHandoff = null;
+let latestGeneratedVisualAssets = null;
+let generatedVisualCursor = 0;
 
 const ROUTES = {
   "/": {
@@ -2982,6 +2999,875 @@ async function submitVisualSpendDecision(decision) {
         : decision === "RETRY_EXISTING"
           ? "Shot returned to existing-visual search."
           : "Shot will remain a placeholder.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function generatedVisualKey(item) {
+  return [
+    String(item && item.concept_id || ""),
+    String(item && item.format || ""),
+    String(item && item.shot_id || "")
+  ].join("::");
+}
+
+function generatedVisualPendingItems(handoff, assets) {
+  const registered = new Set(
+    ((assets && assets.items) || []).map(generatedVisualKey)
+  );
+  return ((handoff && handoff.requests) || []).filter(function (item) {
+    return !registered.has(generatedVisualKey(item));
+  });
+}
+
+function renderGeneratedVisualImport(handoff, assets) {
+  latestGeneratedVisualHandoff = handoff || {};
+  latestGeneratedVisualAssets = assets || {};
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff,
+    latestGeneratedVisualAssets
+  );
+
+  generatedVisualImportPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  generatedVisualCursor = Math.max(
+    0,
+    Math.min(generatedVisualCursor, items.length - 1)
+  );
+  const item = items[generatedVisualCursor] || {};
+  const brief = item.generation_brief || {};
+  const provider = item.provider_handoff || {};
+
+  generatedVisualImportTitle.textContent =
+    "Register generated visual — " + (item.shot_id || "");
+  generatedVisualImportSummary.textContent =
+    (generatedVisualCursor + 1) + " of " + items.length +
+    " waiting · max $" + Number(item.max_cost_usd || 0).toFixed(2) + " USD";
+  generatedVisualImportStatus.textContent = "WAITING FOR ASSET";
+  generatedVisualImportStatus.className = "status-chip running";
+
+  generatedVisualImportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>AUTHORIZED PREMIUM SHOT</h4>' +
+    '<h3>' + escapeHtml(item.shot_id || "") + '</h3>' +
+    '<p><strong>Concept:</strong> ' + escapeHtml(item.concept_id || "") +
+    '<br><strong>Format:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Story purpose:</strong> ' + escapeHtml(item.story_purpose || "") +
+    '<br><strong>Desired visual:</strong> ' + escapeHtml(item.desired_visual || "") +
+    '<br><strong>Authorized ceiling:</strong>   const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return hours + "h " + minutes + "m " + seconds + "s";
+  if (minutes) return minutes + "m " + seconds + "s";
+  return seconds + "s";
+}
+function updateRunningActivity(job) {
+  const running = Boolean(
+    job && (job.status === "RUNNING" || job.status === "STOPPING")
+  );
+
+  analysisCurrentPanel.classList.toggle("is-running", running);
+  analysisRunningActivity.hidden = !running;
+
+  if (!running) {
+    runningJobId = null;
+    runningJobStartedAt = null;
+    runningLastPollAt = null;
+    runningLastOutputAt = null;
+    runningLastLogSignature = "";
+    if (runningUiTimer) {
+      clearInterval(runningUiTimer);
+      runningUiTimer = null;
+    }
+    return;
+  }
+
+  if (runningJobId !== job.id) {
+    runningJobId = job.id || null;
+    const parsed = Date.parse(job.started_at || "");
+    runningJobStartedAt = Number.isFinite(parsed) ? parsed : Date.now();
+    runningLastOutputAt = null;
+    runningLastLogSignature = "";
+  }
+
+  runningLastPollAt = Date.now();
+  analysisRunningLabel.textContent =
+    (job.status === "STOPPING" ? "Stopping: " : "Running: ") +
+    (job.label || job.action_id || "workflow job");
+
+  const paint = function () {
+    const now = Date.now();
+    analysisRunningElapsed.textContent =
+      "Elapsed " + formatElapsed(now - (runningJobStartedAt || now));
+
+    const pollAge = runningLastPollAt == null ? null : now - runningLastPollAt;
+    const outputAge = runningLastOutputAt == null ? null : now - runningLastOutputAt;
+    let message = "Process active";
+    if (outputAge == null) {
+      message = "Process active · waiting for first log output";
+    } else if (outputAge < 15000) {
+      message = "Live · new output " + formatElapsed(outputAge) + " ago";
+    } else {
+      message =
+        "Process still running · no new log output for " +
+        formatElapsed(outputAge);
+    }
+    if (pollAge != null) {
+      message += " · checked " + formatElapsed(pollAge) + " ago";
+    }
+    analysisRunningHeartbeat.textContent = message;
+  };
+
+  paint();
+  if (!runningUiTimer) {
+    runningUiTimer = setInterval(paint, 1000);
+  }
+}
+
+function noteJobLogActivity(job, log) {
+  if (!job || (job.status !== "RUNNING" && job.status !== "STOPPING")) return;
+  if (log === undefined || log === null) return;
+  const value = String(log || "");
+  const signature = value.length + ":" + value.slice(-180);
+  if (value && signature !== runningLastLogSignature) {
+    runningLastOutputAt = Date.now();
+  }
+  runningLastLogSignature = signature;
+}
+
+function renderAnalysis(data) {
+  const workflow = data.workflow || {};
+  const humanCreateGate = [
+    "HUMAN_VISION_GATE",
+    "HUMAN_CONCEPT_GATE",
+    "HUMAN_PACKAGING_GATE",
+    "HUMAN_RESEARCH_GATE",
+    "HUMAN_SCRIPT_GATE",
+    "HUMAN_FORMAT_GATE",
+    "HUMAN_PERFORMANCE_GATE",
+    "HUMAN_NARRATION_PREVIEW_GATE",
+    "HUMAN_VISUAL_CANDIDATE_GATE",
+    "HUMAN_VISUAL_RIGHTS_GATE",
+    "HUMAN_ROUGH_CUT_GATE",
+    "HUMAN_VISUAL_SPEND_GATE"
+  ].includes(workflow.state);
+
+  analysisCurrentTitle.textContent =
+    humanCreateGate
+      ? workflow.current_title
+      : (
+        workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
+          ? workflow.current_title
+          : (data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
+            ? "Prepare the approved source evidence"
+            : "Waiting for opportunity approval")
+      );
+
+  analysisCurrentDetail.textContent =
+    humanCreateGate
+      ? workflow.current_detail
+      : (
+        data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
+          ? (workflow.current_detail || "The next available analysis step is highlighted.")
+          : "Approve an opportunity before Experiment 02 can begin."
+      );
+
+  const actions = (data.actions || []).filter(function (action) {
+    return action.surface === "workflow" && action.id !== "opportunity_research";
+  });
+  renderActionCollection(actions, analysisActions);
+  renderVisionReview(data.vision_review || {}, false);
+  renderHumanAnalysisReview(data.human_analysis_review || {}, false);
+  renderConceptReview(data.concept_gate || {}, false);
+  renderPackagingReview(data.packaging_gate || {}, false);
+  renderResearchReview(data.research_gate || {}, false);
+  renderScriptReview(data.script_gate || {}, false);
+  renderFormatReview(data.format_gate || {}, false);
+  renderPerformanceReview(data.performance_gate || {}, false);
+  renderPreviewReview(data.narration_preview_gate || {});
+  renderVisualCandidateReview(data.visual_candidate_gate || {});
+  renderVisualRightsReview(data.visual_rights_gate || {});
+  renderVisualRoughCutReview(data.visual_rough_cut_gate || {});
+  renderVisualSpendReview(
+    ["HUMAN_VISUAL_SPEND_GATE", "VISUAL_GENERATION_AUTHORIZED"].includes(
+      workflow.state
+    )
+      ? (data.visual_spend_gate || {})
+      : {}
+  );
+  renderGeneratedVisualImport(
+    data.visual_generation_handoff || {},
+    data.generated_visual_assets || {}
+  );
+  api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
+  api("/api/storyboard-review").then(function (value) {
+    latestStoryboardSnapshot = value;
+    renderVisualCandidateReview(latestVisualCandidateSnapshot || {});
+  }).catch(function () {});
+
+  let activeIndex = 0;
+  const exp2 = data.experiment_02_artifacts || {};
+  const transform = data.transformation || {};
+  const packaging = data.packaging || {};
+  const research = data.research || {};
+  const story = data.story_script || {};
+  const fmt = data.format || {};
+  const voice = data.voice_performance || {};
+
+  if (
+    workflow.state === "HUMAN_PERFORMANCE_GATE" ||
+    voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
+  ) {
+    activeIndex = 7;
+  } else if (
+    workflow.state === "HUMAN_FORMAT_GATE" ||
+    fmt.requests_ready || fmt.plans_ready || fmt.format_gate_complete
+  ) {
+    activeIndex = 6;
+  } else if (
+    workflow.state === "HUMAN_SCRIPT_GATE" ||
+    story.requests_ready || story.drafts_ready || story.script_gate_complete
+  ) {
+    activeIndex = 5;
+  } else if (
+    workflow.state === "HUMAN_RESEARCH_GATE" ||
+    research.plans_ready || research.evidence_complete ||
+    research.drafts_ready || research.research_gate_complete
+  ) {
+    activeIndex = 4;
+  } else if (
+    workflow.state === "HUMAN_PACKAGING_GATE" ||
+    packaging.requests_ready || packaging.candidates_ready ||
+    packaging.packaging_gate_complete
+  ) {
+    activeIndex = 3;
+  } else if (
+    workflow.state === "HUMAN_CONCEPT_GATE" ||
+    transform.requests_ready || transform.candidates_ready ||
+    transform.triage_ready || transform.concept_gate_complete
+  ) {
+    activeIndex = 2;
+  } else if (
+    workflow.state === "HUMAN_ANALYSIS_GATE" ||
+    Number(exp2.analyzed_current_count || 0) > 0 ||
+    Number(exp2.review_requests_current_count || 0) > 0 ||
+    Boolean(exp2.requests_complete)
+  ) {
+    activeIndex = 1;
+  }
+
+  creationTabs.forEach(function (tab, index) {
+    tab.classList.toggle("active", index === activeIndex);
+  });
+}
+
+function stateClass(stage) {
+  const classes = [];
+  if (stage.current) classes.push("current");
+  if (!stage.ready) classes.push("blocked");
+  if (stage.complete) classes.push("complete");
+  return classes.join(" ");
+}
+
+function renderStages(stages) {
+  stageGrid.innerHTML = (stages || []).map(function (stage) {
+    const criteria = (stage.criteria || []).map(function (item) {
+      return '<li class="' + (item.done ? "done" : "pending") + '">' +
+        '<span>' + (item.done ? "✓" : "○") + '</span><span>' +
+        escapeHtml(item.label) + '</span></li>';
+    }).join("");
+
+    return '<article class="stage-card ' + stateClass(stage) + '">' +
+      '<div class="stage-id">EXPERIMENT ' + escapeHtml(stage.id) + '</div>' +
+      '<div class="stage-title">' + escapeHtml(stage.title) + '</div>' +
+      '<div class="human-status">' + escapeHtml(stage.human_status || stage.state) + '</div>' +
+      '<div class="stage-detail">' + escapeHtml(stage.detail || "") + '</div>' +
+      '<ul class="criteria-list">' + criteria + '</ul>' +
+      '<div class="stage-next"><strong>Next:</strong> ' +
+      escapeHtml(stage.next_action || "No action.") + '</div>' +
+      '<div class="machine-state">Machine: ' + escapeHtml(stage.state || "") + '</div>' +
+      '</article>';
+  }).join("");
+}
+
+function renderTools(data) {
+  const actions = (data.actions || []).filter(function (action) {
+    return action.surface === "tools";
+  });
+  renderActionCollection(actions, toolActions);
+  renderStages(data.stages || []);
+}
+
+function renderJob(job, log) {
+  const hasJob = job && Object.keys(job).length;
+  noteJobLogActivity(job, log);
+  updateRunningActivity(job);
+  if (!hasJob) {
+    updateRunningActivity(null);
+    jobSummaryButton.className = "job-summary neutral";
+    jobSummaryStatus.textContent = "IDLE";
+    jobSummaryLabel.textContent = "No job running";
+    jobTitle.textContent = "No job running";
+    jobMeta.innerHTML =
+      '<span class="status-chip neutral">IDLE</span><span>Choose an enabled action to start.</span>';
+    stopJob.disabled = true;
+    if (log !== undefined && log !== null) {
+      logView.textContent = log || "No job output yet.";
+    }
+    return;
+  }
+
+  const running = job.status === "RUNNING" || job.status === "STOPPING";
+  let statusClass = "neutral";
+  if (job.status === "SUCCEEDED") statusClass = "success";
+  else if (job.status === "FAILED") statusClass = "failed";
+  else if (job.status === "PARTIAL") statusClass = "running";
+  else if (running) statusClass = "running";
+
+  jobSummaryButton.className = "job-summary " + statusClass;
+  jobSummaryStatus.textContent = job.status || "UNKNOWN";
+  jobSummaryLabel.textContent = job.label || job.action_id || "Job";
+
+  jobTitle.textContent = job.label || job.action_id || "Job";
+  let meta =
+    '<span class="status-chip ' + statusClass + '">' + escapeHtml(job.status || "UNKNOWN") + '</span>' +
+    '<span>PID ' + escapeHtml(job.pid == null ? "—" : job.pid) + '</span>' +
+    '<span>' + escapeHtml(job.started_at || "") + '</span>';
+  if (job.return_code !== null && job.return_code !== undefined) {
+    meta += '<span>Exit ' + escapeHtml(job.return_code) + '</span>';
+  }
+  jobMeta.innerHTML = meta;
+  stopJob.disabled = !running;
+
+  if (log !== undefined && log !== null) {
+    const shouldStick =
+      Math.abs(logView.scrollHeight - logView.scrollTop - logView.clientHeight) < 80;
+    logView.textContent = log || "Job started. Waiting for output…";
+    if (shouldStick) logView.scrollTop = logView.scrollHeight;
+  }
+}
+
+function renderAll(data) {
+  latestStatus = data;
+  renderSidebarStatus(data.workflow || {});
+  renderHomeWorkflow(data);
+  renderProgress(data);
+  renderHomeOpportunity(data.opportunity_gate || {});
+  renderHomeActivity(data.job || {}, data.opportunity_research || {});
+  renderOpportunityGate(data.opportunity_gate || {});
+  renderAnalysis(data);
+  renderTools(data);
+  renderJob(data.job || {});
+  renderRoute({ scroll: false });
+}
+
+async function loadStatus() {
+  try {
+    const data = await api("/api/status");
+    csrfToken = String(data.csrf_token || "");
+    renderAll(data);
+    if (data.job && (data.job.status === "RUNNING" || data.job.status === "STOPPING")) {
+      startJobPolling();
+    }
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function loadJob() {
+  try {
+    const data = await api("/api/job");
+    renderJob(data.job, data.log);
+    const running = data.job &&
+      (data.job.status === "RUNNING" || data.job.status === "STOPPING");
+    if (!running) {
+      stopJobPolling();
+      await loadStatus();
+    }
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function runAction(actionId) {
+  try {
+    const data = await api("/api/run", {
+      method: "POST",
+      body: JSON.stringify({ action_id: actionId })
+    });
+    renderJob(data.job, "");
+    openJobDrawer();
+    showToast("Started: " + data.job.label, false);
+    startJobPolling();
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function stopCurrentJob() {
+  if (!confirm("Stop the running job?")) return;
+  try {
+    const data = await api("/api/stop", {
+      method: "POST",
+      body: "{}"
+    });
+    renderJob(data.job);
+    showToast("Job stopped.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function openTarget(targetId) {
+  try {
+    const data = await api("/api/open", {
+      method: "POST",
+      body: JSON.stringify({ target_id: targetId })
+    });
+    showToast("Opened " + data.opened, false);
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function submitGateAction(action, opportunityId, videoId) {
+  try {
+    const payload = await api("/api/opportunity-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        action: action,
+        opportunity_id: opportunityId,
+        video_id: videoId
+      })
+    });
+    renderOpportunityGate(payload);
+    showToast("Opportunity updated.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function startJobPolling() {
+  if (jobTimer) return;
+  loadJob();
+  jobTimer = setInterval(loadJob, 1200);
+}
+
+function stopJobPolling() {
+  if (!jobTimer) return;
+  clearInterval(jobTimer);
+  jobTimer = null;
+}
+
+document.addEventListener("click", function (event) {
+  const routeTarget = event.target.closest("[data-route]");
+  if (routeTarget) {
+    event.preventDefault();
+    navigate(routeTarget.dataset.route);
+    return;
+  }
+
+  const actionTarget = event.target.closest("[data-action]");
+  if (actionTarget) {
+    runAction(actionTarget.dataset.action);
+    return;
+  }
+
+  const openTargetButton = event.target.closest("[data-open]");
+  if (openTargetButton) {
+    openTarget(openTargetButton.dataset.open);
+    return;
+  }
+
+  const saveIdeaButton = event.target.closest("[data-concept-save]");
+  if (saveIdeaButton) {
+    saveConceptIdea(saveIdeaButton.dataset.conceptSave, "");
+    return;
+  }
+
+  const overrideButton = event.target.closest("[data-concept-override]");
+  if (overrideButton) {
+    api("/api/concept-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: overrideButton.dataset.conceptOverride,
+        decision: "OVERRIDE",
+        criteria: {},
+        note: ""
+      })
+    }).then(function (payload) {
+      latestConceptSnapshot = payload;
+      const nextPending = pendingConceptIndex(payload.concepts || []);
+      if (nextPending >= 0) conceptCursor = nextPending;
+      renderConceptReview(payload, true);
+      showToast("Concept added to Human Gate.", false);
+      loadStatus();
+    }).catch(function (error) {
+      showToast(error.message, true);
+    });
+    return;
+  }
+
+  const gateButton = event.target.closest("[data-gate-action]");
+  if (gateButton) {
+    const action = gateButton.dataset.gateAction;
+    if (
+      action === "REJECT_TOPIC" &&
+      !confirm("Reject this opportunity and keep analysis locked for it?")
+    ) {
+      return;
+    }
+    submitGateAction(
+      action,
+      gateButton.dataset.opportunityId,
+      gateButton.dataset.videoId || null
+    );
+    return;
+  }
+
+  if (event.target.closest("[data-job-drawer]")) {
+    openJobDrawer();
+  }
+});
+
+window.addEventListener("popstate", function () {
+  renderRoute({ scroll: true });
+});
+refreshStatus.addEventListener("click", loadStatus);
+jobSummaryButton.addEventListener("click", openJobDrawer);
+closeJobDrawer.addEventListener("click", closeJob);
+drawerScrim.addEventListener("click", closeJob);
+stopJob.addEventListener("click", stopCurrentJob);
+mobileMenu.addEventListener("click", openSidebar);
+sidebarScrim.addEventListener("click", closeSidebar);
+visionObservation.addEventListener("input", function () {
+  visionEditing = true;
+});
+visionPrev.addEventListener("click", function () {
+  moveVisionCursor(-1);
+});
+visionNext.addEventListener("click", function () {
+  moveVisionCursor(1);
+});
+visionReject.addEventListener("click", function () {
+  submitVisionDecision("REJECT_FRAME");
+});
+visionAccept.addEventListener("click", function () {
+  submitVisionDecision("ACCEPT_FRAME");
+});
+humanAnalysisNote.addEventListener("input", function () {
+  humanAnalysisEditing = true;
+});
+humanAnalysisPrev.addEventListener("click", function () {
+  moveHumanAnalysisCursor(-1);
+});
+humanAnalysisNext.addEventListener("click", function () {
+  moveHumanAnalysisCursor(1);
+});
+humanAnalysisReject.addEventListener("click", function () {
+  submitHumanAnalysisDecision("REJECT");
+});
+humanAnalysisAccept.addEventListener("click", function () {
+  submitHumanAnalysisDecision("ACCEPT");
+});
+conceptNote.addEventListener("input", function () {
+  conceptEditing = true;
+});
+conceptPrev.addEventListener("click", function () {
+  moveConceptCursor(-1);
+});
+conceptNext.addEventListener("click", function () {
+  moveConceptCursor(1);
+});
+conceptReject.addEventListener("click", function () {
+  submitConceptDecision("REJECT");
+});
+conceptRework.addEventListener("click", function () {
+  submitConceptDecision("REWORK");
+});
+conceptSaveIdea.addEventListener("click", function () {
+  submitConceptDecision("SAVE_IDEA");
+});
+conceptAccept.addEventListener("click", function () {
+  submitConceptDecision("ACCEPT");
+});
+packagingNote.addEventListener("input", function () {
+  packagingEditing = true;
+});
+packagingPrev.addEventListener("click", function () {
+  movePackagingCursor(-1);
+});
+packagingNext.addEventListener("click", function () {
+  movePackagingCursor(1);
+});
+packagingReject.addEventListener("click", function () {
+  submitPackagingDecision("REJECT");
+});
+packagingRework.addEventListener("click", function () {
+  submitPackagingDecision("REWORK");
+});
+packagingSaveIdea.addEventListener("click", function () {
+  submitPackagingDecision("SAVE_IDEA");
+});
+packagingAccept.addEventListener("click", function () {
+  submitPackagingDecision("ACCEPT");
+});
+researchNote.addEventListener("input", function () {
+  researchEditing = true;
+});
+researchPrev.addEventListener("click", function () {
+  moveResearchCursor(-1);
+});
+researchNext.addEventListener("click", function () {
+  moveResearchCursor(1);
+});
+researchReject.addEventListener("click", function () {
+  submitResearchDecision("REJECT");
+});
+researchRework.addEventListener("click", function () {
+  submitResearchDecision("REWORK");
+});
+researchAccept.addEventListener("click", function () {
+  submitResearchDecision("ACCEPT");
+});
+scriptNote.addEventListener("input", function () {
+  scriptEditing = true;
+});
+scriptPrev.addEventListener("click", function () {
+  moveScriptCursor(-1);
+});
+scriptNext.addEventListener("click", function () {
+  moveScriptCursor(1);
+});
+scriptReject.addEventListener("click", function () {
+  submitScriptDecision("REJECT");
+});
+scriptRework.addEventListener("click", function () {
+  submitScriptDecision("REWORK");
+});
+scriptAccept.addEventListener("click", function () {
+  submitScriptDecision("ACCEPT");
+});
+formatNote.addEventListener("input", function () {
+  formatEditing = true;
+});
+formatPrev.addEventListener("click", function () {
+  moveFormatCursor(-1);
+});
+formatNext.addEventListener("click", function () {
+  moveFormatCursor(1);
+});
+formatReject.addEventListener("click", function () {
+  submitFormatDecision("REJECT");
+});
+formatRework.addEventListener("click", function () {
+  submitFormatDecision("REWORK");
+});
+formatAccept.addEventListener("click", function () {
+  submitFormatDecision("ACCEPT");
+});
+performanceNote.addEventListener("input", function () {
+  performanceEditing = true;
+});
+performancePrev.addEventListener("click", function () {
+  movePerformanceCursor(-1);
+});
+performanceNext.addEventListener("click", function () {
+  movePerformanceCursor(1);
+});
+performanceReject.addEventListener("click", function () {
+  submitPerformanceDecision("REJECT");
+});
+performanceRework.addEventListener("click", function () {
+  submitPerformanceDecision("REWORK");
+});
+performanceAccept.addEventListener("click", function () {
+  submitPerformanceDecision("ACCEPT");
+});
+previewScript.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_SCRIPT");
+});
+previewPerformance.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_PERFORMANCE");
+});
+previewSound.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_MUSIC_SFX");
+});
+storyboardSaveRevision.addEventListener("click", saveStoryboardRevision);
+visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.max(0, visualShotCursor - 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
+visualShotNext.addEventListener("click", function () { visualShotCursor = Math.min(visualReviewItems().length - 1, visualShotCursor + 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
+visualRejectAll.addEventListener("click", function () { submitVisualCandidateDecision("REJECT_ALL"); });
+visualNeedsBetter.addEventListener("click", function () { submitVisualCandidateDecision("NEEDS_BETTER_VISUAL"); });
+visualRightsPrev.addEventListener("click", function () {
+  visualRightsCursor = Math.max(0, visualRightsCursor - 1);
+  renderVisualRightsReview(latestVisualRightsSnapshot);
+});
+visualRightsNext.addEventListener("click", function () {
+  visualRightsCursor = Math.min(
+    visualRightsItems(latestVisualRightsSnapshot || {}).length - 1,
+    visualRightsCursor + 1
+  );
+  renderVisualRightsReview(latestVisualRightsSnapshot);
+});
+visualRightsReject.addEventListener("click", function () {
+  submitVisualRightsDecision("REJECT_USE");
+});
+visualRightsApprove.addEventListener("click", function () {
+  submitVisualRightsDecision("APPROVE_CONTEXT_USE");
+});
+visualRoughCutPrev.addEventListener("click", function () {
+  visualRoughCutCursor = Math.max(0, visualRoughCutCursor - 1);
+  renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
+});
+visualRoughCutNext.addEventListener("click", function () {
+  visualRoughCutCursor = Math.min(
+    visualRoughCutItems(latestVisualRoughCutSnapshot || {}).length - 1,
+    visualRoughCutCursor + 1
+  );
+  renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
+});
+visualRoughCutVisual.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_VISUAL");
+});
+visualRoughCutPacing.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_PACING");
+});
+visualRoughCutAudio.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_AUDIO");
+});
+visualRoughCutApprove.addEventListener("click", function () {
+  submitVisualRoughCutDecision("APPROVE_WITH_GAPS");
+});
+visualSpendPrev.addEventListener("click", function () {
+  visualSpendCursor = Math.max(0, visualSpendCursor - 1);
+  renderVisualSpendReview(latestVisualSpendSnapshot);
+});
+visualSpendNext.addEventListener("click", function () {
+  visualSpendCursor = Math.min(
+    visualSpendItems(latestVisualSpendSnapshot || {}).length - 1,
+    visualSpendCursor + 1
+  );
+  renderVisualSpendReview(latestVisualSpendSnapshot);
+});
+visualSpendRetry.addEventListener("click", function () {
+  submitVisualSpendDecision("RETRY_EXISTING");
+});
+visualSpendKeep.addEventListener("click", function () {
+  submitVisualSpendDecision("KEEP_PLACEHOLDER");
+});
+visualSpendAuthorize.addEventListener("click", function () {
+  submitVisualSpendDecision("AUTHORIZE_GENERATION");
+});
+
+generatedVisualPrev.addEventListener("click", function () {
+  generatedVisualCursor = Math.max(0, generatedVisualCursor - 1);
+  renderGeneratedVisualImport(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+});
+generatedVisualNext.addEventListener("click", function () {
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+  generatedVisualCursor = Math.min(
+    Math.max(0, items.length - 1),
+    generatedVisualCursor + 1
+  );
+  renderGeneratedVisualImport(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+});
+generatedVisualRegister.addEventListener("click", registerGeneratedVisualAsset);
+
+narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
+narrationSaveRevision.addEventListener("click", saveNarrationSegmentRevision);
+previewApprove.addEventListener("click", function () {
+  submitPreviewDecision("APPROVE_FINAL");
+});
+
+renderRoute({ scroll: true });
+loadStatus();
+setInterval(loadStatus, 5000);
+ +
+    Number(item.max_cost_usd || 0).toFixed(2) + ' USD</p></div>' +
+    '<div class="concept-detail-card"><h4>CINEMATIC BRIEF</h4><p>' +
+    '<strong>Subject/action:</strong> ' + escapeHtml(brief.subject_and_action || "") +
+    '<br><strong>Narrative intent:</strong> ' + escapeHtml(brief.narrative_intent || "") +
+    '<br><strong>Camera:</strong> ' +
+    escapeHtml([
+      brief.camera_angle,
+      brief.framing,
+      brief.camera_movement
+    ].filter(Boolean).join(" · ")) +
+    '<br><strong>Lens:</strong> ' + escapeHtml(brief.lens_feel || "") +
+    '<br><strong>Lighting:</strong> ' + escapeHtml(brief.lighting || "") +
+    '<br><strong>Motion:</strong> ' + escapeHtml(brief.motion_speed || "") +
+    '</p><p class="muted">Preferred provider: ' +
+    escapeHtml(provider.preferred_provider || "higgsfield") +
+    '. The app has not called the provider.</p></div>';
+
+  generatedVisualActualCost.max = String(Number(item.max_cost_usd || 0));
+  generatedVisualActualCost.value = "0";
+  generatedVisualProvider.value =
+    provider.preferred_provider || generatedVisualProvider.value || "higgsfield";
+  generatedVisualAssetPath.value = "";
+  generatedVisualProviderJobId.value = "";
+  generatedVisualNote.value = "";
+  generatedVisualPrev.disabled = generatedVisualCursor === 0;
+  generatedVisualNext.disabled = generatedVisualCursor >= items.length - 1;
+}
+
+async function registerGeneratedVisualAsset() {
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+  const item = items[generatedVisualCursor];
+  if (!item) return;
+
+  const assetPath = generatedVisualAssetPath.value.trim();
+  if (!assetPath) {
+    showToast("Enter the local generated file path.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/generated-visual-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        request_file: item.request_file,
+        asset_file: assetPath,
+        actual_cost_usd: Number(generatedVisualActualCost.value || 0),
+        provider: generatedVisualProvider.value || "higgsfield",
+        provider_job_id: generatedVisualProviderJobId.value,
+        note: generatedVisualNote.value
+      })
+    });
+    latestGeneratedVisualAssets = payload.generated_visual_assets || {};
+    const remaining = generatedVisualPendingItems(
+      latestGeneratedVisualHandoff || {},
+      latestGeneratedVisualAssets
+    );
+    if (generatedVisualCursor >= remaining.length) {
+      generatedVisualCursor = Math.max(0, remaining.length - 1);
+    }
+    renderGeneratedVisualImport(
+      latestGeneratedVisualHandoff || {},
+      latestGeneratedVisualAssets
+    );
+    showToast(
+      "Generated visual registered. Assembly plan will rebuild from the current asset.",
       false
     );
     await loadStatus();
