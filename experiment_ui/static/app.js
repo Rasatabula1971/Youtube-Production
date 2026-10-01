@@ -2178,19 +2178,7 @@ function renderFormatReview(snapshot, force) {
       : '') +
     branches;
 
-  const descriptions = plan.criteria || {};
-  const checked = plan.criteria_decisions || {};
-  const required = plan.required_accept_criteria || Object.keys(descriptions);
-  formatCriteria.innerHTML = required.map(function (criterion) {
-    const id = "format-criterion-" + formatCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-format-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
-
+  formatCriteria.innerHTML = "";\n
   formatNote.value = plan.note || "";
   formatPrev.disabled = formatCursor <= 0;
   formatNext.disabled = formatCursor >= items.length - 1;
@@ -2226,7 +2214,7 @@ async function submitFormatDecision(decision) {
       body: JSON.stringify({
         concept_id: plan.concept_id,
         decision: decision,
-        criteria: collectFormatCriteria(),
+        criteria: {},
         note: formatNote.value
       })
     });
@@ -3226,9 +3214,6 @@ scriptAccept.addEventListener("click", function () {
   submitScriptDecision("ACCEPT");
 });
 formatNote.addEventListener("input", function () {
-  formatEditing = true;
-});
-formatCriteria.addEventListener("change", function () {
   formatEditing = true;
 });
 formatPrev.addEventListener("click", function () {
