@@ -37,6 +37,17 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         self.assertEqual(packages["maxItems"], 1)
         self.assertEqual(package_id["const"], "p2")
 
+    def test_base_prompt_does_not_force_specialist_audience(self):
+        request = {
+            "concept_id": "c1",
+            "allowed_format_intents": ["short"],
+            "package_count_requested": 2,
+        }
+        prompt = runner.build_prompt(request, maximum_chars=95000)
+
+        self.assertIn("Do not invent a specialist audience", prompt)
+        self.assertIn("broad general audience", prompt)
+
     def test_rework_prompt_marks_human_note_authoritative(self):
         prompt = runner.build_prompt(self.request(), maximum_chars=95000)
 
