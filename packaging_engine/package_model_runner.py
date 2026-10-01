@@ -94,8 +94,17 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "title": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": int(
-                    (request.get("title_contract") or {}).get("max_chars", 56)
+                "maxLength": max(
+                    int(
+                        ((request.get("title_contracts") or {}).get("short") or {}).get(
+                            "max_chars", 48
+                        )
+                    ),
+                    int(
+                        ((request.get("title_contracts") or {}).get("long_form") or {}).get(
+                            "max_chars", 70
+                        )
+                    ),
                 ),
             },
             "thumbnail": {
@@ -174,7 +183,7 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "3. Treat title and thumbnail as one communication unit; they should complement, not repeat.\n"
         "4. Generate exactly three genuinely different human hook angles, not wording variants. Prefer truthful consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when supported by the accepted concept.\n"
         "5. The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain. Do not lead like a lecture, textbook chapter, or engineering lesson.\n"
-        "6. TITLE CONTRACT: title is the proposed PUBLIC YouTube title, not an internal label. Target 3-7 words, stay within the hard limits in PACKAGE REQUEST, keep it punchy and conversational, and push toward the strongest truthful dramatic tension supported by the concept.\n"
+        "6. TITLE CONTRACT: title is the proposed PUBLIC YouTube title, not an internal label. Use the contract matching format_intent. Shorts: target 3-7 words, event/tension first, explanation hidden. Long-form: target 5-10 words, curiosity/tension plus enough subject context to make the promise clear. Generate each format independently; do not merely soften a Short title into a long-form title.\n"
         "7. Do not use lecture-title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or materials/technology lists. Put those details in the payoff, not the title.\n"
         "8. Prefer a title that makes a normal viewer think 'wait—what?', 'how is that possible?', or 'that happens to me?' without inventing danger or certainty. Keep technical mechanism/material names out of the title unless the term itself creates the human hook.\n"
         "9. Every package must make one honest promise and define the payoff the video must deliver.\n"
