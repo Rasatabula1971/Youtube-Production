@@ -119,6 +119,9 @@ def normalize_candidate(raw: dict[str, Any], shot_id: str) -> dict[str, Any]:
     commercial = raw.get("commercial_use_allowed")
     url = str(raw.get("source_url") or "").strip()
     local = str(raw.get("local_path") or "").strip()
+    asset_url = str(
+        raw.get("asset_url") or raw.get("preview_media_url") or ""
+    ).strip()
     creator = str(raw.get("creator") or "").strip() or None
     licence = str(raw.get("license") or "").strip() or None
     if tier == "EDITORIAL_EXCERPT":
@@ -140,6 +143,7 @@ def normalize_candidate(raw: dict[str, Any], shot_id: str) -> dict[str, Any]:
         "media_type": raw.get("media_type"),
         "source_tier": tier,
         "source_url": url or None,
+        "asset_url": asset_url or None,
         "local_path": local or None,
         "creator": creator,
         "license": licence,
