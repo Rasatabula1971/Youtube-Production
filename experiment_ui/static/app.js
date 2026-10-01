@@ -163,6 +163,31 @@ const storyboardLighting = document.getElementById("storyboardLighting");
 const storyboardTransition = document.getElementById("storyboardTransition");
 const storyboardSaveRevision = document.getElementById("storyboardSaveRevision");
 
+const visualRightsReviewPanel = document.getElementById("visualRightsReviewPanel");
+const visualRightsReviewTitle = document.getElementById("visualRightsReviewTitle");
+const visualRightsReviewSummary = document.getElementById("visualRightsReviewSummary");
+const visualRightsReviewStatus = document.getElementById("visualRightsReviewStatus");
+const visualRightsDetail = document.getElementById("visualRightsDetail");
+const visualRightsPurpose = document.getElementById("visualRightsPurpose");
+const visualRightsNote = document.getElementById("visualRightsNote");
+const visualRightsPrev = document.getElementById("visualRightsPrev");
+const visualRightsReject = document.getElementById("visualRightsReject");
+const visualRightsApprove = document.getElementById("visualRightsApprove");
+const visualRightsNext = document.getElementById("visualRightsNext");
+
+const visualRoughCutReviewPanel = document.getElementById("visualRoughCutReviewPanel");
+const visualRoughCutReviewTitle = document.getElementById("visualRoughCutReviewTitle");
+const visualRoughCutReviewSummary = document.getElementById("visualRoughCutReviewSummary");
+const visualRoughCutReviewStatus = document.getElementById("visualRoughCutReviewStatus");
+const visualRoughCutDetail = document.getElementById("visualRoughCutDetail");
+const visualRoughCutNote = document.getElementById("visualRoughCutNote");
+const visualRoughCutPrev = document.getElementById("visualRoughCutPrev");
+const visualRoughCutVisual = document.getElementById("visualRoughCutVisual");
+const visualRoughCutPacing = document.getElementById("visualRoughCutPacing");
+const visualRoughCutAudio = document.getElementById("visualRoughCutAudio");
+const visualRoughCutApprove = document.getElementById("visualRoughCutApprove");
+const visualRoughCutNext = document.getElementById("visualRoughCutNext");
+
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -236,6 +261,10 @@ let latestNarrationPerformanceSnapshot = null;
 let latestVisualCandidateSnapshot = null;
 let visualShotCursor = 0;
 let latestStoryboardSnapshot = null;
+let latestVisualRightsSnapshot = null;
+let visualRightsCursor = 0;
+let latestVisualRoughCutSnapshot = null;
+let visualRoughCutCursor = 0;
 
 const ROUTES = {
   "/": {
@@ -2518,15 +2547,21 @@ function renderVisualCandidateReview(snapshot) {
   const decision = (packet.decisions || {})[shot.shot_id];
   visualCandidateReviewTitle.textContent = "Choose visual — " + (shot.shot_id || "");
   visualCandidateReviewSummary.textContent = (visualShotCursor + 1) + " of " + items.length + " storyboard shots";
-  visualCandidateReviewStatus.textContent = decision ? humanizeToken(decision.status || decision.action) : "PENDING";
-  visualCandidateReviewStatus.className = "status-chip " + (decision ? "success" : "running");
+  const staleShot = shot.storyboard_current === false;
+  visualCandidateReviewStatus.textContent = staleShot
+    ? "RE-SEARCH REQUIRED"
+    : (decision ? humanizeToken(decision.status || decision.action) : "PENDING");
+  visualCandidateReviewStatus.className =
+    "status-chip " + (staleShot ? "failed" : (decision ? "success" : "running"));
   visualShotDetail.innerHTML =
     '<div class="concept-detail-card"><h4>STORYBOARD TARGET</h4><h3>' + escapeHtml(shot.shot_id || "") + '</h3>' +
     '<p><strong>Search gap:</strong> ' + (shot.search_gap ? "Yes" : "No") + '</p>' +
     '<p><strong>Premium candidate:</strong> ' + (shot.premium_generation_candidate ? "Yes — only if existing visuals fail" : "No") + '</p>' +
     '<p class="muted">Select the visual that best serves the planned shot. Creator excerpts remain subject to the separate rights/context gate.</p></div>';
   const candidates = shot.candidates || [];
-  visualCandidateCards.innerHTML = candidates.length ? candidates.map(function (candidate) {
+  visualCandidateCards.innerHTML = staleShot
+    ? '<p class="empty-state"><strong>Storyboard changed.</strong> These candidates are stale. Run Continue Automatically to re-search this shot before making a visual decision.</p>'
+    : candidates.length ? candidates.map(function (candidate) {
     const thumb = candidate.thumbnail_url
       ? '<img class="visual-candidate-thumb" src="' + escapeHtml(candidate.thumbnail_url) + '" alt="">'
       : '<div class="visual-candidate-placeholder">No preview</div>';
@@ -2551,6 +2586,8 @@ function renderVisualCandidateReview(snapshot) {
   });
   visualShotPrev.disabled = visualShotCursor === 0;
   visualShotNext.disabled = visualShotCursor >= items.length - 1;
+  visualRejectAll.disabled = staleShot;
+  visualNeedsBetter.disabled = staleShot;
   visualCandidateNote.value = decision && decision.note ? decision.note : "";
   const boards = (latestStoryboardSnapshot && latestStoryboardSnapshot.items) || [];
   const board = boards.find(function (x) { return x.concept_id === packet.concept_id && x.format === packet.format; });
@@ -2604,6 +2641,209 @@ async function submitVisualCandidateDecision(action, candidateId) {
     showToast(action === "SELECT" ? "Visual selected." : "Shot preserved as a visual gap.", false);
     await loadStatus();
   } catch (error) { showToast(error.message, true); }
+}
+
+function visualRightsItems(snapshot) {
+  const items = [];
+  (snapshot && snapshot.items || []).forEach(function (packet) {
+    (packet.pending || []).forEach(function (entry) {
+      items.push({ packet: packet, entry: entry });
+    });
+  });
+  return items;
+}
+
+function renderVisualRightsReview(snapshot) {
+  latestVisualRightsSnapshot = snapshot || {};
+  const items = visualRightsItems(latestVisualRightsSnapshot);
+  visualRightsReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  visualRightsCursor = Math.max(
+    0,
+    Math.min(visualRightsCursor, items.length - 1)
+  );
+  const current = items[visualRightsCursor];
+  const packet = current.packet;
+  const entry = current.entry || {};
+  const candidate = entry.candidate || {};
+  const decision = entry.decision || null;
+
+  visualRightsReviewTitle.textContent =
+    "Creator footage — " + (entry.shot_id || "");
+  visualRightsReviewSummary.textContent =
+    (visualRightsCursor + 1) + " of " + items.length +
+    " rights/context decisions · " +
+    Number(snapshot.decided || 0) + " decided";
+  visualRightsReviewStatus.textContent = decision
+    ? humanizeToken(decision.decision || "DECIDED")
+    : "PENDING";
+  visualRightsReviewStatus.className =
+    "status-chip " +
+    (decision && decision.approved_for_rough_cut
+      ? "success"
+      : decision
+        ? "failed"
+        : "running");
+
+  const source = candidate.source_url
+    ? '<a class="external-button" href="' +
+      escapeHtml(candidate.source_url) +
+      '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
+    : "";
+  visualRightsDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>SELECTED CREATOR / EDITORIAL FOOTAGE</h4>' +
+    '<h3>' + escapeHtml(candidate.title || candidate.candidate_id || entry.shot_id || "") + '</h3>' +
+    '<p><strong>Shot:</strong> ' + escapeHtml(entry.shot_id || "") +
+    '<br><strong>Creator:</strong> ' + escapeHtml(candidate.creator || "Unknown") +
+    '<br><strong>Source tier:</strong> ' + escapeHtml(candidate.source_tier || "") +
+    '<br><strong>Licence:</strong> ' + escapeHtml(candidate.license || "Requires human context review") +
+    '</p>' + source +
+    '<p class="muted">Approval records the intended editorial transformation/context. It does not make a legal fair-use determination.</p></div>';
+
+  visualRightsPurpose.value =
+    decision && decision.transformative_purpose
+      ? decision.transformative_purpose
+      : "";
+  visualRightsNote.value =
+    decision && decision.context_note ? decision.context_note : "";
+  visualRightsPrev.disabled = visualRightsCursor === 0;
+  visualRightsNext.disabled = visualRightsCursor >= items.length - 1;
+}
+
+async function submitVisualRightsDecision(decision) {
+  const items = visualRightsItems(latestVisualRightsSnapshot || {});
+  const current = items[visualRightsCursor];
+  if (!current) return;
+  try {
+    await api("/api/visual-rights-review", {
+      method: "POST",
+      body: JSON.stringify({
+        candidate_review_file: current.packet.candidate_review_file,
+        shot_id: current.entry.shot_id,
+        decision: decision,
+        transformative_purpose: visualRightsPurpose.value,
+        context_note: visualRightsNote.value
+      })
+    });
+    const refreshed = await api("/api/visual-rights-review");
+    latestVisualRightsSnapshot = refreshed;
+    const refreshedItems = visualRightsItems(refreshed);
+    const nextPending = refreshedItems.findIndex(function (item) {
+      return !item.entry.decision;
+    });
+    if (nextPending >= 0) visualRightsCursor = nextPending;
+    renderVisualRightsReview(refreshed);
+    showToast(
+      decision === "APPROVE_CONTEXT_USE"
+        ? "Context use approved for this selected footage."
+        : "Creator footage rejected for this shot.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function visualRoughCutItems(snapshot) {
+  return (snapshot && snapshot.items || []).filter(function (item) {
+    return item && item.review_current !== false;
+  });
+}
+
+function renderVisualRoughCutReview(snapshot) {
+  latestVisualRoughCutSnapshot = snapshot || {};
+  const items = visualRoughCutItems(latestVisualRoughCutSnapshot);
+  visualRoughCutReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  visualRoughCutCursor = Math.max(
+    0,
+    Math.min(visualRoughCutCursor, items.length - 1)
+  );
+  const item = items[visualRoughCutCursor];
+  const decision = item.decision || null;
+  const summary = item.summary || {};
+  const scenes = item.scenes || [];
+
+  visualRoughCutReviewTitle.textContent =
+    "Rough cut — " + humanizeToken(item.format || "");
+  visualRoughCutReviewSummary.textContent =
+    (visualRoughCutCursor + 1) + " of " + items.length +
+    " branches · " + scenes.length + " scenes · " +
+    Number(summary.placeholders || summary.unresolved_visual_gaps || 0) +
+    " unresolved visual gaps";
+  visualRoughCutReviewStatus.textContent = decision
+    ? humanizeToken(decision.decision || "DECIDED")
+    : "PENDING";
+  visualRoughCutReviewStatus.className =
+    "status-chip " +
+    (decision && decision.approved_for_gap_planning
+      ? "success"
+      : decision
+        ? "running"
+        : "running");
+
+  const sceneHtml = scenes.map(function (scene) {
+    const assignment = scene.visual_assignment || {};
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(scene.shot_id || scene.scene_id || "SHOT") + '</h4>' +
+      '<p><strong>Purpose:</strong> ' + escapeHtml(scene.story_purpose || "") +
+      '<br><strong>Visual:</strong> ' + escapeHtml(scene.desired_visual || "") +
+      '<br><strong>Assignment:</strong> ' + escapeHtml(humanizeToken(assignment.status || "PLACEHOLDER")) +
+      (assignment.reason
+        ? '<br><strong>Reason:</strong> ' + escapeHtml(humanizeToken(assignment.reason))
+        : "") +
+      '</p></div>';
+  }).join("");
+
+  visualRoughCutDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>BRANCH</h4><h3>' +
+    escapeHtml(item.concept_id || "") + ' · ' +
+    escapeHtml(humanizeToken(item.format || "")) +
+    '</h3><p class="muted">This is the structural rough cut. Missing visuals may remain as placeholders; paid generation is still locked.</p></div>' +
+    sceneHtml;
+
+  visualRoughCutNote.value =
+    decision && decision.note ? decision.note : "";
+  visualRoughCutPrev.disabled = visualRoughCutCursor === 0;
+  visualRoughCutNext.disabled = visualRoughCutCursor >= items.length - 1;
+}
+
+async function submitVisualRoughCutDecision(decision) {
+  const items = visualRoughCutItems(latestVisualRoughCutSnapshot || {});
+  const item = items[visualRoughCutCursor];
+  if (!item) return;
+  try {
+    await api("/api/visual-rough-cut-review", {
+      method: "POST",
+      body: JSON.stringify({
+        rough_cut_file: item.rough_cut_file,
+        decision: decision,
+        note: visualRoughCutNote.value
+      })
+    });
+    const refreshed = await api("/api/visual-rough-cut-review");
+    latestVisualRoughCutSnapshot = refreshed;
+    const refreshedItems = visualRoughCutItems(refreshed);
+    const nextPending = refreshedItems.findIndex(function (value) {
+      return !value.decision;
+    });
+    if (nextPending >= 0) visualRoughCutCursor = nextPending;
+    renderVisualRoughCutReview(refreshed);
+    showToast(
+      decision === "APPROVE_WITH_GAPS"
+        ? "Rough cut approved. Unresolved gaps can now be planned."
+        : "Rough cut sent back for " +
+          humanizeToken(decision).replace("Rework ", "").toLowerCase() +
+          " rework.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 function formatElapsed(milliseconds) {
@@ -2700,7 +2940,10 @@ function renderAnalysis(data) {
     "HUMAN_SCRIPT_GATE",
     "HUMAN_FORMAT_GATE",
     "HUMAN_PERFORMANCE_GATE",
-    "HUMAN_NARRATION_PREVIEW_GATE"
+    "HUMAN_NARRATION_PREVIEW_GATE",
+    "HUMAN_VISUAL_CANDIDATE_GATE",
+    "HUMAN_VISUAL_RIGHTS_GATE",
+    "HUMAN_ROUGH_CUT_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -2736,8 +2979,14 @@ function renderAnalysis(data) {
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
+  renderVisualCandidateReview(data.visual_candidate_gate || {});
+  renderVisualRightsReview(data.visual_rights_gate || {});
+  renderVisualRoughCutReview(data.visual_rough_cut_gate || {});
   api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
-  Promise.all([api("/api/storyboard-review"), api("/api/visual-candidate-review")]).then(function (values) { latestStoryboardSnapshot=values[0]; renderVisualCandidateReview(values[1]); }).catch(function () {});
+  api("/api/storyboard-review").then(function (value) {
+    latestStoryboardSnapshot = value;
+    renderVisualCandidateReview(latestVisualCandidateSnapshot || {});
+  }).catch(function () {});
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -3235,6 +3484,46 @@ visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.m
 visualShotNext.addEventListener("click", function () { visualShotCursor = Math.min(visualReviewItems().length - 1, visualShotCursor + 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
 visualRejectAll.addEventListener("click", function () { submitVisualCandidateDecision("REJECT_ALL"); });
 visualNeedsBetter.addEventListener("click", function () { submitVisualCandidateDecision("NEEDS_BETTER_VISUAL"); });
+visualRightsPrev.addEventListener("click", function () {
+  visualRightsCursor = Math.max(0, visualRightsCursor - 1);
+  renderVisualRightsReview(latestVisualRightsSnapshot);
+});
+visualRightsNext.addEventListener("click", function () {
+  visualRightsCursor = Math.min(
+    visualRightsItems(latestVisualRightsSnapshot || {}).length - 1,
+    visualRightsCursor + 1
+  );
+  renderVisualRightsReview(latestVisualRightsSnapshot);
+});
+visualRightsReject.addEventListener("click", function () {
+  submitVisualRightsDecision("REJECT_USE");
+});
+visualRightsApprove.addEventListener("click", function () {
+  submitVisualRightsDecision("APPROVE_CONTEXT_USE");
+});
+visualRoughCutPrev.addEventListener("click", function () {
+  visualRoughCutCursor = Math.max(0, visualRoughCutCursor - 1);
+  renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
+});
+visualRoughCutNext.addEventListener("click", function () {
+  visualRoughCutCursor = Math.min(
+    visualRoughCutItems(latestVisualRoughCutSnapshot || {}).length - 1,
+    visualRoughCutCursor + 1
+  );
+  renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
+});
+visualRoughCutVisual.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_VISUAL");
+});
+visualRoughCutPacing.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_PACING");
+});
+visualRoughCutAudio.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_AUDIO");
+});
+visualRoughCutApprove.addEventListener("click", function () {
+  submitVisualRoughCutDecision("APPROVE_WITH_GAPS");
+});
 
 narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
 narrationSaveRevision.addEventListener("click", saveNarrationSegmentRevision);
