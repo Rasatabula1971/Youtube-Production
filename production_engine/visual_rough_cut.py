@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json,safe_slug,sha256_file
+from visual_search import shot_fingerprint
 
 HERE=Path(__file__).resolve().parent; OUTPUT=HERE/"output"
 STORYBOARD_DIR=OUTPUT/"storyboards"; RESULT_DIR=OUTPUT/"visual_search_results"
@@ -26,6 +27,10 @@ def build(board:dict[str,Any],review:dict[str,Any],rights:dict[str,Any]|None,boa
     scenes=[]
     for i,card in enumerate(board.get("cards",[])):
         sid=str(card.get("shot_id") or ""); d=decisions.get(sid,{})
+        if d and d.get("shot_fingerprint") != shot_fingerprint(card):
+            raise ValueError(
+                "STALE_CANDIDATE_REVIEW: storyboard shot changed after visual decision"
+            )
         assignment={"status":"PLACEHOLDER","candidate_id":None,"source_url":None,"reason":"UNRESOLVED_VISUAL_GAP"}
         if d.get("status")=="SELECTED":
             assignment={"status":"APPROVED_EXISTING_ASSET","candidate_id":d.get("candidate_id"),"source_url":d.get("candidate_source_url"),"reason":"VERIFIED_REUSE_RIGHTS"}
