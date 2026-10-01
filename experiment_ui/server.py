@@ -2538,6 +2538,7 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
                 )
 
     current: dict[tuple[str, str, str], float] = {}
+    current_details: dict[tuple[str, str, str], dict[str, Any]] = {}
     stale = 0
     if PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.exists():
         for path in PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.glob(
@@ -2582,6 +2583,13 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
                 stale += 1
                 continue
             current[key] = max_cost
+            current_details[key] = {
+                "request_file": str(path),
+                "desired_visual": payload.get("desired_visual"),
+                "story_purpose": payload.get("story_purpose"),
+                "generation_brief": payload.get("generation_brief", {}),
+                "provider_handoff": payload.get("provider_handoff", {}),
+            }
 
     ready = bool(expected) and expected == current and stale == 0
     return {
@@ -2603,75 +2611,11 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
                 "format": key[1],
                 "shot_id": key[2],
                 "max_cost_usd": value,
-                "request_file": str(
-                    PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
-                    / (
-                        f"{transformation_safe_slug(key[0])}."
-                        f"{transformation_safe_slug(key[1])}."
-                        f"{transformation_safe_slug(key[2])}."
-                        "visual_generation_request.json"
-                    )
-                ),
-                "desired_visual": (
-                    (
-                        safe_load_json(
-                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
-                            / (
-                                f"{transformation_safe_slug(key[0])}."
-                                f"{transformation_safe_slug(key[1])}."
-                                f"{transformation_safe_slug(key[2])}."
-                                "visual_generation_request.json"
-                            )
-                        )
-                        or {}
-                    ).get("desired_visual")
-                ),
-                "story_purpose": (
-                    (
-                        safe_load_json(
-                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
-                            / (
-                                f"{transformation_safe_slug(key[0])}."
-                                f"{transformation_safe_slug(key[1])}."
-                                f"{transformation_safe_slug(key[2])}."
-                                "visual_generation_request.json"
-                            )
-                        )
-                        or {}
-                    ).get("story_purpose")
-                ),
-                "generation_brief": (
-                    (
-                        safe_load_json(
-                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
-                            / (
-                                f"{transformation_safe_slug(key[0])}."
-                                f"{transformation_safe_slug(key[1])}."
-                                f"{transformation_safe_slug(key[2])}."
-                                "visual_generation_request.json"
-                            )
-                        )
-                        or {}
-                    ).get("generation_brief", {})
-                ),
-                "provider_handoff": (
-                    (
-                        safe_load_json(
-                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
-                            / (
-                                f"{transformation_safe_slug(key[0])}."
-                                f"{transformation_safe_slug(key[1])}."
-                                f"{transformation_safe_slug(key[2])}."
-                                "visual_generation_request.json"
-                            )
-                        )
-                        or {}
-                    ).get("provider_handoff", {})
-                ),
+                **current_details.get(key, {}),
             }
             for key, value in sorted(current.items())
         ],
-    }
+    }    }
 
 
 def visual_assembly_artifact_state(
