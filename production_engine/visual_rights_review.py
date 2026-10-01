@@ -1,6 +1,7 @@
 """Human rights/context gate for selected creator/editorial visual excerpts."""
 
 from __future__ import annotations
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,30 @@ def _candidate(review: dict[str,Any], shot_id:str)->dict[str,Any]|None:
     decision=review.get("decisions",{}).get(shot_id,{})
     cid=str(decision.get("candidate_id") or "")
     shot=next((x for x in result.get("shots",[]) if str(x.get("shot_id"))==shot_id),{})
-    return next((x for x in shot.get("candidates",[]) if str(x.get("candidate_id"))==cid),None)
+    result_fingerprint=hashlib.sha256(
+        json.dumps(
+            shot,
+            sort_keys=True,
+            separators=(",",":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if decision.get("result_fingerprint") != result_fingerprint:
+        return None
+    candidate=next((x for x in shot.get("candidates",[]) if str(x.get("candidate_id"))==cid),None)
+    if candidate is None:
+        return None
+    candidate_fingerprint=hashlib.sha256(
+        json.dumps(
+            candidate,
+            sort_keys=True,
+            separators=(",",":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if decision.get("candidate_fingerprint") != candidate_fingerprint:
+        return None
+    return candidate
 
 def snapshot()->dict[str,Any]:
     items=[]
