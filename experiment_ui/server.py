@@ -2773,7 +2773,7 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
             }
             for key, value in sorted(current.items())
         ],
-    }    }
+    }
 
 
 def visual_assembly_artifact_state(
@@ -6246,6 +6246,7 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
+                    selected_titles=body.get("selected_titles"),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:

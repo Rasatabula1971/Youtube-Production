@@ -22,6 +22,10 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
                 "package_id": "p2",
                 "expected_viewer": "Aviation hobbyists",
             },
+            "human_rework_original_titles": {
+                "short": [{"candidate_id": "short-curiosity", "angle": "curiosity", "title": "Keep Short"}],
+                "long_form": [{"candidate_id": "long-curiosity", "angle": "curiosity", "title": "Keep Long"}],
+            },
             "human_rework_original_packages": [
                 {"package_id": "p1", "title": "Keep One"},
                 {"package_id": "p2", "title": "Revise Me"},
@@ -57,7 +61,9 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         }
         prompt = runner.build_prompt(request, maximum_chars=95000)
 
-        self.assertIn("exactly three genuinely different human hook angles", prompt)
+        self.assertIn("exactly five Short titles", prompt)
+        self.assertIn("exactly five Long-form titles", prompt)
+        self.assertIn("curiosity, stakes, unexpected, mystery, payoff", prompt)
         self.assertIn("The explanation is the payoff, not the pitch", prompt)
         self.assertIn("Do not lead like a lecture", prompt)
         self.assertIn("The Physics of X", prompt)
@@ -102,6 +108,10 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
     def test_rework_merge_preserves_other_packages(self):
         response = {
             "concept_id": "c1",
+            "titles": {
+                "short": [{"candidate_id": "short-curiosity", "angle": "curiosity", "title": "Changed Short"}],
+                "long_form": [{"candidate_id": "long-curiosity", "angle": "curiosity", "title": "Changed Long"}],
+            },
             "packages": [
                 {
                     "package_id": "p2",
@@ -120,6 +130,38 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         self.assertEqual(merged["packages"][0]["title"], "Keep One")
         self.assertEqual(merged["packages"][1]["expected_viewer"], "Anyone who flies")
         self.assertEqual(merged["packages"][2]["title"], "Keep Three")
+        self.assertEqual(
+            merged["titles"]["short"][0]["title"],
+            "Keep Short",
+        )
+        self.assertEqual(
+            merged["titles"]["long_form"][0]["title"],
+            "Keep Long",
+        )
+
+
+    def test_title_candidate_schema_requires_five_per_format(self):
+        request = {
+            "concept_id": "c1",
+            "allowed_format_intents": ["short", "long_form", "either"],
+            "package_count_requested": 3,
+            "title_contracts": {
+                "short": {"max_chars": 48},
+                "long_form": {"max_chars": 70},
+            },
+        }
+        schema = runner.response_schema(request)
+        titles = schema["properties"]["titles"]
+
+        self.assertEqual(titles["properties"]["short"]["minItems"], 5)
+        self.assertEqual(titles["properties"]["short"]["maxItems"], 5)
+        self.assertEqual(titles["properties"]["long_form"]["minItems"], 5)
+        self.assertEqual(titles["properties"]["long_form"]["maxItems"], 5)
+        self.assertEqual(
+            titles["properties"]["short"]["items"]["properties"]["angle"]["enum"],
+            ["curiosity", "stakes", "unexpected", "mystery", "payoff"],
+        )
+
 
 
 if __name__ == "__main__":

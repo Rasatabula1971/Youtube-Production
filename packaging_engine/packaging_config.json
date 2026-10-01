@@ -18,5 +18,13 @@
     "max_words": 10,
     "max_chars": 70,
     "style": "curiosity_plus_clear_subject_context"
-  }
+  },
+  "title_variations_per_format": 5,
+  "title_angles": [
+    "curiosity",
+    "stakes",
+    "unexpected",
+    "mystery",
+    "payoff"
+  ]
 }

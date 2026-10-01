@@ -163,8 +163,15 @@ def _script_context(
     if not isinstance(branch_story, dict) or not branch_story:
         raise ValueError(f"Approved format plan is missing {fmt} script context")
     title = str(package.get("title") or "").strip()
+    selected_titles = package.get("selected_titles", {})
+    if isinstance(selected_titles, dict):
+        selection = selected_titles.get(fmt, {})
+        if isinstance(selection, dict):
+            title = str(selection.get("title") or "").strip() or title
     if not title or str(branch_story.get("title") or "") != title:
-        raise ValueError("Approved format plan violates immutable Packaging title")
+        raise ValueError(
+            "Approved format plan violates format-specific Packaging title"
+        )
     sections = branch_story.get("sections", [])
     if not isinstance(sections, list) or not sections:
         raise ValueError(f"Approved format plan requires {fmt} script sections")

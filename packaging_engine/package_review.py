@@ -132,6 +132,7 @@ def public_item(item: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
         "decision": decision.get("decision", "PENDING"),
         "criteria_decisions": decision.get("criteria", {}),
         "note": decision.get("note", ""),
+        "selected_titles": decision.get("selected_titles", {}),
     }
 
 
@@ -222,6 +223,7 @@ def save_package_idea(
         "package_id": str(item.get("package_id") or ""),
         "concept_id": str(item.get("concept_id") or ""),
         "title": item.get("title"),
+        "titles": item.get("titles", {}),
         "thumbnail": item.get("thumbnail"),
         "opening_frame": item.get("opening_frame"),
         "expected_viewer": item.get("expected_viewer"),
@@ -356,6 +358,11 @@ def _apply_rework_feedback(
         for key, value in package.items()
         if key not in {"response_source", "source_overlap"}
     }
+    request["human_rework_original_titles"] = (
+        response.get("titles", {})
+        if isinstance(response.get("titles"), dict)
+        else package.get("titles", {})
+    )
     request["human_rework_original_packages"] = [
         {
             key: value
@@ -378,6 +385,7 @@ def apply_action(
     decision: str,
     criteria: Any,
     note: str | None,
+    selected_titles: Any = None,
 ) -> dict[str, Any]:
     state = current_state()
     if not state:
@@ -427,6 +435,63 @@ def apply_action(
     if value == "REWORK" and not clean_note:
         raise ValueError("REWORK requires a note explaining what must change")
 
+    clean_selected_titles: dict[str, dict[str, str]] = {}
+    if value == "ACCEPT":
+        available_sets = item.get("titles", {})
+        has_new_title_sets = (
+            isinstance(available_sets, dict)
+            and isinstance(available_sets.get("short"), list)
+            and bool(available_sets.get("short"))
+            and isinstance(available_sets.get("long_form"), list)
+            and bool(available_sets.get("long_form"))
+        )
+        if not isinstance(selected_titles, dict):
+            if has_new_title_sets:
+                raise ValueError(
+                    "ACCEPT requires one Short title and one Long-form title selection"
+                )
+            legacy_title = str(item.get("title") or "").strip()
+            selected_titles = {
+                "short": {"candidate_id": "legacy", "title": legacy_title},
+                "long_form": {"candidate_id": "legacy", "title": legacy_title},
+            }
+        for fmt in ("short", "long_form"):
+            selection = selected_titles.get(fmt)
+            if not isinstance(selection, dict):
+                raise ValueError(f"ACCEPT requires selected_titles.{fmt}")
+            title_text = str(selection.get("title") or "").strip()
+            candidate_id = str(selection.get("candidate_id") or "").strip()
+            if not title_text:
+                raise ValueError(f"ACCEPT requires a non-empty {fmt} title")
+            if not candidate_id:
+                candidate_id = "manual"
+            if candidate_id not in {"manual", "legacy"}:
+                candidates = (
+                    available_sets.get(fmt, [])
+                    if isinstance(available_sets, dict)
+                    else []
+                )
+                match = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if isinstance(candidate, dict)
+                        and str(candidate.get("candidate_id") or "")
+                        == candidate_id
+                    ),
+                    None,
+                )
+                if not isinstance(match, dict):
+                    raise ValueError(f"Unknown {fmt} title candidate")
+                if str(match.get("title") or "").strip() != title_text:
+                    raise ValueError(
+                        f"{fmt} selected title does not match its candidate"
+                    )
+            clean_selected_titles[fmt] = {
+                "candidate_id": candidate_id,
+                "title": title_text,
+            }
+
     if value == "ACCEPT":
         concept_id = str(item.get("concept_id", ""))
         conflicts = [
@@ -455,6 +520,7 @@ def apply_action(
         "decision": value,
         "criteria": normalized,
         "note": clean_note,
+        "selected_titles": clean_selected_titles,
         "package_fingerprint": package_fingerprint(item),
     }
 

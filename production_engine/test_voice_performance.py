@@ -245,5 +245,35 @@ class VoicePerformanceTests(unittest.TestCase):
                 )
 
 
+    def test_voice_request_uses_format_specific_selected_title(self) -> None:
+        plan = approved_plan()
+        plan["package"]["selected_titles"] = {
+            "long_form": {
+                "candidate_id": "long-curiosity",
+                "title": "The Locked Title",
+            },
+            "short": {
+                "candidate_id": "short-stakes",
+                "title": "The Fast Locked Title",
+            },
+        }
+        plan["branch_story_packages"]["short"]["title"] = "The Fast Locked Title"
+        branch = next(
+            item for item in plan["branches"] if item["format"] == "short"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "concept.approved_format_plan.json"
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            request = voice_performance.build_request(
+                plan,
+                path,
+                branch,
+                config(),
+            )
+
+        self.assertEqual(request["title"], "The Fast Locked Title")
+
+
+
 if __name__ == "__main__":
     unittest.main()

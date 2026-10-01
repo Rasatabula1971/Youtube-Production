@@ -1604,6 +1604,76 @@ function currentPackagingItem() {
   return { item: items[packagingCursor], items: items };
 }
 
+function packagingTitleChoicesHtml(format, candidates, selected) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const chosenId = selected && selected.candidate_id ? String(selected.candidate_id) : "";
+  const chosenTitle = selected && selected.title ? String(selected.title) : "";
+  const label = format === "short" ? "SHORT TITLE" : "LONG-FORM TITLE";
+  const radioName = "packaging-title-" + format;
+  let html = '<div class="concept-detail-card"><h4>' + label + '</h4>';
+  if (!list.length) {
+    html += '<p>No title candidates available.</p>';
+  } else {
+    list.forEach(function (candidate) {
+      const candidateId = String(candidate.candidate_id || "");
+      const candidateTitle = String(candidate.title || "");
+      const checked = chosenId === candidateId ? " checked" : "";
+      html += '<label class="criterion-item">' +
+        '<input type="radio" name="' + escapeHtml(radioName) + '" value="' +
+        escapeHtml(candidateId) + '" data-title="' + escapeHtml(candidateTitle) + '"' +
+        checked + '>' +
+        '<span><strong>' + escapeHtml(humanizeToken(candidate.angle || "")) +
+        '</strong> — ' + escapeHtml(candidateTitle) + '</span></label>';
+    });
+  }
+  const manualChecked = chosenId === "manual" ? " checked" : "";
+  const manualValue = chosenId === "manual" ? chosenTitle : "";
+  html += '<label class="criterion-item">' +
+    '<input type="radio" name="' + escapeHtml(radioName) + '" value="manual"' +
+    manualChecked + '>' +
+    '<span><strong>Custom</strong> — edit your own title</span></label>' +
+    '<input class="text-input packaging-title-manual" data-format="' +
+    escapeHtml(format) + '" type="text" maxlength="' +
+    (format === "short" ? "48" : "70") + '" value="' +
+    escapeHtml(manualValue) + '" placeholder="Type a custom ' +
+    (format === "short" ? "Short" : "Long-form") + ' title">' +
+    '</div>';
+  return html;
+}
+
+function collectPackagingTitleSelections() {
+  const result = {};
+  ["short", "long_form"].forEach(function (format) {
+    const checked = packagingDetail.querySelector(
+      'input[name="packaging-title-' + format + '"]:checked'
+    );
+    if (!checked) {
+      throw new Error(
+        format === "short"
+          ? "Choose a Short title before accepting."
+          : "Choose a Long-form title before accepting."
+      );
+    }
+    const candidateId = String(checked.value || "");
+    let title = String(checked.dataset.title || "");
+    if (candidateId === "manual") {
+      const manual = packagingDetail.querySelector(
+        '.packaging-title-manual[data-format="' + format + '"]'
+      );
+      title = String((manual && manual.value) || "").trim();
+      if (!title) {
+        throw new Error(
+          format === "short"
+            ? "Enter the custom Short title."
+            : "Enter the custom Long-form title."
+        );
+      }
+    }
+    result[format] = { candidate_id: candidateId, title: title };
+  });
+  return result;
+}
+
 function renderPackagingReview(snapshot, force) {
   latestPackagingSnapshot = snapshot || {};
 
@@ -1658,6 +1728,8 @@ function renderPackagingReview(snapshot, force) {
   const pkg = items[packagingCursor] || {};
   const thumbnail = pkg.thumbnail || {};
   const opening = pkg.opening_frame || {};
+  const titleSets = pkg.titles || {};
+  const selectedTitles = pkg.selected_titles || {};
   const dependencies = (pkg.research_dependencies || []).map(function (item) {
     return "<li>" + escapeHtml(item) + "</li>";
   }).join("");
@@ -1680,13 +1752,15 @@ function renderPackagingReview(snapshot, force) {
 
   packagingDetail.innerHTML =
     '<div class="concept-detail-card">' +
-      '<h4>PUBLIC TITLE</h4>' +
-      '<h3>' + escapeHtml(pkg.title || pkg.package_id) + '</h3>' +
+      '<h4>TITLE SELECTION</h4>' +
+      '<p>Choose one Short title and one Long-form title. The two formats are independent; the thumbnail should add information rather than repeat either title.</p>' +
       '<div class="concept-meta">' +
         '<span>' + escapeHtml(humanizeToken(pkg.format_intent)) + '</span>' +
         '<span>Concept ' + escapeHtml(pkg.concept_id || "") + '</span>' +
       '</div>' +
     '</div>' +
+    packagingTitleChoicesHtml("short", titleSets.short, selectedTitles.short) +
+    packagingTitleChoicesHtml("long_form", titleSets.long_form, selectedTitles.long_form) +
     '<div class="concept-detail-card"><h4>THUMBNAIL</h4><p><strong>Message:</strong> ' +
       escapeHtml(thumbnail.message || "") + '<br><strong>Visual:</strong> ' +
       escapeHtml(thumbnail.visual_concept || "") +
@@ -1755,13 +1829,16 @@ async function submitPackagingDecision(decision) {
   const pkg = current.item;
 
   try {
+    const selectedTitles =
+      decision === "ACCEPT" ? collectPackagingTitleSelections() : null;
     const payload = await api("/api/packaging-gate", {
       method: "POST",
       body: JSON.stringify({
         package_id: pkg.package_id,
         decision: decision,
         criteria: {},
-        note: packagingNote.value
+        note: packagingNote.value,
+        selected_titles: selectedTitles
       })
     });
     packagingEditing = false;

@@ -261,5 +261,38 @@ class FormatEngineTests(unittest.TestCase):
             )
 
 
+    def test_format_request_accepts_distinct_short_and_long_titles(self):
+        script = self.script("either")
+        script["package"]["selected_titles"] = {
+            "long_form": {
+                "candidate_id": "long-curiosity",
+                "title": "Why Racing Brakes Work Backwards",
+            },
+            "short": {
+                "candidate_id": "short-stakes",
+                "title": "Cold Brakes Can Betray You",
+            },
+        }
+        script["branch_scripts"]["short"]["title"] = "Cold Brakes Can Betray You"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "script.json"
+            path.write_text(json.dumps(script), encoding="utf-8")
+            request = build_format_request(script, path, self.config())
+
+        self.assertEqual(
+            request["branch_story_packages"]["long_form"]["title"],
+            "Why Racing Brakes Work Backwards",
+        )
+        self.assertEqual(
+            request["branch_story_packages"]["short"]["title"],
+            "Cold Brakes Can Betray You",
+        )
+        self.assertEqual(
+            request["package"]["selected_titles"]["short"]["title"],
+            "Cold Brakes Can Betray You",
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()

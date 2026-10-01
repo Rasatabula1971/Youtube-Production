@@ -53,6 +53,8 @@ def load_config() -> dict[str, Any]:
         "short_title_contract",
         "long_title_contract",
         "title_style_contract",
+        "title_variations_per_format",
+        "title_angles",
     }
     missing = sorted(required - set(config))
     if missing:
@@ -119,6 +121,8 @@ def build_package_request(
         },
         "package_count_requested": int(config["packages_per_concept"]),
         "allowed_format_intents": list(config["allowed_format_intents"]),
+        "title_variations_per_format": int(config["title_variations_per_format"]),
+        "title_angles": list(config["title_angles"]),
         "title_contracts": {
             "short": {
                 **dict(config.get("short_title_contract", {})),
@@ -148,8 +152,11 @@ def build_package_request(
             "Packaging must preserve and amplify the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama intent. Do not revert to a technical topic label or classroom framing.",
             "Generate exactly three meaningfully different package angles, not three paraphrases. Each option should lead with a different truthful human hook such as consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when the concept supports it.",
             "The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain; reveal the engineering or science as the satisfying answer.",
-            "The title is the proposed PUBLIC YouTube title, not an internal idea label.",
-            "Use the title contract for the package format: Shorts target 3-7 words with event/tension first and explanation hidden; long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear.",
+            "Generate exactly one shared title set per concept: five Short title candidates and five Long-form title candidates total, not per package.",
+            "Use exactly these five psychological title angles once per format: curiosity, stakes, unexpected, mystery, payoff.",
+            "Generate Short and Long-form titles independently; do not merely lengthen or shorten the same wording.",
+            "The legacy title field is only a compatibility working title until the human Packaging Gate chooses the final Short and Long-form titles.",
+            "Use the title contract for each title set: Shorts target 3-7 words with event/tension first and explanation hidden; long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear.",
             "Use the strongest truthful dramatic tension the concept can support. Prefer consequence, contradiction, danger, astonishment, mystery, or personal relevance over explanation-first wording.",
             "Avoid lecture-style title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or ingredient/material lists. Those are payoff language, not title language.",
             "A non-specialist should understand why the package is interesting before they understand the mechanism.",
@@ -164,10 +171,26 @@ def build_package_request(
         ],
         "response_schema": {
             "concept_id": concept_id,
+            "titles": {
+                "short": [
+                    {
+                        "candidate_id": "short-curiosity",
+                        "angle": "curiosity|stakes|unexpected|mystery|payoff",
+                        "title": "short title candidate"
+                    }
+                ],
+                "long_form": [
+                    {
+                        "candidate_id": "long-curiosity",
+                        "angle": "curiosity|stakes|unexpected|mystery|payoff",
+                        "title": "long-form title candidate"
+                    }
+                ]
+            },
             "packages": [
                 {
                     "package_id": "unique stable id",
-                    "title": "candidate title",
+                    "title": "legacy working title for compatibility",
                     "thumbnail": {
                         "message": "what the thumbnail communicates",
                         "visual_concept": "visual idea",
@@ -211,32 +234,93 @@ def validate_package(
     if not package_id:
         errors.append("package_id is required")
 
-    title = str(package.get("title", "")).strip()
-    if title:
-        format_intent_for_title = str(package.get("format_intent", "")).strip()
-        title_config = (
-            config.get("short_title_contract", {})
-            if format_intent_for_title == "short"
-            else config.get("long_title_contract", {})
-        )
-        title_words = [word for word in title.replace("—", " ").split() if word]
-        max_words = int(title_config.get("max_words", 10))
-        max_chars = int(title_config.get("max_chars", 70))
+    lecture_patterns = (
+        "the physics of ",
+        "hidden engineering:",
+        "hidden engineering of ",
+    )
+
+    def validate_title_text(value: Any, *, label: str, contract: dict[str, Any]) -> None:
+        title_text = str(value or "").strip()
+        if not title_text:
+            errors.append(f"{label} is required")
+            return
+        title_words = [word for word in title_text.replace("—", " ").split() if word]
+        max_words = int(contract.get("max_words", 10))
+        max_chars = int(contract.get("max_chars", 70))
         if len(title_words) > max_words:
-            errors.append(f"title must be at most {max_words} words")
-        if len(title) > max_chars:
-            errors.append(f"title must be at most {max_chars} characters")
-        lowered = title.lower().strip()
-        lecture_patterns = (
-            "the physics of ",
-            "hidden engineering:",
-            "hidden engineering of ",
-        )
+            errors.append(f"{label} must be at most {max_words} words")
+        if len(title_text) > max_chars:
+            errors.append(f"{label} must be at most {max_chars} characters")
+        lowered = title_text.lower().strip()
         if (
             lowered.endswith(" explained")
             or any(lowered.startswith(pattern) for pattern in lecture_patterns)
         ):
-            errors.append("title uses lecture-style framing")
+            errors.append(f"{label} uses lecture-style framing")
+
+    title = str(package.get("title", "")).strip()
+    if title:
+        legacy_contract = (
+            config.get("short_title_contract", {})
+            if str(package.get("format_intent", "")).strip() == "short"
+            else config.get("long_title_contract", {})
+        )
+        validate_title_text(title, label="title", contract=legacy_contract)
+
+    titles = package.get("titles")
+    if titles is None:
+        # Legacy package artifacts remain readable/resumable. New model output
+        # is still forced to provide titles by package_model_runner's schema.
+        titles = {}
+    elif not isinstance(titles, dict):
+        errors.append("titles must be an object")
+        titles = {}
+    if titles:
+        required_angles = [str(value) for value in config.get("title_angles", [])]
+        expected_count = int(config.get("title_variations_per_format", 5))
+        for fmt, contract_key in (
+            ("short", "short_title_contract"),
+            ("long_form", "long_title_contract"),
+        ):
+            candidates = titles.get(fmt)
+            if not isinstance(candidates, list):
+                errors.append(f"titles.{fmt} must be a list")
+                continue
+            if len(candidates) != expected_count:
+                errors.append(
+                    f"titles.{fmt} must contain exactly {expected_count} candidates"
+                )
+            seen_candidate_ids: set[str] = set()
+            seen_angles: list[str] = []
+            for index, candidate in enumerate(candidates):
+                if not isinstance(candidate, dict):
+                    errors.append(f"titles.{fmt}[{index}] must be an object")
+                    continue
+                candidate_id = str(candidate.get("candidate_id") or "").strip()
+                angle = str(candidate.get("angle") or "").strip()
+                if not candidate_id:
+                    errors.append(f"titles.{fmt}[{index}].candidate_id is required")
+                elif candidate_id in seen_candidate_ids:
+                    errors.append(f"titles.{fmt} candidate_id values must be unique")
+                else:
+                    seen_candidate_ids.add(candidate_id)
+                if angle not in required_angles:
+                    errors.append(
+                        f"titles.{fmt}[{index}].angle must be one of "
+                        + ", ".join(required_angles)
+                    )
+                else:
+                    seen_angles.append(angle)
+                validate_title_text(
+                    candidate.get("title"),
+                    label=f"titles.{fmt}[{index}].title",
+                    contract=dict(config.get(contract_key, {})),
+                )
+            if sorted(seen_angles) != sorted(required_angles):
+                errors.append(
+                    f"titles.{fmt} must use each configured title angle exactly once"
+                )
 
     for field in (
         "title",
@@ -326,8 +410,13 @@ def validate_response(
             )
             continue
 
+        shared_titles = response.get("titles")
+        package_for_validation = dict(package)
+        if shared_titles is not None:
+            package_for_validation["titles"] = shared_titles
+
         errors = validate_package(
-            package,
+            package_for_validation,
             concept_id=concept_id,
             config=config,
         )
@@ -338,12 +427,28 @@ def validate_response(
         if package_id:
             seen_ids.add(package_id)
 
-        normalized = dict(package)
+        normalized = dict(package_for_validation)
         normalized["concept_id"] = concept_id
         normalized["concept_context"] = request["concept"]
+        normalized_title_sets = normalized.get("titles")
+        if not isinstance(normalized_title_sets, dict):
+            normalized_title_sets = {}
         overlap = check_texts(
             [
                 {"field": "title", "text": normalized.get("title", "")},
+                *[
+                    {
+                        "field": f"titles.{fmt}.{candidate.get('angle', index)}",
+                        "text": candidate.get("title", ""),
+                    }
+                    for fmt in ("short", "long_form")
+                    for index, candidate in enumerate(
+                        normalized_title_sets.get(fmt, [])
+                        if isinstance(normalized_title_sets.get(fmt, []), list)
+                        else []
+                    )
+                    if isinstance(candidate, dict)
+                ],
                 {
                     "field": "one_sentence_promise",
                     "text": normalized.get("one_sentence_promise", ""),

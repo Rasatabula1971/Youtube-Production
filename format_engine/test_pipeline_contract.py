@@ -174,6 +174,43 @@ def package_candidate() -> dict:
     }
 
 
+
+def title_candidates() -> dict:
+    angles = ["curiosity", "stakes", "unexpected", "mystery", "payoff"]
+    short_titles = {
+        "curiosity": "Why Do F1 Brakes Need Heat?",
+        "stakes": "Cold F1 Brakes Can Fail You",
+        "unexpected": "F1 Brakes Hate Being Cold",
+        "mystery": "Why Are F1 Brakes Glowing?",
+        "payoff": "The Secret Is Brake Temperature",
+    }
+    long_titles = {
+        "curiosity": "Why F1 Brakes Work Backwards",
+        "stakes": "Why Cold F1 Brakes Can Ruin a Corner",
+        "unexpected": "Why F1 Brakes Need the Heat Road Cars Avoid",
+        "mystery": "Why Do F1 Brakes Need So Much Heat?",
+        "payoff": "How Temperature Changes the Way F1 Brakes Work",
+    }
+    return {
+        "short": [
+            {
+                "candidate_id": f"short-{angle}",
+                "angle": angle,
+                "title": short_titles[angle],
+            }
+            for angle in angles
+        ],
+        "long_form": [
+            {
+                "candidate_id": f"long-{angle}",
+                "angle": angle,
+                "title": long_titles[angle],
+            }
+            for angle in angles
+        ],
+    }
+
+
 def all_true(criteria: list[str]) -> dict[str, bool]:
     return {criterion: True for criterion in criteria}
 
@@ -228,7 +265,11 @@ class PipelineContractTests(unittest.TestCase):
         concept = concept_handoff["concepts"][0]
         request = packaging_engine.build_package_request(concept, engine_config)
         result = packaging_engine.validate_response(
-            {"concept_id": "c1", "packages": [package_candidate()]},
+            {
+                "concept_id": "c1",
+                "titles": title_candidates(),
+                "packages": [package_candidate()],
+            },
             request,
             engine_config,
         )
@@ -251,6 +292,16 @@ class PipelineContractTests(unittest.TestCase):
                     "decision": "ACCEPT",
                     "criteria": all_true(gate_config["required_accept_criteria"]),
                     "note": "",
+                    "selected_titles": {
+                        "short": {
+                            "candidate_id": "short-unexpected",
+                            "title": "F1 Brakes Hate Being Cold",
+                        },
+                        "long_form": {
+                            "candidate_id": "long-curiosity",
+                            "title": "Why F1 Brakes Work Backwards",
+                        },
+                    },
                 }
                 for item in gate_request["items"]
             ],
@@ -264,6 +315,14 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(packaged["packaging"]["one_sentence_promise"], PROMISE)
         self.assertEqual(packaged["packaging"]["format_intent"], "either")
         self.assertTrue(packaged["packaging"]["research_dependencies"])
+        self.assertEqual(
+            packaged["packaging"]["selected_titles"]["short"]["title"],
+            "F1 Brakes Hate Being Cold",
+        )
+        self.assertEqual(
+            packaged["packaging"]["selected_titles"]["long_form"]["title"],
+            "Why F1 Brakes Work Backwards",
+        )
         return handoff
 
     # ---- seam 5 → 6: Research Gate → Story / Script -------------------------
@@ -598,11 +657,20 @@ class PipelineContractTests(unittest.TestCase):
                         request["psychology_profile"]["hook_target_seconds"],
                         3,
                     )
+                    self.assertEqual(
+                        request["package"]["title"],
+                        "F1 Brakes Hate Being Cold",
+                    )
+                else:
+                    self.assertEqual(
+                        request["package"]["title"],
+                        "Why F1 Brakes Work Backwards",
+                    )
 
                 response = {
                     "concept_id": "c1",
                     "format": fmt,
-                    "title": "Why F1 Brakes Work Backwards",
+                    "title": request["package"]["title"],
                     "opening_hook": branch_drafts[fmt]["opening_hook"],
                     "opening_hook_mechanism": "CONTRADICTION",
                     "opening_hook_claim_ids": [],
@@ -675,6 +743,14 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(request["required_branches"], ["long_form", "short"])
         # The promise has now crossed four stages untouched.
         self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
+        self.assertEqual(
+            request["package"]["selected_titles"]["short"]["title"],
+            "F1 Brakes Hate Being Cold",
+        )
+        self.assertEqual(
+            request["branch_story_packages"]["short"]["title"],
+            "F1 Brakes Hate Being Cold",
+        )
         self.assertEqual(
             request["script_section_ids_by_branch"]["long_form"],
             ["lf1", "lf2", "lf3"],

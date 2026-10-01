@@ -121,13 +121,14 @@ def build_script_request(
     if not concept_id:
         raise ValueError("Story Plan requires concept_id")
 
-    package = plan.get("package", {})
-    if not isinstance(package, dict):
+    package_value = plan.get("package", {})
+    if not isinstance(package_value, dict):
         raise ValueError("Story Plan package must be an object")
-    title = str(package.get("title") or "").strip()
-    if not title:
+    package = dict(package_value)
+    canonical_title = str(package.get("title") or "").strip()
+    if not canonical_title:
         raise ValueError("Story Plan requires the approved Packaging title")
-    if str(plan.get("title", "")) != title:
+    if str(plan.get("title", "")) != canonical_title:
         raise ValueError("Story Plan title must match the approved Packaging title")
 
     required_branches = resolve_script_branches(
@@ -137,6 +138,14 @@ def build_script_request(
     fmt = str(fmt).strip()
     if fmt not in required_branches:
         raise ValueError(f"Unrequested script branch: {fmt}")
+
+    selected_titles = package.get("selected_titles", {})
+    if isinstance(selected_titles, dict):
+        selected = selected_titles.get(fmt, {})
+        if isinstance(selected, dict):
+            format_title = str(selected.get("title") or "").strip()
+            if format_title:
+                package["title"] = format_title
 
     profiles = config.get("profiles", {})
     profile = profiles.get(fmt)
@@ -191,7 +200,7 @@ def build_script_request(
 
     instructions = [
         "Write a FORMAT-SPECIFIC narration from the shared approved Story Plan.",
-        "Return the approved Packaging title exactly; do not rewrite or optimize it.",
+        "Return the approved Packaging title for THIS format exactly; do not rewrite or optimize it.",
         "The opening_hook is the first spoken line and must be high-impact, truthful and tied to the package promise.",
         "The branch may compress, combine or emphasize Story Plan beats differently, but it may not invent facts or abandon the main payoff.",
         "Every script section must cite one or more source_story_beat_ids.",

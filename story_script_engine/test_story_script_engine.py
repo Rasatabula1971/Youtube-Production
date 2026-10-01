@@ -248,5 +248,34 @@ class StoryScriptTests(unittest.TestCase):
             )
 
 
+    def test_script_requests_use_format_specific_selected_titles(self):
+        plan = self.plan("either")
+        plan["package"]["selected_titles"] = {
+            "long_form": {
+                "candidate_id": "long-curiosity",
+                "title": "Why Racing Brakes Work Backwards",
+            },
+            "short": {
+                "candidate_id": "short-stakes",
+                "title": "Cold Brakes Can Betray You",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "plan.json"
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            long_request = build_script_request(plan, path, "long_form")
+            short_request = build_script_request(plan, path, "short")
+
+        self.assertEqual(
+            long_request["package"]["title"],
+            "Why Racing Brakes Work Backwards",
+        )
+        self.assertEqual(
+            short_request["package"]["title"],
+            "Cold Brakes Can Betray You",
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()
