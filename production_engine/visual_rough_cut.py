@@ -19,7 +19,7 @@ ROUGH_DIR=OUTPUT/"visual_rough_cuts"; SUMMARY=OUTPUT/"visual_rough_cut_summary.j
 
 def _key(cid:str,fmt:str)->str:return f"{safe_slug(cid)}.{safe_slug(fmt)}"
 
-def build(board:dict[str,Any],review:dict[str,Any],rights:dict[str,Any]|None,board_path:Path,review_path:Path)->dict[str,Any]:
+def build(board:dict[str,Any],review:dict[str,Any],rights:dict[str,Any]|None,board_path:Path,review_path:Path,rights_path:Path|None=None)->dict[str,Any]:
     if board.get("status")!="READY_FOR_VISUAL_SEARCH": raise ValueError("Storyboard is not current for rough cut")
     if review.get("status")!="READY_FOR_ROUGH_CUT": raise ValueError("Candidate review is incomplete")
     if (board.get("concept_id"),board.get("format"))!=(review.get("concept_id"),review.get("format")): raise ValueError("Storyboard/review identity mismatch")
@@ -49,8 +49,12 @@ def build(board:dict[str,Any],review:dict[str,Any],rights:dict[str,Any]|None,boa
         "status":"READY_FOR_HUMAN_ROUGH_CUT_GATE","premium_generation_allowed":False,"scenes":scenes,
         "summary":{"scenes":len(scenes),"placeholders":len(gaps),"existing_assets":len(scenes)-len(gaps)},
         "gate_policy":{"human_review_required_before_premium_visual_generation":True,"paid_visual_calls_allowed":False},
-        "provenance":{"storyboard":str(board_path.resolve()),"storyboard_sha256":sha256_file(board_path),
-            "candidate_review":str(review_path.resolve()),"candidate_review_sha256":sha256_file(review_path)}}
+        "provenance":{
+            "storyboard":str(board_path.resolve()),"storyboard_sha256":sha256_file(board_path),
+            "candidate_review":str(review_path.resolve()),"candidate_review_sha256":sha256_file(review_path),
+            "rights_review":str(rights_path.resolve()) if rights_path is not None and rights_path.exists() else None,
+            "rights_review_sha256":sha256_file(rights_path) if rights_path is not None and rights_path.exists() else None,
+        }}
 
 def prepare()->dict[str,Any]:
     ROUGH_DIR.mkdir(parents=True,exist_ok=True); items=[]
@@ -60,7 +64,7 @@ def prepare()->dict[str,Any]:
         if not review_path.exists(): continue
         review=load_json(review_path); rights_path=RIGHTS_DIR/f"{key}.visual_rights_review.json"
         rights=load_json(rights_path) if rights_path.exists() else None
-        rough=build(board,review,rights,board_path,review_path); dest=ROUGH_DIR/f"{key}.visual_rough_cut.json"
+        rough=build(board,review,rights,board_path,review_path,rights_path if rights_path.exists() else None); dest=ROUGH_DIR/f"{key}.visual_rough_cut.json"
         atomic_write_json(dest,rough); items.append({"concept_id":rough["concept_id"],"format":rough["format"],"rough_cut":str(dest),**rough["summary"]})
     out={"status":"READY_FOR_HUMAN_ROUGH_CUT_GATE" if items else "WAITING_FOR_REVIEWED_VISUALS","prepared":len(items),"items":items,"paid_visual_calls_allowed":False}
     atomic_write_json(SUMMARY,out); return out
