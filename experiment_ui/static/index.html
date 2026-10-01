@@ -294,15 +294,16 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="researchDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="researchCriteria"></div>
-                <label class="vision-label" for="researchNote">Review note</label>
-                <textarea id="researchNote" class="vision-observation" rows="4" maxlength="1200" placeholder="Required for Rework and for accepting a conflicted claim."></textarea>
+                <div class="concept-complete">Human decision only. Evidence checks remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="researchCriteria" hidden></div>
+                <label class="vision-label" for="researchNote">Human instruction / review note</label>
+                <textarea id="researchNote" class="vision-observation" rows="4" maxlength="1200" placeholder="For Rework, state what must be researched or corrected. This instruction is authoritative. A conflicted claim still needs a note if you Accept it."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="researchPrev" type="button">← Previous</button>
                   <button class="danger" id="researchReject" type="button">Reject</button>
                   <button class="ghost" id="researchRework" type="button">Rework</button>
-                  <button id="researchAccept" type="button">Accept claim</button>
-                  <button class="ghost" id="researchNext" type="button">Next →</button>
+                  <button id="researchAccept" type="button">Accept</button>
+                  <button class="ghost" id="researchNext" type="button">Next claim →</button>
                 </div>
               </div>
             </div>
