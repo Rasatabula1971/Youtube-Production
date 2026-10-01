@@ -1368,22 +1368,7 @@ function renderConceptReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>SOURCE DEPENDENCY TEST</h4><p>' +
       escapeHtml(sourceTest.rationale || "") + '</p></div>';
 
-  const criteriaDescriptions = snapshot.criteria || {};
-  const checked = concept.criteria_decisions || {};
-  const required = concept.required_accept_criteria || Object.keys(criteriaDescriptions);
-  conceptCriteria.innerHTML =
-    '<div class="concept-criteria-help">' +
-      '<strong>Rework only:</strong> check what you want to keep. ' +
-      'Leave unchecked anything you want changed. Accept, Reject and Save Idea ignore these boxes.' +
-    '</div>' +
-    required.map(function (criterion) {
-      const id = "concept-criterion-" + conceptCursor + "-" + criterion;
-      return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-        '<input type="checkbox" id="' + escapeHtml(id) + '" data-concept-criterion="' +
-        escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
-        '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-        escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
-    }).join("");
+  conceptCriteria.innerHTML = "";
 
   conceptNote.value = concept.note || "";
   conceptPrev.disabled = conceptCursor <= 0;
@@ -1460,7 +1445,7 @@ async function submitConceptDecision(decision) {
       body: JSON.stringify({
         concept_id: concept.concept_id,
         decision: decision,
-        criteria: decision === "REWORK" ? collectConceptCriteria() : {},
+        criteria: {},
         note: conceptNote.value
       })
     });
@@ -3133,9 +3118,6 @@ humanAnalysisAccept.addEventListener("click", function () {
   submitHumanAnalysisDecision("ACCEPT");
 });
 conceptNote.addEventListener("input", function () {
-  conceptEditing = true;
-});
-conceptCriteria.addEventListener("change", function () {
   conceptEditing = true;
 });
 conceptPrev.addEventListener("click", function () {
