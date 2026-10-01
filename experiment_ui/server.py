@@ -50,6 +50,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/visual-rough-cut-review",
     "/api/visual-spend-review",
     "/api/generated-visual-asset",
+    "/api/managed-visual-asset",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -258,6 +259,10 @@ from visual_spend_review import (
 from visual_generated_asset_import import (
     register as register_generated_visual_asset,
     snapshot as generated_visual_asset_snapshot,
+)
+from visual_existing_asset_import import (
+    register as register_existing_visual_asset,
+    snapshot as managed_visual_asset_snapshot,
 )
 from storyboard_review import (
     revise as revise_storyboard_shot,
@@ -5477,6 +5482,7 @@ def status_payload() -> dict[str, Any]:
         "visual_candidate_gate": visual_candidate_review_snapshot(),
         "visual_rights_gate": visual_rights_review_snapshot(),
         "visual_asset_acquisition": visual_asset_acquisition_artifact_state(),
+        "managed_visual_assets": managed_visual_asset_snapshot(),
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "visual_spend_gate": visual_spend_review_snapshot(),
         "visual_generation_handoff": visual_generation_handoff_artifact_state(),
@@ -5618,6 +5624,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/generated-visual-asset":
             self._send_json(generated_visual_asset_snapshot())
+            return
+        if route == "/api/managed-visual-asset":
+            self._send_json(managed_visual_asset_snapshot())
             return
         if route == "/api/storyboard-review":
             self._send_json(storyboard_review_snapshot())
@@ -5910,6 +5919,25 @@ class Handler(BaseHTTPRequestHandler):
                 response = {
                     "registered": payload,
                     "generated_visual_assets": generated_visual_asset_snapshot(),
+                }
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/managed-visual-asset":
+                payload = register_existing_visual_asset(
+                    candidate_review_file=str(
+                        body.get("candidate_review_file", "")
+                    ),
+                    shot_id=str(body.get("shot_id", "")),
+                    asset_file=str(body.get("asset_file", "")),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                response = {
+                    "registered": payload,
+                    "managed_visual_assets": managed_visual_asset_snapshot(),
                 }
                 if auto_job:
                     response["automation_job"] = auto_job
