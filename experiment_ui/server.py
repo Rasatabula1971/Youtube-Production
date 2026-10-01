@@ -2765,6 +2765,7 @@ def visual_assembly_artifact_state(
     current: set[tuple[str, str]] = set()
     stale = 0
     waiting_for_premium = 0
+    waiting_for_local = 0
     ready_for_edit = 0
 
     if PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.exists():
@@ -2816,6 +2817,8 @@ def visual_assembly_artifact_state(
             current.add(key)
             if payload.get("status") == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
                 waiting_for_premium += 1
+            elif payload.get("status") == "WAITING_FOR_LOCAL_VISUAL_ASSETS":
+                waiting_for_local += 1
             elif payload.get("status") == "READY_FOR_EDIT_ASSEMBLY":
                 ready_for_edit += 1
 
@@ -2833,6 +2836,7 @@ def visual_assembly_artifact_state(
         "current": len(current),
         "stale": stale,
         "waiting_for_premium_assets": waiting_for_premium,
+        "waiting_for_local_assets": waiting_for_local,
         "ready_for_edit_assembly": ready_for_edit,
     }
 
