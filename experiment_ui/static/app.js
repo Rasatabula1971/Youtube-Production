@@ -470,11 +470,25 @@ function primaryTargetForWorkflow(workflow) {
   if (workflow.state === "HUMAN_ANALYSIS_GATE") {
     return { type: "route", value: "/analysis", label: "Review analysis findings" };
   }
-  if (workflow.state === "HUMAN_SCRIPT_GATE") {
-    return { type: "route", value: "/analysis", label: "Review script" };
-  }
-  if (workflow.state === "HUMAN_CONCEPT_GATE") {
-    return { type: "route", value: "/analysis", label: "Review concepts" };
+  const analysisHumanGateLabels = {
+    HUMAN_ANALYSIS_GATE: "Review analysis findings",
+    HUMAN_CONCEPT_GATE: "Review concepts",
+    HUMAN_PACKAGING_GATE: "Review packages",
+    HUMAN_RESEARCH_GATE: "Review research",
+    HUMAN_SCRIPT_GATE: "Review script",
+    HUMAN_FORMAT_GATE: "Review format",
+    HUMAN_PERFORMANCE_GATE: "Review performance",
+    HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
+    HUMAN_VISUAL_CANDIDATE_GATE: "Choose visuals",
+    HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
+    HUMAN_ROUGH_CUT_GATE: "Review rough cut"
+  };
+  if (analysisHumanGateLabels[workflow.state]) {
+    return {
+      type: "route",
+      value: "/analysis",
+      label: analysisHumanGateLabels[workflow.state]
+    };
   }
   if (workflow.current_action_id) {
     return {
