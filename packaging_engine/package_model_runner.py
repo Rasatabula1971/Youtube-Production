@@ -75,13 +75,51 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         if str(value).strip()
     ]
     title_count = int(request.get("title_variations_per_format", 5))
+    title_contracts = request.get("title_contracts") or {}
+
+    def title_candidate_schema(fmt: str) -> dict[str, Any]:
+        contract = title_contracts.get(fmt) or {}
+        return {
+            "type": "array",
+            "minItems": title_count,
+            "maxItems": title_count,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["candidate_id", "angle", "title"],
+                "properties": {
+                    "candidate_id": {"type": "string", "minLength": 1},
+                    "angle": {"type": "string", "enum": title_angles},
+                    "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": int(
+                            contract.get(
+                                "max_chars",
+                                48 if fmt == "short" else 70,
+                            )
+                        ),
+                    },
+                },
+            },
+        }
+
+    title_sets_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["short", "long_form"],
+        "properties": {
+            "short": title_candidate_schema("short"),
+            "long_form": title_candidate_schema("long_form"),
+        },
+    }
+
     package_schema = {
         "type": "object",
         "additionalProperties": False,
         "required": [
             "package_id",
             "title",
-            "titles",
             "thumbnail",
             "opening_frame",
             "expected_viewer",
@@ -105,76 +143,13 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "minLength": 1,
                 "maxLength": max(
+                    int((title_contracts.get("short") or {}).get("max_chars", 48)),
                     int(
-                        ((request.get("title_contracts") or {}).get("short") or {}).get(
-                            "max_chars", 48
-                        )
-                    ),
-                    int(
-                        ((request.get("title_contracts") or {}).get("long_form") or {}).get(
+                        (title_contracts.get("long_form") or {}).get(
                             "max_chars", 70
                         )
                     ),
                 ),
-            },
-            "titles": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["short", "long_form"],
-                "properties": {
-                    "short": {
-                        "type": "array",
-                        "minItems": title_count,
-                        "maxItems": title_count,
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["candidate_id", "angle", "title"],
-                            "properties": {
-                                "candidate_id": {"type": "string", "minLength": 1},
-                                "angle": {
-                                    "type": "string",
-                                    "enum": title_angles,
-                                },
-                                "title": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": int(
-                                        ((request.get("title_contracts") or {}).get("short") or {}).get(
-                                            "max_chars", 48
-                                        )
-                                    ),
-                                },
-                            },
-                        },
-                    },
-                    "long_form": {
-                        "type": "array",
-                        "minItems": title_count,
-                        "maxItems": title_count,
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["candidate_id", "angle", "title"],
-                            "properties": {
-                                "candidate_id": {"type": "string", "minLength": 1},
-                                "angle": {
-                                    "type": "string",
-                                    "enum": title_angles,
-                                },
-                                "title": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": int(
-                                        ((request.get("title_contracts") or {}).get("long_form") or {}).get(
-                                            "max_chars", 70
-                                        )
-                                    ),
-                                },
-                            },
-                        },
-                    },
-                },
             },
             "thumbnail": {
                 "type": "object",
@@ -214,6 +189,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             },
         },
     }
+
     rework_package_id = str(request.get("human_rework_package_id") or "").strip()
     rework_mode = bool(request.get("human_rework_note") and rework_package_id)
     if rework_mode:
@@ -225,9 +201,10 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["concept_id", "packages"],
+        "required": ["concept_id", "titles", "packages"],
         "properties": {
             "concept_id": {"type": "string", "const": concept_id},
+            "titles": title_sets_schema,
             "packages": {
                 "type": "array",
                 "minItems": 1,
@@ -252,7 +229,7 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "3. Treat title and thumbnail as one communication unit; they should complement, not repeat.\n"
         "4. Keep the three package options meaningfully different in thumbnail/opening-frame/promise angle rather than paraphrases.\n"
         "5. The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain. Do not lead like a lecture, textbook chapter, or engineering lesson.\n"
-        "6. TITLE CONTRACT: for EVERY package generate exactly five Short titles and exactly five Long-form titles. Use each angle exactly once in each format: curiosity, stakes, unexpected, mystery, payoff. Generate each format independently; do not merely lengthen or shorten the same title. Shorts target 3-7 words, event/tension first and explanation hidden. Long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear. The legacy title field is a compatibility working title only and should be the strongest truthful candidate for the package's format_intent.\n"
+        "6. TITLE CONTRACT: generate exactly ONE shared title set for this concept: five Short titles and five Long-form titles total, not per package. Use each angle exactly once in each format: curiosity, stakes, unexpected, mystery, payoff. Generate each format independently; do not merely lengthen or shorten the same title. Shorts target 3-7 words, event/tension first and explanation hidden. Long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear. Package title fields are compatibility working titles only; the shared titles object is the human choice set.\n"
         "7. Do not use lecture-title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or materials/technology lists. Put those details in the payoff, not the title.\n"
         "8. Prefer a title that makes a normal viewer think 'wait—what?', 'how is that possible?', or 'that happens to me?' without inventing danger or certainty. Keep technical mechanism/material names out of the title unless the term itself creates the human hook.\n"
         "9. Every package must make one honest promise and define the payoff the video must deliver.\n"
@@ -265,7 +242,8 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "16. The future script must be capable of fully delivering the package promise.\n"
         "17. If human_rework_note is present, it is an AUTHORITATIVE human directive, not a suggestion. Apply it literally unless it conflicts with factual or safety constraints. Do not silently substitute a narrower, broader, or different audience than the human requested.\n"
         "18. In human rework mode, return exactly one revised package and keep its package_id exactly equal to human_rework_package_id. The runner will preserve all other package options unchanged.\n"
-        "19. Use human_rework_original_package as the before-version. Criteria listed in human_rework_keep_criteria should stay aligned; criteria listed in human_rework_change_criteria must be corrected. If human_rework_mode is HUMAN_INSTRUCTION_ONLY, the human_rework_note alone defines the requested change; do not invent extra revisions.\n\n"
+        "19. Use human_rework_original_package as the before-version. Criteria listed in human_rework_keep_criteria should stay aligned; criteria listed in human_rework_change_criteria must be corrected. If human_rework_mode is HUMAN_INSTRUCTION_ONLY, the human_rework_note alone defines the requested change; do not invent extra revisions.\n"
+        "20. In human rework mode preserve human_rework_original_titles exactly unless the human_rework_note explicitly asks for title changes.\n\n"
         "PACKAGE REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
