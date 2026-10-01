@@ -2163,7 +2163,8 @@ function renderFormatReview(snapshot, force) {
       : '') +
     branches;
 
-  formatCriteria.innerHTML = "";\n
+  formatCriteria.innerHTML = "";
+
   formatNote.value = plan.note || "";
   formatPrev.disabled = formatCursor <= 0;
   formatNext.disabled = formatCursor >= items.length - 1;
