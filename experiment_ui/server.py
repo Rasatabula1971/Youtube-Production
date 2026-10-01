@@ -5464,75 +5464,25 @@ def workflow_guidance(
                     "placeholder, or authorize a specific maximum spend."
                 ),
                 "next_action_id": None,
-                "next_title": "Generated visual provider handoff",
+                "next_title": "Prepare generation briefs or assembly plan",
             }
-        if hero_count > 0 and spend_gate.get("complete"):
-            authorized = int(spend_gate.get("authorized") or 0)
+
+        authorized = int(spend_gate.get("authorized") or 0)
+        if authorized > 0:
             handoff_state = visual_generation_handoff_artifact_state()
-            handoff_ready = bool(handoff_state.get("ready"))
-            if authorized > 0 and not handoff_ready:
+            if not handoff_state.get("ready"):
                 return {
                     "state": "ACTION_REQUIRED",
                     "current_action_id": "auto_continue",
                     "current_title": "Prepare Premium Visual Generation Briefs",
                     "current_detail": (
-                        "Human spend decisions are complete. The next zero-cost "
-                        "step converts only authorized hero gaps into provider-ready "
-                        "cinematic briefs. No provider call or spend occurs."
+                        "Human spend ceilings are approved. Prepare provider-neutral "
+                        "cinematic briefs only; this step calls no paid provider."
                     ),
                     "next_action_id": None,
-                    "next_title": "Review provider-ready generation briefs",
+                    "next_title": "Build Visual Edit Assembly Plan",
                 }
-            assembly_state = visual_assembly_artifact_state(
-                visual_post.get("expected_branches", [])
-            )
-            if not assembly_state.get("ready"):
-                return {
-                    "state": "ACTION_REQUIRED",
-                    "current_action_id": "auto_continue",
-                    "current_title": "Build Visual Edit Assembly Plan",
-                    "current_detail": (
-                        "Visual sourcing and spend decisions are complete. Build the "
-                        "zero-cost edit timeline contract. Premium-generated shots, "
-                        "if any, remain pending assets rather than provider calls."
-                    ),
-                    "next_action_id": None,
-                    "next_title": "Review final assembly readiness",
-                }
-            return {
-                "state": (
-                    "WAITING_FOR_PREMIUM_GENERATED_ASSETS"
-                    if int(
-                        assembly_state.get("waiting_for_premium_assets") or 0
-                    ) > 0
-                    else "VISUAL_ASSEMBLY_READY"
-                ),
-                "current_action_id": None,
-                "current_title": (
-                    "Assembly Plan Waiting for Premium Assets"
-                    if int(
-                        assembly_state.get("waiting_for_premium_assets") or 0
-                    ) > 0
-                    else "Visual Assembly Plan Ready"
-                ),
-                "current_detail": (
-                    "The edit timeline is current. Existing/reused visuals and "
-                    "placeholders are mapped; authorized premium slots are waiting "
-                    "for externally generated assets."
-                    if int(
-                        assembly_state.get("waiting_for_premium_assets") or 0
-                    ) > 0
-                    else "The edit timeline is current and requires no paid visual generation."
-                ),
-                "next_action_id": None,
-                "next_title": (
-                    "Import generated visual assets"
-                    if int(
-                        assembly_state.get("waiting_for_premium_assets") or 0
-                    ) > 0
-                    else "Proceed to edit/render assembly"
-                ),
-            }
+
         assembly_state = visual_assembly_artifact_state(
             visual_post.get("expected_branches", [])
         )
@@ -5542,22 +5492,107 @@ def workflow_guidance(
                 "current_action_id": "auto_continue",
                 "current_title": "Build Visual Edit Assembly Plan",
                 "current_detail": (
-                    "No premium generation is required. Build the deterministic "
-                    "edit timeline from the approved existing visuals and placeholders."
+                    "Build the zero-cost timeline contract from current local "
+                    "visuals and explicit placeholders. Missing premium/editorial "
+                    "assets do not block a structural preview."
                 ),
                 "next_action_id": None,
-                "next_title": "Proceed to edit/render assembly",
+                "next_title": "Build Edit Preview Manifest",
             }
+
+        edit_manifest_state = edit_manifest_artifact_state(
+            visual_post.get("expected_branches", [])
+        )
+        if not edit_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Edit Preview Manifest",
+                "current_detail": (
+                    "Combine current narration timing, visual assembly and approved "
+                    "sound-design intent into a deterministic preview timeline."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Free Structural Edit Preview",
+            }
+
+        edit_preview_state = edit_preview_artifact_state(
+            visual_post.get("expected_branches", [])
+        )
+        if not edit_preview_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Free Structural Edit Preview",
+                "current_detail": (
+                    "Render a local FFmpeg preview with current assets, placeholders "
+                    "and QC-passed narration. No paid visual provider or generated "
+                    "music/SFX is used."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Edit Preview Gate",
+            }
+
+        edit_gate = edit_preview_review_snapshot()
+        if not edit_gate.get("complete"):
+            return {
+                "state": "HUMAN_EDIT_PREVIEW_GATE",
+                "current_action_id": None,
+                "current_title": "Review Structural Edit Preview",
+                "current_detail": (
+                    "Judge pacing, narration-to-picture rhythm and story flow before "
+                    "spending on unresolved hero shots. Dark placeholders are expected "
+                    "where final visual assets are still missing."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve direction or return a layer for rework",
+            }
+
+        if int(edit_gate.get("rework") or 0) > 0:
+            return {
+                "state": "EDIT_PREVIEW_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Edit Preview Rework Requested",
+                "current_detail": (
+                    "A human return request was recorded for visuals, narration or "
+                    "sound. The instruction is preserved and must be applied at that "
+                    "upstream creative layer before a new preview is approved."
+                ),
+                "next_action_id": None,
+                "next_title": "Apply the human rework instruction",
+            }
+
+        premium_missing = int(
+            assembly_state.get("waiting_for_premium_assets") or 0
+        )
+        local_missing = int(
+            assembly_state.get("waiting_for_local_assets") or 0
+        )
+        if premium_missing or local_missing:
+            return {
+                "state": "WAITING_FOR_FINAL_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Edit Direction Approved — Final Visuals Still Missing",
+                "current_detail": (
+                    f"The structural edit is approved. {premium_missing} branch(es) "
+                    f"still wait for premium-generated assets and {local_missing} "
+                    "branch(es) wait for approved local assets. Register those files; "
+                    "the assembly and preview approval will become stale automatically."
+                ),
+                "next_action_id": None,
+                "next_title": "Register final visual assets",
+            }
+
         return {
-            "state": "VISUAL_ASSEMBLY_READY",
+            "state": "FINAL_EDIT_DIRECTION_APPROVED",
             "current_action_id": None,
-            "current_title": "Visual Assembly Plan Ready",
+            "current_title": "Edit Direction Approved",
             "current_detail": (
-                "No unresolved shot met the premium-generation threshold. "
-                "The current edit timeline can proceed without paid visual generation."
+                "The structural edit and all current visual assets are approved and "
+                "provenance-current. Final export/publish preparation is the next build."
             ),
             "next_action_id": None,
-            "next_title": "Proceed to edit/render assembly",
+            "next_title": "Prepare final export",
         }
 
     production_visual = production_visual_artifact_state()
