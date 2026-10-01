@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import visual_search
+import visual_search_acquire
 
 
 class VisualSearchTests(unittest.TestCase):
@@ -39,6 +42,95 @@ class VisualSearchTests(unittest.TestCase):
             request=visual_search.build_search_request(board,p)
         self.assertFalse(request["policy"]["paid_generation_calls_allowed"])
         self.assertTrue(request["policy"]["search_existing_before_generation"])
+        self.assertTrue(request["shots"][0]["shot_fingerprint"])
+
+
+    def test_acquire_reuses_unchanged_raw_shot_and_searches_changed_shot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results = root / "results"
+            raw_dir = root / "raw"
+            results.mkdir()
+            raw_dir.mkdir()
+
+            request_path = results / "c1.short.visual_search_request.json"
+            request = {
+                "concept_id": "c1",
+                "format": "short",
+                "shots": [
+                    {
+                        "shot_id": "s1",
+                        "shot_fingerprint": "fp-current-1",
+                        "search_terms": ["wing bend"],
+                        "max_candidates_per_source": 5,
+                    },
+                    {
+                        "shot_id": "s2",
+                        "shot_fingerprint": "fp-current-2",
+                        "search_terms": ["landing gear"],
+                        "max_candidates_per_source": 5,
+                    },
+                ],
+            }
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            raw_path = raw_dir / "c1.short.visual_search_raw.json"
+            raw_path.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "format": "short",
+                        "shot_fingerprints": {
+                            "s1": "fp-current-1",
+                            "s2": "fp-old-2",
+                        },
+                        "shots": {
+                            "s1": [{"candidate_id": "old-s1"}],
+                            "s2": [{"candidate_id": "old-s2"}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            discovered = {
+                "free": [
+                    {
+                        "candidate_id": "new-s2",
+                        "source_tier": "FREE_COMMERCIAL_LICENSE",
+                        "rights_status": "VERIFIED",
+                        "commercial_use_allowed": True,
+                        "source_url": "https://example.test/new-s2",
+                    }
+                ]
+            }
+            with (
+                patch.object(visual_search_acquire, "RESULT_DIR", results),
+                patch.object(visual_search_acquire, "RAW_DIR", raw_dir),
+                patch.object(
+                    visual_search_acquire,
+                    "SUMMARY_FILE",
+                    root / "summary.json",
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "discover",
+                    return_value=discovered,
+                ) as discover,
+            ):
+                result = visual_search_acquire.acquire()
+
+            updated = json.loads(raw_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["processed"], 1)
+            self.assertEqual(result["items"][0]["shots_reused"], 1)
+            self.assertEqual(result["items"][0]["shots_searched"], 1)
+            self.assertEqual(discover.call_count, 1)
+            self.assertEqual(updated["shots"]["s1"][0]["candidate_id"], "old-s1")
+            self.assertEqual(updated["shots"]["s2"][0]["candidate_id"], "new-s2")
+            self.assertEqual(
+                updated["shot_fingerprints"]["s2"],
+                "fp-current-2",
+            )
+
 
 
 if __name__ == "__main__":
