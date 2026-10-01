@@ -51,6 +51,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/visual-spend-review",
     "/api/generated-visual-asset",
     "/api/managed-visual-asset",
+    "/api/edit-preview-review",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -264,6 +265,10 @@ from visual_existing_asset_import import (
     register as register_existing_visual_asset,
     snapshot as managed_visual_asset_snapshot,
 )
+from edit_preview_review import (
+    apply_action as apply_edit_preview_action,
+    snapshot as edit_preview_review_snapshot,
+)
 from storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
@@ -308,6 +313,13 @@ PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR = (
 )
 PRODUCTION_VISUAL_ASSEMBLY_SUMMARY = (
     PRODUCTION_OUTPUT / "visual_assembly_plan_summary.json"
+)
+PRODUCTION_EDIT_MANIFEST_DIR = PRODUCTION_OUTPUT / "edit_manifests"
+PRODUCTION_EDIT_MANIFEST_SUMMARY = PRODUCTION_OUTPUT / "edit_manifest_summary.json"
+PRODUCTION_EDIT_PREVIEW_DIR = PRODUCTION_OUTPUT / "edit_previews"
+PRODUCTION_EDIT_PREVIEW_RESULT_DIR = PRODUCTION_OUTPUT / "edit_preview_results"
+PRODUCTION_EDIT_PREVIEW_SUMMARY = (
+    PRODUCTION_OUTPUT / "edit_preview_render_summary.json"
 )
 
 AUTO_MACHINE_ACTION_ORDER = [
@@ -359,6 +371,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
     "visual_assembly_prepare",
+    "edit_manifest_prepare",
+    "edit_preview_render",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1144,6 +1158,36 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Builds a deterministic edit timeline from approved existing assets, "
             "editorial excerpts, placeholders and premium-generation slots. "
             "It renders no media and makes no provider calls."
+        ),
+    },
+    "edit_manifest_prepare": {
+        "label": "Build Edit Preview Manifest",
+        "stage": "10",
+        "command": [
+            sys.executable,
+            "production_engine/edit_manifest.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Combines current narration timing, visual assembly and approved "
+            "sound-design intent into a deterministic structural edit manifest. "
+            "Missing visuals remain explicit placeholders."
+        ),
+    },
+    "edit_preview_render": {
+        "label": "Render Free Structural Edit Preview",
+        "stage": "10",
+        "command": [
+            sys.executable,
+            "production_engine/edit_preview_render.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses local FFmpeg to render a non-publishable preview with current "
+            "visual assets/placeholders and QC-passed narration. No paid provider "
+            "or generated music/SFX is used."
         ),
     },
     "production_visual_prepare": {
@@ -2793,6 +2837,140 @@ def visual_assembly_artifact_state(
     }
 
 
+def edit_manifest_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    placeholders = 0
+
+    if PRODUCTION_EDIT_MANIFEST_DIR.exists():
+        for path in PRODUCTION_EDIT_MANIFEST_DIR.glob("*.edit_manifest.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            provenance = payload.get("provenance", {})
+            if not isinstance(provenance, dict):
+                stale += 1
+                continue
+            valid = True
+            for path_key, hash_key in (
+                ("visual_assembly_plan", "visual_assembly_plan_sha256"),
+                ("narration_audio_qc", "narration_audio_qc_sha256"),
+                ("narration_timing_map", "narration_timing_map_sha256"),
+            ):
+                source = Path(str(provenance.get(path_key) or ""))
+                if (
+                    not source.exists()
+                    or provenance.get(hash_key) != sha256_file(source)
+                ):
+                    valid = False
+                    break
+            sound_source = str(provenance.get("sound_design_brief") or "")
+            if valid and sound_source:
+                sound_path = Path(sound_source)
+                if (
+                    not sound_path.exists()
+                    or provenance.get("sound_design_brief_sha256")
+                    != sha256_file(sound_path)
+                ):
+                    valid = False
+            if (
+                not valid
+                or payload.get("status") != "READY_FOR_LOCAL_PREVIEW_RENDER"
+                or (expected and key not in expected)
+            ):
+                stale += 1
+                continue
+            current.add(key)
+            placeholders += int(
+                payload.get("preview_policy", {}).get(
+                    "placeholder_count", 0
+                )
+            )
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "placeholder_count": placeholders,
+    }
+
+
+def edit_preview_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    placeholders = 0
+
+    if PRODUCTION_EDIT_PREVIEW_RESULT_DIR.exists():
+        for path in PRODUCTION_EDIT_PREVIEW_RESULT_DIR.glob(
+            "*.edit_preview_result.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            provenance = payload.get("provenance", {})
+            manifest_path = Path(
+                str(
+                    provenance.get("edit_manifest")
+                    if isinstance(provenance, dict)
+                    else ""
+                )
+            )
+            preview_path = Path(str(payload.get("preview_file") or ""))
+            valid = bool(
+                isinstance(provenance, dict)
+                and manifest_path.exists()
+                and preview_path.exists()
+                and provenance.get("edit_manifest_sha256")
+                == sha256_file(manifest_path)
+                and payload.get("preview_sha256")
+                == sha256_file(preview_path)
+                and payload.get("status")
+                == "READY_FOR_HUMAN_EDIT_PREVIEW_GATE"
+            )
+            if not valid or (expected and key not in expected):
+                stale += 1
+                continue
+            current.add(key)
+            placeholders += int(payload.get("placeholder_segments") or 0)
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "placeholder_segments": placeholders,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -3827,6 +4005,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     visual_assembly_ready = bool(visual_assembly.get("ready"))
+    edit_manifest_state = edit_manifest_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    edit_manifest_ready = bool(edit_manifest_state.get("ready"))
+    edit_preview_state = edit_preview_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    edit_preview_ready = bool(edit_preview_state.get("ready"))
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -4763,6 +4949,31 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "edit_manifest_prepare": {
+            "enabled": visual_assembly_ready and not edit_manifest_ready,
+            "reason": (
+                "Current visual assembly and narration timing are ready for the "
+                "structural edit manifest."
+                if visual_assembly_ready and not edit_manifest_ready
+                else (
+                    "Edit preview manifests are current."
+                    if edit_manifest_ready
+                    else "Build the current visual assembly plan first."
+                )
+            ),
+        },
+        "edit_preview_render": {
+            "enabled": edit_manifest_ready and not edit_preview_ready,
+            "reason": (
+                "Current edit manifests are ready for free local FFmpeg preview."
+                if edit_manifest_ready and not edit_preview_ready
+                else (
+                    "Structural edit previews are current."
+                    if edit_preview_ready
+                    else "Build current edit manifests first."
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -5490,6 +5701,13 @@ def status_payload() -> dict[str, Any]:
         "visual_assembly": visual_assembly_artifact_state(
             visual_post_search_artifact_state().get("expected_branches", [])
         ),
+        "edit_manifest": edit_manifest_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "edit_preview": edit_preview_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "edit_preview_gate": edit_preview_review_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -5627,6 +5845,39 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/managed-visual-asset":
             self._send_json(managed_visual_asset_snapshot())
+            return
+        if route == "/api/edit-preview-review":
+            self._send_json(edit_preview_review_snapshot())
+            return
+        if route == "/api/edit-preview-video":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0])
+            fmt = str((query.get("format") or [""])[0])
+            match = next(
+                (
+                    item
+                    for item in edit_preview_review_snapshot().get(
+                        "items", []
+                    )
+                    if str(item.get("concept_id") or "") == concept_id
+                    and str(item.get("format") or "") == fmt
+                ),
+                None,
+            )
+            if not match or not match.get("preview_file"):
+                self._send_json(
+                    {"error": "Current edit preview is not ready."},
+                    404,
+                )
+                return
+            preview_path = Path(str(match["preview_file"])).resolve()
+            if (
+                preview_path.parent.resolve()
+                != PRODUCTION_EDIT_PREVIEW_DIR.resolve()
+            ):
+                self._send_json({"error": "Invalid edit preview path."}, 403)
+                return
+            self._send_static(preview_path, "video/mp4")
             return
         if route == "/api/storyboard-review":
             self._send_json(storyboard_review_snapshot())
@@ -5939,6 +6190,19 @@ class Handler(BaseHTTPRequestHandler):
                     "registered": payload,
                     "managed_visual_assets": managed_visual_asset_snapshot(),
                 }
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/edit-preview-review":
+                payload = apply_edit_preview_action(
+                    result_file=str(body.get("result_file", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                response = dict(payload)
                 if auto_job:
                     response["automation_job"] = auto_job
                 self._send_json(response)
