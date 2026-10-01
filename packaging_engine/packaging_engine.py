@@ -425,6 +425,9 @@ def validate_response(
         normalized = dict(package)
         normalized["concept_id"] = concept_id
         normalized["concept_context"] = request["concept"]
+        normalized_title_sets = normalized.get("titles")
+        if not isinstance(normalized_title_sets, dict):
+            normalized_title_sets = {}
         overlap = check_texts(
             [
                 {"field": "title", "text": normalized.get("title", "")},
@@ -435,7 +438,9 @@ def validate_response(
                     }
                     for fmt in ("short", "long_form")
                     for index, candidate in enumerate(
-                        (normalized.get("titles") or {}).get(fmt, [])
+                        normalized_title_sets.get(fmt, [])
+                        if isinstance(normalized_title_sets.get(fmt, []), list)
+                        else []
                     )
                     if isinstance(candidate, dict)
                 ],
