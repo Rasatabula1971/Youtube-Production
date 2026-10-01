@@ -437,6 +437,60 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="visualRightsReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN RIGHTS / CONTEXT GATE</p>
+                <h2 id="visualRightsReviewTitle">Review creator footage</h2>
+                <p class="muted" id="visualRightsReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="visualRightsReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="visualRightsDetail"></div>
+              <div class="concept-decision-pane">
+                <p class="muted">This records editorial intent; it is not a legal determination of fair use.</p>
+                <label class="vision-label" for="visualRightsPurpose">Transformative / editorial purpose</label>
+                <textarea id="visualRightsPurpose" class="vision-observation" rows="3" maxlength="1200" placeholder="Required to approve. Example: brief excerpt used to show the event being analyzed while narration critiques/explains what is happening."></textarea>
+                <label class="vision-label" for="visualRightsNote">Context note</label>
+                <textarea id="visualRightsNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional context or restriction."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualRightsPrev" type="button">← Previous</button>
+                  <button class="danger" id="visualRightsReject" type="button">Reject use</button>
+                  <button id="visualRightsApprove" type="button">Approve context use</button>
+                  <button class="ghost" id="visualRightsNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="visualRoughCutReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN ROUGH-CUT GATE</p>
+                <h2 id="visualRoughCutReviewTitle">Review visual rough cut</h2>
+                <p class="muted" id="visualRoughCutReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="visualRoughCutReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="visualRoughCutDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Approve the current visual structure or send the relevant production layer back for rework. Approval with gaps still authorizes zero paid generation.</div>
+                <label class="vision-label" for="visualRoughCutNote">Human instruction / review note</label>
+                <textarea id="visualRoughCutNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for rework. State exactly what feels wrong or what must change."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualRoughCutPrev" type="button">← Previous</button>
+                  <button class="ghost" id="visualRoughCutVisual" type="button">Rework visual</button>
+                  <button class="ghost" id="visualRoughCutPacing" type="button">Rework pacing</button>
+                  <button class="ghost" id="visualRoughCutAudio" type="button">Rework audio</button>
+                  <button id="visualRoughCutApprove" type="button">Approve with gaps</button>
+                  <button class="ghost" id="visualRoughCutNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>
