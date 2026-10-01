@@ -179,7 +179,7 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "14. The future script must be capable of fully delivering the package promise.\n"
         "15. If human_rework_note is present, it is an AUTHORITATIVE human directive, not a suggestion. Apply it literally unless it conflicts with factual or safety constraints. Do not silently substitute a narrower, broader, or different audience than the human requested.\n"
         "16. In human rework mode, return exactly one revised package and keep its package_id exactly equal to human_rework_package_id. The runner will preserve all other package options unchanged.\n"
-        "17. Use human_rework_original_package as the before-version. Criteria listed in human_rework_keep_criteria should stay aligned; criteria listed in human_rework_change_criteria must be corrected.\n\n"
+        "17. Use human_rework_original_package as the before-version. Criteria listed in human_rework_keep_criteria should stay aligned; criteria listed in human_rework_change_criteria must be corrected. If human_rework_mode is HUMAN_INSTRUCTION_ONLY, the human_rework_note alone defines the requested change; do not invent extra revisions.\n\n"
         "PACKAGE REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
