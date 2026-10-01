@@ -29,7 +29,7 @@ from concept_gate import (
     load_json,
 )
 
-from transformation_engine import OUTPUT_DIR, sha256_file
+from transformation_engine import OUTPUT_DIR, REQUESTS_DIR, RESPONSES_DIR, sha256_file
 
 STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
 IDEA_BANK_DIR = OUTPUT_DIR.parent.parent / ".idea_bank"
@@ -44,6 +44,115 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def candidates_hash() -> str | None:
     return sha256_file(DEFAULT_CANDIDATES) if DEFAULT_CANDIDATES.exists() else None
+
+
+def concept_fingerprint(item: dict[str, Any]) -> str:
+    payload = {
+        key: value
+        for key, value in item.items()
+        if key not in {
+            "decision",
+            "criteria_decisions",
+            "note",
+            "idea_id",
+            "idea_saved",
+        }
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _preserved_decisions(
+    request: dict[str, Any],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    prior = previous.get("decisions", {}) if isinstance(previous, dict) else {}
+    if not isinstance(prior, dict):
+        return {}
+    preserved: dict[str, Any] = {}
+    for item in request.get("items", []):
+        concept_id = str(item.get("concept_id") or "")
+        saved = prior.get(concept_id)
+        if not isinstance(saved, dict):
+            continue
+        if str(saved.get("decision") or "").upper() == "REWORK":
+            continue
+        if saved.get("concept_fingerprint") != concept_fingerprint(item):
+            continue
+        preserved[concept_id] = saved
+    return preserved
+
+
+def _apply_rework_feedback(
+    item: dict[str, Any],
+    *,
+    note: str,
+) -> None:
+    response_source = Path(str(item.get("response_source") or "")).resolve()
+    responses_root = RESPONSES_DIR.resolve()
+    if (
+        not response_source.exists()
+        or responses_root not in response_source.parents
+    ):
+        raise ValueError("Concept rework cannot find the originating model response")
+
+    response = load_json(response_source)
+    provenance = response.get("response_provenance", {})
+    request_source = Path(str(provenance.get("request_source") or "")).resolve()
+    requests_root = REQUESTS_DIR.resolve()
+    if not request_source.exists() or requests_root not in request_source.parents:
+        raise ValueError("Concept rework cannot find the originating concept request")
+
+    request = load_json(request_source)
+    concept_id = str(item.get("concept_id") or "")
+    if not concept_id:
+        raise ValueError("Concept rework requires concept_id")
+
+    originals = [
+        value
+        for value in response.get("concepts", [])
+        if isinstance(value, dict)
+    ]
+    if not any(str(value.get("concept_id") or "") == concept_id for value in originals):
+        raise ValueError("Concept rework target is missing from originating response")
+
+    request["human_rework_iteration"] = (
+        int(request.get("human_rework_iteration") or 0) + 1
+    )
+    request["human_rework_mode"] = "HUMAN_INSTRUCTION_ONLY"
+    request["human_rework_note"] = note
+    request["human_rework_concept_id"] = concept_id
+    request["human_rework_original_concept"] = {
+        key: value
+        for key, value in item.items()
+        if key not in {
+            "response_source",
+            "llm_triage",
+            "triage_default",
+            "triage_rank",
+            "required_accept_criteria",
+            "criteria",
+        }
+    }
+    request["human_rework_original_concepts"] = [
+        {
+            key: value
+            for key, value in original.items()
+            if key != "response_provenance"
+        }
+        for original in originals
+    ]
+    write_json(request_source, request)
+
+    # Removing the stale response exposes concept generation immediately. The
+    # unchanged concepts live in human_rework_original_concepts and are merged
+    # back after the revised target is generated.
+    response_source.unlink()
 
 
 def idea_id_for(item: dict[str, Any]) -> str:
@@ -138,8 +247,13 @@ def prepare_state() -> dict[str, Any]:
     request = build_review_request(candidates, load_config())
     write_json(REVIEW_REQUEST_FILE, request)
 
+    previous = load_json(STATE_FILE) if STATE_FILE.exists() else {}
+    available_ids = {
+        str(item.get("concept_id") or "")
+        for item in request.get("items", [])
+    }
     state: dict[str, Any] = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "status": (
             "AWAITING_HUMAN_DECISION"
             if request.get("items")
@@ -147,8 +261,12 @@ def prepare_state() -> dict[str, Any]:
         ),
         "candidates_sha256": candidates_hash(),
         "reviewer": os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER),
-        "decisions": {},
-        "active_override_ids": [],
+        "decisions": _preserved_decisions(request, previous),
+        "active_override_ids": sorted(
+            concept_id
+            for concept_id in previous.get("active_override_ids", [])
+            if str(concept_id) in available_ids
+        ) if isinstance(previous, dict) else [],
     }
     write_json(STATE_FILE, state)
     return snapshot()
@@ -380,23 +498,26 @@ def apply_action(
         )
 
     required = list(item.get("required_accept_criteria", []))
-    if value == "REWORK":
-        normalized = normalize_criteria(criteria, required)
-        if normalized and all(normalized.values()):
-            raise ValueError(
-                "REWORK must leave at least one criterion unchecked to mark what changes"
-            )
-    else:
-        # ACCEPT / REJECT / SAVE_IDEA are single-click choices in the UI.
-        # concept_gate.validate_decisions() normalizes the final audit semantics.
-        normalized = {}
+    normalized = (
+        {criterion: True for criterion in required}
+        if value == "ACCEPT"
+        else {criterion: False for criterion in required}
+        if value == "REJECT"
+        else {}
+    )
+    if value == "REWORK" and not clean_note:
+        raise ValueError("REWORK requires a note explaining what must change")
 
     state.setdefault("decisions", {})[concept_id] = {
         "concept_id": concept_id,
         "decision": value,
         "criteria": normalized,
         "note": clean_note,
+        "concept_fingerprint": concept_fingerprint(item),
     }
+
+    if value == "REWORK":
+        _apply_rework_feedback(item, note=clean_note)
     state["status"] = "AWAITING_HUMAN_DECISION"
     finalize_if_complete(state, request)
     return snapshot()
