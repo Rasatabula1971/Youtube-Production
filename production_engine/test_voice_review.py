@@ -61,7 +61,7 @@ def gate_config() -> dict:
 
 
 class VoiceReviewTests(unittest.TestCase):
-    def test_accept_requires_all_criteria(self) -> None:
+    def test_accept_is_one_click_and_records_audit_criteria(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "spec.json"
             source.write_text(json.dumps(spec()), encoding="utf-8")
@@ -73,17 +73,16 @@ class VoiceReviewTests(unittest.TestCase):
                 "format": "long_form",
                 "reviewer": "tester",
                 "decision": "ACCEPT",
-                "criteria": {
-                    name: True
-                    for name in gate_config()["required_accept_criteria"]
-                },
+                "criteria": {},
                 "note": "",
             }
-            response["criteria"]["emotion_curve_is_restrained"] = False
-            with self.assertRaisesRegex(ValueError, "all criteria"):
-                voice_review.validate_response(
-                    request, response, gate_config()
-                )
+            normalized = voice_review.validate_response(
+                request, response, gate_config()
+            )
+
+        self.assertEqual(normalized["decision"], "ACCEPT")
+        self.assertTrue(all(normalized["criteria"].values()))
+
 
     def test_rework_note_invalidates_spec_and_updates_planner_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,21 +112,18 @@ class VoiceReviewTests(unittest.TestCase):
 
             with (
                 patch.object(voice_review, "SPECS_DIR", specs),
+                patch.object(voice_review, "REQUESTS_DIR", root),
                 patch.object(voice_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(voice_review, "RESPONSES_DIR", responses),
                 patch.object(voice_review, "APPROVED_DIR", approved),
                 patch.object(voice_review, "SUMMARY_FILE", root / "summary.json"),
             ):
                 voice_review.prepare(gate_config())
-                criteria = {
-                    name: False
-                    for name in gate_config()["required_accept_criteria"]
-                }
                 voice_review.apply_action(
                     concept_id="concept-1",
                     format="long_form",
                     decision="REWORK",
-                    criteria=criteria,
+                    criteria={},
                     note="Slow the reveal and reduce the emotional jump.",
                 )
 
@@ -154,6 +150,7 @@ class VoiceReviewTests(unittest.TestCase):
 
             with (
                 patch.object(voice_review, "SPECS_DIR", specs),
+                patch.object(voice_review, "REQUESTS_DIR", root),
                 patch.object(voice_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(voice_review, "RESPONSES_DIR", responses),
                 patch.object(voice_review, "APPROVED_DIR", approved),
@@ -161,15 +158,11 @@ class VoiceReviewTests(unittest.TestCase):
             ):
                 prepared = voice_review.prepare(gate_config())
                 self.assertEqual(prepared["prepared"], 1)
-                criteria = {
-                    name: True
-                    for name in gate_config()["required_accept_criteria"]
-                }
                 snapshot = voice_review.apply_action(
                     concept_id="concept-1",
                     format="long_form",
                     decision="ACCEPT",
-                    criteria=criteria,
+                    criteria={},
                 )
 
             self.assertTrue(snapshot["complete"])
