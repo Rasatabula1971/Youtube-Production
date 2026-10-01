@@ -12,6 +12,7 @@ from analysis_model_runner import (
     call_fair_bridge,
     confirmed_free_providers,
     gemini_compatible_schema,
+    fair_allows_direct_gemini_fallback,
     inference_cost_authorized,
     parse_model_json,
     response_schema,
@@ -433,6 +434,14 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertNotIn("enum", must_pass)
         self.assertNotIn("uniqueItems", tags)
         self.assertNotIn("maxLength", tags["items"])
+
+    def test_quality_exhaustion_allows_direct_gemini_fallback(self):
+        result = {
+            "status": "ESCALATION_REQUIRED",
+            "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+            "paid_inference_executed": False,
+        }
+        self.assertTrue(fair_allows_direct_gemini_fallback(result))
 
     def test_direct_gemini_backup_is_free_tier_authorized_and_tracks_usage(self):
         class FakeResponse:
