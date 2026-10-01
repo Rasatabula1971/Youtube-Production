@@ -53,17 +53,69 @@ def _candidate(review: dict[str,Any], shot_id:str)->dict[str,Any]|None:
 
 def snapshot()->dict[str,Any]:
     items=[]
-    for review_path in sorted(CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")) if CANDIDATE_REVIEW_DIR.exists() else []:
-        review=load_json(review_path); rights_path=_path(review_path)
+    required_total=0
+    decided_total=0
+    approved_total=0
+    stale_total=0
+    paths=sorted(CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")) if CANDIDATE_REVIEW_DIR.exists() else []
+    for review_path in paths:
+        review=load_json(review_path)
+        rights_path=_path(review_path)
         rights=load_json(rights_path) if rights_path.exists() else {"decisions":{}}
+        current_review_hash=sha256_file(review_path)
+        rights_current=(
+            isinstance(rights,dict)
+            and rights.get("source_candidate_review_sha256")==current_review_hash
+        )
+        rights_decisions=rights.get("decisions",{}) if rights_current and isinstance(rights.get("decisions"),dict) else {}
         pending=[]
-        for shot_id,decision in review.get("decisions",{}).items():
-            if decision.get("status")=="SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
-                pending.append({"shot_id":shot_id,"candidate":_candidate(review,shot_id),"decision":rights.get("decisions",{}).get(shot_id)})
+        for shot_id,selection in review.get("decisions",{}).items():
+            if not isinstance(selection,dict) or selection.get("status")!="SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
+                continue
+            required_total+=1
+            candidate=_candidate(review,shot_id)
+            decision=rights_decisions.get(shot_id)
+            decision_current=(
+                candidate is not None
+                and isinstance(decision,dict)
+                and decision.get("candidate_id")==candidate.get("candidate_id")
+            )
+            if decision_current:
+                decided_total+=1
+                approved_total+=int(decision.get("approved_for_rough_cut") is True)
+            elif decision is not None or not rights_current:
+                stale_total+=1
+                decision=None
+            pending.append({
+                "shot_id":shot_id,
+                "candidate":candidate,
+                "decision":decision if decision_current else None,
+            })
         if pending:
-            items.append({"concept_id":review.get("concept_id"),"format":review.get("format"),"candidate_review_file":str(review_path),
-                "candidate_review_sha256":sha256_file(review_path),"pending":pending})
-    return {"status":"READY_FOR_RIGHTS_CONTEXT_REVIEW" if items else "NO_RIGHTS_CONTEXT_REVIEW_REQUIRED","items":items}
+            items.append({
+                "concept_id":review.get("concept_id"),
+                "format":review.get("format"),
+                "candidate_review_file":str(review_path),
+                "candidate_review_sha256":current_review_hash,
+                "rights_review_current":rights_current,
+                "pending":pending,
+            })
+    complete=required_total==0 or (required_total==decided_total and stale_total==0)
+    return {
+        "status":(
+            "NO_RIGHTS_CONTEXT_REVIEW_REQUIRED"
+            if required_total==0
+            else "COMPLETE"
+            if complete
+            else "READY_FOR_RIGHTS_CONTEXT_REVIEW"
+        ),
+        "complete":complete,
+        "required":required_total,
+        "decided":decided_total,
+        "approved":approved_total,
+        "stale":stale_total,
+        "items":items,
+    }
 
 def apply_action(*,candidate_review_file:str,shot_id:str,decision:str,transformative_purpose:str="",context_note:str="")->dict[str,Any]:
     review_path=Path(candidate_review_file)
