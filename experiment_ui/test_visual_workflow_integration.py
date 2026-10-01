@@ -9,7 +9,7 @@ import workflow_automation
 
 
 class VisualWorkflowIntegrationTests(unittest.TestCase):
-    def workflow(self, visual_post):
+    def workflow(self, visual_post, spend_gate=None):
         stack = ExitStack()
         self.addCleanup(stack.close)
         patches = (
@@ -81,6 +81,20 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "visual_post_search_artifact_state",
                 return_value=visual_post,
             ),
+            patch.object(
+                server,
+                "visual_spend_review_snapshot",
+                return_value=(
+                    spend_gate
+                    if spend_gate is not None
+                    else {
+                        "status": "NO_PREMIUM_GENERATION_REQUIRED",
+                        "complete": True,
+                        "hero_candidates": 0,
+                        "authorized": 0,
+                    }
+                ),
+            ),
         )
         for context in patches:
             stack.enter_context(context)
@@ -146,7 +160,29 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(workflow["state"], "HUMAN_ROUGH_CUT_GATE")
 
-    def test_gap_plan_ready_is_explicit_non_spend_state(self):
+    def test_gap_plan_with_premium_candidate_stops_at_spend_gate(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+            },
+            spend_gate={
+                "status": "READY_FOR_VISUAL_SPEND_GATE",
+                "complete": False,
+                "hero_candidates": 1,
+                "authorized": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "HUMAN_VISUAL_SPEND_GATE")
+        self.assertIn("maximum spend", workflow["current_detail"])
+
+    def test_gap_plan_without_premium_candidate_needs_no_spend(self):
         workflow = self.workflow(
             {
                 "candidate_gate": {"packets": [], "stale_shots": 0},
@@ -159,8 +195,31 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "gap_plans_ready": True,
             }
         )
-        self.assertEqual(workflow["state"], "VISUAL_GAP_PLAN_READY")
-        self.assertIn("No paid generation", workflow["current_detail"])
+        self.assertEqual(workflow["state"], "VISUAL_ASSEMBLY_READY")
+        self.assertIn("No unresolved shot met", workflow["current_detail"])
+
+    def test_completed_spend_gate_exposes_authorized_generation_state(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+            },
+            spend_gate={
+                "status": "COMPLETE",
+                "complete": True,
+                "hero_candidates": 1,
+                "authorized": 1,
+            },
+        )
+        self.assertEqual(workflow["state"], "VISUAL_GENERATION_AUTHORIZED")
+        self.assertIn("cost ceilings", workflow["current_detail"])
+
 
     def test_visual_machine_order_stops_at_human_boundaries(self):
         search_index = workflow_automation.AUTO_MACHINE_ACTION_ORDER.index(
