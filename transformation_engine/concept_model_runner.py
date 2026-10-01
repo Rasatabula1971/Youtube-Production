@@ -33,7 +33,9 @@ if str(EXP2_DIR) not in sys.path:
 
 from analysis_model_runner import (
     bridge_payload,
+    call_direct_gemini_backup,
     call_fair_bridge,
+    direct_gemini_available,
     inference_cost_authorized,
     load_runner_config,
     parse_model_json,
@@ -256,6 +258,32 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
     return prompt
 
 
+
+def _rejection_error_summary(validation: dict[str, Any]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for item in validation.get("rejected", []):
+        if not isinstance(item, dict):
+            continue
+        for error in item.get("errors", []):
+            text = str(error).strip()
+            if text:
+                counts[text] = counts.get(text, 0) + 1
+    return [
+        {"error": error, "count": count}
+        for error, count in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
+    ]
+
+
+def _repair_prompt(original_prompt: str, validation: dict[str, Any]) -> str:
+    feedback = _rejection_error_summary(validation)
+    return (
+        original_prompt
+        + "\n\nDETERMINISTIC VALIDATOR FEEDBACK FROM THE PREVIOUS RESPONSE:\n"
+        + json.dumps(feedback, ensure_ascii=False, separators=(",", ":"))
+        + "\nRegenerate the ENTIRE response. Fix every listed validator error. "
+        "Do not weaken, reinterpret, or bypass any rule. Return JSON only."
+    )
+
 def run_one(
     request_path: Path,
     *,
@@ -405,6 +433,55 @@ def run_one(
         atomic_write_json(report_path, report)
         return report
 
+    initial_validation_errors = _rejection_error_summary(validation)
+    repair_result: dict[str, Any] | None = None
+    repair_raw_path: Path | None = None
+    if (
+        len(validation["accepted"]) == 0
+        and direct_gemini_available()
+        and bridge_result.get("direct_backup_may_bill") is False
+    ):
+        repair_payload = dict(payload)
+        repair_payload["prompt"] = _repair_prompt(prompt, validation)
+        repair_result = call_direct_gemini_backup(
+            repair_payload,
+            timeout_seconds=float(
+                runner_config["runner"].get("subprocess_timeout_seconds", 300)
+            ),
+            fair_result={
+                "status": "ESCALATION_REQUIRED",
+                "reason_code": "DETERMINISTIC_VALIDATION_REPAIR",
+                "paid_inference_executed": False,
+                "attempts": safe_attempts(bridge_result),
+            },
+        )
+        if repair_result.get("status") == "ACCEPTED":
+            repaired_raw = str(repair_result.get("output") or "")
+            repair_raw_path = RAW_OUTPUTS_DIR / f"{slug}.repair.txt"
+            atomic_write_text(repair_raw_path, repaired_raw)
+            try:
+                repaired_response = parse_model_json(repaired_raw)
+                repaired_validation = validate_response(
+                    repaired_response,
+                    request,
+                    load_config(),
+                )
+                response = repaired_response
+                validation = repaired_validation
+                bridge_result = repair_result
+                base_report = {
+                    **base_report,
+                    "provider_id": repair_result.get("provider_id"),
+                    "model_id": repair_result.get("model_id"),
+                    "fair_reason_code": repair_result.get("reason_code"),
+                    "direct_backup_used": repair_result.get("direct_backup_used", False),
+                    "direct_backup_may_bill": repair_result.get("direct_backup_may_bill", False),
+                    "billing_authorization": repair_result.get("billing_authorization"),
+                    "attempts": safe_attempts(repair_result),
+                }
+            except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                pass
+
     response["response_provenance"] = {
         "request_source": str(request_path),
         "request_sha256": request_hash,
@@ -428,6 +505,10 @@ def run_one(
         "raw_output": str(raw_path),
         "structurally_accepted": accepted_count,
         "structurally_rejected": rejected_count,
+        "validation_rejection_summary": _rejection_error_summary(validation),
+        "initial_validation_rejection_summary": initial_validation_errors,
+        "validation_repair_attempted": repair_result is not None,
+        "validation_repair_raw_output": str(repair_raw_path) if repair_raw_path else None,
     }
     atomic_write_json(report_path, report)
     return report
