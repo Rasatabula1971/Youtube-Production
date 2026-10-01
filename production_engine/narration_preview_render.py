@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from voice_performance import load_json, safe_slug
+from voice_performance import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -100,10 +100,31 @@ def batch() -> dict[str, Any]:
         key = f"{safe_slug(str(manifest.get('concept_id') or ''))}.{safe_slug(str(manifest.get('format') or ''))}"
         destination = AUDIO_DIR / f"{key}.preview.wav"
         try:
+            render_result = render_manifest(manifest, destination)
+            manifest_hash = sha256_file(path)
+            audio_hash = sha256_file(destination)
+            metadata_path = destination.with_suffix(".meta.json")
+            metadata = {
+                "artifact": "narration_preview_render_metadata",
+                "concept_id": manifest.get("concept_id"),
+                "format": manifest.get("format"),
+                "manifest": str(path.resolve()),
+                "manifest_sha256": manifest_hash,
+                "audio": str(destination.resolve()),
+                "audio_sha256": audio_hash,
+                "renderer": render_result.get("renderer"),
+                "voice": render_result.get("voice"),
+                "sample_rate": render_result.get("sample_rate"),
+                "paid_call": False,
+            }
+            atomic_write_json(metadata_path, metadata)
             items.append({
                 "concept_id": manifest.get("concept_id"),
                 "format": manifest.get("format"),
-                **render_manifest(manifest, destination),
+                **render_result,
+                "manifest_sha256": manifest_hash,
+                "audio_sha256": audio_hash,
+                "render_metadata": str(metadata_path),
             })
         except (RuntimeError, ValueError, OSError) as exc:
             failures.append({"manifest": str(path), "error": str(exc)})
