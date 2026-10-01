@@ -236,6 +236,84 @@ class ConceptModelRunnerTests(unittest.TestCase):
             engine.validation_contract_sha256(),
         )
 
+    @patch("concept_model_runner.call_direct_gemini_backup")
+    @patch("concept_model_runner.direct_gemini_available", return_value=True)
+    @patch("concept_model_runner.resolve_fair_paths")
+    @patch("concept_model_runner.call_fair_bridge")
+    def test_all_rejected_batch_gets_one_free_validation_repair(
+        self,
+        call_bridge,
+        resolve_paths,
+        _direct_available,
+        call_repair,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            request_path = root / "curiosity_gap.concept_request.json"
+            request_path.write_text(json.dumps(self.request()), encoding="utf-8")
+            resolve_paths.return_value = {
+                "repo": root,
+                "env_file": root / ".env",
+                "python": root / "python.exe",
+            }
+            invalid = self.valid_concept()
+            invalid["research_questions"] = []
+            call_bridge.return_value = {
+                "status": "ACCEPTED",
+                "output": json.dumps({
+                    "mechanism_id": "curiosity_gap",
+                    "concepts": [invalid],
+                }),
+                "paid_inference_executed": False,
+                "provider_id": "direct_gemini_backup",
+                "model_id": "gemini-test",
+                "request_id": "req-initial",
+                "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
+                "direct_backup_may_bill": False,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+                "attempts": [],
+            }
+            call_repair.return_value = {
+                "status": "ACCEPTED",
+                "output": json.dumps({
+                    "mechanism_id": "curiosity_gap",
+                    "concepts": [self.valid_concept()],
+                }),
+                "paid_inference_executed": None,
+                "provider_id": "direct_gemini_backup",
+                "model_id": "gemini-test",
+                "request_id": "req-repair",
+                "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
+                "direct_backup_may_bill": False,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+                "attempts": [],
+            }
+
+            old_runs = runner.MODEL_RUNS_DIR
+            old_raw = runner.RAW_OUTPUTS_DIR
+            old_responses = runner.RESPONSES_DIR
+            try:
+                runner.MODEL_RUNS_DIR = root / "runs"
+                runner.RAW_OUTPUTS_DIR = root / "raw"
+                runner.RESPONSES_DIR = root / "responses"
+                result = runner.run_one(
+                    request_path,
+                    force=True,
+                    runner_config=self.runner_config(),
+                )
+            finally:
+                runner.MODEL_RUNS_DIR = old_runs
+                runner.RAW_OUTPUTS_DIR = old_raw
+                runner.RESPONSES_DIR = old_responses
+
+        self.assertEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["structurally_accepted"], 1)
+        self.assertTrue(result["validation_repair_attempted"])
+        self.assertTrue(result["initial_validation_rejection_summary"])
+        call_repair.assert_called_once()
+
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
     def test_old_validation_contract_forces_regeneration(
