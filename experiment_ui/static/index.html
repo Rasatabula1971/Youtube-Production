@@ -349,15 +349,16 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="formatDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="formatCriteria"></div>
-                <label class="vision-label" for="formatNote">Review note</label>
-                <textarea id="formatNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-complete">Human decision only. Format checks remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="formatCriteria" hidden></div>
+                <label class="vision-label" for="formatNote">Human instruction / review note</label>
+                <textarea id="formatNote" class="vision-observation" rows="4" maxlength="1400" placeholder="For Rework, state exactly what the production plan must change. The instruction is authoritative. Optional for Accept or Reject."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="formatPrev" type="button">← Previous</button>
                   <button class="danger" id="formatReject" type="button">Reject</button>
                   <button class="ghost" id="formatRework" type="button">Rework</button>
-                  <button id="formatAccept" type="button">Accept format plan</button>
-                  <button class="ghost" id="formatNext" type="button">Next →</button>
+                  <button id="formatAccept" type="button">Accept</button>
+                  <button class="ghost" id="formatNext" type="button">Next plan →</button>
                 </div>
               </div>
             </div>
