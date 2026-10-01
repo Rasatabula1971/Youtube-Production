@@ -135,7 +135,7 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
             },
         }
         schema = runner.response_schema(request)
-        titles = schema["properties"]["packages"]["items"]["properties"]["titles"]
+        titles = schema["properties"]["titles"]
 
         self.assertEqual(titles["properties"]["short"]["minItems"], 5)
         self.assertEqual(titles["properties"]["short"]["maxItems"], 5)
