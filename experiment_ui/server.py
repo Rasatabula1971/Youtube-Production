@@ -3472,6 +3472,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_manifests_ready = bool(production_visual["manifests_ready"])
     visual_post = visual_post_search_artifact_state()
     visual_candidate_complete = bool(visual_post["candidate_complete"])
+    visual_candidate_stale = int(
+        visual_post["candidate_gate"].get("stale_shots") or 0
+    )
     visual_rights_complete = bool(visual_post["rights_complete"])
     visual_rough_cuts_ready = bool(visual_post["rough_cuts_ready"])
     visual_rough_gate_complete = bool(visual_post["rough_gate_complete"])
@@ -4269,8 +4272,25 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "reason": "Build the cinematic storyboard from current narration timing and visual requirements." if visual_manifests_ready else "Visual requirements are not ready.",
         },
         "visual_search_prepare": {
-            "enabled": has_json_files(PRODUCTION_STORYBOARD_DIR) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else has_json_files(PRODUCTION_STORYBOARD_DIR),
-            "reason": "Prepare storyboard-driven visual search requests.",
+            "enabled": (
+                has_json_files(PRODUCTION_STORYBOARD_DIR)
+                and (
+                    visual_candidate_stale > 0
+                    or not (
+                        PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists()
+                        and any(
+                            PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob(
+                                "*.visual_search_request.json"
+                            )
+                        )
+                    )
+                )
+            ),
+            "reason": (
+                "Storyboard revisions made visual search stale; rebuild only the affected shot requests."
+                if visual_candidate_stale > 0
+                else "Prepare storyboard-driven visual search requests."
+            ),
         },
         "visual_search_acquire": {
             "enabled": any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_results.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else False,
@@ -4794,7 +4814,11 @@ def workflow_guidance(
         }
 
     production_visual = production_visual_artifact_state()
-    if voice.get("visual_ready") and production_visual.get("manifests_ready"):
+    if (
+        voice.get("visual_ready")
+        and production_visual.get("manifests_ready")
+        and not readiness.get("auto_continue", {}).get("enabled")
+    ):
         return {
             "state": "VISUAL_ACQUISITION_REQUIRED",
             "current_action_id": None,
