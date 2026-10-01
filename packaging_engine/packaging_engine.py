@@ -375,6 +375,7 @@ def run_prepare(
         request["request_provenance"] = {
             "concept_handoff_source": str(concept_handoff_path),
             "concept_handoff_sha256": handoff_sha256,
+            "packaging_config_sha256": sha256_file(CONFIG_FILE),
         }
         concept_id = str(request["concept_id"])
         if concept_id in seen_concept_ids:
