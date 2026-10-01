@@ -766,16 +766,27 @@ def call_direct_gemini_backup(
                 "responseMimeType": "application/json",
                 "temperature": 0.2,
             }
+            request_prompt = prompt
             if response_mode == "STRUCTURED_SCHEMA":
                 generation_config["responseJsonSchema"] = gemini_compatible_schema(
                     schema
+                )
+            else:
+                # When Gemini rejects a deep structured-output schema, JSON-only
+                # mode must still receive the exact contract. Otherwise the model
+                # knows only that JSON is required, not the nested object shape.
+                request_prompt = (
+                    prompt
+                    + "\n\nEXPECTED JSON SCHEMA (follow this exact structure):\n"
+                    + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                    + "\nReturn only one JSON object matching this schema."
                 )
 
             body = {
                 "contents": [
                     {
                         "role": "user",
-                        "parts": [{"text": prompt}],
+                        "parts": [{"text": request_prompt}],
                     }
                 ],
                 "generationConfig": generation_config,
