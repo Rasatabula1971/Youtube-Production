@@ -171,7 +171,9 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "10. Preserve the Human Framing/Story drama pulse in production: every beat needs drama_level 4-10 and tempo_level 1-10; both must vary across a branch. Drama and tempo are independent.\n"
         "11. Reach the accepted concept drama target when truthfully supported, but never manufacture spectacle or violate the accepted drama constraint.\n"
         "12. Do not copy source-video wording, footage, story beats or execution.\n"
-        "13. Do not mention claim IDs in on-screen or spoken text.\n\n"
+        "13. Do not mention claim IDs in on-screen or spoken text.\n"
+        "14. If human_rework_note is present, it is an AUTHORITATIVE human instruction for this production plan. Correct the requested production treatment while preserving immutable approved narration, verified claims, required branches, and the package promise.\n"
+        "15. Do not silently redesign unrelated beats unless necessary to make the requested correction coherent. Human rework never authorizes invented spectacle or unsupported factual claims.\n\n"
         "FORMAT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
