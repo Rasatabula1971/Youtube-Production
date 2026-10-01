@@ -2773,7 +2773,7 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
             }
             for key, value in sorted(current.items())
         ],
-    }    }
+    }
 
 
 def visual_assembly_artifact_state(
