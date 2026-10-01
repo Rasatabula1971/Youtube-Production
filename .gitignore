@@ -22,3 +22,6 @@ story_script_engine/output/
 format_engine/output/
 
 source_acquisition/output/
+.venv/
+kokoro_test.wav
+production_engine/output/
