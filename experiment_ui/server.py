@@ -5352,11 +5352,81 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if route == "/api/visual-rough-cut-review":
-                payload = apply_visual_rough_cut_review_action(
-                    rough_cut_file=str(body.get("rough_cut_file", "")),
-                    decision=str(body.get("decision", "")),
-                    note=str(body.get("note") or ""),
+                rough_decision = str(body.get("decision", "")).strip().upper()
+                rough_note = str(body.get("note") or "").strip()
+                rough_cut_file = str(body.get("rough_cut_file", ""))
+                rough_payload = apply_visual_rough_cut_review_action(
+                    rough_cut_file=rough_cut_file,
+                    decision=rough_decision,
+                    note=rough_note,
                 )
+                routed_to = None
+
+                if rough_decision == "REWORK_VISUAL":
+                    shot_id = str(body.get("shot_id") or "").strip()
+                    if not shot_id:
+                        raise ValueError(
+                            "Visual rough-cut rework requires a storyboard shot."
+                        )
+                    concept_id = str(rough_payload.get("concept_id") or "")
+                    branch_format = str(rough_payload.get("format") or "")
+                    board = next(
+                        (
+                            item
+                            for item in storyboard_review_snapshot().get(
+                                "items", []
+                            )
+                            if str(item.get("concept_id") or "") == concept_id
+                            and str(item.get("format") or "") == branch_format
+                        ),
+                        None,
+                    )
+                    if not isinstance(board, dict):
+                        raise ValueError(
+                            "Current storyboard for rough-cut visual rework "
+                            "was not found."
+                        )
+                    revise_storyboard_shot(
+                        storyboard_file=str(board.get("storyboard_file") or ""),
+                        shot_id=shot_id,
+                        instruction=rough_note,
+                        changes={},
+                    )
+                    routed_to = "storyboard_visual_search"
+
+                elif rough_decision == "REWORK_PACING":
+                    concept_id = str(rough_payload.get("concept_id") or "")
+                    branch_format = str(rough_payload.get("format") or "")
+                    apply_format_gate_action(
+                        concept_id=concept_id,
+                        decision="REWORK",
+                        criteria={},
+                        note=(
+                            f"Rough-cut pacing rework for {branch_format}: "
+                            f"{rough_note}"
+                        ),
+                    )
+                    routed_to = "format_gate"
+
+                elif rough_decision == "REWORK_AUDIO":
+                    concept_id = str(rough_payload.get("concept_id") or "")
+                    branch_format = str(rough_payload.get("format") or "")
+                    apply_performance_gate_action(
+                        concept_id=concept_id,
+                        format=branch_format,
+                        decision="REWORK",
+                        criteria={},
+                        note=(
+                            "Rough-cut audio/delivery rework: "
+                            + rough_note
+                        ),
+                    )
+                    routed_to = "performance_gate"
+
+                payload = {
+                    **rough_payload,
+                    "rework_routed_to": routed_to,
+                }
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
