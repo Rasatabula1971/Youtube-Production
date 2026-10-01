@@ -455,7 +455,7 @@ def run_one(
                 "attempts": safe_attempts(bridge_result),
             },
         )
-        if repair_result.get("status") == "ACCEPTED":
+        if repair_result.get("status") == "ACCEPTED" and inference_cost_authorized(repair_result):
             repaired_raw = str(repair_result.get("output") or "")
             repair_raw_path = RAW_OUTPUTS_DIR / f"{slug}.repair.txt"
             atomic_write_text(repair_raw_path, repaired_raw)
