@@ -50,6 +50,9 @@ def load_config() -> dict[str, Any]:
         "packages_per_concept",
         "allowed_format_intents",
         "minimum_research_dependencies",
+        "short_title_contract",
+        "long_title_contract",
+        "title_style_contract",
     }
     missing = sorted(required - set(config))
     if missing:
