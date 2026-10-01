@@ -9,6 +9,42 @@ from story_script_engine import build_script_request, validate_script_response
 
 
 class StoryScriptTests(unittest.TestCase):
+
+    def approved_voice_binding(self):
+        return {
+            "profile": {
+                "schema_version": 1,
+                "profile_id": "engineering_nonengineers",
+                "version": 1,
+                "status": "APPROVED",
+                "channel_id": "engineering_nonengineers",
+                "channel_name": "Engineering for Non-Engineers",
+                "niche": "engineering",
+                "audience": {"knowledge_level": "non_engineer"},
+                "narrator_role": {"identity": "curious_explainer"},
+                "tone": {"primary": "curious"},
+                "technical_language": {"jargon_policy": "translate_immediately"},
+                "sentence_style": {"preferred_length": "short_to_medium"},
+                "storytelling": {"mystery": "high"},
+                "prohibited_style": ["textbook introductions"],
+                "evidence_style": {
+                    "state_uncertainty": True,
+                    "distinguish_fact_from_hypothesis": True,
+                    "numbers_require_support": True,
+                },
+                "provenance": {
+                    "created_from": "channel_setup_gate",
+                    "approved_by": "human",
+                    "approved_at": "2026-10-01T19:53:00-04:00",
+                },
+            },
+            "binding": {
+                "profile_path": "channel_profiles/profiles/engineering.json",
+                "profile_sha256": "abc123",
+            },
+            "apply_to_generation": True,
+        }
+
     def psychology(self, primary, action, loop_id):
         drama_by_action = {"OPEN": 7, "ADVANCE": 5, "PAYOFF": 6, "NONE": 5}
         tempo_by_action = {"OPEN": 7, "ADVANCE": 4, "PAYOFF": 5, "NONE": 5}
@@ -273,6 +309,48 @@ class StoryScriptTests(unittest.TestCase):
         self.assertEqual(
             short_request["package"]["title"],
             "Cold Brakes Can Betray You",
+        )
+
+
+
+    def test_legacy_story_plan_defaults_to_unconfigured_channel_voice(self):
+        request = self.request("long_form")
+
+        self.assertEqual(
+            request["channel_voice"]["profile"]["status"],
+            "UNCONFIGURED",
+        )
+        self.assertFalse(request["channel_voice"]["apply_to_generation"])
+        self.assertTrue(
+            any(
+                "Do not invent a persistent channel personality" in item
+                for item in request["instructions"]
+            )
+        )
+
+    def test_script_inherits_story_bound_channel_voice_version(self):
+        plan = self.plan("either")
+        plan["channel_voice"] = self.approved_voice_binding()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "plan.json"
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            request = build_script_request(plan, path, "long_form")
+
+        self.assertTrue(request["channel_voice"]["apply_to_generation"])
+        self.assertEqual(
+            request["channel_voice"]["profile"]["profile_id"],
+            "engineering_nonengineers",
+        )
+        self.assertEqual(request["channel_voice"]["profile"]["version"], 1)
+        self.assertEqual(
+            request["channel_voice"]["binding"]["profile_sha256"],
+            "abc123",
+        )
+        self.assertTrue(
+            any(
+                "Apply the approved Channel Voice Profile" in item
+                for item in request["instructions"]
+            )
         )
 
 
