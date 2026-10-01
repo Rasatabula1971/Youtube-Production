@@ -23,6 +23,7 @@ ROUGH_REVIEW_DIR = OUTPUT / "visual_rough_cut_reviews"
 GAP_DIR = OUTPUT / "visual_gap_plans"
 SPEND_DIR = OUTPUT / "visual_spend_reviews"
 GEN_REQUEST_DIR = OUTPUT / "visual_generation_requests"
+GENERATED_REGISTRY_DIR = OUTPUT / "generated_visual_asset_registry"
 ASSEMBLY_DIR = OUTPUT / "visual_assembly_plans"
 SUMMARY_FILE = OUTPUT / "visual_assembly_plan_summary.json"
 
@@ -89,6 +90,41 @@ def _spend_decisions(
     return decisions if isinstance(decisions, dict) else {}
 
 
+def _generated_asset_record(
+    concept_id: str,
+    fmt: str,
+    shot_id: str,
+    generation_request_path: Path,
+) -> dict[str, Any] | None:
+    registry_path = GENERATED_REGISTRY_DIR / (
+        f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+        f"{safe_slug(shot_id)}.generated_visual_asset.json"
+    )
+    if not registry_path.exists() or not generation_request_path.exists():
+        return None
+    record = load_json(registry_path)
+    provenance = record.get("provenance", {})
+    asset_path = Path(str(record.get("asset_file") or ""))
+    if (
+        not isinstance(provenance, dict)
+        or provenance.get("visual_generation_request_sha256")
+        != sha256_file(generation_request_path)
+        or not asset_path.exists()
+        or record.get("asset_sha256") != sha256_file(asset_path)
+    ):
+        return None
+    return {
+        "status": "GENERATED_ASSET_READY",
+        "asset_file": str(asset_path),
+        "asset_sha256": record.get("asset_sha256"),
+        "provider": record.get("provider"),
+        "provider_job_id": record.get("provider_job_id"),
+        "actual_cost_usd": float(record.get("actual_cost_usd") or 0),
+        "registry_file": str(registry_path),
+        "registry_sha256": sha256_file(registry_path),
+    }
+
+
 def _generation_slot(
     *,
     concept_id: str,
@@ -125,6 +161,20 @@ def _generation_slot(
         return {
             "status": "PREMIUM_GENERATION_BRIEF_STALE",
             "generation_request": str(request_path),
+            "max_cost_usd": float(decision.get("max_cost_usd") or 0),
+        }
+
+    generated = _generated_asset_record(
+        concept_id,
+        fmt,
+        shot_id,
+        request_path,
+    )
+    if generated is not None:
+        return {
+            **generated,
+            "generation_request": str(request_path),
+            "generation_request_sha256": sha256_file(request_path),
             "max_cost_usd": float(decision.get("max_cost_usd") or 0),
         }
 
@@ -223,7 +273,8 @@ def build_plan(
                 )
                 slot["visual_status"] = generation["status"]
                 slot["generation"] = generation
-                premium_pending += 1
+                if generation["status"] == "PREMIUM_GENERATION_PENDING":
+                    premium_pending += 1
             elif (
                 premium
                 and isinstance(decision, dict)
