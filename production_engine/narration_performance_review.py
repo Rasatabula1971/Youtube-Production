@@ -12,6 +12,7 @@ from voice_performance import load_json,sha256_file
 
 HERE=Path(__file__).resolve().parent;OUTPUT=HERE/"output"
 MANIFESTS=OUTPUT/"narration_preview_manifests";REVISIONS=OUTPUT/"narration_performance_revisions"
+AUDIO=OUTPUT/"narration_preview_audio";RESPONSES=OUTPUT/"narration_preview_review_responses";APPROVED=OUTPUT/"approved_narration_previews"
 ALLOWED={"emotion","intensity","speed","pause_before_ms","pause_after_ms","emphasis_terms"}
 
 def _path(p:Path)->Path:
@@ -52,6 +53,11 @@ def revise(*,manifest_file:str,segment_id:str,instruction:str,delivery_changes:d
  seg["performance_version"]=version;seg["creative_instruction"]=instruction.strip();segments[idx]=seg;m["segments"]=segments
  m.setdefault("policy",{})["segment_local_performance_revision"]=True;m["paid_calls_allowed"]=False
  atomic_write_json(p,m);hist["current_manifest_sha256"]=sha256_file(p);atomic_write_json(rp,hist)
+ key=p.name.replace(".narration_preview.json","")
+ audio=AUDIO/f"{key}.preview.wav";meta=audio.with_suffix(".meta.json")
+ response=RESPONSES/f"{key}.preview_review.json";approved=APPROVED/f"{key}.approved_preview.json"
+ for stale in (audio,meta,response,approved):
+  if stale.exists():stale.unlink()
  return {"status":"NARRATION_SEGMENT_REVISED","segment_id":segment_id,"performance_version":version,"segment":seg,
   "invalidation":{"free_preview_segment":True,"draft_audio_mix":True,"listen_gate_approval":True,"paid_quote":True,"other_segments":False},
   "narration_words_changed":False,"manifest_sha256":sha256_file(p)}
