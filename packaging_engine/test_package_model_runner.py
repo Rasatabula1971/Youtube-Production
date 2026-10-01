@@ -42,10 +42,17 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
             "concept_id": "c1",
             "allowed_format_intents": ["short"],
             "package_count_requested": 3,
-            "title_contract": {
-                "max_words": 8,
-                "max_chars": 56,
-                "target_words": "3-7",
+            "title_contracts": {
+                "short": {
+                    "max_words": 7,
+                    "max_chars": 48,
+                    "target_words": "3-7",
+                },
+                "long_form": {
+                    "max_words": 10,
+                    "max_chars": 70,
+                    "target_words": "5-10",
+                },
             },
         }
         prompt = runner.build_prompt(request, maximum_chars=95000)
@@ -54,19 +61,24 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         self.assertIn("The explanation is the payoff, not the pitch", prompt)
         self.assertIn("Do not lead like a lecture", prompt)
         self.assertIn("The Physics of X", prompt)
-        self.assertIn("Target 3-7 words", prompt)
+        self.assertIn("Shorts: target 3-7 words", prompt)
+        self.assertIn("Long-form: target 5-10 words", prompt)
         self.assertIn("proposed PUBLIC YouTube title", prompt)
+        self.assertIn("Generate each format independently", prompt)
 
-    def test_title_schema_uses_public_title_character_limit(self):
+    def test_title_schema_uses_largest_format_character_limit(self):
         request = {
             "concept_id": "c1",
-            "allowed_format_intents": ["short"],
+            "allowed_format_intents": ["short", "long_form"],
             "package_count_requested": 3,
-            "title_contract": {"max_chars": 56},
+            "title_contracts": {
+                "short": {"max_chars": 48},
+                "long_form": {"max_chars": 70},
+            },
         }
         schema = runner.response_schema(request)
         title = schema["properties"]["packages"]["items"]["properties"]["title"]
-        self.assertEqual(title["maxLength"], 56)
+        self.assertEqual(title["maxLength"], 70)
 
     def test_base_prompt_does_not_force_specialist_audience(self):
         request = {
