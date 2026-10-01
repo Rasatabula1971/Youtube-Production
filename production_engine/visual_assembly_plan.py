@@ -24,6 +24,7 @@ GAP_DIR = OUTPUT / "visual_gap_plans"
 SPEND_DIR = OUTPUT / "visual_spend_reviews"
 GEN_REQUEST_DIR = OUTPUT / "visual_generation_requests"
 GENERATED_REGISTRY_DIR = OUTPUT / "generated_visual_asset_registry"
+MANAGED_REGISTRY_DIR = OUTPUT / "managed_visual_asset_registry"
 ASSEMBLY_DIR = OUTPUT / "visual_assembly_plans"
 SUMMARY_FILE = OUTPUT / "visual_assembly_plan_summary.json"
 
@@ -88,6 +89,48 @@ def _spend_decisions(
         raise ValueError("STALE_OR_INCOMPLETE_VISUAL_SPEND_REVIEW")
     decisions = spend.get("decisions", {})
     return decisions if isinstance(decisions, dict) else {}
+
+
+def _managed_asset_record(
+    concept_id: str,
+    fmt: str,
+    shot_id: str,
+    candidate_id: str,
+) -> dict[str, Any] | None:
+    registry_path = MANAGED_REGISTRY_DIR / (
+        f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+        f"{safe_slug(shot_id)}.managed_visual_asset.json"
+    )
+    if not registry_path.exists():
+        return None
+    record = load_json(registry_path)
+    if str(record.get("candidate_id") or "") != candidate_id:
+        return None
+    provenance = record.get("provenance", {})
+    asset_path = Path(str(record.get("asset_file") or ""))
+    if not isinstance(provenance, dict):
+        return None
+    result_path = Path(str(provenance.get("search_result") or ""))
+    review_path = Path(str(provenance.get("candidate_review") or ""))
+    if (
+        not result_path.exists()
+        or not review_path.exists()
+        or not asset_path.exists()
+        or provenance.get("search_result_sha256") != sha256_file(result_path)
+        or provenance.get("candidate_review_sha256") != sha256_file(review_path)
+        or record.get("asset_sha256") != sha256_file(asset_path)
+    ):
+        return None
+    return {
+        "asset_file": str(asset_path),
+        "asset_sha256": record.get("asset_sha256"),
+        "license": record.get("license"),
+        "creator": record.get("creator"),
+        "source_url": record.get("source_url"),
+        "acquisition_method": record.get("acquisition_method"),
+        "registry_file": str(registry_path),
+        "registry_sha256": sha256_file(registry_path),
+    }
 
 
 def _generated_asset_record(
@@ -219,6 +262,7 @@ def build_plan(
     timeline: list[dict[str, Any]] = []
     unresolved = 0
     premium_pending = 0
+    local_asset_pending = 0
 
     for scene in rough.get("scenes", []):
         if not isinstance(scene, dict):
@@ -243,12 +287,32 @@ def build_plan(
             "APPROVED_EXISTING_ASSET",
             "APPROVED_EDITORIAL_EXCERPT",
         }:
-            slot["visual_status"] = source_status
-            slot["asset"] = {
-                "candidate_id": assignment.get("candidate_id"),
-                "source_url": assignment.get("source_url"),
-                "reason": assignment.get("reason"),
-            }
+            candidate_id = str(assignment.get("candidate_id") or "")
+            managed = _managed_asset_record(
+                concept_id,
+                fmt,
+                shot_id,
+                candidate_id,
+            )
+            if managed is not None:
+                slot["visual_status"] = source_status
+                slot["asset"] = {
+                    "candidate_id": candidate_id,
+                    "reason": assignment.get("reason"),
+                    **managed,
+                }
+            else:
+                slot["visual_status"] = (
+                    "MANUAL_EDITORIAL_ASSET_REQUIRED"
+                    if source_status == "APPROVED_EDITORIAL_EXCERPT"
+                    else "LOCAL_APPROVED_ASSET_REQUIRED"
+                )
+                slot["asset"] = {
+                    "candidate_id": candidate_id,
+                    "source_url": assignment.get("source_url"),
+                    "reason": assignment.get("reason"),
+                }
+                local_asset_pending += 1
         else:
             gap_item = gap_by_shot.get(shot_id, {})
             decision = spend.get(shot_id, {})
@@ -311,12 +375,15 @@ def build_plan(
         "status": (
             "WAITING_FOR_PREMIUM_GENERATED_ASSETS"
             if premium_pending
+            else "WAITING_FOR_LOCAL_VISUAL_ASSETS"
+            if local_asset_pending
             else "READY_FOR_EDIT_ASSEMBLY"
         ),
         "timeline": timeline,
         "summary": {
             "scenes": len(timeline),
             "premium_generation_pending": premium_pending,
+            "local_asset_pending": local_asset_pending,
             "unresolved_nonpremium_or_placeholder": unresolved,
             "resolved_existing": sum(
                 item.get("visual_status")
@@ -402,6 +469,10 @@ def prepare() -> dict[str, Any]:
         "prepared": len(items),
         "waiting_for_premium_assets": sum(
             item["status"] == "WAITING_FOR_PREMIUM_GENERATED_ASSETS"
+            for item in items
+        ),
+        "waiting_for_local_assets": sum(
+            item["status"] == "WAITING_FOR_LOCAL_VISUAL_ASSETS"
             for item in items
         ),
         "ready_for_edit_assembly": sum(
