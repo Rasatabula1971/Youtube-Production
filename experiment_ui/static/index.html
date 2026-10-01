@@ -493,6 +493,34 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="visualSpendReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN VISUAL SPEND GATE</p>
+                <h2 id="visualSpendReviewTitle">Decide whether this shot is worth paying for</h2>
+                <p class="muted" id="visualSpendReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="visualSpendReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="visualSpendDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Paid generation is last-resort only. This gate records a maximum authorization; it does not call a paid provider.</div>
+                <label class="vision-label" for="visualSpendMaxCost">Maximum authorized cost for this shot (USD)</label>
+                <input id="visualSpendMaxCost" type="number" min="0" step="0.01" value="0">
+                <label class="vision-label" for="visualSpendNote">Human instruction / note</label>
+                <textarea id="visualSpendNote" class="vision-observation" rows="4" maxlength="1200" placeholder="Required for Retry existing. Optional for Keep placeholder or Authorize generation."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualSpendPrev" type="button">← Previous</button>
+                  <button class="ghost" id="visualSpendRetry" type="button">Retry existing</button>
+                  <button class="danger" id="visualSpendKeep" type="button">Keep placeholder</button>
+                  <button id="visualSpendAuthorize" type="button">Authorize generation</button>
+                  <button class="ghost" id="visualSpendNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>
