@@ -81,6 +81,7 @@ const packagingNote = document.getElementById("packagingNote");
 const packagingPrev = document.getElementById("packagingPrev");
 const packagingReject = document.getElementById("packagingReject");
 const packagingRework = document.getElementById("packagingRework");
+const packagingSaveIdea = document.getElementById("packagingSaveIdea");
 const packagingAccept = document.getElementById("packagingAccept");
 const packagingNext = document.getElementById("packagingNext");
 
@@ -1525,6 +1526,7 @@ function renderPackagingReview(snapshot, force) {
     packagingNext.disabled = true;
     packagingReject.disabled = true;
     packagingRework.disabled = true;
+    packagingSaveIdea.disabled = true;
     packagingAccept.disabled = true;
     return;
   }
@@ -1603,24 +1605,14 @@ function renderPackagingReview(snapshot, force) {
       (dependencies ? '<ul>' + dependencies + '</ul>' : '<p>None declared.</p>') +
       '</div>';
 
-  const criteriaDescriptions = snapshot.criteria || {};
-  const checked = pkg.criteria_decisions || {};
-  const required = pkg.required_accept_criteria || Object.keys(criteriaDescriptions);
-  packagingCriteria.innerHTML = required.map(function (criterion) {
-    const id = "packaging-criterion-" + packagingCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-packaging-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  packagingCriteria.innerHTML = "";
 
   packagingNote.value = pkg.note || "";
   packagingPrev.disabled = packagingCursor <= 0;
   packagingNext.disabled = packagingCursor >= items.length - 1;
   packagingReject.disabled = false;
   packagingRework.disabled = false;
+  packagingSaveIdea.disabled = false;
   packagingAccept.disabled = false;
   packagingEditing = false;
 }
@@ -1655,7 +1647,7 @@ async function submitPackagingDecision(decision) {
       body: JSON.stringify({
         package_id: pkg.package_id,
         decision: decision,
-        criteria: collectPackagingCriteria(),
+        criteria: {},
         note: packagingNote.value
       })
     });
@@ -1669,7 +1661,9 @@ async function submitPackagingDecision(decision) {
         ? "Package accepted."
         : decision === "REWORK"
           ? "Package sent for rework."
-          : "Package rejected.",
+          : decision === "SAVE_IDEA"
+            ? "Package saved for later."
+            : "Package rejected.",
       false
     );
     await loadStatus();
@@ -3101,9 +3095,6 @@ conceptAccept.addEventListener("click", function () {
 packagingNote.addEventListener("input", function () {
   packagingEditing = true;
 });
-packagingCriteria.addEventListener("change", function () {
-  packagingEditing = true;
-});
 packagingPrev.addEventListener("click", function () {
   movePackagingCursor(-1);
 });
@@ -3115,6 +3106,9 @@ packagingReject.addEventListener("click", function () {
 });
 packagingRework.addEventListener("click", function () {
   submitPackagingDecision("REWORK");
+});
+packagingSaveIdea.addEventListener("click", function () {
+  submitPackagingDecision("SAVE_IDEA");
 });
 packagingAccept.addEventListener("click", function () {
   submitPackagingDecision("ACCEPT");
