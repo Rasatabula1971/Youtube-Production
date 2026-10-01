@@ -501,7 +501,17 @@ function statusTone(workflow) {
     state === "HUMAN_VISION_GATE" ||
     state === "HUMAN_ANALYSIS_GATE" ||
     state === "HUMAN_CONCEPT_GATE" ||
-    state === "HUMAN_SCRIPT_GATE"
+    state === "HUMAN_PACKAGING_GATE" ||
+    state === "HUMAN_RESEARCH_GATE" ||
+    state === "HUMAN_SCRIPT_GATE" ||
+    state === "HUMAN_FORMAT_GATE" ||
+    state === "HUMAN_PERFORMANCE_GATE" ||
+    state === "HUMAN_NARRATION_PREVIEW_GATE" ||
+    state === "HUMAN_VISUAL_CANDIDATE_GATE" ||
+    state === "HUMAN_VISUAL_RIGHTS_GATE" ||
+    state === "HUMAN_ROUGH_CUT_GATE" ||
+    state === "HUMAN_VISUAL_SPEND_GATE" ||
+    state === "HUMAN_EDIT_PREVIEW_GATE"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -3488,25 +3498,26 @@ function renderAnalysis(data) {
     "HUMAN_EDIT_PREVIEW_GATE"
   ].includes(workflow.state);
 
+  const opportunityApproved =
+    Boolean(data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02);
+  const hasWorkflowTitle =
+    Boolean(workflow.current_title) &&
+    workflow.current_action_id !== "opportunity_research";
+
   analysisCurrentTitle.textContent =
-    humanCreateGate
+    opportunityApproved && (humanCreateGate || hasWorkflowTitle)
       ? workflow.current_title
-      : (
-        workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
-          ? workflow.current_title
-          : (data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
-            ? "Prepare the approved source evidence"
-            : "Waiting for opportunity approval")
-      );
+      : opportunityApproved
+        ? "Prepare the approved source evidence"
+        : "Waiting for opportunity approval";
 
   analysisCurrentDetail.textContent =
-    humanCreateGate
-      ? workflow.current_detail
-      : (
-        data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
-          ? (workflow.current_detail || "The next available analysis step is highlighted.")
-          : "Approve an opportunity before Experiment 02 can begin."
-      );
+    opportunityApproved
+      ? (
+        workflow.current_detail ||
+        "The next available analysis step is highlighted."
+      )
+      : "Approve an opportunity before Experiment 02 can begin.";
 
   const actions = (data.actions || []).filter(function (action) {
     return action.surface === "workflow" && action.id !== "opportunity_research";
