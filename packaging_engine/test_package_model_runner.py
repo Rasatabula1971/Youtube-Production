@@ -57,7 +57,9 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         }
         prompt = runner.build_prompt(request, maximum_chars=95000)
 
-        self.assertIn("exactly three genuinely different human hook angles", prompt)
+        self.assertIn("exactly five Short titles", prompt)
+        self.assertIn("exactly five Long-form titles", prompt)
+        self.assertIn("curiosity, stakes, unexpected, mystery, payoff", prompt)
         self.assertIn("The explanation is the payoff, not the pitch", prompt)
         self.assertIn("Do not lead like a lecture", prompt)
         self.assertIn("The Physics of X", prompt)
@@ -120,6 +122,30 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         self.assertEqual(merged["packages"][0]["title"], "Keep One")
         self.assertEqual(merged["packages"][1]["expected_viewer"], "Anyone who flies")
         self.assertEqual(merged["packages"][2]["title"], "Keep Three")
+
+
+    def test_title_candidate_schema_requires_five_per_format(self):
+        request = {
+            "concept_id": "c1",
+            "allowed_format_intents": ["short", "long_form", "either"],
+            "package_count_requested": 3,
+            "title_contracts": {
+                "short": {"max_chars": 48},
+                "long_form": {"max_chars": 70},
+            },
+        }
+        schema = runner.response_schema(request)
+        titles = schema["properties"]["packages"]["items"]["properties"]["titles"]
+
+        self.assertEqual(titles["properties"]["short"]["minItems"], 5)
+        self.assertEqual(titles["properties"]["short"]["maxItems"], 5)
+        self.assertEqual(titles["properties"]["long_form"]["minItems"], 5)
+        self.assertEqual(titles["properties"]["long_form"]["maxItems"], 5)
+        self.assertEqual(
+            titles["properties"]["short"]["items"]["properties"]["angle"]["enum"],
+            ["curiosity", "stakes", "unexpected", "mystery", "payoff"],
+        )
+
 
 
 if __name__ == "__main__":
