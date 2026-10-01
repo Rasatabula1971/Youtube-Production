@@ -12,7 +12,7 @@ from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json,sha256_file
 
 HERE=Path(__file__).resolve().parent; OUTPUT=HERE/"output"
-STORYBOARDS=OUTPUT/"storyboards"; REVISIONS=OUTPUT/"storyboard_revisions"
+STORYBOARDS=OUTPUT/"storyboards"; REVISIONS=OUTPUT/"storyboard_revisions"; SEARCH_RESULTS=OUTPUT/"visual_search_results"
 
 EDITABLE={"desired_visual","search_terms","story_purpose"}
 CINEMATIC={"camera_angle","framing","camera_movement","lens_feel","lighting","depth_of_field","motion_speed","transition"}
@@ -61,6 +61,12 @@ def revise(*,storyboard_file:str,shot_id:str,instruction:str,changes:dict[str,An
  board.setdefault("policy",{})["shot_local_revision_invalidates_only_edited_shot"]=True
  atomic_write_json(p,board)
  hist["current_storyboard_sha256"]=sha256_file(p);atomic_write_json(rp,hist)
+ key=p.name.replace(".storyboard.json","")
+ for stale in (
+  SEARCH_RESULTS/f"{key}.visual_search_request.json",
+  SEARCH_RESULTS/f"{key}.visual_search_results.json",
+ ):
+  if stale.exists():stale.unlink()
  return {"status":"SHOT_REVISED","shot_id":shot_id,"creative_version":version,"card":card,
   "invalidation":{"visual_search":True,"candidate_selection":True,"rights_review":True,"rough_cut_assignment":True,"render_approval":True,"other_shots":False},
   "narration_timing_changed":False,"storyboard_sha256":sha256_file(p)}
