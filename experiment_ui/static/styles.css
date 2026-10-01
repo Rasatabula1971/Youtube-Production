@@ -910,6 +910,16 @@ button.danger {
   min-width: 0;
 }
 
+.edit-preview-video {
+  display: block;
+  width: 100%;
+  max-height: 680px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #05080d;
+}
+
 .vision-frame-image {
   display: block;
   width: 100%;
