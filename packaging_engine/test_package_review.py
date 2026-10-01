@@ -24,6 +24,9 @@ class PackageReviewTests(unittest.TestCase):
             patch.object(review, "STATE_FILE", output / "packaging_gate_ui_state.json")
         )
         stack.enter_context(
+            patch.object(review, "SAVED_PACKAGES_FILE", output / "saved_package_ideas.json")
+        )
+        stack.enter_context(
             patch.object(
                 review, "REVIEW_REQUEST_FILE", output / "packaging_gate_request.json"
             )
@@ -133,22 +136,23 @@ class PackageReviewTests(unittest.TestCase):
             all(item["decision"] == "PENDING" for item in snapshot["packages"])
         )
 
-    def test_accept_requires_every_criterion(self):
+    def test_accept_is_one_click_and_records_audit_criteria(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.patch_paths(stack, Path(tmp))
             review.DEFAULT_CANDIDATES.write_text(
                 json.dumps(self.candidates()), encoding="utf-8"
             )
             review.prepare_state()
-            criteria = self.criteria()
-            criteria["not_misleading"] = False
-            with self.assertRaises(ValueError):
-                review.apply_action(
-                    package_id="p1",
-                    decision="ACCEPT",
-                    criteria=criteria,
-                    note="",
-                )
+            snapshot = review.apply_action(
+                package_id="p1",
+                decision="ACCEPT",
+                criteria={},
+                note="",
+            )
+
+        by_id = {item["package_id"]: item for item in snapshot["packages"]}
+        self.assertEqual(by_id["p1"]["decision"], "ACCEPT")
+        self.assertTrue(all(by_id["p1"]["criteria_decisions"].values()))
 
     def test_accepting_one_package_auto_closes_sibling_variants(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -160,7 +164,7 @@ class PackageReviewTests(unittest.TestCase):
             snapshot = review.apply_action(
                 package_id="p1",
                 decision="ACCEPT",
-                criteria=self.criteria(),
+                criteria={},
                 note="",
             )
 
@@ -216,12 +220,10 @@ class PackageReviewTests(unittest.TestCase):
             )
             review.prepare_state()
 
-            criteria = self.criteria()
-            criteria["viewer_awareness_fit"] = False
             result = review.apply_action(
                 package_id="p1",
                 decision="REWORK",
-                criteria=criteria,
+                criteria={},
                 note="Audience must be anyone who flies, not a specialist group.",
             )
             updated = json.loads(request_path.read_text(encoding="utf-8"))
@@ -232,10 +234,9 @@ class PackageReviewTests(unittest.TestCase):
         )
         self.assertEqual(updated["human_rework_package_id"], "p1")
         self.assertEqual(updated["human_rework_iteration"], 1)
-        self.assertIn(
-            "viewer_awareness_fit",
-            updated["human_rework_change_criteria"],
-        )
+        self.assertEqual(updated["human_rework_keep_criteria"], [])
+        self.assertEqual(updated["human_rework_change_criteria"], [])
+        self.assertEqual(updated["human_rework_mode"], "HUMAN_INSTRUCTION_ONLY")
         self.assertEqual(len(updated["human_rework_original_packages"]), 2)
         self.assertFalse(response_path.exists())
         self.assertEqual(result["status"], "AWAITING_HUMAN_DECISION")
@@ -267,6 +268,28 @@ class PackageReviewTests(unittest.TestCase):
         self.assertEqual(p2["decision"], "REJECT")
         self.assertEqual(p1["decision"], "PENDING")
 
+    def test_save_bookmarks_package_without_deciding_it(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(self.candidates()), encoding="utf-8"
+            )
+            review.prepare_state()
+            snapshot = review.apply_action(
+                package_id="p1",
+                decision="SAVE_IDEA",
+                criteria={},
+                note="Keep this angle for another video.",
+            )
+            saved = json.loads(
+                review.SAVED_PACKAGES_FILE.read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(snapshot["pending"], 2)
+        self.assertEqual(snapshot["packages"][0]["decision"], "PENDING")
+        self.assertEqual(saved["count"], 1)
+        self.assertEqual(saved["items"][0]["package_id"], "p1")
+
     def test_accept_completes_single_concept_and_writes_research_handoff(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.patch_paths(stack, Path(tmp))
@@ -277,7 +300,7 @@ class PackageReviewTests(unittest.TestCase):
             final = review.apply_action(
                 package_id="p1",
                 decision="ACCEPT",
-                criteria=self.criteria(),
+                criteria={},
                 note="",
             )
             handoff = json.loads(
