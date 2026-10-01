@@ -390,6 +390,37 @@ def apply_action(
         "note": clean_note,
         "package_fingerprint": package_fingerprint(item),
     }
+
+    if value == "ACCEPT":
+        # Choosing one package closes the remaining undecided variants for that
+        # concept. The human is selecting a package, not grading every variant.
+        concept_id = str(item.get("concept_id", ""))
+        for candidate in request.get("items", []):
+            sibling_id = str(candidate.get("package_id") or "")
+            if (
+                sibling_id
+                and sibling_id != package_id
+                and str(candidate.get("concept_id") or "") == concept_id
+                and sibling_id not in state.setdefault("decisions", {})
+            ):
+                sibling_required = list(
+                    candidate.get("required_accept_criteria", [])
+                )
+                state["decisions"][sibling_id] = {
+                    "package_id": sibling_id,
+                    "decision": "REJECT",
+                    "criteria": {
+                        criterion: False for criterion in sibling_required
+                    },
+                    "note": (
+                        "Automatically closed after package "
+                        f"{package_id} was accepted for this concept."
+                    ),
+                    "auto_closed": True,
+                    "superseded_by_package_id": package_id,
+                    "package_fingerprint": package_fingerprint(candidate),
+                }
+
     state["status"] = "AWAITING_HUMAN_DECISION"
 
     if value == "REWORK":
