@@ -246,6 +246,15 @@ def _current_registry(
         or record.get("asset_sha256") != sha256_file(asset_path)
     ):
         return False
+    rights_source = str(provenance.get("rights_review") or "")
+    if rights_source:
+        rights_path = Path(rights_source)
+        if (
+            not rights_path.exists()
+            or provenance.get("rights_review_sha256")
+            != sha256_file(rights_path)
+        ):
+            return False
     return True
 
 
@@ -339,11 +348,21 @@ def acquire() -> dict[str, Any]:
             if status == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
                 if not _rights_context_approved(review_path, str(shot_id)):
                     continue
+                existing = (
+                    load_json(registry_path)
+                    if registry_path.exists()
+                    else None
+                )
+                if isinstance(existing, dict) and _current_registry(existing):
+                    current_registry_paths.add(registry_path.resolve())
+                    items.append(existing)
+                    continue
                 manual_required.append({
                     "concept_id": concept_id,
                     "format": fmt,
                     "shot_id": str(shot_id),
                     "candidate_id": candidate_id,
+                    "candidate_review_file": str(review_path),
                     "source_url": candidate.get("source_url"),
                     "creator": candidate.get("creator"),
                     "license": candidate.get("license"),
@@ -429,6 +448,7 @@ def acquire() -> dict[str, Any]:
                         "format": fmt,
                         "shot_id": str(shot_id),
                         "candidate_id": candidate_id,
+                        "candidate_review_file": str(review_path),
                         "source_url": candidate.get("source_url"),
                         "reason": "NO_APPROVED_AUTOMATIC_ASSET_CHANNEL",
                     })
