@@ -37,6 +37,19 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         self.assertEqual(packages["maxItems"], 1)
         self.assertEqual(package_id["const"], "p2")
 
+    def test_base_prompt_requires_human_first_nonlecture_angles(self):
+        request = {
+            "concept_id": "c1",
+            "allowed_format_intents": ["short"],
+            "package_count_requested": 3,
+        }
+        prompt = runner.build_prompt(request, maximum_chars=95000)
+
+        self.assertIn("exactly three genuinely different human hook angles", prompt)
+        self.assertIn("The explanation is the payoff, not the pitch", prompt)
+        self.assertIn("Do not lead like a lecture", prompt)
+        self.assertIn("The Physics of X", prompt)
+
     def test_base_prompt_does_not_force_specialist_audience(self):
         request = {
             "concept_id": "c1",
