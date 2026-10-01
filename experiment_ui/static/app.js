@@ -22,8 +22,13 @@ const refreshStatus = document.getElementById("refreshStatus");
 
 const opportunityGate = document.getElementById("opportunityGate");
 const analysisActions = document.getElementById("analysisActions");
+const analysisCurrentPanel = document.getElementById("analysisCurrentPanel");
 const analysisCurrentTitle = document.getElementById("analysisCurrentTitle");
 const analysisCurrentDetail = document.getElementById("analysisCurrentDetail");
+const analysisRunningActivity = document.getElementById("analysisRunningActivity");
+const analysisRunningLabel = document.getElementById("analysisRunningLabel");
+const analysisRunningElapsed = document.getElementById("analysisRunningElapsed");
+const analysisRunningHeartbeat = document.getElementById("analysisRunningHeartbeat");
 const toolActions = document.getElementById("toolActions");
 const stageGrid = document.getElementById("stageGrid");
 const creationTabs = Array.from(document.querySelectorAll(".creation-tab"));
@@ -193,6 +198,12 @@ const stopJob = document.getElementById("stopJob");
 const toast = document.getElementById("toast");
 
 let jobTimer = null;
+let runningUiTimer = null;
+let runningJobId = null;
+let runningJobStartedAt = null;
+let runningLastPollAt = null;
+let runningLastOutputAt = null;
+let runningLastLogSignature = "";
 let latestStatus = null;
 let csrfToken = "";
 let renderedPath = null;
@@ -2654,6 +2665,90 @@ async function submitVisualCandidateDecision(action, candidateId) {
   } catch (error) { showToast(error.message, true); }
 }
 
+function formatElapsed(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return hours + "h " + minutes + "m " + seconds + "s";
+  if (minutes) return minutes + "m " + seconds + "s";
+  return seconds + "s";
+}
+
+function updateRunningActivity(job) {
+  const running = Boolean(
+    job && (job.status === "RUNNING" || job.status === "STOPPING")
+  );
+
+  analysisCurrentPanel.classList.toggle("is-running", running);
+  analysisRunningActivity.hidden = !running;
+
+  if (!running) {
+    runningJobId = null;
+    runningJobStartedAt = null;
+    runningLastPollAt = null;
+    runningLastOutputAt = null;
+    runningLastLogSignature = "";
+    if (runningUiTimer) {
+      clearInterval(runningUiTimer);
+      runningUiTimer = null;
+    }
+    return;
+  }
+
+  if (runningJobId !== job.id) {
+    runningJobId = job.id || null;
+    const parsed = Date.parse(job.started_at || "");
+    runningJobStartedAt = Number.isFinite(parsed) ? parsed : Date.now();
+    runningLastOutputAt = null;
+    runningLastLogSignature = "";
+  }
+
+  runningLastPollAt = Date.now();
+  analysisRunningLabel.textContent =
+    (job.status === "STOPPING" ? "Stopping: " : "Running: ") +
+    (job.label || job.action_id || "workflow job");
+
+  const paint = function () {
+    const now = Date.now();
+    analysisRunningElapsed.textContent =
+      "Elapsed " + formatElapsed(now - (runningJobStartedAt || now));
+
+    const pollAge = runningLastPollAt == null ? null : now - runningLastPollAt;
+    const outputAge = runningLastOutputAt == null ? null : now - runningLastOutputAt;
+    let message = "Process active";
+    if (outputAge == null) {
+      message = "Process active · waiting for first log output";
+    } else if (outputAge < 15000) {
+      message = "Live · new output " + formatElapsed(outputAge) + " ago";
+    } else {
+      message =
+        "Process still running · no new log output for " +
+        formatElapsed(outputAge);
+    }
+    if (pollAge != null) {
+      message += " · checked " + formatElapsed(pollAge) + " ago";
+    }
+    analysisRunningHeartbeat.textContent = message;
+  };
+
+  paint();
+  if (!runningUiTimer) {
+    runningUiTimer = setInterval(paint, 1000);
+  }
+}
+
+function noteJobLogActivity(job, log) {
+  if (!job || (job.status !== "RUNNING" && job.status !== "STOPPING")) return;
+  if (log === undefined || log === null) return;
+  const value = String(log || "");
+  const signature = value.length + ":" + value.slice(-180);
+  if (value && signature !== runningLastLogSignature) {
+    runningLastOutputAt = Date.now();
+  }
+  runningLastLogSignature = signature;
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -2798,7 +2893,10 @@ function renderTools(data) {
 
 function renderJob(job, log) {
   const hasJob = job && Object.keys(job).length;
+  noteJobLogActivity(job, log);
+  updateRunningActivity(job);
   if (!hasJob) {
+    updateRunningActivity(null);
     jobSummaryButton.className = "job-summary neutral";
     jobSummaryStatus.textContent = "IDLE";
     jobSummaryLabel.textContent = "No job running";
