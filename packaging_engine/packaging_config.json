@@ -6,7 +6,17 @@
     "either"
   ],
   "minimum_research_dependencies": 0,
-  "title_max_words": 8,
-  "title_max_chars": 56,
-  "title_style_contract": "human_hook_v2"
+  "title_style_contract": "format_specific_v3",
+  "short_title_contract": {
+    "target_words": "3-7",
+    "max_words": 7,
+    "max_chars": 48,
+    "style": "event_or_tension_first_explanation_hidden"
+  },
+  "long_title_contract": {
+    "target_words": "5-10",
+    "max_words": 10,
+    "max_chars": 70,
+    "style": "curiosity_plus_clear_subject_context"
+  }
 }
