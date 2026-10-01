@@ -19,6 +19,7 @@ from pipeline_integrity import atomic_write_json
 from story_script_engine import (
     DRAFTS_DIR,
     OUTPUT_DIR,
+    REQUESTS_DIR,
     load_json,
     safe_slug,
     sha256_file,
@@ -165,13 +166,14 @@ def validate_response(req: dict[str, Any], response: dict[str, Any]) -> dict[str
     decision = str(response.get("decision", "")).strip().upper()
     if decision not in {"ACCEPT", "REWORK", "REJECT"}:
         raise ValueError("invalid decision")
-    criteria = response.get("criteria")
-    if not isinstance(criteria, dict):
-        raise ValueError("criteria are required")
-    normalized = {key: criteria.get(key) is True for key in CRITERIA}
     note = str(response.get("note", "") or "").strip()
-    if decision == "ACCEPT" and not all(normalized.values()):
-        raise ValueError("ACCEPT requires all criteria true")
+    normalized = (
+        {key: True for key in CRITERIA}
+        if decision == "ACCEPT"
+        else {key: False for key in CRITERIA}
+        if decision == "REJECT"
+        else {}
+    )
     if decision == "REWORK" and not note:
         raise ValueError("REWORK requires note")
     return {
@@ -351,6 +353,44 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
     return approved_path
 
 
+def _apply_rework_feedback(
+    req: dict[str, Any],
+    *,
+    note: str,
+) -> None:
+    source = assert_current_draft(req)
+    draft = load_json(source)
+    provenance = draft.get("draft_provenance", {})
+    request_source = Path(str(provenance.get("request_source") or "")).resolve()
+    requests_root = REQUESTS_DIR.resolve()
+    if not request_source.exists() or requests_root not in request_source.parents:
+        raise ValueError("Script rework cannot find the current script request")
+
+    request = load_json(request_source)
+    concept_id = str(req.get("concept_id") or "")
+    fmt = str(req.get("format") or "")
+    if (
+        str(request.get("concept_id") or "") != concept_id
+        or str(request.get("format") or "") != fmt
+    ):
+        raise ValueError("Script rework request identity mismatch")
+
+    iteration = int(request.get("human_rework_iteration") or 0) + 1
+    request["human_rework_iteration"] = iteration
+    request["human_rework_mode"] = "HUMAN_INSTRUCTION_ONLY"
+    request["human_rework_note"] = note
+    request["human_rework_format"] = fmt
+    request["human_rework_original_script"] = {
+        "title": draft.get("title"),
+        "opening_hook": draft.get("opening_hook"),
+        "opening_hook_mechanism": draft.get("opening_hook_mechanism"),
+        "opening_hook_claim_ids": draft.get("opening_hook_claim_ids", []),
+        "sections": draft.get("sections", []),
+        "closing": draft.get("closing"),
+    }
+    atomic_write_json(request_source, request)
+
+
 def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
     req = load_json(request_path)
     normalized = validate_response(req, response)
@@ -365,6 +405,9 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
         "script_draft_sha256": sha256_file(source),
     }
     atomic_write_json(dest, saved)
+
+    if normalized["decision"] == "REWORK":
+        _apply_rework_feedback(req, note=normalized["note"])
 
     try:
         bundle_path = _refresh_approved_bundle(str(req["concept_id"]))
@@ -468,12 +511,13 @@ def apply_action(
     if not request_path.exists():
         raise ValueError("Script review request not found")
 
+    value = str(decision or "").strip().upper()
     payload = {
         "concept_id": concept_id,
         "format": fmt,
         "reviewer": reviewer_id(),
-        "decision": decision,
-        "criteria": criteria,
+        "decision": value,
+        "criteria": {},
         "note": str(note or ""),
     }
     apply_payload(request_path, payload)
