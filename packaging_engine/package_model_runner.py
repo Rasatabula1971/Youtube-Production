@@ -72,6 +72,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         "required": [
             "package_id",
             "title",
+            "titles",
             "thumbnail",
             "opening_frame",
             "expected_viewer",
@@ -106,6 +107,77 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                         )
                     ),
                 ),
+            },
+            "titles": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["short", "long_form"],
+                "properties": {
+                    "short": {
+                        "type": "array",
+                        "minItems": 5,
+                        "maxItems": 5,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["candidate_id", "angle", "title"],
+                            "properties": {
+                                "candidate_id": {"type": "string", "minLength": 1},
+                                "angle": {
+                                    "type": "string",
+                                    "enum": [
+                                        "curiosity",
+                                        "stakes",
+                                        "unexpected",
+                                        "mystery",
+                                        "payoff",
+                                    ],
+                                },
+                                "title": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": int(
+                                        ((request.get("title_contracts") or {}).get("short") or {}).get(
+                                            "max_chars", 48
+                                        )
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                    "long_form": {
+                        "type": "array",
+                        "minItems": 5,
+                        "maxItems": 5,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["candidate_id", "angle", "title"],
+                            "properties": {
+                                "candidate_id": {"type": "string", "minLength": 1},
+                                "angle": {
+                                    "type": "string",
+                                    "enum": [
+                                        "curiosity",
+                                        "stakes",
+                                        "unexpected",
+                                        "mystery",
+                                        "payoff",
+                                    ],
+                                },
+                                "title": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": int(
+                                        ((request.get("title_contracts") or {}).get("long_form") or {}).get(
+                                            "max_chars", 70
+                                        )
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                },
             },
             "thumbnail": {
                 "type": "object",
@@ -181,9 +253,9 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "1. Preserve the accepted concept, viewer problem, viewer moment, and desired outcome.\n"
         "2. Do not invent a specialist audience merely to make expected_viewer sound specific. If the concept is broadly relatable, keep the audience broad (for example passengers, drivers, homeowners, or general curious viewers) unless the accepted concept explicitly requires specialist knowledge.\n"
         "3. Treat title and thumbnail as one communication unit; they should complement, not repeat.\n"
-        "4. Generate exactly three genuinely different human hook angles, not wording variants. Prefer truthful consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when supported by the accepted concept.\n"
+        "4. Keep the three package options meaningfully different in thumbnail/opening-frame/promise angle rather than paraphrases.\n"
         "5. The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain. Do not lead like a lecture, textbook chapter, or engineering lesson.\n"
-        "6. TITLE CONTRACT: title is the proposed PUBLIC YouTube title, not an internal label. Use the contract matching format_intent. Shorts: target 3-7 words, event/tension first, explanation hidden. Long-form: target 5-10 words, curiosity/tension plus enough subject context to make the promise clear. Generate each format independently; do not merely soften a Short title into a long-form title.\n"
+        "6. TITLE CONTRACT: for EVERY package generate exactly five Short titles and exactly five Long-form titles. Use each angle exactly once in each format: curiosity, stakes, unexpected, mystery, payoff. Generate each format independently; do not merely lengthen or shorten the same title. Shorts target 3-7 words, event/tension first and explanation hidden. Long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear. The legacy title field is a compatibility working title only and should be the strongest truthful candidate for the package's format_intent.\n"
         "7. Do not use lecture-title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or materials/technology lists. Put those details in the payoff, not the title.\n"
         "8. Prefer a title that makes a normal viewer think 'wait—what?', 'how is that possible?', or 'that happens to me?' without inventing danger or certainty. Keep technical mechanism/material names out of the title unless the term itself creates the human hook.\n"
         "9. Every package must make one honest promise and define the payoff the video must deliver.\n"
