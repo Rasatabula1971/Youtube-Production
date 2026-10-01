@@ -378,15 +378,16 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="performanceDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="performanceCriteria"></div>
-                <label class="vision-label" for="performanceNote">Review note</label>
-                <textarea id="performanceNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-complete">Human decision only. Delivery checks remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="performanceCriteria" hidden></div>
+                <label class="vision-label" for="performanceNote">Human instruction / review note</label>
+                <textarea id="performanceNote" class="vision-observation" rows="4" maxlength="1400" placeholder="For Rework, state exactly what the delivery plan must change. The instruction is authoritative. Optional for Accept or Reject."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="performancePrev" type="button">← Previous</button>
                   <button class="danger" id="performanceReject" type="button">Reject</button>
                   <button class="ghost" id="performanceRework" type="button">Rework</button>
-                  <button id="performanceAccept" type="button">Accept performance</button>
-                  <button class="ghost" id="performanceNext" type="button">Next →</button>
+                  <button id="performanceAccept" type="button">Accept</button>
+                  <button class="ghost" id="performanceNext" type="button">Next branch →</button>
                 </div>
               </div>
             </div>
