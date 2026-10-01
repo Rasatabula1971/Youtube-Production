@@ -255,6 +255,8 @@ def acquire() -> dict[str, Any]:
 
     items: list[dict[str, Any]] = []
     manual_required: list[dict[str, Any]] = []
+    source_review_sha256: dict[str, str] = {}
+    source_rights_sha256: dict[str, str] = {}
     failures: list[dict[str, Any]] = []
     current_registry_paths: set[Path] = set()
 
@@ -266,6 +268,15 @@ def acquire() -> dict[str, Any]:
 
     for review_path in review_paths:
         review = load_json(review_path)
+        source_review_sha256[review_path.name] = sha256_file(review_path)
+        rights_path_for_review = RIGHTS_DIR / review_path.name.replace(
+            ".visual_candidate_review.json",
+            ".visual_rights_review.json",
+        )
+        if rights_path_for_review.exists():
+            source_rights_sha256[rights_path_for_review.name] = sha256_file(
+                rights_path_for_review
+            )
         if str(review.get("status") or "") != "READY_FOR_ROUGH_CUT":
             continue
 
@@ -478,6 +489,8 @@ def acquire() -> dict[str, Any]:
         "manual_required": len(manual_required),
         "failures": len(failures),
         "paid_provider_calls": 0,
+        "source_review_sha256": source_review_sha256,
+        "source_rights_sha256": source_rights_sha256,
         "items": items,
         "manual_items": manual_required,
         "failure_items": failures,
