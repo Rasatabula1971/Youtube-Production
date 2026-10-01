@@ -46,7 +46,8 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         prompt = runner.build_prompt(request, maximum_chars=95000)
 
         self.assertIn("Do not invent a specialist audience", prompt)
-        self.assertIn("broad general audience", prompt)
+        self.assertIn("keep the audience broad", prompt)
+        self.assertIn("general curious viewers", prompt)
 
     def test_rework_prompt_marks_human_note_authoritative(self):
         prompt = runner.build_prompt(self.request(), maximum_chars=95000)
