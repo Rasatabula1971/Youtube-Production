@@ -66,7 +66,8 @@ class ResearchReviewTests(unittest.TestCase):
         requests = output / "review_requests"
         reviewed = output / "reviewed_packages"
         verified = output / "verified_packages"
-        for path in (drafts, requests, reviewed, verified):
+        plans = output / "plans"
+        for path in (drafts, requests, reviewed, verified, plans):
             path.mkdir(parents=True, exist_ok=True)
 
         stack.enter_context(patch.object(review, "OUTPUT_DIR", output))
@@ -112,7 +113,7 @@ class ResearchReviewTests(unittest.TestCase):
                 concept_id="c1",
                 claim_id="clm001",
                 decision="ACCEPT",
-                criteria=self.criteria(),
+                criteria={},
                 note="",
             )
 
@@ -122,6 +123,76 @@ class ResearchReviewTests(unittest.TestCase):
             final["verified_packages"][0]["status"],
             "READY_FOR_STORY_SCRIPT",
         )
+
+    def test_accept_is_one_click_and_records_audit_criteria(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.package()), encoding="utf-8")
+            review.prepare_state()
+
+            final = review.apply_action(
+                concept_id="c1",
+                claim_id="clm001",
+                decision="ACCEPT",
+                criteria={},
+                note="",
+            )
+
+        claim = final["claims"][0]
+        self.assertEqual(claim["decision"], "ACCEPT")
+        self.assertTrue(all(claim["criteria_decisions"].values()))
+
+    def test_rework_writes_authoritative_instruction_into_research_plan(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            draft = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            draft.write_text(json.dumps(self.package()), encoding="utf-8")
+            plan_path = review.OUTPUT_DIR / "plans" / "c1.research_plan.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "research_questions": [
+                            {
+                                "question_id": "rq001",
+                                "question": "What causes it?",
+                                "origin": "concept",
+                            }
+                        ],
+                        "instructions": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            before_hash = review.sha256_file(plan_path)
+            review.prepare_state()
+
+            review.apply_action(
+                concept_id="c1",
+                claim_id="clm001",
+                decision="REWORK",
+                criteria={},
+                note="Find a stronger source and verify the exact operating limit.",
+            )
+            updated = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        self.assertNotEqual(before_hash, review.sha256_file(plan_path))
+        self.assertEqual(updated["human_rework_mode"], "HUMAN_INSTRUCTION_ONLY")
+        self.assertEqual(updated["human_rework_requests"][0]["claim_id"], "clm001")
+        self.assertEqual(
+            updated["human_rework_requests"][0]["note"],
+            "Find a stronger source and verify the exact operating limit.",
+        )
+        rework_questions = [
+            item
+            for item in updated["research_questions"]
+            if item.get("origin") == "human_rework"
+        ]
+        self.assertEqual(len(rework_questions), 1)
+        self.assertEqual(rework_questions[0]["rework_claim_id"], "clm001")
 
     def test_rework_requires_note(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -136,7 +207,7 @@ class ResearchReviewTests(unittest.TestCase):
                     concept_id="c1",
                     claim_id="clm001",
                     decision="REWORK",
-                    criteria=self.criteria(),
+                    criteria={},
                     note="",
                 )
 
