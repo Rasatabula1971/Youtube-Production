@@ -152,6 +152,29 @@ def load_profile(path: Path) -> dict[str, Any]:
     return dict(value)
 
 
+def normalize_binding(value: Any) -> dict[str, Any]:
+    """Validate a bound profile and derive whether it may affect generation."""
+    if not isinstance(value, dict):
+        raise ValueError("Channel Voice binding must be an object")
+    profile = value.get("profile")
+    validation = validate_profile(profile)
+    if not validation["valid"]:
+        raise ValueError(
+            "Invalid bound Channel Voice Profile: "
+            + "; ".join(validation["errors"])
+        )
+    binding = value.get("binding")
+    if binding is None:
+        binding = {}
+    if not isinstance(binding, dict):
+        raise ValueError("Channel Voice binding metadata must be an object")
+    return {
+        "profile": dict(profile),
+        "binding": dict(binding),
+        "apply_to_generation": profile["status"] == "APPROVED",
+    }
+
+
 def load_active_profile_binding(
     selector_path: Path = ACTIVE_SELECTOR,
 ) -> dict[str, Any]:
