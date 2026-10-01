@@ -22,6 +22,10 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
                 "package_id": "p2",
                 "expected_viewer": "Aviation hobbyists",
             },
+            "human_rework_original_titles": {
+                "short": [{"candidate_id": "short-curiosity", "angle": "curiosity", "title": "Keep Short"}],
+                "long_form": [{"candidate_id": "long-curiosity", "angle": "curiosity", "title": "Keep Long"}],
+            },
             "human_rework_original_packages": [
                 {"package_id": "p1", "title": "Keep One"},
                 {"package_id": "p2", "title": "Revise Me"},
@@ -104,6 +108,10 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
     def test_rework_merge_preserves_other_packages(self):
         response = {
             "concept_id": "c1",
+            "titles": {
+                "short": [{"candidate_id": "short-curiosity", "angle": "curiosity", "title": "Changed Short"}],
+                "long_form": [{"candidate_id": "long-curiosity", "angle": "curiosity", "title": "Changed Long"}],
+            },
             "packages": [
                 {
                     "package_id": "p2",
@@ -122,6 +130,14 @@ class PackageModelRunnerReworkTests(unittest.TestCase):
         self.assertEqual(merged["packages"][0]["title"], "Keep One")
         self.assertEqual(merged["packages"][1]["expected_viewer"], "Anyone who flies")
         self.assertEqual(merged["packages"][2]["title"], "Keep Three")
+        self.assertEqual(
+            merged["titles"]["short"][0]["title"],
+            "Keep Short",
+        )
+        self.assertEqual(
+            merged["titles"]["long_form"][0]["title"],
+            "Keep Long",
+        )
 
 
     def test_title_candidate_schema_requires_five_per_format(self):
