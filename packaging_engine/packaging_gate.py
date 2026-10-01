@@ -237,10 +237,24 @@ def validate_decisions(
 
         selected_titles = decision.get("selected_titles", {})
         if value == "ACCEPT":
-            if not isinstance(selected_titles, dict):
-                raise ValueError(
-                    f"ACCEPT requires selected_titles for {package_id}"
-                )
+            item_title_sets = items[package_id].get("titles", {})
+            has_new_title_sets = (
+                isinstance(item_title_sets, dict)
+                and isinstance(item_title_sets.get("short"), list)
+                and bool(item_title_sets.get("short"))
+                and isinstance(item_title_sets.get("long_form"), list)
+                and bool(item_title_sets.get("long_form"))
+            )
+            if not isinstance(selected_titles, dict) or not selected_titles:
+                if has_new_title_sets:
+                    raise ValueError(
+                        f"ACCEPT requires selected_titles for {package_id}"
+                    )
+                legacy_title = str(items[package_id].get("title") or "").strip()
+                selected_titles = {
+                    "short": {"candidate_id": "legacy", "title": legacy_title},
+                    "long_form": {"candidate_id": "legacy", "title": legacy_title},
+                }
             for fmt in ("short", "long_form"):
                 selection = selected_titles.get(fmt)
                 if not isinstance(selection, dict):
@@ -253,7 +267,7 @@ def validate_decisions(
                         f"ACCEPT requires non-empty selected_titles.{fmt}.title"
                     )
                 candidate_id = str(selection.get("candidate_id") or "").strip()
-                if candidate_id and candidate_id != "manual":
+                if candidate_id and candidate_id not in {"manual", "legacy"}:
                     title_sets = items[package_id].get("titles", {})
                     candidates = (
                         title_sets.get(fmt, [])
