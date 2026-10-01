@@ -293,6 +293,11 @@ def _merge_human_rework_response(
         raise ValueError("Human rework target is absent from original package set")
     return {
         "concept_id": str(response.get("concept_id") or request.get("concept_id") or ""),
+        "titles": (
+            response.get("titles")
+            if isinstance(response.get("titles"), dict)
+            else request.get("human_rework_original_titles", {})
+        ),
         "packages": merged,
     }
 
