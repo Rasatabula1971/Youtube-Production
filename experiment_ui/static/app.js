@@ -227,6 +227,20 @@ const generatedVisualPrev = document.getElementById("generatedVisualPrev");
 const generatedVisualRegister = document.getElementById("generatedVisualRegister");
 const generatedVisualNext = document.getElementById("generatedVisualNext");
 
+const editPreviewReviewPanel = document.getElementById("editPreviewReviewPanel");
+const editPreviewReviewTitle = document.getElementById("editPreviewReviewTitle");
+const editPreviewReviewSummary = document.getElementById("editPreviewReviewSummary");
+const editPreviewReviewStatus = document.getElementById("editPreviewReviewStatus");
+const editPreviewVideo = document.getElementById("editPreviewVideo");
+const editPreviewDetail = document.getElementById("editPreviewDetail");
+const editPreviewNote = document.getElementById("editPreviewNote");
+const editPreviewPrev = document.getElementById("editPreviewPrev");
+const editPreviewVisuals = document.getElementById("editPreviewVisuals");
+const editPreviewNarration = document.getElementById("editPreviewNarration");
+const editPreviewSound = document.getElementById("editPreviewSound");
+const editPreviewApprove = document.getElementById("editPreviewApprove");
+const editPreviewNext = document.getElementById("editPreviewNext");
+
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -295,6 +309,8 @@ let formatEditing = false;
 let latestPerformanceSnapshot = null;
 let performanceCursor = 0;
 let performanceEditing = false;
+let latestEditPreviewSnapshot = null;
+let editPreviewCursor = 0;
 let latestPreviewSnapshot = null;
 let latestNarrationPerformanceSnapshot = null;
 let latestVisualCandidateSnapshot = null;
@@ -3134,6 +3150,111 @@ async function submitVisualSpendDecision(decision) {
   }
 }
 
+function editPreviewItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function renderEditPreviewReview(snapshot) {
+  latestEditPreviewSnapshot = snapshot || {};
+  const items = editPreviewItems(latestEditPreviewSnapshot);
+
+  editPreviewReviewPanel.hidden = items.length === 0;
+  if (!items.length) {
+    editPreviewVideo.removeAttribute("src");
+    return;
+  }
+
+  editPreviewCursor = Math.max(
+    0,
+    Math.min(editPreviewCursor, items.length - 1)
+  );
+  const item = items[editPreviewCursor] || {};
+  const decision = item.decision || "PENDING";
+
+  editPreviewReviewTitle.textContent =
+    "Review structural edit — " +
+    humanizeToken(item.format || "") +
+    " · " + (item.concept_id || "");
+  editPreviewReviewSummary.textContent =
+    (editPreviewCursor + 1) + " of " + items.length +
+    " · " + Number(item.duration_seconds || 0).toFixed(1) + " sec" +
+    " · " + Number(item.placeholder_segments || 0) + " placeholder segment(s)";
+  editPreviewReviewStatus.textContent = decision;
+  editPreviewReviewStatus.className =
+    "status-chip " +
+    (decision === "APPROVE_EDIT_DIRECTION"
+      ? "success"
+      : decision === "PENDING"
+        ? "running"
+        : "failed");
+
+  const url =
+    "/api/edit-preview-video?concept_id=" +
+    encodeURIComponent(item.concept_id || "") +
+    "&format=" +
+    encodeURIComponent(item.format || "");
+  if (editPreviewVideo.dataset.previewUrl !== url) {
+    editPreviewVideo.dataset.previewUrl = url;
+    editPreviewVideo.src = url;
+    editPreviewVideo.load();
+  }
+
+  editPreviewDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>STRUCTURAL PREVIEW</h4>' +
+    '<p><strong>Duration:</strong> ' +
+    Number(item.duration_seconds || 0).toFixed(1) + ' sec' +
+    '<br><strong>Placeholders:</strong> ' +
+    Number(item.placeholder_segments || 0) +
+    '<br><strong>Purpose:</strong> Judge pacing, sequence and narration-to-picture rhythm before final visual spending/export.</p>' +
+    (Number(item.placeholder_segments || 0) > 0
+      ? '<p class="muted">Dark placeholder frames are expected. They represent unresolved visual slots, not missing render output.</p>'
+      : '<p class="muted">All preview visual slots currently have local assets.</p>') +
+    '</div>';
+
+  editPreviewNote.value = item.note || "";
+  editPreviewPrev.disabled = editPreviewCursor <= 0;
+  editPreviewNext.disabled = editPreviewCursor >= items.length - 1;
+
+  const decided = decision !== "PENDING";
+  editPreviewVisuals.disabled = decided;
+  editPreviewNarration.disabled = decided;
+  editPreviewSound.disabled = decided;
+  editPreviewApprove.disabled = decided;
+}
+
+async function submitEditPreviewDecision(decision) {
+  const items = editPreviewItems(latestEditPreviewSnapshot || {});
+  const item = items[editPreviewCursor];
+  if (!item) return;
+
+  try {
+    const payload = await api("/api/edit-preview-review", {
+      method: "POST",
+      body: JSON.stringify({
+        result_file: item.result_file,
+        decision: decision,
+        note: editPreviewNote.value
+      })
+    });
+    latestEditPreviewSnapshot = payload;
+    const refreshed = editPreviewItems(payload);
+    const nextPending = refreshed.findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (nextPending >= 0) editPreviewCursor = nextPending;
+    renderEditPreviewReview(payload);
+    showToast(
+      decision === "APPROVE_EDIT_DIRECTION"
+        ? "Edit direction approved."
+        : "Edit preview returned for rework.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function generatedVisualKey(item) {
   return [
     String((item && item.concept_id) || ""),
@@ -3363,7 +3484,8 @@ function renderAnalysis(data) {
     "HUMAN_VISUAL_CANDIDATE_GATE",
     "HUMAN_VISUAL_RIGHTS_GATE",
     "HUMAN_ROUGH_CUT_GATE",
-    "HUMAN_VISUAL_SPEND_GATE"
+    "HUMAN_VISUAL_SPEND_GATE",
+    "HUMAN_EDIT_PREVIEW_GATE"
   ].includes(workflow.state);
 
   analysisCurrentTitle.textContent =
@@ -3417,6 +3539,7 @@ function renderAnalysis(data) {
     data.visual_generation_handoff || {},
     data.generated_visual_assets || {}
   );
+  renderEditPreviewReview(data.edit_preview_gate || {});
   api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
   api("/api/storyboard-review").then(function (value) {
     latestStoryboardSnapshot = value;
@@ -3433,7 +3556,17 @@ function renderAnalysis(data) {
   const voice = data.voice_performance || {};
 
   if (
-    workflow.state === "HUMAN_PERFORMANCE_GATE" ||
+    [
+      "HUMAN_PERFORMANCE_GATE",
+      "HUMAN_NARRATION_PREVIEW_GATE",
+      "HUMAN_VISUAL_CANDIDATE_GATE",
+      "HUMAN_VISUAL_RIGHTS_GATE",
+      "HUMAN_ROUGH_CUT_GATE",
+      "HUMAN_VISUAL_SPEND_GATE",
+      "HUMAN_EDIT_PREVIEW_GATE",
+      "WAITING_FOR_FINAL_VISUAL_ASSETS",
+      "FINAL_EDIT_DIRECTION_APPROVED"
+    ].includes(workflow.state) ||
     voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
   ) {
     activeIndex = 7;
@@ -4001,6 +4134,31 @@ visualSpendKeep.addEventListener("click", function () {
 });
 visualSpendAuthorize.addEventListener("click", function () {
   submitVisualSpendDecision("AUTHORIZE_GENERATION");
+});
+
+editPreviewPrev.addEventListener("click", function () {
+  editPreviewCursor = Math.max(0, editPreviewCursor - 1);
+  renderEditPreviewReview(latestEditPreviewSnapshot || {});
+});
+editPreviewNext.addEventListener("click", function () {
+  const items = editPreviewItems(latestEditPreviewSnapshot || {});
+  editPreviewCursor = Math.min(
+    Math.max(0, items.length - 1),
+    editPreviewCursor + 1
+  );
+  renderEditPreviewReview(latestEditPreviewSnapshot || {});
+});
+editPreviewVisuals.addEventListener("click", function () {
+  submitEditPreviewDecision("RETURN_TO_VISUALS");
+});
+editPreviewNarration.addEventListener("click", function () {
+  submitEditPreviewDecision("RETURN_TO_NARRATION");
+});
+editPreviewSound.addEventListener("click", function () {
+  submitEditPreviewDecision("RETURN_TO_SOUND");
+});
+editPreviewApprove.addEventListener("click", function () {
+  submitEditPreviewDecision("APPROVE_EDIT_DIRECTION");
 });
 
 generatedVisualPrev.addEventListener("click", function () {
