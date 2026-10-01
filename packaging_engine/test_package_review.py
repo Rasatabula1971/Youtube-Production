@@ -105,6 +105,7 @@ class PackageReviewTests(unittest.TestCase):
     def criteria(self):
         return {
             "promise_clear": True,
+            "human_hook_present": True,
             "viewer_problem_aligned": True,
             "viewer_moment_fit": True,
             "one_sentence_promise_clear": True,
