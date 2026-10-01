@@ -152,7 +152,7 @@ def build_package_request(
             "Packaging must preserve and amplify the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama intent. Do not revert to a technical topic label or classroom framing.",
             "Generate exactly three meaningfully different package angles, not three paraphrases. Each option should lead with a different truthful human hook such as consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when the concept supports it.",
             "The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain; reveal the engineering or science as the satisfying answer.",
-            "Generate five Short title candidates and five Long-form title candidates for every package.",
+            "Generate exactly one shared title set per concept: five Short title candidates and five Long-form title candidates total, not per package.",
             "Use exactly these five psychological title angles once per format: curiosity, stakes, unexpected, mystery, payoff.",
             "Generate Short and Long-form titles independently; do not merely lengthen or shorten the same wording.",
             "The legacy title field is only a compatibility working title until the human Packaging Gate chooses the final Short and Long-form titles.",
@@ -171,26 +171,26 @@ def build_package_request(
         ],
         "response_schema": {
             "concept_id": concept_id,
+            "titles": {
+                "short": [
+                    {
+                        "candidate_id": "short-curiosity",
+                        "angle": "curiosity|stakes|unexpected|mystery|payoff",
+                        "title": "short title candidate"
+                    }
+                ],
+                "long_form": [
+                    {
+                        "candidate_id": "long-curiosity",
+                        "angle": "curiosity|stakes|unexpected|mystery|payoff",
+                        "title": "long-form title candidate"
+                    }
+                ]
+            },
             "packages": [
                 {
                     "package_id": "unique stable id",
                     "title": "legacy working title for compatibility",
-                    "titles": {
-                        "short": [
-                            {
-                                "candidate_id": "short-curiosity",
-                                "angle": "curiosity|stakes|unexpected|mystery|payoff",
-                                "title": "short title candidate"
-                            }
-                        ],
-                        "long_form": [
-                            {
-                                "candidate_id": "long-curiosity",
-                                "angle": "curiosity|stakes|unexpected|mystery|payoff",
-                                "title": "long-form title candidate"
-                            }
-                        ]
-                    },
                     "thumbnail": {
                         "message": "what the thumbnail communicates",
                         "visual_concept": "visual idea",
@@ -410,8 +410,13 @@ def validate_response(
             )
             continue
 
+        shared_titles = response.get("titles")
+        package_for_validation = dict(package)
+        if shared_titles is not None:
+            package_for_validation["titles"] = shared_titles
+
         errors = validate_package(
-            package,
+            package_for_validation,
             concept_id=concept_id,
             config=config,
         )
@@ -422,7 +427,7 @@ def validate_response(
         if package_id:
             seen_ids.add(package_id)
 
-        normalized = dict(package)
+        normalized = dict(package_for_validation)
         normalized["concept_id"] = concept_id
         normalized["concept_context"] = request["concept"]
         normalized_title_sets = normalized.get("titles")
