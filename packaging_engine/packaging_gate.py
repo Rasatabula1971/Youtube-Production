@@ -82,6 +82,7 @@ def build_review_request(
                 "package_id": package_id,
                 "concept_id": concept_id,
                 "title": package.get("title"),
+                "titles": package.get("titles", {}),
                 "thumbnail": package.get("thumbnail"),
                 "opening_frame": package.get("opening_frame"),
                 "expected_viewer": package.get("expected_viewer"),
@@ -234,12 +235,59 @@ def validate_decisions(
         if value == "REWORK" and not note:
             raise ValueError(f"REWORK requires a note for {package_id}")
 
+        selected_titles = decision.get("selected_titles", {})
+        if value == "ACCEPT":
+            if not isinstance(selected_titles, dict):
+                raise ValueError(
+                    f"ACCEPT requires selected_titles for {package_id}"
+                )
+            for fmt in ("short", "long_form"):
+                selection = selected_titles.get(fmt)
+                if not isinstance(selection, dict):
+                    raise ValueError(
+                        f"ACCEPT requires a selected {fmt} title for {package_id}"
+                    )
+                selected_text = str(selection.get("title") or "").strip()
+                if not selected_text:
+                    raise ValueError(
+                        f"ACCEPT requires non-empty selected_titles.{fmt}.title"
+                    )
+                candidate_id = str(selection.get("candidate_id") or "").strip()
+                if candidate_id and candidate_id != "manual":
+                    title_sets = items[package_id].get("titles", {})
+                    candidates = (
+                        title_sets.get(fmt, [])
+                        if isinstance(title_sets, dict)
+                        else []
+                    )
+                    matched = next(
+                        (
+                            candidate
+                            for candidate in candidates
+                            if isinstance(candidate, dict)
+                            and str(candidate.get("candidate_id") or "")
+                            == candidate_id
+                        ),
+                        None,
+                    )
+                    if not isinstance(matched, dict):
+                        raise ValueError(
+                            f"Unknown selected {fmt} candidate_id for {package_id}"
+                        )
+                    if str(matched.get("title") or "").strip() != selected_text:
+                        raise ValueError(
+                            f"Selected {fmt} title does not match candidate_id"
+                        )
+
         mapped[package_id] = {
             "package_id": package_id,
             "decision": value,
             "criteria": normalized,
             "note": note,
             "concept_id": items[package_id]["concept_id"],
+            "selected_titles": (
+                selected_titles if value == "ACCEPT" else {}
+            ),
         }
 
     missing = sorted(expected - set(mapped))
@@ -314,9 +362,18 @@ def apply_gate(
             "note": decision["note"],
             "reviewer": reviewer,
             "reviewed_at": reviewed_at,
+            "selected_titles": decision.get("selected_titles", {}),
         }
 
         if decision["decision"] == "ACCEPT":
+            package["selected_titles"] = decision.get("selected_titles", {})
+            long_selection = package["selected_titles"].get("long_form", {})
+            short_selection = package["selected_titles"].get("short", {})
+            package["title"] = (
+                str(long_selection.get("title") or "").strip()
+                or str(short_selection.get("title") or "").strip()
+                or str(package.get("title") or "").strip()
+            )
             buckets["accepted"].append(package)
         elif decision["decision"] == "REWORK":
             buckets["rework"].append(package)
@@ -343,6 +400,8 @@ def apply_gate(
             for key in (
                 "package_id",
                 "title",
+                "titles",
+                "selected_titles",
                 "thumbnail",
                 "opening_frame",
                 "expected_viewer",
