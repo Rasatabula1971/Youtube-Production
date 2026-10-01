@@ -1,5 +1,5 @@
 {
-  "packages_per_concept": 5,
+  "packages_per_concept": 3,
   "allowed_format_intents": [
     "long_form",
     "short",
