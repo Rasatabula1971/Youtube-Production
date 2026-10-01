@@ -432,11 +432,24 @@ def apply_action(
 
     clean_selected_titles: dict[str, dict[str, str]] = {}
     if value == "ACCEPT":
-        if not isinstance(selected_titles, dict):
-            raise ValueError(
-                "ACCEPT requires one Short title and one Long-form title selection"
-            )
         available_sets = item.get("titles", {})
+        has_new_title_sets = (
+            isinstance(available_sets, dict)
+            and isinstance(available_sets.get("short"), list)
+            and bool(available_sets.get("short"))
+            and isinstance(available_sets.get("long_form"), list)
+            and bool(available_sets.get("long_form"))
+        )
+        if not isinstance(selected_titles, dict):
+            if has_new_title_sets:
+                raise ValueError(
+                    "ACCEPT requires one Short title and one Long-form title selection"
+                )
+            legacy_title = str(item.get("title") or "").strip()
+            selected_titles = {
+                "short": {"candidate_id": "legacy", "title": legacy_title},
+                "long_form": {"candidate_id": "legacy", "title": legacy_title},
+            }
         for fmt in ("short", "long_form"):
             selection = selected_titles.get(fmt)
             if not isinstance(selection, dict):
@@ -447,7 +460,7 @@ def apply_action(
                 raise ValueError(f"ACCEPT requires a non-empty {fmt} title")
             if not candidate_id:
                 candidate_id = "manual"
-            if candidate_id != "manual":
+            if candidate_id not in {"manual", "legacy"}:
                 candidates = (
                     available_sets.get(fmt, [])
                     if isinstance(available_sets, dict)
