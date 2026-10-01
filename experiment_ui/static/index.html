@@ -580,6 +580,36 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="editPreviewReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN EDIT PREVIEW GATE</p>
+                <h2 id="editPreviewReviewTitle">Review structural edit preview</h2>
+                <p class="muted" id="editPreviewReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="editPreviewReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div>
+                <video id="editPreviewVideo" class="edit-preview-video" controls preload="metadata"></video>
+                <div class="concept-detail" id="editPreviewDetail"></div>
+              </div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Judge story flow, pacing and narration-to-picture rhythm. Dark frames are intentional placeholders for visual assets that are still unresolved. This is not a publish-ready render.</div>
+                <label class="vision-label" for="editPreviewNote">Human direction</label>
+                <textarea id="editPreviewNote" class="vision-observation" rows="5" maxlength="1600" placeholder="Required when returning a layer for rework. Be specific about what feels wrong and what you want changed."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="editPreviewPrev" type="button">← Previous</button>
+                  <button class="ghost" id="editPreviewVisuals" type="button">Return to visuals</button>
+                  <button class="ghost" id="editPreviewNarration" type="button">Return to narration</button>
+                  <button class="ghost" id="editPreviewSound" type="button">Return to sound</button>
+                  <button id="editPreviewApprove" type="button">Approve edit direction</button>
+                  <button class="ghost" id="editPreviewNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>
