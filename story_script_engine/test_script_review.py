@@ -46,19 +46,40 @@ class ScriptReviewTests(unittest.TestCase):
         requests = root / "requests"
         responses = root / "responses"
         approved = root / "approved"
-        for path in (drafts, requests, responses, approved):
+        script_requests = root / "script_requests"
+        for path in (drafts, requests, responses, approved, script_requests):
             path.mkdir()
         for fmt, narration in (
             ("long_form", "Long form explanation with context and a full payoff."),
             ("short", "Short proof, reveal, payoff."),
         ):
+            script_request_path = (
+                script_requests / f"c1.{fmt}.script_request.json"
+            )
+            script_request_path.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "format": fmt,
+                        "package": {"title": "T"},
+                        "accepted_claims": [
+                            {"claim_id": "clm001", "statement": "Fact"}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            draft_payload = self.draft(fmt, narration)
+            draft_payload["draft_provenance"] = {
+                "request_source": str(script_request_path.resolve())
+            }
             draft_path = drafts / f"c1.{fmt}.script_draft.json"
             draft_path.write_text(
-                json.dumps(self.draft(fmt, narration)),
+                json.dumps(draft_payload),
                 encoding="utf-8",
             )
             req = script_review.build_review_request(
-                self.draft(fmt, narration),
+                draft_payload,
                 draft_path,
             )
             request_path = requests / f"c1.{fmt}.script_review_request.json"
@@ -91,15 +112,17 @@ class ScriptReviewTests(unittest.TestCase):
                 ["long_form", "short"],
             )
 
-    def test_accept_requires_all_criteria(self):
+    def test_accept_is_one_click_and_records_audit_criteria(self):
         req = {
             "concept_id": "c1",
             "format": "short",
         }
         payload = self.accept_payload("short")
-        payload["criteria"]["audience_psychology_coherent"] = False
-        with self.assertRaisesRegex(ValueError, "all criteria"):
-            script_review.validate_response(req, payload)
+        payload["criteria"] = {}
+        normalized = script_review.validate_response(req, payload)
+
+        self.assertEqual(normalized["decision"], "ACCEPT")
+        self.assertTrue(all(normalized["criteria"].values()))
 
     def test_bundle_is_created_only_after_all_required_branches_accept(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -145,6 +168,7 @@ class ScriptReviewTests(unittest.TestCase):
                 patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(script_review, "RESPONSES_DIR", responses),
                 patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "REQUESTS_DIR", root / "script_requests"),
                 patch.object(script_review, "SUMMARY_FILE", root / "summary.json"),
             ):
                 for fmt in ("long_form", "short"):
@@ -162,11 +186,29 @@ class ScriptReviewTests(unittest.TestCase):
                     "criteria": {},
                     "note": "Short needs a faster payoff.",
                 }
+                script_request_path = (
+                    root / "script_requests" / "c1.short.script_request.json"
+                )
+                before_hash = script_review.sha256_file(script_request_path)
                 script_review.apply_payload(
                     requests / "c1.short.script_review_request.json",
                     payload,
                 )
+                updated = json.loads(
+                    script_request_path.read_text(encoding="utf-8")
+                )
+                after_hash = script_review.sha256_file(script_request_path)
                 self.assertFalse(bundle.exists())
+                self.assertNotEqual(before_hash, after_hash)
+                self.assertEqual(
+                    updated["human_rework_note"],
+                    "Short needs a faster payoff.",
+                )
+                self.assertEqual(
+                    updated["human_rework_mode"],
+                    "HUMAN_INSTRUCTION_ONLY",
+                )
+                self.assertEqual(updated["human_rework_format"], "short")
 
     def test_identical_or_truncated_branch_scripts_do_not_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
