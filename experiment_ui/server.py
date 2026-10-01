@@ -49,6 +49,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/visual-rights-review",
     "/api/visual-rough-cut-review",
     "/api/visual-spend-review",
+    "/api/generated-visual-asset",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -253,6 +254,10 @@ from visual_rough_cut_review import (
 from visual_spend_review import (
     apply_action as apply_visual_spend_review_action,
     snapshot as visual_spend_review_snapshot,
+)
+from visual_generated_asset_import import (
+    register as register_generated_visual_asset,
+    snapshot as generated_visual_asset_snapshot,
 )
 from storyboard_review import (
     revise as revise_storyboard_shot,
@@ -2598,6 +2603,71 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
                 "format": key[1],
                 "shot_id": key[2],
                 "max_cost_usd": value,
+                "request_file": str(
+                    PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
+                    / (
+                        f"{transformation_safe_slug(key[0])}."
+                        f"{transformation_safe_slug(key[1])}."
+                        f"{transformation_safe_slug(key[2])}."
+                        "visual_generation_request.json"
+                    )
+                ),
+                "desired_visual": (
+                    (
+                        safe_load_json(
+                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
+                            / (
+                                f"{transformation_safe_slug(key[0])}."
+                                f"{transformation_safe_slug(key[1])}."
+                                f"{transformation_safe_slug(key[2])}."
+                                "visual_generation_request.json"
+                            )
+                        )
+                        or {}
+                    ).get("desired_visual")
+                ),
+                "story_purpose": (
+                    (
+                        safe_load_json(
+                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
+                            / (
+                                f"{transformation_safe_slug(key[0])}."
+                                f"{transformation_safe_slug(key[1])}."
+                                f"{transformation_safe_slug(key[2])}."
+                                "visual_generation_request.json"
+                            )
+                        )
+                        or {}
+                    ).get("story_purpose")
+                ),
+                "generation_brief": (
+                    (
+                        safe_load_json(
+                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
+                            / (
+                                f"{transformation_safe_slug(key[0])}."
+                                f"{transformation_safe_slug(key[1])}."
+                                f"{transformation_safe_slug(key[2])}."
+                                "visual_generation_request.json"
+                            )
+                        )
+                        or {}
+                    ).get("generation_brief", {})
+                ),
+                "provider_handoff": (
+                    (
+                        safe_load_json(
+                            PRODUCTION_VISUAL_GENERATION_REQUEST_DIR
+                            / (
+                                f"{transformation_safe_slug(key[0])}."
+                                f"{transformation_safe_slug(key[1])}."
+                                f"{transformation_safe_slug(key[2])}."
+                                "visual_generation_request.json"
+                            )
+                        )
+                        or {}
+                    ).get("provider_handoff", {})
+                ),
             }
             for key, value in sorted(current.items())
         ],
@@ -5347,6 +5417,7 @@ def status_payload() -> dict[str, Any]:
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "visual_spend_gate": visual_spend_review_snapshot(),
         "visual_generation_handoff": visual_generation_handoff_artifact_state(),
+        "generated_visual_assets": generated_visual_asset_snapshot(),
         "visual_assembly": visual_assembly_artifact_state(
             visual_post_search_artifact_state().get("expected_branches", [])
         ),
@@ -5481,6 +5552,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/visual-spend-review":
             self._send_json(visual_spend_review_snapshot())
+            return
+        if route == "/api/generated-visual-asset":
+            self._send_json(generated_visual_asset_snapshot())
             return
         if route == "/api/storyboard-review":
             self._send_json(storyboard_review_snapshot())
@@ -5758,6 +5832,25 @@ class Handler(BaseHTTPRequestHandler):
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
+                return
+
+            if route == "/api/generated-visual-asset":
+                payload = register_generated_visual_asset(
+                    request_file=str(body.get("request_file", "")),
+                    asset_file=str(body.get("asset_file", "")),
+                    actual_cost_usd=float(body.get("actual_cost_usd") or 0),
+                    provider=str(body.get("provider") or "higgsfield"),
+                    provider_job_id=str(body.get("provider_job_id") or ""),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                response = {
+                    "registered": payload,
+                    "generated_visual_assets": generated_visual_asset_snapshot(),
+                }
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
                 return
 
             if route == "/api/storyboard-review":
