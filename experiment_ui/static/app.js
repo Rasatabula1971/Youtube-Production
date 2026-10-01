@@ -1991,18 +1991,7 @@ function renderScriptReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>CLOSING</h4><p>' +
       escapeHtml(script.closing || "") + '</p></div>';
 
-  const descriptions = script.criteria || {};
-  const checked = script.criteria_decisions || {};
-  const required = script.required_accept_criteria || Object.keys(descriptions);
-  scriptCriteria.innerHTML = required.map(function (criterion) {
-    const id = "script-criterion-" + scriptCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-script-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  scriptCriteria.innerHTML = "";
 
   scriptNote.value = script.note || "";
   scriptPrev.disabled = scriptCursor <= 0;
@@ -2040,7 +2029,7 @@ async function submitScriptDecision(decision) {
         concept_id: script.concept_id,
         format: script.format,
         decision: decision,
-        criteria: collectScriptCriteria(),
+        criteria: {},
         note: scriptNote.value
       })
     });
@@ -3219,9 +3208,6 @@ researchAccept.addEventListener("click", function () {
   submitResearchDecision("ACCEPT");
 });
 scriptNote.addEventListener("input", function () {
-  scriptEditing = true;
-});
-scriptCriteria.addEventListener("change", function () {
   scriptEditing = true;
 });
 scriptPrev.addEventListener("click", function () {
