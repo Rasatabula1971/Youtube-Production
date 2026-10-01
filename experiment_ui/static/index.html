@@ -464,6 +464,33 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="managedVisualImportPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">APPROVED VISUAL ASSET RETURN</p>
+                <h2 id="managedVisualImportTitle">Supply approved local visual</h2>
+                <p class="muted" id="managedVisualImportSummary"></p>
+              </div>
+              <span class="status-chip running" id="managedVisualImportStatus">LOCAL FILE REQUIRED</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="managedVisualImportDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">The app will not automatically download creator/editorial footage. Supply a local file only for the exact visual selection already approved by the Human Rights/Context Gate.</div>
+                <label class="vision-label" for="managedVisualAssetPath">Local approved file path</label>
+                <input id="managedVisualAssetPath" type="text" placeholder="C:\path\to\approved-clip.mp4">
+                <label class="vision-label" for="managedVisualNote">Context / edit note</label>
+                <textarea id="managedVisualNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional note about the supplied excerpt or intended edit."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="managedVisualPrev" type="button">← Previous</button>
+                  <button id="managedVisualRegister" type="button">Register approved asset</button>
+                  <button class="ghost" id="managedVisualNext" type="button">Next →</button>
+                </div>
+                <p class="muted">Registration records provenance and the prior human context decision. It is not a legal determination of fair use.</p>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="visualRoughCutReviewPanel" hidden>
             <div class="panel-head">
               <div>
