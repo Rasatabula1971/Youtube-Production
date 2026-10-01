@@ -279,6 +279,15 @@ PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
 PRODUCTION_STORYBOARD_DIR = PRODUCTION_OUTPUT / "storyboards"
 PRODUCTION_VISUAL_SEARCH_RESULT_DIR = PRODUCTION_OUTPUT / "visual_search_results"
 PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_candidate_reviews"
+PRODUCTION_VISUAL_ASSET_ACQUISITION_SUMMARY = (
+    PRODUCTION_OUTPUT / "visual_asset_acquisition_summary.json"
+)
+PRODUCTION_MANAGED_VISUAL_ASSET_DIR = (
+    PRODUCTION_OUTPUT / "managed_visual_assets"
+)
+PRODUCTION_MANAGED_VISUAL_REGISTRY_DIR = (
+    PRODUCTION_OUTPUT / "managed_visual_asset_registry"
+)
 PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rights_reviews"
 PRODUCTION_VISUAL_ROUGH_CUT_DIR = PRODUCTION_OUTPUT / "visual_rough_cuts"
 PRODUCTION_VISUAL_ROUGH_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rough_cut_reviews"
@@ -340,6 +349,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "storyboard_prepare",
     "visual_search_prepare",
     "visual_search_acquire",
+    "visual_asset_acquire",
     "visual_rough_cut_prepare",
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
@@ -1067,6 +1077,21 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [sys.executable, "production_engine/visual_search_acquire.py", "--mode", "acquire"],
         "description": "Searches configured zero-cost stock and creator-discovery adapters, then stops for human candidate review.",
+    },
+    "visual_asset_acquire": {
+        "label": "Acquire Approved Free Visual Assets",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_asset_acquire.py",
+            "--mode",
+            "acquire",
+        ],
+        "description": (
+            "Copies approved local-library assets and downloads only verified "
+            "zero-cost stock media from allow-listed Pexels/Pixabay hosts. "
+            "Creator/editorial footage is never auto-downloaded."
+        ),
     },
     "visual_rough_cut_prepare": {
         "label": "Build Visual Rough Cut",
@@ -2514,6 +2539,68 @@ def visual_post_search_artifact_state() -> dict[str, Any]:
     }
 
 
+def visual_asset_acquisition_artifact_state() -> dict[str, Any]:
+    candidate_gate = visual_candidate_review_snapshot()
+    rights_gate = visual_rights_review_snapshot()
+
+    expected_reviews: dict[str, str] = {}
+    expected_rights: dict[str, str] = {}
+    for packet in candidate_gate.get("packets", []):
+        if not isinstance(packet, dict):
+            continue
+        result_path = Path(str(packet.get("result_file") or ""))
+        if not result_path.name:
+            continue
+        base = result_path.name.replace(".visual_search_results.json", "")
+        review_path = (
+            PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR
+            / f"{base}.visual_candidate_review.json"
+        )
+        if review_path.exists():
+            expected_reviews[review_path.name] = sha256_file(review_path)
+
+        rights_required = any(
+            isinstance(decision, dict)
+            and decision.get("status")
+            == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+            for decision in packet.get("decisions", {}).values()
+        )
+        if rights_required:
+            rights_path = (
+                PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR
+                / f"{base}.visual_rights_review.json"
+            )
+            if rights_path.exists():
+                expected_rights[rights_path.name] = sha256_file(rights_path)
+
+    payload = safe_load_json(PRODUCTION_VISUAL_ASSET_ACQUISITION_SUMMARY)
+    summary = payload if isinstance(payload, dict) else {}
+    current = bool(
+        candidate_gate.get("complete")
+        and rights_gate.get("complete")
+        and expected_reviews
+        and summary.get("source_review_sha256") == expected_reviews
+        and summary.get("source_rights_sha256") == expected_rights
+    )
+    return {
+        "status": (
+            "CURRENT"
+            if current
+            else "READY_TO_ACQUIRE"
+            if candidate_gate.get("complete") and rights_gate.get("complete")
+            else "WAITING_FOR_VISUAL_REVIEW"
+        ),
+        "current": current,
+        "acquired": int(summary.get("acquired") or 0) if current else 0,
+        "manual_required": int(summary.get("manual_required") or 0)
+        if current else 0,
+        "failures": int(summary.get("failures") or 0) if current else 0,
+        "items": summary.get("items", []) if current else [],
+        "manual_items": summary.get("manual_items", []) if current else [],
+        "failure_items": summary.get("failure_items", []) if current else [],
+    }
+
+
 def visual_generation_handoff_artifact_state() -> dict[str, Any]:
     spend = visual_spend_review_snapshot()
     expected: dict[tuple[str, str, str], float] = {}
@@ -3717,6 +3804,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post["candidate_gate"].get("stale_shots") or 0
     )
     visual_rights_complete = bool(visual_post["rights_complete"])
+    visual_asset_acquisition = visual_asset_acquisition_artifact_state()
+    visual_asset_acquisition_current = bool(
+        visual_asset_acquisition.get("current")
+    )
     visual_rough_cuts_ready = bool(visual_post["rough_cuts_ready"])
     visual_rough_gate_complete = bool(visual_post["rough_gate_complete"])
     visual_gap_plans_ready = bool(visual_post["gap_plans_ready"])
@@ -4548,15 +4639,42 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "enabled": any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_results.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else False,
             "reason": "Search zero-cost/existing visual sources, then stop for human candidate review.",
         },
+        "visual_asset_acquire": {
+            "enabled": (
+                visual_candidate_complete
+                and visual_rights_complete
+                and not visual_asset_acquisition_current
+            ),
+            "reason": (
+                "Approved current visual selections are ready for safe local "
+                "asset acquisition."
+                if (
+                    visual_candidate_complete
+                    and visual_rights_complete
+                    and not visual_asset_acquisition_current
+                )
+                else (
+                    "Approved visual asset acquisition is current."
+                    if visual_asset_acquisition_current
+                    else "Complete Visual Candidate and Rights/Context review first."
+                )
+            ),
+        },
         "visual_rough_cut_prepare": {
             "enabled": (
                 visual_candidate_complete
                 and visual_rights_complete
+                and visual_asset_acquisition_current
                 and not visual_rough_cuts_ready
             ),
             "reason": (
-                "Current visual selections and rights/context decisions are ready; build the rough cut."
-                if visual_candidate_complete and visual_rights_complete and not visual_rough_cuts_ready
+                "Current visual selections, rights/context decisions and safe asset acquisition are ready; build the rough cut."
+                if (
+                    visual_candidate_complete
+                    and visual_rights_complete
+                    and visual_asset_acquisition_current
+                    and not visual_rough_cuts_ready
+                )
                 else (
                     "Current rough-cut manifests are ready."
                     if visual_rough_cuts_ready
@@ -5358,6 +5476,7 @@ def status_payload() -> dict[str, Any]:
         "visual_post_search": visual_post_search_artifact_state(),
         "visual_candidate_gate": visual_candidate_review_snapshot(),
         "visual_rights_gate": visual_rights_review_snapshot(),
+        "visual_asset_acquisition": visual_asset_acquisition_artifact_state(),
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
         "visual_spend_gate": visual_spend_review_snapshot(),
         "visual_generation_handoff": visual_generation_handoff_artifact_state(),
