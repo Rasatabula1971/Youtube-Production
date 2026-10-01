@@ -36,6 +36,14 @@ class PackagingEngineTests(unittest.TestCase):
                 "style": "curiosity_plus_clear_subject_context",
             },
             "title_style_contract": "format_specific_v3",
+            "title_variations_per_format": 5,
+            "title_angles": [
+                "curiosity",
+                "stakes",
+                "unexpected",
+                "mystery",
+                "payoff",
+            ],
         }
         self.concept = {
             "concept_id": "c1",
