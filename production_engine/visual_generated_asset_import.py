@@ -22,6 +22,7 @@ OUTPUT = HERE / "output"
 REQUEST_DIR = OUTPUT / "visual_generation_requests"
 ASSET_DIR = OUTPUT / "generated_visual_assets"
 REGISTRY_DIR = OUTPUT / "generated_visual_asset_registry"
+ASSEMBLY_DIR = OUTPUT / "visual_assembly_plans"
 SUMMARY_FILE = OUTPUT / "generated_visual_asset_summary.json"
 
 ALLOWED_EXTENSIONS = {
@@ -170,6 +171,14 @@ def register(
     }
     registry = _registry_path(request)
     atomic_write_json(registry, record)
+
+    concept_id, fmt, _shot_id = _request_identity(request)
+    assembly_path = ASSEMBLY_DIR / (
+        f"{safe_slug(concept_id)}.{safe_slug(fmt)}.visual_assembly_plan.json"
+    )
+    if assembly_path.exists():
+        assembly_path.unlink()
+
     return record
 
 
