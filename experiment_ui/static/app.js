@@ -2885,67 +2885,7 @@ async function submitVisualRoughCutDecision(decision) {
   }
 }
 
-function visualSpendItems(snapshot) {
-  const items = [];
-  (snapshot && snapshot.items || []).forEach(function (packet) {
-    (packet.hero_candidates || []).forEach(function (gap) {
-      items.push({ packet: packet, gap: gap });
-    });
-  });
-  return items;
-}
-
-function renderVisualSpendReview(snapshot) {
-  latestVisualSpendSnapshot = snapshot || {};
-  const items = visualSpendItems(latestVisualSpendSnapshot);
-  visualSpendReviewPanel.hidden = items.length === 0;
-  if (!items.length) return;
-
-  visualSpendCursor = Math.max(
-    0,
-    Math.min(visualSpendCursor, items.length - 1)
-  );
-  const current = items[visualSpendCursor];
-  const packet = current.packet;
-  const gap = current.gap || {};
-  const decision = (packet.decisions || {})[gap.shot_id] || null;
-  const score = gap.visual_value_score || {};
-
-  visualSpendReviewTitle.textContent =
-    "Premium gap — " + (gap.shot_id || "");
-  visualSpendReviewSummary.textContent =
-    (visualSpendCursor + 1) + " of " + items.length +
-    " premium candidates · authorized max so far $" +
-    Number(snapshot.authorized_max_total_usd || 0).toFixed(2) +
-    " " + escapeHtml(snapshot.currency || "USD");
-  visualSpendReviewStatus.textContent = decision
-    ? humanizeToken(decision.decision || "DECIDED")
-    : "PENDING";
-  visualSpendReviewStatus.className =
-    "status-chip " +
-    (decision && decision.paid_generation_authorized
-      ? "success"
-      : decision
-        ? "neutral"
-        : "running");
-
-  visualSpendDetail.innerHTML =
-    '<div class="concept-detail-card"><h4>LAST-RESORT GENERATION CANDIDATE</h4>' +
-    '<h3>' + escapeHtml(gap.shot_id || "") + '</h3>' +
-    '<p><strong>Desired visual:</strong> ' + escapeHtml(gap.desired_visual || "") +
-    '<br><strong>Story purpose:</strong> ' + escapeHtml(gap.story_purpose || "") +
-    '<br><strong>Visual value score:</strong> ' + escapeHtml(score.total == null ? "—" : score.total) +
-    '<br><strong>Resolution class:</strong> ' + escapeHtml(humanizeToken(gap.resolution_class || "")) +
-    '</p><p class="muted">Per-shot hard cap:   const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours) return hours + "h " + minutes + "m " + seconds + "s";
-  if (minutes) return minutes + "m " + seconds + "s";
-  return seconds + "s";
-}
-
-function updateRunningActivity(job) {
+function visualSpendItems(snapshot) {\n  const items = [];\n  (snapshot && snapshot.items || []).forEach(function (packet) {\n    (packet.hero_candidates || []).forEach(function (gap) {\n      items.push({ packet: packet, gap: gap });\n    });\n  });\n  return items;\n}\n\nfunction renderVisualSpendReview(snapshot) {\n  latestVisualSpendSnapshot = snapshot || {};\n  const items = visualSpendItems(latestVisualSpendSnapshot);\n  visualSpendReviewPanel.hidden = items.length === 0;\n  if (!items.length) return;\n\n  visualSpendCursor = Math.max(\n    0,\n    Math.min(visualSpendCursor, items.length - 1)\n  );\n  const current = items[visualSpendCursor];\n  const packet = current.packet;\n  const gap = current.gap || {};\n  const decision = (packet.decisions || {})[gap.shot_id] || null;\n  const score = gap.visual_value_score || {};\n\n  visualSpendReviewTitle.textContent =\n    "Premium gap — " + (gap.shot_id || "");\n  visualSpendReviewSummary.textContent =\n    (visualSpendCursor + 1) + " of " + items.length +\n    " premium candidates · authorized max so far $" +\n    Number(snapshot.authorized_max_total_usd || 0).toFixed(2) +\n    " " + String(snapshot.currency || "USD");\n  visualSpendReviewStatus.textContent = decision\n    ? humanizeToken(decision.decision || "DECIDED")\n    : "PENDING";\n  visualSpendReviewStatus.className =\n    "status-chip " +\n    (decision && decision.paid_generation_authorized\n      ? "success"\n      : decision\n        ? "neutral"\n        : "running");\n\n  visualSpendDetail.innerHTML =\n    '<div class="concept-detail-card"><h4>LAST-RESORT GENERATION CANDIDATE</h4>' +\n    "<h3>" + escapeHtml(gap.shot_id || "") + "</h3>" +\n    "<p><strong>Desired visual:</strong> " + escapeHtml(gap.desired_visual || "") +\n    "<br><strong>Story purpose:</strong> " + escapeHtml(gap.story_purpose || "") +\n    "<br><strong>Visual value score:</strong> " + escapeHtml(score.total == null ? "—" : score.total) +\n    "<br><strong>Resolution class:</strong> " + escapeHtml(humanizeToken(gap.resolution_class || "")) +\n    '</p><p class="muted">Per-shot hard cap: $' +\n    Number(snapshot.per_shot_hard_cap_usd || 0).toFixed(2) +\n    " · Workflow hard cap: $" +\n    Number(snapshot.workflow_hard_cap_usd || 0).toFixed(2) +\n    ". Authorizing here sets a ceiling only.</p></div>";\n\n  visualSpendMaxCost.max = String(\n    Number(snapshot.per_shot_hard_cap_usd || 0)\n  );\n  visualSpendMaxCost.value = decision\n    ? Number(decision.max_cost_usd || 0).toFixed(2)\n    : "0";\n  visualSpendNote.value = decision && decision.note ? decision.note : "";\n  visualSpendPrev.disabled = visualSpendCursor === 0;\n  visualSpendNext.disabled = visualSpendCursor >= items.length - 1;\n}\n\nasync function submitVisualSpendDecision(decision) {\n  const items = visualSpendItems(latestVisualSpendSnapshot || {});\n  const current = items[visualSpendCursor];\n  if (!current) return;\n  try {\n    await api("/api/visual-spend-review", {\n      method: "POST",\n      body: JSON.stringify({\n        gap_plan_file: current.packet.gap_plan_file,\n        shot_id: current.gap.shot_id,\n        decision: decision,\n        max_cost_usd: Number(visualSpendMaxCost.value || 0),\n        note: visualSpendNote.value\n      })\n    });\n    const refreshed = await api("/api/visual-spend-review");\n    latestVisualSpendSnapshot = refreshed;\n    const refreshedItems = visualSpendItems(refreshed);\n    const nextPending = refreshedItems.findIndex(function (item) {\n      return !(item.packet.decisions || {})[item.gap.shot_id];\n    });\n    if (nextPending >= 0) visualSpendCursor = nextPending;\n    renderVisualSpendReview(refreshed);\n    showToast(\n      decision === "AUTHORIZE_GENERATION"\n        ? "Generation ceiling authorized for this shot. No provider call has been made."\n        : decision === "RETRY_EXISTING"\n          ? "Shot returned to existing-visual search."\n          : "Shot will remain a placeholder.",\n      false\n    );\n    await loadStatus();\n  } catch (error) {\n    showToast(error.message, true);\n  }\n}\n\nfunction formatElapsed(milliseconds) {\n  const totalSeconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));\n  const hours = Math.floor(totalSeconds / 3600);\n  const minutes = Math.floor((totalSeconds % 3600) / 60);\n  const seconds = totalSeconds % 60;\n  if (hours) return hours + "h " + minutes + "m " + seconds + "s";\n  if (minutes) return minutes + "m " + seconds + "s";\n  return seconds + "s";\n}\nfunction updateRunningActivity(job) {
   const running = Boolean(
     job && (job.status === "RUNNING" || job.status === "STOPPING")
   );
