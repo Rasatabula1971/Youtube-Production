@@ -13,6 +13,7 @@ class PackagingGateTests(unittest.TestCase):
         self.config = {
             "required_accept_criteria": [
                 "promise_clear",
+                "human_hook_present",
                 "viewer_problem_aligned",
                 "viewer_moment_fit",
                 "one_sentence_promise_clear",
