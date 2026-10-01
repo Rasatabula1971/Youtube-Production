@@ -10,12 +10,29 @@ HERE=Path(__file__).resolve().parent; OUTPUT=HERE/"output"; ROUGH=OUTPUT/"visual
 def _path(p:Path)->Path:
  REVIEW.mkdir(parents=True,exist_ok=True); return REVIEW/p.name.replace(".visual_rough_cut.json",".visual_rough_cut_review.json")
 def snapshot()->dict[str,Any]:
- items=[]
+ items=[];approved=0;pending=0;rework=0
  for p in sorted(ROUGH.glob("*.visual_rough_cut.json")) if ROUGH.exists() else []:
-  rough=load_json(p); rp=_path(p); review=load_json(rp) if rp.exists() else None
-  items.append({"concept_id":rough.get("concept_id"),"format":rough.get("format"),"rough_cut_file":str(p),"rough_cut_sha256":sha256_file(p),
-   "summary":rough.get("summary",{}),"scenes":rough.get("scenes",[]),"decision":review})
- return {"status":"READY_FOR_HUMAN_ROUGH_CUT_GATE" if items else "WAITING_FOR_ROUGH_CUT","items":items}
+  rough=load_json(p);rp=_path(p);review=load_json(rp) if rp.exists() else None
+  current=bool(
+   isinstance(review,dict)
+   and review.get("source_rough_cut_sha256")==sha256_file(p)
+  )
+  decision=review if current else None
+  if decision and decision.get("decision")=="APPROVE_WITH_GAPS":approved+=1
+  elif decision and str(decision.get("decision") or "").startswith("REWORK_"):rework+=1
+  else:pending+=1
+  items.append({
+   "concept_id":rough.get("concept_id"),"format":rough.get("format"),
+   "rough_cut_file":str(p),"rough_cut_sha256":sha256_file(p),
+   "summary":rough.get("summary",{}),"scenes":rough.get("scenes",[]),
+   "decision":decision,"review_current":current,
+  })
+ complete=bool(items) and approved==len(items)
+ return {
+  "status":"COMPLETE" if complete else "READY_FOR_HUMAN_ROUGH_CUT_GATE" if items else "WAITING_FOR_ROUGH_CUT",
+  "complete":complete,"accepted":approved,"pending":pending,"rework":rework,"items":items,
+ }
+
 def apply_action(*,rough_cut_file:str,decision:str,note:str="")->dict[str,Any]:
  p=Path(rough_cut_file)
  if not p.exists() or p.parent.resolve()!=ROUGH.resolve(): raise ValueError("Invalid rough cut")
