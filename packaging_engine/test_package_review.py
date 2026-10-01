@@ -149,26 +149,25 @@ class PackageReviewTests(unittest.TestCase):
                     note="",
                 )
 
-    def test_only_one_package_can_be_accepted_per_concept(self):
+    def test_accepting_one_package_auto_closes_sibling_variants(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.patch_paths(stack, Path(tmp))
             review.DEFAULT_CANDIDATES.write_text(
                 json.dumps(self.candidates()), encoding="utf-8"
             )
             review.prepare_state()
-            review.apply_action(
+            snapshot = review.apply_action(
                 package_id="p1",
                 decision="ACCEPT",
                 criteria=self.criteria(),
                 note="",
             )
-            with self.assertRaises(ValueError):
-                review.apply_action(
-                    package_id="p2",
-                    decision="ACCEPT",
-                    criteria=self.criteria(),
-                    note="",
-                )
+
+        by_id = {item["package_id"]: item for item in snapshot["packages"]}
+        self.assertEqual(by_id["p1"]["decision"], "ACCEPT")
+        self.assertEqual(by_id["p2"]["decision"], "REJECT")
+        self.assertIn("p1 was accepted", by_id["p2"]["note"])
+        self.assertTrue(snapshot["complete"])
 
     def test_rework_note_is_written_into_model_request_and_invalidates_response(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -267,23 +266,17 @@ class PackageReviewTests(unittest.TestCase):
         self.assertEqual(p2["decision"], "REJECT")
         self.assertEqual(p1["decision"], "PENDING")
 
-    def test_complete_gate_writes_research_handoff(self):
+    def test_accept_completes_single_concept_and_writes_research_handoff(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.patch_paths(stack, Path(tmp))
             review.DEFAULT_CANDIDATES.write_text(
                 json.dumps(self.candidates()), encoding="utf-8"
             )
             review.prepare_state()
-            review.apply_action(
+            final = review.apply_action(
                 package_id="p1",
                 decision="ACCEPT",
                 criteria=self.criteria(),
-                note="",
-            )
-            final = review.apply_action(
-                package_id="p2",
-                decision="REJECT",
-                criteria={key: False for key in self.criteria()},
                 note="",
             )
             handoff = json.loads(
@@ -292,6 +285,7 @@ class PackageReviewTests(unittest.TestCase):
 
         self.assertTrue(final["complete"])
         self.assertEqual(final["accepted"], 1)
+        self.assertEqual(final["rejected"], 1)
         self.assertEqual(handoff["status"], "READY_FOR_RESEARCH")
         self.assertEqual(handoff["concept_count"], 1)
         self.assertEqual(
