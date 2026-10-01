@@ -152,6 +152,14 @@ each required format** before the Human Script Gate. Long-form and Shorts may
 therefore share the same research and story promise while using different
 attention, cognitive-load and payoff strategies. See D-063 through D-065.
 
+Channel personality is supplied through a separate versioned **Channel Voice
+Profile**. Until a channel/niche and target viewer are deliberately chosen, the
+active profile remains `UNCONFIGURED` and must not cause the model to invent a
+persistent channel personality. Once a profile is human-approved, Story
+Planning binds that exact profile version and Script Writing inherits it.
+Channel Voice controls writing/presentation style; Voice Performance remains a
+separate downstream delivery layer. See D-070.
+
 A concept moves past the Human Script Gate only when every required branch is
 accepted. The resulting approved script bundle preserves the narrations
 separately.
