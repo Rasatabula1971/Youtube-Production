@@ -121,6 +121,8 @@ def build_package_request(
         },
         "package_count_requested": int(config["packages_per_concept"]),
         "allowed_format_intents": list(config["allowed_format_intents"]),
+        "title_variations_per_format": int(config["title_variations_per_format"]),
+        "title_angles": list(config["title_angles"]),
         "title_contracts": {
             "short": {
                 **dict(config.get("short_title_contract", {})),
@@ -267,9 +269,14 @@ def validate_package(
         validate_title_text(title, label="title", contract=legacy_contract)
 
     titles = package.get("titles")
-    if not isinstance(titles, dict):
+    if titles is None:
+        # Legacy package artifacts remain readable/resumable. New model output
+        # is still forced to provide titles by package_model_runner's schema.
+        titles = {}
+    elif not isinstance(titles, dict):
         errors.append("titles must be an object")
-    else:
+        titles = {}
+    if titles:
         required_angles = [str(value) for value in config.get("title_angles", [])]
         expected_count = int(config.get("title_variations_per_format", 5))
         for fmt, contract_key in (
