@@ -6,7 +6,7 @@
     "either"
   ],
   "minimum_research_dependencies": 0,
-  "title_max_words": 9,
-  "title_max_chars": 62,
+  "title_max_words": 8,
+  "title_max_chars": 56,
   "title_style_contract": "human_hook_v2"
 }
