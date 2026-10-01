@@ -130,6 +130,14 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             },
         },
     }
+    rework_package_id = str(request.get("human_rework_package_id") or "").strip()
+    rework_mode = bool(request.get("human_rework_note") and rework_package_id)
+    if rework_mode:
+        package_schema["properties"]["package_id"] = {
+            "type": "string",
+            "const": rework_package_id,
+        }
+
     return {
         "type": "object",
         "additionalProperties": False,
@@ -139,7 +147,11 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "packages": {
                 "type": "array",
                 "minItems": 1,
-                "maxItems": int(request.get("package_count_requested", 5)),
+                "maxItems": (
+                    1
+                    if rework_mode
+                    else int(request.get("package_count_requested", 5))
+                ),
                 "items": package_schema,
             },
         },
@@ -160,7 +172,10 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "7. Do not predict CTR, views, virality, retention, or recommendation performance.\n"
         "8. List any factual or evidentiary dependency that Research must verify before scripting.\n"
         "9. Do not rank or score package options.\n"
-        "10. The future script must be capable of fully delivering the package promise.\n\n"
+        "10. The future script must be capable of fully delivering the package promise.\n"
+        "11. If human_rework_note is present, it is an AUTHORITATIVE human directive, not a suggestion. Apply it literally unless it conflicts with factual or safety constraints. Do not silently substitute a narrower, broader, or different audience than the human requested.\n"
+        "12. In human rework mode, return exactly one revised package and keep its package_id exactly equal to human_rework_package_id. The runner will preserve all other package options unchanged.\n"
+        "13. Use human_rework_original_package as the before-version. Criteria listed in human_rework_keep_criteria should stay aligned; criteria listed in human_rework_change_criteria must be corrected.\n\n"
         "PACKAGE REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -170,6 +185,48 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
             f"is {maximum_chars:,}."
         )
     return prompt
+
+
+def _merge_human_rework_response(
+    request: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    note = str(request.get("human_rework_note") or "").strip()
+    target = str(request.get("human_rework_package_id") or "").strip()
+    if not note or not target:
+        return response
+
+    generated = response.get("packages")
+    if not isinstance(generated, list) or len(generated) != 1:
+        raise ValueError("Human rework must return exactly one revised package")
+    replacement = generated[0]
+    if (
+        not isinstance(replacement, dict)
+        or str(replacement.get("package_id") or "") != target
+    ):
+        raise ValueError("Human rework package_id must match the reviewed package")
+
+    originals = request.get("human_rework_original_packages")
+    if not isinstance(originals, list) or not originals:
+        raise ValueError("Human rework is missing the original package set")
+
+    merged: list[dict[str, Any]] = []
+    replaced = False
+    for item in originals:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("package_id") or "") == target:
+            merged.append(replacement)
+            replaced = True
+        else:
+            merged.append(item)
+
+    if not replaced:
+        raise ValueError("Human rework target is absent from original package set")
+    return {
+        "concept_id": str(response.get("concept_id") or request.get("concept_id") or ""),
+        "packages": merged,
+    }
 
 
 def run_one(
@@ -297,7 +354,13 @@ def run_one(
 
     try:
         response = parse_model_json(raw_output)
-        validation = validate_response(response, request, load_config())
+        config = load_config()
+        validation = validate_response(response, request, config)
+        if request.get("human_rework_note"):
+            if not validation["accepted"]:
+                raise ValueError("Human rework produced no structurally accepted package")
+            response = _merge_human_rework_response(request, response)
+            validation = validate_response(response, request, config)
     except Exception as exc:
         report = {
             **base_report,
