@@ -5730,16 +5730,49 @@ def workflow_guidance(
                 "next_title": "Register final visual assets",
             }
 
+        final_handoff = final_production_handoff_artifact_state(
+            visual_post.get("expected_branches", [])
+        )
+        if not final_handoff.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Prepare Final Production Handoff",
+                "current_detail": (
+                    "The structural edit and all current visual assets are approved. "
+                    "Build the zero-cost provider-neutral package containing the final "
+                    "visual timeline, narration and sound-design intent."
+                ),
+                "next_action_id": None,
+                "next_title": "Final sound/provider boundary",
+            }
+
+        if int(final_handoff.get("blocked") or 0) > 0:
+            return {
+                "state": "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+                "current_action_id": None,
+                "current_title": "Final Production Handoff Has Missing Inputs",
+                "current_detail": (
+                    "One or more branches lost a current final visual, narration or "
+                    "sound-design input. Rebuild the stale upstream artifact before "
+                    "attempting final production."
+                ),
+                "next_action_id": None,
+                "next_title": "Repair missing final-production inputs",
+            }
+
         return {
-            "state": "FINAL_EDIT_DIRECTION_APPROVED",
+            "state": "FINAL_SOUND_PROVIDER_REQUIRED",
             "current_action_id": None,
-            "current_title": "Edit Direction Approved",
+            "current_title": "Final Production Handoff Ready",
             "current_detail": (
-                "The structural edit and all current visual assets are approved and "
-                "provenance-current. Final export/publish preparation is the next build."
+                "The approved visual edit and narration are packaged and current. "
+                "Final music/SFX are still descriptive intent only. No paid provider "
+                "has been called. Connect a commercial-safe final sound/provider path "
+                "before a publish-ready export."
             ),
             "next_action_id": None,
-            "next_title": "Prepare final export",
+            "next_title": "Connect final sound/provider assets",
         }
 
     production_visual = production_visual_artifact_state()
