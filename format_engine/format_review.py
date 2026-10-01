@@ -24,6 +24,7 @@ from pipeline_integrity import atomic_write_json
 from format_engine import (
     OUTPUT_DIR,
     PLANS_DIR,
+    REQUESTS_DIR,
     load_json,
     safe_slug,
     sha256_file,
@@ -152,13 +153,14 @@ def validate_response(
     decision = str(response.get("decision", "")).strip().upper()
     if decision not in {"ACCEPT", "REWORK", "REJECT"}:
         raise ValueError("invalid decision")
-    criteria = response.get("criteria")
-    if not isinstance(criteria, dict):
-        raise ValueError("criteria are required")
-    normalized = {name: criteria.get(name) is True for name in names}
     note = str(response.get("note", "") or "").strip()
-    if decision == "ACCEPT" and not all(normalized.values()):
-        raise ValueError("ACCEPT requires all criteria true")
+    normalized = (
+        {name: True for name in names}
+        if decision == "ACCEPT"
+        else {name: False for name in names}
+        if decision == "REJECT"
+        else {}
+    )
     if decision == "REWORK" and not note:
         raise ValueError("REWORK requires note")
     return {
@@ -181,6 +183,38 @@ def assert_current_plan(request: dict[str, Any]) -> Path:
             "STALE_REVIEW_REQUEST: format plan changed after review preparation"
         )
     return source
+
+
+def _apply_rework_feedback(
+    request: dict[str, Any],
+    *,
+    note: str,
+) -> None:
+    source = assert_current_plan(request)
+    plan = load_json(source)
+    provenance = plan.get("plan_provenance", {})
+    request_source = Path(str(provenance.get("request_source") or "")).resolve()
+    requests_root = REQUESTS_DIR.resolve()
+    if not request_source.exists() or requests_root not in request_source.parents:
+        raise ValueError("Format rework cannot find the current format request")
+
+    original_request = load_json(request_source)
+    concept_id = str(request.get("concept_id") or "")
+    if str(original_request.get("concept_id") or "") != concept_id:
+        raise ValueError("Format rework request concept_id mismatch")
+
+    original_request["human_rework_iteration"] = (
+        int(original_request.get("human_rework_iteration") or 0) + 1
+    )
+    original_request["human_rework_mode"] = "HUMAN_INSTRUCTION_ONLY"
+    original_request["human_rework_note"] = note
+    original_request["human_rework_original_plan"] = {
+        "format_intent": plan.get("format_intent"),
+        "required_branches": plan.get("required_branches", []),
+        "branches": plan.get("branches", []),
+        "validation": plan.get("validation", {}),
+    }
+    atomic_write_json(request_source, original_request)
 
 
 def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
@@ -215,6 +249,9 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
         summary["approved_format_plan"] = str(approved_path)
     elif approved_path.exists():
         approved_path.unlink()
+
+    if decision == "REWORK":
+        _apply_rework_feedback(request, note=normalized["note"])
 
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(SUMMARY_FILE, summary)
@@ -299,11 +336,12 @@ def apply_action(
         raise ValueError("Format review request not found")
 
     request = load_json(request_path)
+    value = str(decision or "").strip().upper()
     payload = {
         "concept_id": concept_id,
         "reviewer": reviewer_id(),
-        "decision": decision,
-        "criteria": criteria,
+        "decision": value,
+        "criteria": {},
         "note": str(note or ""),
     }
 
