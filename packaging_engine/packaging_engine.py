@@ -127,7 +127,10 @@ def build_package_request(
             "Packaging must preserve and amplify the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama intent. Do not revert to a technical topic label or classroom framing.",
             "Generate exactly three meaningfully different package angles, not three paraphrases. Each option should lead with a different truthful human hook such as consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when the concept supports it.",
             "The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain; reveal the engineering or science as the satisfying answer.",
-            "Avoid lecture-style title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or ingredient/material lists unless that wording itself is the strongest truthful human hook.",
+            "The title is the proposed PUBLIC YouTube title, not an internal idea label.",
+            "Keep the public title punchy: normally 3-8 words and never exceed the configured hard limit.",
+            "Use the strongest truthful dramatic tension the concept can support. Prefer consequence, contradiction, danger, astonishment, mystery, or personal relevance over explanation-first wording.",
+            "Avoid lecture-style title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or ingredient/material lists. Those are payoff language, not title language.",
             "A non-specialist should understand why the package is interesting before they understand the mechanism.",
             "Use the Visual Opening Plan as the starting psychological intention for the thumbnail/opening frame; do not promise unsupported spectacle.",
             "Write a one-sentence promise in the form: this video helps [viewer/problem] so they can [specific outcome].",
@@ -186,6 +189,29 @@ def validate_package(
     package_id = str(package.get("package_id", "")).strip()
     if not package_id:
         errors.append("package_id is required")
+
+    title = str(package.get("title", "")).strip()
+    if title:
+        title_words = [word for word in title.replace("—", " ").split() if word]
+        if len(title_words) > int(config.get("title_max_words", 9)):
+            errors.append(
+                f"title must be at most {int(config.get('title_max_words', 9))} words"
+            )
+        if len(title) > int(config.get("title_max_chars", 62)):
+            errors.append(
+                f"title must be at most {int(config.get('title_max_chars', 62))} characters"
+            )
+        lowered = title.lower().strip()
+        lecture_patterns = (
+            "the physics of ",
+            "hidden engineering:",
+            "hidden engineering of ",
+        )
+        if (
+            lowered.endswith(" explained")
+            or any(lowered.startswith(pattern) for pattern in lecture_patterns)
+        ):
+            errors.append("title uses lecture-style framing")
 
     for field in (
         "title",
