@@ -282,10 +282,6 @@ def acquire() -> dict[str, Any]:
             ".visual_candidate_review.json",
             ".visual_rights_review.json",
         )
-        if rights_path_for_review.exists():
-            source_rights_sha256[rights_path_for_review.name] = sha256_file(
-                rights_path_for_review
-            )
         if str(review.get("status") or "") != "READY_FOR_ROUGH_CUT":
             continue
 
@@ -304,6 +300,18 @@ def acquire() -> dict[str, Any]:
         decisions = review.get("decisions", {})
         if not isinstance(decisions, dict):
             continue
+        if (
+            any(
+                isinstance(decision, dict)
+                and decision.get("status")
+                == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+                for decision in decisions.values()
+            )
+            and rights_path_for_review.exists()
+        ):
+            source_rights_sha256[rights_path_for_review.name] = sha256_file(
+                rights_path_for_review
+            )
 
         for shot_id, decision in decisions.items():
             if not isinstance(decision, dict):
