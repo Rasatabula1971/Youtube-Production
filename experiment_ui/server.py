@@ -48,6 +48,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/visual-candidate-review",
     "/api/visual-rights-review",
     "/api/visual-rough-cut-review",
+    "/api/visual-spend-review",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -248,6 +249,10 @@ from visual_rights_review import (
 from visual_rough_cut_review import (
     apply_action as apply_visual_rough_cut_review_action,
     snapshot as visual_rough_cut_review_snapshot,
+)
+from visual_spend_review import (
+    apply_action as apply_visual_spend_review_action,
+    snapshot as visual_spend_review_snapshot,
 )
 from storyboard_review import (
     revise as revise_storyboard_shot,
@@ -4800,17 +4805,61 @@ def workflow_guidance(
         }
 
     if visual_post.get("gap_plans_ready"):
+        spend_gate = visual_spend_review_snapshot()
+        hero_count = int(spend_gate.get("hero_candidates") or 0)
+        if hero_count > 0 and not spend_gate.get("complete"):
+            return {
+                "state": "HUMAN_VISUAL_SPEND_GATE",
+                "current_action_id": None,
+                "current_title": "Decide Whether Any Visual Is Worth Paying For",
+                "current_detail": (
+                    "Existing/free sourcing has already been tried. For each "
+                    "high-value unresolved shot, retry existing sources, keep a "
+                    "placeholder, or authorize a specific maximum spend."
+                ),
+                "next_action_id": None,
+                "next_title": "Generated visual provider handoff",
+            }
+        if hero_count > 0 and spend_gate.get("complete"):
+            authorized = int(spend_gate.get("authorized") or 0)
+            return {
+                "state": (
+                    "VISUAL_GENERATION_AUTHORIZED"
+                    if authorized > 0
+                    else "VISUAL_ASSEMBLY_READY"
+                ),
+                "current_action_id": None,
+                "current_title": (
+                    "Visual Generation Authorized"
+                    if authorized > 0
+                    else "Visual Plan Ready for Assembly"
+                ),
+                "current_detail": (
+                    "Human spend decisions are complete. Authorized shots remain "
+                    "bounded by their exact per-shot and workflow cost ceilings; "
+                    "no provider call is made by the Spend Gate itself."
+                    if authorized > 0
+                    else "All premium candidates were kept as placeholders or "
+                    "returned to existing-asset sourcing. No paid visual generation "
+                    "is authorized."
+                ),
+                "next_action_id": None,
+                "next_title": (
+                    "Prepare provider-neutral generation requests"
+                    if authorized > 0
+                    else "Assemble current visual plan"
+                ),
+            }
         return {
-            "state": "VISUAL_GAP_PLAN_READY",
+            "state": "VISUAL_ASSEMBLY_READY",
             "current_action_id": None,
-            "current_title": "Visual Gap Plan Ready",
+            "current_title": "Visual Plan Ready for Assembly",
             "current_detail": (
-                "Unresolved shots are classified for another existing-asset "
-                "attempt or a separate human spend decision. No paid generation "
-                "has been authorized."
+                "No unresolved shot met the premium-generation threshold. "
+                "The current plan can proceed without paid visual generation."
             ),
             "next_action_id": None,
-            "next_title": "Human Visual Spend Gate",
+            "next_title": "Assemble current visual plan",
         }
 
     production_visual = production_visual_artifact_state()
@@ -4950,6 +4999,7 @@ def status_payload() -> dict[str, Any]:
         "visual_candidate_gate": visual_candidate_review_snapshot(),
         "visual_rights_gate": visual_rights_review_snapshot(),
         "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
+        "visual_spend_gate": visual_spend_review_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -5078,6 +5128,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/visual-rough-cut-review":
             self._send_json(visual_rough_cut_review_snapshot())
+            return
+        if route == "/api/visual-spend-review":
+            self._send_json(visual_spend_review_snapshot())
             return
         if route == "/api/storyboard-review":
             self._send_json(storyboard_review_snapshot())
@@ -5306,6 +5359,54 @@ class Handler(BaseHTTPRequestHandler):
                     instruction=str(body.get("instruction") or ""),
                     delivery_changes=body.get("delivery_changes") if isinstance(body.get("delivery_changes"), dict) else {},
                 )
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-spend-review":
+                spend_decision = str(
+                    body.get("decision", "")
+                ).strip().upper()
+                spend_note = str(body.get("note") or "").strip()
+                shot_id = str(body.get("shot_id") or "").strip()
+                payload = apply_visual_spend_review_action(
+                    gap_plan_file=str(body.get("gap_plan_file", "")),
+                    shot_id=shot_id,
+                    decision=spend_decision,
+                    max_cost_usd=float(body.get("max_cost_usd") or 0),
+                    note=spend_note,
+                )
+                routed_to = None
+                if spend_decision == "RETRY_EXISTING":
+                    concept_id = str(payload.get("concept_id") or "")
+                    branch_format = str(payload.get("format") or "")
+                    board = next(
+                        (
+                            item
+                            for item in storyboard_review_snapshot().get(
+                                "items", []
+                            )
+                            if str(item.get("concept_id") or "") == concept_id
+                            and str(item.get("format") or "") == branch_format
+                        ),
+                        None,
+                    )
+                    if not isinstance(board, dict):
+                        raise ValueError(
+                            "Current storyboard for existing-visual retry "
+                            "was not found."
+                        )
+                    revise_storyboard_shot(
+                        storyboard_file=str(board.get("storyboard_file") or ""),
+                        shot_id=shot_id,
+                        instruction=spend_note,
+                        changes={},
+                    )
+                    routed_to = "storyboard_visual_search"
+
+                payload = {**payload, "rework_routed_to": routed_to}
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 
