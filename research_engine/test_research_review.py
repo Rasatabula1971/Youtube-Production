@@ -178,8 +178,9 @@ class ResearchReviewTests(unittest.TestCase):
                 note="Find a stronger source and verify the exact operating limit.",
             )
             updated = json.loads(plan_path.read_text(encoding="utf-8"))
+            after_hash = review.sha256_file(plan_path)
 
-        self.assertNotEqual(before_hash, review.sha256_file(plan_path))
+        self.assertNotEqual(before_hash, after_hash)
         self.assertEqual(updated["human_rework_mode"], "HUMAN_INSTRUCTION_ONLY")
         self.assertEqual(updated["human_rework_requests"][0]["claim_id"], "clm001")
         self.assertEqual(
