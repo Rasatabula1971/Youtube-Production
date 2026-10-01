@@ -80,28 +80,13 @@ class FormatReviewTests(unittest.TestCase):
         self.assertEqual(snapshot["status"], "AWAITING_HUMAN_DECISION")
         self.assertEqual(snapshot["pending"], 1)
 
-    def test_accept_requires_all_criteria(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root / "plan.json"
-            request_path = root / "request.json"
-            response_path = root / "response.json"
-            approved = root / "approved"
-            approved.mkdir()
-            source.write_text(json.dumps(plan()), encoding="utf-8")
-            request_path.write_text(
-                json.dumps(format_review.build_review_request(plan(), source)),
-                encoding="utf-8",
-            )
-            partial = accept_response()
-            partial["criteria"][CRITERIA[0]] = False
-            response_path.write_text(json.dumps(partial), encoding="utf-8")
-            with (
-                patch.object(format_review, "APPROVED_DIR", approved),
-                patch.object(format_review, "SUMMARY_FILE", root / "summary.json"),
-                self.assertRaisesRegex(ValueError, "ACCEPT requires all criteria"),
-            ):
-                format_review.apply(request_path, response_path)
+    def test_accept_is_one_click_and_records_audit_criteria(self):
+        request = {"concept_id": "c1", "required_accept_criteria": list(CRITERIA)}
+        payload = accept_response(criteria={})
+        normalized = format_review.validate_response(request, payload)
+
+        self.assertEqual(normalized["decision"], "ACCEPT")
+        self.assertTrue(all(normalized["criteria"].values()))
 
     def test_accept_produces_approved_format_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -127,6 +112,61 @@ class FormatReviewTests(unittest.TestCase):
             self.assertTrue(approved_path.exists())
             stored = json.loads(approved_path.read_text(encoding="utf-8"))
             self.assertIn("approved_provenance", stored)
+
+    def test_rework_updates_current_format_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requests_dir = root / "format_requests"
+            requests_dir.mkdir()
+            source = root / "plan.json"
+            request_path = root / "review_request.json"
+            response_path = root / "response.json"
+            format_request = requests_dir / "c1.format_request.json"
+            format_request.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "required_branches": ["long_form", "short"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            payload = plan()
+            payload["plan_provenance"] = {
+                "request_source": str(format_request.resolve())
+            }
+            source.write_text(json.dumps(payload), encoding="utf-8")
+            request_path.write_text(
+                json.dumps(format_review.build_review_request(payload, source)),
+                encoding="utf-8",
+            )
+            response_path.write_text(
+                json.dumps(
+                    accept_response(
+                        decision="REWORK",
+                        criteria={},
+                        note="Raise the opening visual drama without changing narration.",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            before_hash = format_review.sha256_file(format_request)
+            with (
+                patch.object(format_review, "REQUESTS_DIR", requests_dir),
+                patch.object(format_review, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                result = format_review.apply(request_path, response_path)
+            updated = json.loads(format_request.read_text(encoding="utf-8"))
+            after_hash = format_review.sha256_file(format_request)
+
+        self.assertEqual(result["status"], "FORMAT_REWORK_REQUIRED")
+        self.assertNotEqual(before_hash, after_hash)
+        self.assertEqual(
+            updated["human_rework_note"],
+            "Raise the opening visual drama without changing narration.",
+        )
+        self.assertEqual(updated["human_rework_mode"], "HUMAN_INSTRUCTION_ONLY")
+        self.assertIn("human_rework_original_plan", updated)
 
     def test_rework_requires_note(self):
         with tempfile.TemporaryDirectory() as tmp:
