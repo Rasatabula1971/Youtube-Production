@@ -287,6 +287,10 @@ class FormatEngineTests(unittest.TestCase):
             request["branch_story_packages"]["short"]["title"],
             "Cold Brakes Can Betray You",
         )
+        self.assertEqual(
+            request["package"]["selected_titles"]["short"]["title"],
+            "Cold Brakes Can Betray You",
+        )
 
 
 
