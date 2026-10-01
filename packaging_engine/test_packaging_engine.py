@@ -23,9 +23,19 @@ class PackagingEngineTests(unittest.TestCase):
                 "either",
             ],
             "minimum_research_dependencies": 0,
-            "title_max_words": 8,
-            "title_max_chars": 56,
-            "title_style_contract": "human_hook_v2",
+            "short_title_contract": {
+                "target_words": "3-7",
+                "max_words": 7,
+                "max_chars": 48,
+                "style": "event_or_tension_first_explanation_hidden",
+            },
+            "long_title_contract": {
+                "target_words": "5-10",
+                "max_words": 10,
+                "max_chars": 70,
+                "style": "curiosity_plus_clear_subject_context",
+            },
+            "title_style_contract": "format_specific_v3",
         }
         self.concept = {
             "concept_id": "c1",
@@ -118,6 +128,7 @@ class PackagingEngineTests(unittest.TestCase):
     def test_long_public_title_is_rejected(self):
         request = build_package_request(self.concept, self.config)
         package = self.valid_package()
+        package["format_intent"] = "short"
         package["title"] = "Why This Airplane Tire Somehow Survives Every Violent Runway Impact"
         result = validate_response(
             {"concept_id": "c1", "packages": [package]},
@@ -126,9 +137,21 @@ class PackagingEngineTests(unittest.TestCase):
         )
         self.assertEqual(len(result["accepted"]), 0)
         self.assertIn(
-            "title must be at most 8 words",
+            "title must be at most 7 words",
             result["rejected"][0]["errors"],
         )
+
+    def test_long_form_allows_more_context_than_short(self):
+        request = build_package_request(self.concept, self.config)
+        package = self.valid_package()
+        package["format_intent"] = "long_form"
+        package["title"] = "Why Airplane Wings Bend More Than You Think"
+        result = validate_response(
+            {"concept_id": "c1", "packages": [package]},
+            request,
+            self.config,
+        )
+        self.assertEqual(len(result["accepted"]), 1)
 
     def test_lecture_style_public_title_is_rejected(self):
         request = build_package_request(self.concept, self.config)
