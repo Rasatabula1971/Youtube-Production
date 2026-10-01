@@ -733,6 +733,107 @@ button.danger {
 
 .creation-tab.future { opacity: .42; }
 
+.running-activity {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 13px;
+  margin: 0 0 13px;
+  padding: 13px 14px;
+  border: 1px solid rgba(47,129,247,.58);
+  border-radius: 11px;
+  background: rgba(47,129,247,.09);
+}
+
+.running-activity[hidden] { display: none !important; }
+
+.running-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(121,192,255,.20);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: running-spin .8s linear infinite;
+}
+
+.running-activity-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.running-activity-copy strong {
+  color: #d9ecff;
+  font-size: 13px;
+}
+
+.running-activity-copy span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.running-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.running-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: running-dot 1.15s ease-in-out infinite;
+}
+
+.running-dots span:nth-child(2) { animation-delay: .16s; }
+.running-dots span:nth-child(3) { animation-delay: .32s; }
+
+#analysisCurrentPanel.is-running {
+  border-color: rgba(47,129,247,.66);
+  box-shadow:
+    var(--shadow),
+    inset 0 0 0 1px rgba(47,129,247,.08),
+    0 0 24px rgba(47,129,247,.08);
+  animation: running-panel-pulse 2.2s ease-in-out infinite;
+}
+
+.job-summary.running .job-summary-dot,
+.status-dot.running {
+  animation: running-status-pulse 1.45s ease-in-out infinite;
+}
+
+@keyframes running-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes running-dot {
+  0%, 70%, 100% { opacity: .28; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-3px); }
+}
+
+@keyframes running-panel-pulse {
+  0%, 100% { border-color: rgba(47,129,247,.50); }
+  50% { border-color: rgba(121,192,255,.92); }
+}
+
+@keyframes running-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47,129,247,.30); }
+  50% { box-shadow: 0 0 0 6px rgba(47,129,247,0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .running-spinner,
+  .running-dots span,
+  #analysisCurrentPanel.is-running,
+  .job-summary.running .job-summary-dot,
+  .status-dot.running {
+    animation: none;
+  }
+}
+
 .action-groups {
   display: grid;
   gap: 11px;
