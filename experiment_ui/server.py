@@ -46,6 +46,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/performance-gate",
     "/api/narration-preview-gate",
     "/api/narration-spend-gate",
+    "/api/narration-render-return",
     "/api/visual-candidate-review",
     "/api/visual-rights-review",
     "/api/visual-rough-cut-review",
@@ -234,6 +235,11 @@ from voice_review import (
     snapshot as performance_gate_snapshot,
 )
 from narration_render import snapshot as narration_render_snapshot
+from narration_render_import import (
+    register as register_narration_render_return,
+    snapshot as narration_render_return_snapshot,
+)
+from narration_audio_qc import snapshot as narration_audio_qc_snapshot
 from pre_render_engagement import snapshot as pre_render_engagement_snapshot
 from narration_preview import snapshot as narration_preview_prepare_snapshot
 from sound_design_brief import snapshot as sound_design_brief_snapshot
@@ -2364,36 +2370,57 @@ def voice_performance_artifact_state() -> dict[str, Any]:
 
 
 def narration_artifact_state() -> dict[str, Any]:
-    """Return narration preparation, spend-gate and deterministic Audio QC state."""
+    """Return narration spend, registered provider return and live Audio QC state."""
     voice = voice_performance_artifact_state()
     if not voice.get("visual_ready"):
         return {
-            "render": {"status": "WAITING_FOR_PERFORMANCE_APPROVAL", "prepared": 0, "ready_for_spend_gate": 0, "items": []},
-            "spend_gate": {"status": "WAITING_FOR_PROVIDER_QUOTE", "complete": False, "items": []},
+            "render": {
+                "status": "WAITING_FOR_PERFORMANCE_APPROVAL",
+                "prepared": 0,
+                "ready_for_spend_gate": 0,
+                "items": [],
+            },
+            "spend_gate": {
+                "status": "WAITING_FOR_PROVIDER_QUOTE",
+                "complete": False,
+                "items": [],
+            },
+            "render_return": {
+                "status": "WAITING_FOR_SPEND_APPROVAL",
+                "expected": 0,
+                "current": 0,
+                "items": [],
+            },
             "render_results_present": False,
-            "audio_qc": {"status": "WAITING_FOR_NARRATION_RENDER_RESULTS", "processed": 0, "passed": 0, "failed": 0, "items": []},
+            "audio_qc": {
+                "status": "WAITING_FOR_NARRATION_RENDER_RESULTS",
+                "processed": 0,
+                "passed": 0,
+                "failed": 0,
+                "items": [],
+            },
             "audio_ready": False,
         }
 
     render = narration_render_snapshot()
     spend_gate = narration_spend_gate_snapshot()
-    render_results_present = (
-        PRODUCTION_NARRATION_RENDER_RESULTS_DIR.exists()
-        and any(PRODUCTION_NARRATION_RENDER_RESULTS_DIR.glob("*.narration_render_result.json"))
+    render_return = narration_render_return_snapshot()
+    audio_qc = narration_audio_qc_snapshot()
+    expected_returns = int(render_return.get("expected") or 0)
+    current_returns = int(render_return.get("current") or 0)
+    render_results_present = bool(
+        expected_returns > 0 and current_returns == expected_returns
     )
-    qc_payload = safe_load_json(PRODUCTION_NARRATION_QC_SUMMARY)
-    audio_qc = qc_payload if isinstance(qc_payload, dict) else {
-        "status": "WAITING_FOR_NARRATION_RENDER_RESULTS",
-        "processed": 0, "passed": 0, "failed": 0, "items": [],
-    }
     audio_ready = bool(
         render_results_present
         and audio_qc.get("status") == "PASS"
-        and int(audio_qc.get("processed") or 0) > 0
+        and int(audio_qc.get("processed") or 0) == expected_returns
+        and int(audio_qc.get("passed") or 0) == expected_returns
     )
     return {
         "render": render,
         "spend_gate": spend_gate,
+        "render_return": render_return,
         "render_results_present": render_results_present,
         "audio_qc": audio_qc,
         "audio_ready": audio_ready,
@@ -4096,7 +4123,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         and int(narration_spend_gate.get("rework") or 0) == 0
         and int(narration_spend_gate.get("rejected") or 0) == 0
     )
-    narration_render_results_present = bool(narration.get("render_results_present"))
+    narration_return = narration.get("render_return", {})
+    narration_return_status = str(
+        narration_return.get("status") or "WAITING_FOR_SPEND_APPROVAL"
+    )
+    narration_render_results_present = bool(
+        narration.get("render_results_present")
+    )
+    narration_audio_qc_state = narration.get("audio_qc", {})
+    narration_audio_qc_status = str(
+        narration_audio_qc_state.get("status")
+        or "WAITING_FOR_NARRATION_RENDER_RESULTS"
+    )
     narration_audio_ready = bool(narration.get("audio_ready"))
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
@@ -4942,11 +4980,33 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "narration_audio_qc": {
-            "enabled": narration_spend_accepted and narration_render_results_present and not narration_audio_ready,
+            "enabled": (
+                narration_spend_accepted
+                and narration_render_results_present
+                and narration_audio_qc_status
+                == "WAITING_FOR_NARRATION_RENDER_RESULTS"
+            ),
             "reason": (
-                "Rendered narration exists under an accepted spend authorization; run local Audio QC."
-                if narration_spend_accepted and narration_render_results_present and not narration_audio_ready
-                else ("Narration Audio QC has passed and timing maps are ready." if narration_audio_ready else ("Import current narration render results after spend approval." if narration_spend_accepted else "Complete the Human Narration Spend Gate first."))
+                "Current spend-authorized provider audio is registered; run local Audio QC and build the narration timing map."
+                if (
+                    narration_spend_accepted
+                    and narration_render_results_present
+                    and narration_audio_qc_status
+                    == "WAITING_FOR_NARRATION_RENDER_RESULTS"
+                )
+                else (
+                    "Narration Audio QC has passed and timing maps are ready."
+                    if narration_audio_ready
+                    else (
+                        "Narration Audio QC failed. Re-import corrected provider audio before retrying."
+                        if narration_audio_qc_status == "FAIL"
+                        else (
+                            "Register the current provider narration return after spend approval."
+                            if narration_spend_accepted
+                            else "Complete the Human Narration Spend Gate first."
+                        )
+                    )
+                )
             ),
         },
         "storyboard_prepare": {
@@ -5588,6 +5648,68 @@ def workflow_guidance(
             "next_title": "Paid narration remains locked until you accept.",
         }
 
+    narration_spend_accepted = bool(
+        narration_spend_state.get("complete")
+        and int(narration_spend_state.get("accepted") or 0) > 0
+        and int(narration_spend_state.get("pending") or 0) == 0
+        and int(narration_spend_state.get("rework") or 0) == 0
+        and int(narration_spend_state.get("rejected") or 0) == 0
+    )
+    narration_return_state = narration_state.get("render_return", {})
+    narration_qc_state = narration_state.get("audio_qc", {})
+    if narration_spend_accepted:
+        if narration_return_state.get("status") != "READY_FOR_AUDIO_QC":
+            return {
+                "state": "WAITING_NARRATION_RENDER_RETURN",
+                "current_action_id": None,
+                "current_title": "Register Final Narration Audio",
+                "current_detail": (
+                    "Spend is authorized for the exact current quote. Supply the "
+                    "provider job/reference, actual cumulative cost, and one local "
+                    "audio file for every narration segment. The repository does "
+                    "not call an unverified paid provider."
+                ),
+                "next_action_id": None,
+                "next_title": "Automatic local Audio QC",
+            }
+        if narration_qc_state.get("status") == "FAIL":
+            return {
+                "state": "NARRATION_AUDIO_QC_FAILED",
+                "current_action_id": None,
+                "current_title": "Narration Audio QC Failed",
+                "current_detail": (
+                    "One or more final narration segments failed duration, silence, "
+                    "clipping, file, or attempt-policy checks. Register corrected "
+                    "provider audio before retrying."
+                ),
+                "next_action_id": None,
+                "next_title": "Re-import corrected narration audio",
+            }
+        if narration_state.get("audio_ready"):
+            return {
+                "state": "NARRATION_AUDIO_READY",
+                "current_action_id": None,
+                "current_title": "Final Narration Audio Ready",
+                "current_detail": (
+                    "Current spend-authorized narration passed local Audio QC and "
+                    "the timing map is ready. Slice 12 stops here before visual "
+                    "production begins."
+                ),
+                "next_action_id": None,
+                "next_title": "Visual production boundary",
+            }
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Run Narration Audio QC",
+            "current_detail": (
+                "Current provider audio is registered against the exact spend "
+                "authorization. Run deterministic local Audio QC and timing-map generation."
+            ),
+            "next_action_id": None,
+            "next_title": "Stop before visual production",
+        }
+
     narration_items = [
         item
         for item in narration_render_state.get("items", [])
@@ -6008,6 +6130,7 @@ def status_payload() -> dict[str, Any]:
         "narration_preview_gate": preview_gate,
         "narration": narration,
         "narration_spend_gate": narration["spend_gate"],
+        "narration_render_return": narration["render_return"],
         "production_visual": production_visual,
         "visual_post_search": visual_post_search_artifact_state(),
         "visual_candidate_gate": visual_candidate_review_snapshot(),
@@ -6167,6 +6290,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/narration-spend-gate":
             self._send_json(narration_spend_gate_snapshot())
+            return
+        if route == "/api/narration-render-return":
+            self._send_json(narration_render_return_snapshot())
             return
         if route == "/api/visual-candidate-review":
             self._send_json(visual_candidate_review_snapshot())
@@ -6714,6 +6840,24 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-render-return":
+                payload = register_narration_render_return(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    provider_job_id=str(body.get("provider_job_id", "")),
+                    actual_cost_usd=body.get("actual_cost_usd"),
+                    segments=(
+                        body.get("segments")
+                        if isinstance(body.get("segments"), list)
+                        else []
+                    ),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
