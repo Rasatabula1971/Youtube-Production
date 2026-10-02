@@ -954,7 +954,8 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
             },
             final_export_gate={
                 "status": "FINAL_EXPORT_APPROVED",
-                "complete": True, "pending": 0, "approved": 1, "rework": 0,
+                "complete": True, "total": 1, "pending": 0,
+                "approved": 1, "rework": 0,
             },
         )
         self.assertEqual(workflow["state"], "FINAL_EXPORT_APPROVED")
