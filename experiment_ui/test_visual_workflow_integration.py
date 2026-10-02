@@ -15,6 +15,10 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         spend_gate=None,
         handoff_state=None,
         assembly_state=None,
+        edit_manifest_state=None,
+        edit_preview_state=None,
+        ffmpeg_ready=True,
+        edit_gate=None,
     ):
         stack = ExitStack()
         self.addCleanup(stack.close)
@@ -141,6 +145,48 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                         "waiting_for_premium_assets": 0,
                         "waiting_for_local_assets": 0,
                         "waiting_for_existing_retry": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "edit_manifest_artifact_state",
+                return_value=(
+                    edit_manifest_state
+                    if edit_manifest_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "edit_preview_artifact_state",
+                return_value=(
+                    edit_preview_state
+                    if edit_preview_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "structural_ffmpeg_available",
+                return_value=ffmpeg_ready,
+            ),
+            patch.object(
+                server,
+                "edit_preview_review_snapshot",
+                return_value=(
+                    edit_gate
+                    if edit_gate is not None
+                    else {
+                        "status": "AWAITING_HUMAN_DECISION",
+                        "complete": False,
+                        "rework": 0,
                     }
                 ),
             ),
@@ -284,7 +330,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
 
 
-    def test_current_no_spend_assembly_stops_before_edit_preview(self):
+    def test_current_no_spend_assembly_starts_slice19_manifest(self):
         workflow = self.workflow(
             {
                 "candidate_gate": {"packets": [], "stale_shots": 0},
@@ -303,10 +349,128 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "waiting_for_premium_assets": 0,
                 "waiting_for_local_assets": 0,
                 "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
             },
         )
-        self.assertEqual(workflow["state"], "VISUAL_ASSEMBLY_READY")
-        self.assertIn("stops before", workflow["current_detail"])
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Build Edit Preview Manifest",
+        )
+        self.assertEqual(
+            workflow["current_action_id"],
+            "auto_continue",
+        )
+
+    def test_current_manifest_without_ffmpeg_stops_fail_closed(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [("c1", "short")],
+            },
+            assembly_state={
+                "status": "ASSEMBLY_PLANS_READY",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            ffmpeg_ready=False,
+        )
+        self.assertEqual(
+            workflow["state"],
+            "LOCAL_FFMPEG_REQUIRED",
+        )
+        self.assertIn(
+            "will not use a paid/cloud fallback",
+            workflow["current_detail"],
+        )
+
+    def test_current_manifest_runs_local_preview_next(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [("c1", "short")],
+            },
+            assembly_state={
+                "status": "ASSEMBLY_PLANS_READY",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={
+                "status": "STALE_OR_INCOMPLETE",
+                "ready": False,
+            },
+            ffmpeg_ready=True,
+        )
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Render Free Structural Edit Preview",
+        )
+
+    def test_current_preview_stops_at_human_edit_preview_gate(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [("c1", "short")],
+            },
+            assembly_state={
+                "status": "ASSEMBLY_PLANS_READY",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            ffmpeg_ready=True,
+            edit_gate={
+                "status": "AWAITING_HUMAN_DECISION",
+                "complete": False,
+                "rework": 0,
+            },
+        )
+        self.assertEqual(
+            workflow["state"],
+            "HUMAN_EDIT_PREVIEW_GATE",
+        )
+        self.assertIn(
+            "structural only",
+            workflow["current_detail"],
+        )
 
     def test_current_premium_assembly_waits_for_external_asset(self):
         workflow = self.workflow(
@@ -390,7 +554,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 6
+                search_index : search_index + 8
             ],
             [
                 "visual_search_acquire",
@@ -399,6 +563,8 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "visual_gap_prepare",
                 "visual_generation_handoff_prepare",
                 "visual_assembly_prepare",
+                "edit_manifest_prepare",
+                "edit_preview_render",
             ],
         )
         self.assertIn("visual_rough_cut_prepare", server.ACTION_DEFS)
