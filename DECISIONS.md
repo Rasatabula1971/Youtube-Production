@@ -1660,3 +1660,46 @@ The Human Narration Spend Gate displays the initial and worst-case USD quote,
 requires every spend criterion, and requires an explicit human confirmation
 before an ACCEPT can authorize that ceiling. Preparing or viewing the gate
 does not call the paid provider.
+
+## D-082 — Paid narration returns are registered before deterministic Audio QC
+
+**Status:** Accepted
+
+Slice 12 does not add an unverified paid-provider adapter. After the Human
+Narration Spend Gate accepts the exact current worst-case quote, the workflow
+moves to `WAITING_NARRATION_RENDER_RETURN`.
+
+The operator registers the provider return with:
+
+- the current concept/format branch;
+- provider job, transaction, or receipt reference;
+- actual cumulative USD cost;
+- every narration segment in exact request order;
+- the attempt number for each segment; and
+- a local provider-returned audio file for each segment.
+
+Registration is rejected unless the Human Narration Spend approval is current,
+the exact narration render request and estimate are still current, the actual
+cost is at or below the approved worst-case ceiling, every segment is present
+in exact order, and every attempt is within the approved regeneration policy.
+
+Provider audio is copied into managed project storage and hash-bound to the
+current render request and spend approval. Registering corrected audio
+invalidates prior Audio QC and timing-map artifacts.
+
+Duration QC is based on a deterministic target derived from the locked
+narration text and approved delivery speed in the render request. Provider
+metadata cannot supply or override the QC duration baseline.
+
+After a complete current provider return is registered, local deterministic
+Audio QC runs automatically. It checks duration tolerance, unexpected silence,
+clipping, missing files, exact segment coverage, and attempt policy. No
+automatic emotion grading or take selection is allowed.
+
+If any current branch fails QC, the workflow stops at
+`NARRATION_AUDIO_QC_FAILED` for corrected audio to be re-registered. Only
+when every current authorized branch passes does the workflow reach
+`NARRATION_AUDIO_READY`.
+
+Slice 12 hard-stops at `NARRATION_AUDIO_READY`. Automatic visual production
+must not begin in this slice.

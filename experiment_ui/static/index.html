@@ -740,6 +740,34 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="narrationReturnPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">AUTHORIZED NARRATION RETURN</p>
+                <h2 id="narrationReturnTitle">Register final narration audio</h2>
+                <p class="muted" id="narrationReturnSummary">Register only audio produced under the current approved spend ceiling.</p>
+              </div>
+              <span class="status-chip running" id="narrationReturnStatus">RETURN REQUIRED</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="narrationReturnDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">This step does not call the paid provider. It records the provider return, copies audio into managed storage, and then starts local Audio QC.</div>
+                <label class="vision-label" for="narrationProviderJobId">Provider job / receipt reference</label>
+                <input id="narrationProviderJobId" type="text" maxlength="300" placeholder="Required provider job, transaction, or receipt reference">
+                <label class="vision-label" for="narrationActualCost">Actual cumulative cost (USD)</label>
+                <input id="narrationActualCost" type="number" min="0" step="0.01" placeholder="0.00">
+                <div id="narrationReturnSegments" class="concept-criteria"></div>
+                <p class="muted">Enter local file paths returned by the provider. Every current narration segment is required in exact order. Re-register corrected files after a QC failure.</p>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="narrationReturnPrev" type="button">← Previous</button>
+                  <button id="narrationReturnRegister" type="button">Register Audio → Run Local QC</button>
+                  <button class="ghost" id="narrationReturnNext" type="button">Next branch →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>

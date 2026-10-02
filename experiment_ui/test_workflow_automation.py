@@ -489,6 +489,133 @@ class WorkflowAutomationTests(unittest.TestCase):
             "NARRATION_PROVIDER_SETUP_REQUIRED",
         )
 
+    def test_spend_approval_waits_for_provider_audio_return(self):
+        readiness = {
+            "production_visual_prepare": {
+                "enabled": True,
+                "reason": "stale downstream visual work",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "WAITING_NARRATION_RENDER_RETURN",
+                    "current_title": "Register Final Narration Audio",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "WAITING_NARRATION_RENDER_RETURN",
+        )
+
+    def test_registered_narration_runs_qc_then_stops_before_visuals(self):
+        state = {"qc_done": False}
+
+        def readiness():
+            if not state["qc_done"]:
+                return {
+                    "narration_audio_qc": {
+                        "enabled": True,
+                        "reason": "current provider audio ready for QC",
+                    },
+                    "production_visual_prepare": {
+                        "enabled": False,
+                        "reason": "QC first",
+                    },
+                }
+            return {
+                "production_visual_prepare": {
+                    "enabled": True,
+                    "reason": "would be next after Slice 12",
+                }
+            }
+
+        def guidance(_readiness):
+            if state["qc_done"]:
+                return {
+                    "state": "NARRATION_AUDIO_READY",
+                    "current_title": "Final Narration Audio Ready",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_title": "Run Narration Audio QC",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, "narration_audio_qc")
+            state["qc_done"] = True
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["completed_actions"],
+            ["narration_audio_qc"],
+        )
+        self.assertEqual(
+            result["workflow_state"],
+            "NARRATION_AUDIO_READY",
+        )
+
+    def test_failed_narration_qc_blocks_visual_work(self):
+        readiness = {
+            "production_visual_prepare": {
+                "enabled": True,
+                "reason": "stale visual work",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "NARRATION_AUDIO_QC_FAILED",
+                    "current_title": "Narration Audio QC Failed",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "NARRATION_AUDIO_QC_FAILED",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {

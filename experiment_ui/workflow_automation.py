@@ -147,6 +147,19 @@ def run_until_human_gate() -> dict[str, Any]:
                 or "Narration provider prerequisites are not ready.",
             }
 
+        if guidance.get("state") in {
+            "WAITING_NARRATION_RENDER_RETURN",
+            "NARRATION_AUDIO_QC_FAILED",
+            "NARRATION_AUDIO_READY",
+        }:
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Narration audio is at a human/provider boundary.",
+            }
+
         action_id = next_enabled_action(readiness)
         if action_id is None:
             return {

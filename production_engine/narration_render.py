@@ -101,6 +101,23 @@ def artifact_key(concept_id: str, fmt: str) -> str:
     return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
 
 
+BASE_NARRATION_WPM = 150.0
+
+
+def expected_speech_duration_seconds(
+    narration: str,
+    speed: Any,
+) -> float:
+    words = [word for word in narration.split() if word.strip()]
+    if not words:
+        raise ValueError("Narration segment cannot be empty")
+    rate = _number(speed or 1.0, label="delivery.speed")
+    if rate <= 0:
+        raise ValueError("delivery.speed must be positive")
+    seconds = (len(words) / BASE_NARRATION_WPM) * 60.0 / rate
+    return round(max(seconds, 0.25), 3)
+
+
 def provider_contract_verified(config: dict[str, Any]) -> bool:
     contract = config.get("provider_contract", {})
     if not isinstance(contract, dict):
@@ -223,6 +240,10 @@ def build_render_request(
                 ],
                 "immutable_narration": narration,
                 "immutable_narration_sha256": expected_hash,
+                "expected_duration_seconds": expected_speech_duration_seconds(
+                    narration,
+                    direction.get("speed"),
+                ),
                 "delivery": {
                     "emotion": direction.get("emotion"),
                     "intensity": direction.get("intensity"),

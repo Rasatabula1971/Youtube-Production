@@ -520,3 +520,43 @@ The provenance chain is:
 render request → provider quote → cost estimate → Human Narration Spend Gate`.
 
 Changing any bound upstream artifact invalidates downstream spend eligibility.
+
+## Slice 12 — Spend approval → provider return → local Audio QC
+
+After the Human Narration Spend Gate accepts the current quote, the app does
+not call an unverified paid provider. It stops at:
+
+`WAITING_NARRATION_RENDER_RETURN`
+
+The working page displays an **Authorized Narration Return** panel. For each
+current branch, the operator supplies the provider job/receipt reference,
+actual cumulative USD cost, and one local audio path for every requested
+narration segment. Each segment also records its attempt number.
+
+The return registry:
+
+- requires a current Human Narration Spend approval;
+- checks the current request/estimate/spend provenance chain;
+- refuses actual cost above the approved worst-case ceiling;
+- requires exact segment order and full coverage;
+- enforces the maximum attempts per segment;
+- accepts only supported audio file extensions;
+- copies provider audio into managed project storage; and
+- invalidates stale QC/timing output whenever audio is re-registered.
+
+A complete current return automatically unlocks
+`narration_audio_qc`. Local ffprobe/ffmpeg checks then produce a deterministic
+Audio QC record and narration timing map.
+
+QC duration targets come from the current narration render request. They are
+derived from immutable narration text plus the approved delivery speed, not
+from provider-returned metadata.
+
+The workflow then stops at one of two boundaries:
+
+- `NARRATION_AUDIO_QC_FAILED` — corrected provider audio must be registered;
+- `NARRATION_AUDIO_READY` — every current authorized branch passed QC and its
+  timing map is current.
+
+Even when narration is ready, Slice 12 prevents automatic continuation into
+visual production.

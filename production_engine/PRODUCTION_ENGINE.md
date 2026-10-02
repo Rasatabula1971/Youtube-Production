@@ -208,3 +208,53 @@ approved spend artifacts.
 The checked-in Higgsfield narration provider contract remains intentionally
 unverified, so production will stop at provider setup/quote requirements until
 those prerequisites are supplied from verified provider information.
+
+## Slice 12 — authorized narration return and deterministic Audio QC
+
+The paid narration API adapter remains intentionally unimplemented until a
+provider endpoint and schema are verified. Slice 12 instead implements the safe
+return path after a human has already authorized the exact current quote.
+
+The chain is:
+
+```text
+Human Narration Spend ACCEPT
+        ↓
+WAITING_NARRATION_RENDER_RETURN
+        ↓
+register provider job/ref + actual cost + every segment audio file
+        ↓
+managed narration audio + provenance-bound render result
+        ↓
+local ffprobe / ffmpeg Audio QC
+        ↓
+narration timing map
+        ↓
+NARRATION_AUDIO_READY
+        ↓
+STOP before visual production
+```
+
+Actual cumulative cost cannot exceed the accepted worst-case narration ceiling.
+The registered result records the exact render-request hash, exact spend
+approval hash, exact cost-estimate hash, provider job/reference and per-segment
+audio hashes.
+
+Audio is copied into `production_engine/output/narration_audio/` so downstream
+work does not depend on arbitrary external file paths.
+
+The narration request now contains a provider-independent
+`expected_duration_seconds` for each segment, derived from immutable text at a
+base 150 words/minute adjusted by the approved delivery speed. This duration is
+the QC baseline. Provider-returned duration values are not trusted.
+
+Audio QC accepts only the current registered provider return. It verifies
+duration tolerance, unexpected silence, clipping, exact segment coverage,
+missing files and attempt limits. A replacement provider return deletes stale
+QC/timing artifacts before the new files are evaluated.
+
+A QC summary is `PASS` only when every current authorized branch has a current
+PASS result. Partial branch coverage cannot report a global PASS.
+
+Slice 12 does not execute paid narration and does not start storyboard or visual
+production.

@@ -297,6 +297,18 @@ const narrationSpendRework = document.getElementById("narrationSpendRework");
 const narrationSpendAccept = document.getElementById("narrationSpendAccept");
 const narrationSpendNext = document.getElementById("narrationSpendNext");
 
+const narrationReturnPanel = document.getElementById("narrationReturnPanel");
+const narrationReturnTitle = document.getElementById("narrationReturnTitle");
+const narrationReturnSummary = document.getElementById("narrationReturnSummary");
+const narrationReturnStatus = document.getElementById("narrationReturnStatus");
+const narrationReturnDetail = document.getElementById("narrationReturnDetail");
+const narrationProviderJobId = document.getElementById("narrationProviderJobId");
+const narrationActualCost = document.getElementById("narrationActualCost");
+const narrationReturnSegments = document.getElementById("narrationReturnSegments");
+const narrationReturnPrev = document.getElementById("narrationReturnPrev");
+const narrationReturnRegister = document.getElementById("narrationReturnRegister");
+const narrationReturnNext = document.getElementById("narrationReturnNext");
+
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
@@ -354,6 +366,8 @@ let editPreviewCursor = 0;
 let latestPreviewSnapshot = null;
 let latestNarrationSpendSnapshot = null;
 let narrationSpendCursor = 0;
+let latestNarrationReturnSnapshot = null;
+let narrationReturnCursor = 0;
 let latestNarrationPerformanceSnapshot = null;
 let latestVisualCandidateSnapshot = null;
 let visualShotCursor = 0;
@@ -552,6 +566,8 @@ function statusTone(workflow) {
     state === "HUMAN_NARRATION_SPEND_GATE" ||
     state === "WAITING_NARRATION_PROVIDER_QUOTE" ||
     state === "NARRATION_PROVIDER_SETUP_REQUIRED" ||
+    state === "WAITING_NARRATION_RENDER_RETURN" ||
+    state === "NARRATION_AUDIO_QC_FAILED" ||
     state === "HUMAN_VISUAL_CANDIDATE_GATE" ||
     state === "HUMAN_VISUAL_RIGHTS_GATE" ||
     state === "HUMAN_ROUGH_CUT_GATE" ||
@@ -598,6 +614,9 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
     HUMAN_NARRATION_SPEND_GATE: "Review narration spend",
+    WAITING_NARRATION_RENDER_RETURN: "Register final narration",
+    NARRATION_AUDIO_QC_FAILED: "Fix narration audio",
+    NARRATION_AUDIO_READY: "Narration audio ready",
     HUMAN_VISUAL_CANDIDATE_GATE: "Choose visuals",
     HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
     HUMAN_ROUGH_CUT_GATE: "Review rough cut",
@@ -3436,10 +3455,146 @@ async function submitNarrationSpendDecision(decision) {
     renderNarrationSpendReview(payload);
     showToast(
       decision === "ACCEPT"
-        ? "Narration spend authorized for this current quote. This gate did not call the provider."
+        ? "Narration spend authorized for this current quote. Register the provider audio return next; this gate did not call the provider."
         : decision === "REWORK"
           ? "Narration quote/setup sent for rework."
           : "Narration spend rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function narrationReturnItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function currentNarrationReturnItem() {
+  const items = narrationReturnItems(latestNarrationReturnSnapshot || {});
+  if (!items.length) return null;
+  narrationReturnCursor = Math.max(
+    0,
+    Math.min(narrationReturnCursor, items.length - 1)
+  );
+  return items[narrationReturnCursor] || null;
+}
+
+function renderNarrationReturn(snapshot, narrationState, workflow) {
+  latestNarrationReturnSnapshot = snapshot || {};
+  const items = narrationReturnItems(snapshot);
+  const qc = (narrationState && narrationState.audio_qc) || {};
+  const audioReady = Boolean(narrationState && narrationState.audio_ready);
+  narrationReturnPanel.hidden = items.length === 0 || audioReady;
+  if (!items.length || audioReady) return;
+
+  const item = currentNarrationReturnItem();
+  if (!item) return;
+  const qcFailed = qc.status === "FAIL";
+  narrationReturnTitle.textContent =
+    qcFailed ? "Replace narration audio that failed QC" :
+    "Register final narration — " + humanizeToken(item.format || "");
+  narrationReturnSummary.textContent =
+    (narrationReturnCursor + 1) + " of " + items.length +
+    " branch" + (items.length === 1 ? "" : "es") +
+    ". Local Audio QC runs after a complete current return is registered.";
+  narrationReturnStatus.textContent =
+    qcFailed ? "QC FAILED — REIMPORT" :
+    item.current_result ? "REGISTERED" : "RETURN REQUIRED";
+  narrationReturnStatus.className =
+    "status-chip " + (item.current_result && !qcFailed ? "success" : "running");
+
+  const ceiling = Number(item.worst_case_estimate_usd);
+  narrationReturnDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>AUTHORIZED PROVIDER RETURN</h4>' +
+    '<h3>' + escapeHtml(item.provider || "Narration provider") + '</h3>' +
+    '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Approved ceiling:</strong> ' + escapeHtml(item.currency || "USD") + ' ' +
+    escapeHtml(Number.isFinite(ceiling) ? ceiling.toFixed(2) : "—") +
+    '<br><strong>Render request:</strong> ' + escapeHtml(item.render_request || "—") +
+    '</p><p class="muted">Actual cumulative cost cannot exceed the approved ceiling. Imported files are copied into managed project storage and hash-bound to this authorization.</p></div>';
+
+  narrationProviderJobId.value = item.provider_job_id || "";
+  narrationActualCost.value =
+    item.actual_cost_usd == null ? "" : String(item.actual_cost_usd);
+  narrationReturnSegments.innerHTML = (item.segments || []).map(function (segment, index) {
+    return '<div class="criterion-row" data-narration-return-row data-segment-id="' +
+      escapeHtml(segment.segment_id || "") + '">' +
+      '<span><strong>' + escapeHtml(segment.segment_id || ("Segment " + (index + 1))) +
+      '</strong><small>' + escapeHtml(segment.purpose || "") +
+      ' · target ≈ ' + escapeHtml(segment.expected_duration_seconds == null ? "—" : segment.expected_duration_seconds) +
+      's · max attempts ' + escapeHtml(segment.max_attempts || "—") + '</small></span>' +
+      '<label>Attempt<input data-return-attempt type="number" min="1" max="' +
+      escapeHtml(segment.max_attempts || 1) + '" value="' +
+      escapeHtml(segment.attempt || 1) + '"></label>' +
+      '<label>Local audio path<input data-return-audio type="text" value="' +
+      escapeHtml(segment.audio_file || "") + '" placeholder="C:/path/segment.wav"></label>' +
+      '</div>';
+  }).join("");
+
+  narrationReturnPrev.disabled = narrationReturnCursor <= 0;
+  narrationReturnNext.disabled = narrationReturnCursor >= items.length - 1;
+  narrationReturnRegister.disabled =
+    Boolean(item.current_result) && !qcFailed &&
+    (!workflow || workflow.state !== "WAITING_NARRATION_RENDER_RETURN");
+}
+
+function moveNarrationReturnCursor(delta) {
+  const items = narrationReturnItems(latestNarrationReturnSnapshot || {});
+  if (!items.length) return;
+  narrationReturnCursor = Math.max(
+    0,
+    Math.min(items.length - 1, narrationReturnCursor + delta)
+  );
+  renderNarrationReturn(
+    latestNarrationReturnSnapshot,
+    (latestStatus && latestStatus.narration) || {},
+    (latestStatus && latestStatus.workflow) || {}
+  );
+}
+
+async function submitNarrationReturn() {
+  const item = currentNarrationReturnItem();
+  if (!item) return;
+  if (!narrationProviderJobId.value.trim()) {
+    showToast("Provider job / receipt reference is required.", true);
+    return;
+  }
+  if (!narrationActualCost.value.trim()) {
+    showToast("Enter the actual cumulative narration cost.", true);
+    return;
+  }
+  const rows = narrationReturnSegments.querySelectorAll("[data-narration-return-row]");
+  const segments = Array.from(rows).map(function (row) {
+    return {
+      segment_id: row.dataset.segmentId,
+      attempt: Number(row.querySelector("[data-return-attempt]").value),
+      audio_file: row.querySelector("[data-return-audio]").value
+    };
+  });
+
+  try {
+    const payload = await api("/api/narration-render-return", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        format: item.format,
+        provider_job_id: narrationProviderJobId.value,
+        actual_cost_usd: Number(narrationActualCost.value),
+        segments: segments
+      })
+    });
+    latestNarrationReturnSnapshot = payload.snapshot || {};
+    renderNarrationReturn(
+      latestNarrationReturnSnapshot,
+      (latestStatus && latestStatus.narration) || {},
+      (latestStatus && latestStatus.workflow) || {}
+    );
+    showToast(
+      payload.automation_job && payload.automation_job.action_id === "auto_continue"
+        ? "Final narration registered. Local Audio QC started automatically."
+        : "Final narration registered. Local Audio QC is ready.",
       false
     );
     await loadStatus();
@@ -4368,6 +4523,11 @@ function renderAnalysis(data) {
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
   renderNarrationSpendReview(data.narration_spend_gate || {});
+  renderNarrationReturn(
+    data.narration_render_return || {},
+    data.narration || {},
+    workflow
+  );
   renderVisualCandidateReview(data.visual_candidate_gate || {});
   renderVisualRightsReview(data.visual_rights_gate || {});
   renderManagedVisualImport(
@@ -4409,6 +4569,9 @@ function renderAnalysis(data) {
       "HUMAN_NARRATION_SPEND_GATE",
       "WAITING_NARRATION_PROVIDER_QUOTE",
       "NARRATION_PROVIDER_SETUP_REQUIRED",
+      "WAITING_NARRATION_RENDER_RETURN",
+      "NARRATION_AUDIO_QC_FAILED",
+      "NARRATION_AUDIO_READY",
       "HUMAN_VISUAL_CANDIDATE_GATE",
       "HUMAN_VISUAL_RIGHTS_GATE",
       "HUMAN_ROUGH_CUT_GATE",
@@ -4965,6 +5128,13 @@ narrationSpendRework.addEventListener("click", function () {
 narrationSpendAccept.addEventListener("click", function () {
   submitNarrationSpendDecision("ACCEPT");
 });
+narrationReturnPrev.addEventListener("click", function () {
+  moveNarrationReturnCursor(-1);
+});
+narrationReturnNext.addEventListener("click", function () {
+  moveNarrationReturnCursor(1);
+});
+narrationReturnRegister.addEventListener("click", submitNarrationReturn);
 storyboardSaveRevision.addEventListener("click", saveStoryboardRevision);
 visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.max(0, visualShotCursor - 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
 visualShotNext.addEventListener("click", function () { visualShotCursor = Math.min(visualReviewItems().length - 1, visualShotCursor + 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
