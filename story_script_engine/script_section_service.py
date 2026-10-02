@@ -21,6 +21,8 @@ from script_section_apply import (
     SELECTION_TRANSACTIONS_DIR,
     apply_manual_edit,
     apply_selection,
+    list_saved_versions,
+    restore_saved_version,
 )
 from script_section_rework_runner import (
     ALTERNATIVES_DIR,
@@ -167,6 +169,7 @@ def branch_snapshot(
     drafts_dir: Path = DRAFTS_DIR,
     state_dir: Path = SECTION_STATE_DIR,
     alternatives_dir: Path = ALTERNATIVES_DIR,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
 ) -> dict[str, Any]:
     concept = str(concept_id or "").strip()
     branch_format = str(fmt or "").strip()
@@ -199,6 +202,16 @@ def branch_snapshot(
             "prepared": False,
             "targets": [],
         }
+    versions = list_saved_versions(
+        draft,
+        versions_dir=versions_dir,
+    )
+    current_revision = (
+        int(draft.get("human_revision", {}).get("revision", 0))
+        if isinstance(draft.get("human_revision"), dict)
+        else 0
+    )
+
     state_path = state_path_for(concept, branch_format, state_dir)
     if not state_path.is_file():
         preview_targets = build_targets(draft)
@@ -217,6 +230,8 @@ def branch_snapshot(
                 }
                 for target in preview_targets
             ],
+            "current_revision": current_revision,
+            "versions": versions,
             "rework_reasons": sorted(ALLOWED_REWORK_REASONS),
         }
 
@@ -233,6 +248,8 @@ def branch_snapshot(
             "section_state": str(state_path),
             "error": str(exc),
             "targets": [],
+            "current_revision": current_revision,
+            "versions": versions,
             "rework_reasons": sorted(ALLOWED_REWORK_REASONS),
         }
 
@@ -273,6 +290,8 @@ def branch_snapshot(
         "draft": str(draft_path),
         "section_state": str(state_path),
         "state_version": state.get("state_version"),
+        "current_revision": current_revision,
+        "versions": versions,
         "targets": targets,
         "rework_reasons": sorted(ALLOWED_REWORK_REASONS),
     }
@@ -295,6 +314,7 @@ def snapshot(
             drafts_dir=drafts_dir,
             state_dir=state_dir,
             alternatives_dir=alternatives_dir,
+            versions_dir=versions_dir,
         )
 
     branches: list[dict[str, Any]] = []
@@ -311,6 +331,7 @@ def snapshot(
                         drafts_dir=drafts_dir,
                         state_dir=state_dir,
                         alternatives_dir=alternatives_dir,
+                        versions_dir=versions_dir,
                     )
                 )
     return {
@@ -350,6 +371,7 @@ def apply_action(
     custom_instruction: str | None = None,
     selection_id: str | None = None,
     replacement_text: str | None = None,
+    version_id: str | None = None,
     reviewer: str | None = None,
     drafts_dir: Path = DRAFTS_DIR,
     state_dir: Path = SECTION_STATE_DIR,
@@ -518,6 +540,41 @@ def apply_action(
             except OSError:
                 pass
 
+    elif action_value == "RESTORE_VERSION":
+        if not state_path.is_file():
+            raise ValueError("Section state is not prepared")
+        if not str(version_id or "").strip():
+            raise ValueError("RESTORE_VERSION requires version_id")
+        if review_requests_dir is None:
+            from script_review import REVIEW_REQUESTS_DIR
+
+            review_requests_dir = REVIEW_REQUESTS_DIR
+
+        restore_saved_version(
+            draft_path,
+            state_path,
+            version_id=str(version_id),
+            reviewer=reviewer_value,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+        branch_prefix = (
+            f"{safe_slug(concept)}.{safe_slug(branch_format)}."
+        )
+        for directory in (alternatives_dir, rework_requests_dir):
+            if not directory.exists():
+                continue
+            for stale in directory.glob(f"{branch_prefix}*"):
+                if stale.is_file():
+                    try:
+                        stale.unlink()
+                    except OSError:
+                        pass
+
     else:
         raise ValueError(f"Unsupported section review action: {action_value}")
 
@@ -527,4 +584,5 @@ def apply_action(
         drafts_dir=drafts_dir,
         state_dir=state_dir,
         alternatives_dir=alternatives_dir,
+        versions_dir=versions_dir,
     )
