@@ -61,6 +61,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_asset_acquire",
     "visual_rough_cut_prepare",
     "visual_gap_prepare",
+    "visual_generation_handoff_prepare",
+    "visual_assembly_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40
@@ -156,8 +158,12 @@ def run_until_human_gate() -> dict[str, Any]:
             "HUMAN_VISUAL_RIGHTS_GATE",
             "HUMAN_ROUGH_CUT_GATE",
             "HUMAN_VISUAL_SPEND_GATE",
-            "VISUAL_GAPS_READY_NO_SPEND",
-            "VISUAL_SPEND_DECISIONS_COMPLETE",
+            "VISUAL_SPEND_INVALID",
+            "VISUAL_EXISTING_RETRY_REQUIRED",
+            "WAITING_FOR_VISUAL_ASSETS",
+            "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+            "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+            "VISUAL_ASSEMBLY_READY",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
