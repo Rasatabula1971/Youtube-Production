@@ -21,6 +21,7 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, safe_slug, sha256_file
+from visual_search import search_result_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -209,6 +210,10 @@ def _copy_local(
 def _rights_context_approved(
     review_path: Path,
     shot_id: str,
+    *,
+    candidate_id: str,
+    candidate_fingerprint: str,
+    result_fingerprint: str,
 ) -> bool:
     rights_path = RIGHTS_DIR / review_path.name.replace(
         ".visual_candidate_review.json",
@@ -217,10 +222,20 @@ def _rights_context_approved(
     if not rights_path.exists():
         return False
     rights = load_json(rights_path)
+    if (
+        rights.get("source_candidate_review_sha256")
+        != sha256_file(review_path)
+    ):
+        return False
     decision = rights.get("decisions", {}).get(shot_id, {})
     return bool(
         isinstance(decision, dict)
         and decision.get("approved_for_rough_cut") is True
+        and str(decision.get("candidate_id") or "") == candidate_id
+        and decision.get("selection_candidate_fingerprint")
+        == candidate_fingerprint
+        and decision.get("selection_result_fingerprint")
+        == result_fingerprint
     )
 
 
@@ -293,7 +308,16 @@ def acquire() -> dict[str, Any]:
             continue
         if review.get("source_result_sha256") != sha256_file(result_path):
             continue
-        result = load_json(result_path)
+        result_state = search_result_is_current(result_path)
+        if result_state is None:
+            failures.append({
+                "concept_id": review.get("concept_id"),
+                "format": review.get("format"),
+                "shot_id": None,
+                "error": "STALE_VISUAL_SEARCH_RESULT",
+            })
+            continue
+        result = result_state[0]
         concept_id = str(result.get("concept_id") or "")
         fmt = str(result.get("format") or "")
 
@@ -354,7 +378,23 @@ def acquire() -> dict[str, Any]:
             )
 
             if status == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
-                if not _rights_context_approved(review_path, str(shot_id)):
+                if not _rights_context_approved(
+                    review_path,
+                    str(shot_id),
+                    candidate_id=candidate_id,
+                    candidate_fingerprint=str(
+                        decision.get("candidate_fingerprint") or ""
+                    ),
+                    result_fingerprint=str(
+                        decision.get("result_fingerprint") or ""
+                    ),
+                ):
+                    failures.append({
+                        "concept_id": concept_id,
+                        "format": fmt,
+                        "shot_id": str(shot_id),
+                        "error": "STALE_OR_MISSING_RIGHTS_CONTEXT_APPROVAL",
+                    })
                     continue
                 existing = (
                     load_json(registry_path)
@@ -507,7 +547,11 @@ def acquire() -> dict[str, Any]:
 
     summary = {
         "status": (
-            "ASSETS_ACQUIRED"
+            "ACQUISITION_ATTENTION_REQUIRED"
+            if failures
+            else "ASSETS_ACQUIRED_WITH_MANUAL_GAPS"
+            if items and manual_required
+            else "ASSETS_ACQUIRED"
             if items
             else "MANUAL_ASSETS_REQUIRED"
             if manual_required
