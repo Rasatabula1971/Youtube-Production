@@ -772,8 +772,6 @@ def _apply_selection_unlocked(
     artifact = load_json(alternatives_path)
     if artifact.get("artifact") != "script_section_alternatives":
         raise ValueError("Not a script_section_alternatives artifact")
-    if artifact.get("selection") is not None:
-        raise ValueError("An alternative has already been selected")
 
     selection = str(selection_id or "").strip().upper()
     if selection not in ALLOWED_SELECTIONS:
