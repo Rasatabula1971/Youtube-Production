@@ -81,6 +81,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="researchNote"', html)
         self.assertIn('id="scriptSectionReviewPane"', html)
         self.assertIn('id="scriptSectionTarget"', html)
+        self.assertIn('id="scriptSectionManualText"', html)
+        self.assertIn('id="scriptSectionSaveManual"', html)
         self.assertIn('id="scriptSectionReason"', html)
         self.assertIn('id="scriptSectionGenerate"', html)
         self.assertIn('id="scriptSectionAlternativeCards"', html)
@@ -102,6 +104,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/research-gate", script)
         self.assertIn("renderScriptSectionReview", script)
         self.assertIn("submitScriptSectionAction", script)
+        self.assertIn('"MANUAL_EDIT"', script)
+        self.assertIn("replacement_text", script)
         self.assertIn("/api/script-section-review", script)
         self.assertIn("data-script-section-selection", script)
 
