@@ -335,6 +335,11 @@
                     <select id="scriptSectionTarget"></select>
                     <div class="concept-complete" id="scriptSectionTargetDetail"></div>
 
+                    <label class="vision-label" for="scriptSectionManualText">Manual target edit</label>
+                    <textarea id="scriptSectionManualText" class="vision-observation" rows="4" maxlength="5000" placeholder="Edit only this selected target. Locked targets must be unlocked first."></textarea>
+                    <button class="ghost" id="scriptSectionSaveManual" type="button">Save manual edit + lock</button>
+                    <p class="muted">Manual edits use the same full-script validation, versioning and rollback protection as generated alternatives.</p>
+
                     <label class="vision-label" for="scriptSectionReason">Rework reason</label>
                     <select id="scriptSectionReason"></select>
                     <label class="vision-label" for="scriptSectionInstruction">Selective rework instruction</label>
