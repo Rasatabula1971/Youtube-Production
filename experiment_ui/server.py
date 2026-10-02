@@ -2012,14 +2012,14 @@ def packaging_artifact_state() -> dict[str, Any]:
 
 
 def research_artifact_state() -> dict[str, Any]:
-    upstream = packaging_artifact_state()
-    packaging_handoff_hash = (
-        sha256_file(PACKAGING_RESEARCH_HANDOFF)
-        if upstream.get("research_ready") and PACKAGING_RESEARCH_HANDOFF.exists()
+    upstream = transformation_artifact_state()
+    research_handoff_hash = (
+        sha256_file(TRANSFORM_RESEARCH_HANDOFF)
+        if upstream.get("research_ready") and TRANSFORM_RESEARCH_HANDOFF.exists()
         else None
     )
     plan_hashes: dict[str, str] = {}
-    if packaging_handoff_hash and RESEARCH_PLANS_DIR.exists():
+    if research_handoff_hash and RESEARCH_PLANS_DIR.exists():
         for path in RESEARCH_PLANS_DIR.glob("*.research_plan.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict):
@@ -2029,7 +2029,12 @@ def research_artifact_state() -> dict[str, Any]:
             if (
                 concept_id
                 and isinstance(provenance, dict)
-                and provenance.get("packaging_handoff_sha256") == packaging_handoff_hash
+                and (
+                    provenance.get("research_handoff_sha256")
+                    == research_handoff_hash
+                    or provenance.get("packaging_handoff_sha256")
+                    == research_handoff_hash
+                )
             ):
                 plan_hashes[concept_id] = sha256_file(path)
 
@@ -2108,7 +2113,10 @@ def research_artifact_state() -> dict[str, Any]:
         )
     )
     return {
-        "packaging_handoff_sha256": packaging_handoff_hash,
+        "research_handoff_sha256": research_handoff_hash,
+        "packaging_handoff_sha256": (
+            research_handoff_hash
+        ),
         "plan_concept_ids": sorted(plan_hashes),
         "evidence_concept_ids": sorted(evidence_hashes),
         "response_concept_ids": sorted(response_hashes),
