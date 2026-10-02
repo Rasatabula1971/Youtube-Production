@@ -397,6 +397,32 @@
               </div>
             </div>
           </section>
+          <section class="panel concept-review-panel" id="titleDirectionReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">POST-SCRIPT TITLE DIRECTION GATE</p>
+                <h2 id="titleDirectionReviewTitle">Select preferred title directions</h2>
+                <p class="muted" id="titleDirectionReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="titleDirectionReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="titleDirectionDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Choose one Short and one Long-form direction. You may edit the wording, but the chosen candidate preserves its psychological angle, primary driver, claim and evidence provenance. This is not yet the final packaging approval.</div>
+                <label class="vision-label" for="titleDirectionNote">Human instruction / review note</label>
+                <textarea id="titleDirectionNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. State what the title directions should change without changing the approved script or evidence."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="titleDirectionPrev" type="button">← Previous</button>
+                  <button class="danger" id="titleDirectionReject" type="button">Reject directions</button>
+                  <button class="ghost" id="titleDirectionRework" type="button">Rework 5+5</button>
+                  <button id="titleDirectionAccept" type="button">Accept directions</button>
+                  <button class="ghost" id="titleDirectionNext" type="button">Next concept →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="formatReviewPanel" hidden>
             <div class="panel-head">
               <div>
