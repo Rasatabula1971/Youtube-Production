@@ -283,5 +283,65 @@ class ScriptSectionServiceTests(unittest.TestCase):
 
 
 
+    def test_manual_edit_uses_resolved_paths_and_clears_stale_rework_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dirs = self.dirs(root)
+            draft_path = self.write_draft(dirs)
+            service.apply_action(
+                concept_id="c1",
+                fmt="long_form",
+                action="PREPARE",
+                **dirs,
+            )
+            state_path = (
+                dirs["state_dir"]
+                / "c1.long_form.section_state.json"
+            )
+            alternatives = (
+                dirs["alternatives_dir"]
+                / "c1.long_form.section_explanation_02.alternatives.json"
+            )
+            rework_request = (
+                dirs["rework_requests_dir"]
+                / "c1.long_form.section_explanation_02.section_rework_request.json"
+            )
+            alternatives.write_text("{}", encoding="utf-8")
+            rework_request.write_text("{}", encoding="utf-8")
+
+            with patch.object(
+                service,
+                "apply_manual_edit",
+                return_value={"status": "MANUAL_EDIT_APPLIED"},
+            ) as mocked:
+                snapshot = service.apply_action(
+                    concept_id="c1",
+                    fmt="long_form",
+                    action="MANUAL_EDIT",
+                    target_id="section:explanation_02",
+                    replacement_text="Human-written replacement.",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            self.assertEqual(mocked.call_args.args[0], draft_path)
+            self.assertEqual(mocked.call_args.args[1], state_path)
+            self.assertEqual(
+                mocked.call_args.kwargs["target_id"],
+                "section:explanation_02",
+            )
+            self.assertEqual(
+                mocked.call_args.kwargs["replacement_text"],
+                "Human-written replacement.",
+            )
+            self.assertFalse(alternatives.exists())
+            self.assertFalse(rework_request.exists())
+            self.assertEqual(
+                snapshot["status"],
+                "READY_FOR_SECTION_REVIEW",
+            )
+
+
+
 if __name__ == "__main__":
     unittest.main()
