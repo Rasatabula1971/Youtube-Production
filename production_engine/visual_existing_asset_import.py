@@ -28,6 +28,7 @@ RIGHTS_DIR = OUTPUT / "visual_rights_reviews"
 ASSET_DIR = OUTPUT / "managed_visual_assets"
 REGISTRY_DIR = OUTPUT / "managed_visual_asset_registry"
 ASSEMBLY_DIR = OUTPUT / "visual_assembly_plans"
+ROUGH_DIR = OUTPUT / "visual_rough_cuts"
 SUMMARY_FILE = OUTPUT / "managed_visual_asset_snapshot.json"
 
 MAX_ASSET_BYTES = 250 * 1024 * 1024
@@ -246,6 +247,12 @@ def register(
 
     registry_path = _registry_path(concept_id, fmt, shot)
     atomic_write_json(registry_path, record)
+
+    rough_path = ROUGH_DIR / (
+        f"{safe_slug(concept_id)}.{safe_slug(fmt)}.visual_rough_cut.json"
+    )
+    if rough_path.exists():
+        rough_path.unlink()
 
     assembly_path = ASSEMBLY_DIR / (
         f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
