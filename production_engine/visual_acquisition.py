@@ -31,6 +31,7 @@ APPROVED_FORMAT_DIR = (
     PROJECT_ROOT / "format_engine" / "output" / "approved_format_plans"
 )
 OUTPUT_DIR = HERE / "output"
+TIMING_DIR = OUTPUT_DIR / "narration_timing_maps"
 MANIFESTS_DIR = OUTPUT_DIR / "visual_manifests"
 SUMMARY_FILE = OUTPUT_DIR / "visual_summary.json"
 
@@ -193,6 +194,8 @@ def build_manifest(
     plan_path: Path,
     branch: dict[str, Any],
     config: dict[str, Any],
+    *,
+    timing_path: Path | None = None,
 ) -> dict[str, Any]:
     concept_id = _approved_plan_identity(plan)
     fmt = str(branch.get("format", "")).strip()
@@ -268,6 +271,14 @@ def build_manifest(
         "manifest_provenance": {
             "approved_format_plan": str(plan_path.resolve()),
             "approved_format_plan_sha256": sha256_file(plan_path),
+            "narration_timing_map": (
+                str(timing_path.resolve()) if timing_path is not None else None
+            ),
+            "narration_timing_map_sha256": (
+                sha256_file(timing_path)
+                if timing_path is not None
+                else None
+            ),
         },
     }
 
@@ -551,7 +562,33 @@ def run_prepare(
             for branch in branches:
                 if not isinstance(branch, dict):
                     raise ValueError("Every approved format branch must be an object")
-                manifest = build_manifest(plan, path, branch, config)
+                concept_id = _approved_plan_identity(plan)
+                fmt = str(branch.get("format") or "").strip()
+                timing_path = (
+                    TIMING_DIR
+                    / f"{safe_slug(concept_id)}.{safe_slug(fmt)}.narration_timing_map.json"
+                )
+                if not timing_path.is_file():
+                    raise ValueError(
+                        f"{concept_id}.{fmt} requires current narration timing"
+                    )
+                timing = load_json(timing_path)
+                if (
+                    not isinstance(timing, dict)
+                    or timing.get("status") != "READY_FOR_ROUGH_CUT"
+                    or str(timing.get("concept_id") or "") != concept_id
+                    or str(timing.get("format") or "") != fmt
+                ):
+                    raise ValueError(
+                        f"{concept_id}.{fmt} narration timing is not ready"
+                    )
+                manifest = build_manifest(
+                    plan,
+                    path,
+                    branch,
+                    config,
+                    timing_path=timing_path,
+                )
                 fmt = str(manifest["format"])
                 concept_id = str(manifest["concept_id"])
                 dest = (
