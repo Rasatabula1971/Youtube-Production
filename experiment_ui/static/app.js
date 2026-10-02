@@ -573,6 +573,11 @@ function statusTone(workflow) {
     state === "HUMAN_VISUAL_RIGHTS_GATE" ||
     state === "HUMAN_ROUGH_CUT_GATE" ||
     state === "HUMAN_VISUAL_SPEND_GATE" ||
+    state === "VISUAL_SPEND_INVALID" ||
+    state === "VISUAL_EXISTING_RETRY_REQUIRED" ||
+    state === "WAITING_FOR_VISUAL_ASSETS" ||
+    state === "WAITING_FOR_PREMIUM_VISUAL_ASSETS" ||
+    state === "WAITING_FOR_LOCAL_VISUAL_ASSETS" ||
     state === "HUMAN_EDIT_PREVIEW_GATE"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
@@ -623,8 +628,12 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
     HUMAN_ROUGH_CUT_GATE: "Review rough cut",
     HUMAN_VISUAL_SPEND_GATE: "Review visual spend",
-    VISUAL_GAPS_READY_NO_SPEND: "No visual spend needed",
-    VISUAL_SPEND_DECISIONS_COMPLETE: "Visual spend decisions complete"
+    VISUAL_SPEND_INVALID: "Fix visual spend",
+    VISUAL_EXISTING_RETRY_REQUIRED: "Retry existing visuals",
+    WAITING_FOR_VISUAL_ASSETS: "Register missing visuals",
+    WAITING_FOR_PREMIUM_VISUAL_ASSETS: "Register premium visuals",
+    WAITING_FOR_LOCAL_VISUAL_ASSETS: "Register local visuals",
+    VISUAL_ASSEMBLY_READY: "Visual assembly ready"
   };
   if (analysisHumanGateLabels[workflow.state]) {
     return {
@@ -4501,8 +4510,12 @@ function renderAnalysis(data) {
     "HUMAN_VISUAL_RIGHTS_GATE",
     "HUMAN_ROUGH_CUT_GATE",
     "HUMAN_VISUAL_SPEND_GATE",
-    "VISUAL_GAPS_READY_NO_SPEND",
-    "VISUAL_SPEND_DECISIONS_COMPLETE",
+    "VISUAL_SPEND_INVALID",
+    "VISUAL_EXISTING_RETRY_REQUIRED",
+    "WAITING_FOR_VISUAL_ASSETS",
+    "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+    "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+    "VISUAL_ASSEMBLY_READY",
     "HUMAN_EDIT_PREVIEW_GATE"
   ].includes(workflow.state);
 
@@ -4556,8 +4569,9 @@ function renderAnalysis(data) {
   renderVisualSpendReview(
     [
       "HUMAN_VISUAL_SPEND_GATE",
-      "VISUAL_SPEND_DECISIONS_COMPLETE",
-      "VISUAL_GENERATION_AUTHORIZED"
+      "VISUAL_SPEND_INVALID",
+      "WAITING_FOR_VISUAL_ASSETS",
+      "WAITING_FOR_PREMIUM_VISUAL_ASSETS"
     ].includes(workflow.state)
       ? (data.visual_spend_gate || {})
       : {}
@@ -4597,8 +4611,12 @@ function renderAnalysis(data) {
       "HUMAN_VISUAL_RIGHTS_GATE",
       "HUMAN_ROUGH_CUT_GATE",
       "HUMAN_VISUAL_SPEND_GATE",
-      "VISUAL_GAPS_READY_NO_SPEND",
-      "VISUAL_SPEND_DECISIONS_COMPLETE",
+      "VISUAL_SPEND_INVALID",
+      "VISUAL_EXISTING_RETRY_REQUIRED",
+      "WAITING_FOR_VISUAL_ASSETS",
+      "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+      "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+      "VISUAL_ASSEMBLY_READY",
       "HUMAN_EDIT_PREVIEW_GATE",
       "WAITING_FOR_FINAL_VISUAL_ASSETS",
       "FINAL_EDIT_DIRECTION_APPROVED"

@@ -429,3 +429,44 @@ Non-finite amounts are rejected before comparison.
 Slice 17 produces no generation handoff. It stops at the Human Visual Spend
 Gate, the no-spend boundary, or completed spend decisions. Paid provider
 execution remains impossible in this stage.
+
+## Slice 18 — canonical visual spend → zero-cost generation handoff and assembly
+
+The visual spend artifact is now canonical and tamper-resistant. Reconciliation
+preserves/recomputes the review status, summary and branch authorization total.
+Invalid or over-cap decisions are removed from current state.
+
+`visual_generation_handoff.py` consumes the complete current visual-spend
+snapshot rather than scanning arbitrary review files. It emits requests only for
+`AUTHORIZE_GENERATION` decisions in a globally valid spend state.
+
+Each generated request binds:
+
+- current gap-plan path/hash;
+- current visual-spend-review path/hash;
+- exact human spend-decision SHA-256; and
+- exact maximum authorized USD cost.
+
+The request explicitly records `provider_call_authorized=false` and
+`execution_authorized=false`. Preparing it spends nothing.
+
+`visual_assembly_plan.py` now validates the exact current gap plan, requires a
+complete current spend review whenever hero gaps exist, recognizes current
+managed asset statuses, and revalidates managed/generated local files.
+
+The assembly plan can resolve to:
+
+- `READY_FOR_EDIT_ASSEMBLY`;
+- `WAITING_FOR_PREMIUM_GENERATED_ASSETS`;
+- `WAITING_FOR_LOCAL_VISUAL_ASSETS`; or
+- `WAITING_FOR_EXISTING_VISUAL_RETRY`.
+
+A premium generation request that is missing or stale remains a pending premium
+slot. A generated asset is accepted only when its request hash, local asset hash
+and actual cost remain current and within the request's authorized maximum.
+
+Assembly plans can be independently rebuilt and compared through
+`assembly_plan_is_current`, so later asset/request changes invalidate an old
+timeline instead of silently surviving.
+
+Slice 18 ends before edit-manifest creation and before any video rendering.

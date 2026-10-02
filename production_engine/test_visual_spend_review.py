@@ -266,6 +266,65 @@ class VisualSpendReviewTests(unittest.TestCase):
                 6.0,
             )
 
+    def test_snapshot_preserves_complete_spend_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            gaps, reviews = self.patch_paths(stack, Path(tmp))
+            plan = self.write_plan(gaps, [self.gap("shot-001")])
+            spend.apply_action(
+                gap_plan_file=str(plan),
+                shot_id="shot-001",
+                decision="AUTHORIZE_GENERATION",
+                max_cost_usd=4.25,
+            )
+            review_path = (
+                reviews / "c1.short.visual_spend_review.json"
+            )
+            before = json.loads(
+                review_path.read_text(encoding="utf-8")
+            )
+            snapshot = spend.snapshot()
+            after = json.loads(
+                review_path.read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(before["status"], "COMPLETE")
+        self.assertEqual(after["status"], "COMPLETE")
+        self.assertEqual(after["summary"]["decided"], 1)
+        self.assertEqual(after["authorized_max_total_usd"], 4.25)
+        self.assertTrue(snapshot["complete"])
+
+    def test_tampered_over_cap_decision_is_removed_from_current_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            gaps, reviews = self.patch_paths(stack, Path(tmp))
+            plan = self.write_plan(gaps, [self.gap("shot-001")])
+            spend.apply_action(
+                gap_plan_file=str(plan),
+                shot_id="shot-001",
+                decision="AUTHORIZE_GENERATION",
+                max_cost_usd=4.25,
+            )
+            review_path = (
+                reviews / "c1.short.visual_spend_review.json"
+            )
+            payload = json.loads(
+                review_path.read_text(encoding="utf-8")
+            )
+            payload["decisions"]["shot-001"]["max_cost_usd"] = 99.0
+            review_path.write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+            snapshot = spend.snapshot()
+            current = json.loads(
+                review_path.read_text(encoding="utf-8")
+            )
+
+        self.assertFalse(snapshot["complete"])
+        self.assertEqual(snapshot["authorized"], 0)
+        self.assertEqual(snapshot["stale_removed"], 1)
+        self.assertEqual(current["status"], "REVIEW_IN_PROGRESS")
+        self.assertEqual(current["decisions"], {})
+
     def test_retry_existing_requires_human_instruction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             gaps, _ = self.patch_paths(stack, Path(tmp))

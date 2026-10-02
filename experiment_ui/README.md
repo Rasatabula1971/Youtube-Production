@@ -755,3 +755,38 @@ invalid spend configuration fail closed.
 
 Choosing **Authorize Generation** records only a maximum permitted spend. It
 does not call a provider, create a generation job, or spend money in Slice 17.
+
+## Slice 18 — Visual Spend decisions → generation briefs / assembly boundary
+
+After Slice 17, Continue Automatically may perform at most two new zero-cost
+steps:
+
+```text
+Completed Human Visual Spend / no-spend decision
+        ↓
+Prepare Premium Visual Generation Briefs   (authorized shots only)
+        ↓
+Build Visual Edit Assembly Plan
+        ↓
+STOP
+```
+
+When there is no authorized premium generation, the brief step is skipped.
+
+The assembly stop state tells the reviewer exactly what remains:
+
+- `VISUAL_ASSEMBLY_READY` — current timeline is ready for the next edit-preview
+  slice;
+- `WAITING_FOR_PREMIUM_VISUAL_ASSETS` — current human-authorized generation
+  briefs exist, but the app has not called a paid provider;
+- `WAITING_FOR_LOCAL_VISUAL_ASSETS` — approved local/editorial files still
+  need to be registered;
+- `WAITING_FOR_VISUAL_ASSETS` — both premium and local assets are missing; or
+- `VISUAL_EXISTING_RETRY_REQUIRED` — a human chose Retry Existing and the
+  requested free/existing search must be performed before edit-preview work.
+
+Generation briefs are provider-neutral handoff artifacts. They preserve the
+human maximum spend but set provider-call and execution authorization to false.
+
+The workflow does not automatically continue into edit-manifest creation or
+FFmpeg preview rendering in Slice 18.

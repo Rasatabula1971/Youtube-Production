@@ -272,6 +272,7 @@ from visual_spend_review import (
     snapshot as visual_spend_review_snapshot,
 )
 from visual_gap_planner import gap_plan_is_current
+from visual_assembly_plan import assembly_plan_is_current
 from visual_generated_asset_import import (
     register as register_generated_visual_asset,
     snapshot as generated_visual_asset_snapshot,
@@ -395,8 +396,6 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
     "visual_assembly_prepare",
-    "edit_manifest_prepare",
-    "edit_preview_render",
     "final_production_handoff_prepare",
 ]
 
@@ -2782,29 +2781,65 @@ def visual_asset_acquisition_artifact_state() -> dict[str, Any]:
 
 def visual_generation_handoff_artifact_state() -> dict[str, Any]:
     spend = visual_spend_review_snapshot()
-    expected: dict[tuple[str, str, str], float] = {}
-    for item in spend.get("items", []):
-        if not isinstance(item, dict):
-            continue
-        concept_id = str(item.get("concept_id") or "")
-        branch_format = str(item.get("format") or "")
-        decisions = item.get("decisions", {})
-        if not isinstance(decisions, dict):
-            continue
-        for shot_id, decision in decisions.items():
-            if (
-                isinstance(decision, dict)
-                and decision.get("paid_generation_authorized") is True
-                and str(decision.get("decision") or "")
-                == "AUTHORIZE_GENERATION"
-            ):
-                expected[(concept_id, branch_format, str(shot_id))] = round(
-                    float(decision.get("max_cost_usd") or 0),
-                    2,
-                )
+    expected: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
 
-    current: dict[tuple[str, str, str], float] = {}
-    current_details: dict[tuple[str, str, str], dict[str, Any]] = {}
+    if spend.get("complete") and spend.get("global_cap_valid", True):
+        for item in spend.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            concept_id = str(item.get("concept_id") or "")
+            branch_format = str(item.get("format") or "")
+            gap_path = Path(str(item.get("gap_plan_file") or ""))
+            spend_path = Path(str(item.get("spend_review_file") or ""))
+            decisions = item.get("decisions", {})
+            if not isinstance(decisions, dict):
+                continue
+            for shot_id, decision in decisions.items():
+                if (
+                    isinstance(decision, dict)
+                    and decision.get("paid_generation_authorized") is True
+                    and str(decision.get("decision") or "")
+                    == "AUTHORIZE_GENERATION"
+                ):
+                    decision_hash = hashlib.sha256(
+                        json.dumps(
+                            decision,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    expected[
+                        (concept_id, branch_format, str(shot_id))
+                    ] = {
+                        "max_cost_usd": round(
+                            float(decision.get("max_cost_usd") or 0),
+                            2,
+                        ),
+                        "gap_plan": str(gap_path.resolve())
+                        if gap_path.exists()
+                        else str(gap_path),
+                        "gap_plan_sha256": item.get("gap_plan_sha256"),
+                        "spend_review": str(spend_path.resolve())
+                        if spend_path.exists()
+                        else str(spend_path),
+                        "spend_review_sha256": item.get(
+                            "spend_review_sha256"
+                        ),
+                        "decision_sha256": decision_hash,
+                    }
+
+    current: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
+    current_details: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
     stale = 0
     if PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.exists():
         for path in PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.glob(
@@ -2819,38 +2854,50 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
                 str(payload.get("format") or ""),
                 str(payload.get("shot_id") or ""),
             )
+            wanted = expected.get(key)
             provenance = payload.get("provenance", {})
             authorization = payload.get("spend_authorization", {})
-            if not isinstance(provenance, dict) or not isinstance(
-                authorization, dict
+            if (
+                wanted is None
+                or not isinstance(provenance, dict)
+                or not isinstance(authorization, dict)
             ):
                 stale += 1
                 continue
+
             gap_path = Path(str(provenance.get("gap_plan") or ""))
             spend_path = Path(
                 str(provenance.get("visual_spend_review") or "")
             )
-            if (
-                not gap_path.exists()
-                or not spend_path.exists()
-                or provenance.get("gap_plan_sha256") != sha256_file(gap_path)
-                or provenance.get("visual_spend_review_sha256")
-                != sha256_file(spend_path)
-                or authorization.get("human_authorized") is not True
-                or authorization.get("execution_authorized") is not False
-            ):
-                stale += 1
-                continue
             max_cost = round(
                 float(authorization.get("max_cost_usd") or 0),
                 2,
             )
-            if key not in expected or expected[key] != max_cost:
+            valid = bool(
+                gap_path.is_file()
+                and spend_path.is_file()
+                and str(gap_path.resolve()) == wanted["gap_plan"]
+                and str(spend_path.resolve()) == wanted["spend_review"]
+                and provenance.get("gap_plan_sha256")
+                == wanted["gap_plan_sha256"]
+                == sha256_file(gap_path)
+                and provenance.get("visual_spend_review_sha256")
+                == wanted["spend_review_sha256"]
+                == sha256_file(spend_path)
+                and provenance.get("visual_spend_decision_sha256")
+                == wanted["decision_sha256"]
+                and authorization.get("human_authorized") is True
+                and authorization.get("execution_authorized") is False
+                and max_cost == wanted["max_cost_usd"]
+            )
+            if not valid:
                 stale += 1
                 continue
-            current[key] = max_cost
+
+            current[key] = wanted
             current_details[key] = {
                 "request_file": str(path),
+                "request_sha256": sha256_file(path),
                 "desired_visual": payload.get("desired_visual"),
                 "story_purpose": payload.get("story_purpose"),
                 "generation_brief": payload.get("generation_brief", {}),
@@ -2870,19 +2917,26 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
         "expected": len(expected),
         "current": len(current),
         "stale": stale,
-        "authorized_max_total_usd": round(sum(expected.values()), 2),
+        "authorized_max_total_usd": round(
+            sum(
+                item["max_cost_usd"]
+                for item in expected.values()
+            ),
+            2,
+        ),
+        "provider_calls": 0,
+        "paid_inference_executed": False,
         "requests": [
             {
                 "concept_id": key[0],
                 "format": key[1],
                 "shot_id": key[2],
-                "max_cost_usd": value,
+                "max_cost_usd": value["max_cost_usd"],
                 **current_details.get(key, {}),
             }
             for key, value in sorted(current.items())
         ],
     }
-
 
 def visual_assembly_artifact_state(
     expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
@@ -2896,13 +2950,14 @@ def visual_assembly_artifact_state(
     stale = 0
     waiting_for_premium = 0
     waiting_for_local = 0
+    waiting_for_retry = 0
     ready_for_edit = 0
 
     if PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.exists():
         for path in PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.glob(
             "*.visual_assembly_plan.json"
         ):
-            payload = safe_load_json(path)
+            payload = assembly_plan_is_current(path)
             if not isinstance(payload, dict):
                 stale += 1
                 continue
@@ -2910,47 +2965,22 @@ def visual_assembly_artifact_state(
                 str(payload.get("concept_id") or ""),
                 str(payload.get("format") or ""),
             )
-            provenance = payload.get("provenance", {})
-            if not isinstance(provenance, dict):
-                stale += 1
-                continue
-
-            checks = (
-                ("rough_cut", "rough_cut_sha256"),
-                ("rough_cut_review", "rough_cut_review_sha256"),
-                ("gap_plan", "gap_plan_sha256"),
-            )
-            valid = True
-            for path_key, hash_key in checks:
-                source = Path(str(provenance.get(path_key) or ""))
-                if (
-                    not source.exists()
-                    or provenance.get(hash_key) != sha256_file(source)
-                ):
-                    valid = False
-                    break
-
-            spend_source = str(provenance.get("spend_review") or "")
-            if valid and spend_source:
-                spend_path = Path(spend_source)
-                if (
-                    not spend_path.exists()
-                    or provenance.get("spend_review_sha256")
-                    != sha256_file(spend_path)
-                ):
-                    valid = False
-
-            if not valid or (expected and key not in expected):
+            if expected and key not in expected:
                 stale += 1
                 continue
 
             current.add(key)
-            if payload.get("status") == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
+            status = str(payload.get("status") or "")
+            if status == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
                 waiting_for_premium += 1
-            elif payload.get("status") == "WAITING_FOR_LOCAL_VISUAL_ASSETS":
+            elif status == "WAITING_FOR_LOCAL_VISUAL_ASSETS":
                 waiting_for_local += 1
-            elif payload.get("status") == "READY_FOR_EDIT_ASSEMBLY":
+            elif status == "WAITING_FOR_EXISTING_VISUAL_RETRY":
+                waiting_for_retry += 1
+            elif status == "READY_FOR_EDIT_ASSEMBLY":
                 ready_for_edit += 1
+            else:
+                stale += 1
 
     ready = bool(expected) and expected.issubset(current) and stale == 0
     return {
@@ -2967,9 +2997,9 @@ def visual_assembly_artifact_state(
         "stale": stale,
         "waiting_for_premium_assets": waiting_for_premium,
         "waiting_for_local_assets": waiting_for_local,
+        "waiting_for_existing_retry": waiting_for_retry,
         "ready_for_edit_assembly": ready_for_edit,
     }
-
 
 def edit_manifest_artifact_state(
     expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
@@ -5995,6 +6025,21 @@ def workflow_guidance(
     if visual_post.get("gap_plans_ready"):
         spend_gate = visual_spend_review_snapshot()
         hero_count = int(spend_gate.get("hero_candidates") or 0)
+
+        if spend_gate.get("status") == "INVALID_VISUAL_SPEND_AUTHORIZATION":
+            return {
+                "state": "VISUAL_SPEND_INVALID",
+                "current_action_id": None,
+                "current_title": "Visual Spend Authorization Is Invalid",
+                "current_detail": (
+                    "The current spend records exceed or violate the configured "
+                    "workflow cost boundary. No generation brief or assembly can "
+                    "continue until the current spend decisions are repaired."
+                ),
+                "next_action_id": None,
+                "next_title": "Repair the Human Visual Spend decisions",
+            }
+
         if hero_count > 0 and not spend_gate.get("complete"):
             return {
                 "state": "HUMAN_VISUAL_SPEND_GATE",
@@ -6007,35 +6052,7 @@ def workflow_guidance(
                     "workflow-wide USD hard cap applies across every current branch."
                 ),
                 "next_action_id": None,
-                "next_title": "Slice 18: prepare generation or assembly handoff",
-            }
-
-        if hero_count == 0:
-            return {
-                "state": "VISUAL_GAPS_READY_NO_SPEND",
-                "current_action_id": None,
-                "current_title": "Visual Gap Plan Ready — No Spend Needed",
-                "current_detail": (
-                    "The approved rough cut has current gap plans, but no unresolved "
-                    "shot met the premium-generation threshold. Slice 17 stops here "
-                    "with paid generation still locked."
-                ),
-                "next_action_id": None,
-                "next_title": "Slice 18: build the zero-cost visual assembly",
-            }
-
-        if spend_gate.get("complete"):
-            return {
-                "state": "VISUAL_SPEND_DECISIONS_COMPLETE",
-                "current_action_id": None,
-                "current_title": "Visual Spend Decisions Complete",
-                "current_detail": (
-                    "Every current premium candidate has a human decision and all "
-                    "authorized ceilings fit the global workflow cap. No generation "
-                    "brief or provider action is created in Slice 17."
-                ),
-                "next_action_id": None,
-                "next_title": "Slice 18: prepare generation or assembly handoff",
+                "next_title": "Prepare generation briefs or zero-cost assembly",
             }
 
         authorized = int(spend_gate.get("authorized") or 0)
@@ -6047,8 +6064,9 @@ def workflow_guidance(
                     "current_action_id": "auto_continue",
                     "current_title": "Prepare Premium Visual Generation Briefs",
                     "current_detail": (
-                        "Human spend ceilings are approved. Prepare provider-neutral "
-                        "cinematic briefs only; this step calls no paid provider."
+                        "The Human Visual Spend Gate is complete. Prepare only "
+                        "provenance-bound provider-neutral briefs for explicitly "
+                        "authorized shots. This step calls no provider and spends nothing."
                     ),
                     "next_action_id": None,
                     "next_title": "Build Visual Edit Assembly Plan",
@@ -6063,140 +6081,91 @@ def workflow_guidance(
                 "current_action_id": "auto_continue",
                 "current_title": "Build Visual Edit Assembly Plan",
                 "current_detail": (
-                    "Build the zero-cost timeline contract from current local "
-                    "visuals and explicit placeholders. Missing premium/editorial "
-                    "assets do not block a structural preview."
+                    "Build the deterministic zero-cost timeline from current managed "
+                    "assets, approved placeholders and any authorized premium slots. "
+                    "No media is rendered and no provider is called."
                 ),
                 "next_action_id": None,
-                "next_title": "Build Edit Preview Manifest",
+                "next_title": "Slice 18 assembly boundary",
             }
 
-        edit_manifest_state = edit_manifest_artifact_state(
-            visual_post.get("expected_branches", [])
+        retry_pending = int(
+            assembly_state.get("waiting_for_existing_retry") or 0
         )
-        if not edit_manifest_state.get("ready"):
-            return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Build Edit Preview Manifest",
-                "current_detail": (
-                    "Combine current narration timing, visual assembly and approved "
-                    "sound-design intent into a deterministic preview timeline."
-                ),
-                "next_action_id": None,
-                "next_title": "Render Free Structural Edit Preview",
-            }
-
-        edit_preview_state = edit_preview_artifact_state(
-            visual_post.get("expected_branches", [])
-        )
-        if not edit_preview_state.get("ready"):
-            return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Render Free Structural Edit Preview",
-                "current_detail": (
-                    "Render a local FFmpeg preview with current assets, placeholders "
-                    "and QC-passed narration. No paid visual provider or generated "
-                    "music/SFX is used."
-                ),
-                "next_action_id": None,
-                "next_title": "Human Edit Preview Gate",
-            }
-
-        edit_gate = edit_preview_review_snapshot()
-        if not edit_gate.get("complete"):
-            return {
-                "state": "HUMAN_EDIT_PREVIEW_GATE",
-                "current_action_id": None,
-                "current_title": "Review Structural Edit Preview",
-                "current_detail": (
-                    "Judge pacing, narration-to-picture rhythm and story flow before "
-                    "spending on unresolved hero shots. Dark placeholders are expected "
-                    "where final visual assets are still missing."
-                ),
-                "next_action_id": None,
-                "next_title": "Approve direction or return a layer for rework",
-            }
-
-        if int(edit_gate.get("rework") or 0) > 0:
-            return {
-                "state": "EDIT_PREVIEW_REWORK_REQUIRED",
-                "current_action_id": None,
-                "current_title": "Edit Preview Rework Requested",
-                "current_detail": (
-                    "A human return request was recorded for visuals, narration or "
-                    "sound. The instruction is preserved and must be applied at that "
-                    "upstream creative layer before a new preview is approved."
-                ),
-                "next_action_id": None,
-                "next_title": "Apply the human rework instruction",
-            }
-
-        premium_missing = int(
+        premium_pending = int(
             assembly_state.get("waiting_for_premium_assets") or 0
         )
-        local_missing = int(
+        local_pending = int(
             assembly_state.get("waiting_for_local_assets") or 0
         )
-        if premium_missing or local_missing:
+
+        if retry_pending:
             return {
-                "state": "WAITING_FOR_FINAL_VISUAL_ASSETS",
+                "state": "VISUAL_EXISTING_RETRY_REQUIRED",
                 "current_action_id": None,
-                "current_title": "Edit Direction Approved — Final Visuals Still Missing",
+                "current_title": "Retry Existing Visual Search Requested",
                 "current_detail": (
-                    f"The structural edit is approved. {premium_missing} branch(es) "
-                    f"still wait for premium-generated assets and {local_missing} "
-                    "branch(es) wait for approved local assets. Register those files; "
-                    "the assembly and preview approval will become stale automatically."
+                    f"{retry_pending} branch(es) contain a human Retry Existing "
+                    "decision. Slice 18 preserves those instructions and stops before "
+                    "edit preview work so the search can be rerun intentionally."
                 ),
                 "next_action_id": None,
-                "next_title": "Register final visual assets",
+                "next_title": "Rerun the requested existing/free visual search",
             }
 
-        final_handoff = final_production_handoff_artifact_state(
-            visual_post.get("expected_branches", [])
-        )
-        if not final_handoff.get("ready"):
+        if premium_pending and local_pending:
             return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Prepare Final Production Handoff",
+                "state": "WAITING_FOR_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Visual Assembly Ready — Final Assets Still Missing",
                 "current_detail": (
-                    "The structural edit and all current visual assets are approved. "
-                    "Build the zero-cost provider-neutral package containing the final "
-                    "visual timeline, narration and sound-design intent."
+                    f"{premium_pending} branch(es) wait for externally generated "
+                    f"premium assets and {local_pending} branch(es) wait for approved "
+                    "local/editorial files. The app has made no paid provider call."
                 ),
                 "next_action_id": None,
-                "next_title": "Final sound/provider boundary",
+                "next_title": "Register the missing visual assets",
             }
 
-        if int(final_handoff.get("blocked") or 0) > 0:
+        if premium_pending:
             return {
-                "state": "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+                "state": "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
                 "current_action_id": None,
-                "current_title": "Final Production Handoff Has Missing Inputs",
+                "current_title": "Premium Visual Briefs Ready — Awaiting External Assets",
                 "current_detail": (
-                    "One or more branches lost a current final visual, narration or "
-                    "sound-design input. Rebuild the stale upstream artifact before "
-                    "attempting final production."
+                    f"{premium_pending} branch(es) contain current, human-authorized "
+                    "generation briefs. No paid provider call has been made. Provider "
+                    "execution remains external/unbuilt in this slice; register the "
+                    "resulting files only within the authorized cost ceilings."
                 ),
                 "next_action_id": None,
-                "next_title": "Repair missing final-production inputs",
+                "next_title": "Register generated visual assets",
+            }
+
+        if local_pending:
+            return {
+                "state": "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Visual Assembly Ready — Local Assets Required",
+                "current_detail": (
+                    f"{local_pending} branch(es) still need approved local/editorial "
+                    "files. No paid generation is needed for those branches."
+                ),
+                "next_action_id": None,
+                "next_title": "Register approved local visual assets",
             }
 
         return {
-            "state": "FINAL_SOUND_PROVIDER_REQUIRED",
+            "state": "VISUAL_ASSEMBLY_READY",
             "current_action_id": None,
-            "current_title": "Final Production Handoff Ready",
+            "current_title": "Visual Assembly Plan Ready",
             "current_detail": (
-                "The approved visual edit and narration are packaged and current. "
-                "Final music/SFX are still descriptive intent only. No paid provider "
-                "has been called. Connect a commercial-safe final sound/provider path "
-                "before a publish-ready export."
+                "Current spend/no-spend decisions have been converted into a "
+                "provenance-bound zero-cost visual timeline. Slice 18 stops before "
+                "building or rendering the structural edit preview."
             ),
             "next_action_id": None,
-            "next_title": "Connect final sound/provider assets",
+            "next_title": "Slice 19: build the structural edit preview",
         }
 
     production_visual = production_visual_artifact_state()
