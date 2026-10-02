@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ SECTION_REVIEW_STATES_DIR = OUTPUT_DIR / "script_section_review_states"
 SUMMARY_FILE = OUTPUT_DIR / "script_gate_summary.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
+_SECTION_REVIEW_ACTION_LOCK = threading.Lock()
 
 CRITERIA = (
     "package_promise_delivered",
@@ -191,23 +193,24 @@ def prepare() -> dict[str, Any]:
             str(req["format"]),
         )
         initial_state = req["section_review"]
-        if state_dest.exists():
-            existing_state = load_json(state_dest)
-            validation = validate_section_review_state(existing_state)
-            if not validation["valid"]:
-                raise ValueError(
-                    "Invalid persisted section review state: "
-                    + "; ".join(validation["errors"])
-                )
-            if (
-                existing_state.get("source_draft_sha256")
-                == initial_state.get("source_draft_sha256")
-            ):
-                req["section_review"] = existing_state
+        with _SECTION_REVIEW_ACTION_LOCK:
+            if state_dest.exists():
+                existing_state = load_json(state_dest)
+                validation = validate_section_review_state(existing_state)
+                if not validation["valid"]:
+                    raise ValueError(
+                        "Invalid persisted section review state: "
+                        + "; ".join(validation["errors"])
+                    )
+                if (
+                    existing_state.get("source_draft_sha256")
+                    == initial_state.get("source_draft_sha256")
+                ):
+                    req["section_review"] = existing_state
+                else:
+                    atomic_write_json(state_dest, initial_state)
             else:
                 atomic_write_json(state_dest, initial_state)
-        else:
-            atomic_write_json(state_dest, initial_state)
         current_section_states.add(state_dest.resolve())
 
         dest = REVIEW_REQUESTS_DIR / (
@@ -635,40 +638,41 @@ def apply_section_review_action(
     if not request_path.exists():
         raise ValueError("Script review request not found")
 
-    req = load_json(request_path)
-    if (
-        str(req.get("concept_id") or "").strip() != cid
-        or str(req.get("format") or "").strip() != fmt
-    ):
-        raise ValueError("Script section review request identity mismatch")
+    with _SECTION_REVIEW_ACTION_LOCK:
+        req = load_json(request_path)
+        if (
+            str(req.get("concept_id") or "").strip() != cid
+            or str(req.get("format") or "").strip() != fmt
+        ):
+            raise ValueError("Script section review request identity mismatch")
 
-    source = assert_current_draft(req)
-    state, state_path = _validated_section_review_state(req)
-    result = apply_target_action(
-        state,
-        source_draft_sha256=sha256_file(source),
-        target_id=target_id,
-        action=action,
-        reviewer=reviewer or reviewer_id(),
-        updated_at=datetime.now(timezone.utc).isoformat(),
-        reason=reason,
-        note=note,
-    )
+        source = assert_current_draft(req)
+        state, state_path = _validated_section_review_state(req)
+        result = apply_target_action(
+            state,
+            source_draft_sha256=sha256_file(source),
+            target_id=target_id,
+            action=action,
+            reviewer=reviewer or reviewer_id(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            reason=reason,
+            note=note,
+        )
 
-    if result["changed"]:
-        SECTION_REVIEW_STATES_DIR.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(state_path, result["state"])
+        if result["changed"]:
+            SECTION_REVIEW_STATES_DIR.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(state_path, result["state"])
 
-    invalidated = False
-    if result["invalidates_branch_approval"]:
-        branch_response = response_path(cid, fmt)
-        if branch_response.exists():
-            branch_response.unlink()
-            invalidated = True
-        approved_path = APPROVED_DIR / f"{safe_slug(cid)}.approved_script.json"
-        if approved_path.exists():
-            approved_path.unlink()
-            invalidated = True
+        invalidated = False
+        if result["invalidates_branch_approval"]:
+            branch_response = response_path(cid, fmt)
+            if branch_response.exists():
+                branch_response.unlink()
+                invalidated = True
+            approved_path = APPROVED_DIR / f"{safe_slug(cid)}.approved_script.json"
+            if approved_path.exists():
+                approved_path.unlink()
+                invalidated = True
 
     return {
         "status": (
