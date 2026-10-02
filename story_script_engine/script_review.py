@@ -771,7 +771,7 @@ def prepare_section_rework_request(
     }
 
 
-def validate_prepared_section_rework_request(
+def _validate_prepared_section_rework_request_unlocked(
     *,
     concept_id: str,
     format: str,
@@ -885,6 +885,21 @@ def validate_prepared_section_rework_request(
         "request": str(dest),
         "request_sha256": sha256_file(dest),
     }
+
+
+def validate_prepared_section_rework_request(
+    *,
+    concept_id: str,
+    format: str,
+    target_id: str,
+) -> dict[str, Any]:
+    """Validate a Slice 3 packet atomically with section-review changes."""
+    with _SECTION_REVIEW_ACTION_LOCK:
+        return _validate_prepared_section_rework_request_unlocked(
+            concept_id=concept_id,
+            format=format,
+            target_id=target_id,
+        )
 
 
 def apply_section_review_action(
