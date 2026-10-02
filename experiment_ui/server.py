@@ -5835,7 +5835,10 @@ def workflow_guidance(
     visual_post = visual_post_search_artifact_state()
     candidate_gate = visual_post.get("candidate_gate", {})
     if (
-        candidate_gate.get("ready_for_review")
+        candidate_gate.get(
+            "ready_for_review",
+            bool(candidate_gate.get("packets")),
+        )
         and candidate_gate.get("packets")
         and not visual_post.get("candidate_complete")
     ):
