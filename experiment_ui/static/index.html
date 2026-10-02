@@ -326,37 +326,61 @@
                 <div class="concept-complete">Human decision only. Script quality criteria remain in the audit trail; you do not need to tick boxes.</div>
                 <div class="concept-criteria" id="scriptCriteria" hidden></div>
 
-                <div class="concept-detail-card" id="scriptSectionReviewPane">
-                  <h4>SELECTIVE SECTION REVIEW</h4>
-                  <p class="muted" id="scriptSectionReviewState">Choose a script branch to review sections.</p>
+                <div class="concept-detail-card script-section-review-pane" id="scriptSectionReviewPane">
+                  <div class="script-section-review-head">
+                    <div>
+                      <h4>SELECTIVE SECTION REVIEW</h4>
+                      <p class="muted" id="scriptSectionReviewState">Choose a script branch to review sections.</p>
+                    </div>
+                    <span class="status-chip running" id="scriptSectionTargetStatus">NOT PREPARED</span>
+                  </div>
+                  <div class="script-section-progress" id="scriptSectionProgress"></div>
                   <button class="ghost" id="scriptSectionPrepare" type="button">Prepare section review</button>
+
                   <div id="scriptSectionControls" hidden>
-                    <label class="vision-label" for="scriptSectionTarget">Target</label>
-                    <select id="scriptSectionTarget"></select>
-                    <div class="concept-complete" id="scriptSectionTargetDetail"></div>
+                    <div class="script-section-target-row">
+                      <div class="script-section-target-select">
+                        <label class="vision-label" for="scriptSectionTarget">Target</label>
+                        <select id="scriptSectionTarget"></select>
+                      </div>
+                      <button class="ghost" id="scriptSectionNextPending" type="button">Next unresolved →</button>
+                    </div>
 
-                    <label class="vision-label" for="scriptSectionManualText">Manual target edit</label>
-                    <textarea id="scriptSectionManualText" class="vision-observation" rows="4" maxlength="5000" placeholder="Edit only this selected target. Locked targets must be unlocked first."></textarea>
-                    <button class="ghost" id="scriptSectionSaveManual" type="button">Save manual edit + lock</button>
-                    <p class="muted">Manual edits use the same full-script validation, versioning and rollback protection as generated alternatives.</p>
+                    <div class="script-section-target-detail" id="scriptSectionTargetDetail"></div>
 
-                    <label class="vision-label" for="scriptSectionReason">Rework reason</label>
-                    <select id="scriptSectionReason"></select>
-                    <label class="vision-label" for="scriptSectionInstruction">Selective rework instruction</label>
-                    <textarea id="scriptSectionInstruction" class="vision-observation" rows="3" maxlength="1200" placeholder="Optional for preset reasons. Required when reason is Custom. State exactly what should change in this target only."></textarea>
-
-                    <div class="concept-review-actions">
+                    <div class="script-section-action-strip">
                       <button id="scriptSectionAccept" type="button">Accept + lock</button>
                       <button class="ghost" id="scriptSectionLock" type="button">Lock</button>
                       <button class="ghost" id="scriptSectionUnlock" type="button">Unlock</button>
                       <button class="ghost" id="scriptSectionRework" type="button">Request rework</button>
                       <button class="ghost" id="scriptSectionCancelRework" type="button">Cancel rework</button>
-                      <button id="scriptSectionGenerate" type="button">Generate A / B / C</button>
                     </div>
 
-                    <div id="scriptSectionAlternatives" hidden>
-                      <h4>ORIGINAL + ALTERNATIVES</h4>
-                      <div id="scriptSectionAlternativeCards"></div>
+                    <details class="script-section-editor">
+                      <summary>Manual target edit</summary>
+                      <label class="vision-label" for="scriptSectionManualText">Edit selected target only</label>
+                      <textarea id="scriptSectionManualText" class="vision-observation" rows="4" maxlength="5000" placeholder="Edit only this selected target. Locked targets must be unlocked first."></textarea>
+                      <button class="ghost" id="scriptSectionSaveManual" type="button">Save manual edit + lock</button>
+                      <p class="muted">Manual edits use the same full-script validation, versioning and rollback protection as generated alternatives.</p>
+                    </details>
+
+                    <div class="script-section-rework-box">
+                      <label class="vision-label" for="scriptSectionReason">Rework reason</label>
+                      <select id="scriptSectionReason"></select>
+                      <label class="vision-label" for="scriptSectionInstruction">Selective rework instruction</label>
+                      <textarea id="scriptSectionInstruction" class="vision-observation" rows="3" maxlength="1200" placeholder="Optional for preset reasons. Required when reason is Custom. State exactly what should change in this target only."></textarea>
+                      <div class="script-section-generation-actions">
+                        <button class="ghost" id="scriptSectionPrepareRework" type="button">Prepare rework request</button>
+                        <button id="scriptSectionGenerate" type="button">Generate A / B / C</button>
+                      </div>
+                    </div>
+
+                    <div id="scriptSectionAlternatives" class="script-section-alternatives" hidden>
+                      <div class="script-section-alternatives-head">
+                        <h4>ORIGINAL + ALTERNATIVES</h4>
+                        <span class="muted">Choose one. Nothing is applied until you click a choice.</span>
+                      </div>
+                      <div class="script-section-alternative-grid" id="scriptSectionAlternativeCards"></div>
                     </div>
                   </div>
                 </div>

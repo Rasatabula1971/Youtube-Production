@@ -1476,3 +1476,35 @@ one-time-selection check. This is required because an interrupted process may
 have written a temporary selection marker before crashing; that marker must not
 prevent recovery on the next human action.
 
+## D-076 — Slice 6 keeps selective review inside the existing Human Script Gate
+
+**Status:** Accepted
+
+Selective Script Rework does not become a separate page or separate human gate.
+Slice 6 exposes the canonical section-review service inside the existing Human
+Script Gate.
+
+The UI shows target-level state, progress and the next unresolved target while
+retaining the whole branch script alongside it. Per-target actions are
+`Accept + lock`, `Lock`, `Unlock`, `Request rework` and
+`Cancel rework`.
+
+The Slice 3 no-inference boundary is visible as `Prepare rework request`.
+Slice 4 generation remains a separate `Generate A / B / C` action. Generated
+Original/A/B/C choices are shown inline and are not applied until the human
+clicks one choice.
+
+Every section mutation is treated as single-flight in the browser. While one is
+running, target navigation and branch-level decisions are disabled. This is a
+UI safety layer only; canonical backend locking and transaction protection
+remain authoritative.
+
+Whole-script `Accept` is disabled when canonical section state is stale or any
+target remains `REWORK_REQUESTED`.
+
+After a section action, the browser reloads the Human Script Gate snapshot for
+the same concept/format immediately. This prevents stale narration from
+remaining visible after an A/B/C selection or manual edit.
+
+Slice 6 adds no new script-generation behavior, model route, persistence
+contract or destructive backend operation.
