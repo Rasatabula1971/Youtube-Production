@@ -283,6 +283,20 @@ const finalSoundOmit = document.getElementById("finalSoundOmit");
 const finalSoundRegister = document.getElementById("finalSoundRegister");
 const finalSoundNext = document.getElementById("finalSoundNext");
 
+const finalExportReviewPanel = document.getElementById("finalExportReviewPanel");
+const finalExportReviewTitle = document.getElementById("finalExportReviewTitle");
+const finalExportReviewSummary = document.getElementById("finalExportReviewSummary");
+const finalExportReviewStatus = document.getElementById("finalExportReviewStatus");
+const finalExportVideo = document.getElementById("finalExportVideo");
+const finalExportDetail = document.getElementById("finalExportDetail");
+const finalExportNote = document.getElementById("finalExportNote");
+const finalExportPrev = document.getElementById("finalExportPrev");
+const finalExportVisuals = document.getElementById("finalExportVisuals");
+const finalExportNarration = document.getElementById("finalExportNarration");
+const finalExportSound = document.getElementById("finalExportSound");
+const finalExportApprove = document.getElementById("finalExportApprove");
+const finalExportNext = document.getElementById("finalExportNext");
+
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -406,6 +420,8 @@ let latestGeneratedVisualAssets = null;
 let generatedVisualCursor = 0;
 let latestFinalSoundSnapshot = null;
 let finalSoundCursor = 0;
+let latestFinalExportSnapshot = null;
+let finalExportCursor = 0;
 
 const ROUTES = {
   "/": {
@@ -605,7 +621,10 @@ function statusTone(workflow) {
     state === "EDIT_PREVIEW_REWORK_REQUIRED" ||
     state === "WAITING_FOR_FINAL_VISUAL_ASSETS" ||
     state === "FINAL_PRODUCTION_HANDOFF_BLOCKED" ||
-    state === "WAITING_FOR_FINAL_SOUND_ASSETS"
+    state === "WAITING_FOR_FINAL_SOUND_ASSETS" ||
+    state === "LOCAL_FINAL_FFMPEG_REQUIRED" ||
+    state === "HUMAN_FINAL_EXPORT_GATE" ||
+    state === "FINAL_EXPORT_REWORK_REQUIRED"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -668,7 +687,11 @@ function primaryTargetForWorkflow(workflow) {
     FINAL_PRODUCTION_HANDOFF_BLOCKED: "Resolve final handoff",
     FINAL_PRODUCTION_HANDOFF_READY: "Final handoff ready",
     WAITING_FOR_FINAL_SOUND_ASSETS: "Register final sound",
-    FINAL_SOUND_ASSETS_READY: "Final sound ready"
+    FINAL_SOUND_ASSETS_READY: "Final sound ready",
+    LOCAL_FINAL_FFMPEG_REQUIRED: "Configure final FFmpeg",
+    HUMAN_FINAL_EXPORT_GATE: "Review final render",
+    FINAL_EXPORT_REWORK_REQUIRED: "Route final render rework",
+    FINAL_EXPORT_APPROVED: "Final export approved"
   };
   if (analysisHumanGateLabels[workflow.state]) {
     return {
@@ -4558,6 +4581,111 @@ async function submitFinalSoundResolution(mode) {
   }
 }
 
+function finalExportItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function renderFinalExportReview(snapshot) {
+  latestFinalExportSnapshot = snapshot || {};
+  const items = finalExportItems(latestFinalExportSnapshot);
+  finalExportReviewPanel.hidden = items.length === 0;
+  if (!items.length) {
+    finalExportVideo.removeAttribute("src");
+    return;
+  }
+
+  finalExportCursor = Math.max(
+    0,
+    Math.min(finalExportCursor, items.length - 1)
+  );
+  const item = items[finalExportCursor] || {};
+  const decision = item.decision || "PENDING";
+
+  finalExportReviewTitle.textContent =
+    "Review final render — " +
+    humanizeToken(item.format || "") +
+    " · " + (item.concept_id || "");
+  finalExportReviewSummary.textContent =
+    (finalExportCursor + 1) + " of " + items.length +
+    " · " + Number(item.duration_seconds || 0).toFixed(1) + " sec" +
+    " · " + Number(item.sound_assets_mixed || 0) + " sound asset(s)" +
+    " · " + Number(item.sound_omissions || 0) + " omission(s)";
+  finalExportReviewStatus.textContent =
+    item.export_approved ? "FINAL EXPORT APPROVED" : decision;
+  finalExportReviewStatus.className =
+    "status-chip " +
+    (item.export_approved
+      ? "success"
+      : decision === "PENDING"
+        ? "running"
+        : "failed");
+
+  const url =
+    "/api/final-render-video?concept_id=" +
+    encodeURIComponent(item.concept_id || "") +
+    "&format=" +
+    encodeURIComponent(item.format || "");
+  if (finalExportVideo.dataset.renderUrl !== url) {
+    finalExportVideo.dataset.renderUrl = url;
+    finalExportVideo.src = url;
+    finalExportVideo.load();
+  }
+
+  finalExportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>LOCAL FINAL CANDIDATE</h4>' +
+    '<p><strong>Duration:</strong> ' +
+    Number(item.duration_seconds || 0).toFixed(1) + ' sec' +
+    '<br><strong>Sound assets mixed:</strong> ' +
+    Number(item.sound_assets_mixed || 0) +
+    '<br><strong>Explicit sound omissions:</strong> ' +
+    Number(item.sound_omissions || 0) +
+    '<br><strong>Render size:</strong> ' +
+    Number(item.render_bytes || 0).toLocaleString() + ' bytes' +
+    '</p><p class="muted">Approval binds these exact rendered bytes. It does not upload or publish the video.</p></div>';
+
+  finalExportNote.value = item.note || "";
+  finalExportPrev.disabled = finalExportCursor <= 0;
+  finalExportNext.disabled = finalExportCursor >= items.length - 1;
+  const decided = decision !== "PENDING";
+  finalExportVisuals.disabled = decided;
+  finalExportNarration.disabled = decided;
+  finalExportSound.disabled = decided;
+  finalExportApprove.disabled = decided;
+}
+
+async function submitFinalExportDecision(decision) {
+  const items = finalExportItems(latestFinalExportSnapshot || {});
+  const item = items[finalExportCursor];
+  if (!item) return;
+
+  try {
+    const payload = await api("/api/final-export-review", {
+      method: "POST",
+      body: JSON.stringify({
+        result_file: item.result_file,
+        decision: decision,
+        note: finalExportNote.value
+      })
+    });
+    latestFinalExportSnapshot = payload || {};
+    const refreshed = finalExportItems(latestFinalExportSnapshot);
+    const nextPending = refreshed.findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (nextPending >= 0) finalExportCursor = nextPending;
+    renderFinalExportReview(latestFinalExportSnapshot);
+    showToast(
+      decision === "APPROVE_EXPORT"
+        ? "Final export approved. Upload and publishing remain locked."
+        : "Final render returned for rework.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function formatElapsed(milliseconds) {
   const totalSeconds = Math.max(
     0,
@@ -4677,7 +4805,11 @@ function renderAnalysis(data) {
     "FINAL_PRODUCTION_HANDOFF_BLOCKED",
     "FINAL_PRODUCTION_HANDOFF_READY",
     "WAITING_FOR_FINAL_SOUND_ASSETS",
-    "FINAL_SOUND_ASSETS_READY"
+    "FINAL_SOUND_ASSETS_READY",
+    "LOCAL_FINAL_FFMPEG_REQUIRED",
+    "HUMAN_FINAL_EXPORT_GATE",
+    "FINAL_EXPORT_REWORK_REQUIRED",
+    "FINAL_EXPORT_APPROVED"
   ].includes(workflow.state);
 
   const opportunityApproved =
@@ -4743,6 +4875,7 @@ function renderAnalysis(data) {
   );
   renderEditPreviewReview(data.edit_preview_gate || {});
   renderFinalSoundImport(data.final_sound_assets || {});
+  renderFinalExportReview(data.final_export_gate || {});
   api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
   api("/api/storyboard-review").then(function (value) {
     latestStoryboardSnapshot = value;
@@ -4787,6 +4920,10 @@ function renderAnalysis(data) {
       "FINAL_PRODUCTION_HANDOFF_READY",
       "WAITING_FOR_FINAL_SOUND_ASSETS",
       "FINAL_SOUND_ASSETS_READY",
+      "LOCAL_FINAL_FFMPEG_REQUIRED",
+      "HUMAN_FINAL_EXPORT_GATE",
+      "FINAL_EXPORT_REWORK_REQUIRED",
+      "FINAL_EXPORT_APPROVED",
       "FINAL_EDIT_DIRECTION_APPROVED"
     ].includes(workflow.state) ||
     voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
@@ -5498,6 +5635,31 @@ finalSoundRegister.addEventListener("click", function () {
 });
 finalSoundOmit.addEventListener("click", function () {
   submitFinalSoundResolution("omit");
+});
+
+finalExportPrev.addEventListener("click", function () {
+  finalExportCursor = Math.max(0, finalExportCursor - 1);
+  renderFinalExportReview(latestFinalExportSnapshot || {});
+});
+finalExportNext.addEventListener("click", function () {
+  const items = finalExportItems(latestFinalExportSnapshot || {});
+  finalExportCursor = Math.min(
+    Math.max(0, items.length - 1),
+    finalExportCursor + 1
+  );
+  renderFinalExportReview(latestFinalExportSnapshot || {});
+});
+finalExportVisuals.addEventListener("click", function () {
+  submitFinalExportDecision("RETURN_TO_VISUALS");
+});
+finalExportNarration.addEventListener("click", function () {
+  submitFinalExportDecision("RETURN_TO_NARRATION");
+});
+finalExportSound.addEventListener("click", function () {
+  submitFinalExportDecision("RETURN_TO_SOUND");
+});
+finalExportApprove.addEventListener("click", function () {
+  submitFinalExportDecision("APPROVE_EXPORT");
 });
 
 narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
