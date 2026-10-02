@@ -3840,6 +3840,8 @@ def stage_statuses() -> list[dict[str, Any]]:
         or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
     )
     title_direction_selected = bool(title_direction.get("selected"))
+    packaging_brief = packaging_brief_snapshot()
+    packaging_brief_ready = bool(packaging_brief.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -3893,10 +3895,20 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if title_direction_selected:
-        package_human = "TITLE DIRECTIONS SELECTED — SLICE 23 COMPLETE"
+    if packaging_brief_ready:
+        package_human = "PACKAGING BRIEF READY — SLICE 24 COMPLETE"
         package_tone = "complete"
-        package_next = "Build Slice 24 Packaging Brief + Viewer Promise."
+        package_next = "Build psychological angles and thumbnail concepts in Slice 25."
+    elif active_action in {
+        "packaging_brief_prepare",
+    }:
+        package_human = "PACKAGING BRIEF BUILD RUNNING"
+        package_tone = "running"
+        package_next = "Wait for current evidence-bound briefs to finish."
+    elif title_direction_selected:
+        package_human = "TITLE DIRECTIONS SELECTED — BRIEF NEEDED"
+        package_tone = "ready"
+        package_next = "Build Packaging Brief + Viewer Promise."
     elif active_action in {
         "title_direction_prepare",
         "title_direction_generate",
@@ -4491,6 +4503,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
     )
     title_direction_selected = bool(title_direction.get("selected"))
+    packaging_brief = packaging_brief_snapshot()
+    packaging_brief_ready = bool(packaging_brief.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -5306,14 +5320,34 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "packaging_brief_prepare": {
+            "enabled": title_direction_selected and not packaging_brief_ready,
+            "reason": (
+                "The current Human Title Direction Gate is complete; bind the exact "
+                "approved script, hook, payoff, verified evidence and selected "
+                "direction into format-specific Packaging Briefs and Viewer Promise "
+                "Contracts."
+                if title_direction_selected and not packaging_brief_ready
+                else (
+                    "Current Packaging Briefs and Viewer Promise Contracts are ready."
+                    if packaging_brief_ready
+                    else "Complete the Human Title Direction Gate first."
+                )
+            ),
+        },
         "format_prepare": {
             "enabled": False,
             "reason": (
-                "Slice 23 intentionally stops after title-direction selection. "
-                "The mature Packaging Brief/thumbnail/pairing stage must be built "
-                "before production Format planning is re-enabled."
-                if title_direction_selected
-                else "Complete the post-script Title Direction Gate first."
+                "Slice 24 intentionally stops after the evidence-bound Packaging "
+                "Brief + Viewer Promise Contract. Psychological angles, thumbnails, "
+                "pairing and final Packaging validation must be built before Format "
+                "planning is re-enabled."
+                if packaging_brief_ready
+                else (
+                    "Build current Packaging Briefs first."
+                    if title_direction_selected
+                    else "Complete the post-script Title Direction Gate first."
+                )
             ),
         },
         "format_generate": {
@@ -6261,19 +6295,33 @@ def workflow_guidance(
         }
 
     if title_gate.get("status") == "TITLE_DIRECTION_SELECTED":
+        packaging_brief = packaging_brief_snapshot()
+        if not packaging_brief.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Packaging Brief + Viewer Promise",
+                "current_detail": (
+                    "The selected title directions are current. Deterministically "
+                    "bind each Short/Long branch to the exact approved script, "
+                    "opening hook, payoff, verified evidence, audience context and "
+                    "SEARCH/BROWSE/HYBRID intent. Missing evidence fails closed."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 24 Packaging Brief boundary",
+            }
         return {
-            "state": "TITLE_DIRECTION_SELECTED",
+            "state": "PACKAGING_BRIEF_READY",
             "current_action_id": None,
-            "current_title": "Title Directions Selected",
+            "current_title": "Packaging Brief + Viewer Promise Ready",
             "current_detail": (
-                "One Short and one Long-form psychological/title direction are "
-                "selected against the exact approved script. Slice 23 stops here. "
-                "The wording is intentionally not final and production remains "
-                "held until the mature Packaging Engine validates title, thumbnail, "
-                "hook and Viewer Promise together."
+                "Every current format branch has an evidence-bound Packaging Brief "
+                "and explicit Viewer Promise Contract. Slice 24 stops here. No "
+                "thumbnail concepts, package scoring, final packaging approval or "
+                "production action has occurred."
             ),
             "next_action_id": None,
-            "next_title": "Slice 24: Packaging Brief + Viewer Promise Contract",
+            "next_title": "Slice 25: psychological angles + thumbnail concepts",
         }
 
     fmt = format_artifact_state()
