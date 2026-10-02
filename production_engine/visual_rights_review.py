@@ -182,12 +182,20 @@ def _reconcile(
         else:
             stale += 1
 
+    current = _current_review_result(review_path, review)
+    result_path = current[0] if current is not None else None
     reconciled = {
         "artifact": "visual_rights_review",
         "concept_id": review.get("concept_id"),
         "format": review.get("format"),
         "source_candidate_review": str(review_path.resolve()),
         "source_candidate_review_sha256": sha256_file(review_path),
+        "source_search_result": (
+            str(result_path.resolve()) if result_path is not None else None
+        ),
+        "source_search_result_sha256": (
+            sha256_file(result_path) if result_path is not None else None
+        ),
         "decisions": current_decisions,
     }
     return reconciled, stale
