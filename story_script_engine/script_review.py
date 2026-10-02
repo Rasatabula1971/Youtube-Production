@@ -102,13 +102,45 @@ def _validated_section_review_state(
             "Invalid section review state: " + "; ".join(validation["errors"])
         )
 
-    expected_hash = str(
-        req.get("request_provenance", {}).get("script_draft_sha256") or ""
-    )
+    provenance = req.get("request_provenance", {})
+    expected_hash = str(provenance.get("script_draft_sha256") or "")
     if str(state.get("source_draft_sha256") or "") != expected_hash:
         raise ValueError(
             "STALE_SECTION_REVIEW_STATE: state is not bound to current review draft"
         )
+
+    draft_path = Path(str(provenance.get("script_draft") or ""))
+    if (
+        not draft_path.exists()
+        or not expected_hash
+        or sha256_file(draft_path) != expected_hash
+    ):
+        raise ValueError(
+            "STALE_SECTION_REVIEW_STATE: current script draft does not match"
+        )
+    expected_state = build_section_review_state(
+        load_json(draft_path),
+        source_draft_sha256=expected_hash,
+    )
+    immutable_keys = (
+        "target_id",
+        "target_type",
+        "source_section_id",
+        "source_story_beat_ids",
+        "claim_ids",
+        "content_sha256",
+    )
+    actual_targets = state.get("targets", [])
+    expected_targets = expected_state.get("targets", [])
+    if len(actual_targets) != len(expected_targets):
+        raise ValueError(
+            "STALE_SECTION_REVIEW_STATE: target structure does not match draft"
+        )
+    for actual, expected in zip(actual_targets, expected_targets):
+        if any(actual.get(key) != expected.get(key) for key in immutable_keys):
+            raise ValueError(
+                "STALE_SECTION_REVIEW_STATE: target metadata/hash does not match draft"
+            )
     return dict(state), state_path
 
 
