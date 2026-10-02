@@ -144,3 +144,29 @@ an implemented renderer.
 Higgsfield remains the paid premium fallback for generated visuals, not the
 default visual source. Paid visual generation happens only after cheaper
 acceptable routes have been exhausted.
+
+## Slice 10 — zero-cost narration preview boundary
+
+The first production work after Human Performance approval is a free local
+prototype, not a paid narration request.
+
+The chain is:
+
+1. deterministic pre-render engagement validation;
+2. current narration-preview manifest preparation;
+3. reference-only music/SFX planning;
+4. local Kokoro narration preview rendering; and
+5. Human Narration Preview Gate.
+
+Every step is fail-closed against stale provenance. Engagement results record
+the approved Voice Performance spec hash. Preview manifests carry that same
+approved-spec provenance. Render metadata binds the exact manifest hash and
+rendered audio hash. The human approval records both hashes plus the approved
+Voice spec hash.
+
+Paid narration preparation independently rechecks the current approved preview
+against the current Voice Performance spec and rendered preview audio. A
+previous approval cannot be reused after upstream performance changes.
+
+The preview renderer has no network/paid fallback. Missing Kokoro/local audio
+dependencies stop the chain before the human listen gate.
