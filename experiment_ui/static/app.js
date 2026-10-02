@@ -2154,17 +2154,18 @@ function syncWholeScriptAcceptWithSectionState(snapshot) {
   if (!latestScriptSnapshot || latestScriptSnapshot.complete) return;
   const status = String((snapshot && snapshot.status) || "");
   const targets = (snapshot && snapshot.targets) || [];
-  const hasRework = targets.some(function (target) {
-    return target.decision === "REWORK_REQUESTED";
+  const prepared = status === "READY_FOR_SECTION_REVIEW";
+  const unresolved = prepared && targets.some(function (target) {
+    return target.decision !== "ACCEPTED" || target.locked !== true;
   });
   const stale = status === "STALE_SECTION_STATE";
   scriptReject.disabled = Boolean(scriptSectionBusy);
   scriptRework.disabled = Boolean(scriptSectionBusy);
-  scriptAccept.disabled = Boolean(scriptSectionBusy || hasRework || stale);
+  scriptAccept.disabled = Boolean(scriptSectionBusy || unresolved || stale);
   scriptAccept.title = stale
     ? "Resolve the stale section-review state before whole-script approval."
-    : hasRework
-      ? "Resolve requested section rework before whole-script approval."
+    : unresolved
+      ? "Finish the prepared section review before whole-script approval."
       : scriptSectionBusy
         ? "Wait for the current section action to finish."
         : "";
@@ -2758,11 +2759,12 @@ async function submitScriptDecision(decision) {
   if (
     decision === "ACCEPT" &&
     latestScriptSectionSnapshot &&
+    latestScriptSectionSnapshot.status === "READY_FOR_SECTION_REVIEW" &&
     (latestScriptSectionSnapshot.targets || []).some(function (target) {
-      return target.decision === "REWORK_REQUESTED";
+      return target.decision !== "ACCEPTED" || target.locked !== true;
     })
   ) {
-    showToast("Resolve requested section rework before accepting the whole script.", true);
+    showToast("Finish the prepared section review before accepting the whole script.", true);
     return;
   }
   const script = current.item;
