@@ -1,9 +1,10 @@
 """Human selection and safe application of script rework alternatives.
 
-This downstream selective-rework step is destructive only after explicit human
-selection. It changes one chosen target, verifies the exact Slice 4 alternatives
-artifact/model response, and protects the operation with backups plus a
-recoverable transaction journal.
+Slice 5 is destructive only after explicit human selection. It changes one
+chosen target, verifies the exact Slice 4 alternatives artifact/model response,
+serializes the mutation with canonical section state, preserves exact parent
+versions, and protects every touched file with recoverable transaction
+snapshots.
 """
 
 from __future__ import annotations
