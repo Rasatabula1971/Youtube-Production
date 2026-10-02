@@ -1,8 +1,9 @@
 """Human selection and safe application of script rework alternatives.
 
-Slice 3 is the first destructive selective-rework step. It changes only one
-chosen target after explicit human selection and protects the operation with
-backups plus a recoverable transaction journal.
+This downstream selective-rework step is destructive only after explicit human
+selection. It changes one chosen target, verifies the exact Slice 4 alternatives
+artifact/model response, and protects the operation with backups plus a
+recoverable transaction journal.
 """
 
 from __future__ import annotations
