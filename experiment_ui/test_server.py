@@ -106,6 +106,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="finalSoundImportPanel"', html)
         self.assertIn('id="finalSoundLicenceReference"', html)
         self.assertIn('id="finalSoundCommercialUse"', html)
+        self.assertIn('id="finalExportReviewPanel"', html)
+        self.assertIn('id="finalExportVideo"', html)
+        self.assertIn('id="finalExportApprove"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -130,6 +133,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("data-script-section-selection", script)
         self.assertIn("renderFinalSoundImport", script)
         self.assertIn("/api/final-sound-asset", script)
+        self.assertIn("renderFinalExportReview", script)
+        self.assertIn("/api/final-export-review", script)
+        self.assertIn("/api/final-render-video", script)
 
     def test_final_sound_route_is_human_gate_guarded(self):
         self.assertIn(
@@ -140,6 +146,24 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn(
             "production_engine/final_sound_plan.py",
             server.ACTION_DEFS["final_sound_plan_prepare"]["command"][1],
+        )
+
+    def test_final_export_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/final-export-review",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        self.assertIn("final_render_manifest_prepare", server.ACTION_DEFS)
+        self.assertIn("final_render_local", server.ACTION_DEFS)
+        self.assertIn(
+            "production_engine/final_render_manifest.py",
+            server.ACTION_DEFS[
+                "final_render_manifest_prepare"
+            ]["command"][1],
+        )
+        self.assertIn(
+            "production_engine/final_render.py",
+            server.ACTION_DEFS["final_render_local"]["command"][1],
         )
 
     def test_action_allowlist_contains_no_shell_strings(self):
