@@ -272,6 +272,7 @@ from visual_spend_review import (
     snapshot as visual_spend_review_snapshot,
 )
 from visual_gap_planner import gap_plan_is_current
+from visual_assembly_plan import assembly_plan_is_current
 from visual_generated_asset_import import (
     register as register_generated_visual_asset,
     snapshot as generated_visual_asset_snapshot,
@@ -395,8 +396,6 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
     "visual_assembly_prepare",
-    "edit_manifest_prepare",
-    "edit_preview_render",
     "final_production_handoff_prepare",
 ]
 
@@ -2782,29 +2781,65 @@ def visual_asset_acquisition_artifact_state() -> dict[str, Any]:
 
 def visual_generation_handoff_artifact_state() -> dict[str, Any]:
     spend = visual_spend_review_snapshot()
-    expected: dict[tuple[str, str, str], float] = {}
-    for item in spend.get("items", []):
-        if not isinstance(item, dict):
-            continue
-        concept_id = str(item.get("concept_id") or "")
-        branch_format = str(item.get("format") or "")
-        decisions = item.get("decisions", {})
-        if not isinstance(decisions, dict):
-            continue
-        for shot_id, decision in decisions.items():
-            if (
-                isinstance(decision, dict)
-                and decision.get("paid_generation_authorized") is True
-                and str(decision.get("decision") or "")
-                == "AUTHORIZE_GENERATION"
-            ):
-                expected[(concept_id, branch_format, str(shot_id))] = round(
-                    float(decision.get("max_cost_usd") or 0),
-                    2,
-                )
+    expected: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
 
-    current: dict[tuple[str, str, str], float] = {}
-    current_details: dict[tuple[str, str, str], dict[str, Any]] = {}
+    if spend.get("complete") and spend.get("global_cap_valid", True):
+        for item in spend.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            concept_id = str(item.get("concept_id") or "")
+            branch_format = str(item.get("format") or "")
+            gap_path = Path(str(item.get("gap_plan_file") or ""))
+            spend_path = Path(str(item.get("spend_review_file") or ""))
+            decisions = item.get("decisions", {})
+            if not isinstance(decisions, dict):
+                continue
+            for shot_id, decision in decisions.items():
+                if (
+                    isinstance(decision, dict)
+                    and decision.get("paid_generation_authorized") is True
+                    and str(decision.get("decision") or "")
+                    == "AUTHORIZE_GENERATION"
+                ):
+                    decision_hash = hashlib.sha256(
+                        json.dumps(
+                            decision,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    expected[
+                        (concept_id, branch_format, str(shot_id))
+                    ] = {
+                        "max_cost_usd": round(
+                            float(decision.get("max_cost_usd") or 0),
+                            2,
+                        ),
+                        "gap_plan": str(gap_path.resolve())
+                        if gap_path.exists()
+                        else str(gap_path),
+                        "gap_plan_sha256": item.get("gap_plan_sha256"),
+                        "spend_review": str(spend_path.resolve())
+                        if spend_path.exists()
+                        else str(spend_path),
+                        "spend_review_sha256": item.get(
+                            "spend_review_sha256"
+                        ),
+                        "decision_sha256": decision_hash,
+                    }
+
+    current: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
+    current_details: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
     stale = 0
     if PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.exists():
         for path in PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.glob(
@@ -2819,38 +2854,50 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
                 str(payload.get("format") or ""),
                 str(payload.get("shot_id") or ""),
             )
+            wanted = expected.get(key)
             provenance = payload.get("provenance", {})
             authorization = payload.get("spend_authorization", {})
-            if not isinstance(provenance, dict) or not isinstance(
-                authorization, dict
+            if (
+                wanted is None
+                or not isinstance(provenance, dict)
+                or not isinstance(authorization, dict)
             ):
                 stale += 1
                 continue
+
             gap_path = Path(str(provenance.get("gap_plan") or ""))
             spend_path = Path(
                 str(provenance.get("visual_spend_review") or "")
             )
-            if (
-                not gap_path.exists()
-                or not spend_path.exists()
-                or provenance.get("gap_plan_sha256") != sha256_file(gap_path)
-                or provenance.get("visual_spend_review_sha256")
-                != sha256_file(spend_path)
-                or authorization.get("human_authorized") is not True
-                or authorization.get("execution_authorized") is not False
-            ):
-                stale += 1
-                continue
             max_cost = round(
                 float(authorization.get("max_cost_usd") or 0),
                 2,
             )
-            if key not in expected or expected[key] != max_cost:
+            valid = bool(
+                gap_path.is_file()
+                and spend_path.is_file()
+                and str(gap_path.resolve()) == wanted["gap_plan"]
+                and str(spend_path.resolve()) == wanted["spend_review"]
+                and provenance.get("gap_plan_sha256")
+                == wanted["gap_plan_sha256"]
+                == sha256_file(gap_path)
+                and provenance.get("visual_spend_review_sha256")
+                == wanted["spend_review_sha256"]
+                == sha256_file(spend_path)
+                and provenance.get("visual_spend_decision_sha256")
+                == wanted["decision_sha256"]
+                and authorization.get("human_authorized") is True
+                and authorization.get("execution_authorized") is False
+                and max_cost == wanted["max_cost_usd"]
+            )
+            if not valid:
                 stale += 1
                 continue
-            current[key] = max_cost
+
+            current[key] = wanted
             current_details[key] = {
                 "request_file": str(path),
+                "request_sha256": sha256_file(path),
                 "desired_visual": payload.get("desired_visual"),
                 "story_purpose": payload.get("story_purpose"),
                 "generation_brief": payload.get("generation_brief", {}),
@@ -2870,19 +2917,26 @@ def visual_generation_handoff_artifact_state() -> dict[str, Any]:
         "expected": len(expected),
         "current": len(current),
         "stale": stale,
-        "authorized_max_total_usd": round(sum(expected.values()), 2),
+        "authorized_max_total_usd": round(
+            sum(
+                item["max_cost_usd"]
+                for item in expected.values()
+            ),
+            2,
+        ),
+        "provider_calls": 0,
+        "paid_inference_executed": False,
         "requests": [
             {
                 "concept_id": key[0],
                 "format": key[1],
                 "shot_id": key[2],
-                "max_cost_usd": value,
+                "max_cost_usd": value["max_cost_usd"],
                 **current_details.get(key, {}),
             }
             for key, value in sorted(current.items())
         ],
     }
-
 
 def visual_assembly_artifact_state(
     expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
@@ -2896,13 +2950,14 @@ def visual_assembly_artifact_state(
     stale = 0
     waiting_for_premium = 0
     waiting_for_local = 0
+    waiting_for_retry = 0
     ready_for_edit = 0
 
     if PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.exists():
         for path in PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.glob(
             "*.visual_assembly_plan.json"
         ):
-            payload = safe_load_json(path)
+            payload = assembly_plan_is_current(path)
             if not isinstance(payload, dict):
                 stale += 1
                 continue
@@ -2910,47 +2965,22 @@ def visual_assembly_artifact_state(
                 str(payload.get("concept_id") or ""),
                 str(payload.get("format") or ""),
             )
-            provenance = payload.get("provenance", {})
-            if not isinstance(provenance, dict):
-                stale += 1
-                continue
-
-            checks = (
-                ("rough_cut", "rough_cut_sha256"),
-                ("rough_cut_review", "rough_cut_review_sha256"),
-                ("gap_plan", "gap_plan_sha256"),
-            )
-            valid = True
-            for path_key, hash_key in checks:
-                source = Path(str(provenance.get(path_key) or ""))
-                if (
-                    not source.exists()
-                    or provenance.get(hash_key) != sha256_file(source)
-                ):
-                    valid = False
-                    break
-
-            spend_source = str(provenance.get("spend_review") or "")
-            if valid and spend_source:
-                spend_path = Path(spend_source)
-                if (
-                    not spend_path.exists()
-                    or provenance.get("spend_review_sha256")
-                    != sha256_file(spend_path)
-                ):
-                    valid = False
-
-            if not valid or (expected and key not in expected):
+            if expected and key not in expected:
                 stale += 1
                 continue
 
             current.add(key)
-            if payload.get("status") == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
+            status = str(payload.get("status") or "")
+            if status == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
                 waiting_for_premium += 1
-            elif payload.get("status") == "WAITING_FOR_LOCAL_VISUAL_ASSETS":
+            elif status == "WAITING_FOR_LOCAL_VISUAL_ASSETS":
                 waiting_for_local += 1
-            elif payload.get("status") == "READY_FOR_EDIT_ASSEMBLY":
+            elif status == "WAITING_FOR_EXISTING_VISUAL_RETRY":
+                waiting_for_retry += 1
+            elif status == "READY_FOR_EDIT_ASSEMBLY":
                 ready_for_edit += 1
+            else:
+                stale += 1
 
     ready = bool(expected) and expected.issubset(current) and stale == 0
     return {
@@ -2967,9 +2997,9 @@ def visual_assembly_artifact_state(
         "stale": stale,
         "waiting_for_premium_assets": waiting_for_premium,
         "waiting_for_local_assets": waiting_for_local,
+        "waiting_for_existing_retry": waiting_for_retry,
         "ready_for_edit_assembly": ready_for_edit,
     }
-
 
 def edit_manifest_artifact_state(
     expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
