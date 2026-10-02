@@ -6025,6 +6025,12 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             concept_id = str((query.get("concept_id") or [""])[0]).strip()
             fmt = str((query.get("format") or [""])[0]).strip()
+            if bool(concept_id) != bool(fmt):
+                self._send_json(
+                    {"error": "concept_id and format must be supplied together."},
+                    400,
+                )
+                return
             self._send_json(
                 script_section_review_snapshot(
                     concept_id if concept_id else None,
