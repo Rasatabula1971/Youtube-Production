@@ -248,7 +248,7 @@ def run_one(
     except Exception as exc:
         report = {
             **base,
-            "status": "INVALID_MODEL_OUTPUT",
+            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
             "error_type": type(exc).__name__,
             "error": str(exc),
         }
@@ -285,7 +285,11 @@ def run_batch(force: bool = False) -> dict[str, Any]:
         for path in requests
     ]
     run_apply()
-    status = batch_status([str(item.get("status") or "") for item in results])
+    status = batch_status(
+        results,
+        expected_count=len(requests),
+        processed_count=len(results),
+    )
     summary = {
         "status": status,
         "requests": len(requests),
