@@ -49,6 +49,23 @@ class ExperimentUiTests(unittest.TestCase):
             {"/", "/opportunity", "/analysis", "/tools"},
         )
 
+
+    def test_script_gate_route_starts_automatic_downstream_work(self):
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        post_start = source.index("def do_POST")
+        start = source.index(
+            'if route == "/api/script-gate":',
+            post_start,
+        )
+        end = source.index(
+            'if route == "/api/script-section-review":',
+            start,
+        )
+        block = source[start:end]
+
+        self.assertIn("maybe_start_automatic_workflow()", block)
+        self.assertIn('"automation_job": auto_job', block)
+
     def test_script_section_review_route_is_human_gate_guarded(self):
         self.assertIn(
             "/api/script-section-review",
@@ -154,6 +171,55 @@ class ExperimentUiTests(unittest.TestCase):
             "workflow_automation.py",
             server.ACTION_DEFS["auto_continue"]["command"][1],
         )
+
+
+    def test_completed_human_gate_starts_auto_continue_when_machine_work_is_ready(self):
+        with (
+            patch.object(server.JOB_MANAGER, "running", return_value=False),
+            patch.object(
+                server,
+                "action_readiness",
+                return_value={
+                    "auto_continue": {
+                        "enabled": True,
+                        "reason": "Automatic machine work is ready: Prepare Format Requests",
+                    }
+                },
+            ),
+            patch.object(
+                server.JOB_MANAGER,
+                "start",
+                return_value={
+                    "action_id": "auto_continue",
+                    "status": "RUNNING",
+                },
+            ) as start,
+        ):
+            job = server.maybe_start_automatic_workflow()
+
+        start.assert_called_once_with("auto_continue")
+        self.assertEqual(job["action_id"], "auto_continue")
+        self.assertEqual(job["status"], "RUNNING")
+
+    def test_completed_human_gate_does_not_start_job_without_ready_machine_step(self):
+        with (
+            patch.object(server.JOB_MANAGER, "running", return_value=False),
+            patch.object(
+                server,
+                "action_readiness",
+                return_value={
+                    "auto_continue": {
+                        "enabled": False,
+                        "reason": "Waiting at a human gate.",
+                    }
+                },
+            ),
+            patch.object(server.JOB_MANAGER, "start") as start,
+        ):
+            job = server.maybe_start_automatic_workflow()
+
+        start.assert_not_called()
+        self.assertIsNone(job)
 
     def test_experiment_02_evidence_acquisition_is_guided_step(self):
         self.assertIn("exp2_acquire", server.ACTION_DEFS)

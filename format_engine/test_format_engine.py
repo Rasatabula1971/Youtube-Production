@@ -414,6 +414,254 @@ class FormatEngineTests(unittest.TestCase):
             )
 
 
+
+    def test_changed_script_handoff_prunes_all_stale_format_outputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approved_scripts = root / "approved_scripts"
+            requests = root / "format_requests"
+            responses = root / "format_responses"
+            plans = root / "format_plans"
+            model_runs = root / "format_model_runs"
+            raw = root / "raw_format_outputs"
+            review_requests = root / "format_review_requests"
+            review_responses = root / "format_review_responses"
+            approved_plans = root / "approved_format_plans"
+            for directory in (
+                approved_scripts,
+                requests,
+                responses,
+                plans,
+                model_runs,
+                raw,
+                review_requests,
+                review_responses,
+                approved_plans,
+            ):
+                directory.mkdir()
+
+            approved_path = approved_scripts / "c1.approved_script.json"
+            approved_path.write_text(
+                json.dumps(self.script("short")),
+                encoding="utf-8",
+            )
+            (requests / "c1.format_request.json").write_text(
+                json.dumps({"concept_id": "c1", "old": True}),
+                encoding="utf-8",
+            )
+
+            stale_paths = [
+                responses / "c1.json",
+                plans / "c1.format_plan.json",
+                model_runs / "c1.model_run.json",
+                raw / "c1.txt",
+                review_requests / "c1.format_review_request.json",
+                review_responses / "c1.format_review_response.json",
+                approved_plans / "c1.approved_format_plan.json",
+            ]
+            for path in stale_paths:
+                path.write_text("old", encoding="utf-8")
+
+            model_summary = root / "format_model_batch_summary.json"
+            gate_summary = root / "format_gate_summary.json"
+            model_summary.write_text("old", encoding="utf-8")
+            gate_summary.write_text("old", encoding="utf-8")
+
+            with (
+                patch.object(module, "REQUESTS_DIR", requests),
+                patch.object(module, "RESPONSES_DIR", responses),
+                patch.object(module, "PLANS_DIR", plans),
+                patch.object(module, "MODEL_RUNS_DIR", model_runs),
+                patch.object(module, "RAW_OUTPUTS_DIR", raw),
+                patch.object(module, "FORMAT_REVIEW_REQUESTS_DIR", review_requests),
+                patch.object(module, "FORMAT_REVIEW_RESPONSES_DIR", review_responses),
+                patch.object(module, "APPROVED_FORMAT_PLANS_DIR", approved_plans),
+                patch.object(module, "MODEL_BATCH_SUMMARY_FILE", model_summary),
+                patch.object(module, "FORMAT_GATE_SUMMARY_FILE", gate_summary),
+                patch.object(module, "OUTPUT_DIR", root),
+                patch.object(module, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                summary = module.run_prepare(
+                    approved_scripts,
+                    self.config(),
+                )
+
+            new_request = requests / "c1.format_request.json"
+            request_payload = json.loads(
+                new_request.read_text(encoding="utf-8")
+            )
+            new_request_exists = new_request.exists()
+            stale_exists = [path.exists() for path in stale_paths]
+            model_summary_exists = model_summary.exists()
+            gate_summary_exists = gate_summary.exists()
+
+        self.assertEqual(summary["prepared"], 1)
+        self.assertEqual(
+            summary["stale_cleanup"]["invalidated_concept_slugs"],
+            ["c1"],
+        )
+        self.assertEqual(request_payload["concept_id"], "c1")
+        self.assertTrue(new_request_exists)
+        self.assertTrue(all(not exists for exists in stale_exists))
+        self.assertFalse(model_summary_exists)
+        self.assertFalse(gate_summary_exists)
+
+    def test_unchanged_current_format_provenance_preserves_valid_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approved_scripts = root / "approved_scripts"
+            requests = root / "format_requests"
+            responses = root / "format_responses"
+            plans = root / "format_plans"
+            model_runs = root / "format_model_runs"
+            raw = root / "raw_format_outputs"
+            review_requests = root / "format_review_requests"
+            review_responses = root / "format_review_responses"
+            approved_plans = root / "approved_format_plans"
+            for directory in (
+                approved_scripts,
+                requests,
+                responses,
+                plans,
+                model_runs,
+                raw,
+                review_requests,
+                review_responses,
+                approved_plans,
+            ):
+                directory.mkdir()
+
+            approved_path = approved_scripts / "c1.approved_script.json"
+            approved_path.write_text(
+                json.dumps(self.script("short")),
+                encoding="utf-8",
+            )
+
+            model_summary = root / "format_model_batch_summary.json"
+            gate_summary = root / "format_gate_summary.json"
+
+            patches = (
+                patch.object(module, "REQUESTS_DIR", requests),
+                patch.object(module, "RESPONSES_DIR", responses),
+                patch.object(module, "PLANS_DIR", plans),
+                patch.object(module, "MODEL_RUNS_DIR", model_runs),
+                patch.object(module, "RAW_OUTPUTS_DIR", raw),
+                patch.object(module, "FORMAT_REVIEW_REQUESTS_DIR", review_requests),
+                patch.object(module, "FORMAT_REVIEW_RESPONSES_DIR", review_responses),
+                patch.object(module, "APPROVED_FORMAT_PLANS_DIR", approved_plans),
+                patch.object(module, "MODEL_BATCH_SUMMARY_FILE", model_summary),
+                patch.object(module, "FORMAT_GATE_SUMMARY_FILE", gate_summary),
+                patch.object(module, "OUTPUT_DIR", root),
+                patch.object(module, "SUMMARY_FILE", root / "summary.json"),
+            )
+            for item in patches:
+                item.start()
+            try:
+                module.run_prepare(
+                    approved_scripts,
+                    self.config(),
+                )
+                request_path = requests / "c1.format_request.json"
+                request_hash = module.sha256_file(request_path)
+
+                response_path = responses / "c1.json"
+                response_path.write_text(
+                    json.dumps(
+                        {
+                            "concept_id": "c1",
+                            "response_provenance": {
+                                "request_sha256": request_hash,
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                plan_path = plans / "c1.format_plan.json"
+                plan_path.write_text(
+                    json.dumps(
+                        {
+                            "concept_id": "c1",
+                            "plan_provenance": {
+                                "request_sha256": request_hash,
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                plan_hash = module.sha256_file(plan_path)
+                (model_runs / "c1.model_run.json").write_text(
+                    json.dumps(
+                        {
+                            "status": "VALIDATED",
+                            "request_sha256": request_hash,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (raw / "c1.txt").write_text("model output", encoding="utf-8")
+                (review_requests / "c1.format_review_request.json").write_text(
+                    json.dumps(
+                        {
+                            "concept_id": "c1",
+                            "request_provenance": {
+                                "format_plan": str(plan_path.resolve()),
+                                "format_plan_sha256": plan_hash,
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (review_responses / "c1.format_review_response.json").write_text(
+                    json.dumps(
+                        {
+                            "decision": "ACCEPT",
+                            "format_plan_sha256": plan_hash,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (approved_plans / "c1.approved_format_plan.json").write_text(
+                    json.dumps(
+                        {
+                            "concept_id": "c1",
+                            "approved_provenance": {
+                                "format_plan_sha256": plan_hash,
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                summary = module.run_prepare(
+                    approved_scripts,
+                    self.config(),
+                )
+                preserved = [
+                    response_path,
+                    plan_path,
+                    model_runs / "c1.model_run.json",
+                    raw / "c1.txt",
+                    review_requests / "c1.format_review_request.json",
+                    review_responses / "c1.format_review_response.json",
+                    approved_plans / "c1.approved_format_plan.json",
+                ]
+                existence = [path.exists() for path in preserved]
+            finally:
+                for item in reversed(patches):
+                    item.stop()
+
+        self.assertEqual(
+            summary["stale_cleanup"]["invalidated_concept_slugs"],
+            [],
+        )
+        self.assertEqual(
+            summary["stale_cleanup"]["active_provenance_cleanup"][
+                "removed_artifacts"
+            ],
+            [],
+        )
+        self.assertTrue(all(existence))
+
     def test_format_request_accepts_distinct_short_and_long_titles(self):
         script = self.script("either")
         script["package"]["selected_titles"] = {

@@ -80,6 +80,45 @@ def criteria_names(config: dict[str, Any] | None = None) -> tuple[str, ...]:
     return tuple(str(name) for name in config["required_accept_criteria"])
 
 
+def _current_plan_request_path(
+    plan: dict[str, Any],
+) -> Path | None:
+    concept_id = str(plan.get("concept_id") or "").strip()
+    provenance = plan.get("plan_provenance", {})
+    if not concept_id or not isinstance(provenance, dict):
+        return None
+
+    expected = (
+        REQUESTS_DIR / f"{safe_slug(concept_id)}.format_request.json"
+    ).resolve()
+    recorded = Path(
+        str(provenance.get("request_source") or "")
+    ).resolve()
+    expected_hash = str(
+        provenance.get("request_sha256") or ""
+    ).strip()
+    if (
+        recorded != expected
+        or not expected.is_file()
+        or not expected_hash
+        or sha256_file(expected) != expected_hash
+    ):
+        return None
+    request = load_json(expected)
+    if str(request.get("concept_id") or "").strip() != concept_id:
+        return None
+    return expected
+
+
+def _remove_if_exists(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError(f"Expected Format Gate file: {path}")
+    path.unlink()
+    return True
+
+
 def build_review_request(
     plan: dict[str, Any],
     plan_path: Path,
@@ -118,20 +157,81 @@ def build_review_request(
 def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_gate_config()
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
-    paths = sorted(PLANS_DIR.glob("*.format_plan.json")) if PLANS_DIR.exists() else []
+    paths = (
+        sorted(PLANS_DIR.glob("*.format_plan.json"))
+        if PLANS_DIR.exists()
+        else []
+    )
     prepared = []
+    skipped_stale = []
+    current_slugs: set[str] = set()
+
     for path in paths:
-        request = build_review_request(load_json(path), path, config)
+        plan = load_json(path)
+        if _current_plan_request_path(plan) is None:
+            skipped_stale.append(str(path.resolve()))
+            continue
+
+        request = build_review_request(plan, path, config)
+        slug = safe_slug(request["concept_id"])
+        current_slugs.add(slug)
         dest = (
             REVIEW_REQUESTS_DIR
-            / f"{safe_slug(request['concept_id'])}.format_review_request.json"
+            / f"{slug}.format_review_request.json"
         )
+        current_plan_hash = sha256_file(path)
+
+        existing_response = response_path(request["concept_id"])
+        if existing_response.is_file():
+            saved = load_json(existing_response)
+            if saved.get("format_plan_sha256") != current_plan_hash:
+                existing_response.unlink()
+
+        approved_path = (
+            APPROVED_DIR / f"{slug}.approved_format_plan.json"
+        )
+        if approved_path.is_file():
+            approved = load_json(approved_path)
+            provenance = approved.get("approved_provenance", {})
+            if (
+                not isinstance(provenance, dict)
+                or provenance.get("format_plan_sha256")
+                != current_plan_hash
+            ):
+                approved_path.unlink()
+
         atomic_write_json(dest, request)
-        prepared.append({"concept_id": request["concept_id"], "request": str(dest)})
+        prepared.append(
+            {
+                "concept_id": request["concept_id"],
+                "request": str(dest),
+            }
+        )
+
+    removed_stale_gate_artifacts: list[str] = []
+    for directory, suffix in (
+        (REVIEW_REQUESTS_DIR, ".format_review_request.json"),
+        (RESPONSES_DIR, ".format_review_response.json"),
+        (APPROVED_DIR, ".approved_format_plan.json"),
+    ):
+        if not directory.exists():
+            continue
+        for path in directory.glob(f"*{suffix}"):
+            slug = path.name[: -len(suffix)]
+            if slug not in current_slugs and _remove_if_exists(path):
+                removed_stale_gate_artifacts.append(
+                    str(path.resolve())
+                )
+
+    if removed_stale_gate_artifacts:
+        _remove_if_exists(SUMMARY_FILE)
+
     return {
         "status": "FORMAT_GATE_READY" if prepared else "WAITING_FOR_FORMAT_PLANS",
         "prepared": len(prepared),
         "requests": prepared,
+        "skipped_stale_plans": skipped_stale,
+        "removed_stale_gate_artifacts": removed_stale_gate_artifacts,
     }
 
 

@@ -140,6 +140,58 @@ class WorkflowAutomationTests(unittest.TestCase):
             ["concept_generate", "concept_generate"],
         )
 
+
+    def test_script_gate_completion_runs_format_chain_to_human_format_gate(self):
+        state = {"completed": 0}
+        sequence = [
+            "format_prepare",
+            "format_generate",
+            "format_gate_prepare",
+        ]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
+                return {
+                    action_id: {
+                        "enabled": True,
+                        "reason": f"{action_id} ready",
+                    }
+                }
+            return {}
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, sequence[state["completed"]])
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "HUMAN_FORMAT_GATE",
+                    "current_title": "Review Format Plan",
+                },
+            ),
+            patch.object(
+                automation,
+                "run_action",
+                side_effect=fake_run,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertEqual(result["workflow_state"], "HUMAN_FORMAT_GATE")
+        self.assertEqual(result["message"], "Review Format Plan")
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {

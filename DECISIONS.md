@@ -1538,3 +1538,31 @@ Format run.
 Backward compatibility is preserved only when no canonical section review was
 ever prepared. An older approved bundle becomes stale as soon as a prepared
 section-state exists without matching provenance.
+
+## D-078 — Script completion automatically advances to the Human Format Gate
+
+**Status:** Accepted
+
+A valid completed Human Script Gate is followed by deterministic Format machine
+work without another routine run-button decision.
+
+The existing automatic workflow runner must execute
+`format_prepare → format_generate → format_gate_prepare` and then stop at the
+Human Format Gate. It must not auto-approve Format or continue into Voice
+Performance before the human Format decision.
+
+The Script Gate POST handler starts `auto_continue` only when downstream
+machine work is actually enabled and no other job is running. The browser shows
+that automatic continuation explicitly.
+
+The Script → Format handoff is also an invalidation boundary. When the approved
+Script input changes, all Format artifacts derived from the previous request are
+stale and are removed. Current filenames alone are insufficient evidence of
+currency; response, plan, model-run and gate provenance must still match the
+current request/plan hashes.
+
+Unchanged provenance remains cacheable. Slice 8 therefore removes stale work
+without forcing unnecessary FAIR calls for valid current work.
+
+The Human Format Gate is the mandatory stopping point after automatic Format
+preparation.
