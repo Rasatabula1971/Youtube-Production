@@ -156,16 +156,19 @@ class ScriptSectionApplyTests(unittest.TestCase):
                     "alternative_id": "A",
                     "replacement_text": "Instead of taking the force in one rigid hit, the joint redirects part of that load as it moves.",
                     "change_summary": "A concrete, surgical force-path explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "B",
                     "replacement_text": "Picture the force entering the joint and being guided through a different path as the joint flexes.",
                     "change_summary": "A more visual and conversational explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "C",
                     "replacement_text": "The motion is doing work: it changes the route the force takes through the structure.",
                     "change_summary": "A shorter reveal-first explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
             ],
         }
