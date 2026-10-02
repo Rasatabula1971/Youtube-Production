@@ -388,6 +388,7 @@ def run_one(
         "story_plan": request.get("story_plan", {}),
         "psychology_contract": request.get("psychology_contract", {}),
         "psychology_profile": request.get("psychology_profile", {}),
+        "channel_voice": request.get("channel_voice", {}),
         "validation": validation,
         "draft_provenance": response["response_provenance"],
     }
