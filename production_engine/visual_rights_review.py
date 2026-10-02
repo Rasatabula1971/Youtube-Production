@@ -199,6 +199,7 @@ def snapshot() -> dict[str, Any]:
     decided_total = 0
     approved_total = 0
     stale_total = 0
+    stale_reviews = 0
     paths = (
         sorted(
             CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")
@@ -209,6 +210,11 @@ def snapshot() -> dict[str, Any]:
     for review_path in paths:
         review = load_json(review_path)
         rights_path = _path(review_path)
+        if _current_review_result(review_path, review) is None:
+            stale_reviews += 1
+            if rights_path.exists():
+                rights_path.unlink()
+            continue
         stored = (
             load_json(rights_path)
             if rights_path.exists()
@@ -228,7 +234,7 @@ def snapshot() -> dict[str, Any]:
             ):
                 continue
             required_total += 1
-            candidate = _candidate(review, shot_id)
+            candidate = _candidate(review_path, review, shot_id)
             decision = rights["decisions"].get(shot_id)
             if isinstance(decision, dict):
                 decided_total += 1
@@ -268,6 +274,7 @@ def snapshot() -> dict[str, Any]:
         "decided": decided_total,
         "approved": approved_total,
         "stale_removed": stale_total,
+        "stale_reviews": stale_reviews,
         "items": items,
     }
 
@@ -288,6 +295,8 @@ def apply_action(
         raise ValueError("Invalid candidate review file")
 
     review = load_json(review_path)
+    if _current_review_result(review_path, review) is None:
+        raise ValueError("STALE_VISUAL_CANDIDATE_REVIEW")
     selected = review.get("decisions", {}).get(shot_id)
     if (
         not selected
@@ -306,7 +315,7 @@ def apply_action(
             "Approval requires a documented transformative/editorial purpose"
         )
 
-    candidate = _candidate(review, shot_id)
+    candidate = _candidate(review_path, review, shot_id)
     if not candidate:
         raise ValueError("Selected candidate is unavailable or stale")
 
