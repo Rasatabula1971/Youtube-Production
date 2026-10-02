@@ -427,6 +427,34 @@ def run_prepare() -> dict[str, Any]:
     return result
 
 
+
+def request_snapshot() -> dict[str, Any]:
+    brief_state = packaging_brief_snapshot()
+    expected = int(brief_state.get("current") or 0) if brief_state.get("ready") else 0
+    current = 0
+    stale = 0
+    if REQUESTS_DIR.exists():
+        for path in REQUESTS_DIR.glob("*.psychological_angle_request.json"):
+            if request_is_current(path) is not None:
+                current += 1
+            else:
+                stale += 1
+    ready = expected > 0 and current == expected and stale == 0
+    return {
+        "status": (
+            "PSYCHOLOGICAL_ANGLE_REQUESTS_READY"
+            if ready
+            else "PSYCHOLOGICAL_ANGLE_REQUESTS_STALE"
+            if stale
+            else "WAITING_FOR_PSYCHOLOGICAL_ANGLE_REQUESTS"
+        ),
+        "ready": ready,
+        "expected": expected,
+        "current": current,
+        "stale": stale,
+    }
+
+
 def run_apply() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
