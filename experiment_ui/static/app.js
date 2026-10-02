@@ -580,7 +580,9 @@ function statusTone(workflow) {
     state === "WAITING_FOR_LOCAL_VISUAL_ASSETS" ||
     state === "LOCAL_FFMPEG_REQUIRED" ||
     state === "HUMAN_EDIT_PREVIEW_GATE" ||
-    state === "EDIT_PREVIEW_REWORK_REQUIRED"
+    state === "EDIT_PREVIEW_REWORK_REQUIRED" ||
+    state === "WAITING_FOR_FINAL_VISUAL_ASSETS" ||
+    state === "FINAL_PRODUCTION_HANDOFF_BLOCKED"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -638,7 +640,10 @@ function primaryTargetForWorkflow(workflow) {
     LOCAL_FFMPEG_REQUIRED: "Configure local FFmpeg",
     HUMAN_EDIT_PREVIEW_GATE: "Review edit preview",
     EDIT_PREVIEW_REWORK_REQUIRED: "Route edit rework",
-    EDIT_PREVIEW_DIRECTION_APPROVED: "Edit direction approved"
+    EDIT_PREVIEW_DIRECTION_APPROVED: "Edit direction approved",
+    WAITING_FOR_FINAL_VISUAL_ASSETS: "Register final visuals",
+    FINAL_PRODUCTION_HANDOFF_BLOCKED: "Resolve final handoff",
+    FINAL_PRODUCTION_HANDOFF_READY: "Final handoff ready"
   };
   if (analysisHumanGateLabels[workflow.state]) {
     return {
@@ -4523,7 +4528,10 @@ function renderAnalysis(data) {
     "LOCAL_FFMPEG_REQUIRED",
     "HUMAN_EDIT_PREVIEW_GATE",
     "EDIT_PREVIEW_REWORK_REQUIRED",
-    "EDIT_PREVIEW_DIRECTION_APPROVED"
+    "EDIT_PREVIEW_DIRECTION_APPROVED",
+    "WAITING_FOR_FINAL_VISUAL_ASSETS",
+    "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+    "FINAL_PRODUCTION_HANDOFF_READY"
   ].includes(workflow.state);
 
   const opportunityApproved =
@@ -4628,6 +4636,8 @@ function renderAnalysis(data) {
       "EDIT_PREVIEW_REWORK_REQUIRED",
       "EDIT_PREVIEW_DIRECTION_APPROVED",
       "WAITING_FOR_FINAL_VISUAL_ASSETS",
+      "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+      "FINAL_PRODUCTION_HANDOFF_READY",
       "FINAL_EDIT_DIRECTION_APPROVED"
     ].includes(workflow.state) ||
     voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
