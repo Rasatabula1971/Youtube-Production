@@ -15,6 +15,10 @@ if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
+from script_section_review import (
+    build_section_review_state,
+    validate_section_review_state,
+)
 
 from story_script_engine import (
     DRAFTS_DIR,
@@ -63,6 +67,18 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
     if not isinstance(required_branches, list) or fmt not in required_branches:
         raise ValueError("Script draft required_branches do not include its format")
 
+    draft_sha256 = sha256_file(draft_path)
+    section_review = build_section_review_state(
+        draft,
+        source_draft_sha256=draft_sha256,
+    )
+    section_review_validation = validate_section_review_state(section_review)
+    if not section_review_validation["valid"]:
+        raise ValueError(
+            "Invalid section review contract: "
+            + "; ".join(section_review_validation["errors"])
+        )
+
     return {
         "request_type": "human_script_gate",
         "concept_id": concept_id,
@@ -78,6 +94,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "story_plan": draft.get("story_plan", {}),
         "psychology_profile": draft.get("psychology_profile", {}),
         "channel_voice": draft.get("channel_voice", {}),
+        "section_review": section_review,
         "accepted_claims": draft.get("accepted_claims", []),
         "validation": draft.get("validation", {}),
         "source_overlap": draft.get("validation", {}).get("source_overlap", {}),
@@ -117,7 +134,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         },
         "request_provenance": {
             "script_draft": str(draft_path.resolve()),
-            "script_draft_sha256": sha256_file(draft_path),
+            "script_draft_sha256": draft_sha256,
         },
     }
 

@@ -121,6 +121,55 @@ class ScriptReviewTests(unittest.TestCase):
                 ["long_form", "short"],
             )
 
+
+    def test_review_request_contains_slice1_section_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            draft = self.draft("short", "Short proof, reveal, payoff.")
+            path = Path(tmp) / "c1.short.script_draft.json"
+            path.write_text(json.dumps(draft), encoding="utf-8")
+
+            request = script_review.build_review_request(draft, path)
+
+        state = request["section_review"]
+        self.assertEqual(state["artifact"], "script_section_review_state")
+        self.assertEqual(
+            state["source_draft_sha256"],
+            request["request_provenance"]["script_draft_sha256"],
+        )
+        self.assertEqual(
+            [item["target_id"] for item in state["targets"]],
+            ["opening_hook", "section:s1", "closing"],
+        )
+        for item in state["targets"]:
+            self.assertEqual(item["review_state"], "PENDING")
+            self.assertFalse(item["locked"])
+            self.assertTrue(item["editable"])
+            self.assertEqual(item["revision"], 0)
+
+    def test_snapshot_preserves_section_review_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+            ):
+                snapshot = script_review.snapshot()
+
+        short = next(
+            item for item in snapshot["scripts"]
+            if item["format"] == "short"
+        )
+        self.assertEqual(
+            [item["target_id"] for item in short["section_review"]["targets"]],
+            ["opening_hook", "section:s1", "closing"],
+        )
+        self.assertEqual(
+            short["section_review"]["source_draft_sha256"],
+            short["request_provenance"]["script_draft_sha256"],
+        )
+
     def test_accept_is_one_click_and_records_audit_criteria(self):
         req = {
             "concept_id": "c1",
