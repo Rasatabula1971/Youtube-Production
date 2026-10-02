@@ -20,7 +20,11 @@ if str(_ROOT) not in sys.path:
 
 from pipeline_integrity import atomic_write_json
 from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
-from script_section_state import build_targets, validate_state
+from script_section_state import (
+    assert_state_matches_draft,
+    build_targets,
+    validate_state,
+)
 from script_section_rework_runner import (
     assert_request_current,
     validate_response as validate_rework_response,
@@ -316,6 +320,284 @@ def _invalidate_and_refresh_script_gate(
     approved_path = approved_dir / f"{safe_slug(concept_id)}.approved_script.json"
     if approved_path.exists():
         approved_path.unlink()
+
+
+def _manual_edit_transaction_paths(
+    *,
+    concept_id: str,
+    fmt: str,
+    state_version: int,
+    target_id: str,
+    transactions_dir: Path,
+) -> tuple[Path, Path]:
+    stem = (
+        f"{_branch_key(concept_id, fmt)}."
+        f"v{state_version}.{safe_slug(target_id)}"
+    )
+    transaction = transactions_dir / f"{stem}.manual_edit_transaction.json"
+    backups = transactions_dir / "backups" / f"{stem}.manual_edit"
+    return transaction, backups
+
+
+def _bound_script_request_from_draft(
+    draft: dict[str, Any],
+) -> tuple[Path, dict[str, Any]]:
+    provenance = draft.get("draft_provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("Script draft is missing draft_provenance")
+
+    request_path = Path(
+        str(provenance.get("request_source") or "")
+    ).resolve()
+    expected_hash = str(provenance.get("request_sha256") or "")
+    if not request_path.is_file() or not expected_hash:
+        raise ValueError("Script draft is missing its bound script request")
+    if sha256_file(request_path) != expected_hash:
+        raise ValueError("STALE_SCRIPT_REQUEST: original script request changed")
+
+    request = load_json(request_path)
+    if str(request.get("concept_id") or "") != str(
+        draft.get("concept_id") or ""
+    ):
+        raise ValueError("Script request concept_id mismatch")
+    if str(request.get("format") or "") != str(draft.get("format") or ""):
+        raise ValueError("Script request format mismatch")
+    return request_path, request
+
+
+def _text_for_target(draft: dict[str, Any], target_id: str) -> str:
+    if target_id == "hook:opening":
+        return str(draft.get("opening_hook") or "")
+    if target_id == "closing:closing":
+        return str(draft.get("closing") or "")
+    if target_id.startswith("section:"):
+        section_id = target_id.split(":", 1)[1]
+        for section in draft.get("sections", []):
+            if (
+                isinstance(section, dict)
+                and str(section.get("section_id") or "") == section_id
+            ):
+                return str(section.get("narration") or "")
+    raise ValueError(f"Unsupported or missing script target: {target_id}")
+
+
+def _save_previous_version(
+    old_draft: dict[str, Any],
+    *,
+    concept_id: str,
+    fmt: str,
+    revision: int,
+    versions_dir: Path,
+) -> Path:
+    branch_versions_dir = versions_dir / _branch_key(concept_id, fmt)
+    branch_versions_dir.mkdir(parents=True, exist_ok=True)
+    previous_revision = revision - 1
+    version_path = (
+        branch_versions_dir
+        / f"revision_{previous_revision:04d}.script_draft.json"
+    )
+    if version_path.exists():
+        if load_json(version_path) != old_draft:
+            raise ValueError("Script version collision with different content")
+    else:
+        atomic_write_json(version_path, old_draft)
+    return version_path
+
+
+def apply_manual_edit(
+    draft_path: Path,
+    state_path: Path,
+    *,
+    target_id: str,
+    replacement_text: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+) -> dict[str, Any]:
+    """Apply one human-written target replacement with full validation."""
+    draft_path = draft_path.resolve()
+    state_path = state_path.resolve()
+    if not draft_path.is_file():
+        raise FileNotFoundError(draft_path)
+    if not state_path.is_file():
+        raise FileNotFoundError(state_path)
+
+    reviewer_value = str(reviewer or "").strip()
+    if not reviewer_value:
+        raise ValueError("reviewer is required")
+    target_value = str(target_id or "").strip()
+    if not target_value:
+        raise ValueError("target_id is required")
+    replacement = str(replacement_text or "").strip()
+    if not replacement:
+        raise ValueError("Manual edit requires non-empty replacement_text")
+
+    initial_draft = load_json(draft_path)
+    concept_id = str(initial_draft.get("concept_id") or "").strip()
+    fmt = str(initial_draft.get("format") or "").strip()
+    if not concept_id or not fmt:
+        raise ValueError("Script draft identity is incomplete")
+
+    recover_incomplete_transactions(
+        concept_id,
+        fmt,
+        transactions_dir=transactions_dir,
+    )
+
+    old_draft = load_json(draft_path)
+    old_state = load_json(state_path)
+    assert_state_matches_draft(old_state, draft_path)
+
+    state_target = next(
+        (
+            item
+            for item in old_state.get("targets", [])
+            if isinstance(item, dict)
+            and item.get("target_id") == target_value
+        ),
+        None,
+    )
+    if not isinstance(state_target, dict):
+        raise ValueError(f"Unknown script edit target: {target_value}")
+    if state_target.get("locked") is True:
+        raise ValueError("Locked target cannot be manually edited until unlocked")
+
+    original_text = _text_for_target(old_draft, target_value)
+    if " ".join(original_text.split()) == " ".join(replacement.split()):
+        raise ValueError("Manual edit must change the selected target text")
+
+    script_request_path, original_script_request = (
+        _bound_script_request_from_draft(old_draft)
+    )
+
+    revised_draft = copy.deepcopy(old_draft)
+    _replace_target_text(
+        revised_draft,
+        target_id=target_value,
+        replacement_text=replacement,
+    )
+    _assert_only_selected_target_changed(
+        old_draft,
+        revised_draft,
+        target_id=target_value,
+        old_state=old_state,
+    )
+    validation = _validate_revised_script(
+        revised_draft,
+        original_script_request,
+        operation_label="Manual edit",
+    )
+
+    prior_revision = (
+        int(old_draft.get("human_revision", {}).get("revision", 0))
+        if isinstance(old_draft.get("human_revision"), dict)
+        else 0
+    )
+    revision = prior_revision + 1
+
+    transaction_path, backup_dir = _manual_edit_transaction_paths(
+        concept_id=concept_id,
+        fmt=fmt,
+        state_version=int(old_state.get("state_version") or 0),
+        target_id=target_value,
+        transactions_dir=transactions_dir,
+    )
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_draft = backup_dir / "draft.json"
+    backup_state = backup_dir / "state.json"
+    atomic_write_json(backup_draft, old_draft)
+    atomic_write_json(backup_state, old_state)
+
+    transaction = {
+        "artifact": "script_section_manual_edit_transaction",
+        "status": "PREPARED",
+        "concept_id": concept_id,
+        "format": fmt,
+        "target_id": target_value,
+        "reviewer": reviewer_value,
+        "prepared_at": _utc_now(),
+        "backups": {
+            "draft": str(backup_draft.resolve()),
+            "state": str(backup_state.resolve()),
+        },
+        "destinations": {
+            "draft": str(draft_path),
+            "state": str(state_path),
+        },
+    }
+    transaction_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(transaction_path, transaction)
+
+    try:
+        transaction["status"] = "IN_PROGRESS"
+        transaction["started_at"] = _utc_now()
+        atomic_write_json(transaction_path, transaction)
+
+        version_path = _save_previous_version(
+            old_draft,
+            concept_id=concept_id,
+            fmt=fmt,
+            revision=revision,
+            versions_dir=versions_dir,
+        )
+
+        parent_hash = sha256_file(draft_path)
+        revised_draft["validation"] = validation
+        revised_draft["human_revision"] = {
+            "revision": revision,
+            "parent_draft_sha256": parent_hash,
+            "edit_type": "MANUAL_TARGET_EDIT",
+            "edited_target_id": target_value,
+            "edited_by": reviewer_value,
+            "edited_at": _utc_now(),
+            "previous_version": str(version_path.resolve()),
+            "script_request": str(script_request_path),
+            "script_request_sha256": sha256_file(script_request_path),
+        }
+        atomic_write_json(draft_path, revised_draft)
+
+        new_state = _rebase_state(
+            old_state,
+            revised_draft,
+            draft_path,
+            selected_target_id=target_value,
+            reviewer=reviewer_value,
+            action_label="MANUAL_EDIT",
+        )
+        atomic_write_json(state_path, new_state)
+
+        _invalidate_and_refresh_script_gate(
+            revised_draft,
+            draft_path,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+        transaction["status"] = "COMMITTED"
+        transaction["committed_at"] = _utc_now()
+        transaction["resulting_draft_sha256"] = sha256_file(draft_path)
+        transaction["resulting_state_sha256"] = sha256_file(state_path)
+        atomic_write_json(transaction_path, transaction)
+
+    except Exception:
+        recover_prepared_transaction(transaction_path)
+        raise
+
+    return {
+        "status": "MANUAL_EDIT_APPLIED",
+        "concept_id": concept_id,
+        "format": fmt,
+        "target_id": target_value,
+        "revision": revision,
+        "script_draft": str(draft_path),
+        "section_state": str(state_path),
+        "previous_version": str(version_path),
+        "transaction": str(transaction_path),
+    }
 
 
 def apply_selection(
