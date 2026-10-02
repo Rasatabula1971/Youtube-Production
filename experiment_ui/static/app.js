@@ -3709,13 +3709,22 @@ async function submitVisualCandidateDecision(action, candidateId) {
   const items = visualReviewItems(), current = items[visualShotCursor];
   if (!current) return;
   try {
-    await api("/api/visual-candidate-review", { method:"POST", body:JSON.stringify({
+    const saved = await api("/api/visual-candidate-review", { method:"POST", body:JSON.stringify({
       result_file: current.packet.result_file, shot_id: current.shot.shot_id,
       action: action, candidate_id: candidateId || null, note: visualCandidateNote.value
     })});
     const refreshed = await api("/api/visual-candidate-review");
     renderVisualCandidateReview(refreshed);
-    showToast(action === "SELECT" ? "Visual selected." : "Shot preserved as a visual gap.", false);
+    const savedDecision =
+      ((saved && saved.decisions) || {})[current.shot.shot_id] || {};
+    showToast(
+      action === "SELECT"
+        ? savedDecision.status === "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+          ? "Visual selected. Rights/context review is required before reuse."
+          : "Visual selected with verified reuse rights."
+        : "Shot preserved as a visual gap.",
+      false
+    );
     await loadStatus();
   } catch (error) { showToast(error.message, true); }
 }
