@@ -63,6 +63,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
     "visual_assembly_prepare",
+    "edit_manifest_prepare",
+    "edit_preview_render",
 ]
 
 MAX_STEPS_PER_RUN = 40
@@ -163,7 +165,10 @@ def run_until_human_gate() -> dict[str, Any]:
             "WAITING_FOR_VISUAL_ASSETS",
             "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
             "WAITING_FOR_LOCAL_VISUAL_ASSETS",
-            "VISUAL_ASSEMBLY_READY",
+            "LOCAL_FFMPEG_REQUIRED",
+            "HUMAN_EDIT_PREVIEW_GATE",
+            "EDIT_PREVIEW_REWORK_REQUIRED",
+            "EDIT_PREVIEW_DIRECTION_APPROVED",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
@@ -205,9 +210,15 @@ def run_until_human_gate() -> dict[str, Any]:
                         "retry; paid fallback is forbidden."
                         if action_id == "narration_preview_render"
                         else (
-                            "Current artifacts were preserved, but the active "
-                            "provider/model did not produce new validated output. "
-                            "Retry Continue Automatically later."
+                            "The free local structural edit preview could not "
+                            "be rendered. Check/configure local FFmpeg and current "
+                            "manifest media, then retry; paid/cloud fallback is forbidden."
+                            if action_id == "edit_preview_render"
+                            else (
+                                "Current artifacts were preserved, but the active "
+                                "provider/model did not produce new validated output. "
+                                "Retry Continue Automatically later."
+                            )
                         )
                     )
                     return {
