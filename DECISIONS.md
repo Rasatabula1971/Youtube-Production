@@ -1269,3 +1269,34 @@ Quota/capacity errors retain the D-068 routing behavior: 429/temporary 5xx may
 advance to the next configured free Gemini model, and exhaustion preserves
 partial state for a later retry. Paid inference remains prohibited.
 
+
+## D-070 — Channel Voice is versioned channel configuration, not a global project voice
+
+**Status:** Accepted
+
+The YouTube Production system does not have one universal writing voice.
+Different channels may use the same Opportunity, Research, Story/Script, Format
+and Production engines while presenting with different audience assumptions,
+narrator posture, tone, technical-language treatment, sentence style,
+storytelling preferences and prohibited style.
+
+The repository therefore defines a versioned **Channel Voice Profile** layer.
+A profile becomes generation-active only when its status is `APPROVED`.
+Story Planning binds the exact active profile version and hash into the story
+request, and downstream Script Writing inherits that bound profile rather than
+re-reading whichever profile happens to be active later.
+
+Until a channel thesis, niche and target viewer are deliberately chosen, the
+active profile remains `UNCONFIGURED`. In that state the model must not infer
+a persistent channel personality from the niche, title, source videos or
+generic creator advice. Existing research, Human Framing, psychology and format
+rules continue to operate normally.
+
+Channel Voice is distinct from Voice Performance. Channel Voice controls how a
+channel writes and presents ideas; Voice Performance controls how an approved
+script is spoken, including emotion, intensity, speed, pauses and emphasis.
+
+Future profiles are versioned rather than silently overwritten. Published
+retention, comment and performance evidence may justify Voice v2, v3 and later,
+but learning-driven changes remain explicit human-approved channel decisions.
+

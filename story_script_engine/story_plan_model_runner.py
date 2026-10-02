@@ -251,7 +251,8 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "13. Use only accepted_claim_ids for factual beats and factual opening claims.\n"
         "14. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
         "15. At least one beat must be PAYOFF.\n"
-        "16. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n\n"
+        "16. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n"
+        "17. CHANNEL VOICE: when channel_voice.apply_to_generation is true, use that approved profile for framing posture, technical-language treatment and style constraints without overriding research or packaging. When false, do NOT invent a persistent channel personality from niche, title, source videos or generic creator advice.\n\n"
         "STORY PLAN REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -417,6 +418,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "accepted_claims": request.get("accepted_claims", []),
         "accepted_claim_ids": request.get("accepted_claim_ids", []),
         "psychology_contract": request.get("psychology_contract", {}),
+        "channel_voice": request.get("channel_voice", {}),
         "validation": validation,
         "plan_provenance": response["response_provenance"],
     }

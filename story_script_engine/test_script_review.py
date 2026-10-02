@@ -37,6 +37,15 @@ class ScriptReviewTests(unittest.TestCase):
             "story_plan": {"title": "T", "beats": []},
             "psychology_contract": {"opening_line": {"required": True}},
             "psychology_profile": {"reward_density": "HIGH" if fmt == "short" else "MODERATE"},
+            "channel_voice": {
+                "profile": {
+                    "profile_id": "engineering_nonengineers",
+                    "version": 1,
+                    "status": "APPROVED",
+                },
+                "binding": {"profile_sha256": "voice-v1"},
+                "apply_to_generation": True,
+            },
             "accepted_claims": [{"claim_id": "clm001", "statement": "Fact"}],
             "validation": {"source_overlap": {"blocking": False}},
         }
@@ -159,6 +168,10 @@ class ScriptReviewTests(unittest.TestCase):
                 bundle["branch_scripts"]["short"]["psychology_profile"]["reward_density"],
                 "HIGH",
             )
+            self.assertEqual(
+                bundle["channel_voice"]["binding"]["profile_sha256"],
+                "voice-v1",
+            )
 
     def test_rework_revokes_existing_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -264,6 +277,42 @@ class ScriptReviewTests(unittest.TestCase):
             clear=False,
         ):
             self.assertEqual(script_review.reviewer_id(), "ricky")
+
+
+    def test_bundle_rejects_mixed_channel_voice_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts, requests, responses, approved = self.setup_gate(root)
+            short_path = drafts / "c1.short.script_draft.json"
+            short = json.loads(short_path.read_text(encoding="utf-8"))
+            short["channel_voice"]["profile"]["version"] = 2
+            short["channel_voice"]["binding"]["profile_sha256"] = "voice-v2"
+            short_path.write_text(json.dumps(short), encoding="utf-8")
+            short_req = script_review.build_review_request(short, short_path)
+            (requests / "c1.short.script_review_request.json").write_text(
+                json.dumps(short_req),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                script_review.apply_payload(
+                    requests / "c1.long_form.script_review_request.json",
+                    self.accept_payload("long_form"),
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "different Channel Voice bindings",
+                ):
+                    script_review.apply_payload(
+                        requests / "c1.short.script_review_request.json",
+                        self.accept_payload("short"),
+                    )
+
 
 
 if __name__ == "__main__":

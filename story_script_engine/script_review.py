@@ -77,6 +77,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "package": draft.get("package", {}),
         "story_plan": draft.get("story_plan", {}),
         "psychology_profile": draft.get("psychology_profile", {}),
+        "channel_voice": draft.get("channel_voice", {}),
         "accepted_claims": draft.get("accepted_claims", []),
         "validation": draft.get("validation", {}),
         "source_overlap": draft.get("validation", {}).get("source_overlap", {}),
@@ -288,6 +289,7 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
 
     branch_scripts: dict[str, dict[str, Any]] = {}
     review_provenance: dict[str, dict[str, str]] = {}
+    channel_voice_fingerprint: str | None = None
     for fmt in sorted(required_set):
         request_path, req = by_format[fmt]
         saved_path = response_path(concept_id, fmt)
@@ -303,6 +305,19 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
 
         source = assert_current_draft(req)
         draft = load_json(source)
+        channel_voice = draft.get("channel_voice", {})
+        fingerprint = json.dumps(
+            channel_voice,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if channel_voice_fingerprint is None:
+            channel_voice_fingerprint = fingerprint
+        elif fingerprint != channel_voice_fingerprint:
+            raise ValueError(
+                "script branches use different Channel Voice bindings"
+            )
         branch_scripts[fmt] = {
             "format": fmt,
             "title": draft.get("title"),
@@ -340,6 +355,7 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
         "accepted_claims": sample.get("accepted_claims", []),
         "story_plan": sample.get("story_plan", {}),
         "psychology_contract": sample.get("psychology_contract", {}),
+        "channel_voice": sample.get("channel_voice", {}),
         "required_branches": sorted(required_set),
         "branch_scripts": branch_scripts,
         "script_gate": {

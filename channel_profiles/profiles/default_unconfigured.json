@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "profile_id": "UNCONFIGURED",
+  "version": 0,
+  "status": "UNCONFIGURED",
+  "channel_id": null,
+  "channel_name": null,
+  "niche": null,
+  "audience": null,
+  "narrator_role": null,
+  "tone": null,
+  "technical_language": null,
+  "sentence_style": null,
+  "storytelling": null,
+  "prohibited_style": [],
+  "evidence_style": {
+    "state_uncertainty": true,
+    "distinguish_fact_from_hypothesis": true,
+    "numbers_require_support": true
+  },
+  "provenance": {
+    "created_from": "system_default",
+    "approved_by": null,
+    "approved_at": null
+  }
+}

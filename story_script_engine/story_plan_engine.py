@@ -18,6 +18,10 @@ _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
+from channel_profiles.channel_profile import (
+    load_active_profile_binding,
+    normalize_binding,
+)
 from pipeline_integrity import atomic_write_json
 from story_script_engine import (
     RESEARCH_VERIFIED_DIR,
@@ -168,11 +172,32 @@ def _base_from_verified_package(
 def build_story_plan_request(
     package: dict[str, Any],
     package_path: Path,
+    channel_voice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     base = _base_from_verified_package(package, package_path)
+    channel_voice_binding = (
+        normalize_binding(channel_voice)
+        if channel_voice is not None
+        else load_active_profile_binding()
+    )
+    voice_is_active = bool(channel_voice_binding["apply_to_generation"])
+    voice_instruction = (
+        "Apply the approved Channel Voice Profile to framing choices, "
+        "technical-language treatment and narrator posture. It may not "
+        "override verified research, the approved package promise or the "
+        "format psychology contract."
+        if voice_is_active
+        else (
+            "No approved Channel Voice Profile exists. Do not infer a "
+            "persistent channel personality from the niche, title, source "
+            "videos or generic creator advice. Use only the supplied "
+            "research, human framing and psychology constraints."
+        )
+    )
     return {
         "artifact": "story_plan_request",
         **{key: value for key, value in base.items() if not key.startswith("source_")},
+        "channel_voice": channel_voice_binding,
         "psychology_contract": {
             "opening_line": {
                 "required": True,
@@ -225,6 +250,7 @@ def build_story_plan_request(
             "Every factual beat may use only accepted claim_ids supplied here.",
             "Framing can be original, but it must not introduce unsupported factual assertions.",
             "Do not copy source-video wording, sequence, personality, or exact execution.",
+            voice_instruction,
             "Make each beat advance the viewer rather than repeat the previous beat.",
         ],
         "request_provenance": {

@@ -39,6 +39,42 @@ class StoryPlanEngineTests(unittest.TestCase):
             ],
         }
 
+
+    def approved_voice_binding(self):
+        return {
+            "profile": {
+                "schema_version": 1,
+                "profile_id": "engineering_nonengineers",
+                "version": 1,
+                "status": "APPROVED",
+                "channel_id": "engineering_nonengineers",
+                "channel_name": "Engineering for Non-Engineers",
+                "niche": "engineering",
+                "audience": {"knowledge_level": "non_engineer"},
+                "narrator_role": {"identity": "curious_explainer"},
+                "tone": {"primary": "curious"},
+                "technical_language": {"jargon_policy": "translate_immediately"},
+                "sentence_style": {"preferred_length": "short_to_medium"},
+                "storytelling": {"mystery": "high"},
+                "prohibited_style": ["textbook introductions"],
+                "evidence_style": {
+                    "state_uncertainty": True,
+                    "distinguish_fact_from_hypothesis": True,
+                    "numbers_require_support": True,
+                },
+                "provenance": {
+                    "created_from": "channel_setup_gate",
+                    "approved_by": "human",
+                    "approved_at": "2026-10-01T19:53:00-04:00",
+                },
+            },
+            "binding": {
+                "profile_path": "channel_profiles/profiles/engineering.json",
+                "profile_sha256": "abc123",
+            },
+            "apply_to_generation": True,
+        }
+
     def psychology(self, primary, action, loop_id):
         drama_by_action = {"OPEN": 7, "ADVANCE": 5, "PAYOFF": 6, "NONE": 5}
         tempo_by_action = {"OPEN": 7, "ADVANCE": 4, "PAYOFF": 5, "NONE": 5}
@@ -178,6 +214,47 @@ class StoryPlanEngineTests(unittest.TestCase):
         self.assertTrue(
             any("opening_psychology uses unapproved claim_id" in error for error in result["errors"])
         )
+
+
+    def test_unconfigured_channel_voice_does_not_invent_personality(self):
+        request = self.request()
+
+        self.assertEqual(
+            request["channel_voice"]["profile"]["status"],
+            "UNCONFIGURED",
+        )
+        self.assertFalse(request["channel_voice"]["apply_to_generation"])
+        self.assertTrue(
+            any(
+                "Do not infer a persistent channel personality" in item
+                for item in request["instructions"]
+            )
+        )
+
+    def test_approved_channel_voice_is_bound_into_story_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "verified.json"
+            package = self.package()
+            path.write_text(json.dumps(package), encoding="utf-8")
+            request = build_story_plan_request(
+                package,
+                path,
+                channel_voice=self.approved_voice_binding(),
+            )
+
+        self.assertTrue(request["channel_voice"]["apply_to_generation"])
+        self.assertEqual(
+            request["channel_voice"]["profile"]["profile_id"],
+            "engineering_nonengineers",
+        )
+        self.assertEqual(request["channel_voice"]["profile"]["version"], 1)
+        self.assertTrue(
+            any(
+                "Apply the approved Channel Voice Profile" in item
+                for item in request["instructions"]
+            )
+        )
+
 
 
 if __name__ == "__main__":

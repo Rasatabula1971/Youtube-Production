@@ -193,21 +193,23 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "10. Follow the supplied psychology_profile. It overrides generic pacing folklore.\n"
         "11. Do not copy source-video wording, story sequence, personality or exact execution.\n"
         "12. Do not claim virality or guaranteed performance.\n"
-        "13. If human_rework_note is present, it is an AUTHORITATIVE human instruction for THIS format branch. Correct exactly the requested issue while preserving the approved Packaging title, verified claims, Story Plan constraints and format identity. Do not silently rewrite unrelated parts unless required to make the requested correction coherent.\n"
-        "14. Human rework never authorizes invented facts, unsupported drama, or changing the approved package promise.\n"
+        "13. CHANNEL VOICE: when channel_voice.apply_to_generation is true, follow the approved profile for wording, narrator posture, technical-language treatment and prohibited-style rules. It never overrides verified research, Packaging or format psychology.\n"
+        "14. CHANNEL VOICE: when channel_voice.apply_to_generation is false, do NOT infer a persistent channel personality from niche, title, source videos or generic creator advice.\n"
+        "15. If human_rework_note is present, it is an AUTHORITATIVE human instruction for THIS format branch. Correct exactly the requested issue while preserving the approved Packaging title, verified claims, Story Plan constraints and format identity. Do not silently rewrite unrelated parts unless required to make the requested correction coherent.\n"
+        "16. Human rework never authorizes invented facts, unsupported drama, or changing the approved package promise.\n"
     )
     if fmt == "short":
         prompt += (
             "17. SHORTS: defend against the swipe immediately. The 3-second hook target is a production hypothesis that will be measured after audio rendering, not guessed from text length.\n"
             "18. SHORTS: every section must create meaningful progress through PROOF, NOVELTY, REVEAL, EXPECTATION_SHIFT, MICRO_PAYOFF or PROGRESS.\n"
-            "15. SHORTS: aim for a meaningful attention/reward refresh roughly every 4-6 seconds as a testable hypothesis; keep one core idea and low cognitive branching.\n"
-            "16. SHORTS: close loops quickly and finish with a strong payoff.\n"
+            "19. SHORTS: aim for a meaningful attention/reward refresh roughly every 4-6 seconds as a testable hypothesis; keep one core idea and low cognitive branching.\n"
+            "20. SHORTS: close loops quickly and finish with a strong payoff.\n"
         )
     else:
         prompt += (
             "17. LONG FORM: prioritize sustained curiosity, comprehension and meaningful delayed payoff over constant interruption.\n"
-            "16. LONG FORM: use setup, examples and breathing room where they reduce cognitive load.\n"
-            "15. LONG FORM: cover the full Story Plan rather than reducing it to a short-form summary.\n"
+            "18. LONG FORM: use setup, examples and breathing room where they reduce cognitive load.\n"
+            "19. LONG FORM: cover the full Story Plan rather than reducing it to a short-form summary.\n"
         )
     prompt += (
         "\nPSYCHOLOGY PROFILE:\n"
@@ -386,6 +388,7 @@ def run_one(
         "story_plan": request.get("story_plan", {}),
         "psychology_contract": request.get("psychology_contract", {}),
         "psychology_profile": request.get("psychology_profile", {}),
+        "channel_voice": request.get("channel_voice", {}),
         "validation": validation,
         "draft_provenance": response["response_provenance"],
     }
