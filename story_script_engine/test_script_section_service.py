@@ -208,12 +208,15 @@ class ScriptSectionServiceTests(unittest.TestCase):
 
             request_meta = result["rework_request"]
             request_path = Path(request_meta["request_file"])
+            request_exists = request_path.exists()
+            after = draft_path.read_bytes()
+            model_was_called = model_call.called
 
-        self.assertFalse(model_call.called)
+        self.assertFalse(model_was_called)
         self.assertFalse(request_meta["model_called"])
         self.assertFalse(request_meta["script_changed"])
-        self.assertTrue(request_path.exists())
-        self.assertEqual(before, draft_path.read_bytes())
+        self.assertTrue(request_exists)
+        self.assertEqual(before, after)
 
     def test_rework_invalidates_branch_response_and_approved_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
