@@ -55,6 +55,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/managed-visual-asset",
     "/api/edit-preview-review",
     "/api/final-sound-asset",
+    "/api/final-export-review",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -298,6 +299,17 @@ from final_sound_asset_import import (
     register as register_final_sound_asset,
     snapshot as final_sound_asset_snapshot,
 )
+from final_render_manifest import (
+    manifest_is_current as final_render_manifest_is_current,
+)
+from final_render import (
+    ffmpeg_available as final_ffmpeg_available,
+    result_is_current as final_render_result_is_current,
+)
+from final_export_review import (
+    apply_action as apply_final_export_action,
+    snapshot as final_export_review_snapshot,
+)
 from storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
@@ -360,6 +372,13 @@ PRODUCTION_FINAL_HANDOFF_SUMMARY = (
     PRODUCTION_OUTPUT / "final_production_handoff_summary.json"
 )
 PRODUCTION_FINAL_SOUND_PLAN_DIR = PRODUCTION_OUTPUT / "final_sound_plans"
+PRODUCTION_FINAL_RENDER_MANIFEST_DIR = (
+    PRODUCTION_OUTPUT / "final_render_manifests"
+)
+PRODUCTION_FINAL_RENDER_RESULT_DIR = (
+    PRODUCTION_OUTPUT / "final_render_results"
+)
+PRODUCTION_FINAL_RENDER_DIR = PRODUCTION_OUTPUT / "final_renders"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -414,6 +433,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "edit_preview_render",
     "final_production_handoff_prepare",
     "final_sound_plan_prepare",
+    "final_render_manifest_prepare",
+    "final_render_local",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1259,6 +1280,34 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Converts the current final-production handoff into exact licensed "
             "music/SFX requirements. It calls no provider, authorizes no spend, "
             "renders no final media, and does not publish."
+        ),
+    },
+    "final_render_manifest_prepare": {
+        "label": "Build Final Render Manifest",
+        "stage": "12",
+        "command": [
+            sys.executable,
+            "production_engine/final_render_manifest.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Binds current final visuals, narration and every licensed/omitted "
+            "sound resolution into a rebuild-current local final-render manifest."
+        ),
+    },
+    "final_render_local": {
+        "label": "Render Local Final Candidate",
+        "stage": "12",
+        "command": [
+            sys.executable,
+            "production_engine/final_render.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses local FFmpeg to render the current final candidate, then stops "
+            "for the Human Final Export Gate. It does not upload or publish."
         ),
     },
     "production_visual_prepare": {
@@ -3218,6 +3267,78 @@ def final_sound_plan_artifact_state(
     }
 
 
+def final_render_manifest_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    if PRODUCTION_FINAL_RENDER_MANIFEST_DIR.exists():
+        for path in PRODUCTION_FINAL_RENDER_MANIFEST_DIR.glob(
+            "*.final_render_manifest.json"
+        ):
+            payload = final_render_manifest_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+    }
+
+
+def final_render_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    if PRODUCTION_FINAL_RENDER_RESULT_DIR.exists():
+        for path in PRODUCTION_FINAL_RENDER_RESULT_DIR.glob(
+            "*.final_render_result.json"
+        ):
+            payload = final_render_result_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -4304,6 +4425,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     final_sound_plan_ready = bool(final_sound_plan_state.get("ready"))
+    final_sound_assets = final_sound_asset_snapshot()
+    final_sound_assets_ready = bool(final_sound_assets.get("ready"))
+    final_render_manifest_state = final_render_manifest_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_render_manifest_ready = bool(
+        final_render_manifest_state.get("ready")
+    )
+    final_render_state = final_render_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_render_ready = bool(final_render_state.get("ready"))
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -5428,6 +5561,52 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "final_render_manifest_prepare": {
+            "enabled": (
+                final_sound_plan_ready
+                and final_sound_assets_ready
+                and not final_render_manifest_ready
+            ),
+            "reason": (
+                "Every current final sound requirement is resolved; bind final "
+                "visuals, narration and sound into a rebuild-current render manifest."
+                if (
+                    final_sound_plan_ready
+                    and final_sound_assets_ready
+                    and not final_render_manifest_ready
+                )
+                else (
+                    "Final render manifests are current."
+                    if final_render_manifest_ready
+                    else "Resolve every current final sound requirement first."
+                )
+            ),
+        },
+        "final_render_local": {
+            "enabled": (
+                final_render_manifest_ready
+                and final_ffmpeg_available()
+                and not final_render_ready
+            ),
+            "reason": (
+                "Current final render manifests are ready for local FFmpeg."
+                if (
+                    final_render_manifest_ready
+                    and final_ffmpeg_available()
+                    and not final_render_ready
+                )
+                else (
+                    "Local final renders are current."
+                    if final_render_ready
+                    else (
+                        "Configured local FFmpeg is required for final rendering."
+                        if final_render_manifest_ready
+                        and not final_ffmpeg_available()
+                        else "Build current final render manifests first."
+                    )
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -6387,17 +6566,112 @@ def workflow_guidance(
                 "next_title": "Complete final sound asset registration",
             }
 
+        final_render_manifest_state = final_render_manifest_artifact_state(
+            expected_branches
+        )
+        if not final_render_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Final Render Manifest",
+                "current_detail": (
+                    "All final sound requirements are resolved. Bind the exact "
+                    "current visuals, narration, licensed sound assets and explicit "
+                    "omissions into a rebuild-current local final-render manifest."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Local Final Candidate",
+            }
+
+        if not final_ffmpeg_available():
+            return {
+                "state": "LOCAL_FINAL_FFMPEG_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Local FFmpeg Required for Final Render",
+                "current_detail": (
+                    "The final render manifest is current, but local FFmpeg is "
+                    "unavailable. Slice 22 will not use a cloud or paid rendering "
+                    "fallback. Install/configure FFmpeg, then continue."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Local Final Candidate",
+            }
+
+        final_render_state = final_render_artifact_state(
+            expected_branches
+        )
+        if not final_render_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Local Final Candidate",
+                "current_detail": (
+                    "Render the rebuild-current final manifest locally with FFmpeg. "
+                    "This produces a publish-quality candidate but does not approve "
+                    "export, upload, or publishing."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Final Export Gate",
+            }
+
+        final_export_gate = final_export_review_snapshot()
+        if not final_export_gate.get("complete"):
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_action_id": None,
+                "current_title": "Review Final Render",
+                "current_detail": (
+                    "Watch the exact local final candidate with final visuals, "
+                    "narration and licensed/omitted sound decisions. Approve export "
+                    "or return visuals, narration or sound for rework."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve export or return a creative layer",
+            }
+
+        if int(final_export_gate.get("rework") or 0) > 0:
+            return {
+                "state": "FINAL_EXPORT_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Final Render Rework Requested",
+                "current_detail": (
+                    "The Human Final Export Gate returned a creative layer for "
+                    "rework. The exact final render result and human instruction "
+                    "are preserved. No upload or publishing is authorized."
+                ),
+                "next_action_id": None,
+                "next_title": "Route final-render rework",
+            }
+
+        if (
+            int(final_export_gate.get("approved") or 0)
+            != int(final_export_gate.get("total") or 0)
+            or int(final_export_gate.get("total") or 0) <= 0
+        ):
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_action_id": None,
+                "current_title": "Review Final Render",
+                "current_detail": (
+                    "The saved export approval is missing or stale against the "
+                    "current final-render bytes. Review and approve the exact "
+                    "current render again before export."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve the exact current final render",
+            }
+
         return {
-            "state": "FINAL_SOUND_ASSETS_READY",
+            "state": "FINAL_EXPORT_APPROVED",
             "current_action_id": None,
-            "current_title": "Final Sound Assets Ready",
+            "current_title": "Final Export Approved",
             "current_detail": (
-                "Every current final sound requirement is resolved by a managed "
-                "commercial-safe asset or an explicit human omission. Slice 21 "
-                "stops here. No final render, upload or publish action has occurred."
+                "The exact current local final-render bytes passed the Human Final "
+                "Export Gate. Slice 22 stops here. The video is export-approved, "
+                "but upload and publish remain unauthorized and unperformed."
             ),
             "next_action_id": None,
-            "next_title": "Slice 22: local final render and human export gate",
+            "next_title": "Slice 23: publishing package and upload boundary",
         }
 
     production_visual = production_visual_artifact_state()
@@ -6563,6 +6837,13 @@ def status_payload() -> dict[str, Any]:
             visual_post_search_artifact_state().get("expected_branches", [])
         ),
         "final_sound_assets": final_sound_asset_snapshot(),
+        "final_render_manifest": final_render_manifest_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_render": final_render_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_export_gate": final_export_review_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -6726,6 +7007,42 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/final-sound-asset":
             self._send_json(final_sound_asset_snapshot())
+            return
+        if route == "/api/final-export-review":
+            self._send_json(final_export_review_snapshot())
+            return
+        if route == "/api/final-render-video":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0])
+            fmt = str((query.get("format") or [""])[0])
+            match = next(
+                (
+                    item
+                    for item in final_export_review_snapshot().get(
+                        "items", []
+                    )
+                    if str(item.get("concept_id") or "") == concept_id
+                    and str(item.get("format") or "") == fmt
+                ),
+                None,
+            )
+            if not match or not match.get("render_file"):
+                self._send_json(
+                    {"error": "Current final render is not ready."},
+                    404,
+                )
+                return
+            render_path = Path(str(match["render_file"])).resolve()
+            if (
+                render_path.parent.resolve()
+                != PRODUCTION_FINAL_RENDER_DIR.resolve()
+            ):
+                self._send_json(
+                    {"error": "Invalid final render path."},
+                    403,
+                )
+                return
+            self._send_static(render_path, "video/mp4")
             return
         if route == "/api/edit-preview-video":
             query = parse_qs(urlparse(self.path).query)
@@ -7166,7 +7483,19 @@ class Handler(BaseHTTPRequestHandler):
                     "registered": payload,
                     "final_sound_assets": final_sound_asset_snapshot(),
                 }
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    response["automation_job"] = auto_job
                 self._send_json(response)
+                return
+
+            if route == "/api/final-export-review":
+                payload = apply_final_export_action(
+                    result_file=str(body.get("result_file", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
+                )
+                self._send_json(payload)
                 return
 
             if route == "/api/storyboard-review":

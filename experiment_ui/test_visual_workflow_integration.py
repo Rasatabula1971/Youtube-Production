@@ -22,6 +22,10 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         final_handoff_state=None,
         final_sound_plan_state=None,
         final_sound_assets=None,
+        final_render_manifest_state=None,
+        final_render_state=None,
+        final_export_gate=None,
+        final_ffmpeg_ready=True,
         readiness=None,
     ):
         stack = ExitStack()
@@ -243,6 +247,56 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                         "stale": 0,
                     }
                 ),
+            ),
+            patch.object(
+                server,
+                "final_render_manifest_artifact_state",
+                return_value=(
+                    final_render_manifest_state
+                    if final_render_manifest_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                        "expected": 1,
+                        "current": 0,
+                        "stale": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "final_render_artifact_state",
+                return_value=(
+                    final_render_state
+                    if final_render_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                        "expected": 1,
+                        "current": 0,
+                        "stale": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "final_export_review_snapshot",
+                return_value=(
+                    final_export_gate
+                    if final_export_gate is not None
+                    else {
+                        "status": "WAITING_FOR_FINAL_RENDER",
+                        "complete": False,
+                        "pending": 0,
+                        "approved": 0,
+                        "rework": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "final_ffmpeg_available",
+                return_value=final_ffmpeg_ready,
             ),
         )
         for context in patches:
@@ -691,7 +745,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertIn("does not call or pay", workflow["current_detail"])
 
-    def test_resolved_final_sound_stops_at_slice21_boundary(self):
+    def test_resolved_final_sound_unlocks_final_render_manifest(self):
         workflow = self.workflow(
             {
                 "candidate_gate": {"packets": [], "stale_shots": 0},
@@ -743,9 +797,170 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "stale": 0,
             },
         )
-        self.assertEqual(workflow["state"], "FINAL_SOUND_ASSETS_READY")
-        self.assertIn("Slice 21 stops here", workflow["current_detail"])
-        self.assertIn("No final render", workflow["current_detail"])
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Build Final Render Manifest",
+        )
+
+    def test_current_final_manifest_unlocks_local_render(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT", "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1, "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={"status": "COMPLETE", "complete": True, "rework": 0},
+            final_handoff_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0, "blocked": 0,
+                "ready_for_final_sound": 1,
+            },
+            final_sound_plan_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0, "requirements": 2,
+            },
+            final_sound_assets={
+                "status": "FINAL_SOUND_ASSETS_READY", "ready": True,
+                "plans": 1, "expected": 2, "resolved": 2,
+                "pending": 0, "stale": 0,
+            },
+            final_render_manifest_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0,
+            },
+            final_render_state={
+                "status": "STALE_OR_INCOMPLETE", "ready": False,
+                "expected": 1, "current": 0, "stale": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Render Local Final Candidate",
+        )
+
+    def test_current_final_render_stops_at_human_export_gate(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT", "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1, "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={"status": "COMPLETE", "complete": True, "rework": 0},
+            final_handoff_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0, "blocked": 0,
+                "ready_for_final_sound": 1,
+            },
+            final_sound_plan_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0, "requirements": 2,
+            },
+            final_sound_assets={
+                "status": "FINAL_SOUND_ASSETS_READY", "ready": True,
+                "plans": 1, "expected": 2, "resolved": 2,
+                "pending": 0, "stale": 0,
+            },
+            final_render_manifest_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0,
+            },
+            final_render_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0,
+            },
+            final_export_gate={
+                "status": "AWAITING_HUMAN_FINAL_EXPORT_REVIEW",
+                "complete": False, "pending": 1, "approved": 0, "rework": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "HUMAN_FINAL_EXPORT_GATE")
+
+    def test_final_export_approval_stops_slice22_without_publish(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT", "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1, "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={"status": "COMPLETE", "complete": True, "rework": 0},
+            final_handoff_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0, "blocked": 0,
+                "ready_for_final_sound": 1,
+            },
+            final_sound_plan_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0, "requirements": 2,
+            },
+            final_sound_assets={
+                "status": "FINAL_SOUND_ASSETS_READY", "ready": True,
+                "plans": 1, "expected": 2, "resolved": 2,
+                "pending": 0, "stale": 0,
+            },
+            final_render_manifest_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0,
+            },
+            final_render_state={
+                "status": "CURRENT", "ready": True, "expected": 1,
+                "current": 1, "stale": 0,
+            },
+            final_export_gate={
+                "status": "FINAL_EXPORT_APPROVED",
+                "complete": True, "total": 1, "pending": 0,
+                "approved": 1, "rework": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "FINAL_EXPORT_APPROVED")
+        self.assertIn("Slice 22 stops here", workflow["current_detail"])
+        self.assertIn("upload and publish remain unauthorized", workflow["current_detail"])
 
     def test_blocked_final_handoff_stops_without_paid_action(self):
         workflow = self.workflow(
@@ -878,7 +1093,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 10
+                search_index : search_index + 12
             ],
             [
                 "visual_search_acquire",
@@ -891,6 +1106,8 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "edit_preview_render",
                 "final_production_handoff_prepare",
                 "final_sound_plan_prepare",
+                "final_render_manifest_prepare",
+                "final_render_local",
             ],
         )
         self.assertIn("visual_rough_cut_prepare", server.ACTION_DEFS)

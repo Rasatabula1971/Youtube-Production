@@ -2075,3 +2075,44 @@ invalidates old registrations automatically.
 The successful Slice 21 boundary is `FINAL_SOUND_ASSETS_READY`: every current
 requirement has either a current licensed asset or an explicit human omission.
 Final mixing/rendering remains Slice 22 work.
+
+## D-092 — Final rendering is local, rebuild-current, and requires exact-byte human export approval
+
+**Status:** Accepted
+
+Slice 22 owns the transition from fully resolved final sound to an
+export-approved local final video candidate.
+
+The automatic path is:
+
+`FINAL_SOUND_ASSETS_READY → final_render_manifest_prepare → final_render_local → HUMAN_FINAL_EXPORT_GATE`
+
+The final render manifest is rebuild-current. It binds the exact current
+Slice 20 final-production handoff, current Slice 21 final-sound plan, every
+current licensed sound resolution or explicit human omission, and the exact
+visual/narration media hashes.
+
+The render is local FFmpeg only. Cloud rendering and paid render fallbacks are
+forbidden. Internal visual timeline gaps fail closed. If the approved visual
+timeline ends slightly before the narration timeline, the last approved visual
+is held/looped through the exact render duration rather than introducing a black
+placeholder.
+
+Slice 22 uses a deterministic conservative audio-mix policy for the local final
+candidate: narration remains full-level, music marked to duck under narration is
+attenuated, non-ducked music uses a higher fixed bed, SFX use a fixed level, and
+the final mix is limited before AAC encoding. This is a candidate mix, not an
+implicit creative approval; the Human Final Export Gate may return sound for
+rework.
+
+The final rendered MP4 is not export-approved merely because FFmpeg succeeded.
+The Human Final Export Gate is bound to the exact current render-result JSON and
+rendered file SHA-256. A changed manifest, visual, narration, sound resolution,
+sound asset, or rendered byte invalidates an old approval.
+
+Human review may approve the exact render for export or return visuals,
+narration, or sound for rework. An approval explicitly keeps
+`upload_authorized=false` and `publish_authorized=false`.
+
+The successful Slice 22 boundary is `FINAL_EXPORT_APPROVED`. Upload and
+publishing remain later work.

@@ -1165,6 +1165,66 @@ class WorkflowAutomationTests(unittest.TestCase):
             "WAITING_FOR_FINAL_SOUND_ASSETS",
         )
 
+    def test_resolved_sound_runs_final_manifest_and_render_then_stops(self):
+        state = {"completed": 0}
+        sequence = [
+            "final_render_manifest_prepare",
+            "final_render_local",
+        ]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
+                return {
+                    action_id: {
+                        "enabled": True,
+                        "reason": f"{action_id} ready",
+                    }
+                }
+            return {}
+
+        def guidance(_readiness):
+            if state["completed"] < len(sequence):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_title": sequence[state["completed"]],
+                }
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_title": "Review Final Render",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, sequence[state["completed"]])
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(
+                automation,
+                "run_action",
+                side_effect=fake_run,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_FINAL_EXPORT_GATE",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {

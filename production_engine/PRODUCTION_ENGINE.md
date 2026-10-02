@@ -597,3 +597,61 @@ a missing asset from silently becoming an omission.
 Slice 21 stops at `FINAL_SOUND_ASSETS_READY`. It does not mix final sound into
 video, create a publish-ready render, upload, or publish. Those remain the next
 production boundary.
+
+## Slice 22 — rebuild-current local final render and Human Final Export Gate
+
+Slice 22 turns the fully resolved Slice 21 media set into a local final
+candidate and then stops for exact-byte human review:
+
+```text
+FINAL_SOUND_ASSETS_READY
+        ↓
+final_render_manifest_prepare
+        ↓
+current visuals + narration + licensed/omitted sound resolutions
+        ↓
+final_render_local
+        ↓
+local H.264/AAC final candidate
+        ↓
+HUMAN_FINAL_EXPORT_GATE
+        ↓
+APPROVE_EXPORT
+        or
+RETURN_TO_VISUALS / RETURN_TO_NARRATION / RETURN_TO_SOUND
+        ↓
+FINAL_EXPORT_APPROVED
+        ↓
+STOP
+```
+
+`final_render_manifest.py` rebuilds the complete final-render contract from
+live current inputs. The manifest rejects stale visual/narration bytes, stale
+sound plans, incomplete sound resolutions, and unknown sound-to-narration
+segment references. Every registered sound resolution is bound by its
+requirement fingerprint, resolution-file hash and managed asset hash. Explicit
+human sound omissions cross the manifest as provenance records rather than
+silently disappearing.
+
+Music beds use the narration segment timing window. SFX cues use deterministic
+segment-relative placement. The fixed local mix policy is recorded in the
+manifest so a later re-render cannot silently change levels. The Human Final
+Export Gate is the creative check for the final mix.
+
+`final_render.py` uses local FFmpeg only. It renders approved final visual
+assets with no placeholder frames, mixes QC-passed narration and current
+licensed final sound, encodes H.264/AAC, and records the exact resulting SHA-256
+and byte count. Internal visual timeline gaps fail closed; a short visual tail
+is extended by holding/looping the last approved asset through the narration
+duration.
+
+`final_export_review.py` is the final human gate for Slice 22. Approval is
+bound to the exact current render-result artifact and exact final MP4 hash.
+Replacing any upstream current media or changing the rendered file invalidates
+that approval.
+
+An approved export is still not an upload or publish authorization. Slice 22
+records `upload_authorized=false` and `publish_authorized=false`, performs no
+network upload, and invokes no publishing API.
+
+Slice 22 ends at `FINAL_EXPORT_APPROVED`.

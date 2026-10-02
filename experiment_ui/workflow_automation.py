@@ -67,6 +67,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "edit_preview_render",
     "final_production_handoff_prepare",
     "final_sound_plan_prepare",
+    "final_render_manifest_prepare",
+    "final_render_local",
 ]
 
 MAX_STEPS_PER_RUN = 40
@@ -173,7 +175,10 @@ def run_until_human_gate() -> dict[str, Any]:
             "WAITING_FOR_FINAL_VISUAL_ASSETS",
             "FINAL_PRODUCTION_HANDOFF_BLOCKED",
             "WAITING_FOR_FINAL_SOUND_ASSETS",
-            "FINAL_SOUND_ASSETS_READY",
+            "LOCAL_FINAL_FFMPEG_REQUIRED",
+            "HUMAN_FINAL_EXPORT_GATE",
+            "FINAL_EXPORT_REWORK_REQUIRED",
+            "FINAL_EXPORT_APPROVED",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
@@ -220,9 +225,16 @@ def run_until_human_gate() -> dict[str, Any]:
                             "manifest media, then retry; paid/cloud fallback is forbidden."
                             if action_id == "edit_preview_render"
                             else (
-                                "Current artifacts were preserved, but the active "
-                                "provider/model did not produce new validated output. "
-                                "Retry Continue Automatically later."
+                                "The local final candidate could not be rendered. "
+                                "Check/configure local FFmpeg and the current final "
+                                "render manifest media, then retry; cloud/paid "
+                                "render fallback is forbidden."
+                                if action_id == "final_render_local"
+                                else (
+                                    "Current artifacts were preserved, but the active "
+                                    "provider/model did not produce new validated output. "
+                                    "Retry Continue Automatically later."
+                                )
                             )
                         )
                     )
