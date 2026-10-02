@@ -3806,6 +3806,19 @@ def stage_statuses() -> list[dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
+    title_direction = title_direction_artifact_state()
+    title_direction_requests_ready = bool(
+        title_direction.get("requests_ready")
+    )
+    title_direction_candidates_ready = bool(
+        title_direction.get("candidates_ready")
+    )
+    title_direction_gate = title_direction.get("gate", {})
+    title_direction_gate_status = str(
+        title_direction_gate.get("status")
+        or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
+    )
+    title_direction_selected = bool(title_direction.get("selected"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -5073,67 +5086,35 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "package_prepare": {
-            "enabled": bool(transform["research_ready"]) and not package_requests,
+            "enabled": False,
             "reason": (
-                "Accepted concepts are ready for packaging requests."
-                if bool(transform["research_ready"]) and not package_requests
-                else (
-                    "Package requests are already current."
-                    if package_requests
-                    else "Accept at least one concept first."
-                )
+                "Legacy pre-script Packaging action retained for resumability only. "
+                "Slice 23 active workflow researches the accepted concept first."
             ),
         },
         "package_generate": {
-            "enabled": package_requests and not package_candidates,
+            "enabled": False,
             "reason": (
-                "Current package requests are ready for FAIR free-only generation."
-                if package_requests and not package_candidates
-                else (
-                    "Valid package candidates already exist."
-                    if package_candidates
-                    else "Prepare current package requests first."
-                )
+                "Legacy pre-script Packaging generation is inactive in Slice 23. "
+                "Use the post-script Title Direction stage instead."
             ),
         },
         "package_gate_prepare": {
-            "enabled": (
-                package_candidates
-                and (
-                    packaging_gate_status == "READY_TO_PREPARE"
-                    or (
-                        packaging_gate_complete
-                        and not bool(packaging["research_ready"])
-                    )
-                )
-            ),
+            "enabled": False,
             "reason": (
-                "Validated package candidates are ready for human review."
-                if package_candidates and packaging_gate_status == "READY_TO_PREPARE"
-                else (
-                    "No package was accepted; reopen the current Packaging Gate."
-                    if (
-                        package_candidates
-                        and packaging_gate_complete
-                        and not bool(packaging["research_ready"])
-                    )
-                    else (
-                        "Packaging Gate is already prepared or complete."
-                        if package_candidates
-                        else "Generate valid package candidates first."
-                    )
-                )
+                "Legacy pre-script Packaging Gate is inactive in Slice 23. Existing "
+                "artifacts remain readable for audit/resume compatibility."
             ),
         },
         "research_prepare": {
-            "enabled": bool(packaging["research_ready"]) and not research_plans,
+            "enabled": bool(transform["research_ready"]) and not research_plans,
             "reason": (
-                "Approved packages are ready to become research plans."
-                if bool(packaging["research_ready"]) and not research_plans
+                "Accepted concepts are ready to become research plans directly."
+                if bool(transform["research_ready"]) and not research_plans
                 else (
                     "Research plans are already current."
                     if research_plans
-                    else "Approve a package first."
+                    else "Accept at least one concept first."
                 )
             ),
         },
@@ -5186,7 +5167,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "story_prepare": {
             "enabled": bool(research["story_ready"]) and not story_requests_ready,
             "reason": (
-                "Verified research and the approved package are ready for Story Plan requests."
+                "Verified research and the accepted concept/viewer contract are ready for Story Plan requests."
                 if bool(research["story_ready"]) and not story_requests_ready
                 else (
                     "Story Plan requests are already current."
@@ -5262,16 +5243,69 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     )
                 )
             ),
-        },        "format_prepare": {
-            "enabled": production_ready and not format_requests_ready,
+        },
+        "title_direction_prepare": {
+            "enabled": (
+                production_ready
+                and not title_direction_requests_ready
+            ),
             "reason": (
-                "All required branch scripts are approved and ready for production-format planning."
-                if production_ready and not format_requests_ready
+                "Human-approved scripts are stable; prepare the post-script 5+5 "
+                "title-direction requests from their hooks, payoff and evidence."
+                if production_ready and not title_direction_requests_ready
                 else (
-                    "Format requests are already current."
-                    if format_requests_ready
+                    "Title direction requests are current."
+                    if title_direction_requests_ready
                     else "Complete the Human Script Gate first."
                 )
+            ),
+        },
+        "title_direction_generate": {
+            "enabled": (
+                title_direction_requests_ready
+                and not title_direction_candidates_ready
+            ),
+            "reason": (
+                "Current post-script title-direction requests are ready for FAIR "
+                "free-first generation."
+                if (
+                    title_direction_requests_ready
+                    and not title_direction_candidates_ready
+                )
+                else (
+                    "Current 5+5 title direction candidates are ready."
+                    if title_direction_candidates_ready
+                    else "Prepare current title direction requests first."
+                )
+            ),
+        },
+        "title_direction_gate_prepare": {
+            "enabled": (
+                title_direction_candidates_ready
+                and title_direction_gate_status == "READY_TO_PREPARE"
+            ),
+            "reason": (
+                "Five Short and five Long-form title directions are ready for "
+                "human selection."
+                if (
+                    title_direction_candidates_ready
+                    and title_direction_gate_status == "READY_TO_PREPARE"
+                )
+                else (
+                    "Title Direction Gate is already prepared or complete."
+                    if title_direction_candidates_ready
+                    else "Generate current title direction candidates first."
+                )
+            ),
+        },
+        "format_prepare": {
+            "enabled": False,
+            "reason": (
+                "Slice 23 intentionally stops after title-direction selection. "
+                "The mature Packaging Brief/thumbnail/pairing stage must be built "
+                "before production Format planning is re-enabled."
+                if title_direction_selected
+                else "Complete the post-script Title Direction Gate first."
             ),
         },
         "format_generate": {
