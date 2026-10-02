@@ -492,7 +492,7 @@ def _apply_rework_feedback(
     atomic_write_json(request_source, request)
 
 
-def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
+def _apply_payload_unlocked(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
     req = load_json(request_path)
     normalized = validate_response(req, response)
     source = assert_current_draft(req)
@@ -544,6 +544,12 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(SUMMARY_FILE, result)
     return result
+
+
+def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
+    """Apply a branch-level decision atomically with section-review actions."""
+    with _SECTION_REVIEW_ACTION_LOCK:
+        return _apply_payload_unlocked(request_path, response)
 
 
 def apply(request_path: Path, response_path_file: Path) -> dict[str, Any]:
