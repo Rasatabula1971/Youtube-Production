@@ -120,6 +120,7 @@ class VisualExistingAssetImportTests(unittest.TestCase):
                 patch.object(importer, "ASSET_DIR", root / "assets"),
                 patch.object(importer, "REGISTRY_DIR", root / "registry"),
                 patch.object(importer, "ASSEMBLY_DIR", assembly_dir),
+                patch.object(importer, "ROUGH_DIR", root / "rough"),
                 patch.object(importer, "SUMMARY_FILE", root / "summary.json"),
             ):
                 record = importer.register(
@@ -142,6 +143,39 @@ class VisualExistingAssetImportTests(unittest.TestCase):
         self.assertEqual(snap["current"], 1)
         self.assertEqual(snap["manual"], 1)
 
+    def test_manual_asset_registration_invalidates_placeholder_rough_cut(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_dir, review_dir, rights_dir, review_path, _ = self.packet(
+                root,
+                editorial=True,
+            )
+            source = root / "editorial.mp4"
+            source.write_bytes(b"editorial-clip")
+            rough_dir = root / "rough"
+            rough_dir.mkdir()
+            rough_path = write_json(
+                rough_dir / "c1.short.visual_rough_cut.json",
+                {"status": "READY_FOR_HUMAN_ROUGH_CUT_GATE"},
+            )
+
+            with (
+                patch.object(importer, "RESULT_DIR", result_dir),
+                patch.object(importer, "REVIEW_DIR", review_dir),
+                patch.object(importer, "RIGHTS_DIR", rights_dir),
+                patch.object(importer, "ASSET_DIR", root / "assets"),
+                patch.object(importer, "REGISTRY_DIR", root / "registry"),
+                patch.object(importer, "ASSEMBLY_DIR", root / "assembly"),
+                patch.object(importer, "ROUGH_DIR", rough_dir),
+            ):
+                importer.register(
+                    candidate_review_file=str(review_path),
+                    shot_id="shot-001",
+                    asset_file=str(source),
+                )
+
+            self.assertFalse(rough_path.exists())
+
     def test_editorial_asset_without_rights_approval_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -160,6 +194,7 @@ class VisualExistingAssetImportTests(unittest.TestCase):
                 patch.object(importer, "ASSET_DIR", root / "assets"),
                 patch.object(importer, "REGISTRY_DIR", root / "registry"),
                 patch.object(importer, "ASSEMBLY_DIR", root / "assembly"),
+                patch.object(importer, "ROUGH_DIR", root / "rough"),
             ):
                 with self.assertRaisesRegex(
                     ValueError,
@@ -188,6 +223,7 @@ class VisualExistingAssetImportTests(unittest.TestCase):
                 patch.object(importer, "ASSET_DIR", root / "assets"),
                 patch.object(importer, "REGISTRY_DIR", root / "registry"),
                 patch.object(importer, "ASSEMBLY_DIR", root / "assembly"),
+                patch.object(importer, "ROUGH_DIR", root / "rough"),
             ):
                 record = importer.register(
                     candidate_review_file=str(review_path),

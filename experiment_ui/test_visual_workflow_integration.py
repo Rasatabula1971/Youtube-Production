@@ -83,6 +83,20 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
             ),
             patch.object(
                 server,
+                "visual_asset_acquisition_artifact_state",
+                return_value={
+                    "status": "CURRENT",
+                    "current": True,
+                    "acquired": 0,
+                    "manual_required": 0,
+                    "failures": 0,
+                    "items": [],
+                    "manual_items": [],
+                    "failure_items": [],
+                },
+            ),
+            patch.object(
+                server,
                 "visual_spend_review_snapshot",
                 return_value=(
                     spend_gate
@@ -227,10 +241,11 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 3
+                search_index : search_index + 4
             ],
             [
                 "visual_search_acquire",
+                "visual_asset_acquire",
                 "visual_rough_cut_prepare",
                 "visual_gap_prepare",
             ],

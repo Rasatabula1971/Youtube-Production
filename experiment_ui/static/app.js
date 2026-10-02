@@ -3927,7 +3927,9 @@ async function registerManagedVisualAsset() {
       latestManagedVisualAssets
     );
     showToast(
-      "Approved visual registered. Current assembly can now use the local asset.",
+      payload.automation_job && payload.automation_job.action_id === "auto_continue"
+        ? "Approved visual registered. The rough cut is refreshing automatically."
+        : "Approved visual registered. The rough cut can now refresh with the local asset.",
       false
     );
     await loadStatus();

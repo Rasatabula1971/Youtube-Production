@@ -641,3 +641,40 @@ candidates, or mark the shot as needing a better visual. Creator/editorial
 candidates still require the separate Rights/Context Gate before use.
 
 Slice 14 downloads no media and authorizes no paid visual generation.
+
+## Slice 16 — reviewed visuals → managed assets → Human Rough-Cut Gate
+
+After the Human Visual Candidate Gate is complete, the workflow still stops at
+the Human Rights/Context Gate whenever selected creator/editorial footage needs
+context review.
+
+Once candidate and rights decisions are complete, Continue Automatically runs:
+
+```text
+Acquire Approved Free Visual Assets
+        ↓
+Build Visual Rough Cut
+        ↓
+STOP: HUMAN_ROUGH_CUT_GATE
+```
+
+Automatic acquisition is limited to current, rights-verified zero-cost assets.
+Stock downloads retain the existing HTTPS/provider allow-list, media-type and
+size limits. Creator/editorial footage is never downloaded automatically.
+
+The rough cut now distinguishes a human selection from an actual current local
+asset. A selected clip appears as real media only when its managed registry and
+local file hashes are current. Missing selected stock, stale files and approved
+editorial clips that still need manual supply remain explicit placeholders.
+
+Automatic acquisition failures keep the acquisition step retryable and prevent
+the rough cut from being promoted as current. Manual editorial supply is
+different: the structural rough cut may proceed with a clearly labelled
+placeholder.
+
+When the reviewer later registers the approved local editorial/visual file, the
+old rough cut is invalidated and the automatic workflow rebuilds it from the new
+current local asset before the Human Rough-Cut Gate.
+
+The Human Rough-Cut Gate is a hard automation stop. Gap planning and all premium
+visual decisions remain downstream of that human approval.

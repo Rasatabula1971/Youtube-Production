@@ -333,3 +333,34 @@ all branches that require search. Partial branch results cannot unlock review.
 This stage is discovery-only: no visual file is downloaded, creator/editorial
 footage is never auto-approved, and no paid generation provider is called.
 
+## Slice 16 — managed visual asset truth boundary and rough cut
+
+The visual rough cut no longer treats a selected candidate URL as if the media
+itself were available.
+
+A real rough-cut asset requires a current `managed_visual_asset` record whose
+candidate ID/fingerprint, search-result hash, candidate-review hash, optional
+rights-review hash and local asset hash are all current.
+
+For verified free/owned selections, `visual_asset_acquire.py` may copy or
+download the asset through the existing safe zero-cost acquisition channels.
+Search-result provenance is revalidated before acquisition. For editorial
+selections, current Human Rights/Context approval is checked against the exact
+current review/candidate fingerprints, but the file is never auto-downloaded.
+
+`visual_rough_cut.py` records, per used shot, the managed registry path/hash and
+asset path/hash. A selected shot without a current managed file is emitted as a
+placeholder with an explicit reason rather than a false existing-asset
+assignment.
+
+The server considers a rough cut current only when its storyboard, candidate
+review, required rights review, and complete managed-asset registry set all
+match current files. Registering a new manual visual invalidates the existing
+rough cut so it is rebuilt automatically.
+
+Automatic acquisition failures block current rough-cut preparation. Missing
+manual editorial files do not block structural rough-cut review; they stay
+visible placeholders.
+
+Slice 16 ends at the Human Rough-Cut Gate and never authorizes paid visual
+generation.

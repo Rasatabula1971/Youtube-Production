@@ -117,6 +117,19 @@ class VisualAssetAcquireTests(unittest.TestCase):
                 patch.object(acquire, "ASSET_DIR", asset_dir),
                 patch.object(acquire, "REGISTRY_DIR", registry_dir),
                 patch.object(acquire, "SUMMARY_FILE", summary),
+                patch.object(
+                    acquire,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
                 patch.object(acquire, "_download_stock", side_effect=fake_download),
             ):
                 result = acquire.acquire()
@@ -152,6 +165,21 @@ class VisualAssetAcquireTests(unittest.TestCase):
                         "shot-001": {
                             "approved_for_rough_cut": True,
                             "candidate_id": "youtube-abc",
+                            "selection_candidate_fingerprint": (
+                                json.loads(
+                                    review_path.read_text(encoding="utf-8")
+                                )["decisions"]["shot-001"][
+                                    "candidate_fingerprint"
+                                ]
+                            ),
+                            "selection_result_fingerprint": (
+                                json.loads(
+                                    review_path.read_text(encoding="utf-8")
+                                )["decisions"]["shot-001"].get(
+                                    "result_fingerprint",
+                                    "",
+                                )
+                            ),
                         }
                     },
                 },
@@ -164,6 +192,19 @@ class VisualAssetAcquireTests(unittest.TestCase):
                 patch.object(acquire, "ASSET_DIR", root / "assets"),
                 patch.object(acquire, "REGISTRY_DIR", root / "registry"),
                 patch.object(acquire, "SUMMARY_FILE", root / "summary.json"),
+                patch.object(
+                    acquire,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
                 patch.object(acquire, "_download_stock") as downloader,
             ):
                 result = acquire.acquire()
@@ -179,6 +220,64 @@ class VisualAssetAcquireTests(unittest.TestCase):
         self.assertEqual(
             item["candidate_review_file"],
             str(review_path),
+        )
+
+    def test_stale_rights_review_is_not_treated_as_approved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = self.editorial_candidate()
+            result_dir, review_dir, rights_dir = self.setup_packet(
+                root,
+                candidate,
+                "SELECTED_PENDING_RIGHTS_CONTEXT_GATE",
+            )
+            review_path = review_dir / "c1.short.visual_candidate_review.json"
+            review = json.loads(review_path.read_text(encoding="utf-8"))
+            review["decisions"]["shot-001"]["result_fingerprint"] = "result-fp"
+            review_path.write_text(json.dumps(review), encoding="utf-8")
+            rights_path = rights_dir / "c1.short.visual_rights_review.json"
+            write_json(
+                rights_path,
+                {
+                    "source_candidate_review_sha256": "stale-review-hash",
+                    "decisions": {
+                        "shot-001": {
+                            "approved_for_rough_cut": True,
+                            "candidate_id": "youtube-abc",
+                            "selection_candidate_fingerprint": review[
+                                "decisions"
+                            ]["shot-001"]["candidate_fingerprint"],
+                            "selection_result_fingerprint": "result-fp",
+                        }
+                    },
+                },
+            )
+            result_path = result_dir / "c1.short.visual_search_results.json"
+            current_result = json.loads(
+                result_path.read_text(encoding="utf-8")
+            )
+
+            with (
+                patch.object(acquire, "RESULT_DIR", result_dir),
+                patch.object(acquire, "REVIEW_DIR", review_dir),
+                patch.object(acquire, "RIGHTS_DIR", rights_dir),
+                patch.object(acquire, "ASSET_DIR", root / "assets"),
+                patch.object(acquire, "REGISTRY_DIR", root / "registry"),
+                patch.object(acquire, "SUMMARY_FILE", root / "summary.json"),
+                patch.object(
+                    acquire,
+                    "search_result_is_current",
+                    return_value=(current_result, Path("request"), {}),
+                ),
+            ):
+                result = acquire.acquire()
+
+        self.assertEqual(result["acquired"], 0)
+        self.assertEqual(result["manual_required"], 0)
+        self.assertEqual(result["failures"], 1)
+        self.assertEqual(
+            result["failure_items"][0]["error"],
+            "STALE_OR_MISSING_RIGHTS_CONTEXT_APPROVAL",
         )
 
     def test_stock_download_host_allowlist_rejects_wrong_host(self):
