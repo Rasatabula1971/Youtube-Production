@@ -170,12 +170,42 @@ existing branch-level acceptance response and approved multi-format bundle are
 invalidated. Whole-branch `ACCEPT` is blocked while any target is
 `REWORK_REQUESTED`.
 
-### Planned Slice 3 — selective rework request
+### Slice 3 — selective rework request
 
-The next slice will build a bounded rework request for one selected target. It
-will include the target text, immutable metadata, accepted claims,
-Story/Channel constraints, and only the adjacent read-only context required to
-preserve flow. It will still not replace narration.
+A target must already be `REWORK_REQUESTED` before Slice 3 can prepare a
+request. Slice 3 still makes no model call and never mutates narration.
+
+The request is deliberately bounded. It contains:
+
+- the exact selected target text;
+- immutable target metadata such as section ID, source Story beat IDs, purpose,
+  psychology mechanism, reward type, claim IDs, or opening-hook mechanism;
+- only the immediately previous and next targets as read-only flow context;
+- the human rework reason and note recorded in Slice 2;
+- only accepted claims already mapped to the selected target;
+- the relevant Story Plan beat(s), plus story question/opening/payoff/closing
+  intent needed to preserve the wider promise;
+- the branch psychology contract/profile;
+- the exact Channel Voice binding already carried by the Script Draft; and
+- approved package constraints.
+
+The packet is bound to the exact Script Draft, persisted section-state artifact,
+Human Script Gate request and original Script Request. Provenance also records
+the section-state revision, script revision, target revision and target content
+hash.
+
+A prepared request is considered current only while all of those artifacts and
+revision/hash values still match. Validation rebuilds the expected packet from
+current trusted artifacts and rejects edited/tampered packets, changed section
+state, changed Script Requests or changed drafts.
+
+Request preparation and validation share the same in-process lock used by
+section actions, preventing a threaded state change from racing a validation
+that a later generator will rely on.
+
+Slice 3 can be invoked from the Script Gate CLI with
+`--mode prepare-section-rework` and checked with
+`--mode validate-section-rework`.
 
 ### Planned Slice 4 — bounded alternatives
 
