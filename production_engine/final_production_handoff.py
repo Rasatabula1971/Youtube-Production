@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+from edit_manifest import manifest_is_current
+from edit_preview_render import preview_result_is_current
+from sound_design_brief import current_brief_for_branch
 from visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
@@ -35,42 +38,64 @@ def _key(concept_id: str, fmt: str) -> str:
 def _current_approval(
     path: Path,
 ) -> tuple[dict[str, Any], Path, dict[str, Any], Path, dict[str, Any]]:
+    if (
+        not path.is_file()
+        or path.parent.resolve() != APPROVED_EDIT_DIR.resolve()
+    ):
+        raise ValueError("STALE_EDIT_DIRECTION_APPROVAL")
+
     approval = load_json(path)
-    if approval.get("status") != "EDIT_DIRECTION_APPROVED":
+    if (
+        approval.get("artifact") != "approved_edit_preview"
+        or approval.get("status") != "EDIT_DIRECTION_APPROVED"
+    ):
         raise ValueError("Edit direction approval is invalid")
 
     result_path = Path(str(approval.get("source_preview_result") or ""))
     if (
-        not result_path.exists()
+        not result_path.is_file()
         or result_path.parent.resolve() != EDIT_RESULT_DIR.resolve()
         or approval.get("source_preview_result_sha256")
         != sha256_file(result_path)
     ):
         raise ValueError("STALE_EDIT_DIRECTION_APPROVAL")
 
-    result = load_json(result_path)
+    current_result = preview_result_is_current(result_path)
+    if current_result is None:
+        raise ValueError("STALE_EDIT_PREVIEW_RESULT")
+    result = current_result
+
+    concept_id = str(result.get("concept_id") or "")
+    fmt = str(result.get("format") or "")
+    if (
+        str(approval.get("concept_id") or "") != concept_id
+        or str(approval.get("format") or "") != fmt
+        or str(approval.get("preview_file") or "")
+        != str(result.get("preview_file") or "")
+        or int(approval.get("placeholder_segments_at_approval") or 0)
+        != int(result.get("placeholder_segments") or 0)
+    ):
+        raise ValueError("STALE_EDIT_DIRECTION_APPROVAL")
+
     provenance = result.get("provenance", {})
     if not isinstance(provenance, dict):
         raise ValueError("Edit preview provenance is missing")
     manifest_path = Path(str(provenance.get("edit_manifest") or ""))
+    current_manifest = manifest_is_current(manifest_path)
     if (
-        not manifest_path.exists()
+        current_manifest is None
         or provenance.get("edit_manifest_sha256")
         != sha256_file(manifest_path)
     ):
         raise ValueError("STALE_EDIT_PREVIEW_RESULT")
 
-    preview_path = Path(str(result.get("preview_file") or ""))
     if (
-        not preview_path.exists()
-        or result.get("preview_sha256") != sha256_file(preview_path)
+        str(current_manifest.get("concept_id") or "") != concept_id
+        or str(current_manifest.get("format") or "") != fmt
     ):
-        raise ValueError("Approved edit preview media is stale")
+        raise ValueError("Edit preview branch identity is stale")
 
-    manifest = load_json(manifest_path)
-    if manifest.get("status") != "READY_FOR_LOCAL_PREVIEW_RENDER":
-        raise ValueError("Current edit manifest is not valid")
-    return approval, result_path, result, manifest_path, manifest
+    return approval, result_path, result, manifest_path, current_manifest
 
 
 def _validate_final_visuals(
@@ -137,27 +162,56 @@ def _validate_narration(
     return narration, blockers
 
 
-def _visual_costs(concept_id: str, fmt: str) -> dict[str, Any]:
+def _visual_costs(
+    concept_id: str,
+    fmt: str,
+    visuals: list[dict[str, Any]],
+) -> dict[str, Any]:
+    selected = {
+        str(item.get("shot_id") or ""): item
+        for item in visuals
+        if isinstance(item, dict) and str(item.get("shot_id") or "")
+    }
     items: list[dict[str, Any]] = []
     total = 0.0
     if GENERATED_VISUAL_REGISTRY.exists():
-        for path in GENERATED_VISUAL_REGISTRY.glob(
-            "*.generated_visual_asset.json"
+        for path in sorted(
+            GENERATED_VISUAL_REGISTRY.glob("*.generated_visual_asset.json")
         ):
             payload = load_json(path)
+            shot_id = str(payload.get("shot_id") or "")
+            selected_item = selected.get(shot_id)
             if (
                 str(payload.get("concept_id") or "") != concept_id
                 or str(payload.get("format") or "") != fmt
+                or payload.get("artifact") != "generated_visual_asset"
+                or payload.get("status") != "REGISTERED_CURRENT"
+                or selected_item is None
             ):
                 continue
+
+            asset_path = Path(str(payload.get("asset_file") or ""))
+            selected_path = Path(str(selected_item.get("asset_file") or ""))
+            if (
+                not asset_path.is_file()
+                or not selected_path.is_file()
+                or asset_path.resolve() != selected_path.resolve()
+                or payload.get("asset_sha256") != sha256_file(asset_path)
+                or selected_item.get("asset_sha256") != sha256_file(asset_path)
+            ):
+                continue
+
             cost = round(float(payload.get("actual_cost_usd") or 0), 2)
+            if cost < 0:
+                raise ValueError("Generated visual actual cost cannot be negative")
             total += cost
             items.append({
-                "shot_id": payload.get("shot_id"),
+                "shot_id": shot_id,
                 "provider": payload.get("provider"),
                 "actual_cost_usd": cost,
-                "registry_file": str(path),
+                "registry_file": str(path.resolve()),
                 "registry_sha256": sha256_file(path),
+                "asset_sha256": payload.get("asset_sha256"),
             })
     return {
         "currency": "USD",
@@ -183,12 +237,13 @@ def build_handoff(
     narration, narration_blockers = _validate_narration(manifest)
     blockers = visual_blockers + narration_blockers
 
-    sound_path = SOUND_DIR / f"{_key(concept_id, fmt)}.sound_design_brief.json"
+    sound_state = current_brief_for_branch(concept_id, fmt)
+    sound_path: Path | None = None
     sound_brief: dict[str, Any] | None = None
-    if sound_path.exists():
-        sound_brief = load_json(sound_path)
+    if sound_state is None:
+        blockers.append("APPROVED_SOUND_DESIGN_BRIEF_MISSING_OR_STALE")
     else:
-        blockers.append("APPROVED_SOUND_DESIGN_BRIEF_MISSING")
+        sound_path, sound_brief = sound_state
 
     # Sound design is intentionally still descriptive-only. A final licensed or
     # provider-rendered music/SFX layer has not yet been connected.
@@ -219,7 +274,7 @@ def build_handoff(
             "paid_execution_performed": False,
             "sound_brief_is_instruction_only": True,
         },
-        "costs": _visual_costs(concept_id, fmt),
+        "costs": _visual_costs(concept_id, fmt, visuals),
         "blockers": blockers,
         "human_approval": {
             "edit_direction_approved": True,
@@ -235,13 +290,55 @@ def build_handoff(
             "edit_manifest": str(manifest_path.resolve()),
             "edit_manifest_sha256": sha256_file(manifest_path),
             "sound_design_brief": (
-                str(sound_path.resolve()) if sound_path.exists() else None
+                str(sound_path.resolve()) if sound_path is not None else None
             ),
             "sound_design_brief_sha256": (
-                sha256_file(sound_path) if sound_path.exists() else None
+                sha256_file(sound_path) if sound_path is not None else None
             ),
         },
     }
+
+
+def handoff_is_current(path: Path) -> dict[str, Any] | None:
+    if (
+        not path.is_file()
+        or path.parent.resolve() != HANDOFF_DIR.resolve()
+    ):
+        return None
+    try:
+        payload = load_json(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("artifact") != "final_production_handoff"
+        or payload.get("status")
+        not in {
+            "READY_FOR_FINAL_SOUND_PROVIDER_OR_ASSET_REGISTRATION",
+            "BLOCKED",
+        }
+    ):
+        return None
+
+    provenance = payload.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    approval_path = Path(
+        str(provenance.get("approved_edit_preview") or "")
+    )
+    if (
+        not approval_path.is_file()
+        or approval_path.parent.resolve() != APPROVED_EDIT_DIR.resolve()
+        or provenance.get("approved_edit_preview_sha256")
+        != sha256_file(approval_path)
+    ):
+        return None
+
+    try:
+        rebuilt = build_handoff(approval_path)
+    except (OSError, ValueError, json.JSONDecodeError, TypeError):
+        return None
+    return payload if payload == rebuilt else None
 
 
 def prepare() -> dict[str, Any]:
