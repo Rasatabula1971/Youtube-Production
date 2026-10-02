@@ -829,7 +829,7 @@ def build_alternatives_artifact(
     }
 
 
-def _cached_artifact_errors(
+def alternatives_artifact_integrity_errors(
     artifact: dict[str, Any],
     request: dict[str, Any],
     *,
@@ -918,7 +918,7 @@ def run_one(
             and existing.get("request_sha256") == request_hash
         ):
             artifact = load_json(artifact_path)
-            cache_errors = _cached_artifact_errors(
+            cache_errors = alternatives_artifact_integrity_errors(
                 artifact,
                 request,
                 request_path=path,
