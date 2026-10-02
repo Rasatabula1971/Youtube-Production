@@ -516,7 +516,10 @@ def _approved_bundle_is_current(concept_id: str) -> bool:
                 source,
                 require_complete=True,
             )
-            if record.get("section_review_prepared") is not section["prepared"]:
+            recorded_prepared = (
+                record.get("section_review_prepared") is True
+            )
+            if recorded_prepared != section["prepared"]:
                 return False
             if section["prepared"]:
                 if record.get("section_state") != section["section_state"]:
