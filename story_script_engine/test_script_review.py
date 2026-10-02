@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -541,6 +542,57 @@ class ScriptReviewTests(unittest.TestCase):
             self.assertTrue(result["branch_approval_invalidated"])
             self.assertFalse(short_response.exists())
             self.assertEqual(result["target"]["review_state"], "PENDING")
+
+
+    def test_concurrent_section_actions_do_not_lose_updates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            states.mkdir()
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+            ):
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    futures = [
+                        pool.submit(
+                            script_review.apply_section_review_action,
+                            concept_id="c1",
+                            format="short",
+                            target_id="opening_hook",
+                            action="LOCK",
+                            reviewer="r1",
+                        ),
+                        pool.submit(
+                            script_review.apply_section_review_action,
+                            concept_id="c1",
+                            format="short",
+                            target_id="section:s1",
+                            action="LOCK",
+                            reviewer="r2",
+                        ),
+                    ]
+                    for future in futures:
+                        future.result()
+
+                state = json.loads(
+                    (
+                        states
+                        / "c1.short.script_section_review_state.json"
+                    ).read_text(encoding="utf-8")
+                )
+
+            by_id = {
+                item["target_id"]: item
+                for item in state["targets"]
+            }
+            self.assertTrue(by_id["opening_hook"]["locked"])
+            self.assertTrue(by_id["section:s1"]["locked"])
+            self.assertEqual(state["state_revision"], 2)
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
