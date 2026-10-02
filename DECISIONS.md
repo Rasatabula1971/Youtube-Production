@@ -1353,7 +1353,10 @@ closed.
 
 Every material state transition increments both the target revision and the
 section-state revision. Equivalent retried operations are idempotent and do not
-inflate revisions.
+inflate revisions. Section actions and whole-branch Script Gate decisions are
+serialized through the same in-process lock so concurrent threaded requests
+cannot leave a branch accepted while one of its sections is simultaneously
+marked for rework.
 
 Section state is stored separately from the immutable Script Draft and survives
 re-running Script Gate preparation while the source draft SHA-256 is unchanged.
