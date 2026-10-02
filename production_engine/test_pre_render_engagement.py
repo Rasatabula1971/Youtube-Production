@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import pre_render_engagement
 from pre_render_engagement import validate_spec
 
 
@@ -41,6 +44,35 @@ class PreRenderEngagementTests(unittest.TestCase):
         self.assertEqual(result["status"], "PASS")
         self.assertFalse(result["policy"]["predicts_retention"])
         self.assertFalse(result["policy"]["claims_dopamine_measurement"])
+
+    def test_snapshot_rejects_pass_for_changed_approved_voice_spec(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approved = root / "approved"
+            results = root / "results"
+            approved.mkdir()
+            results.mkdir()
+            source = approved / "c1.long_form.approved_voice_spec.json"
+            source.write_text(json.dumps(spec()), encoding="utf-8")
+            result = validate_spec(spec(), source)
+            result_path = results / f"{source.stem}.engagement.json"
+            result_path.write_text(json.dumps(result), encoding="utf-8")
+
+            with (
+                patch.object(pre_render_engagement, "APPROVED_DIR", approved),
+                patch.object(pre_render_engagement, "RESULTS_DIR", results),
+            ):
+                current = pre_render_engagement.snapshot()
+                changed = spec()
+                changed["title"] = "Changed after old engagement pass"
+                source.write_text(json.dumps(changed), encoding="utf-8")
+                stale = pre_render_engagement.snapshot()
+
+            self.assertEqual(current["status"], "PASS")
+            self.assertTrue(current["current"])
+            self.assertEqual(stale["status"], "STALE_ENGAGEMENT_VALIDATION")
+            self.assertFalse(stale["current"])
+            self.assertEqual(stale["stale"], 1)
 
     def test_flat_lecture_delivery_is_blocked(self) -> None:
         payload = spec()
