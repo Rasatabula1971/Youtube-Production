@@ -151,6 +151,90 @@ def validate_spec(spec: dict[str, Any], source: Path) -> dict[str, Any]:
     }
 
 
+def _result_path(source: Path) -> Path:
+    return RESULTS_DIR / f"{source.stem}.engagement.json"
+
+
+def _current_result(source: Path) -> dict[str, Any] | None:
+    path = _result_path(source)
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    provenance = payload.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    recorded = Path(str(provenance.get("approved_voice_spec") or "")).resolve()
+    if recorded != source.resolve():
+        return None
+    if provenance.get("approved_voice_spec_sha256") != sha256_file(source):
+        return None
+    return payload
+
+
+def snapshot() -> dict[str, Any]:
+    sources = (
+        sorted(APPROVED_DIR.glob("*.approved_voice_spec.json"))
+        if APPROVED_DIR.exists()
+        else []
+    )
+    if not sources:
+        return {
+            "status": "WAITING_FOR_APPROVED_PERFORMANCE",
+            "current": False,
+            "processed": 0,
+            "passed": 0,
+            "blocked": 0,
+            "stale": 0,
+            "items": [],
+        }
+
+    items: list[dict[str, Any]] = []
+    stale = 0
+    passed = 0
+    blocked = 0
+    for source in sources:
+        result = _current_result(source)
+        if result is None:
+            stale += 1
+            continue
+        status = str(result.get("status") or "")
+        passed += status == "PASS"
+        blocked += status == "BLOCKED"
+        items.append(
+            {
+                "concept_id": result.get("concept_id"),
+                "format": result.get("format"),
+                "status": status,
+                "errors": result.get("errors", []),
+                "warnings": result.get("warnings", []),
+                "result": str(_result_path(source)),
+            }
+        )
+
+    current = stale == 0 and len(items) == len(sources)
+    status = (
+        "BLOCKED"
+        if current and blocked
+        else "PASS"
+        if current and passed == len(sources)
+        else "STALE_ENGAGEMENT_VALIDATION"
+    )
+    return {
+        "status": status,
+        "current": current,
+        "processed": len(items),
+        "passed": passed,
+        "blocked": blocked,
+        "stale": stale,
+        "items": items,
+    }
+
+
 def batch() -> dict[str, Any]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     paths = sorted(APPROVED_DIR.glob("*.approved_voice_spec.json")) if APPROVED_DIR.exists() else []
@@ -159,7 +243,7 @@ def batch() -> dict[str, Any]:
     for source in paths:
         payload = json.loads(source.read_text(encoding="utf-8"))
         result = validate_spec(payload, source)
-        dest = RESULTS_DIR / f"{source.stem}.engagement.json"
+        dest = _result_path(source)
         atomic_write_json(dest, result)
         current.add(dest.resolve())
         items.append({
@@ -173,17 +257,7 @@ def batch() -> dict[str, Any]:
     for stale in RESULTS_DIR.glob("*.engagement.json"):
         if stale.resolve() not in current:
             stale.unlink()
-    summary = {
-        "status": (
-            "PASS" if items and all(item["status"] == "PASS" for item in items)
-            else "BLOCKED" if items
-            else "WAITING_FOR_APPROVED_PERFORMANCE"
-        ),
-        "processed": len(items),
-        "passed": sum(item["status"] == "PASS" for item in items),
-        "blocked": sum(item["status"] == "BLOCKED" for item in items),
-        "items": items,
-    }
+    summary = snapshot()
     atomic_write_json(SUMMARY_FILE, summary)
     return summary
 
