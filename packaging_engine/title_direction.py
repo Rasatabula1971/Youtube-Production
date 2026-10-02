@@ -352,6 +352,8 @@ def run_apply() -> dict[str, Any]:
             item["response_provenance"] = provenance
             item["request_file"] = str(request_path.resolve())
             item["request_sha256"] = sha256_file(request_path)
+            item["response_file"] = str(response_path.resolve())
+            item["response_sha256"] = sha256_file(response_path)
             candidates.append(item)
         except Exception as exc:
             rejected.append(
