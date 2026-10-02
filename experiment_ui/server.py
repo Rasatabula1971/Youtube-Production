@@ -6134,9 +6134,9 @@ def workflow_guidance(
                 "current_title": "Premium Visual Briefs Ready — Awaiting External Assets",
                 "current_detail": (
                     f"{premium_pending} branch(es) contain current, human-authorized "
-                    "generation briefs. Provider execution remains external/unbuilt "
-                    "in this slice; register the resulting files only within the "
-                    "authorized cost ceilings."
+                    "generation briefs. No paid provider call has been made. Provider "
+                    "execution remains external/unbuilt in this slice; register the "
+                    "resulting files only within the authorized cost ceilings."
                 ),
                 "next_action_id": None,
                 "next_title": "Register generated visual assets",
