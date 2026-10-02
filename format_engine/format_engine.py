@@ -39,6 +39,13 @@ REQUESTS_DIR = OUTPUT_DIR / "format_requests"
 RESPONSES_DIR = OUTPUT_DIR / "format_responses"
 PLANS_DIR = OUTPUT_DIR / "format_plans"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+MODEL_RUNS_DIR = OUTPUT_DIR / "format_model_runs"
+RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_format_outputs"
+MODEL_BATCH_SUMMARY_FILE = OUTPUT_DIR / "format_model_batch_summary.json"
+FORMAT_REVIEW_REQUESTS_DIR = OUTPUT_DIR / "format_review_requests"
+FORMAT_REVIEW_RESPONSES_DIR = OUTPUT_DIR / "format_review_responses"
+APPROVED_FORMAT_PLANS_DIR = OUTPUT_DIR / "approved_format_plans"
+FORMAT_GATE_SUMMARY_FILE = OUTPUT_DIR / "format_gate_summary.json"
 
 READY_STATUS = "READY_FOR_PRODUCTION"
 
@@ -223,6 +230,78 @@ def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
                 f"{previous!r} and {raw!r} -> {slug!r}"
             )
         owners[slug] = raw
+
+
+def _request_slug_from_path(path: Path) -> str | None:
+    suffix = ".format_request.json"
+    name = path.name
+    if not name.endswith(suffix):
+        return None
+    return name[: -len(suffix)]
+
+
+def _existing_request_hashes(requests_dir: Path) -> dict[str, str]:
+    if not requests_dir.exists():
+        return {}
+    result: dict[str, str] = {}
+    for path in requests_dir.glob("*.format_request.json"):
+        slug = _request_slug_from_path(path)
+        if slug:
+            result[slug] = sha256_file(path)
+    return result
+
+
+def _remove_file(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError(f"Expected file during Format cleanup: {path}")
+    path.unlink()
+    return True
+
+
+def _invalidate_format_slug(slug: str) -> list[str]:
+    """Remove downstream artifacts derived from an invalidated Format request."""
+    removed: list[str] = []
+    paths = [
+        RESPONSES_DIR / f"{slug}.json",
+        PLANS_DIR / f"{slug}.format_plan.json",
+        MODEL_RUNS_DIR / f"{slug}.model_run.json",
+        RAW_OUTPUTS_DIR / f"{slug}.txt",
+        FORMAT_REVIEW_REQUESTS_DIR / f"{slug}.format_review_request.json",
+        FORMAT_REVIEW_RESPONSES_DIR / f"{slug}.format_review_response.json",
+        APPROVED_FORMAT_PLANS_DIR / f"{slug}.approved_format_plan.json",
+    ]
+    for path in paths:
+        if _remove_file(path):
+            removed.append(str(path.resolve()))
+    return removed
+
+
+def _prune_invalidated_format_outputs(
+    previous_hashes: dict[str, str],
+    current_hashes: dict[str, str],
+) -> dict[str, Any]:
+    invalidated = sorted(
+        slug
+        for slug in set(previous_hashes) | set(current_hashes)
+        if previous_hashes.get(slug) != current_hashes.get(slug)
+    )
+    removed: list[str] = []
+    for slug in invalidated:
+        removed.extend(_invalidate_format_slug(slug))
+
+    summaries_removed: list[str] = []
+    if invalidated:
+        for path in (MODEL_BATCH_SUMMARY_FILE, FORMAT_GATE_SUMMARY_FILE):
+            if _remove_file(path):
+                summaries_removed.append(str(path.resolve()))
+
+    return {
+        "invalidated_concept_slugs": invalidated,
+        "removed_artifacts": removed,
+        "removed_summaries": summaries_removed,
+    }
 
 
 def load_config(path: Path = CONFIG_FILE) -> dict[str, Any]:
@@ -683,6 +762,7 @@ def run_prepare(
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     config = config or load_config()
+    previous_request_hashes = _existing_request_hashes(REQUESTS_DIR)
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
     paths = (
         sorted(approved_dir.glob("*.approved_script.json"))
@@ -724,6 +804,12 @@ def run_prepare(
     for stale_path in REQUESTS_DIR.glob("*.format_request.json"):
         if stale_path.resolve() not in current_destinations:
             stale_path.unlink()
+
+    current_request_hashes = _existing_request_hashes(REQUESTS_DIR)
+    cleanup = _prune_invalidated_format_outputs(
+        previous_request_hashes,
+        current_request_hashes,
+    )
     summary = {
         "status": (
             "FORMAT_REQUESTS_READY" if prepared else "WAITING_FOR_APPROVED_SCRIPTS"
@@ -732,6 +818,7 @@ def run_prepare(
         "prepared": len(prepared),
         "failures": failures,
         "requests_dir": str(REQUESTS_DIR),
+        "stale_cleanup": cleanup,
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     SUMMARY_FILE.write_text(
