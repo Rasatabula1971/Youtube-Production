@@ -54,6 +54,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/generated-visual-asset",
     "/api/managed-visual-asset",
     "/api/edit-preview-review",
+    "/api/final-sound-asset",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
