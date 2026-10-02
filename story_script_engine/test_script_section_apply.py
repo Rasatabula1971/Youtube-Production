@@ -512,6 +512,46 @@ class ScriptSectionApplyTests(unittest.TestCase):
 
             self.assertEqual(before, paths["draft"].read_bytes())
 
+
+    def test_tampered_model_response_pointer_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.apply_dirs(root)
+            before = paths["draft"].read_bytes()
+
+            fake_response = root / "attacker_response.json"
+            fake_response.write_text(
+                json.dumps(self.alternatives_response()),
+                encoding="utf-8",
+            )
+            artifact = rework_runner.load_json(paths["alternatives"])
+            artifact["artifact_provenance"]["model_response"] = str(
+                fake_response.resolve()
+            )
+            artifact["artifact_provenance"]["model_response_sha256"] = (
+                rework_runner.sha256_file(fake_response)
+            )
+            paths["alternatives"].write_text(
+                json.dumps(artifact),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "integrity check failed",
+            ):
+                section_apply.apply_selection(
+                    paths["alternatives"],
+                    selection_id="A",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            after = paths["draft"].read_bytes()
+
+        self.assertEqual(before, after)
+
     def test_stale_section_state_blocks_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
