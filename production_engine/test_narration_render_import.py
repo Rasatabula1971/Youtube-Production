@@ -228,6 +228,63 @@ class NarrationRenderImportTests(unittest.TestCase):
                         ],
                     )
 
+    def test_failed_multi_segment_copy_preserves_previous_managed_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            case = self.setup_case(root)
+            a = root / "a.wav"
+            b = root / "b.wav"
+            a.write_bytes(b"new-a")
+            b.write_bytes(b"new-b")
+            branch_dir = case["managed"] / "concept-1.long_form"
+            branch_dir.mkdir()
+            marker = branch_dir / "old.wav"
+            marker.write_bytes(b"previous-current-audio")
+
+            real_copy = render_import._copy_audio
+            calls = {"count": 0}
+
+            def fail_second(source, destination):
+                calls["count"] += 1
+                if calls["count"] == 2:
+                    raise OSError("simulated copy failure")
+                real_copy(source, destination)
+
+            with self.patched_case(case):
+                with patch.object(
+                    render_import,
+                    "_copy_audio",
+                    side_effect=fail_second,
+                ):
+                    with self.assertRaisesRegex(OSError, "simulated"):
+                        render_import.register(
+                            concept_id="concept-1",
+                            format="long_form",
+                            provider_job_id="job-123",
+                            actual_cost_usd=2.0,
+                            segments=[
+                                {
+                                    "segment_id": "b1",
+                                    "attempt": 1,
+                                    "audio_file": str(a),
+                                },
+                                {
+                                    "segment_id": "b2",
+                                    "attempt": 1,
+                                    "audio_file": str(b),
+                                },
+                            ],
+                        )
+
+            self.assertTrue(marker.exists())
+            self.assertEqual(
+                marker.read_bytes(),
+                b"previous-current-audio",
+            )
+            self.assertFalse(
+                (case["managed"] / ".concept-1.long_form.staging").exists()
+            )
+
     def test_missing_or_reordered_segment_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
