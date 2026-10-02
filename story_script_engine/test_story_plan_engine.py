@@ -22,7 +22,7 @@ class StoryPlanEngineTests(unittest.TestCase):
                 "viewer_moment": "Watching a race",
                 "desired_outcome": "Understand why",
                 "packaging": {
-                    "title": "Why Racing Brakes Work Backwards",
+                    "title": "Old Working Title",
                     "one_sentence_promise": "Explain the counterintuitive behavior",
                     "expected_payoff": "A clear explanation",
                     "thumbnail": {"message": "Backwards?"},
@@ -145,11 +145,11 @@ class StoryPlanEngineTests(unittest.TestCase):
             path.write_text(json.dumps(self.package()), encoding="utf-8")
             return build_story_plan_request(self.package(), path)
 
-    def test_request_locks_title_and_advertises_psychology_contract(self):
+    def test_request_carries_internal_title_and_advertises_psychology_contract(self):
         request = self.request()
         self.assertEqual(
             request["package"]["title"],
-            "Why Racing Brakes Work Backwards",
+            "Old Working Title",
         )
         self.assertEqual(request["accepted_claim_ids"], ["clm001"])
         self.assertTrue(request["psychology_contract"]["opening_line"]["required"])
@@ -169,7 +169,7 @@ class StoryPlanEngineTests(unittest.TestCase):
         result = validate_story_plan_response(response, self.request())
         self.assertFalse(result["valid"])
         self.assertTrue(
-            any("approved Packaging title" in error for error in result["errors"])
+            any("internal working title" in error for error in result["errors"])
         )
 
     def test_story_plan_requires_payoff_beat(self):
