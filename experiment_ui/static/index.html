@@ -710,6 +710,36 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="finalExportReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN FINAL EXPORT GATE</p>
+                <h2 id="finalExportReviewTitle">Review final render</h2>
+                <p class="muted" id="finalExportReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="finalExportReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div>
+                <video id="finalExportVideo" class="edit-preview-video" controls preload="metadata"></video>
+                <div class="concept-detail" id="finalExportDetail"></div>
+              </div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">This is the local final candidate with final visuals, narration and licensed/omitted sound decisions. Approval marks these exact bytes export-approved only; it does not upload or publish.</div>
+                <label class="vision-label" for="finalExportNote">Human direction</label>
+                <textarea id="finalExportNote" class="vision-observation" rows="5" maxlength="1600" placeholder="Required when returning visuals, narration or sound for rework."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="finalExportPrev" type="button">← Previous</button>
+                  <button class="ghost" id="finalExportVisuals" type="button">Return to visuals</button>
+                  <button class="ghost" id="finalExportNarration" type="button">Return to narration</button>
+                  <button class="ghost" id="finalExportSound" type="button">Return to sound</button>
+                  <button id="finalExportApprove" type="button">Approve final export</button>
+                  <button class="ghost" id="finalExportNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>
