@@ -7465,6 +7465,9 @@ class Handler(BaseHTTPRequestHandler):
                     "registered": payload,
                     "final_sound_assets": final_sound_asset_snapshot(),
                 }
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    response["automation_job"] = auto_job
                 self._send_json(response)
                 return
 
