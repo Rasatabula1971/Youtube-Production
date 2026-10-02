@@ -185,6 +185,52 @@ class TitleDirectionReviewTests(unittest.TestCase):
         self.assertFalse(paths["response_path"].exists())
         self.assertFalse(paths["candidates_file"].exists())
 
+    def test_duplicate_accept_is_idempotent_and_conflict_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            patches, paths = self.patched(root)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+                module.prepare_state()
+                first = module.apply_action(
+                    concept_id="c1",
+                    decision="ACCEPT",
+                    selected_titles=self.selections(),
+                )
+                history_before = list(
+                    paths["history_dir"].glob(
+                        "*.title_direction_selection.json"
+                    )
+                )
+                duplicate = module.apply_action(
+                    concept_id="c1",
+                    decision="ACCEPT",
+                    selected_titles=self.selections(),
+                )
+                history_after = list(
+                    paths["history_dir"].glob(
+                        "*.title_direction_selection.json"
+                    )
+                )
+                changed = self.selections()
+                changed["short"] = {
+                    "title_id": "short-curiosity",
+                    "title_text": "A Different Direction",
+                }
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Conflicting duplicate",
+                ):
+                    module.apply_action(
+                        concept_id="c1",
+                        decision="ACCEPT",
+                        selected_titles=changed,
+                    )
+
+        self.assertTrue(first["ready"])
+        self.assertTrue(duplicate["ready"])
+        self.assertEqual(len(history_before), 1)
+        self.assertEqual(len(history_after), 1)
+
     def test_changed_candidates_invalidate_saved_gate_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
