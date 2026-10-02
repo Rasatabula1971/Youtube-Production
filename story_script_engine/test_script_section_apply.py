@@ -254,7 +254,12 @@ class ScriptSectionApplyTests(unittest.TestCase):
         )
         self.assertTrue(validation["valid"], validation["errors"])
 
-        response_path = root / "c1.long_form.section_rework_response.json"
+        rework_responses_dir = root / "rework_responses"
+        rework_responses_dir.mkdir()
+        response_path = (
+            rework_responses_dir
+            / "c1.long_form.section_explanation_02.json"
+        )
         response_path.write_text(
             json.dumps(response),
             encoding="utf-8",
@@ -294,12 +299,14 @@ class ScriptSectionApplyTests(unittest.TestCase):
     def apply_dirs(self, root):
         review_requests = root / "review_requests"
         review_responses = root / "review_responses"
+        rework_responses = root / "rework_responses"
         approved = root / "approved"
         versions = root / "versions"
         transactions = root / "transactions"
         for path in (
             review_requests,
             review_responses,
+            rework_responses,
             approved,
             versions,
             transactions,
@@ -308,6 +315,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         return {
             "review_requests_dir": review_requests,
             "review_responses_dir": review_responses,
+            "rework_responses_dir": rework_responses,
             "approved_dir": approved,
             "versions_dir": versions,
             "transactions_dir": transactions,
