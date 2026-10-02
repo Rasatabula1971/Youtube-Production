@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -100,8 +101,9 @@ class NarrationRenderImportTests(unittest.TestCase):
             "spend_path": spend_path,
         }
 
-    def patches(self, case):
-        return (
+    def patched_case(self, case):
+        stack = ExitStack()
+        for item in (
             patch.object(render_import, "REQUESTS_DIR", case["requests"]),
             patch.object(render_import, "ESTIMATES_DIR", case["estimates"]),
             patch.object(render_import, "APPROVED_SPEND_DIR", case["approved"]),
@@ -133,7 +135,9 @@ class NarrationRenderImportTests(unittest.TestCase):
                     ],
                 },
             ),
-        )
+        ):
+            stack.enter_context(item)
+        return stack
 
     def test_register_copies_audio_and_binds_current_spend(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -151,7 +155,7 @@ class NarrationRenderImportTests(unittest.TestCase):
             stale_qc.write_text("{}", encoding="utf-8")
             stale_timing.write_text("{}", encoding="utf-8")
 
-            with self.patches(case):
+            with self.patched_case(case):
                 registered = render_import.register(
                     concept_id="concept-1",
                     format="long_form",
@@ -203,7 +207,7 @@ class NarrationRenderImportTests(unittest.TestCase):
             a.write_bytes(b"a")
             b.write_bytes(b"b")
 
-            with self.patches(case):
+            with self.patched_case(case):
                 with self.assertRaisesRegex(ValueError, "exceeds"):
                     render_import.register(
                         concept_id="concept-1",
@@ -233,7 +237,7 @@ class NarrationRenderImportTests(unittest.TestCase):
             a.write_bytes(b"a")
             b.write_bytes(b"b")
 
-            with self.patches(case):
+            with self.patched_case(case):
                 with self.assertRaisesRegex(ValueError, "exact order"):
                     render_import.register(
                         concept_id="concept-1",
