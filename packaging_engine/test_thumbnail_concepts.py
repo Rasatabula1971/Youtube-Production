@@ -112,7 +112,7 @@ class ThumbnailConceptTests(unittest.TestCase):
 
     def test_incorrect_word_count_is_rejected(self):
         response = self.response()
-        response["thumbnail_concepts"][0]["text_word_count"] = 1
+        response["thumbnail_concepts"][0]["text_word_count"] = 2
         with self.assertRaisesRegex(ValueError, "text_word_count is incorrect"):
             module.validate_response(response, self.request())
 
