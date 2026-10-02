@@ -357,6 +357,12 @@ def _apply_rework(item: dict[str, Any], note: str) -> None:
         response_path.unlink()
     if CANDIDATES_FILE.exists():
         CANDIDATES_FILE.unlink()
+    # The previous active selection is no longer current after an explicit
+    # rework request. Historical copies remain under HISTORY_DIR.
+    if APPROVED_FILE.exists():
+        APPROVED_FILE.unlink()
+    if SUMMARY_FILE.exists():
+        SUMMARY_FILE.unlink()
 
 
 def apply_action(
@@ -386,6 +392,32 @@ def apply_action(
         raise ValueError("Unknown title-direction concept_id")
 
     clean_note = str(note or "").strip()
+    existing = state.get("decisions", {}).get(str(concept_id))
+    if isinstance(existing, dict) and existing.get("decision") in {
+        "ACCEPT",
+        "REJECT",
+    }:
+        if existing.get("decision") != value:
+            raise ValueError(
+                "Title direction decision is already finalized; request REWORK "
+                "before changing the decision"
+            )
+        if value == "REJECT":
+            return snapshot()
+        normalized_duplicate = {
+            fmt: _normalize_selection(item, fmt, (selected_titles or {}).get(fmt))
+            for fmt in ("short", "long_form")
+        }
+        if (
+            normalized_duplicate == existing.get("selected_titles", {})
+            and clean_note == str(existing.get("note") or "")
+        ):
+            return snapshot()
+        raise ValueError(
+            "Conflicting duplicate Title Direction submission; request REWORK "
+            "before changing an accepted selection"
+        )
+
     if value == "REWORK":
         if not clean_note:
             raise ValueError("REWORK requires an authoritative human note")
