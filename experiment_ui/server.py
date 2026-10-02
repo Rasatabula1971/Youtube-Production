@@ -6131,24 +6131,6 @@ def workflow_guidance(
                 "criteria. Accept, send for rework, or reject."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Automatic Packaging",
-        }
-
-    packaging = packaging_artifact_state()
-    packaging_gate = packaging.get("packaging_gate", {})
-    if (
-        packaging.get("candidates_ready")
-        and packaging_gate.get("status") == "AWAITING_HUMAN_DECISION"
-    ):
-        return {
-            "state": "HUMAN_PACKAGING_GATE",
-            "current_action_id": None,
-            "current_title": "Review Package Candidates",
-            "current_detail": (
-                "Review title, thumbnail and opening-frame packages. Approve at "
-                "most one package per concept, send it for rework, or reject it."
-            ),
-            "next_action_id": "auto_continue",
             "next_title": "Automatic Research",
         }
 
@@ -6185,7 +6167,105 @@ def workflow_guidance(
                 "and story payoff before production."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Automatic Format planning",
+            "next_title": "Generate post-script title directions",
+        }
+
+    title_direction = title_direction_artifact_state()
+    title_gate = title_direction.get("gate", {})
+    if (
+        story.get("production_ready")
+        and not title_direction.get("requests_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Prepare Post-Script Title Directions",
+            "current_detail": (
+                "The script, opening hook, payoff and evidence are human-approved. "
+                "Prepare the exact current 5 Short + 5 Long-form title-direction "
+                "request. These are preferred psychological directions, not final "
+                "locked wording."
+            ),
+            "next_action_id": None,
+            "next_title": "Generate 5 Short + 5 Long title directions",
+        }
+
+    if (
+        title_direction.get("requests_ready")
+        and not title_direction.get("candidates_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Generate 5 Short + 5 Long Title Directions",
+            "current_detail": (
+                "Use the configured free-first FAIR path to generate independent "
+                "Short and Long-form title hypotheses from the approved script, "
+                "hook, payoff and evidence. No title is automatically selected."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Title Direction Gate",
+        }
+
+    if (
+        title_direction.get("candidates_ready")
+        and title_gate.get("status") == "READY_TO_PREPARE"
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Prepare Title Direction Gate",
+            "current_detail": (
+                "Current 5+5 title directions are ready. Prepare their hash-bound "
+                "human review state without selecting or ranking a winner."
+            ),
+            "next_action_id": None,
+            "next_title": "Select preferred title directions",
+        }
+
+    if title_gate.get("status") == "AWAITING_HUMAN_TITLE_DIRECTION":
+        return {
+            "state": "HUMAN_TITLE_DIRECTION_GATE",
+            "current_action_id": None,
+            "current_title": "Select Preferred Title Directions",
+            "current_detail": (
+                "Choose one Short and one Long-form title direction. The selection "
+                "records the preferred psychological direction and evidence-backed "
+                "claim; exact title wording remains editable in the mature Packaging "
+                "Engine."
+            ),
+            "next_action_id": None,
+            "next_title": "Accept, rework, or reject the title directions",
+        }
+
+    if title_gate.get("status") == "TITLE_DIRECTION_REJECTED":
+        return {
+            "state": "TITLE_DIRECTION_REJECTED",
+            "current_action_id": None,
+            "current_title": "Title Direction Rejected",
+            "current_detail": (
+                "At least one current concept has no accepted title direction. "
+                "Rework or regenerate the current 5+5 title hypotheses before "
+                "mature packaging can begin."
+            ),
+            "next_action_id": None,
+            "next_title": "Rework title directions",
+        }
+
+    if title_gate.get("status") == "TITLE_DIRECTION_SELECTED":
+        return {
+            "state": "TITLE_DIRECTION_SELECTED",
+            "current_action_id": None,
+            "current_title": "Title Directions Selected",
+            "current_detail": (
+                "One Short and one Long-form psychological/title direction are "
+                "selected against the exact approved script. Slice 23 stops here. "
+                "The wording is intentionally not final and production remains "
+                "held until the mature Packaging Engine validates title, thumbnail, "
+                "hook and Viewer Promise together."
+            ),
+            "next_action_id": None,
+            "next_title": "Slice 24: Packaging Brief + Viewer Promise Contract",
         }
 
     fmt = format_artifact_state()
