@@ -93,6 +93,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="packagingReviewPanel"', html)
         self.assertIn('id="packagingCriteria"', html)
         self.assertIn('id="packagingNote"', html)
+        self.assertIn('id="titleDirectionReviewPanel"', html)
+        self.assertIn('id="titleDirectionDetail"', html)
+        self.assertIn('id="titleDirectionAccept"', html)
         self.assertIn('id="researchReviewPanel"', html)
         self.assertIn('id="researchCriteria"', html)
         self.assertIn('id="researchNote"', html)
@@ -123,6 +126,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/concept-gate", script)
         self.assertIn("renderPackagingReview", script)
         self.assertIn("/api/packaging-gate", script)
+        self.assertIn("renderTitleDirectionReview", script)
+        self.assertIn("/api/title-direction-gate", script)
         self.assertIn("renderResearchReview", script)
         self.assertIn("/api/research-gate", script)
         self.assertIn("renderScriptSectionReview", script)
@@ -136,6 +141,32 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("renderFinalExportReview", script)
         self.assertIn("/api/final-export-review", script)
         self.assertIn("/api/final-render-video", script)
+
+    def test_title_direction_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/title-direction-gate",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        for action_id in (
+            "title_direction_prepare",
+            "title_direction_generate",
+            "title_direction_gate_prepare",
+        ):
+            self.assertIn(action_id, server.ACTION_DEFS)
+
+        script_index = server.AUTO_MACHINE_ACTION_ORDER.index(
+            "script_gate_prepare"
+        )
+        self.assertEqual(
+            server.AUTO_MACHINE_ACTION_ORDER[
+                script_index + 1 : script_index + 4
+            ],
+            [
+                "title_direction_prepare",
+                "title_direction_generate",
+                "title_direction_gate_prepare",
+            ],
+        )
 
     def test_final_sound_route_is_human_gate_guarded(self):
         self.assertIn(
@@ -305,23 +336,15 @@ class ExperimentUiTests(unittest.TestCase):
             server.ACTION_DEFS["concept_gate_prepare"]["command"][1],
         )
 
-    def test_packaging_actions_follow_concept_gate(self):
+    def test_legacy_packaging_actions_are_retained_but_not_in_active_order(self):
         for action_id in (
             "package_prepare",
             "package_generate",
             "package_gate_prepare",
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
+            self.assertNotIn(action_id, server.AUTO_MACHINE_ACTION_ORDER)
 
-        concept_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_gate_prepare")
-        self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[concept_index + 1 : concept_index + 4],
-            [
-                "package_prepare",
-                "package_generate",
-                "package_gate_prepare",
-            ],
-        )
         self.assertIn(
             "packaging_engine/packaging_engine.py",
             server.ACTION_DEFS["package_prepare"]["command"][1],
@@ -335,7 +358,7 @@ class ExperimentUiTests(unittest.TestCase):
             server.ACTION_DEFS["package_gate_prepare"]["command"][1],
         )
 
-    def test_research_actions_follow_packaging_gate(self):
+    def test_research_actions_follow_concept_gate_directly(self):
         for action_id in (
             "research_prepare",
             "research_acquire",
@@ -344,9 +367,9 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        packaging_index = server.AUTO_MACHINE_ACTION_ORDER.index("package_gate_prepare")
+        concept_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[packaging_index + 1 : packaging_index + 5],
+            server.AUTO_MACHINE_ACTION_ORDER[concept_index + 1 : concept_index + 5],
             [
                 "research_prepare",
                 "research_acquire",
@@ -431,7 +454,7 @@ class ExperimentUiTests(unittest.TestCase):
             "Review Research Claims",
         )
 
-    def test_pending_packaging_gate_becomes_human_workflow_gate(self):
+    def test_legacy_pending_packaging_gate_does_not_block_research(self):
         with (
             patch.object(
                 server,
@@ -448,6 +471,11 @@ class ExperimentUiTests(unittest.TestCase):
                     "awaiting_human_review": False,
                     "complete": True,
                 },
+            ),
+            patch.object(
+                server,
+                "human_analysis_review_snapshot",
+                return_value={"status": "COMPLETE"},
             ),
             patch.object(
                 server,
@@ -473,14 +501,20 @@ class ExperimentUiTests(unittest.TestCase):
                     },
                 },
             ),
+            patch.object(
+                server,
+                "research_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "research_gate": {
+                        "status": "AWAITING_HUMAN_DECISION",
+                    },
+                },
+            ),
         ):
             workflow = server.workflow_guidance({})
 
-        self.assertEqual(workflow["state"], "HUMAN_PACKAGING_GATE")
-        self.assertEqual(
-            workflow["current_title"],
-            "Review Package Candidates",
-        )
+        self.assertEqual(workflow["state"], "HUMAN_RESEARCH_GATE")
 
     def test_pending_concept_gate_becomes_human_workflow_gate(self):
         with (

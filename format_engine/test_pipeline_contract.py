@@ -410,7 +410,7 @@ class PipelineContractTests(unittest.TestCase):
         )
         self.assertEqual(
             story_request["package"]["title"],
-            "Why F1 Brakes Work Backwards",
+            "Why Racing Brakes Behave Backwards",
         )
         self.assertEqual(story_request["package"]["one_sentence_promise"], PROMISE)
         self.assertEqual(
@@ -421,7 +421,7 @@ class PipelineContractTests(unittest.TestCase):
         claim_ids = story_request["accepted_claim_ids"]
         story_response = {
             "concept_id": "c1",
-            "title": "Why F1 Brakes Work Backwards",
+            "title": "Why Racing Brakes Behave Backwards",
             "story_question": (
                 "Why do racing brakes need conditions that seem wrong for road cars?"
             ),
@@ -657,15 +657,10 @@ class PipelineContractTests(unittest.TestCase):
                         request["psychology_profile"]["hook_target_seconds"],
                         3,
                     )
-                    self.assertEqual(
-                        request["package"]["title"],
-                        "F1 Brakes Hate Being Cold",
-                    )
-                else:
-                    self.assertEqual(
-                        request["package"]["title"],
-                        "Why F1 Brakes Work Backwards",
-                    )
+                self.assertEqual(
+                    request["package"]["title"],
+                    "Why Racing Brakes Behave Backwards",
+                )
 
                 response = {
                     "concept_id": "c1",
@@ -743,13 +738,14 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(request["required_branches"], ["long_form", "short"])
         # The promise has now crossed four stages untouched.
         self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
+        self.assertEqual(request["package"]["selected_titles"], {})
         self.assertEqual(
-            request["package"]["selected_titles"]["short"]["title"],
-            "F1 Brakes Hate Being Cold",
+            request["package"]["title_role"],
+            "INTERNAL_WORKING_TITLE",
         )
         self.assertEqual(
             request["branch_story_packages"]["short"]["title"],
-            "F1 Brakes Hate Being Cold",
+            "Why Racing Brakes Behave Backwards",
         )
         self.assertEqual(
             request["script_section_ids_by_branch"]["long_form"],

@@ -126,11 +126,11 @@ def build_script_request(
     if not isinstance(package_value, dict):
         raise ValueError("Story Plan package must be an object")
     package = dict(package_value)
-    canonical_title = str(package.get("title") or "").strip()
-    if not canonical_title:
-        raise ValueError("Story Plan requires the approved Packaging title")
-    if str(plan.get("title", "")) != canonical_title:
-        raise ValueError("Story Plan title must match the approved Packaging title")
+    working_title = str(package.get("title") or "").strip()
+    if not working_title:
+        raise ValueError("Story Plan requires an internal working title")
+    if str(plan.get("title", "")) != working_title:
+        raise ValueError("Story Plan title must match the internal working title")
 
     required_branches = resolve_script_branches(
         str(package.get("format_intent") or ""),
@@ -139,14 +139,6 @@ def build_script_request(
     fmt = str(fmt).strip()
     if fmt not in required_branches:
         raise ValueError(f"Unrequested script branch: {fmt}")
-
-    selected_titles = package.get("selected_titles", {})
-    if isinstance(selected_titles, dict):
-        selected = selected_titles.get(fmt, {})
-        if isinstance(selected, dict):
-            format_title = str(selected.get("title") or "").strip()
-            if format_title:
-                package["title"] = format_title
 
     profiles = config.get("profiles", {})
     profile = profiles.get(fmt)
@@ -209,16 +201,17 @@ def build_script_request(
 
     instructions = [
         "Write a FORMAT-SPECIFIC narration from the shared approved Story Plan.",
-        "Return the approved Packaging title for THIS format exactly; do not rewrite or optimize it.",
-        "The opening_hook is the first spoken line and must be high-impact, truthful and tied to the package promise.",
+        "Return the INTERNAL WORKING TITLE exactly for artifact identity; it is not the final public YouTube title.",
+        "The opening_hook is the first spoken line and must be high-impact, truthful and tied to the accepted concept/viewer promise.",
         "The branch may compress, combine or emphasize Story Plan beats differently, but it may not invent facts or abandon the main payoff.",
         "Every script section must cite one or more source_story_beat_ids.",
         "Section claim_ids may use only claims available from those source Story Plan beats.",
         "Use the supplied format psychology profile rather than generic engagement advice.",
         (
             "Apply the approved Channel Voice Profile to wording, narrator posture, "
-            "technical-language treatment and prohibited-style rules. Research, "
-            "Packaging and format psychology remain higher-priority constraints."
+            "technical-language treatment and prohibited-style rules. Verified "
+            "research, the accepted viewer/story contract and format psychology "
+            "remain higher-priority constraints."
             if voice_is_active
             else (
                 "No approved Channel Voice Profile exists. Do not invent a persistent "
@@ -291,9 +284,9 @@ def validate_script_response(
     if str(response.get("format", "")).strip() != fmt:
         errors.append("format mismatch")
 
-    approved_title = str(request.get("package", {}).get("title") or "")
-    if str(response.get("title", "")) != approved_title:
-        errors.append("title must exactly match the approved Packaging title")
+    working_title = str(request.get("package", {}).get("title") or "")
+    if str(response.get("title", "")) != working_title:
+        errors.append("title must exactly match the internal working title")
 
     if not str(response.get("opening_hook", "")).strip():
         errors.append("opening_hook is required")

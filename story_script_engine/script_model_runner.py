@@ -56,7 +56,7 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "script_model_batch_summary.json"
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed_claims = list(request.get("accepted_claim_ids", []))
-    approved_title = str(request.get("package", {}).get("title") or "")
+    working_title = str(request.get("package", {}).get("title") or "")
     fmt = str(request.get("format") or "")
     story_plan = request.get("story_plan", {})
     beats = story_plan.get("beats", []) if isinstance(story_plan, dict) else []
@@ -155,7 +155,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "const": str(request.get("concept_id", "")),
             },
             "format": {"type": "string", "const": fmt},
-            "title": {"type": "string", "const": approved_title},
+            "title": {"type": "string", "const": working_title},
             "opening_hook": {"type": "string", "minLength": 1},
             "opening_hook_mechanism": {
                 "type": "string",
@@ -181,9 +181,9 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "Return JSON only.\n\n"
         f"TARGET FORMAT: {fmt}\n"
         "Rules:\n"
-        "1. Return the approved Packaging title EXACTLY. Do not rewrite it.\n"
+        "1. Return the INTERNAL WORKING TITLE EXACTLY for artifact identity. It is not the final public YouTube title.\n"
         "2. Return the exact target format supplied in the request.\n"
-        "3. The opening_hook is the FIRST SPOKEN LINE. Make it high-impact, truthful and directly tied to the package promise.\n"
+        "3. The opening_hook is the FIRST SPOKEN LINE. Make it high-impact, truthful and directly tied to the accepted concept/viewer promise.\n"
         "4. Choose an allowed opening_hook_mechanism appropriate to THIS format; do not manufacture drama or overstate verified research.\n"
         "5. Record opening_hook_claim_ids for any verified factual claims the hook relies on.\n"
         "6. Build sections specifically for this format. Each section must cite one or more source_story_beat_ids from the shared Story Plan.\n"
@@ -193,10 +193,10 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "10. Follow the supplied psychology_profile. It overrides generic pacing folklore.\n"
         "11. Do not copy source-video wording, story sequence, personality or exact execution.\n"
         "12. Do not claim virality or guaranteed performance.\n"
-        "13. CHANNEL VOICE: when channel_voice.apply_to_generation is true, follow the approved profile for wording, narrator posture, technical-language treatment and prohibited-style rules. It never overrides verified research, Packaging or format psychology.\n"
+        "13. CHANNEL VOICE: when channel_voice.apply_to_generation is true, follow the approved profile for wording, narrator posture, technical-language treatment and prohibited-style rules. It never overrides verified research, the accepted viewer/story contract or format psychology.\n"
         "14. CHANNEL VOICE: when channel_voice.apply_to_generation is false, do NOT infer a persistent channel personality from niche, title, source videos or generic creator advice.\n"
-        "15. If human_rework_note is present, it is an AUTHORITATIVE human instruction for THIS format branch. Correct exactly the requested issue while preserving the approved Packaging title, verified claims, Story Plan constraints and format identity. Do not silently rewrite unrelated parts unless required to make the requested correction coherent.\n"
-        "16. Human rework never authorizes invented facts, unsupported drama, or changing the approved package promise.\n"
+        "15. If human_rework_note is present, it is an AUTHORITATIVE human instruction for THIS format branch. Correct exactly the requested issue while preserving the internal working-title identity, verified claims, Story Plan constraints and format identity. Do not silently rewrite unrelated parts unless required to make the requested correction coherent.\n"
+        "16. Human rework never authorizes invented facts, unsupported drama, or changing the accepted viewer/story promise.\n"
     )
     if fmt == "short":
         prompt += (

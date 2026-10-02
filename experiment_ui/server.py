@@ -39,6 +39,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/human-analysis-review",
     "/api/concept-gate",
     "/api/packaging-gate",
+    "/api/title-direction-gate",
     "/api/research-gate",
     "/api/script-gate",
     "/api/script-section-review",
@@ -151,6 +152,10 @@ from package_review import (
 from package_review import (
     snapshot as packaging_gate_snapshot,
 )
+from title_direction_review import (
+    apply_action as apply_title_direction_gate_action,
+    snapshot as title_direction_gate_snapshot,
+)
 
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
@@ -158,6 +163,18 @@ PACKAGING_REQUESTS_DIR = PACKAGING_OUTPUT / "package_requests"
 PACKAGING_RESPONSES_DIR = PACKAGING_OUTPUT / "package_responses"
 PACKAGING_CANDIDATES_FILE = PACKAGING_OUTPUT / "package_candidates.json"
 PACKAGING_RESEARCH_HANDOFF = PACKAGING_OUTPUT / "research_handoff.json"
+TITLE_DIRECTION_REQUESTS_DIR = (
+    PACKAGING_OUTPUT / "title_direction_requests"
+)
+TITLE_DIRECTION_RESPONSES_DIR = (
+    PACKAGING_OUTPUT / "title_direction_responses"
+)
+TITLE_DIRECTION_CANDIDATES_FILE = (
+    PACKAGING_OUTPUT / "title_direction_candidates.json"
+)
+TITLE_DIRECTION_SELECTED_FILE = (
+    PACKAGING_OUTPUT / "selected_title_directions.json"
+)
 
 RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 if str(RESEARCH_DIR) not in sys.path:
@@ -394,9 +411,6 @@ AUTO_MACHINE_ACTION_ORDER = [
     "concept_generate",
     "concept_triage",
     "concept_gate_prepare",
-    "package_prepare",
-    "package_generate",
-    "package_gate_prepare",
     "research_prepare",
     "research_acquire",
     "research_generate",
@@ -406,6 +420,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
+    "title_direction_prepare",
+    "title_direction_generate",
+    "title_direction_gate_prepare",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -903,7 +920,9 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": (
-            "Turns approved packages into bounded research questions, including package promise dependencies."
+            "Turns human-accepted concepts directly into bounded research questions. "
+            "Pre-script packaging is no longer required; legacy package dependencies "
+            "remain readable on older resumable handoffs."
         ),
     },
     "research_acquire": {
@@ -956,7 +975,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Builds story-structure requests from verified research and the "
-            "approved title/package before any narration is written."
+            "accepted concept/viewer contract. The carried title is internal only."
         ),
     },
     "story_generate": {
@@ -1009,6 +1028,48 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": ("Prepares the human Script Gate before production."),
+    },
+    "title_direction_prepare": {
+        "label": "Prepare Title Direction Requests",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds post-script title-direction requests from exact current "
+            "human-approved scripts, opening hooks, payoffs and approved evidence."
+        ),
+    },
+    "title_direction_generate": {
+        "label": "Generate 5+5 Title Directions",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-first routing to generate five Short and five Long-form "
+            "title directions with stable IDs and psychology/evidence metadata."
+        ),
+    },
+    "title_direction_gate_prepare": {
+        "label": "Prepare Title Direction Gate",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the post-script Human Title Direction Gate. Selection records "
+            "a preferred psychological direction; exact wording remains editable."
+        ),
     },
     "format_prepare": {
         "label": "Prepare Format Requests",
@@ -1951,14 +2012,14 @@ def packaging_artifact_state() -> dict[str, Any]:
 
 
 def research_artifact_state() -> dict[str, Any]:
-    upstream = packaging_artifact_state()
-    packaging_handoff_hash = (
-        sha256_file(PACKAGING_RESEARCH_HANDOFF)
-        if upstream.get("research_ready") and PACKAGING_RESEARCH_HANDOFF.exists()
+    upstream = transformation_artifact_state()
+    research_handoff_hash = (
+        sha256_file(TRANSFORM_RESEARCH_HANDOFF)
+        if upstream.get("research_ready") and TRANSFORM_RESEARCH_HANDOFF.exists()
         else None
     )
     plan_hashes: dict[str, str] = {}
-    if packaging_handoff_hash and RESEARCH_PLANS_DIR.exists():
+    if research_handoff_hash and RESEARCH_PLANS_DIR.exists():
         for path in RESEARCH_PLANS_DIR.glob("*.research_plan.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict):
@@ -1968,7 +2029,12 @@ def research_artifact_state() -> dict[str, Any]:
             if (
                 concept_id
                 and isinstance(provenance, dict)
-                and provenance.get("packaging_handoff_sha256") == packaging_handoff_hash
+                and (
+                    provenance.get("research_handoff_sha256")
+                    == research_handoff_hash
+                    or provenance.get("packaging_handoff_sha256")
+                    == research_handoff_hash
+                )
             ):
                 plan_hashes[concept_id] = sha256_file(path)
 
@@ -2047,7 +2113,10 @@ def research_artifact_state() -> dict[str, Any]:
         )
     )
     return {
-        "packaging_handoff_sha256": packaging_handoff_hash,
+        "research_handoff_sha256": research_handoff_hash,
+        "packaging_handoff_sha256": (
+            research_handoff_hash
+        ),
         "plan_concept_ids": sorted(plan_hashes),
         "evidence_concept_ids": sorted(evidence_hashes),
         "response_concept_ids": sorted(response_hashes),
@@ -2222,6 +2291,128 @@ def story_script_artifact_state() -> dict[str, Any]:
         "script_gate": gate,
         "script_gate_complete": bool(gate.get("complete")),
         "production_ready": production_ready,
+    }
+
+
+def title_direction_artifact_state() -> dict[str, Any]:
+    upstream = story_script_artifact_state()
+    approved_hashes: dict[str, str] = {}
+    if upstream.get("production_ready") and SCRIPT_APPROVED_DIR.exists():
+        for path in SCRIPT_APPROVED_DIR.glob("*.approved_script.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            gate_info = payload.get("script_gate", {})
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if (
+                concept_id
+                and isinstance(gate_info, dict)
+                and gate_info.get("status") == "READY_FOR_PRODUCTION"
+            ):
+                approved_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if TITLE_DIRECTION_REQUESTS_DIR.exists():
+        for path in TITLE_DIRECTION_REQUESTS_DIR.glob(
+            "*.title_direction_request.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in approved_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("approved_script_sha256")
+                == approved_hashes[concept_id]
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    response_hashes: dict[str, str] = {}
+    if TITLE_DIRECTION_RESPONSES_DIR.exists():
+        for path in TITLE_DIRECTION_RESPONSES_DIR.glob(
+            "*.title_direction_response.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("response_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256")
+                == request_hashes[concept_id]
+            ):
+                response_hashes[concept_id] = sha256_file(path)
+
+    candidates = safe_load_json(TITLE_DIRECTION_CANDIDATES_FILE)
+    candidate_ids: set[str] = set()
+    candidates_current = False
+    if (
+        isinstance(candidates, dict)
+        and candidates.get("artifact") == "title_direction_candidates"
+        and isinstance(candidates.get("concepts"), list)
+    ):
+        current = True
+        for item in candidates.get("concepts", []):
+            if not isinstance(item, dict):
+                current = False
+                break
+            concept_id = str(item.get("concept_id") or "").strip()
+            provenance = item.get("response_provenance", {})
+            if (
+                concept_id not in request_hashes
+                or concept_id not in response_hashes
+                or item.get("request_sha256") != request_hashes[concept_id]
+                or item.get("response_sha256")
+                != response_hashes[concept_id]
+                or not isinstance(provenance, dict)
+                or provenance.get("request_sha256")
+                != request_hashes[concept_id]
+            ):
+                current = False
+                break
+            candidate_ids.add(concept_id)
+        candidates_current = (
+            current
+            and bool(approved_hashes)
+            and set(approved_hashes) == candidate_ids
+        )
+
+    requests_ready = (
+        bool(approved_hashes)
+        and set(approved_hashes).issubset(request_hashes)
+    )
+    responses_complete = (
+        requests_ready
+        and set(request_hashes).issubset(response_hashes)
+    )
+    candidates_ready = responses_complete and candidates_current
+    gate = (
+        title_direction_gate_snapshot()
+        if candidates_ready
+        else {
+            "status": "WAITING_FOR_TITLE_DIRECTION_CANDIDATES",
+            "complete": False,
+            "ready": False,
+            "concepts": [],
+        }
+    )
+    return {
+        "approved_script_concept_ids": sorted(approved_hashes),
+        "request_concept_ids": sorted(request_hashes),
+        "response_concept_ids": sorted(response_hashes),
+        "candidate_concept_ids": sorted(candidate_ids),
+        "requests_ready": requests_ready,
+        "responses_complete": responses_complete,
+        "candidates_ready": candidates_ready,
+        "candidates_current": candidates_current,
+        "gate": gate,
+        "gate_complete": bool(gate.get("complete")),
+        "selected": bool(gate.get("ready")),
+        "status": gate.get("status"),
     }
 
 
@@ -3617,6 +3808,19 @@ def stage_statuses() -> list[dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
+    title_direction = title_direction_artifact_state()
+    title_direction_requests_ready = bool(
+        title_direction.get("requests_ready")
+    )
+    title_direction_candidates_ready = bool(
+        title_direction.get("candidates_ready")
+    )
+    title_direction_gate = title_direction.get("gate", {})
+    title_direction_gate_status = str(
+        title_direction_gate.get("status")
+        or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
+    )
+    title_direction_selected = bool(title_direction.get("selected"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -3627,7 +3831,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
         transform_tone = "complete"
-        transform_next = "Proceed to Packaging / Research."
+        transform_next = "Proceed to Research."
     elif active_action in {
         "transform_prepare",
         "concept_generate",
@@ -3670,46 +3874,46 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if packaging_research_ready:
-        package_human = "PACKAGE ACCEPTED — STAGE COMPLETE"
+    if title_direction_selected:
+        package_human = "TITLE DIRECTIONS SELECTED — SLICE 23 COMPLETE"
         package_tone = "complete"
-        package_next = "Proceed to Research."
+        package_next = "Build Slice 24 Packaging Brief + Viewer Promise."
     elif active_action in {
-        "package_prepare",
-        "package_generate",
-        "package_gate_prepare",
+        "title_direction_prepare",
+        "title_direction_generate",
+        "title_direction_gate_prepare",
     }:
-        package_human = "PACKAGING WORK RUNNING"
+        package_human = "TITLE DIRECTION WORK RUNNING"
         package_tone = "running"
-        package_next = "Wait for the current Packaging job to finish."
-    elif not research_ready:
-        package_human = "WAITING FOR ACCEPTED CONCEPT"
+        package_next = "Wait for the current title-direction job to finish."
+    elif not production_ready:
+        package_human = "WAITING FOR APPROVED SCRIPT"
         package_tone = "blocked"
-        package_next = "Accept a concept first."
-    elif not package_requests:
-        package_human = "READY TO PREPARE PACKAGES"
+        package_next = "Approve all required script branches first."
+    elif not title_direction_requests_ready:
+        package_human = "READY TO PREPARE TITLE DIRECTIONS"
         package_tone = "ready"
-        package_next = "Run Prepare Package Requests."
-    elif not package_candidates:
-        package_human = "PACKAGE GENERATION NEEDED"
+        package_next = "Run Prepare Title Direction Requests."
+    elif not title_direction_candidates_ready:
+        package_human = "5+5 TITLE GENERATION NEEDED"
         package_tone = "action"
-        package_next = "Run Generate Package Candidates."
-    elif packaging_gate_status == "READY_TO_PREPARE":
-        package_human = "PREPARE PACKAGING GATE"
+        package_next = "Generate five Short and five Long-form directions."
+    elif title_direction_gate_status == "READY_TO_PREPARE":
+        package_human = "PREPARE TITLE DIRECTION GATE"
         package_tone = "action"
-        package_next = "Run Prepare Packaging Gate."
-    elif packaging_gate_status == "AWAITING_HUMAN_DECISION":
-        package_human = "HUMAN PACKAGE DECISION NEEDED"
+        package_next = "Prepare the Human Title Direction Gate."
+    elif title_direction_gate_status == "AWAITING_HUMAN_TITLE_DIRECTION":
+        package_human = "HUMAN TITLE DIRECTION DECISION NEEDED"
         package_tone = "action"
-        package_next = "Review package candidates in Analyze & Create."
-    elif packaging_gate_complete:
-        package_human = "NO APPROVED PACKAGE"
+        package_next = "Select one Short and one Long-form direction."
+    elif title_direction_gate_status == "TITLE_DIRECTION_REJECTED":
+        package_human = "TITLE DIRECTION REWORK REQUIRED"
         package_tone = "action"
-        package_next = "Rework or regenerate packages before research."
+        package_next = "Rework or regenerate title directions."
     else:
-        package_human = "PACKAGING NEEDS ATTENTION"
+        package_human = "TITLE DIRECTION NEEDS ATTENTION"
         package_tone = "action"
-        package_next = "Inspect the Packaging Gate state."
+        package_next = "Inspect the Title Direction Gate state."
 
     if story_ready:
         research_human = "RESEARCH APPROVED — STAGE COMPLETE"
@@ -3724,10 +3928,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         research_human = "RESEARCH WORK RUNNING"
         research_tone = "running"
         research_next = "Wait for the current Research job to finish."
-    elif not packaging_research_ready:
-        research_human = "WAITING FOR APPROVED PACKAGE"
+    elif not research_ready:
+        research_human = "WAITING FOR ACCEPTED CONCEPT"
         research_tone = "blocked"
-        research_next = "Approve a package first."
+        research_next = "Accept a concept first."
     elif not research_plans:
         research_human = "READY TO PREPARE RESEARCH"
         research_tone = "ready"
@@ -3760,7 +3964,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     if production_ready:
         script_human = "SCRIPT APPROVED — STAGE COMPLETE"
         script_tone = "complete"
-        script_next = "Proceed to Format."
+        script_next = "Proceed to post-script Title Direction."
     elif active_action in {
         "story_prepare",
         "story_generate",
@@ -3802,7 +4006,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif script_gate_complete:
         script_human = "NO APPROVED SCRIPT"
         script_tone = "action"
-        script_next = "Rework or regenerate scripts before Format."
+        script_next = "Rework or regenerate scripts before Title Direction."
     else:
         script_human = "SCRIPT NEEDS ATTENTION"
         script_tone = "action"
@@ -3812,42 +4016,17 @@ def stage_statuses() -> list[dict[str, Any]]:
         format_human = "FORMAT APPROVED — STAGE COMPLETE"
         format_tone = "complete"
         format_next = "Ready for the Production Engine."
-    elif active_action in {
-        "format_prepare",
-        "format_generate",
-        "format_gate_prepare",
-    }:
-        format_human = "FORMAT WORK RUNNING"
-        format_tone = "running"
-        format_next = "Wait for the current Format job to finish."
-    elif not production_ready:
-        format_human = "WAITING FOR APPROVED SCRIPT"
+    elif not title_direction_selected:
+        format_human = "WAITING FOR TITLE DIRECTION"
         format_tone = "blocked"
-        format_next = "Approve a script first."
-    elif not format_requests_ready:
-        format_human = "READY TO PREPARE FORMATS"
-        format_tone = "ready"
-        format_next = "Run Prepare Format Requests."
-    elif not format_plans_ready:
-        format_human = "FORMAT PLANNING NEEDED"
-        format_tone = "action"
-        format_next = "Run Generate Format Plans."
-    elif format_gate_status == "READY_TO_PREPARE":
-        format_human = "PREPARE FORMAT GATE"
-        format_tone = "action"
-        format_next = "Run Prepare Format Gate."
-    elif format_gate_status == "AWAITING_HUMAN_DECISION":
-        format_human = "HUMAN FORMAT DECISION NEEDED"
-        format_tone = "action"
-        format_next = "Review format plans in Analyze & Create."
-    elif format_gate_complete:
-        format_human = "NO APPROVED FORMAT PLAN"
-        format_tone = "action"
-        format_next = "Rework or regenerate format plans before production."
+        format_next = "Complete the post-script Title Direction Gate first."
     else:
-        format_human = "FORMAT NEEDS ATTENTION"
-        format_tone = "action"
-        format_next = "Inspect the Format Gate state."
+        format_human = "HELD FOR MATURE PACKAGING"
+        format_tone = "blocked"
+        format_next = (
+            "Slice 24 must validate title + thumbnail + hook + Viewer Promise "
+            "before Format/Production resumes."
+        )
 
     return [
         {
@@ -4034,7 +4213,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": concept_gate_complete,
                 },
                 {
-                    "label": "At least one concept accepted for packaging",
+                    "label": "At least one concept accepted for research",
                     "done": research_ready,
                 },
             ],
@@ -4044,56 +4223,20 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
         {
             "id": "05",
-            "title": "Packaging",
-            "state": packaging_gate_status,
-            "human_status": package_human,
-            "tone": package_tone,
-            "detail": (
-                "Builds title, thumbnail and opening-frame options before script "
-                "drafting, then stops for human package selection."
-            ),
-            "next_action": package_next,
-            "criteria": [
-                {
-                    "label": "Accepted concept handoff ready",
-                    "done": research_ready,
-                },
-                {
-                    "label": "Package requests prepared",
-                    "done": package_requests,
-                },
-                {
-                    "label": "Valid package candidates generated",
-                    "done": package_candidates,
-                },
-                {
-                    "label": "Human Packaging Gate complete",
-                    "done": packaging_gate_complete,
-                },
-                {
-                    "label": "At least one package approved for research",
-                    "done": packaging_research_ready,
-                },
-            ],
-            "complete": packaging_research_ready,
-            "ready": research_ready,
-            "current": research_ready and not packaging_research_ready,
-        },
-        {
-            "id": "06",
             "title": "Research",
             "state": research_gate_status,
             "human_status": research_human,
             "tone": research_tone,
             "detail": (
-                "Acquires real web evidence, structures traceable claims, and "
-                "stops for human claim approval before Story / Script."
+                "Starts directly from the accepted Concept Gate handoff, acquires "
+                "real web evidence, structures traceable claims, and stops for "
+                "human claim approval before Story / Script."
             ),
             "next_action": research_next,
             "criteria": [
                 {
-                    "label": "Approved package handoff ready",
-                    "done": packaging_research_ready,
+                    "label": "Accepted concept handoff ready",
+                    "done": research_ready,
                 },
                 {
                     "label": "Research plans prepared",
@@ -4117,11 +4260,11 @@ def stage_statuses() -> list[dict[str, Any]]:
                 },
             ],
             "complete": story_ready,
-            "ready": packaging_research_ready,
-            "current": packaging_research_ready and not story_ready,
+            "ready": research_ready,
+            "current": research_ready and not story_ready,
         },
         {
-            "id": "07",
+            "id": "06",
             "title": "Story / Script",
             "state": script_gate_status if script_drafts_ready else (
                 "READY_TO_PREPARE" if story_ready else "WAITING_FOR_RESEARCH"
@@ -4129,8 +4272,9 @@ def stage_statuses() -> list[dict[str, Any]]:
             "human_status": script_human,
             "tone": script_tone,
             "detail": (
-                "Drafts an original script constrained to human-accepted claims, "
-                "then requires a human Script Gate decision."
+                "Drafts an original script constrained to human-accepted claims "
+                "and carries only an internal working title. Final public title "
+                "direction is selected after script approval."
             ),
             "next_action": script_next,
             "criteria": [
@@ -4151,7 +4295,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": script_gate_complete,
                 },
                 {
-                    "label": "Every script approved for Format",
+                    "label": "Every required script branch approved",
                     "done": production_ready,
                 },
             ],
@@ -4160,43 +4304,77 @@ def stage_statuses() -> list[dict[str, Any]]:
             "current": story_ready and not production_ready,
         },
         {
-            "id": "08",
-            "title": "Format",
-            "state": format_gate_status if format_plans_ready else (
-                "READY_TO_PREPARE" if production_ready else "WAITING_FOR_SCRIPT"
-            ),
-            "human_status": format_human,
-            "tone": format_tone,
+            "id": "07",
+            "title": "Packaging / Title Direction",
+            "state": title_direction_gate_status,
+            "human_status": package_human,
+            "tone": package_tone,
             "detail": (
-                "Plans long-form and Shorts as separate productions from the "
-                "approved script, then requires a human Format Gate decision."
+                "Generates five Short and five Long-form title directions from the "
+                "approved script, hook, payoff and evidence. Human selection records "
+                "a preferred psychological direction without permanently locking "
+                "the final title wording."
             ),
-            "next_action": format_next,
+            "next_action": package_next,
             "criteria": [
                 {
                     "label": "Approved script handoff ready",
                     "done": production_ready,
                 },
                 {
-                    "label": "Format requests prepared",
-                    "done": format_requests_ready,
+                    "label": "Post-script title requests prepared",
+                    "done": title_direction_requests_ready,
                 },
                 {
-                    "label": "Validated format plans generated",
-                    "done": format_plans_ready,
+                    "label": "5 Short + 5 Long title directions current",
+                    "done": title_direction_candidates_ready,
                 },
                 {
-                    "label": "Human Format Gate complete",
-                    "done": format_gate_complete,
+                    "label": "Human Title Direction Gate complete",
+                    "done": bool(title_direction_gate.get("complete")),
                 },
                 {
-                    "label": "Every format plan approved for production",
-                    "done": production_engine_ready,
+                    "label": "Short + Long title directions selected",
+                    "done": title_direction_selected,
                 },
             ],
-            "complete": production_engine_ready,
+            "complete": title_direction_selected,
             "ready": production_ready,
-            "current": production_ready and not production_engine_ready,
+            "current": production_ready and not title_direction_selected,
+        },
+        {
+            "id": "08",
+            "title": "Format / Production Hold",
+            "state": (
+                "WAITING_FOR_MATURE_PACKAGING"
+                if title_direction_selected
+                else "WAITING_FOR_TITLE_DIRECTION"
+            ),
+            "human_status": format_human,
+            "tone": format_tone,
+            "detail": (
+                "Format and Production are intentionally held until Slice 24 binds "
+                "the selected title direction to the Packaging Brief, Viewer Promise, "
+                "thumbnail concepts, pairing and validation."
+            ),
+            "next_action": format_next,
+            "criteria": [
+                {
+                    "label": "Post-script title direction selected",
+                    "done": title_direction_selected,
+                },
+                {
+                    "label": "Mature Packaging Engine validation complete",
+                    "done": False,
+                },
+                {
+                    "label": "Format planning re-enabled",
+                    "done": False,
+                },
+            ],
+            "complete": False,
+            "ready": title_direction_selected,
+            "current": title_direction_selected,
         },
     ]
 
@@ -4281,6 +4459,19 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
+    title_direction = title_direction_artifact_state()
+    title_direction_requests_ready = bool(
+        title_direction.get("requests_ready")
+    )
+    title_direction_candidates_ready = bool(
+        title_direction.get("candidates_ready")
+    )
+    title_direction_gate = title_direction.get("gate", {})
+    title_direction_gate_status = str(
+        title_direction_gate.get("status")
+        or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
+    )
+    title_direction_selected = bool(title_direction.get("selected"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -4884,67 +5075,35 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "package_prepare": {
-            "enabled": bool(transform["research_ready"]) and not package_requests,
+            "enabled": False,
             "reason": (
-                "Accepted concepts are ready for packaging requests."
-                if bool(transform["research_ready"]) and not package_requests
-                else (
-                    "Package requests are already current."
-                    if package_requests
-                    else "Accept at least one concept first."
-                )
+                "Legacy pre-script Packaging action retained for resumability only. "
+                "Slice 23 active workflow researches the accepted concept first."
             ),
         },
         "package_generate": {
-            "enabled": package_requests and not package_candidates,
+            "enabled": False,
             "reason": (
-                "Current package requests are ready for FAIR free-only generation."
-                if package_requests and not package_candidates
-                else (
-                    "Valid package candidates already exist."
-                    if package_candidates
-                    else "Prepare current package requests first."
-                )
+                "Legacy pre-script Packaging generation is inactive in Slice 23. "
+                "Use the post-script Title Direction stage instead."
             ),
         },
         "package_gate_prepare": {
-            "enabled": (
-                package_candidates
-                and (
-                    packaging_gate_status == "READY_TO_PREPARE"
-                    or (
-                        packaging_gate_complete
-                        and not bool(packaging["research_ready"])
-                    )
-                )
-            ),
+            "enabled": False,
             "reason": (
-                "Validated package candidates are ready for human review."
-                if package_candidates and packaging_gate_status == "READY_TO_PREPARE"
-                else (
-                    "No package was accepted; reopen the current Packaging Gate."
-                    if (
-                        package_candidates
-                        and packaging_gate_complete
-                        and not bool(packaging["research_ready"])
-                    )
-                    else (
-                        "Packaging Gate is already prepared or complete."
-                        if package_candidates
-                        else "Generate valid package candidates first."
-                    )
-                )
+                "Legacy pre-script Packaging Gate is inactive in Slice 23. Existing "
+                "artifacts remain readable for audit/resume compatibility."
             ),
         },
         "research_prepare": {
-            "enabled": bool(packaging["research_ready"]) and not research_plans,
+            "enabled": bool(transform["research_ready"]) and not research_plans,
             "reason": (
-                "Approved packages are ready to become research plans."
-                if bool(packaging["research_ready"]) and not research_plans
+                "Accepted concepts are ready to become research plans directly."
+                if bool(transform["research_ready"]) and not research_plans
                 else (
                     "Research plans are already current."
                     if research_plans
-                    else "Approve a package first."
+                    else "Accept at least one concept first."
                 )
             ),
         },
@@ -4997,7 +5156,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "story_prepare": {
             "enabled": bool(research["story_ready"]) and not story_requests_ready,
             "reason": (
-                "Verified research and the approved package are ready for Story Plan requests."
+                "Verified research and the accepted concept/viewer contract are ready for Story Plan requests."
                 if bool(research["story_ready"]) and not story_requests_ready
                 else (
                     "Story Plan requests are already current."
@@ -5073,16 +5232,69 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     )
                 )
             ),
-        },        "format_prepare": {
-            "enabled": production_ready and not format_requests_ready,
+        },
+        "title_direction_prepare": {
+            "enabled": (
+                production_ready
+                and not title_direction_requests_ready
+            ),
             "reason": (
-                "All required branch scripts are approved and ready for production-format planning."
-                if production_ready and not format_requests_ready
+                "Human-approved scripts are stable; prepare the post-script 5+5 "
+                "title-direction requests from their hooks, payoff and evidence."
+                if production_ready and not title_direction_requests_ready
                 else (
-                    "Format requests are already current."
-                    if format_requests_ready
+                    "Title direction requests are current."
+                    if title_direction_requests_ready
                     else "Complete the Human Script Gate first."
                 )
+            ),
+        },
+        "title_direction_generate": {
+            "enabled": (
+                title_direction_requests_ready
+                and not title_direction_candidates_ready
+            ),
+            "reason": (
+                "Current post-script title-direction requests are ready for FAIR "
+                "free-first generation."
+                if (
+                    title_direction_requests_ready
+                    and not title_direction_candidates_ready
+                )
+                else (
+                    "Current 5+5 title direction candidates are ready."
+                    if title_direction_candidates_ready
+                    else "Prepare current title direction requests first."
+                )
+            ),
+        },
+        "title_direction_gate_prepare": {
+            "enabled": (
+                title_direction_candidates_ready
+                and title_direction_gate_status == "READY_TO_PREPARE"
+            ),
+            "reason": (
+                "Five Short and five Long-form title directions are ready for "
+                "human selection."
+                if (
+                    title_direction_candidates_ready
+                    and title_direction_gate_status == "READY_TO_PREPARE"
+                )
+                else (
+                    "Title Direction Gate is already prepared or complete."
+                    if title_direction_candidates_ready
+                    else "Generate current title direction candidates first."
+                )
+            ),
+        },
+        "format_prepare": {
+            "enabled": False,
+            "reason": (
+                "Slice 23 intentionally stops after title-direction selection. "
+                "The mature Packaging Brief/thumbnail/pairing stage must be built "
+                "before production Format planning is re-enabled."
+                if title_direction_selected
+                else "Complete the post-script Title Direction Gate first."
             ),
         },
         "format_generate": {
@@ -5908,24 +6120,6 @@ def workflow_guidance(
                 "criteria. Accept, send for rework, or reject."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Automatic Packaging",
-        }
-
-    packaging = packaging_artifact_state()
-    packaging_gate = packaging.get("packaging_gate", {})
-    if (
-        packaging.get("candidates_ready")
-        and packaging_gate.get("status") == "AWAITING_HUMAN_DECISION"
-    ):
-        return {
-            "state": "HUMAN_PACKAGING_GATE",
-            "current_action_id": None,
-            "current_title": "Review Package Candidates",
-            "current_detail": (
-                "Review title, thumbnail and opening-frame packages. Approve at "
-                "most one package per concept, send it for rework, or reject it."
-            ),
-            "next_action_id": "auto_continue",
             "next_title": "Automatic Research",
         }
 
@@ -5962,7 +6156,105 @@ def workflow_guidance(
                 "and story payoff before production."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Automatic Format planning",
+            "next_title": "Generate post-script title directions",
+        }
+
+    title_direction = title_direction_artifact_state()
+    title_gate = title_direction.get("gate", {})
+    if (
+        story.get("production_ready")
+        and not title_direction.get("requests_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Prepare Post-Script Title Directions",
+            "current_detail": (
+                "The script, opening hook, payoff and evidence are human-approved. "
+                "Prepare the exact current 5 Short + 5 Long-form title-direction "
+                "request. These are preferred psychological directions, not final "
+                "locked wording."
+            ),
+            "next_action_id": None,
+            "next_title": "Generate 5 Short + 5 Long title directions",
+        }
+
+    if (
+        title_direction.get("requests_ready")
+        and not title_direction.get("candidates_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Generate 5 Short + 5 Long Title Directions",
+            "current_detail": (
+                "Use the configured free-first FAIR path to generate independent "
+                "Short and Long-form title hypotheses from the approved script, "
+                "hook, payoff and evidence. No title is automatically selected."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Title Direction Gate",
+        }
+
+    if (
+        title_direction.get("candidates_ready")
+        and title_gate.get("status") == "READY_TO_PREPARE"
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Prepare Title Direction Gate",
+            "current_detail": (
+                "Current 5+5 title directions are ready. Prepare their hash-bound "
+                "human review state without selecting or ranking a winner."
+            ),
+            "next_action_id": None,
+            "next_title": "Select preferred title directions",
+        }
+
+    if title_gate.get("status") == "AWAITING_HUMAN_TITLE_DIRECTION":
+        return {
+            "state": "HUMAN_TITLE_DIRECTION_GATE",
+            "current_action_id": None,
+            "current_title": "Select Preferred Title Directions",
+            "current_detail": (
+                "Choose one Short and one Long-form title direction. The selection "
+                "records the preferred psychological direction and evidence-backed "
+                "claim; exact title wording remains editable in the mature Packaging "
+                "Engine."
+            ),
+            "next_action_id": None,
+            "next_title": "Accept, rework, or reject the title directions",
+        }
+
+    if title_gate.get("status") == "TITLE_DIRECTION_REJECTED":
+        return {
+            "state": "TITLE_DIRECTION_REJECTED",
+            "current_action_id": None,
+            "current_title": "Title Direction Rejected",
+            "current_detail": (
+                "At least one current concept has no accepted title direction. "
+                "Rework or regenerate the current 5+5 title hypotheses before "
+                "mature packaging can begin."
+            ),
+            "next_action_id": None,
+            "next_title": "Rework title directions",
+        }
+
+    if title_gate.get("status") == "TITLE_DIRECTION_SELECTED":
+        return {
+            "state": "TITLE_DIRECTION_SELECTED",
+            "current_action_id": None,
+            "current_title": "Title Directions Selected",
+            "current_detail": (
+                "One Short and one Long-form psychological/title direction are "
+                "selected against the exact approved script. Slice 23 stops here. "
+                "The wording is intentionally not final and production remains "
+                "held until the mature Packaging Engine validates title, thumbnail, "
+                "hook and Viewer Promise together."
+            ),
+            "next_action_id": None,
+            "next_title": "Slice 24: Packaging Brief + Viewer Promise Contract",
         }
 
     fmt = format_artifact_state()
@@ -6798,6 +7090,8 @@ def status_payload() -> dict[str, Any]:
         "research_gate": research["research_gate"],
         "story_script": story,
         "script_gate": story["script_gate"],
+        "title_direction": title_direction_artifact_state(),
+        "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],
         "voice_performance": voice,
@@ -6923,6 +7217,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/packaging-gate":
             self._send_json(packaging_gate_snapshot())
+            return
+        if route == "/api/title-direction-gate":
+            self._send_json(title_direction_gate_snapshot())
             return
         if route == "/api/research-gate":
             self._send_json(research_gate_snapshot())
@@ -7220,6 +7517,19 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                     selected_titles=body.get("selected_titles"),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/title-direction-gate":
+                payload = apply_title_direction_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    selected_titles=body.get("selected_titles"),
+                    note=str(body.get("note") or ""),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:

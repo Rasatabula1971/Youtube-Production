@@ -138,3 +138,91 @@ This video helps [specific viewer/problem] so they can [specific outcome].
 
 Gap positioning must not upgrade a `HYPOTHESIS` or `UNASSESSED` gap into a
 proven audience fact.
+
+## Slice 23 architecture migration — post-script title direction
+
+Packaging v1.0 changes the active sequencing contract. The legacy Packaging
+Engine in this directory remains available to read historical artifacts and
+resume older runs, but it is no longer an active prerequisite before Research.
+
+New active sequence:
+
+```text
+accepted concept
+→ verified research
+→ approved story/script
+→ 5 Short title directions + 5 Long-form title directions
+→ Human Title Direction Gate
+→ mature Packaging Engine (next slice)
+```
+
+### Internal working title versus public title
+
+Story, Script and Format require a stable internal title for provenance and
+artifact identity. That value is now marked `INTERNAL_WORKING_TITLE` and must
+not be interpreted as the final public YouTube title.
+
+Legacy `selected_titles` are ignored when generating current Script/Format
+artifacts. A public title may be rewritten later without invalidating approved
+narration merely because wording changed.
+
+### Post-script 5+5 title directions
+
+`title_direction.py` prepares one request per exact current
+`approved_script_bundle`. It carries:
+
+- opening hook and hook mechanism;
+- approved script section outline;
+- story question and payoff intent;
+- approved evidence claims;
+- five configured psychological angles;
+- Short versus Long-form identity;
+- title-length guidance rather than a hard 60-character cutoff.
+
+`title_direction_model_runner.py` uses the existing FAIR free-first routing
+policy. It requests exactly five Short and five Long-form directions and fails
+closed on invented evidence references or malformed stable IDs.
+
+Each candidate stores:
+
+- `title_id`;
+- `format`;
+- `title_text`;
+- `psychological_angle`;
+- `primary_driver`;
+- `secondary_driver`;
+- `core_claim`;
+- `evidence_refs`;
+- `character_count`;
+- `search_intent`.
+
+No viral score, CTR prediction or automatic winner ranking is produced.
+
+### Human Title Direction Gate
+
+`title_direction_review.py` requires one Short and one Long-form selection per
+concept. A selection records a preferred psychological/title direction and is
+explicitly **not** final wording.
+
+The selected artifact uses:
+
+`PREFERRED_TITLE_AND_PSYCHOLOGICAL_DIRECTION_NOT_FINAL_WORDING`
+
+and stores `final_wording_editable_later=true`.
+
+Rework is scoped to `TITLE_DIRECTIONS_ONLY`. It changes the title-direction
+request, invalidates only the title-generation response/candidate aggregate,
+and leaves approved script/evidence untouched.
+
+Historical selections are archived append-only. Current state is bound to the
+candidate-set SHA-256; stale candidate sets reopen the gate.
+
+### Slice 23 boundary
+
+The successful boundary is:
+
+`TITLE_DIRECTION_SELECTED`
+
+Format and Production remain held after that point until Slice 24 builds the
+Packaging Brief and Viewer Promise Contract and begins mature title/thumbnail
+coordination.

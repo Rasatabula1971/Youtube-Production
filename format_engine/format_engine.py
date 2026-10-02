@@ -501,13 +501,13 @@ def build_format_request(
     package = script.get("package", {})
     if not isinstance(package, dict):
         package = {}
-    approved_title = str(package.get("title") or "").strip()
-    if not approved_title:
-        raise ValueError("Approved script bundle requires Packaging title")
-    if str(script.get("title") or "") != approved_title:
-        raise ValueError(
-            "Approved script bundle title does not match the Packaging title contract"
-        )
+    working_title = str(
+        script.get("title")
+        or package.get("title")
+        or ""
+    ).strip()
+    if not working_title:
+        raise ValueError("Approved script bundle requires an internal working title")
 
     required_branches = resolve_branches(
         str(package.get("format_intent") or ""),
@@ -545,15 +545,9 @@ def build_format_request(
             raise ValueError(f"Approved script bundle is missing {fmt} script")
         if str(branch_script.get("format") or "") != fmt:
             raise ValueError(f"Approved {fmt} script has wrong format identity")
-        expected_title = approved_title
-        selected_titles = package.get("selected_titles", {})
-        if isinstance(selected_titles, dict):
-            selection = selected_titles.get(fmt, {})
-            if isinstance(selection, dict):
-                expected_title = str(selection.get("title") or "").strip() or approved_title
-        if str(branch_script.get("title") or "") != expected_title:
+        if str(branch_script.get("title") or "") != working_title:
             raise ValueError(
-                f"Approved {fmt} script violates format-specific Packaging title"
+                f"Approved {fmt} script does not preserve the internal working-title identity"
             )
         sections = branch_script.get("sections", [])
         if not isinstance(sections, list) or not sections:
@@ -599,8 +593,9 @@ def build_format_request(
         "required_branches": required_branches,
         "branch_constraints": constraints,
         "package": {
-            "title": package.get("title"),
-            "selected_titles": package.get("selected_titles", {}),
+            "title": working_title,
+            "title_role": "INTERNAL_WORKING_TITLE",
+            "selected_titles": {},
             "one_sentence_promise": package.get("one_sentence_promise"),
             "expected_payoff": package.get("expected_payoff"),
             "viewer_problem": package.get("viewer_problem"),

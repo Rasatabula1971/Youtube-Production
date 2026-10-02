@@ -20,7 +20,9 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
 CONFIG_FILE = HERE / "research_config.json"
-DEFAULT_HANDOFF = PROJECT_ROOT / "packaging_engine" / "output" / "research_handoff.json"
+DEFAULT_HANDOFF = (
+    PROJECT_ROOT / "transformation_engine" / "output" / "research_handoff.json"
+)
 
 OUTPUT_DIR = HERE / "output"
 PLANS_DIR = OUTPUT_DIR / "plans"
@@ -109,31 +111,33 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    packaging = concept.get("packaging")
-    if not isinstance(packaging, dict):
-        raise ValueError(f"Concept {concept_id} requires an approved packaging object")
-
-    if "research_dependencies" not in packaging:
-        raise ValueError(
-            f"Concept {concept_id} packaging requires research_dependencies"
-        )
-    dependencies = packaging.get("research_dependencies")
+    packaging_value = concept.get("packaging")
+    packaging = (
+        dict(packaging_value)
+        if isinstance(packaging_value, dict)
+        else {}
+    )
+    dependencies = packaging.get("research_dependencies", [])
     if not isinstance(dependencies, list):
         raise ValueError(
-            f"Concept {concept_id} packaging research_dependencies must be a list"
+            f"Concept {concept_id} legacy packaging research_dependencies must be a list"
         )
 
+    # Slice 23 active runs enter Research directly from the Concept Gate. Older
+    # package-bound handoffs remain resumable: if they carry explicit packaging
+    # research dependencies, preserve those as additional questions without
+    # making pre-script packaging a prerequisite for new runs.
     for index, dependency in enumerate(dependencies, start=1):
         text = str(dependency).strip()
         if not text:
             raise ValueError(
-                f"Concept {concept_id} has an empty packaging research dependency"
+                f"Concept {concept_id} has an empty legacy packaging research dependency"
             )
         questions.append(
             {
                 "question_id": f"pkgq{index:03d}",
                 "question": text,
-                "origin": "packaging",
+                "origin": "legacy_packaging",
             }
         )
 
@@ -163,11 +167,11 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
             "Link every factual claim to one or more research questions.",
             "Record supporting, contradicting, and qualifying evidence instead of silently reconciling disagreements.",
             "Do not mark a claim verified merely because multiple sources agree.",
-            "The approved package defines the promise the future script must fulfill.",
+            "The accepted concept, viewer need and verified evidence define the story contract. Final public packaging is selected only after the script is approved.",
             "Preserve the accepted viewer problem, viewer moment, desired outcome, Human Framing contract, content-gap status, and channel-fit rationale for Story / Script.",
             "Research factual assumptions embedded in the Hook Experience, stakes, drama source, and Explanation Payoff before Story / Script treats them as true.",
             "Do not treat a HYPOTHESIS or UNASSESSED content gap as a proven audience fact.",
-            "Packaging research dependencies are mandatory research questions and must be resolved before Story / Script.",
+            "Legacy packaging research dependencies, when present on an older resumable handoff, remain research questions but new runs do not require pre-script packaging.",
         ],
         "response_schema": {
             "concept_id": concept_id,
@@ -528,6 +532,15 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     for concept in concepts:
         plan = build_research_plan(concept)
         plan["plan_provenance"] = {
+            "research_handoff_source": str(handoff_path),
+            "research_handoff_sha256": handoff_sha256,
+            "source_stage": (
+                "concept_gate"
+                if handoff.get("artifact") == "research_handoff"
+                else "legacy_packaging"
+            ),
+            # Compatibility aliases retained so older tooling can still read
+            # already-prepared plans during the migration.
             "packaging_handoff_source": str(handoff_path),
             "packaging_handoff_sha256": handoff_sha256,
         }
