@@ -9,6 +9,8 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, sha256_file
+from visual_candidate_review import candidate_selection_status
+from visual_search import search_result_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -23,6 +25,37 @@ def _path(review_path: Path) -> Path:
         ".visual_candidate_review.json",
         ".visual_rights_review.json",
     )
+
+
+def _current_review_result(
+    review_path: Path,
+    review: dict[str, Any],
+) -> tuple[Path, dict[str, Any]] | None:
+    if (
+        not isinstance(review, dict)
+        or review.get("status") != "READY_FOR_ROUGH_CUT"
+    ):
+        return None
+    result_path = Path(str(review.get("source_result") or ""))
+    if (
+        not result_path.is_file()
+        or result_path.parent.resolve() != SEARCH_RESULT_DIR.resolve()
+        or review.get("source_result_sha256") != sha256_file(result_path)
+    ):
+        return None
+
+    current = search_result_is_current(result_path)
+    if current is None:
+        return None
+    result = current[0]
+    if (
+        str(result.get("concept_id") or "")
+        != str(review.get("concept_id") or "")
+        or str(result.get("format") or "")
+        != str(review.get("format") or "")
+    ):
+        return None
+    return result_path, result
 
 
 def _candidate(
