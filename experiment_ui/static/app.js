@@ -2389,6 +2389,7 @@ function renderScriptReview(snapshot, force) {
     scriptReject.disabled = true;
     scriptRework.disabled = true;
     scriptAccept.disabled = true;
+    loadScriptSectionReviewForCurrent();
     return;
   }
 
@@ -2474,6 +2475,7 @@ function renderScriptReview(snapshot, force) {
   scriptRework.disabled = false;
   scriptAccept.disabled = false;
   scriptEditing = false;
+  loadScriptSectionReviewForCurrent();
 }
 
 function moveScriptCursor(delta) {
@@ -2481,6 +2483,10 @@ function moveScriptCursor(delta) {
   if (!current) return;
   scriptCursor = Math.max(0, Math.min(current.items.length - 1, scriptCursor + delta));
   scriptEditing = false;
+  scriptSectionTargetId = null;
+  scriptSectionRenderedTargetId = null;
+  latestScriptSectionSnapshot = null;
+  scriptSectionLoadToken += 1;
   renderScriptReview(latestScriptSnapshot, true);
 }
 
@@ -4245,6 +4251,14 @@ document.addEventListener("click", function (event) {
     return;
   }
 
+  const scriptSelectionButton = event.target.closest("[data-script-section-selection]");
+  if (scriptSelectionButton) {
+    submitScriptSectionAction("SELECT_ALTERNATIVE", {
+      selection_id: scriptSelectionButton.dataset.scriptSectionSelection
+    });
+    return;
+  }
+
   const gateButton = event.target.closest("[data-gate-action]");
   if (gateButton) {
     const action = gateButton.dataset.gateAction;
@@ -4384,6 +4398,32 @@ scriptRework.addEventListener("click", function () {
 });
 scriptAccept.addEventListener("click", function () {
   submitScriptDecision("ACCEPT");
+});
+scriptSectionTarget.addEventListener("change", function () {
+  scriptSectionTargetId = scriptSectionTarget.value;
+  scriptSectionRenderedTargetId = null;
+  renderScriptSectionReview(latestScriptSectionSnapshot || {});
+});
+scriptSectionPrepare.addEventListener("click", function () {
+  submitScriptSectionAction("PREPARE");
+});
+scriptSectionAccept.addEventListener("click", function () {
+  submitScriptSectionAction("ACCEPT");
+});
+scriptSectionLock.addEventListener("click", function () {
+  submitScriptSectionAction("LOCK");
+});
+scriptSectionUnlock.addEventListener("click", function () {
+  submitScriptSectionAction("UNLOCK");
+});
+scriptSectionRework.addEventListener("click", function () {
+  submitScriptSectionAction("REWORK");
+});
+scriptSectionCancelRework.addEventListener("click", function () {
+  submitScriptSectionAction("CANCEL_REWORK");
+});
+scriptSectionGenerate.addEventListener("click", function () {
+  submitScriptSectionAction("GENERATE_ALTERNATIVES");
 });
 formatNote.addEventListener("input", function () {
   formatEditing = true;
