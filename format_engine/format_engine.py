@@ -373,7 +373,7 @@ def _prune_mismatched_active_format_outputs(
             and run.get("status") == "VALIDATED"
             and run.get("request_sha256") == request_hash
         )
-        if run_path.exists() and not run_current:
+        if not run_current:
             if _remove_file(run_path):
                 removed.append(str(run_path.resolve()))
             if _remove_file(raw_path):
