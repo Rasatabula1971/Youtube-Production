@@ -109,3 +109,28 @@ A concept moves forward only when **all required branches** are accepted. The
 gate then writes one provenance-bound approved script bundle containing the
 separate immutable narrations. Identical branch scripts, or a Short that is only
 a prefix/truncation of long-form narration, fail closed.
+
+## Selective section rework — Slice 1 contract
+
+Selective rework is being added incrementally. Slice 1 adds only deterministic
+review state; it makes no model call and does not change Human Script Gate
+behavior yet.
+
+Each exact script draft can be mapped to stable review targets:
+
+- `hook:opening`;
+- one `section:<section_id>` target for every generated script section; and
+- `closing:closing`.
+
+The state is SHA-256 bound to the exact draft. Duplicate or missing section IDs
+fail closed. Human actions may ACCEPT, LOCK, UNLOCK, request REWORK, or cancel a
+pending rework request. ACCEPT locks the target. A locked target cannot be
+reworked until explicitly unlocked.
+
+Rework requests record a bounded reason plus an optional human instruction.
+They do **not** overwrite narration. Later slices will generate alternatives for
+only the selected target and require a separate human choice before any draft
+replacement occurs.
+
+If the source draft changes after section state is created, the old state is
+stale and cannot be applied silently.
