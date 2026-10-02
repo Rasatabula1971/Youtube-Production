@@ -1944,3 +1944,52 @@ progression rather than being silently converted into a placeholder.
 Authorized premium slots remain pending until a current generated asset is
 registered against the exact generation request and within the approved cost
 ceiling. Slice 18 does not implement provider execution.
+
+## D-089 — Current visual assembly advances through a free local structural preview only
+
+**Status:** Accepted
+
+Slice 19 owns the transition from a current Slice 18 visual assembly into the
+Human Edit Preview Gate.
+
+The automatic path is:
+
+`edit_manifest_prepare → edit_preview_render → HUMAN_EDIT_PREVIEW_GATE`
+
+and only runs when every expected visual-assembly branch is current and
+`READY_FOR_EDIT_ASSEMBLY`.
+
+Slice 19 does not execute premium visual generation, final production handoff,
+music/SFX generation, upload, publishing, or any paid/cloud fallback.
+
+The edit manifest is not considered current merely because its source files
+still exist. It must rebuild exactly from:
+
+- the current Slice 18 visual assembly;
+- the current registered narration render return;
+- current PASS narration Audio-QC;
+- the matching current narration timing map;
+- exact local narration audio bytes; and
+- the current approved sound-design brief when one exists.
+
+If a sound brief did not exist when the manifest was built and is approved
+later, the old manifest becomes stale.
+
+The local structural preview renderer calls only the configured local FFmpeg
+binary. A stale manifest is rejected before any subprocess runs. Missing local
+FFmpeg is an explicit workflow boundary; no cloud or paid fallback is allowed.
+
+A preview result is current only while:
+
+- its exact manifest remains current and hash-matched;
+- its preview file exists in the managed preview directory;
+- its preview SHA-256 matches; and
+- its recorded byte count matches the current file.
+
+The Human Edit Preview Gate uses this same current-result contract. Therefore
+assembly, narration, sound, manifest or preview mutation invalidates the old
+human-review target.
+
+The structural preview is explicitly non-publishable. It exists only to judge
+story flow, pacing, narration-to-picture rhythm and visual continuity before
+later final-production work.
