@@ -5267,18 +5267,30 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "edit_manifest_prepare": {
-            "enabled": visual_assembly_edit_ready and not edit_manifest_ready,
+            "enabled": (
+                narration_audio_ready
+                and visual_assembly_edit_ready
+                and not edit_manifest_ready
+            ),
             "reason": (
-                "Current final-for-preview visual assembly and narration timing "
-                "are ready for the structural edit manifest."
-                if visual_assembly_edit_ready and not edit_manifest_ready
+                "Current PASS narration timing and final-for-preview visual "
+                "assembly are ready for the structural edit manifest."
+                if (
+                    narration_audio_ready
+                    and visual_assembly_edit_ready
+                    and not edit_manifest_ready
+                )
                 else (
                     "Edit preview manifests are current."
                     if edit_manifest_ready
                     else (
-                        "Register/retry required visual assets before Slice 19."
-                        if visual_assembly_ready
-                        else "Build the current visual assembly plan first."
+                        "Narration Audio QC/timing must be current before Slice 19."
+                        if not narration_audio_ready
+                        else (
+                            "Register/retry required visual assets before Slice 19."
+                            if visual_assembly_ready
+                            else "Build the current visual assembly plan first."
+                        )
                     )
                 )
             ),
