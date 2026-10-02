@@ -4336,15 +4336,15 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
         {
             "id": "07",
-            "title": "Packaging / Title Direction",
+            "title": "Packaging / Title Direction + Brief",
             "state": title_direction_gate_status,
             "human_status": package_human,
             "tone": package_tone,
             "detail": (
                 "Generates five Short and five Long-form title directions from the "
-                "approved script, hook, payoff and evidence. Human selection records "
-                "a preferred psychological direction without permanently locking "
-                "the final title wording."
+                "approved script, then binds the selected direction to an exact "
+                "evidence-backed Packaging Brief and Viewer Promise Contract for "
+                "each format. Final title wording is still not permanently locked."
             ),
             "next_action": package_next,
             "criteria": [
@@ -4368,31 +4368,44 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "label": "Short + Long title directions selected",
                     "done": title_direction_selected,
                 },
+                {
+                    "label": "Packaging Brief + Viewer Promise current",
+                    "done": packaging_brief_ready,
+                },
             ],
-            "complete": title_direction_selected,
+            "complete": packaging_brief_ready,
             "ready": production_ready,
-            "current": production_ready and not title_direction_selected,
+            "current": production_ready and not packaging_brief_ready,
         },
         {
             "id": "08",
             "title": "Format / Production Hold",
             "state": (
                 "WAITING_FOR_MATURE_PACKAGING"
-                if title_direction_selected
-                else "WAITING_FOR_TITLE_DIRECTION"
+                if packaging_brief_ready
+                else (
+                    "WAITING_FOR_PACKAGING_BRIEF"
+                    if title_direction_selected
+                    else "WAITING_FOR_TITLE_DIRECTION"
+                )
             ),
             "human_status": format_human,
             "tone": format_tone,
             "detail": (
-                "Format and Production are intentionally held until Slice 24 binds "
-                "the selected title direction to the Packaging Brief, Viewer Promise, "
-                "thumbnail concepts, pairing and validation."
+                "Format and Production remain intentionally held after Slice 24. "
+                "The evidence-bound Packaging Brief and Viewer Promise are ready, "
+                "but psychological angle expansion, thumbnail concepts, pairing and "
+                "final package validation must still be built."
             ),
             "next_action": format_next,
             "criteria": [
                 {
                     "label": "Post-script title direction selected",
                     "done": title_direction_selected,
+                },
+                {
+                    "label": "Packaging Brief + Viewer Promise ready",
+                    "done": packaging_brief_ready,
                 },
                 {
                     "label": "Mature Packaging Engine validation complete",
