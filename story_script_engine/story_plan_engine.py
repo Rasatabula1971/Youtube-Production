@@ -180,7 +180,6 @@ def build_story_plan_request(
         if channel_voice is not None
         else load_active_profile_binding()
     )
-    voice_profile = channel_voice_binding["profile"]
     voice_is_active = bool(channel_voice_binding["apply_to_generation"])
     voice_instruction = (
         "Apply the approved Channel Voice Profile to framing choices, "
