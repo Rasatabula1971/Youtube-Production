@@ -91,7 +91,9 @@ class VoiceReviewTests(unittest.TestCase):
             requests = root / "requests"
             responses = root / "responses"
             approved = root / "approved"
+            model_runs = root / "model_runs"
             specs.mkdir()
+            model_runs.mkdir()
             planner_request = root / "concept-1.long_form.voice_request.json"
             planner_request.write_text(
                 json.dumps(
@@ -110,6 +112,15 @@ class VoiceReviewTests(unittest.TestCase):
             }
             source = specs / "concept-1.long_form.voice_performance_spec.json"
             source.write_text(json.dumps(payload), encoding="utf-8")
+            (model_runs / "concept-1.long_form.model_run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "VALIDATED",
+                        "request_sha256": voice_review.sha256_file(planner_request),
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             with (
                 patch.object(voice_review, "SPECS_DIR", specs),
@@ -117,6 +128,7 @@ class VoiceReviewTests(unittest.TestCase):
                 patch.object(voice_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(voice_review, "RESPONSES_DIR", responses),
                 patch.object(voice_review, "APPROVED_DIR", approved),
+                patch.object(voice_review, "MODEL_RUNS_DIR", model_runs),
                 patch.object(voice_review, "SUMMARY_FILE", root / "summary.json"),
             ):
                 voice_review.prepare(gate_config())
@@ -195,6 +207,61 @@ class VoiceReviewTests(unittest.TestCase):
             self.assertTrue(all(not path.exists() for path in stale_paths))
             self.assertFalse(summary.exists())
 
+    def test_prepare_rejects_spec_without_validated_model_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            specs = root / "specs"
+            planner_requests = root / "planner_requests"
+            model_runs = root / "model_runs"
+            review_requests = root / "review_requests"
+            responses = root / "responses"
+            approved = root / "approved"
+            for directory in (
+                specs,
+                planner_requests,
+                model_runs,
+                review_requests,
+                responses,
+                approved,
+            ):
+                directory.mkdir()
+
+            planner_request = (
+                planner_requests / "concept-1.long_form.voice_request.json"
+            )
+            planner_request.write_text(
+                json.dumps({"concept_id": "concept-1", "format": "long_form"}),
+                encoding="utf-8",
+            )
+            request_hash = voice_review.sha256_file(planner_request)
+            payload = spec()
+            payload["spec_provenance"] = {
+                "request_source": str(planner_request.resolve()),
+                "request_sha256": request_hash,
+            }
+            source = specs / "concept-1.long_form.voice_performance_spec.json"
+            source.write_text(json.dumps(payload), encoding="utf-8")
+            (model_runs / "concept-1.long_form.model_run.json").write_text(
+                json.dumps(
+                    {"status": "RUNNER_ERROR", "request_sha256": request_hash}
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(voice_review, "SPECS_DIR", specs),
+                patch.object(voice_review, "REQUESTS_DIR", planner_requests),
+                patch.object(voice_review, "MODEL_RUNS_DIR", model_runs),
+                patch.object(voice_review, "REVIEW_REQUESTS_DIR", review_requests),
+                patch.object(voice_review, "RESPONSES_DIR", responses),
+                patch.object(voice_review, "APPROVED_DIR", approved),
+                patch.object(voice_review, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                result = voice_review.prepare(gate_config())
+
+            self.assertEqual(result["prepared"], 0)
+            self.assertEqual(result["skipped_stale_specs"], [str(source.resolve())])
+
     def test_accept_creates_approved_spec_without_rendering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -215,6 +282,15 @@ class VoiceReviewTests(unittest.TestCase):
             }
             source = specs / "concept-1.long_form.voice_performance_spec.json"
             source.write_text(json.dumps(payload), encoding="utf-8")
+            (model_runs / "concept-1.long_form.model_run.json").write_text(
+                json.dumps(
+                    {
+                        "status": "VALIDATED",
+                        "request_sha256": voice_review.sha256_file(planner_request),
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             with (
                 patch.object(voice_review, "SPECS_DIR", specs),
@@ -222,6 +298,7 @@ class VoiceReviewTests(unittest.TestCase):
                 patch.object(voice_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(voice_review, "RESPONSES_DIR", responses),
                 patch.object(voice_review, "APPROVED_DIR", approved),
+                patch.object(voice_review, "MODEL_RUNS_DIR", model_runs),
                 patch.object(voice_review, "SUMMARY_FILE", root / "summary.json"),
             ):
                 prepared = voice_review.prepare(gate_config())
