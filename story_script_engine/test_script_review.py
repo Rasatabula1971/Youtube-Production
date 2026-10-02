@@ -306,7 +306,7 @@ class ScriptReviewTests(unittest.TestCase):
                 patch.object(script_review, "SECTION_STATE_DIR", states),
                 self.assertRaisesRegex(
                     ValueError,
-                    "ACCEPT blocked while section rework is pending",
+                    "ACCEPT blocked until prepared section review is complete",
                 ),
             ):
                 script_review.apply_payload(
@@ -334,10 +334,23 @@ class ScriptReviewTests(unittest.TestCase):
                 path.mkdir()
 
             draft_path = drafts / "c1.short.script_draft.json"
-            section_state.prepare_state(
+            prepared_state = section_state.prepare_state(
                 draft_path,
                 state_dir=states,
             )
+            state_path = section_state.state_path_for(
+                "c1",
+                "short",
+                states,
+            )
+            for target in prepared_state["targets"]:
+                section_state.apply_target_action(
+                    state_path,
+                    draft_path,
+                    target_id=target["target_id"],
+                    action="ACCEPT",
+                    reviewer="r",
+                )
             short_request = (
                 requests / "c1.short.script_review_request.json"
             )
@@ -371,10 +384,8 @@ class ScriptReviewTests(unittest.TestCase):
                             section_service.apply_action,
                             concept_id="c1",
                             fmt="short",
-                            action="REWORK",
+                            action="UNLOCK",
                             target_id="section:s1",
-                            reason="TOO_TECHNICAL",
-                            custom_instruction="Use plain language.",
                             reviewer="r",
                             **service_dirs,
                         ),
@@ -384,7 +395,7 @@ class ScriptReviewTests(unittest.TestCase):
                             future.result()
                         except ValueError as exc:
                             self.assertIn(
-                                "ACCEPT blocked while section rework is pending",
+                                "ACCEPT blocked until prepared section review is complete",
                                 str(exc),
                             )
 
@@ -404,8 +415,122 @@ class ScriptReviewTests(unittest.TestCase):
             )
             branch_response_exists = branch_response.exists()
 
-        self.assertEqual(target["decision"], "REWORK_REQUESTED")
+        self.assertEqual(target["decision"], "PENDING")
         self.assertFalse(branch_response_exists)
+
+
+    def test_prepared_section_review_blocks_accept_while_targets_are_pending(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            states.mkdir()
+            draft_path = drafts / "c1.short.script_draft.json"
+            section_state.prepare_state(
+                draft_path,
+                state_dir=states,
+            )
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_STATE_DIR", states),
+                self.assertRaisesRegex(
+                    ValueError,
+                    "ACCEPT blocked until prepared section review is complete",
+                ),
+            ):
+                script_review.apply_payload(
+                    requests / "c1.short.script_review_request.json",
+                    self.accept_payload("short"),
+                )
+
+        self.assertFalse(
+            (responses / "c1.short.script_review_response.json").exists()
+        )
+
+    def test_completed_section_review_is_bound_to_bundle_and_stale_state_revokes_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            states.mkdir()
+
+            state_paths = {}
+            for fmt in ("long_form", "short"):
+                draft_path = drafts / f"c1.{fmt}.script_draft.json"
+                prepared = section_state.prepare_state(
+                    draft_path,
+                    state_dir=states,
+                )
+                state_path = section_state.state_path_for(
+                    "c1",
+                    fmt,
+                    states,
+                )
+                state_paths[fmt] = state_path
+                for target in prepared["targets"]:
+                    section_state.apply_target_action(
+                        state_path,
+                        draft_path,
+                        target_id=target["target_id"],
+                        action="ACCEPT",
+                        reviewer="r",
+                    )
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_STATE_DIR", states),
+                patch.object(script_review, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                script_review.apply_payload(
+                    requests / "c1.long_form.script_review_request.json",
+                    self.accept_payload("long_form"),
+                )
+                result = script_review.apply_payload(
+                    requests / "c1.short.script_review_request.json",
+                    self.accept_payload("short"),
+                )
+                bundle_path = Path(result["approved_script"])
+                bundle = json.loads(
+                    bundle_path.read_text(encoding="utf-8")
+                )
+                current = script_review.snapshot()
+                bound_short_state_sha256 = script_review.sha256_file(
+                    state_paths["short"]
+                )
+
+                short_state = json.loads(
+                    state_paths["short"].read_text(encoding="utf-8")
+                )
+                section_state.apply_target_action(
+                    state_paths["short"],
+                    drafts / "c1.short.script_draft.json",
+                    target_id=short_state["targets"][0]["target_id"],
+                    action="ACCEPT",
+                    reviewer="r",
+                )
+                stale = script_review.snapshot()
+
+            short_provenance = bundle["approved_provenance"]["short"]
+
+        self.assertTrue(short_provenance["section_review_prepared"])
+        self.assertEqual(
+            short_provenance["section_state"],
+            str(state_paths["short"].resolve()),
+        )
+        self.assertEqual(
+            short_provenance["section_state_sha256"],
+            bound_short_state_sha256,
+        )
+        self.assertGreater(short_provenance["section_state_version"], 0)
+        self.assertEqual(short_provenance["section_target_count"], 3)
+        self.assertIn("c1", current["production_ready_concept_ids"])
+        self.assertNotIn("c1", stale["production_ready_concept_ids"])
+        self.assertTrue(bundle_path.exists())
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
