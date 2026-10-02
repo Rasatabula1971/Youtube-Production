@@ -49,7 +49,7 @@ RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_script_section_rework_outputs"
 
 ALTERNATIVE_IDS = ["A", "B", "C"]
 _NUMERIC_TOKEN_RE = re.compile(
-    r"(?<![A-Za-z0-9_])[-+]?\\d+(?:,\\d{3})*(?:\\.\\d+)?%?"
+    r"(?<![A-Za-z0-9_])[-+]?\d+(?:,\d{3})*(?:\.\d+)?%?"
 )
 
 
