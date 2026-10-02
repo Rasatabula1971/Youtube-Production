@@ -40,6 +40,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "title_direction_prepare",
     "title_direction_generate",
     "title_direction_gate_prepare",
+    "packaging_brief_prepare",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
