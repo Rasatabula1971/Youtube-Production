@@ -94,7 +94,19 @@ def run_until_human_gate() -> dict[str, Any]:
     for _ in range(MAX_STEPS_PER_RUN):
         readiness = control.action_readiness()
         guidance = control.workflow_guidance(readiness)
-        if guidance.get("state") == "HUMAN_NARRATION_PREVIEW_GATE":
+        preview_machine_pending = any(
+            readiness.get(action_id, {}).get("enabled")
+            for action_id in (
+                "pre_render_engagement",
+                "narration_preview_prepare",
+                "prototype_sound_prepare",
+                "narration_preview_render",
+            )
+        )
+        if (
+            guidance.get("state") == "HUMAN_NARRATION_PREVIEW_GATE"
+            and not preview_machine_pending
+        ):
             return {
                 "status": "STOPPED_AT_BOUNDARY",
                 "completed_actions": completed_actions,
