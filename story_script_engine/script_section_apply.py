@@ -9,8 +9,11 @@ recoverable transaction journal.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,6 +25,7 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json
 from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
 from script_section_state import (
+    SECTION_STATE_ACTION_LOCK,
     assert_state_matches_draft,
     build_targets,
     validate_state,
@@ -49,6 +53,113 @@ ALLOWED_SELECTIONS = {"ORIGINAL", "A", "B", "C"}
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=path.name + ".",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    return _sha256_bytes(str(value).encode("utf-8"))
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    path = path.resolve()
+    root = root.resolve()
+    return path == root or root in path.parents
+
+
+def _snapshot_file(
+    destination: Path,
+    *,
+    backup_dir: Path,
+    key: str,
+) -> dict[str, Any]:
+    destination = destination.resolve()
+    backup_dir = backup_dir.resolve()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    if destination.exists() and not destination.is_file():
+        raise ValueError(f"Transaction destination is not a file: {destination}")
+
+    existed = destination.is_file()
+    snapshot: dict[str, Any] = {
+        "destination": str(destination),
+        "existed": existed,
+        "backup": None,
+        "sha256_before": None,
+        "backup_sha256": None,
+    }
+    if existed:
+        payload = destination.read_bytes()
+        backup = backup_dir / f"{safe_slug(key)}.bin"
+        _atomic_write_bytes(backup, payload)
+        digest = _sha256_bytes(payload)
+        snapshot["backup"] = str(backup.resolve())
+        snapshot["sha256_before"] = digest
+        snapshot["backup_sha256"] = digest
+    return snapshot
+
+
+def _restore_file_snapshot(
+    snapshot: dict[str, Any],
+    *,
+    allowed_backup_root: Path,
+) -> None:
+    if not isinstance(snapshot, dict):
+        raise ValueError("Transaction file snapshot must be an object")
+    destination_text = str(snapshot.get("destination") or "").strip()
+    if not destination_text:
+        raise ValueError("Transaction file snapshot is missing destination")
+    destination = Path(destination_text).resolve()
+    existed = snapshot.get("existed")
+    if not isinstance(existed, bool):
+        raise ValueError("Transaction file snapshot existed must be boolean")
+
+    if not existed:
+        if destination.exists():
+            if not destination.is_file():
+                raise ValueError(
+                    f"Cannot roll back non-file destination: {destination}"
+                )
+            destination.unlink()
+        return
+
+    backup_text = str(snapshot.get("backup") or "").strip()
+    expected_hash = str(snapshot.get("backup_sha256") or "").strip()
+    if not backup_text or not expected_hash:
+        raise ValueError("Transaction file snapshot is missing backup metadata")
+    backup = Path(backup_text).resolve()
+    if not _is_within(backup, allowed_backup_root):
+        raise ValueError("Transaction backup path escapes backup root")
+    if not backup.is_file():
+        raise ValueError(f"Cannot recover transaction: missing backup {backup}")
+    if sha256_file(backup) != expected_hash:
+        raise ValueError("Transaction backup hash changed")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_bytes(destination, backup.read_bytes())
+    expected_before = str(snapshot.get("sha256_before") or "").strip()
+    if expected_before and sha256_file(destination) != expected_before:
+        raise ValueError("Transaction recovery did not restore exact file bytes")
 
 
 def _branch_key(concept_id: str, fmt: str) -> str:
