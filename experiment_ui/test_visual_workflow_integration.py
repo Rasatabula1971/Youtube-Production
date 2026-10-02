@@ -227,10 +227,11 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 3
+                search_index : search_index + 4
             ],
             [
                 "visual_search_acquire",
+                "visual_asset_acquire",
                 "visual_rough_cut_prepare",
                 "visual_gap_prepare",
             ],
