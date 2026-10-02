@@ -110,178 +110,119 @@ gate then writes one provenance-bound approved script bundle containing the
 separate immutable narrations. Identical branch scripts, or a Short that is only
 a prefix/truncation of long-form narration, fail closed.
 
-## Selective section rework — Slice 1 contract
+## Selective section rework
 
-Selective rework is being added incrementally. Slice 1 adds only deterministic
-review state; it makes no model call and does not change Human Script Gate
-behavior yet.
+Selective script review uses one canonical runtime path:
 
-Each exact script draft can be mapped to stable review targets:
+```text
+script_section_state.py
+        ↓
+script_section_service.py
+        ↓
+script_section_rework_runner.py
+        ↓
+script_section_apply.py
+```
 
-- `opening_hook`;
-- one `section:<section_id>` target for every generated script section; and
-- `closing`.
+The browser reaches that path through `/api/script-section-review`. The
+section-review system is separate from the whole-branch Human Script Gate, but
+both protect the same Script Draft and approval bundle.
 
-The state is SHA-256 bound to the exact draft. Duplicate or missing section IDs
-fail closed. Slice 1 records, but does not yet execute, the future review
-semantics: each target starts as `PENDING`, `locked=false`, `editable=true`,
-with target revision `0`, script revision `0`, state revision `0`, and no
-rework reason/note.
+### Slice 1 — canonical section state
 
-The contract reserves `ACCEPTED` and `REWORK_REQUESTED` review states plus the
-bounded rework-reason vocabulary needed by later slices. There are deliberately
-no section-level action handlers, model calls, alternatives, replacements, or UI
-controls in Slice 1.
+`script_section_state.py` creates a state artifact under
+`script_section_states/` for one exact format-specific Script Draft. Stable
+target IDs are:
 
-If the source draft changes after section state is created, its draft hash no
-longer matches the contract. Later action slices must fail closed rather than
-silently applying stale state.
+- `hook:opening`;
+- one `section:<section_id>` target for each generated section; and
+- `closing:closing`.
 
-### Slice 2 — backend section actions
+Every target carries a deterministic `target_sha256`, ordinal, decision,
+locked flag and optional rework metadata. The state carries the exact source
+draft path/SHA-256, `state_version`, timestamps and an audit history.
 
-Slice 2 persists the section-review state independently under
-`script_section_review_states/` and adds backend-only target transitions. It
-still makes no model call and changes no narration.
+Missing or duplicate section IDs fail closed. Target IDs that collide after
+filesystem normalization also fail closed. `assert_state_matches_draft()`
+rebuilds the target set from the current Script Draft and rejects stale or
+tampered state.
 
-Supported actions are:
+Slice 1 does not change narration.
 
-- `ACCEPT` — marks the target `ACCEPTED`, locks it and makes it non-editable;
-- `LOCK` — freezes a target without approving it;
-- `UNLOCK` — reopens a locked target; unlocking an accepted target returns it
-  to `PENDING`;
-- `REWORK` — marks an unlocked target `REWORK_REQUESTED` with one bounded
-  reason and an optional human note; and
-- `CANCEL_REWORK` — clears a pending rework request back to `PENDING`.
+### Slice 2 — section decisions
 
-Every real transition increments the target revision and state revision.
-Repeated equivalent actions are idempotent and do not inflate revisions.
-`script_revision` remains unchanged because Slice 2 never changes script text.
+The canonical section actions are:
 
-A locked target cannot enter rework until explicitly unlocked.
-`CUSTOM_INSTRUCTION` requires a non-empty human note. Unknown targets,
-unknown reasons and stale draft hashes fail closed.
+- `ACCEPT` — marks the target `ACCEPTED` and locks it;
+- `LOCK` — freezes the current target without accepting it;
+- `UNLOCK` — unlocks it and returns an accepted target to `PENDING`;
+- `REWORK` — marks an unlocked target `REWORK_REQUESTED`; and
+- `CANCEL_REWORK` — returns a rework target to `PENDING`.
 
-Re-running Script Gate preparation preserves current section state when the
-bound draft hash is unchanged. A new draft hash resets to a new Slice 1 state
-rather than applying old decisions to new words.
+Rework accepts a bounded reason or custom instruction. The canonical custom
+reason token is `CUSTOM`. A locked target cannot be reworked until it is
+unlocked. Every state action is recorded in history and advances
+`state_version`; script text is not changed by these actions.
 
-If a target is marked for rework, or an accepted target is unlocked, any
-existing branch-level acceptance response and approved multi-format bundle are
-invalidated. Whole-branch `ACCEPT` is blocked while any target is
-`REWORK_REQUESTED`.
+`script_section_service.py` resolves all filesystem paths from logical
+concept/format/target identity. The browser does not supply arbitrary draft or
+state paths. Rework or unlock invalidates stale branch-level approval artifacts.
 
-### Slice 3 — selective rework request
+Section-state mutations and whole-branch Script Gate decisions use the same
+in-process lock. Whole-branch `ACCEPT` also checks the canonical state and
+fails while any target is `REWORK_REQUESTED`.
 
-A target must already be `REWORK_REQUESTED` before Slice 3 can prepare a
-request. Slice 3 still makes no model call and never mutates narration.
+### Slice 3 — bounded rework request preparation
 
-The request is deliberately bounded. It contains:
+Slice 3 adds a distinct `PREPARE_REWORK_REQUEST` service action. It prepares
+the request only:
 
-- the exact selected target text;
-- immutable target metadata such as section ID, source Story beat IDs, purpose,
-  psychology mechanism, reward type, claim IDs, or opening-hook mechanism;
-- only the immediately previous and next targets as read-only flow context;
-- the human rework reason and note recorded in Slice 2;
+- no FAIR/model call;
+- no A/B/C generation;
+- no Script Draft mutation.
+
+The selected target must already be `REWORK_REQUESTED`. The request contains:
+
+- the exact selected target text and immutable metadata;
+- only the immediately previous and next targets as read-only context;
+- locked target IDs;
+- the human rework reason/custom instruction;
 - only accepted claims already mapped to the selected target;
-- the relevant Story Plan beat(s), plus story question/opening/payoff/closing
-  intent needed to preserve the wider promise;
+- only Story Plan beats referenced by that target, plus shared story question,
+  opening intent, payoff intent and closing intent;
 - the branch psychology contract/profile;
-- the exact Channel Voice binding already carried by the Script Draft; and
+- the exact bound Channel Voice;
 - approved package constraints.
 
-The packet is bound to the exact Script Draft, persisted section-state artifact,
-Human Script Gate request and original Script Request. Provenance also records
-the section-state revision, script revision, target revision and target content
-hash.
+Provenance binds the request to the exact Script Draft, canonical section-state
+artifact, original Script Request and Human Script Gate review request. It also
+records `state_version` and the selected `target_sha256`.
 
-A prepared request is considered current only while all of those artifacts and
-revision/hash values still match. Validation rebuilds the expected packet from
-current trusted artifacts and rejects edited/tampered packets, changed section
-state, changed Script Requests or changed drafts.
+`assert_request_current()` verifies those source hashes and rebuilds the
+expected request from trusted current artifacts. Manual request edits, changed
+draft/state/review/script requests, a cancelled rework, a newly locked target or
+a changed target hash all fail closed.
 
-Request preparation and validation share the same in-process lock used by
-section actions, preventing a threaded state change from racing a validation
-that a later generator will rely on.
+Request preparation and current-state validation share the canonical state
+lock. If state changes while a FAIR call is in flight, the runner checks the
+request again before accepting the returned alternatives and writes no
+alternatives artifact from the stale result.
 
-Slice 3 can be invoked from the Script Gate CLI with
-`--mode prepare-section-rework` and checked with
-`--mode validate-section-rework`.
+### Existing downstream selective-rework capabilities
 
-### Planned Slice 4 — bounded alternatives
+The repository already contains later selective-rework capabilities beyond
+Slice 3:
 
-FAIR will return exactly three candidates: `A`, `B`, and `C`. The response
-may contain replacement wording and a short change summary only; it cannot alter
-section IDs, source Story beats, claim IDs, psychology labels, reward labels or
-locked neighbors.
+- `GENERATE_ALTERNATIVES` uses the bounded request to ask FAIR for exactly
+  A/B/C and does not mutate the draft;
+- human selection can keep Original or apply A/B/C;
+- selected replacement changes only the chosen target and runs the normal full
+  Script validator;
+- prior drafts are versioned and destructive updates use recoverable
+  transaction backups;
+- manual target editing uses the same target-isolation and validation boundary;
+- the local UI/API exposes logical section-review actions without accepting
+  user-supplied artifact paths.
 
-Alternative generation remains non-destructive. The output artifact keeps the
-original text and records `selection: null`.
-
-### Planned Slice 5 — human selection and safe replacement
-
-Generated alternatives still cannot edit a script by themselves. A human must
-explicitly choose `ORIGINAL`, `A`, `B`, or `C`.
-
-Choosing `ORIGINAL` keeps the draft bytes unchanged and marks that target
-accepted/locked. Choosing A/B/C changes only the selected text field. All other
-targets, including every locked target, must retain the same deterministic
-target hash. The selected replacement is then run through the normal full-script
-validator before it can be written.
-
-Before a replacement, the prior draft is saved under `script_versions/`.
-The section state is rebased to the new draft hash, the selected target becomes
-accepted/locked, and existing Human Script Gate responses/approved bundles are
-invalidated so stale approval cannot flow downstream.
-
-Selection uses a recoverable transaction journal with backups of the draft,
-section state and alternatives artifact. A failed/interrupted operation rolls
-those core artifacts back instead of leaving a partially applied replacement.
-
-### Planned Slice 6A — local UI service/API boundary
-
-The local control UI reaches selective rework through
-`/api/script-section-review`. Browser requests provide only logical
-`concept_id`, `format`, `target_id`, action/reason, and selection values.
-They never provide draft, state, request, alternatives, version or transaction
-filesystem paths.
-
-The service resolves those paths from project-owned output directories and
-verifies the draft identity after filesystem normalization. Target IDs that
-would collide after filename normalization are rejected when section state is
-created.
-
-The endpoint supports preparing section state, target accept/lock/unlock/rework,
-bounded alternative generation, and explicit alternative selection. Rework or
-unlocking an accepted target invalidates any stale branch response and approved
-script bundle immediately.
-
-### Planned Slice 6B — Human Script Gate controls
-
-The Human Script Gate exposes selective review as one compact target selector
-rather than repeating controls under every paragraph. The reviewer can choose
-the opening hook, any generated section or the closing; accept/lock it; unlock
-it; request bounded rework; generate A/B/C; or explicitly keep Original/use
-A/B/C. Whole-script Rework remains a separate branch-level action.
-
-### Planned Slice 7 — whole-script interaction and manual target edit
-
-A human may also replace the wording of one **unlocked** target directly. Manual
-editing never bypasses the selective-rework safeguards:
-
-- the replacement must be non-empty and materially change the target;
-- locked targets must be explicitly unlocked first;
-- only the chosen target text field may change;
-- all non-target hashes must remain identical;
-- the complete revised script must pass the normal deterministic Script
-  validator;
-- the previous draft is saved under `script_versions/`;
-- the edited target becomes accepted and locked;
-- stale Human Script Gate approval/bundles are invalidated and the review
-  request is rebound to the revised draft; and
-- draft/state writes use the same recoverable transaction/rollback mechanism as
-  generated-alternative selection.
-
-Any previously generated alternatives for the edited target become stale by
-target hash/state version and are hidden; cleanup of those stale files is
-best-effort and cannot turn an already-committed manual edit into an apparent
-failure.
+Those downstream capabilities remain separate from Slice 3 request preparation,
+so the request can be inspected or validated before any model call.
