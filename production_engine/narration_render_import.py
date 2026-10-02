@@ -290,70 +290,89 @@ def register(
 
     key = artifact_key(concept_id, fmt)
     branch_dir = MANAGED_AUDIO_DIR / key
-    branch_dir.mkdir(parents=True, exist_ok=True)
+    staging_dir = MANAGED_AUDIO_DIR / f".{key}.staging"
+    backup_dir = MANAGED_AUDIO_DIR / f".{key}.backup"
+    for transient in (staging_dir, backup_dir):
+        if transient.exists():
+            shutil.rmtree(transient)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
     max_attempts = int(request.get("max_attempts_per_segment") or 0)
     registered_segments: list[dict[str, Any]] = []
-    keep: set[Path] = set()
-
-    for index, (supplied, planned) in enumerate(
-        zip(segments, expected, strict=True)
-    ):
-        segment_id = str(supplied.get("segment_id") or "")
-        attempt = int(supplied.get("attempt") or 0)
-        if attempt < 1 or attempt > max_attempts:
-            raise ValueError(
-                f"{segment_id} attempt must be between 1 and {max_attempts}"
+    try:
+        for index, (supplied, planned) in enumerate(
+            zip(segments, expected, strict=True)
+        ):
+            segment_id = str(supplied.get("segment_id") or "")
+            attempt = int(supplied.get("attempt") or 0)
+            if attempt < 1 or attempt > max_attempts:
+                raise ValueError(
+                    f"{segment_id} attempt must be between 1 and {max_attempts}"
+                )
+            source_value = str(supplied.get("audio_file") or "").strip()
+            if not source_value:
+                raise ValueError(f"{segment_id} audio_file is required")
+            source = Path(source_value).expanduser().resolve()
+            suffix = source.suffix.lower()
+            if suffix not in ALLOWED_AUDIO_SUFFIXES:
+                raise ValueError(
+                    f"{segment_id} audio type {suffix or '<none>'} is not supported"
+                )
+            filename = f"{index:03d}_{safe_slug(segment_id)}{suffix}"
+            staged = staging_dir / filename
+            _copy_audio(source, staged)
+            registered_segments.append(
+                {
+                    "segment_id": segment_id,
+                    "attempt": attempt,
+                    "audio_file": str((branch_dir / filename).resolve()),
+                    "audio_sha256": sha256_file(staged),
+                    "expected_duration_seconds": planned.get(
+                        "expected_duration_seconds"
+                    ),
+                }
             )
-        source_value = str(supplied.get("audio_file") or "").strip()
-        if not source_value:
-            raise ValueError(f"{segment_id} audio_file is required")
-        source = Path(source_value).expanduser().resolve()
-        suffix = source.suffix.lower()
-        if suffix not in ALLOWED_AUDIO_SUFFIXES:
-            raise ValueError(
-                f"{segment_id} audio type {suffix or '<none>'} is not supported"
-            )
-        destination = (
-            branch_dir
-            / f"{index:03d}_{safe_slug(segment_id)}{suffix}"
-        )
-        _copy_audio(source, destination)
-        keep.add(destination.resolve())
-        registered_segments.append(
-            {
-                "segment_id": segment_id,
-                "attempt": attempt,
-                "audio_file": str(destination.resolve()),
-                "audio_sha256": sha256_file(destination),
-                "expected_duration_seconds": planned.get(
-                    "expected_duration_seconds"
-                ),
-            }
+
+        result = {
+            "artifact": "narration_render_result",
+            "concept_id": concept_id,
+            "format": fmt,
+            "provider": request.get("provider"),
+            "provider_job_id": provider_job_id,
+            "actual_cost_usd": actual_cost,
+            "approved_cost_ceiling_usd": ceiling,
+            "currency": estimate.get("currency"),
+            "render_request_sha256": sha256_file(request_path),
+            "spend_approval_sha256": sha256_file(spend_path),
+            "cost_estimate_sha256": sha256_file(estimate_path),
+            "segments": registered_segments,
+            "registered_at": datetime.now(timezone.utc).isoformat(),
+            "provider_called_by_this_module": False,
+        }
+        RENDER_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        result_path = (
+            RENDER_RESULTS_DIR / f"{key}.narration_render_result.json"
         )
 
-    for stale in branch_dir.iterdir():
-        if stale.is_file() and stale.resolve() not in keep:
-            stale.unlink()
+        had_previous = branch_dir.exists()
+        if had_previous:
+            branch_dir.rename(backup_dir)
+        try:
+            staging_dir.rename(branch_dir)
+            atomic_write_json(result_path, result)
+        except Exception:
+            if branch_dir.exists():
+                shutil.rmtree(branch_dir)
+            if backup_dir.exists():
+                backup_dir.rename(branch_dir)
+            raise
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
+    except Exception:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir)
+        raise
 
-    result = {
-        "artifact": "narration_render_result",
-        "concept_id": concept_id,
-        "format": fmt,
-        "provider": request.get("provider"),
-        "provider_job_id": provider_job_id,
-        "actual_cost_usd": actual_cost,
-        "approved_cost_ceiling_usd": ceiling,
-        "currency": estimate.get("currency"),
-        "render_request_sha256": sha256_file(request_path),
-        "spend_approval_sha256": sha256_file(spend_path),
-        "cost_estimate_sha256": sha256_file(estimate_path),
-        "segments": registered_segments,
-        "registered_at": datetime.now(timezone.utc).isoformat(),
-        "provider_called_by_this_module": False,
-    }
-    RENDER_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    result_path = RENDER_RESULTS_DIR / f"{key}.narration_render_result.json"
-    atomic_write_json(result_path, result)
     _invalidate_qc(key)
 
     current = current_result(concept_id, fmt)
