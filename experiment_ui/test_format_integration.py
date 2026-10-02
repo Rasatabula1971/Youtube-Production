@@ -52,6 +52,18 @@ class FormatUiIntegrationTests(unittest.TestCase):
         self.assertIn("renderFormatReview", script)
         self.assertIn("/api/format-gate", script)
 
+
+    def test_script_accept_ui_announces_automatic_format_handoff(self):
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            'payload.automation_job.action_id === "auto_continue"',
+            script,
+        )
+        self.assertIn(
+            "Script Gate complete. Format planning started automatically.",
+            script,
+        )
+
     def test_pending_format_gate_is_a_human_boundary(self):
         with (
             patch.object(
