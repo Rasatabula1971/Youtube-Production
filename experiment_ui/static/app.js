@@ -2977,12 +2977,19 @@ async function submitFormatDecision(decision) {
     const nextPending = pendingFormatIndex(payload.plans || []);
     if (nextPending >= 0) formatCursor = nextPending;
     renderFormatReview(payload, true);
+    const automaticPerformanceStarted = Boolean(
+      decision === "ACCEPT" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
     showToast(
-      decision === "ACCEPT"
-        ? "Format plan accepted for production."
-        : decision === "REWORK"
-          ? "Format plan sent for rework."
-          : "Format plan rejected.",
+      automaticPerformanceStarted
+        ? "Format Gate complete. Voice Performance planning started automatically."
+        : decision === "ACCEPT"
+          ? "Format plan accepted for production."
+          : decision === "REWORK"
+            ? "Format plan sent for rework."
+            : "Format plan rejected.",
       false
     );
     await loadStatus();
