@@ -23,6 +23,7 @@ from voice_performance import (
     SPECS_DIR,
     OUTPUT_DIR,
     REQUESTS_DIR,
+    MODEL_RUNS_DIR,
     load_json,
     safe_slug,
     sha256_file,
@@ -124,6 +125,60 @@ def build_review_request(
     }
 
 
+def _current_spec_request_path(spec: dict[str, Any]) -> Path | None:
+    concept_id = str(spec.get("concept_id") or "").strip()
+    fmt = str(spec.get("format") or "").strip()
+    provenance = spec.get("spec_provenance", {})
+    if not concept_id or not fmt or not isinstance(provenance, dict):
+        return None
+
+    expected = (
+        REQUESTS_DIR / f"{artifact_key(concept_id, fmt)}.voice_request.json"
+    ).resolve()
+    recorded = Path(str(provenance.get("request_source") or "")).resolve()
+    expected_hash = str(provenance.get("request_sha256") or "").strip()
+    if (
+        recorded != expected
+        or not expected.is_file()
+        or not expected_hash
+        or sha256_file(expected) != expected_hash
+    ):
+        return None
+    request = load_json(expected)
+    if (
+        str(request.get("concept_id") or "").strip() != concept_id
+        or str(request.get("format") or "").strip() != fmt
+    ):
+        return None
+
+    report_path = MODEL_RUNS_DIR / f"{artifact_key(concept_id, fmt)}.model_run.json"
+    report = _load_dict_or_none(report_path)
+    if (
+        not isinstance(report, dict)
+        or report.get("status") != "VALIDATED"
+        or report.get("request_sha256") != expected_hash
+    ):
+        return None
+    return expected
+
+
+def _remove_if_exists(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError(f"Expected Voice Performance Gate file: {path}")
+    path.unlink()
+    return True
+
+
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_gate_config()
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -133,13 +188,46 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
         else []
     )
     prepared: list[dict[str, Any]] = []
-    current: set[Path] = set()
+    skipped_stale: list[str] = []
+    current_keys: set[str] = set()
+
     for path in paths:
-        request = build_review_request(load_json(path), path, config)
+        spec = load_json(path)
+        if _current_spec_request_path(spec) is None:
+            skipped_stale.append(str(path.resolve()))
+            continue
+
+        request = build_review_request(spec, path, config)
         key = artifact_key(request["concept_id"], request["format"])
+        current_keys.add(key)
         dest = REVIEW_REQUESTS_DIR / f"{key}.voice_review_request.json"
+        current_spec_hash = sha256_file(path)
+
+        response = response_path(request["concept_id"], request["format"])
+        if response.is_file():
+            saved = _load_dict_or_none(response)
+            if (
+                not isinstance(saved, dict)
+                or saved.get("voice_performance_spec_sha256") != current_spec_hash
+            ):
+                response.unlink()
+
+        approved_path = APPROVED_DIR / f"{key}.approved_voice_spec.json"
+        if approved_path.is_file():
+            approved = _load_dict_or_none(approved_path)
+            provenance = (
+                approved.get("approved_provenance", {})
+                if isinstance(approved, dict)
+                else {}
+            )
+            if (
+                not isinstance(provenance, dict)
+                or provenance.get("voice_performance_spec_sha256")
+                != current_spec_hash
+            ):
+                approved_path.unlink()
+
         atomic_write_json(dest, request)
-        current.add(dest.resolve())
         prepared.append(
             {
                 "concept_id": request["concept_id"],
@@ -147,9 +235,23 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
                 "request": str(dest),
             }
         )
-    for stale in REVIEW_REQUESTS_DIR.glob("*.voice_review_request.json"):
-        if stale.resolve() not in current:
-            stale.unlink()
+
+    removed_stale_gate_artifacts: list[str] = []
+    for directory, suffix in (
+        (REVIEW_REQUESTS_DIR, ".voice_review_request.json"),
+        (RESPONSES_DIR, ".voice_review_response.json"),
+        (APPROVED_DIR, ".approved_voice_spec.json"),
+    ):
+        if not directory.exists():
+            continue
+        for path in directory.glob(f"*{suffix}"):
+            key = path.name[: -len(suffix)]
+            if key not in current_keys and _remove_if_exists(path):
+                removed_stale_gate_artifacts.append(str(path.resolve()))
+
+    if removed_stale_gate_artifacts or skipped_stale:
+        _remove_if_exists(SUMMARY_FILE)
+
     return {
         "status": (
             "VOICE_PERFORMANCE_GATE_READY"
@@ -158,6 +260,8 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
         ),
         "prepared": len(prepared),
         "requests": prepared,
+        "skipped_stale_specs": skipped_stale,
+        "removed_stale_gate_artifacts": removed_stale_gate_artifacts,
     }
 
 

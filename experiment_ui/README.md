@@ -406,3 +406,35 @@ Slice 8 also makes the handoff self-cleaning. When the approved Script input
 changes, Format preparation invalidates downstream artifacts derived from the
 old request rather than allowing stale plans or human decisions to survive into
 the next run.
+
+## Slice 9 — automatic Format → Voice Performance continuation
+
+After the final current Format Plan is accepted, the server reevaluates machine
+readiness and starts the existing `auto_continue` job automatically. The
+operator does not press another run button.
+
+The deterministic post-Format sequence is:
+
+```text
+Human Format Gate completes
+        ↓
+voice_prepare
+        ↓
+voice_generate
+        ↓
+voice_gate_prepare
+        ↓
+STOP: HUMAN_PERFORMANCE_GATE
+```
+
+The browser explicitly reports **“Format Gate complete. Voice Performance
+planning started automatically.”** when the final Format decision launches that
+job.
+
+The automation runner still stops at the Human Performance Gate. It does not
+approve the performance plan, render narration, or authorize paid narration
+without the human decision.
+
+Slice 9 also makes this handoff self-cleaning. A changed Voice request
+invalidates downstream Voice model/spec/gate artifacts, while valid unchanged
+provenance remains reusable.
