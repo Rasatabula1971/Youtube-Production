@@ -4,7 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from production_engine import visual_acquisition
 from production_engine.visual_acquisition import (
     build_manifest,
     candidate_state,
@@ -114,6 +116,65 @@ class VisualAcquisitionTests(unittest.TestCase):
         self.assertTrue(
             manifest["manifest_provenance"]["approved_format_plan_sha256"]
         )
+
+    def test_prepare_binds_manifest_to_current_narration_timing(self) -> None:
+        plan = approved_plan()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            approved = root / "approved"
+            timings = root / "timings"
+            manifests = root / "manifests"
+            approved.mkdir()
+            timings.mkdir()
+            manifests.mkdir()
+            plan_path = write_plan(approved, plan)
+            timing_path = (
+                timings
+                / "concept-1.long_form.narration_timing_map.json"
+            )
+            timing_path.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "concept-1",
+                        "format": "long_form",
+                        "status": "READY_FOR_ROUGH_CUT",
+                        "segments": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch.object(visual_acquisition, "TIMING_DIR", timings),
+                patch.object(visual_acquisition, "MANIFESTS_DIR", manifests),
+                patch.object(
+                    visual_acquisition,
+                    "SUMMARY_FILE",
+                    root / "summary.json",
+                ),
+                patch.object(visual_acquisition, "OUTPUT_DIR", root),
+            ):
+                result = visual_acquisition.run_prepare(
+                    approved,
+                    self.config,
+                )
+
+            self.assertEqual(result["status"], "VISUAL_MANIFESTS_READY")
+            manifest_path = (
+                manifests
+                / "concept-1.long_form.visual_manifest.json"
+            )
+            manifest = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            provenance = manifest["manifest_provenance"]
+            self.assertEqual(
+                provenance["narration_timing_map_sha256"],
+                visual_acquisition.sha256_file(timing_path),
+            )
+            self.assertEqual(
+                provenance["narration_timing_map"],
+                str(timing_path.resolve()),
+            )
 
     def test_verified_free_asset_beats_paid_ai(self) -> None:
         requirement = {
