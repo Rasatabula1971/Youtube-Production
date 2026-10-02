@@ -1428,3 +1428,51 @@ artifact path tampering from redirecting selection to a different response.
 Slice 4 itself never mutates the Script Draft or section state. Human application
 of Original/A/B/C remains a separate downstream action.
 
+
+## D-075 — Slice 5 selection is explicit, serialized and fully recoverable
+
+**Status:** Accepted
+
+The system may apply a selective Script Rework only after an explicit human
+choice of `ORIGINAL`, `A`, `B` or `C`. No automatic stage, model result,
+cache hit or retry may choose a replacement.
+
+Selection is serialized with the canonical section-state lock. Concurrent
+choices for the same target cannot both commit, and selection cannot race a
+simultaneous section-state mutation or manual edit inside the same process.
+
+Before mutation, Slice 5 revalidates the exact Slice 4 alternatives artifact,
+its deterministic model-response provenance and the current Slice 3 request.
+The target must still be `REWORK_REQUESTED` and unlocked.
+
+A/B/C replacement must change exactly one target. Non-target hashes are checked
+both before writing and again from the persisted draft. The full Script
+validator must pass before the replacement is accepted. The selected target is
+then rebased as `ACCEPTED` and locked.
+
+Previous script versions are exact byte copies of the parent draft, not JSON
+re-serializations. Their SHA-256 must equal the recorded
+`parent_draft_sha256`. Human revision provenance also records the parent
+section-state hash, selected replacement hash, selected claim IDs, exact rework
+request/model-response hashes and alternatives artifact hash before selection.
+
+Choosing `ORIGINAL` must leave the Script Draft hash unchanged and does not
+increment the human script revision. It only resolves the rework decision by
+accepting/locking the target and recording the human choice.
+
+The Slice 5 transaction snapshots every file selection can modify, including
+Script Draft, section state, alternatives artifact, Human Script Gate request
+and response, approved bundle, and any previous-version destination. Each
+existing file is backed up as exact bytes with a SHA-256; previously absent
+files are recorded as absent.
+
+Rollback validates every required backup before restoring any destination. A
+missing or changed backup fails closed without beginning a partial recovery.
+Rollback restores exact previous bytes and removes files created only by the
+failed transaction.
+
+Recovery of `PREPARED` or `IN_PROGRESS` transactions occurs before the
+one-time-selection check. This is required because an interrupted process may
+have written a temporary selection marker before crashing; that marker must not
+prevent recovery on the next human action.
+

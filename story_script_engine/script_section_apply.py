@@ -1,16 +1,20 @@
 """Human selection and safe application of script rework alternatives.
 
-This downstream selective-rework step is destructive only after explicit human
-selection. It changes one chosen target, verifies the exact Slice 4 alternatives
-artifact/model response, and protects the operation with backups plus a
-recoverable transaction journal.
+Slice 5 is destructive only after explicit human selection. It changes one
+chosen target, verifies the exact Slice 4 alternatives artifact/model response,
+serializes the mutation with canonical section state, preserves exact parent
+versions, and protects every touched file with recoverable transaction
+snapshots.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,6 +26,7 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json
 from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
 from script_section_state import (
+    SECTION_STATE_ACTION_LOCK,
     assert_state_matches_draft,
     build_targets,
     validate_state,
@@ -49,6 +54,127 @@ ALLOWED_SELECTIONS = {"ORIGINAL", "A", "B", "C"}
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=path.name + ".",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    return _sha256_bytes(str(value).encode("utf-8"))
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    path = path.resolve()
+    root = root.resolve()
+    return path == root or root in path.parents
+
+
+def _snapshot_file(
+    destination: Path,
+    *,
+    backup_dir: Path,
+    key: str,
+) -> dict[str, Any]:
+    destination = destination.resolve()
+    backup_dir = backup_dir.resolve()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    if destination.exists() and not destination.is_file():
+        raise ValueError(f"Transaction destination is not a file: {destination}")
+
+    existed = destination.is_file()
+    snapshot: dict[str, Any] = {
+        "destination": str(destination),
+        "existed": existed,
+        "backup": None,
+        "sha256_before": None,
+        "backup_sha256": None,
+    }
+    if existed:
+        payload = destination.read_bytes()
+        backup = backup_dir / f"{safe_slug(key)}.bin"
+        _atomic_write_bytes(backup, payload)
+        digest = _sha256_bytes(payload)
+        snapshot["backup"] = str(backup.resolve())
+        snapshot["sha256_before"] = digest
+        snapshot["backup_sha256"] = digest
+    return snapshot
+
+
+def _validated_snapshot_paths(
+    snapshot: dict[str, Any],
+    *,
+    allowed_backup_root: Path,
+) -> tuple[Path, Path | None]:
+    if not isinstance(snapshot, dict):
+        raise ValueError("Transaction file snapshot must be an object")
+    destination_text = str(snapshot.get("destination") or "").strip()
+    if not destination_text:
+        raise ValueError("Transaction file snapshot is missing destination")
+    destination = Path(destination_text).resolve()
+    existed = snapshot.get("existed")
+    if not isinstance(existed, bool):
+        raise ValueError("Transaction file snapshot existed must be boolean")
+
+    if not existed:
+        if destination.exists() and not destination.is_file():
+            raise ValueError(
+                f"Cannot roll back non-file destination: {destination}"
+            )
+        return destination, None
+
+    backup_text = str(snapshot.get("backup") or "").strip()
+    expected_hash = str(snapshot.get("backup_sha256") or "").strip()
+    if not backup_text or not expected_hash:
+        raise ValueError("Transaction file snapshot is missing backup metadata")
+    backup = Path(backup_text).resolve()
+    if not _is_within(backup, allowed_backup_root):
+        raise ValueError("Transaction backup path escapes backup root")
+    if not backup.is_file():
+        raise ValueError(f"Cannot recover transaction: missing backup {backup}")
+    if sha256_file(backup) != expected_hash:
+        raise ValueError("Transaction backup hash changed")
+    return destination, backup
+
+
+def _restore_file_snapshot(
+    snapshot: dict[str, Any],
+    *,
+    allowed_backup_root: Path,
+) -> None:
+    destination, backup = _validated_snapshot_paths(
+        snapshot,
+        allowed_backup_root=allowed_backup_root,
+    )
+    if backup is None:
+        if destination.exists():
+            destination.unlink()
+        return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_bytes(destination, backup.read_bytes())
+    expected_before = str(snapshot.get("sha256_before") or "").strip()
+    if expected_before and sha256_file(destination) != expected_before:
+        raise ValueError("Transaction recovery did not restore exact file bytes")
 
 
 def _branch_key(concept_id: str, fmt: str) -> str:
@@ -85,22 +211,42 @@ def recover_prepared_transaction(transaction_path: Path) -> dict[str, Any]:
     if status not in {"PREPARED", "IN_PROGRESS"}:
         return transaction
 
-    backups = transaction.get("backups")
-    destinations = transaction.get("destinations")
-    if not isinstance(backups, dict) or not isinstance(destinations, dict):
-        raise ValueError("Script edit transaction is missing backup metadata")
-    if not backups or set(backups) != set(destinations):
-        raise ValueError("Script edit transaction backup metadata is inconsistent")
-
-    for key in sorted(destinations):
-        backup = Path(str(backups.get(key) or "")).resolve()
-        destination = Path(str(destinations.get(key) or "")).resolve()
-        if not backup.is_file():
-            raise ValueError(
-                f"Cannot recover script edit transaction: missing {key} backup"
+    snapshots = transaction.get("file_snapshots")
+    if isinstance(snapshots, dict):
+        if not snapshots:
+            raise ValueError("Script edit transaction has no file snapshots")
+        allowed_backup_root = transaction_path.parent / "backups"
+        # Preflight every snapshot before changing any destination.
+        for key in sorted(snapshots):
+            _validated_snapshot_paths(
+                snapshots[key],
+                allowed_backup_root=allowed_backup_root,
             )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _restore_backup_file(backup, destination)
+        for key in sorted(snapshots):
+            _restore_file_snapshot(
+                snapshots[key],
+                allowed_backup_root=allowed_backup_root,
+            )
+    else:
+        # Legacy transaction compatibility for pre-Slice-5 journals.
+        backups = transaction.get("backups")
+        destinations = transaction.get("destinations")
+        if not isinstance(backups, dict) or not isinstance(destinations, dict):
+            raise ValueError("Script edit transaction is missing backup metadata")
+        if not backups or set(backups) != set(destinations):
+            raise ValueError(
+                "Script edit transaction backup metadata is inconsistent"
+            )
+
+        for key in sorted(destinations):
+            backup = Path(str(backups.get(key) or "")).resolve()
+            destination = Path(str(destinations.get(key) or "")).resolve()
+            if not backup.is_file():
+                raise ValueError(
+                    f"Cannot recover script edit transaction: missing {key} backup"
+                )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _restore_backup_file(backup, destination)
 
     transaction["status"] = "ROLLED_BACK"
     transaction["rolled_back_at"] = _utc_now()
@@ -385,30 +531,52 @@ def _text_for_target(draft: dict[str, Any], target_id: str) -> str:
     raise ValueError(f"Unsupported or missing script target: {target_id}")
 
 
-def _save_previous_version(
-    old_draft: dict[str, Any],
+def _previous_version_path(
     *,
     concept_id: str,
     fmt: str,
     revision: int,
     versions_dir: Path,
 ) -> Path:
-    branch_versions_dir = versions_dir / _branch_key(concept_id, fmt)
-    branch_versions_dir.mkdir(parents=True, exist_ok=True)
-    previous_revision = revision - 1
-    version_path = (
-        branch_versions_dir
-        / f"revision_{previous_revision:04d}.script_draft.json"
+    return (
+        versions_dir
+        / _branch_key(concept_id, fmt)
+        / f"revision_{revision - 1:04d}.script_draft.json"
     )
+
+
+def _save_previous_version(
+    old_draft: dict[str, Any],
+    source_draft_path: Path,
+    *,
+    concept_id: str,
+    fmt: str,
+    revision: int,
+    versions_dir: Path,
+) -> Path:
+    source_draft_path = source_draft_path.resolve()
+    if load_json(source_draft_path) != old_draft:
+        raise ValueError("Previous-version source does not match old draft payload")
+
+    version_path = _previous_version_path(
+        concept_id=concept_id,
+        fmt=fmt,
+        revision=revision,
+        versions_dir=versions_dir,
+    )
+    source_bytes = source_draft_path.read_bytes()
     if version_path.exists():
-        if load_json(version_path) != old_draft:
+        if not version_path.is_file() or version_path.read_bytes() != source_bytes:
             raise ValueError("Script version collision with different content")
     else:
-        atomic_write_json(version_path, old_draft)
+        _atomic_write_bytes(version_path, source_bytes)
+
+    if sha256_file(version_path) != sha256_file(source_draft_path):
+        raise ValueError("Previous version is not an exact copy of parent draft")
     return version_path
 
 
-def apply_manual_edit(
+def _apply_manual_edit_unlocked(
     draft_path: Path,
     state_path: Path,
     *,
@@ -542,6 +710,7 @@ def apply_manual_edit(
 
         version_path = _save_previous_version(
             old_draft,
+            draft_path,
             concept_id=concept_id,
             fmt=fmt,
             revision=revision,
@@ -604,7 +773,7 @@ def apply_manual_edit(
     }
 
 
-def apply_selection(
+def _apply_selection_unlocked(
     alternatives_path: Path,
     *,
     selection_id: str,
@@ -624,8 +793,6 @@ def apply_selection(
     artifact = load_json(alternatives_path)
     if artifact.get("artifact") != "script_section_alternatives":
         raise ValueError("Not a script_section_alternatives artifact")
-    if artifact.get("selection") is not None:
-        raise ValueError("An alternative has already been selected")
 
     selection = str(selection_id or "").strip().upper()
     if selection not in ALLOWED_SELECTIONS:
@@ -785,16 +952,54 @@ def apply_selection(
         target_id=target_id,
         transactions_dir=transactions_dir,
     )
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_draft = backup_dir / "draft.json"
-    backup_state = backup_dir / "state.json"
-    backup_alternatives = backup_dir / "alternatives.json"
-    atomic_write_json(backup_draft, old_draft)
-    atomic_write_json(backup_state, old_state)
-    atomic_write_json(backup_alternatives, old_artifact)
+
+    branch = _branch_key(concept_id, fmt)
+    review_request_path = (
+        review_requests_dir / f"{branch}.script_review_request.json"
+    ).resolve()
+    review_response_path = (
+        review_responses_dir / f"{branch}.script_review_response.json"
+    ).resolve()
+    approved_path = (
+        approved_dir / f"{safe_slug(concept_id)}.approved_script.json"
+    ).resolve()
+    version_path = (
+        _previous_version_path(
+            concept_id=concept_id,
+            fmt=fmt,
+            revision=revision,
+            versions_dir=versions_dir,
+        ).resolve()
+        if selection != "ORIGINAL"
+        else None
+    )
+
+    mutable_files: dict[str, Path] = {
+        "draft": draft_path,
+        "state": state_path,
+        "alternatives": alternatives_path,
+        "script_review_request": review_request_path,
+        "script_review_response": review_response_path,
+        "approved_script": approved_path,
+    }
+    if version_path is not None:
+        mutable_files["previous_version"] = version_path
+
+    file_snapshots = {
+        key: _snapshot_file(
+            destination,
+            backup_dir=backup_dir,
+            key=key,
+        )
+        for key, destination in mutable_files.items()
+    }
+    parent_draft_sha256 = sha256_file(draft_path)
+    parent_state_sha256 = sha256_file(state_path)
+    alternatives_sha256_before_selection = sha256_file(alternatives_path)
 
     transaction = {
         "artifact": "script_section_selection_transaction",
+        "schema_version": 2,
         "status": "PREPARED",
         "concept_id": concept_id,
         "format": fmt,
@@ -802,16 +1007,16 @@ def apply_selection(
         "selection_id": selection,
         "reviewer": reviewer_value,
         "prepared_at": _utc_now(),
-        "backups": {
-            "draft": str(backup_draft.resolve()),
-            "state": str(backup_state.resolve()),
-            "alternatives": str(backup_alternatives.resolve()),
-        },
-        "destinations": {
-            "draft": str(draft_path),
-            "state": str(state_path),
-            "alternatives": str(alternatives_path),
-        },
+        "parent_draft_sha256": parent_draft_sha256,
+        "parent_state_sha256": parent_state_sha256,
+        "alternatives_sha256_before_selection": (
+            alternatives_sha256_before_selection
+        ),
+        "rework_request": str(request_path),
+        "rework_request_sha256": sha256_file(request_path),
+        "model_response": str(response_path),
+        "model_response_sha256": sha256_file(response_path),
+        "file_snapshots": file_snapshots,
     }
     transaction_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(transaction_path, transaction)
@@ -851,34 +1056,45 @@ def apply_selection(
                 original_script_request,
             )
 
-            branch_versions_dir = versions_dir / _branch_key(concept_id, fmt)
-            branch_versions_dir.mkdir(parents=True, exist_ok=True)
-            previous_revision = revision - 1
-            version_path = (
-                branch_versions_dir
-                / f"revision_{previous_revision:04d}.script_draft.json"
+            saved_version_path = _save_previous_version(
+                old_draft,
+                draft_path,
+                concept_id=concept_id,
+                fmt=fmt,
+                revision=revision,
+                versions_dir=versions_dir,
             )
-            if version_path.exists():
-                if load_json(version_path) != old_draft:
-                    raise ValueError(
-                        "Script version collision with different content"
-                    )
-            else:
-                atomic_write_json(version_path, old_draft)
+            if version_path is None or saved_version_path.resolve() != version_path:
+                raise ValueError("Previous-version path changed during selection")
+            previous_version_sha256 = sha256_file(saved_version_path)
+            if previous_version_sha256 != parent_draft_sha256:
+                raise ValueError(
+                    "Previous version hash does not match parent draft hash"
+                )
 
             revised_draft["validation"] = validation
             revised_draft["human_revision"] = {
                 "revision": revision,
-                "parent_draft_sha256": sha256_file(draft_path),
+                "parent_draft_sha256": parent_draft_sha256,
+                "parent_state_sha256": parent_state_sha256,
                 "selected_target_id": target_id,
                 "selection_id": selection,
                 "selected_by": reviewer_value,
                 "selected_at": _utc_now(),
-                "alternatives_artifact": str(alternatives_path),
-                "alternatives_artifact_sha256_before_selection": sha256_file(
-                    alternatives_path
+                "selected_replacement_sha256": _sha256_text(replacement_text),
+                "selected_claim_ids_used": list(
+                    selected.get("claim_ids_used", [])
                 ),
-                "previous_version": str(version_path.resolve()),
+                "rework_request": str(request_path),
+                "rework_request_sha256": sha256_file(request_path),
+                "model_response": str(response_path),
+                "model_response_sha256": sha256_file(response_path),
+                "alternatives_artifact": str(alternatives_path),
+                "alternatives_artifact_sha256_before_selection": (
+                    alternatives_sha256_before_selection
+                ),
+                "previous_version": str(saved_version_path.resolve()),
+                "previous_version_sha256": previous_version_sha256,
             }
             atomic_write_json(draft_path, revised_draft)
 
@@ -901,13 +1117,41 @@ def apply_selection(
         artifact["selection"] = {
             "selection_id": selection,
             "replacement_text": replacement_text,
+            "replacement_text_sha256": _sha256_text(replacement_text),
+            "claim_ids_used": (
+                []
+                if selection == "ORIGINAL"
+                else list(selected.get("claim_ids_used", []))
+            ),
             "reviewer": reviewer_value,
             "selected_at": _utc_now(),
+            "parent_draft_sha256": parent_draft_sha256,
+            "parent_state_sha256": parent_state_sha256,
+            "rework_request_sha256": sha256_file(request_path),
+            "model_response_sha256": sha256_file(response_path),
             "resulting_draft_sha256": sha256_file(draft_path),
             "resulting_state_version": new_state.get("state_version"),
             "revision": revision,
         }
         atomic_write_json(alternatives_path, artifact)
+
+        persisted_draft = load_json(draft_path)
+        persisted_state = load_json(state_path)
+        assert_state_matches_draft(persisted_state, draft_path)
+        if selection == "ORIGINAL":
+            if sha256_file(draft_path) != parent_draft_sha256:
+                raise ValueError("ORIGINAL selection changed the Script Draft")
+        else:
+            _assert_only_selected_target_changed(
+                old_draft,
+                persisted_draft,
+                target_id=target_id,
+                old_state=old_state,
+            )
+            if version_path is None or sha256_file(version_path) != parent_draft_sha256:
+                raise ValueError(
+                    "Previous version does not preserve exact parent draft"
+                )
 
         _invalidate_and_refresh_script_gate(
             revised_draft,
@@ -923,6 +1167,14 @@ def apply_selection(
         transaction["resulting_state_sha256"] = sha256_file(state_path)
         transaction["resulting_alternatives_sha256"] = sha256_file(
             alternatives_path
+        )
+        transaction["resulting_script_review_request_sha256"] = sha256_file(
+            review_request_path
+        )
+        transaction["previous_version_sha256"] = (
+            sha256_file(version_path)
+            if version_path is not None and version_path.is_file()
+            else None
         )
         atomic_write_json(transaction_path, transaction)
 
@@ -942,3 +1194,59 @@ def apply_selection(
         "alternatives": str(alternatives_path),
         "transaction": str(transaction_path),
     }
+
+def apply_manual_edit(
+    draft_path: Path,
+    state_path: Path,
+    *,
+    target_id: str,
+    replacement_text: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+) -> dict[str, Any]:
+    """Serialize a human manual target edit with all section-state mutations."""
+    with SECTION_STATE_ACTION_LOCK:
+        return _apply_manual_edit_unlocked(
+            draft_path,
+            state_path,
+            target_id=target_id,
+            replacement_text=replacement_text,
+            reviewer=reviewer,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+
+def apply_selection(
+    alternatives_path: Path,
+    *,
+    selection_id: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+    rework_responses_dir: Path = REWORK_RESPONSES_DIR,
+) -> dict[str, Any]:
+    """Serialize ORIGINAL/A/B/C selection with all section-state mutations."""
+    with SECTION_STATE_ACTION_LOCK:
+        return _apply_selection_unlocked(
+            alternatives_path,
+            selection_id=selection_id,
+            reviewer=reviewer,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+            rework_responses_dir=rework_responses_dir,
+        )
+

@@ -261,9 +261,68 @@ match the exact validated model response and current validation contract.
 Slice 4 generation is non-destructive: tests assert both the Script Draft bytes
 and section-state bytes remain unchanged.
 
+### Slice 5 — explicit human selection and safe replacement
+
+Slice 5 applies only an explicit human choice: `ORIGINAL`, `A`, `B` or
+`C`. No model or automatic stage may choose a replacement on the human's
+behalf.
+
+Selection revalidates the exact Slice 4 alternatives artifact/model response
+before any destructive write. The selected target must still be
+`REWORK_REQUESTED` and unlocked.
+
+All selection mutations run under the same canonical in-process section-state
+lock used by Human Script review actions. Concurrent A-vs-B choices, manual
+edits or state changes therefore serialize; only the first valid selection can
+commit.
+
+For A/B/C:
+
+- only the selected target text is replaced;
+- all non-target target hashes must remain unchanged;
+- the full Script validator runs before the draft is accepted;
+- the previous Script Draft is saved as an exact byte-for-byte version file;
+- the saved version SHA-256 must equal the parent draft SHA-256;
+- the selected target becomes `ACCEPTED` and locked; and
+- the Human Script Gate request is rebuilt for the new draft while stale
+  branch approval is invalidated.
+
+For `ORIGINAL`, the Script Draft hash must remain byte-identical. Only review
+state/audit artifacts change: the target is accepted and locked without
+incrementing the human script revision.
+
+The selection audit records parent draft/state hashes, the exact Slice 3 request
+and Slice 4 model-response hashes, selected replacement hash, claim IDs used,
+reviewer, resulting state version and revision lineage.
+
+A Slice 5 transaction snapshots every file selection can mutate before the
+first write:
+
+- Script Draft;
+- canonical section state;
+- alternatives artifact;
+- Human Script Gate request;
+- Human Script Gate response;
+- approved script bundle; and
+- previous-version destination when A/B/C is chosen.
+
+Snapshots preserve exact bytes and record backup hashes. Rollback first
+preflights every backup before restoring any file, preventing a corrupt backup
+from causing a partial rollback. Files that did not exist before the
+transaction are removed during rollback.
+
+If the process is interrupted after writes begin, the next selection recovers
+any `PREPARED` or `IN_PROGRESS` transaction **before** enforcing the
+one-time-selection check. A half-written `selection` field therefore cannot
+permanently block recovery.
+
+Slice 5 does not alter Slice 4 alternatives generation. Manual free-text editing
+remains a separate human action, though it shares the same section-state lock
+and exact parent-version helper.
+
 ### Existing downstream selective-rework capabilities
 
-The repository already contains capabilities beyond Slice 4:
+The repository already contains capabilities beyond Slice 5:
 
 - human selection can keep Original or apply A/B/C;
 - selected replacement changes only the chosen target and runs the normal full
