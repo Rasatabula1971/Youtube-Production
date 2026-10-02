@@ -27,6 +27,22 @@ def card(shot_id: str, desired: str) -> dict:
     }
 
 
+def current_request_state(path: Path):
+    if not path.exists():
+        return None
+    return (json.loads(path.read_text(encoding="utf-8")), Path("board"))
+
+
+def current_result_state(path: Path):
+    if not path.exists():
+        return None
+    return (
+        json.loads(path.read_text(encoding="utf-8")),
+        Path("request"),
+        {},
+    )
+
+
 def result_shot(current_card: dict, candidate_id: str) -> dict:
     return {
         "shot_id": current_card["shot_id"],
@@ -85,6 +101,25 @@ class VisualCandidateReviewTests(unittest.TestCase):
         results: Path,
         shots: list[dict],
     ) -> Path:
+        request_path = results / "c1.short.visual_search_request.json"
+        request_path.write_text(
+            json.dumps(
+                {
+                    "artifact": "visual_search_request",
+                    "concept_id": "c1",
+                    "format": "short",
+                    "status": "SEARCH_REQUIRED",
+                    "shots": [
+                        {
+                            "shot_id": item["shot_id"],
+                            "shot_fingerprint": item["shot_fingerprint"],
+                        }
+                        for item in shots
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
         path = results / "c1.short.visual_search_results.json"
         path.write_text(
             json.dumps(
@@ -114,6 +149,16 @@ class VisualCandidateReviewTests(unittest.TestCase):
                 patch.object(review, "RESULT_DIR", results),
                 patch.object(review, "STORYBOARD_DIR", storyboards),
                 patch.object(review, "REVIEW_DIR", reviews),
+                patch.object(
+                    review,
+                    "search_request_is_current",
+                    side_effect=current_request_state,
+                ),
+                patch.object(
+                    review,
+                    "search_result_is_current",
+                    side_effect=current_result_state,
+                ),
             ):
                 accepted = review.apply_action(
                     result_file=str(result_path),
@@ -154,6 +199,37 @@ class VisualCandidateReviewTests(unittest.TestCase):
             self.assertEqual(snapshot["stale_shots"], 1)
             self.assertEqual(snapshot["packets"][0]["decisions"], {})
 
+    def test_stale_result_provenance_blocks_candidate_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results, storyboards, reviews = self.paths(root)
+            current = card("shot-001", "impact")
+            self.write_board(storyboards, [current])
+            result_path = self.write_results(
+                results,
+                [result_shot(current, "candidate-1")],
+            )
+            with (
+                patch.object(review, "RESULT_DIR", results),
+                patch.object(review, "STORYBOARD_DIR", storyboards),
+                patch.object(review, "REVIEW_DIR", reviews),
+                patch.object(
+                    review,
+                    "search_result_is_current",
+                    return_value=None,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "not bound to the current request",
+                ):
+                    review.apply_action(
+                        result_file=str(result_path),
+                        shot_id="shot-001",
+                        action="SELECT",
+                        candidate_id="candidate-1",
+                    )
+
     def test_unchanged_shot_decision_survives_other_shot_result_refresh(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -172,6 +248,16 @@ class VisualCandidateReviewTests(unittest.TestCase):
                 patch.object(review, "RESULT_DIR", results),
                 patch.object(review, "STORYBOARD_DIR", storyboards),
                 patch.object(review, "REVIEW_DIR", reviews),
+                patch.object(
+                    review,
+                    "search_request_is_current",
+                    side_effect=current_request_state,
+                ),
+                patch.object(
+                    review,
+                    "search_result_is_current",
+                    side_effect=current_result_state,
+                ),
             ):
                 review.apply_action(
                     result_file=str(result_path),
