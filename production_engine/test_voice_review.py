@@ -105,7 +105,8 @@ class VoiceReviewTests(unittest.TestCase):
             )
             payload = spec()
             payload["spec_provenance"] = {
-                "request_source": str(planner_request),
+                "request_source": str(planner_request.resolve()),
+                "request_sha256": voice_review.sha256_file(planner_request),
             }
             source = specs / "concept-1.long_form.voice_performance_spec.json"
             source.write_text(json.dumps(payload), encoding="utf-8")
@@ -137,6 +138,63 @@ class VoiceReviewTests(unittest.TestCase):
                 "Slow the reveal and reduce the emotional jump.",
             )
 
+    def test_prepare_skips_stale_spec_and_removes_old_gate_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            specs = root / "specs"
+            planner_requests = root / "planner_requests"
+            review_requests = root / "review_requests"
+            responses = root / "responses"
+            approved = root / "approved"
+            for directory in (
+                specs,
+                planner_requests,
+                review_requests,
+                responses,
+                approved,
+            ):
+                directory.mkdir()
+
+            planner_request = (
+                planner_requests / "concept-1.long_form.voice_request.json"
+            )
+            planner_request.write_text(
+                json.dumps({"concept_id": "concept-1", "format": "long_form"}),
+                encoding="utf-8",
+            )
+            payload = spec()
+            payload["spec_provenance"] = {
+                "request_source": str(planner_request.resolve()),
+                "request_sha256": "stale-hash",
+            }
+            source = specs / "concept-1.long_form.voice_performance_spec.json"
+            source.write_text(json.dumps(payload), encoding="utf-8")
+
+            stale_paths = [
+                review_requests / "concept-1.long_form.voice_review_request.json",
+                responses / "concept-1.long_form.voice_review_response.json",
+                approved / "concept-1.long_form.approved_voice_spec.json",
+            ]
+            for path in stale_paths:
+                path.write_text("{}", encoding="utf-8")
+            summary = root / "voice_performance_gate_summary.json"
+            summary.write_text("{}", encoding="utf-8")
+
+            with (
+                patch.object(voice_review, "SPECS_DIR", specs),
+                patch.object(voice_review, "REQUESTS_DIR", planner_requests),
+                patch.object(voice_review, "REVIEW_REQUESTS_DIR", review_requests),
+                patch.object(voice_review, "RESPONSES_DIR", responses),
+                patch.object(voice_review, "APPROVED_DIR", approved),
+                patch.object(voice_review, "SUMMARY_FILE", summary),
+            ):
+                result = voice_review.prepare(gate_config())
+
+            self.assertEqual(result["prepared"], 0)
+            self.assertEqual(result["skipped_stale_specs"], [str(source.resolve())])
+            self.assertTrue(all(not path.exists() for path in stale_paths))
+            self.assertFalse(summary.exists())
+
     def test_accept_creates_approved_spec_without_rendering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -145,8 +203,18 @@ class VoiceReviewTests(unittest.TestCase):
             responses = root / "responses"
             approved = root / "approved"
             specs.mkdir()
+            planner_request = root / "concept-1.long_form.voice_request.json"
+            planner_request.write_text(
+                json.dumps({"concept_id": "concept-1", "format": "long_form"}),
+                encoding="utf-8",
+            )
+            payload = spec()
+            payload["spec_provenance"] = {
+                "request_source": str(planner_request.resolve()),
+                "request_sha256": voice_review.sha256_file(planner_request),
+            }
             source = specs / "concept-1.long_form.voice_performance_spec.json"
-            source.write_text(json.dumps(spec()), encoding="utf-8")
+            source.write_text(json.dumps(payload), encoding="utf-8")
 
             with (
                 patch.object(voice_review, "SPECS_DIR", specs),
