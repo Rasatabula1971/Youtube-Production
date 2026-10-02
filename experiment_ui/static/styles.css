@@ -1155,6 +1155,225 @@ button.danger {
   font-size: 12px;
 }
 
+/* Human Script Gate — selective section review */
+.script-section-review-pane {
+  display: grid;
+  gap: 12px;
+}
+
+.script-section-review-head,
+.script-section-target-row,
+.script-section-alternatives-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.script-section-review-head h4,
+.script-section-alternatives-head h4 {
+  margin: 0;
+}
+
+.script-section-review-head p {
+  margin: 5px 0 0;
+}
+
+.script-section-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.script-section-stat {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(147,161,178,.07);
+  color: #cbd5df;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.script-section-stat.success {
+  border-color: rgba(63,185,80,.36);
+  color: #b9efc2;
+}
+
+.script-section-stat.attention {
+  border-color: rgba(248,81,73,.38);
+  color: #ffc0bc;
+}
+
+.script-section-target-row {
+  align-items: end;
+}
+
+.script-section-target-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.script-section-target-select select,
+.script-section-rework-box select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #0d131b;
+  color: var(--text);
+}
+
+.script-section-target-detail {
+  padding: 12px 13px;
+  border: 1px solid rgba(121,192,255,.26);
+  border-radius: 10px;
+  background: rgba(121,192,255,.045);
+}
+
+.script-section-target-copy > strong {
+  display: block;
+  color: #fff;
+  font-size: 11px;
+}
+
+.script-section-target-copy p {
+  margin: 6px 0 0;
+  color: #e1e7ee;
+  font-size: 12px;
+  line-height: 1.52;
+}
+
+.script-section-rework-current {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid rgba(248,81,73,.30);
+  border-radius: 8px;
+  background: rgba(248,81,73,.055);
+  color: #f3c6c3;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.script-section-action-strip,
+.script-section-generation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.script-section-editor {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(13,17,23,.24);
+}
+
+.script-section-editor summary {
+  cursor: pointer;
+  padding: 10px 11px;
+  color: #d8e1ea;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.script-section-editor[open] {
+  padding: 0 10px 10px;
+}
+
+.script-section-editor[open] summary {
+  margin: 0 -10px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.script-section-rework-box {
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(13,17,23,.22);
+}
+
+.script-section-generation-actions {
+  margin-top: 2px;
+}
+
+.script-section-alternatives {
+  display: grid;
+  gap: 9px;
+  padding-top: 2px;
+}
+
+.script-section-alternatives-head {
+  align-items: baseline;
+}
+
+.script-section-alternative-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 9px;
+}
+
+.script-section-alternative-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 190px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(13,17,23,.34);
+}
+
+.script-section-alternative-card.original {
+  border-color: rgba(147,161,178,.34);
+}
+
+.script-section-alternative-label {
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.script-section-alternative-card p {
+  margin: 0 0 8px;
+  color: #d9e2ec;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.script-section-alternative-card .concept-meta {
+  margin-top: auto;
+  margin-bottom: 9px;
+}
+
+.script-section-alternative-card button {
+  align-self: flex-start;
+}
+
+@media (max-width: 620px) {
+  .script-section-review-head,
+  .script-section-target-row,
+  .script-section-alternatives-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .script-section-alternative-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .script-section-action-strip button,
+  .script-section-generation-actions button {
+    flex: 1 1 140px;
+  }
+}
+
 /* Tools */
 .tool-shortcuts {
   margin-bottom: 14px;
