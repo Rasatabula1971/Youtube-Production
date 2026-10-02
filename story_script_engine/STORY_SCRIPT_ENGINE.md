@@ -134,3 +134,23 @@ replacement occurs.
 
 If the source draft changes after section state is created, the old state is
 stale and cannot be applied silently.
+
+### Slice 2 — bounded alternatives
+
+A target marked `REWORK_REQUESTED` can now produce a separate rework request.
+The request includes the selected text, immutable target metadata, the accepted
+claims and Story/Channel constraints, plus only the immediately adjacent
+read-only context needed to preserve flow.
+
+FAIR returns exactly three candidates: `A`, `B`, and `C`. The response may
+contain replacement wording and a short change summary only; it cannot alter
+section IDs, source Story beats, claim IDs, psychology labels, reward labels or
+locked neighbors.
+
+Alternative generation is still non-destructive. The output artifact keeps the
+original text and records `selection: null`. No generated alternative replaces
+the script until a later Human Selection slice explicitly applies one.
+
+The rework request is bound to the exact script draft, exact section-state file,
+state version, target hash and original script request. Any intervening change
+makes the request stale before a model call is allowed.
