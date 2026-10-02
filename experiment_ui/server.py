@@ -4211,7 +4211,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": concept_gate_complete,
                 },
                 {
-                    "label": "At least one concept accepted for packaging",
+                    "label": "At least one concept accepted for research",
                     "done": research_ready,
                 },
             ],
@@ -4221,56 +4221,20 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
         {
             "id": "05",
-            "title": "Packaging",
-            "state": packaging_gate_status,
-            "human_status": package_human,
-            "tone": package_tone,
-            "detail": (
-                "Builds title, thumbnail and opening-frame options before script "
-                "drafting, then stops for human package selection."
-            ),
-            "next_action": package_next,
-            "criteria": [
-                {
-                    "label": "Accepted concept handoff ready",
-                    "done": research_ready,
-                },
-                {
-                    "label": "Package requests prepared",
-                    "done": package_requests,
-                },
-                {
-                    "label": "Valid package candidates generated",
-                    "done": package_candidates,
-                },
-                {
-                    "label": "Human Packaging Gate complete",
-                    "done": packaging_gate_complete,
-                },
-                {
-                    "label": "At least one package approved for research",
-                    "done": packaging_research_ready,
-                },
-            ],
-            "complete": packaging_research_ready,
-            "ready": research_ready,
-            "current": research_ready and not packaging_research_ready,
-        },
-        {
-            "id": "06",
             "title": "Research",
             "state": research_gate_status,
             "human_status": research_human,
             "tone": research_tone,
             "detail": (
-                "Acquires real web evidence, structures traceable claims, and "
-                "stops for human claim approval before Story / Script."
+                "Starts directly from the accepted Concept Gate handoff, acquires "
+                "real web evidence, structures traceable claims, and stops for "
+                "human claim approval before Story / Script."
             ),
             "next_action": research_next,
             "criteria": [
                 {
-                    "label": "Approved package handoff ready",
-                    "done": packaging_research_ready,
+                    "label": "Accepted concept handoff ready",
+                    "done": research_ready,
                 },
                 {
                     "label": "Research plans prepared",
@@ -4294,11 +4258,11 @@ def stage_statuses() -> list[dict[str, Any]]:
                 },
             ],
             "complete": story_ready,
-            "ready": packaging_research_ready,
-            "current": packaging_research_ready and not story_ready,
+            "ready": research_ready,
+            "current": research_ready and not story_ready,
         },
         {
-            "id": "07",
+            "id": "06",
             "title": "Story / Script",
             "state": script_gate_status if script_drafts_ready else (
                 "READY_TO_PREPARE" if story_ready else "WAITING_FOR_RESEARCH"
@@ -4306,8 +4270,9 @@ def stage_statuses() -> list[dict[str, Any]]:
             "human_status": script_human,
             "tone": script_tone,
             "detail": (
-                "Drafts an original script constrained to human-accepted claims, "
-                "then requires a human Script Gate decision."
+                "Drafts an original script constrained to human-accepted claims "
+                "and carries only an internal working title. Final public title "
+                "direction is selected after script approval."
             ),
             "next_action": script_next,
             "criteria": [
@@ -4328,7 +4293,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": script_gate_complete,
                 },
                 {
-                    "label": "Every script approved for Format",
+                    "label": "Every required script branch approved",
                     "done": production_ready,
                 },
             ],
@@ -4337,43 +4302,77 @@ def stage_statuses() -> list[dict[str, Any]]:
             "current": story_ready and not production_ready,
         },
         {
-            "id": "08",
-            "title": "Format",
-            "state": format_gate_status if format_plans_ready else (
-                "READY_TO_PREPARE" if production_ready else "WAITING_FOR_SCRIPT"
-            ),
-            "human_status": format_human,
-            "tone": format_tone,
+            "id": "07",
+            "title": "Packaging / Title Direction",
+            "state": title_direction_gate_status,
+            "human_status": package_human,
+            "tone": package_tone,
             "detail": (
-                "Plans long-form and Shorts as separate productions from the "
-                "approved script, then requires a human Format Gate decision."
+                "Generates five Short and five Long-form title directions from the "
+                "approved script, hook, payoff and evidence. Human selection records "
+                "a preferred psychological direction without permanently locking "
+                "the final title wording."
             ),
-            "next_action": format_next,
+            "next_action": package_next,
             "criteria": [
                 {
                     "label": "Approved script handoff ready",
                     "done": production_ready,
                 },
                 {
-                    "label": "Format requests prepared",
-                    "done": format_requests_ready,
+                    "label": "Post-script title requests prepared",
+                    "done": title_direction_requests_ready,
                 },
                 {
-                    "label": "Validated format plans generated",
-                    "done": format_plans_ready,
+                    "label": "5 Short + 5 Long title directions current",
+                    "done": title_direction_candidates_ready,
                 },
                 {
-                    "label": "Human Format Gate complete",
-                    "done": format_gate_complete,
+                    "label": "Human Title Direction Gate complete",
+                    "done": bool(title_direction_gate.get("complete")),
                 },
                 {
-                    "label": "Every format plan approved for production",
-                    "done": production_engine_ready,
+                    "label": "Short + Long title directions selected",
+                    "done": title_direction_selected,
                 },
             ],
-            "complete": production_engine_ready,
+            "complete": title_direction_selected,
             "ready": production_ready,
-            "current": production_ready and not production_engine_ready,
+            "current": production_ready and not title_direction_selected,
+        },
+        {
+            "id": "08",
+            "title": "Format / Production Hold",
+            "state": (
+                "WAITING_FOR_MATURE_PACKAGING"
+                if title_direction_selected
+                else "WAITING_FOR_TITLE_DIRECTION"
+            ),
+            "human_status": format_human,
+            "tone": format_tone,
+            "detail": (
+                "Format and Production are intentionally held until Slice 24 binds "
+                "the selected title direction to the Packaging Brief, Viewer Promise, "
+                "thumbnail concepts, pairing and validation."
+            ),
+            "next_action": format_next,
+            "criteria": [
+                {
+                    "label": "Post-script title direction selected",
+                    "done": title_direction_selected,
+                },
+                {
+                    "label": "Mature Packaging Engine validation complete",
+                    "done": False,
+                },
+                {
+                    "label": "Format planning re-enabled",
+                    "done": False,
+                },
+            ],
+            "complete": False,
+            "ready": title_direction_selected,
+            "current": title_direction_selected,
         },
     ]
 
