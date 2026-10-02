@@ -1738,3 +1738,38 @@ fingerprint matches the new request.
 All visual planning in Slice 13 keeps `paid_generation_calls_allowed: false`.
 Premium generation may be marked only as a future candidate for a high-value
 unfilled gap; it is never authorized or called here.
+
+## D-084 — Current free/existing visual discovery stops at the Human Candidate Gate
+
+**Status:** Accepted
+
+Slice 14 advances the current Slice 13 search plan through configured zero-cost
+discovery only:
+
+`VISUAL_SEARCH_READY → visual_search_acquire → HUMAN_VISUAL_CANDIDATE_GATE`.
+
+Before any external discovery adapter is called, the search request must still
+be current and bound to the current storyboard. The request hash is rechecked
+before each shot so a mid-run upstream edit stops additional provider calls.
+
+Discovery is resumable. Raw results are checkpointed after each shot. On a
+later rerun, an unchanged shot is reused only when its fingerprint still
+matches and its previous provider search completed without provider errors.
+Changed or previously errored shots are searched again.
+
+Each zero-cost provider is isolated. A timeout, malformed response or provider
+failure cannot discard valid candidates returned by other providers. Provider
+errors are preserved in the current candidate packet for human visibility.
+There is no automatic retry storm; a later explicit rerun retries errored shots
+while preserving clean cached shots.
+
+Search results are current only when they are bound to the exact current search
+request and contain the exact current shot IDs/fingerprints. The Human Visual
+Candidate Gate opens only after every current search-required branch has a
+current result.
+
+The candidate gate never treats creator/editorial discovery as reuse
+permission. Those candidates remain behind the separate human rights/context
+gate. Unknown or unsupported rights remain blocked.
+
+Slice 14 downloads no visual media and calls no paid generation provider.
