@@ -196,22 +196,36 @@ def recover_prepared_transaction(transaction_path: Path) -> dict[str, Any]:
     if status not in {"PREPARED", "IN_PROGRESS"}:
         return transaction
 
-    backups = transaction.get("backups")
-    destinations = transaction.get("destinations")
-    if not isinstance(backups, dict) or not isinstance(destinations, dict):
-        raise ValueError("Script edit transaction is missing backup metadata")
-    if not backups or set(backups) != set(destinations):
-        raise ValueError("Script edit transaction backup metadata is inconsistent")
-
-    for key in sorted(destinations):
-        backup = Path(str(backups.get(key) or "")).resolve()
-        destination = Path(str(destinations.get(key) or "")).resolve()
-        if not backup.is_file():
-            raise ValueError(
-                f"Cannot recover script edit transaction: missing {key} backup"
+    snapshots = transaction.get("file_snapshots")
+    if isinstance(snapshots, dict):
+        if not snapshots:
+            raise ValueError("Script edit transaction has no file snapshots")
+        allowed_backup_root = transaction_path.parent / "backups"
+        for key in sorted(snapshots):
+            _restore_file_snapshot(
+                snapshots[key],
+                allowed_backup_root=allowed_backup_root,
             )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _restore_backup_file(backup, destination)
+    else:
+        # Legacy transaction compatibility for pre-Slice-5 journals.
+        backups = transaction.get("backups")
+        destinations = transaction.get("destinations")
+        if not isinstance(backups, dict) or not isinstance(destinations, dict):
+            raise ValueError("Script edit transaction is missing backup metadata")
+        if not backups or set(backups) != set(destinations):
+            raise ValueError(
+                "Script edit transaction backup metadata is inconsistent"
+            )
+
+        for key in sorted(destinations):
+            backup = Path(str(backups.get(key) or "")).resolve()
+            destination = Path(str(destinations.get(key) or "")).resolve()
+            if not backup.is_file():
+                raise ValueError(
+                    f"Cannot recover script edit transaction: missing {key} backup"
+                )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _restore_backup_file(backup, destination)
 
     transaction["status"] = "ROLLED_BACK"
     transaction["rolled_back_at"] = _utc_now()
