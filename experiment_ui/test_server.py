@@ -79,6 +79,11 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="researchReviewPanel"', html)
         self.assertIn('id="researchCriteria"', html)
         self.assertIn('id="researchNote"', html)
+        self.assertIn('id="scriptSectionReviewPane"', html)
+        self.assertIn('id="scriptSectionTarget"', html)
+        self.assertIn('id="scriptSectionReason"', html)
+        self.assertIn('id="scriptSectionGenerate"', html)
+        self.assertIn('id="scriptSectionAlternativeCards"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -95,6 +100,10 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/packaging-gate", script)
         self.assertIn("renderResearchReview", script)
         self.assertIn("/api/research-gate", script)
+        self.assertIn("renderScriptSectionReview", script)
+        self.assertIn("submitScriptSectionAction", script)
+        self.assertIn("/api/script-section-review", script)
+        self.assertIn("data-script-section-selection", script)
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
