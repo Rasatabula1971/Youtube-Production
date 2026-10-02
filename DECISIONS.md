@@ -1384,3 +1384,47 @@ The repository already contains downstream A/B/C generation, human selection,
 safe single-target replacement, manual edit and UI/service capabilities. Those
 are distinct from Slice 3: preparing the request itself spends no inference and
 changes no narration.
+
+## D-074 — Slice 4 alternatives are strict claim-bound artifacts, not free-form rewrites
+
+**Status:** Accepted
+
+Selective Script Rework Slice 4 generates exactly three non-destructive
+alternatives (A/B/C) from the bounded Slice 3 request.
+
+The FAIR response schema and the local deterministic validator enforce the same
+closed contract. Each alternative must contain only its ID, replacement text,
+change summary and `claim_ids_used`. Extra fields, missing fields, wrong value
+types, reordered/missing A/B/C identities or malformed claim declarations fail
+closed.
+
+Every alternative must declare `claim_ids_used` exactly equal to the accepted
+claim IDs already mapped to the selected target. Alternatives cannot expand the
+target's factual scope by naming unrelated accepted claims. A target with no
+mapped claims must declare an empty claim list.
+
+Because claim IDs alone cannot prove that prose has not invented a quantitative
+fact, Slice 4 also applies a conservative numeric guard. A numeric token may
+appear in a replacement only if it was already present in the original selected
+target or in one of the target's bound accepted-claim statements.
+
+All candidates remain subject to the source-overlap block and must differ from
+both the original target and one another.
+
+Generation revalidates Slice 3 provenance after FAIR returns. If draft/state or
+human review state changes while inference is running, the returned result is
+discarded before a response or alternatives artifact is accepted.
+
+A validated alternatives artifact is bound to the exact rework request,
+validation-contract hash and saved model-response file/hash. Cached artifacts
+are deterministically rebuilt from that response before reuse. A changed cache
+fails closed and does not trigger a hidden replacement model call.
+
+Human selection does not trust the response path written inside the alternatives
+artifact. The expected response path is resolved from repository-owned
+concept/format/target identity and must match artifact provenance. This prevents
+artifact path tampering from redirecting selection to a different response.
+
+Slice 4 itself never mutates the Script Draft or section state. Human application
+of Original/A/B/C remains a separate downstream action.
+
