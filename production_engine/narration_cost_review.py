@@ -25,6 +25,7 @@ from narration_render import (
     artifact_key,
     load_json,
     sha256_file,
+    snapshot as narration_render_snapshot,
 )
 
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "narration_spend_review_requests"
@@ -61,6 +62,23 @@ def reviewer_id() -> str:
     return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER
 
 
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _remove_if_exists(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError(f"Expected narration spend gate file: {path}")
+    path.unlink()
+    return True
+
+
 def build_review_request(
     estimate: dict[str, Any],
     estimate_path: Path,
@@ -95,23 +113,68 @@ def build_review_request(
 
 
 def prepare() -> dict[str, Any]:
-    REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
+    for directory in (REVIEW_REQUESTS_DIR, RESPONSES_DIR, APPROVED_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    render_state = narration_render_snapshot()
+    ready_keys = {
+        artifact_key(
+            str(item.get("concept_id") or ""),
+            str(item.get("format") or ""),
+        )
+        for item in render_state.get("items", [])
+        if isinstance(item, dict)
+        and item.get("status") == "READY_FOR_SPEND_GATE"
+    }
+
     paths = (
         sorted(ESTIMATES_DIR.glob("*.narration_cost_estimate.json"))
         if ESTIMATES_DIR.exists()
         else []
     )
     prepared: list[dict[str, Any]] = []
-    current: set[Path] = set()
+    current_keys: set[str] = set()
     for path in paths:
-        estimate = load_json(path)
+        estimate = _load_dict_or_none(path)
         if not isinstance(estimate, dict) or estimate.get("status") != "READY_FOR_SPEND_GATE":
             continue
+        key = artifact_key(
+            str(estimate.get("concept_id") or ""),
+            str(estimate.get("format") or ""),
+        )
+        if key not in ready_keys:
+            continue
+
         request = build_review_request(estimate, path)
-        key = artifact_key(request["concept_id"], request["format"])
+        current_keys.add(key)
         dest = REVIEW_REQUESTS_DIR / f"{key}.narration_spend_review_request.json"
+        estimate_hash = sha256_file(path)
+
+        response = response_path(request["concept_id"], request["format"])
+        if response.is_file():
+            saved = _load_dict_or_none(response)
+            if (
+                not isinstance(saved, dict)
+                or saved.get("narration_cost_estimate_sha256") != estimate_hash
+            ):
+                response.unlink()
+
+        approved_path = APPROVED_DIR / f"{key}.approved_narration_spend.json"
+        if approved_path.is_file():
+            approved = _load_dict_or_none(approved_path)
+            provenance = (
+                approved.get("approved_provenance", {})
+                if isinstance(approved, dict)
+                else {}
+            )
+            if (
+                not isinstance(provenance, dict)
+                or provenance.get("narration_cost_estimate_sha256")
+                != estimate_hash
+            ):
+                approved_path.unlink()
+
         atomic_write_json(dest, request)
-        current.add(dest.resolve())
         prepared.append(
             {
                 "concept_id": request["concept_id"],
@@ -120,16 +183,30 @@ def prepare() -> dict[str, Any]:
             }
         )
 
-    for stale in REVIEW_REQUESTS_DIR.glob("*.narration_spend_review_request.json"):
-        if stale.resolve() not in current:
-            stale.unlink()
+    removed_stale: list[str] = []
+    for directory, suffix in (
+        (REVIEW_REQUESTS_DIR, ".narration_spend_review_request.json"),
+        (RESPONSES_DIR, ".narration_spend_review_response.json"),
+        (APPROVED_DIR, ".approved_narration_spend.json"),
+    ):
+        for path in directory.glob(f"*{suffix}"):
+            key = path.name[: -len(suffix)]
+            if key not in current_keys and _remove_if_exists(path):
+                removed_stale.append(str(path.resolve()))
+
+    if removed_stale:
+        _remove_if_exists(SUMMARY_FILE)
 
     return {
-        "status": "NARRATION_SPEND_GATE_READY" if prepared else "WAITING_FOR_PROVIDER_QUOTE",
+        "status": (
+            "NARRATION_SPEND_GATE_READY"
+            if prepared
+            else "WAITING_FOR_PROVIDER_QUOTE"
+        ),
         "prepared": len(prepared),
         "requests": prepared,
+        "removed_stale_gate_artifacts": removed_stale,
     }
-
 
 def assert_current_estimate(request: dict[str, Any]) -> Path:
     provenance = request.get("request_provenance", {})
@@ -253,16 +330,16 @@ def _response_is_current(request: dict[str, Any], saved: dict[str, Any]) -> bool
 
 
 def snapshot() -> dict[str, Any]:
-    if not REVIEW_REQUESTS_DIR.exists():
-        return {
-            "status": "READY_TO_PREPARE",
-            "complete": False,
-            "items": [],
-            "pending": 0,
-            "accepted": 0,
-            "rework": 0,
-            "rejected": 0,
-        }
+    render_state = narration_render_snapshot()
+    eligible = {
+        artifact_key(
+            str(item.get("concept_id") or ""),
+            str(item.get("format") or ""),
+        )
+        for item in render_state.get("items", [])
+        if isinstance(item, dict)
+        and item.get("status") == "READY_FOR_SPEND_GATE"
+    }
 
     items: list[dict[str, Any]] = []
     stale_requests = 0
@@ -272,53 +349,70 @@ def snapshot() -> dict[str, Any]:
         "REWORK": "rework",
         "REJECT": "rejected",
     }
-    for path in sorted(
-        REVIEW_REQUESTS_DIR.glob("*.narration_spend_review_request.json")
-    ):
-        request = load_json(path)
-        concept_id = str(request.get("concept_id") or "")
-        fmt = str(request.get("format") or "")
-        saved_path = response_path(concept_id, fmt)
-        saved = load_json(saved_path) if saved_path.exists() else {}
-        try:
-            source = assert_current_estimate(request)
-        except ValueError:
-            stale_requests += 1
-            saved = {}
-            source = None
-        if (
-            source is None
-            or not isinstance(saved, dict)
-            or not _response_is_current(request, saved)
-        ):
-            saved = {}
-        decision = str(saved.get("decision") or "PENDING").upper()
-        counts[decision_key.get(decision, "pending")] += 1
-        items.append(
-            {
-                **request,
-                "decision": decision,
-                "criteria_decisions": saved.get("criteria", {}),
-                "note": saved.get("note", ""),
-            }
-        )
 
-    complete = bool(items) and counts["pending"] == 0 and stale_requests == 0
-    status = (
-        "READY_TO_PREPARE"
-        if stale_requests
-        else "COMPLETE"
-        if complete
-        else "AWAITING_HUMAN_DECISION"
+    if REVIEW_REQUESTS_DIR.exists():
+        for path in sorted(
+            REVIEW_REQUESTS_DIR.glob("*.narration_spend_review_request.json")
+        ):
+            request = _load_dict_or_none(path)
+            if not isinstance(request, dict):
+                stale_requests += 1
+                continue
+            concept_id = str(request.get("concept_id") or "")
+            fmt = str(request.get("format") or "")
+            key = artifact_key(concept_id, fmt)
+            if key not in eligible:
+                stale_requests += 1
+                continue
+
+            saved_path = response_path(concept_id, fmt)
+            saved = _load_dict_or_none(saved_path) if saved_path.exists() else {}
+            try:
+                source = assert_current_estimate(request)
+            except ValueError:
+                stale_requests += 1
+                saved = {}
+                source = None
+            if (
+                source is None
+                or not isinstance(saved, dict)
+                or not _response_is_current(request, saved)
+            ):
+                saved = {}
+            decision = str(saved.get("decision") or "PENDING").upper()
+            counts[decision_key.get(decision, "pending")] += 1
+            items.append(
+                {
+                    **request,
+                    "decision": decision,
+                    "criteria_decisions": saved.get("criteria", {}),
+                    "note": saved.get("note", ""),
+                }
+            )
+
+    complete = (
+        bool(items)
+        and len(items) == len(eligible)
+        and counts["pending"] == 0
+        and stale_requests == 0
     )
+    if not eligible:
+        status = "WAITING_FOR_PROVIDER_QUOTE"
+    elif not items or stale_requests:
+        status = "READY_TO_PREPARE"
+    elif complete:
+        status = "COMPLETE"
+    else:
+        status = "AWAITING_HUMAN_DECISION"
+
     return {
         "status": status,
         "complete": complete,
         "items": items,
+        "eligible": len(eligible),
         "stale_requests": stale_requests,
         **counts,
     }
-
 
 def apply_action(
     *,
