@@ -398,20 +398,28 @@ def manifest_is_current(path: Path) -> dict[str, Any] | None:
         return None
 
     sound_source = str(provenance.get("sound_design_brief") or "")
+    canonical_sound_path = SOUND_DIR / (
+        f"{_key(str(manifest.get('concept_id') or ''), str(manifest.get('format') or ''))}."
+        "sound_design_brief.json"
+    )
     sound_path = (
         Path(sound_source)
         if sound_source
-        else SOUND_DIR / "__missing__.json"
+        else canonical_sound_path
     )
     if sound_source:
         if (
-            not sound_path.is_file()
+            sound_path.resolve() != canonical_sound_path.resolve()
+            or not sound_path.is_file()
             or sound_path.parent.resolve() != SOUND_DIR.resolve()
             or provenance.get("sound_design_brief_sha256")
             != sha256_file(sound_path)
         ):
             return None
-    elif provenance.get("sound_design_brief_sha256") is not None:
+    elif (
+        provenance.get("sound_design_brief_sha256") is not None
+        or canonical_sound_path.exists()
+    ):
         return None
 
     try:
