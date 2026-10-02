@@ -845,6 +845,31 @@ def validate_prepared_section_rework_request(
             != provenance.get("script_request_sha256")
         ):
             raise ValueError("script_request_sha256 changed")
+        script_request = load_json(script_request_path)
+        if (
+            str(script_request.get("concept_id") or "").strip() != cid
+            or str(script_request.get("format") or "").strip() != fmt
+        ):
+            raise ValueError("Original script request identity changed")
+
+        expected_packet = build_section_rework_request(
+            draft=load_json(draft_path),
+            review_request=req,
+            section_state=state,
+            target_id=tid,
+            provenance={
+                "script_draft": str(draft_path.resolve()),
+                "script_draft_sha256": sha256_file(draft_path),
+                "section_state": str(state_path.resolve()),
+                "section_state_sha256": sha256_file(state_path),
+                "script_review_request": str(review_path.resolve()),
+                "script_review_request_sha256": sha256_file(review_path),
+                "script_request": str(script_request_path),
+                "script_request_sha256": sha256_file(script_request_path),
+            },
+        )
+        if packet != expected_packet:
+            raise ValueError("Prepared selective rework request content changed")
 
     except (OSError, TypeError, ValueError) as exc:
         return {
@@ -969,16 +994,45 @@ def apply_action(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Human Script Gate")
-    parser.add_argument("--mode", choices=("prepare", "apply"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=(
+            "prepare",
+            "apply",
+            "prepare-section-rework",
+            "validate-section-rework",
+        ),
+        required=True,
+    )
     parser.add_argument("--request", type=Path)
     parser.add_argument("--response", type=Path)
+    parser.add_argument("--concept-id")
+    parser.add_argument("--format")
+    parser.add_argument("--target-id")
     args = parser.parse_args()
     if args.mode == "prepare":
         result = prepare()
-    else:
+    elif args.mode == "apply":
         if not args.request or not args.response:
             raise SystemExit("--request and --response required")
         result = apply(args.request.resolve(), args.response.resolve())
+    else:
+        if not args.concept_id or not args.format or not args.target_id:
+            raise SystemExit(
+                "--concept-id, --format and --target-id required"
+            )
+        if args.mode == "prepare-section-rework":
+            result = prepare_section_rework_request(
+                concept_id=args.concept_id,
+                format=args.format,
+                target_id=args.target_id,
+            )
+        else:
+            result = validate_prepared_section_rework_request(
+                concept_id=args.concept_id,
+                format=args.format,
+                target_id=args.target_id,
+            )
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
