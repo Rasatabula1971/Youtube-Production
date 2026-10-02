@@ -155,6 +155,9 @@ def run_until_human_gate() -> dict[str, Any]:
             "HUMAN_VISUAL_CANDIDATE_GATE",
             "HUMAN_VISUAL_RIGHTS_GATE",
             "HUMAN_ROUGH_CUT_GATE",
+            "HUMAN_VISUAL_SPEND_GATE",
+            "VISUAL_GAPS_READY_NO_SPEND",
+            "VISUAL_SPEND_DECISIONS_COMPLETE",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
