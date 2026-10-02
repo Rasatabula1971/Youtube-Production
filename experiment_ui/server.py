@@ -290,6 +290,7 @@ from edit_preview_review import (
     apply_action as apply_edit_preview_action,
     snapshot as edit_preview_review_snapshot,
 )
+from final_production_handoff import handoff_is_current
 from storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
@@ -403,6 +404,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_assembly_prepare",
     "edit_manifest_prepare",
     "edit_preview_render",
+    "final_production_handoff_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -3112,44 +3114,15 @@ def final_production_handoff_artifact_state(
         for path in PRODUCTION_FINAL_HANDOFF_DIR.glob(
             "*.final_production_handoff.json"
         ):
-            payload = safe_load_json(path)
-            if not isinstance(payload, dict):
+            payload = handoff_is_current(path)
+            if payload is None:
                 stale += 1
                 continue
             key = (
                 str(payload.get("concept_id") or ""),
                 str(payload.get("format") or ""),
             )
-            provenance = payload.get("provenance", {})
-            if not isinstance(provenance, dict):
-                stale += 1
-                continue
-
-            valid = True
-            for path_key, hash_key in (
-                ("approved_edit_preview", "approved_edit_preview_sha256"),
-                ("edit_preview_result", "edit_preview_result_sha256"),
-                ("edit_manifest", "edit_manifest_sha256"),
-            ):
-                source = Path(str(provenance.get(path_key) or ""))
-                if (
-                    not source.exists()
-                    or provenance.get(hash_key) != sha256_file(source)
-                ):
-                    valid = False
-                    break
-
-            sound_source = str(provenance.get("sound_design_brief") or "")
-            if valid and sound_source:
-                sound_path = Path(sound_source)
-                if (
-                    not sound_path.exists()
-                    or provenance.get("sound_design_brief_sha256")
-                    != sha256_file(sound_path)
-                ):
-                    valid = False
-
-            if not valid or (expected and key not in expected):
+            if expected and key not in expected:
                 stale += 1
                 continue
 
@@ -6231,17 +6204,67 @@ def workflow_guidance(
                 "next_title": "Route the approved rework instruction",
             }
 
+        final_handoff_state = final_production_handoff_artifact_state(
+            expected_branches
+        )
+        if not final_handoff_state.get("ready"):
+            handoff_action = readiness.get(
+                "final_production_handoff_prepare",
+                {},
+            )
+            if handoff_action.get("enabled"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Final Production Handoff",
+                    "current_detail": (
+                        "The structural edit direction is approved. Revalidate the "
+                        "exact current preview, manifest, narration, final visual "
+                        "assets and sound brief, then package a provider-neutral "
+                        "handoff. This step spends nothing and renders nothing."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Final production boundary",
+                }
+            return {
+                "state": "WAITING_FOR_FINAL_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Final Visual Assets Still Required",
+                "current_detail": (
+                    str(handoff_action.get("reason") or "")
+                    or "Register all current final visual assets before the final "
+                    "production handoff can be prepared."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare Final Production Handoff",
+            }
+
+        if int(final_handoff_state.get("blocked") or 0) > 0:
+            return {
+                "state": "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+                "current_action_id": None,
+                "current_title": "Final Production Handoff Blocked",
+                "current_detail": (
+                    "A current handoff exists, but one or more final-production "
+                    "inputs are still blocked. Resolve the recorded blockers; no "
+                    "paid provider or publish action is authorized."
+                ),
+                "next_action_id": None,
+                "next_title": "Resolve final-production blockers",
+            }
+
         return {
-            "state": "EDIT_PREVIEW_DIRECTION_APPROVED",
+            "state": "FINAL_PRODUCTION_HANDOFF_READY",
             "current_action_id": None,
-            "current_title": "Structural Edit Direction Approved",
+            "current_title": "Final Production Handoff Ready",
             "current_detail": (
-                "The current free structural preview has human approval. Slice 19 "
-                "stops here and performs no final production handoff, paid visual "
-                "execution, music/SFX generation, upload or publish action."
+                "The approved edit direction is now packaged against exact current "
+                "visual, narration and sound-intent provenance. Slice 20 stops here. "
+                "No final music/SFX provider, final render, upload or publish action "
+                "has been executed or authorized."
             ),
             "next_action_id": None,
-            "next_title": "Slice 20: final asset / production handoff boundary",
+            "next_title": "Slice 21: final sound/media execution boundary",
         }
 
     production_visual = production_visual_artifact_state()

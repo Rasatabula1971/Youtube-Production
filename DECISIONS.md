@@ -1993,3 +1993,41 @@ human-review target.
 The structural preview is explicitly non-publishable. It exists only to judge
 story flow, pacing, narration-to-picture rhythm and visual continuity before
 later final-production work.
+## D-090 — Approved edit direction advances only to a current zero-spend final-production handoff
+
+**Status:** Accepted
+
+Slice 20 owns the transition after the Human Edit Preview Gate approves the
+current structural preview.
+
+The automatic path is:
+
+`EDIT_DIRECTION_APPROVED → final_production_handoff_prepare → FINAL_PRODUCTION_HANDOFF_READY`
+
+The handoff step is deterministic and zero-spend. It does not call Higgsfield or
+another paid provider, generate final music/SFX, perform a final render, upload,
+or publish.
+
+Final-handoff currentness is rebuild-based rather than path-existence based. A
+handoff is current only when the exact Human Edit Preview approval still points
+to a current Slice 19 preview result, the preview still resolves to a current
+edit manifest, final visual/narration bytes still match, and the Sound Design
+Brief is still current against its own upstream preview approval.
+
+The currentness check rebuilds the handoff from those live inputs and requires
+the stored artifact to match exactly. Mutating narration, visuals, the approved
+sound brief, edit manifest, preview result, preview media, or edit approval
+therefore makes the old handoff stale.
+
+Generated-visual cost provenance includes only current generated assets that are
+actually selected in the final visual track. Historical or replaced generated
+asset registry entries are not added to the handoff total.
+
+If final visuals are still missing, automation stops at
+`WAITING_FOR_FINAL_VISUAL_ASSETS`. If a current handoff contains another
+blocking condition, it stops at `FINAL_PRODUCTION_HANDOFF_BLOCKED`.
+
+The successful Slice 20 boundary is `FINAL_PRODUCTION_HANDOFF_READY`. The
+handoff records provider-neutral instructions and explicitly keeps provider
+execution unauthorized. Final licensed music/SFX acquisition/provider execution
+and publish-ready rendering remain later work.

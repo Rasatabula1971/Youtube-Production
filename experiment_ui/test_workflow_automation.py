@@ -1100,6 +1100,67 @@ class WorkflowAutomationTests(unittest.TestCase):
             "HUMAN_EDIT_PREVIEW_GATE",
         )
 
+    def test_approved_edit_direction_runs_final_handoff_then_stops(self):
+        state = {"completed": False}
+
+        def readiness():
+            if not state["completed"]:
+                return {
+                    "final_production_handoff_prepare": {
+                        "enabled": True,
+                        "reason": "approved edit direction is current",
+                    }
+                }
+            return {}
+
+        def guidance(_readiness):
+            if not state["completed"]:
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_title": "Prepare Final Production Handoff",
+                }
+            return {
+                "state": "FINAL_PRODUCTION_HANDOFF_READY",
+                "current_title": "Final Production Handoff Ready",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(
+                action_id,
+                "final_production_handoff_prepare",
+            )
+            state["completed"] = True
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(
+                automation,
+                "run_action",
+                side_effect=fake_run,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(
+            result["completed_actions"],
+            ["final_production_handoff_prepare"],
+        )
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "FINAL_PRODUCTION_HANDOFF_READY",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {

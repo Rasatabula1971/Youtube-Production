@@ -511,3 +511,43 @@ stale.
 
 No paid provider, premium visual execution, generated music/SFX, upload or
 publish action exists in Slice 19.
+## Slice 20 — approved edit direction to current final-production handoff
+
+After the Human Edit Preview Gate approves the current free structural preview,
+the normal workflow automatically runs one more deterministic zero-spend step:
+
+```text
+current Human Edit Preview approval
+        ↓
+revalidate current preview + edit manifest
+        ↓
+revalidate final visual and narration bytes
+        ↓
+revalidate current Sound Design Brief
+        ↓
+provider-neutral final-production handoff
+        ↓
+FINAL_PRODUCTION_HANDOFF_READY
+        ↓
+STOP
+```
+
+The final handoff is rebuild-current. Merely retaining the same filenames is not
+enough: the approval must still target a current Slice 19 preview, that preview
+must still target a current edit manifest, every final visual/narration file
+hash must match, and the Sound Design Brief must still be current against its
+own approved narration-preview provenance.
+
+The stored handoff is independently rebuildable. If rebuilding from current
+inputs produces a different payload, the old handoff is stale and cannot count
+as final-production readiness.
+
+Generated-visual cost reporting is limited to current generated assets actually
+used by the final visual track; historical/replaced generated assets are not
+summed into the handoff.
+
+Slice 20 remains a hard no-spend boundary. It performs no paid provider call,
+no final music/SFX generation, no final video render, no upload, and no publish
+action. A successful handoff therefore reports readiness for a later final
+sound/provider-or-licensed-asset registration stage rather than claiming that
+the video is publish-ready.

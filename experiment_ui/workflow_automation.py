@@ -65,6 +65,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_assembly_prepare",
     "edit_manifest_prepare",
     "edit_preview_render",
+    "final_production_handoff_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40
@@ -168,7 +169,9 @@ def run_until_human_gate() -> dict[str, Any]:
             "LOCAL_FFMPEG_REQUIRED",
             "HUMAN_EDIT_PREVIEW_GATE",
             "EDIT_PREVIEW_REWORK_REQUIRED",
-            "EDIT_PREVIEW_DIRECTION_APPROVED",
+            "WAITING_FOR_FINAL_VISUAL_ASSETS",
+            "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+            "FINAL_PRODUCTION_HANDOFF_READY",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
