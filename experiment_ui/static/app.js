@@ -613,6 +613,8 @@ function statusTone(workflow) {
     state === "HUMAN_PACKAGING_GATE" ||
     state === "HUMAN_RESEARCH_GATE" ||
     state === "HUMAN_SCRIPT_GATE" ||
+    state === "HUMAN_TITLE_DIRECTION_GATE" ||
+    state === "TITLE_DIRECTION_REJECTED" ||
     state === "HUMAN_FORMAT_GATE" ||
     state === "HUMAN_PERFORMANCE_GATE" ||
     state === "HUMAN_NARRATION_PREVIEW_GATE" ||
@@ -677,6 +679,9 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_PACKAGING_GATE: "Review packages",
     HUMAN_RESEARCH_GATE: "Review research",
     HUMAN_SCRIPT_GATE: "Review script",
+    HUMAN_TITLE_DIRECTION_GATE: "Select title directions",
+    TITLE_DIRECTION_REJECTED: "Rework title directions",
+    TITLE_DIRECTION_SELECTED: "Title directions selected",
     HUMAN_FORMAT_GATE: "Review format",
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
@@ -4969,6 +4974,9 @@ function renderAnalysis(data) {
     "HUMAN_PACKAGING_GATE",
     "HUMAN_RESEARCH_GATE",
     "HUMAN_SCRIPT_GATE",
+    "HUMAN_TITLE_DIRECTION_GATE",
+    "TITLE_DIRECTION_REJECTED",
+    "TITLE_DIRECTION_SELECTED",
     "HUMAN_FORMAT_GATE",
     "HUMAN_PERFORMANCE_GATE",
     "HUMAN_NARRATION_PREVIEW_GATE",
@@ -5124,20 +5132,24 @@ function renderAnalysis(data) {
   ) {
     activeIndex = 6;
   } else if (
+    [
+      "HUMAN_TITLE_DIRECTION_GATE",
+      "TITLE_DIRECTION_REJECTED",
+      "TITLE_DIRECTION_SELECTED"
+    ].includes(workflow.state) ||
+    Boolean((data.title_direction || {}).requests_ready) ||
+    Boolean((data.title_direction || {}).candidates_ready)
+  ) {
+    activeIndex = 5;
+  } else if (
     workflow.state === "HUMAN_SCRIPT_GATE" ||
     story.requests_ready || story.drafts_ready || story.script_gate_complete
   ) {
-    activeIndex = 5;
+    activeIndex = 4;
   } else if (
     workflow.state === "HUMAN_RESEARCH_GATE" ||
     research.plans_ready || research.evidence_complete ||
     research.drafts_ready || research.research_gate_complete
-  ) {
-    activeIndex = 4;
-  } else if (
-    workflow.state === "HUMAN_PACKAGING_GATE" ||
-    packaging.requests_ready || packaging.candidates_ready ||
-    packaging.packaging_gate_complete
   ) {
     activeIndex = 3;
   } else if (
