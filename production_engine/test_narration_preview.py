@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 import wave
@@ -35,6 +36,39 @@ class NarrationPreviewTests(unittest.TestCase):
         self.assertTrue(manifest["segments"][0]["sound_design"]["editorial_only"])
         self.assertIn("kokoro_local", manifest["renderer_preference"])
 
+    def _bind_current_manifest(
+        self,
+        root: Path,
+        manifest: Path,
+        payload: dict,
+    ) -> Path:
+        voice_dir = root / "voice"
+        voice_dir.mkdir(exist_ok=True)
+        concept_id = str(payload.get("concept_id") or "")
+        fmt = str(payload.get("format") or "")
+        spec_path = voice_dir / f"{concept_id}.{fmt}.approved_voice_spec.json"
+        spec_path.write_text(
+            json.dumps(
+                {
+                    "concept_id": concept_id,
+                    "format": fmt,
+                    "performance_gate": {
+                        "status": "PERFORMANCE_SPEC_APPROVED",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        current = dict(payload)
+        current["provenance"] = {
+            "approved_voice_spec": str(spec_path.resolve()),
+            "approved_voice_spec_sha256": narration_preview_review.sha256_file(
+                spec_path
+            ),
+        }
+        manifest.write_text(json.dumps(current), encoding="utf-8")
+        return voice_dir
+
     def _write_current_render(self, manifest: Path, audio: Path) -> None:
         audio.parent.mkdir(parents=True, exist_ok=True)
         audio.write_bytes(b"current preview audio")
@@ -58,9 +92,10 @@ class NarrationPreviewTests(unittest.TestCase):
             approved = root / "approved"
             preview.mkdir()
             manifest = preview / "c1.shorts.narration_preview.json"
-            manifest.write_text(
-                '{"concept_id":"c1","format":"shorts","segments":[]}',
-                encoding="utf-8",
+            voice_dir = self._bind_current_manifest(
+                root,
+                manifest,
+                {"concept_id": "c1", "format": "shorts", "segments": []},
             )
             audio = audio_dir / "c1.shorts.preview.wav"
             self._write_current_render(manifest, audio)
@@ -70,6 +105,7 @@ class NarrationPreviewTests(unittest.TestCase):
                 patch.object(narration_preview_review, "RENDER_DIR", audio_dir),
                 patch.object(narration_preview_review, "RESPONSES_DIR", responses),
                 patch.object(narration_preview_review, "APPROVED_DIR", approved),
+                patch.object(narration_preview_review, "APPROVED_VOICE_DIR", voice_dir),
                 patch.object(narration_preview_review, "SUMMARY_FILE", root / "summary.json"),
             ):
                 result = narration_preview_review.apply_action(
@@ -93,22 +129,27 @@ class NarrationPreviewTests(unittest.TestCase):
             approved = root / "approved"
             preview.mkdir()
             manifest = preview / "c1.shorts.narration_preview.json"
-            manifest.write_text(
-                '{"concept_id":"c1","format":"shorts","segments":[{"segment_id":"a"}]}',
-                encoding="utf-8",
+            voice_dir = self._bind_current_manifest(
+                root,
+                manifest,
+                {
+                    "concept_id": "c1",
+                    "format": "shorts",
+                    "segments": [{"segment_id": "a"}],
+                },
             )
             audio = audio_dir / "c1.shorts.preview.wav"
             self._write_current_render(manifest, audio)
-            manifest.write_text(
-                '{"concept_id":"c1","format":"shorts","segments":[{"segment_id":"b"}]}',
-                encoding="utf-8",
-            )
+            changed = json.loads(manifest.read_text(encoding="utf-8"))
+            changed["segments"] = [{"segment_id": "b"}]
+            manifest.write_text(json.dumps(changed), encoding="utf-8")
 
             with (
                 patch.object(narration_preview_review, "PREVIEW_DIR", preview),
                 patch.object(narration_preview_review, "RENDER_DIR", audio_dir),
                 patch.object(narration_preview_review, "RESPONSES_DIR", responses),
                 patch.object(narration_preview_review, "APPROVED_DIR", approved),
+                patch.object(narration_preview_review, "APPROVED_VOICE_DIR", voice_dir),
             ):
                 snapshot = narration_preview_review.snapshot()
                 with self.assertRaisesRegex(
@@ -133,9 +174,10 @@ class NarrationPreviewTests(unittest.TestCase):
             approved = root / "approved"
             preview.mkdir()
             manifest = preview / "c1.shorts.narration_preview.json"
-            manifest.write_text(
-                '{"concept_id":"c1","format":"shorts"}',
-                encoding="utf-8",
+            voice_dir = self._bind_current_manifest(
+                root,
+                manifest,
+                {"concept_id": "c1", "format": "shorts"},
             )
             audio = audio_dir / "c1.shorts.preview.wav"
             self._write_current_render(manifest, audio)
@@ -146,10 +188,121 @@ class NarrationPreviewTests(unittest.TestCase):
                 patch.object(narration_preview_review, "RENDER_DIR", audio_dir),
                 patch.object(narration_preview_review, "RESPONSES_DIR", responses),
                 patch.object(narration_preview_review, "APPROVED_DIR", approved),
+                patch.object(narration_preview_review, "APPROVED_VOICE_DIR", voice_dir),
             ):
                 snapshot = narration_preview_review.snapshot()
 
             self.assertFalse(snapshot["items"][0]["audio_ready"])
+
+    def test_changed_approved_voice_spec_makes_old_preview_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preview = root / "preview"
+            audio_dir = root / "audio"
+            responses = root / "responses"
+            approved = root / "approved"
+            preview.mkdir()
+            manifest = preview / "c1.shorts.narration_preview.json"
+            voice_dir = self._bind_current_manifest(
+                root,
+                manifest,
+                {"concept_id": "c1", "format": "shorts", "segments": []},
+            )
+            audio = audio_dir / "c1.shorts.preview.wav"
+            self._write_current_render(manifest, audio)
+
+            spec_path = voice_dir / "c1.shorts.approved_voice_spec.json"
+            with (
+                patch.object(narration_preview_review, "PREVIEW_DIR", preview),
+                patch.object(narration_preview_review, "RENDER_DIR", audio_dir),
+                patch.object(narration_preview_review, "RESPONSES_DIR", responses),
+                patch.object(narration_preview_review, "APPROVED_DIR", approved),
+                patch.object(narration_preview_review, "APPROVED_VOICE_DIR", voice_dir),
+            ):
+                current = narration_preview_review.snapshot()
+                changed = json.loads(spec_path.read_text(encoding="utf-8"))
+                changed["title"] = "Changed performance"
+                spec_path.write_text(json.dumps(changed), encoding="utf-8")
+                stale = narration_preview_review.snapshot()
+                with self.assertRaisesRegex(ValueError, "stale"):
+                    narration_preview_review.apply_action(
+                        concept_id="c1",
+                        format="shorts",
+                        decision="APPROVE_FINAL",
+                    )
+
+            self.assertTrue(current["items"][0]["audio_ready"])
+            self.assertFalse(stale["items"][0]["audio_ready"])
+            self.assertFalse(stale["complete"])
+
+    def test_preview_snapshot_requires_current_engagement_and_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approved_voice = root / "approved_voice"
+            engagement = root / "engagement"
+            manifests = root / "manifests"
+            approved_voice.mkdir()
+            engagement.mkdir()
+            manifests.mkdir()
+
+            spec_path = approved_voice / "c1.shorts.approved_voice_spec.json"
+            voice_spec = {
+                "concept_id": "c1",
+                "format": "shorts",
+                "title": "Test",
+                "performance_gate": {"status": "PERFORMANCE_SPEC_APPROVED"},
+                "beats": [
+                    {
+                        "beat_id": "b1",
+                        "purpose": "opening hook",
+                        "immutable_narration": "Listen.",
+                    }
+                ],
+                "directions": [
+                    {
+                        "emotion": "curious",
+                        "intensity": 0.5,
+                        "speed": 1.0,
+                        "pause_before_ms": 0,
+                        "pause_after_ms": 100,
+                        "emphasis_terms": [],
+                    }
+                ],
+            }
+            spec_path.write_text(json.dumps(voice_spec), encoding="utf-8")
+            engagement_path = engagement / f"{spec_path.stem}.engagement.json"
+            engagement_path.write_text(
+                json.dumps(
+                    {
+                        "status": "PASS",
+                        "provenance": {
+                            "approved_voice_spec": str(spec_path.resolve()),
+                            "approved_voice_spec_sha256": narration_preview.sha256_file(
+                                spec_path
+                            ),
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest = narration_preview.build_manifest(voice_spec, spec_path)
+            manifest_path = manifests / "c1.shorts.narration_preview.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with (
+                patch.object(narration_preview, "APPROVED_DIR", approved_voice),
+                patch.object(narration_preview, "ENGAGEMENT_DIR", engagement),
+                patch.object(narration_preview, "MANIFEST_DIR", manifests),
+            ):
+                current = narration_preview.snapshot()
+                voice_spec["title"] = "Changed"
+                spec_path.write_text(json.dumps(voice_spec), encoding="utf-8")
+                stale = narration_preview.snapshot()
+
+            self.assertEqual(current["status"], "READY_FOR_FREE_PREVIEW_RENDER")
+            self.assertEqual(current["prepared"], 1)
+            self.assertNotEqual(stale["status"], "READY_FOR_FREE_PREVIEW_RENDER")
+            self.assertEqual(stale["prepared"], 0)
 
     def test_batch_writes_manifest_bound_render_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -299,12 +452,17 @@ class NarrationPreviewTests(unittest.TestCase):
             approved = root / "approved"
             preview.mkdir()
             manifest = preview / "c1.shorts.narration_preview.json"
-            manifest.write_text('{"concept_id":"c1","format":"shorts"}', encoding="utf-8")
+            voice_dir = self._bind_current_manifest(
+                root,
+                manifest,
+                {"concept_id": "c1", "format": "shorts"},
+            )
             with (
                 patch.object(narration_preview_review, "PREVIEW_DIR", preview),
                 patch.object(narration_preview_review, "RENDER_DIR", audio),
                 patch.object(narration_preview_review, "RESPONSES_DIR", responses),
                 patch.object(narration_preview_review, "APPROVED_DIR", approved),
+                patch.object(narration_preview_review, "APPROVED_VOICE_DIR", voice_dir),
             ):
                 with self.assertRaisesRegex(ValueError, "before listening artifact exists"):
                     narration_preview_review.apply_action(
