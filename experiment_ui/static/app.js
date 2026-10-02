@@ -284,6 +284,18 @@ const narrationPauseAfter = document.getElementById("narrationPauseAfter");
 const narrationEmphasis = document.getElementById("narrationEmphasis");
 const narrationSaveRevision = document.getElementById("narrationSaveRevision");
 
+const narrationSpendReviewPanel = document.getElementById("narrationSpendReviewPanel");
+const narrationSpendReviewTitle = document.getElementById("narrationSpendReviewTitle");
+const narrationSpendReviewSummary = document.getElementById("narrationSpendReviewSummary");
+const narrationSpendReviewStatus = document.getElementById("narrationSpendReviewStatus");
+const narrationSpendDetail = document.getElementById("narrationSpendDetail");
+const narrationSpendCriteria = document.getElementById("narrationSpendCriteria");
+const narrationSpendNote = document.getElementById("narrationSpendNote");
+const narrationSpendPrev = document.getElementById("narrationSpendPrev");
+const narrationSpendReject = document.getElementById("narrationSpendReject");
+const narrationSpendRework = document.getElementById("narrationSpendRework");
+const narrationSpendAccept = document.getElementById("narrationSpendAccept");
+const narrationSpendNext = document.getElementById("narrationSpendNext");
 
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
@@ -340,6 +352,8 @@ let performanceEditing = false;
 let latestEditPreviewSnapshot = null;
 let editPreviewCursor = 0;
 let latestPreviewSnapshot = null;
+let latestNarrationSpendSnapshot = null;
+let narrationSpendCursor = 0;
 let latestNarrationPerformanceSnapshot = null;
 let latestVisualCandidateSnapshot = null;
 let visualShotCursor = 0;
@@ -535,6 +549,9 @@ function statusTone(workflow) {
     state === "HUMAN_FORMAT_GATE" ||
     state === "HUMAN_PERFORMANCE_GATE" ||
     state === "HUMAN_NARRATION_PREVIEW_GATE" ||
+    state === "HUMAN_NARRATION_SPEND_GATE" ||
+    state === "WAITING_NARRATION_PROVIDER_QUOTE" ||
+    state === "NARRATION_PROVIDER_SETUP_REQUIRED" ||
     state === "HUMAN_VISUAL_CANDIDATE_GATE" ||
     state === "HUMAN_VISUAL_RIGHTS_GATE" ||
     state === "HUMAN_ROUGH_CUT_GATE" ||
@@ -580,6 +597,7 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_FORMAT_GATE: "Review format",
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
+    HUMAN_NARRATION_SPEND_GATE: "Review narration spend",
     HUMAN_VISUAL_CANDIDATE_GATE: "Choose visuals",
     HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
     HUMAN_ROUGH_CUT_GATE: "Review rough cut",
@@ -3269,10 +3287,159 @@ async function submitPreviewDecision(decision) {
       })
     });
     renderPreviewReview(payload);
+    const automaticQuotePreparation = Boolean(
+      decision === "APPROVE_FINAL" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
     showToast(
-      decision === "APPROVE_FINAL"
-        ? "Free prototype approved. Paid quote preparation is now unlocked."
-        : "Prototype sent back for " + humanizeToken(decision).toLowerCase() + ".",
+      automaticQuotePreparation
+        ? "Free prototype approved. Sound brief and narration cost preparation started automatically."
+        : decision === "APPROVE_FINAL"
+          ? "Free prototype approved. Narration quote preparation is unlocked."
+          : "Prototype sent back for " + humanizeToken(decision).toLowerCase() + ".",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function narrationSpendItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function currentNarrationSpendItem() {
+  const items = narrationSpendItems(latestNarrationSpendSnapshot || {});
+  if (!items.length) return null;
+  narrationSpendCursor = Math.max(
+    0,
+    Math.min(narrationSpendCursor, items.length - 1)
+  );
+  const firstPending = items.findIndex(function (item) {
+    return (item.decision || "PENDING") === "PENDING";
+  });
+  if (firstPending >= 0 && (items[narrationSpendCursor].decision || "PENDING") !== "PENDING") {
+    narrationSpendCursor = firstPending;
+  }
+  return items[narrationSpendCursor] || null;
+}
+
+function renderNarrationSpendReview(snapshot) {
+  latestNarrationSpendSnapshot = snapshot || {};
+  const items = narrationSpendItems(snapshot);
+  narrationSpendReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  const item = currentNarrationSpendItem();
+  if (!item) return;
+  const decision = item.decision || "PENDING";
+  narrationSpendReviewTitle.textContent =
+    "Narration spend — " + humanizeToken(item.format || "");
+  narrationSpendReviewSummary.textContent =
+    (narrationSpendCursor + 1) + " of " + items.length +
+    " branch" + (items.length === 1 ? "" : "es") +
+    ". Accept authorizes up to the displayed worst-case cost; it does not itself call the provider.";
+  narrationSpendReviewStatus.textContent = decision;
+  narrationSpendReviewStatus.className =
+    "status-chip " + (decision === "ACCEPT" ? "success" : decision === "PENDING" ? "running" : "failed");
+
+  const currency = item.currency || "USD";
+  const initial = Number(item.initial_estimate_usd);
+  const worst = Number(item.worst_case_estimate_usd);
+  const quote = item.provider_quote || {};
+  narrationSpendDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>CURRENT PROVIDER QUOTE</h4>' +
+    '<h3>' + escapeHtml(item.provider || "Narration provider") + '</h3>' +
+    '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Initial estimate:</strong> ' + escapeHtml(currency) + ' ' +
+      escapeHtml(Number.isFinite(initial) ? initial.toFixed(2) : "—") +
+    '<br><strong>Worst-case authorization:</strong> ' + escapeHtml(currency) + ' ' +
+      escapeHtml(Number.isFinite(worst) ? worst.toFixed(2) : "—") +
+    '<br><strong>Segments:</strong> ' + escapeHtml(item.segment_count || 0) +
+    '<br><strong>Max attempts/segment:</strong> ' + escapeHtml(item.max_attempts_per_segment || 0) +
+    '<br><strong>Quote reference:</strong> ' + escapeHtml(quote.quote_reference || "—") +
+    '</p><p class="muted">The worst-case figure is the ceiling you are authorizing for this current quote. A changed request or quote invalidates this decision.</p></div>';
+
+  const descriptions = item.criteria || {};
+  const selected = item.criteria_decisions || {};
+  narrationSpendCriteria.innerHTML = (item.required_accept_criteria || []).map(function (name) {
+    return '<label class="criterion-row"><input type="checkbox" data-narration-spend-criterion="' +
+      escapeHtml(name) + '"' + (selected[name] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(name)) + '</strong><small>' +
+      escapeHtml(descriptions[name] || "") + '</small></span></label>';
+  }).join("");
+
+  narrationSpendNote.value = item.note || "";
+  narrationSpendPrev.disabled = narrationSpendCursor <= 0;
+  narrationSpendNext.disabled = narrationSpendCursor >= items.length - 1;
+  narrationSpendReject.disabled = decision === "ACCEPT";
+  narrationSpendRework.disabled = decision === "ACCEPT";
+  narrationSpendAccept.disabled = decision === "ACCEPT";
+}
+
+function moveNarrationSpendCursor(delta) {
+  const items = narrationSpendItems(latestNarrationSpendSnapshot || {});
+  if (!items.length) return;
+  narrationSpendCursor = Math.max(
+    0,
+    Math.min(items.length - 1, narrationSpendCursor + delta)
+  );
+  renderNarrationSpendReview(latestNarrationSpendSnapshot);
+}
+
+function collectNarrationSpendCriteria() {
+  const values = {};
+  narrationSpendCriteria
+    .querySelectorAll("[data-narration-spend-criterion]")
+    .forEach(function (input) {
+      values[input.dataset.narrationSpendCriterion] = Boolean(input.checked);
+    });
+  return values;
+}
+
+async function submitNarrationSpendDecision(decision) {
+  const item = currentNarrationSpendItem();
+  if (!item) return;
+  const criteria = collectNarrationSpendCriteria();
+  if (decision === "ACCEPT") {
+    const worst = Number(item.worst_case_estimate_usd);
+    const currency = item.currency || "USD";
+    if (!(item.required_accept_criteria || []).every(function (name) { return criteria[name] === true; })) {
+      showToast("Confirm every spend criterion before accepting.", true);
+      return;
+    }
+    if (!confirm(
+      "Authorize paid narration up to " + currency + " " +
+      (Number.isFinite(worst) ? worst.toFixed(2) : "the displayed worst-case amount") +
+      " for this exact current quote?"
+    )) return;
+  }
+
+  try {
+    const payload = await api("/api/narration-spend-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        format: item.format,
+        decision: decision,
+        criteria: criteria,
+        note: narrationSpendNote.value
+      })
+    });
+    latestNarrationSpendSnapshot = payload;
+    const pendingIndex = narrationSpendItems(payload).findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (pendingIndex >= 0) narrationSpendCursor = pendingIndex;
+    renderNarrationSpendReview(payload);
+    showToast(
+      decision === "ACCEPT"
+        ? "Narration spend authorized for this current quote. This gate did not call the provider."
+        : decision === "REWORK"
+          ? "Narration quote/setup sent for rework."
+          : "Narration spend rejected.",
       false
     );
     await loadStatus();
@@ -4156,6 +4323,9 @@ function renderAnalysis(data) {
     "HUMAN_FORMAT_GATE",
     "HUMAN_PERFORMANCE_GATE",
     "HUMAN_NARRATION_PREVIEW_GATE",
+    "HUMAN_NARRATION_SPEND_GATE",
+    "WAITING_NARRATION_PROVIDER_QUOTE",
+    "NARRATION_PROVIDER_SETUP_REQUIRED",
     "HUMAN_VISUAL_CANDIDATE_GATE",
     "HUMAN_VISUAL_RIGHTS_GATE",
     "HUMAN_ROUGH_CUT_GATE",
@@ -4197,6 +4367,7 @@ function renderAnalysis(data) {
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
+  renderNarrationSpendReview(data.narration_spend_gate || {});
   renderVisualCandidateReview(data.visual_candidate_gate || {});
   renderVisualRightsReview(data.visual_rights_gate || {});
   renderManagedVisualImport(
@@ -4775,6 +4946,21 @@ previewPerformance.addEventListener("click", function () {
 });
 previewSound.addEventListener("click", function () {
   submitPreviewDecision("REWORK_MUSIC_SFX");
+});
+narrationSpendPrev.addEventListener("click", function () {
+  moveNarrationSpendCursor(-1);
+});
+narrationSpendNext.addEventListener("click", function () {
+  moveNarrationSpendCursor(1);
+});
+narrationSpendReject.addEventListener("click", function () {
+  submitNarrationSpendDecision("REJECT");
+});
+narrationSpendRework.addEventListener("click", function () {
+  submitNarrationSpendDecision("REWORK");
+});
+narrationSpendAccept.addEventListener("click", function () {
+  submitNarrationSpendDecision("ACCEPT");
 });
 storyboardSaveRevision.addEventListener("click", saveStoryboardRevision);
 visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.max(0, visualShotCursor - 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
