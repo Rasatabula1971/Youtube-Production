@@ -141,6 +141,19 @@ def build_targets(draft: dict[str, Any]) -> list[dict[str, Any]]:
             payload={"closing": draft.get("closing")},
         )
     )
+
+    filesystem_ids: dict[str, str] = {}
+    for record in records:
+        target_id = str(record["target_id"])
+        normalized = safe_slug(target_id)
+        previous = filesystem_ids.get(normalized)
+        if previous is not None and previous != target_id:
+            raise ValueError(
+                "Script target IDs collide after filesystem normalization: "
+                f"{previous!r} and {target_id!r} -> {normalized!r}"
+            )
+        filesystem_ids[normalized] = target_id
+
     return records
 
 

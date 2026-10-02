@@ -41,6 +41,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/packaging-gate",
     "/api/research-gate",
     "/api/script-gate",
+    "/api/script-section-review",
     "/api/format-gate",
     "/api/performance-gate",
     "/api/narration-preview-gate",
@@ -182,6 +183,10 @@ from script_review import (
 )
 from script_review import (
     snapshot as script_gate_snapshot,
+)
+from script_section_service import (
+    apply_action as apply_script_section_review_action,
+    snapshot as script_section_review_snapshot,
 )
 from story_plan_engine import (
     validation_contract_sha256 as story_plan_validation_contract_sha256,
@@ -6016,6 +6021,23 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/script-gate":
             self._send_json(script_gate_snapshot())
             return
+        if route == "/api/script-section-review":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0]).strip()
+            fmt = str((query.get("format") or [""])[0]).strip()
+            if bool(concept_id) != bool(fmt):
+                self._send_json(
+                    {"error": "concept_id and format must be supplied together."},
+                    400,
+                )
+                return
+            self._send_json(
+                script_section_review_snapshot(
+                    concept_id if concept_id else None,
+                    fmt if fmt else None,
+                )
+            )
+            return
         if route == "/api/format-gate":
             self._send_json(format_gate_snapshot())
             return
@@ -6279,6 +6301,35 @@ class Handler(BaseHTTPRequestHandler):
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/script-section-review":
+                payload = apply_script_section_review_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    fmt=str(body.get("format", "")),
+                    action=str(body.get("action", "")),
+                    target_id=(
+                        str(body["target_id"])
+                        if body.get("target_id") is not None
+                        else None
+                    ),
+                    reason=(
+                        str(body["reason"])
+                        if body.get("reason") is not None
+                        else None
+                    ),
+                    custom_instruction=(
+                        str(body["custom_instruction"])
+                        if body.get("custom_instruction") is not None
+                        else None
+                    ),
+                    selection_id=(
+                        str(body["selection_id"])
+                        if body.get("selection_id") is not None
+                        else None
+                    ),
+                )
                 self._send_json(payload)
                 return
 

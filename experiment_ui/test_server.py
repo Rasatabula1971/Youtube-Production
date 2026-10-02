@@ -49,6 +49,16 @@ class ExperimentUiTests(unittest.TestCase):
             {"/", "/opportunity", "/analysis", "/tools"},
         )
 
+    def test_script_section_review_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/script-section-review",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        self.assertIn('route == "/api/script-section-review"', source)
+        self.assertIn("apply_script_section_review_action", source)
+
+
     def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
