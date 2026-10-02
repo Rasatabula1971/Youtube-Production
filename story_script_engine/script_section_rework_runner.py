@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,46 @@ MODEL_RUNS_DIR = OUTPUT_DIR / "script_section_rework_model_runs"
 RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_script_section_rework_outputs"
 
 ALTERNATIVE_IDS = ["A", "B", "C"]
+_NUMERIC_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9_])[-+]?\\d+(?:,\\d{3})*(?:\\.\\d+)?%?"
+)
+
+
+def _allowed_claim_ids(request: dict[str, Any]) -> list[str]:
+    claims = request.get("accepted_claims", [])
+    if not isinstance(claims, list):
+        raise ValueError("accepted_claims must be a list")
+    ids: list[str] = []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            raise ValueError("accepted_claims entries must be objects")
+        claim_id = str(claim.get("claim_id") or "").strip()
+        if not claim_id:
+            raise ValueError("accepted_claims entries require claim_id")
+        ids.append(claim_id)
+    if len(ids) != len(set(ids)):
+        raise ValueError("accepted_claims contains duplicate claim_id values")
+    return ids
+
+
+def _numeric_tokens(text: str) -> set[str]:
+    return {
+        match.group(0).replace(",", "")
+        for match in _NUMERIC_TOKEN_RE.finditer(str(text or ""))
+    }
+
+
+def _allowed_numeric_tokens(request: dict[str, Any]) -> set[str]:
+    texts = [
+        str(
+            request.get("selected_target", {}).get("original_text")
+            or ""
+        )
+    ]
+    for claim in request.get("accepted_claims", []):
+        if isinstance(claim, dict):
+            texts.append(str(claim.get("statement") or ""))
+    return _numeric_tokens("\n".join(texts))
 
 
 def validation_contract_sha256() -> str:
@@ -470,6 +511,20 @@ def assert_request_current(request: dict[str, Any]) -> None:
 
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
+    allowed_claim_ids = _allowed_claim_ids(request)
+    claim_id_schema: dict[str, Any] = {
+        "type": "array",
+        "uniqueItems": True,
+        "minItems": len(allowed_claim_ids),
+        "maxItems": len(allowed_claim_ids),
+        "items": {"type": "string"},
+    }
+    if allowed_claim_ids:
+        claim_id_schema["items"] = {
+            "type": "string",
+            "enum": allowed_claim_ids,
+        }
+
     return {
         "type": "object",
         "additionalProperties": False,
@@ -503,6 +558,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                         "alternative_id",
                         "replacement_text",
                         "change_summary",
+                        "claim_ids_used",
                     ],
                     "properties": {
                         "alternative_id": {
@@ -517,6 +573,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                             "type": "string",
                             "minLength": 1,
                         },
+                        "claim_ids_used": claim_id_schema,
                     },
                 },
             },
@@ -536,9 +593,11 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "5. Produce exactly A, B and C. A is surgical, B is stronger, C is materially different while staying inside the same facts and story function.\n"
         "6. Correct the supplied rework_reason/custom_instruction rather than improving unrelated parts.\n"
         "7. Use only accepted_claims for factual assertions. Do not invent facts or stakes.\n"
-        "8. Preserve package promise, story intent, open loops, payoff logic, target format and approved Channel Voice when active.\n"
-        "9. Do not copy source-video wording, personality, sequence or exact execution.\n"
-        "10. Do not claim virality or guaranteed performance.\n\n"
+        "8. Every alternative must return claim_ids_used exactly matching the selected target's accepted claim IDs, in the supplied order; return [] when none are allowed.\n"
+        "9. Do not introduce new numeric facts unless that numeric value already appears in selected_target.original_text or accepted_claims.\n"
+        "10. Preserve package promise, story intent, open loops, payoff logic, target format and approved Channel Voice when active.\n"
+        "11. Do not copy source-video wording, personality, sequence or exact execution.\n"
+        "12. Do not claim virality or guaranteed performance.\n\n"
         "REWORK REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -552,11 +611,40 @@ def validate_response(
     request: dict[str, Any],
 ) -> dict[str, Any]:
     errors: list[str] = []
-    if str(response.get("concept_id") or "") != str(request.get("concept_id") or ""):
+    expected_top_keys = {
+        "concept_id",
+        "format",
+        "target_id",
+        "alternatives",
+    }
+    if not isinstance(response, dict):
+        return {
+            "valid": False,
+            "errors": ["response must be an object"],
+            "source_overlap": {},
+        }
+
+    actual_top_keys = set(response)
+    missing_top = sorted(expected_top_keys - actual_top_keys)
+    extra_top = sorted(actual_top_keys - expected_top_keys)
+    if missing_top:
+        errors.append(
+            "response missing fields: " + ", ".join(missing_top)
+        )
+    if extra_top:
+        errors.append(
+            "response has unsupported fields: " + ", ".join(extra_top)
+        )
+
+    for field in ("concept_id", "format", "target_id"):
+        if not isinstance(response.get(field), str):
+            errors.append(f"{field} must be a string")
+
+    if response.get("concept_id") != request.get("concept_id"):
         errors.append("concept_id mismatch")
-    if str(response.get("format") or "") != str(request.get("format") or ""):
+    if response.get("format") != request.get("format"):
         errors.append("format mismatch")
-    if str(response.get("target_id") or "") != str(request.get("target_id") or ""):
+    if response.get("target_id") != request.get("target_id"):
         errors.append("target_id mismatch")
 
     alternatives = response.get("alternatives")
@@ -565,7 +653,7 @@ def validate_response(
         alternatives = []
 
     ids = [
-        str(item.get("alternative_id") or "")
+        item.get("alternative_id")
         for item in alternatives
         if isinstance(item, dict)
     ]
@@ -576,42 +664,108 @@ def validate_response(
         str(request.get("selected_target", {}).get("original_text") or "")
         .split()
     ).casefold()
+    allowed_claim_ids = _allowed_claim_ids(request)
+    allowed_numeric_tokens = _allowed_numeric_tokens(request)
     seen_text: set[str] = set()
     overlap_reports: dict[str, Any] = {}
+    expected_alt_keys = {
+        "alternative_id",
+        "replacement_text",
+        "change_summary",
+        "claim_ids_used",
+    }
 
     for index, item in enumerate(alternatives):
         if not isinstance(item, dict):
             errors.append(f"alternative {index} must be an object")
             continue
-        alt_id = str(item.get("alternative_id") or "")
-        text = str(item.get("replacement_text") or "").strip()
-        summary = str(item.get("change_summary") or "").strip()
+
+        alt_id = item.get("alternative_id")
+        label = alt_id if isinstance(alt_id, str) and alt_id else str(index)
+        actual_alt_keys = set(item)
+        missing_alt = sorted(expected_alt_keys - actual_alt_keys)
+        extra_alt = sorted(actual_alt_keys - expected_alt_keys)
+        if missing_alt:
+            errors.append(
+                f"alternative {label} missing fields: "
+                + ", ".join(missing_alt)
+            )
+        if extra_alt:
+            errors.append(
+                f"alternative {label} has unsupported fields: "
+                + ", ".join(extra_alt)
+            )
+
+        if not isinstance(alt_id, str):
+            errors.append(f"alternative {index} alternative_id must be a string")
+
+        text_value = item.get("replacement_text")
+        summary_value = item.get("change_summary")
+        if not isinstance(text_value, str):
+            errors.append(
+                f"alternative {label} replacement_text must be a string"
+            )
+            text = ""
+        else:
+            text = text_value.strip()
+        if not isinstance(summary_value, str):
+            errors.append(
+                f"alternative {label} change_summary must be a string"
+            )
+            summary = ""
+        else:
+            summary = summary_value.strip()
+
+        claims_used = item.get("claim_ids_used")
+        if not isinstance(claims_used, list) or any(
+            not isinstance(claim_id, str) for claim_id in claims_used
+        ):
+            errors.append(
+                f"alternative {label} claim_ids_used must be a list of strings"
+            )
+            claims_used = []
+        if claims_used != allowed_claim_ids:
+            errors.append(
+                f"alternative {label} claim_ids_used must exactly match "
+                "the selected target's accepted claim IDs"
+            )
+
         if not text:
-            errors.append(f"alternative {alt_id or index} requires replacement_text")
+            errors.append(f"alternative {label} requires replacement_text")
             continue
         if not summary:
-            errors.append(f"alternative {alt_id or index} requires change_summary")
+            errors.append(f"alternative {label} requires change_summary")
+
+        unsupported_numbers = sorted(
+            _numeric_tokens(text) - allowed_numeric_tokens
+        )
+        if unsupported_numbers:
+            errors.append(
+                f"alternative {label} introduces unsupported numeric facts: "
+                + ", ".join(unsupported_numbers)
+            )
 
         normalized = " ".join(text.split()).casefold()
         if normalized == original:
-            errors.append(f"alternative {alt_id or index} is unchanged from original")
+            errors.append(f"alternative {label} is unchanged from original")
         if normalized in seen_text:
-            errors.append(f"alternative {alt_id or index} duplicates another alternative")
+            errors.append(f"alternative {label} duplicates another alternative")
         seen_text.add(normalized)
 
         overlap = check_texts(
-            [{"field": f"alternative.{alt_id}", "text": text}]
+            [{"field": f"alternative.{label}", "text": text}]
         )
-        overlap_reports[alt_id] = overlap
+        overlap_reports[str(label)] = overlap
         if overlap.get("blocking"):
-            errors.append(f"alternative {alt_id} fails source-overlap block")
+            errors.append(f"alternative {label} fails source-overlap block")
 
     return {
         "valid": not errors,
         "errors": errors,
         "source_overlap": overlap_reports,
+        "allowed_claim_ids": allowed_claim_ids,
+        "allowed_numeric_tokens": sorted(allowed_numeric_tokens),
     }
-
 
 def build_alternatives_artifact(
     response: dict[str, Any],
@@ -621,6 +775,7 @@ def build_alternatives_artifact(
     request_path: Path,
     provider_id: str | None,
     model_id: str | None,
+    response_path: Path | None = None,
 ) -> dict[str, Any]:
     return {
         "artifact": "script_section_alternatives",
@@ -659,8 +814,75 @@ def build_alternatives_artifact(
             ).get("section_state_sha256"),
             "provider_id": provider_id,
             "model_id": model_id,
+            "validation_contract_sha256": validation_contract_sha256(),
+            "model_response": (
+                str(response_path.resolve())
+                if response_path is not None
+                else None
+            ),
+            "model_response_sha256": (
+                sha256_file(response_path)
+                if response_path is not None and response_path.is_file()
+                else None
+            ),
         },
     }
+
+
+def _cached_artifact_errors(
+    artifact: dict[str, Any],
+    request: dict[str, Any],
+    *,
+    request_path: Path,
+    response_path: Path,
+    contract_hash: str,
+) -> list[str]:
+    errors: list[str] = []
+    if artifact.get("artifact") != "script_section_alternatives":
+        errors.append("artifact type mismatch")
+    if artifact.get("status") != "ALTERNATIVES_READY":
+        errors.append("artifact status is not ALTERNATIVES_READY")
+    if artifact.get("selection") is not None:
+        errors.append("artifact already has a human selection")
+
+    provenance = artifact.get("artifact_provenance")
+    if not isinstance(provenance, dict):
+        return errors + ["artifact provenance is missing"]
+
+    if provenance.get("rework_request_sha256") != sha256_file(request_path):
+        errors.append("rework request hash mismatch")
+    if provenance.get("validation_contract_sha256") != contract_hash:
+        errors.append("validation contract hash mismatch")
+    if provenance.get("model_response") != str(response_path.resolve()):
+        errors.append("model response path mismatch")
+    if not response_path.is_file():
+        errors.append("model response file is unavailable")
+        return errors
+    if provenance.get("model_response_sha256") != sha256_file(response_path):
+        errors.append("model response hash mismatch")
+        return errors
+
+    response = load_json(response_path)
+    validation = validate_response(response, request)
+    if not validation["valid"]:
+        errors.append(
+            "cached model response fails deterministic validation: "
+            + "; ".join(validation["errors"])
+        )
+        return errors
+
+    expected = build_alternatives_artifact(
+        response,
+        request,
+        validation,
+        request_path=request_path,
+        provider_id=provenance.get("provider_id"),
+        model_id=provenance.get("model_id"),
+        response_path=response_path,
+    )
+    if artifact != expected:
+        errors.append("alternatives artifact content changed")
+    return errors
 
 
 def run_one(
@@ -690,14 +912,28 @@ def run_one(
 
     if report_path.exists() and artifact_path.exists() and not force:
         existing = load_json(report_path)
-        artifact = load_json(artifact_path)
-        provenance = artifact.get("artifact_provenance", {})
         if (
             existing.get("status") == "VALIDATED"
             and existing.get("validation_contract_sha256") == contract_hash
-            and isinstance(provenance, dict)
-            and provenance.get("rework_request_sha256") == request_hash
+            and existing.get("request_sha256") == request_hash
         ):
+            artifact = load_json(artifact_path)
+            cache_errors = _cached_artifact_errors(
+                artifact,
+                request,
+                request_path=path,
+                response_path=response_path,
+                contract_hash=contract_hash,
+            )
+            if cache_errors:
+                return {
+                    "status": "CACHED_ALTERNATIVES_INVALID",
+                    "concept_id": concept_id,
+                    "format": fmt,
+                    "target_id": target_id,
+                    "errors": cache_errors,
+                    "alternatives": str(artifact_path),
+                }
             return {
                 "status": "SKIPPED_ALREADY_VALIDATED",
                 "concept_id": concept_id,
@@ -833,6 +1069,7 @@ def run_one(
         request_path=path,
         provider_id=result.get("provider_id"),
         model_id=result.get("model_id"),
+        response_path=response_path,
     )
     atomic_write_json(artifact_path, artifact)
 
