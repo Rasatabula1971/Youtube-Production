@@ -138,6 +138,18 @@ const scriptSectionGenerate = document.getElementById("scriptSectionGenerate");
 const scriptSectionAlternatives = document.getElementById("scriptSectionAlternatives");
 const scriptSectionAlternativeCards = document.getElementById("scriptSectionAlternativeCards");
 
+const titleDirectionReviewPanel = document.getElementById("titleDirectionReviewPanel");
+const titleDirectionReviewTitle = document.getElementById("titleDirectionReviewTitle");
+const titleDirectionReviewSummary = document.getElementById("titleDirectionReviewSummary");
+const titleDirectionReviewStatus = document.getElementById("titleDirectionReviewStatus");
+const titleDirectionDetail = document.getElementById("titleDirectionDetail");
+const titleDirectionNote = document.getElementById("titleDirectionNote");
+const titleDirectionPrev = document.getElementById("titleDirectionPrev");
+const titleDirectionReject = document.getElementById("titleDirectionReject");
+const titleDirectionRework = document.getElementById("titleDirectionRework");
+const titleDirectionAccept = document.getElementById("titleDirectionAccept");
+const titleDirectionNext = document.getElementById("titleDirectionNext");
+
 const formatReviewPanel = document.getElementById("formatReviewPanel");
 const formatReviewTitle = document.getElementById("formatReviewTitle");
 const formatReviewSummary = document.getElementById("formatReviewSummary");
@@ -383,6 +395,9 @@ let researchEditing = false;
 let latestScriptSnapshot = null;
 let scriptCursor = 0;
 let scriptEditing = false;
+let latestTitleDirectionSnapshot = null;
+let titleDirectionCursor = 0;
+let titleDirectionEditing = false;
 let latestScriptSectionSnapshot = null;
 let scriptSectionTargetId = null;
 let scriptSectionRenderedTargetId = null;
@@ -1726,6 +1741,179 @@ async function submitConceptDecision(decision) {
   }
 }
 
+
+function titleDirectionConcepts(snapshot) {
+  return (snapshot && snapshot.concepts) || [];
+}
+
+function titleDirectionCandidateHtml(format, candidate, selected) {
+  const titleId = String(candidate.title_id || candidate.candidate_id || "");
+  const titleText = String(candidate.title_text || candidate.title || "");
+  const selectedId = selected && String(
+    selected.selected_title_id || selected.title_id || ""
+  );
+  const selectedText = selected && String(
+    selected.selected_title_text || selected.title_text || ""
+  );
+  const checked = selectedId === titleId ? " checked" : "";
+  const editValue = selectedId === titleId && selectedText
+    ? selectedText
+    : titleText;
+  const radioName = "title-direction-" + format;
+  const evidence = Array.isArray(candidate.evidence_refs)
+    ? candidate.evidence_refs.join(", ")
+    : "";
+  return (
+    '<div class="concept-detail-card">' +
+      '<label class="criterion-item">' +
+        '<input type="radio" name="' + escapeHtml(radioName) + '" value="' +
+          escapeHtml(titleId) + '"' + checked + '>' +
+        '<span><strong>' + escapeHtml(titleText) + '</strong></span>' +
+      '</label>' +
+      '<div class="concept-meta">' +
+        '<span>' + escapeHtml(humanizeToken(candidate.psychological_angle || candidate.angle || "")) + '</span>' +
+        '<span>' + escapeHtml(humanizeToken(candidate.primary_driver || "")) + '</span>' +
+        '<span>' + Number(candidate.character_count || titleText.length) + ' chars</span>' +
+        '<span>' + escapeHtml(candidate.search_intent || "") + '</span>' +
+      '</div>' +
+      '<p class="muted"><strong>Claim:</strong> ' +
+        escapeHtml(candidate.core_claim || "") +
+        (evidence ? '<br><strong>Evidence:</strong> ' + escapeHtml(evidence) : '') +
+      '</p>' +
+      '<label class="vision-label">Editable wording</label>' +
+      '<input class="text-input title-direction-text" data-title-id="' +
+        escapeHtml(titleId) + '" type="text" maxlength="120" value="' +
+        escapeHtml(editValue) + '">' +
+    '</div>'
+  );
+}
+
+function titleDirectionSetHtml(format, candidates, selected) {
+  const label = format === "short" ? "SHORT — 5 DIRECTIONS" : "LONG-FORM — 5 DIRECTIONS";
+  const list = Array.isArray(candidates) ? candidates : [];
+  return (
+    '<div class="concept-detail-card"><h4>' + label + '</h4>' +
+      '<p class="muted">Select one direction. Exact wording may be adjusted now and remains editable in mature Packaging.</p></div>' +
+    list.map(function (candidate) {
+      return titleDirectionCandidateHtml(format, candidate, selected);
+    }).join("")
+  );
+}
+
+function renderTitleDirectionReview(snapshot, force) {
+  latestTitleDirectionSnapshot = snapshot || {};
+  const items = titleDirectionConcepts(latestTitleDirectionSnapshot);
+
+  if (!items.length) {
+    titleDirectionReviewPanel.hidden = true;
+    return;
+  }
+  if (titleDirectionEditing && !force) return;
+
+  titleDirectionCursor = Math.max(
+    0,
+    Math.min(titleDirectionCursor, items.length - 1)
+  );
+  const item = items[titleDirectionCursor] || {};
+  const selected = item.selected_titles || {};
+  const titles = item.titles || {};
+  const decision = item.decision || "PENDING";
+
+  titleDirectionReviewPanel.hidden = false;
+  titleDirectionReviewTitle.textContent =
+    "Title directions — " + (item.concept_id || "");
+  titleDirectionReviewSummary.textContent =
+    (titleDirectionCursor + 1) + " of " + items.length +
+    " · " + Number(latestTitleDirectionSnapshot.pending || 0) + " pending";
+  titleDirectionReviewStatus.textContent = decision;
+  titleDirectionReviewStatus.className =
+    "status-chip " +
+    (decision === "ACCEPT"
+      ? "success"
+      : decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  titleDirectionDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>DIRECTION CONTRACT</h4>' +
+    '<p>Choose the psychology/title direction that best represents the approved script. This does <strong>not</strong> permanently lock the public title text.</p></div>' +
+    titleDirectionSetHtml("short", titles.short, selected.short) +
+    titleDirectionSetHtml("long_form", titles.long_form, selected.long_form);
+
+  titleDirectionNote.value = item.note || "";
+  titleDirectionPrev.disabled = titleDirectionCursor <= 0;
+  titleDirectionNext.disabled = titleDirectionCursor >= items.length - 1;
+  const decided = decision !== "PENDING";
+  titleDirectionReject.disabled = decided;
+  titleDirectionRework.disabled = decided;
+  titleDirectionAccept.disabled = decided;
+  titleDirectionEditing = false;
+}
+
+function collectTitleDirectionSelections() {
+  const result = {};
+  ["short", "long_form"].forEach(function (format) {
+    const checked = titleDirectionDetail.querySelector(
+      'input[name="title-direction-' + format + '"]:checked'
+    );
+    if (!checked) {
+      throw new Error(
+        format === "short"
+          ? "Choose one Short title direction."
+          : "Choose one Long-form title direction."
+      );
+    }
+    const titleId = String(checked.value || "");
+    const input = titleDirectionDetail.querySelector(
+      '.title-direction-text[data-title-id="' + CSS.escape(titleId) + '"]'
+    );
+    const text = String((input && input.value) || "").trim();
+    if (!text) throw new Error("Selected title wording cannot be blank.");
+    result[format] = {
+      title_id: titleId,
+      title_text: text
+    };
+  });
+  return result;
+}
+
+async function submitTitleDirectionDecision(decision) {
+  const items = titleDirectionConcepts(latestTitleDirectionSnapshot || {});
+  const item = items[titleDirectionCursor];
+  if (!item) return;
+  try {
+    const selectedTitles =
+      decision === "ACCEPT" ? collectTitleDirectionSelections() : null;
+    const payload = await api("/api/title-direction-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        decision: decision,
+        selected_titles: selectedTitles,
+        note: titleDirectionNote.value
+      })
+    });
+    titleDirectionEditing = false;
+    latestTitleDirectionSnapshot = payload || {};
+    const refreshed = titleDirectionConcepts(latestTitleDirectionSnapshot);
+    const nextPending = refreshed.findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (nextPending >= 0) titleDirectionCursor = nextPending;
+    renderTitleDirectionReview(latestTitleDirectionSnapshot, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Title directions accepted. Exact wording remains editable later."
+        : decision === "REWORK"
+          ? "Title directions sent for targeted regeneration."
+          : "Title directions rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
 
 function pendingPackagingIndex(items) {
   return (items || []).findIndex(function (item) {
@@ -4840,9 +5028,10 @@ function renderAnalysis(data) {
   renderVisionReview(data.vision_review || {}, false);
   renderHumanAnalysisReview(data.human_analysis_review || {}, false);
   renderConceptReview(data.concept_gate || {}, false);
-  renderPackagingReview(data.packaging_gate || {}, false);
+  renderPackagingReview({}, false);
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
+  renderTitleDirectionReview(data.title_direction_gate || {}, false);
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
@@ -5660,6 +5849,28 @@ finalExportSound.addEventListener("click", function () {
 });
 finalExportApprove.addEventListener("click", function () {
   submitFinalExportDecision("APPROVE_EXPORT");
+});
+
+titleDirectionPrev.addEventListener("click", function () {
+  titleDirectionCursor = Math.max(0, titleDirectionCursor - 1);
+  renderTitleDirectionReview(latestTitleDirectionSnapshot || {}, true);
+});
+titleDirectionNext.addEventListener("click", function () {
+  const items = titleDirectionConcepts(latestTitleDirectionSnapshot || {});
+  titleDirectionCursor = Math.min(
+    Math.max(0, items.length - 1),
+    titleDirectionCursor + 1
+  );
+  renderTitleDirectionReview(latestTitleDirectionSnapshot || {}, true);
+});
+titleDirectionReject.addEventListener("click", function () {
+  submitTitleDirectionDecision("REJECT");
+});
+titleDirectionRework.addEventListener("click", function () {
+  submitTitleDirectionDecision("REWORK");
+});
+titleDirectionAccept.addEventListener("click", function () {
+  submitTitleDirectionDecision("ACCEPT");
 });
 
 narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
