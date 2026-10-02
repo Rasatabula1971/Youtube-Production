@@ -20,6 +20,8 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         ffmpeg_ready=True,
         edit_gate=None,
         final_handoff_state=None,
+        final_sound_plan_state=None,
+        final_sound_assets=None,
         readiness=None,
     ):
         stack = ExitStack()
@@ -206,6 +208,39 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                         "stale": 0,
                         "blocked": 0,
                         "ready_for_final_sound": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "final_sound_plan_artifact_state",
+                return_value=(
+                    final_sound_plan_state
+                    if final_sound_plan_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                        "expected": 1,
+                        "current": 0,
+                        "stale": 0,
+                        "requirements": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "final_sound_asset_snapshot",
+                return_value=(
+                    final_sound_assets
+                    if final_sound_assets is not None
+                    else {
+                        "status": "WAITING_FOR_FINAL_SOUND_PLANS",
+                        "ready": False,
+                        "plans": 0,
+                        "expected": 0,
+                        "resolved": 0,
+                        "pending": 0,
+                        "stale": 0,
                     }
                 ),
             ),
@@ -543,7 +578,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
             "Prepare Final Production Handoff",
         )
 
-    def test_current_final_handoff_stops_at_slice20_boundary(self):
+    def test_current_final_handoff_unlocks_final_sound_plan(self):
         workflow = self.workflow(
             {
                 "candidate_gate": {"packets": [], "stale_shots": 0},
@@ -582,12 +617,135 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "blocked": 0,
                 "ready_for_final_sound": 1,
             },
+            final_sound_plan_state={
+                "status": "STALE_OR_INCOMPLETE",
+                "ready": False,
+                "expected": 1,
+                "current": 0,
+                "stale": 0,
+                "requirements": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Prepare Final Sound Requirements",
+        )
+        self.assertIn("calls no provider", workflow["current_detail"])
+
+    def test_current_sound_plan_waits_for_licensed_assets(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={"status": "COMPLETE", "complete": True, "rework": 0},
+            final_handoff_state={
+                "status": "CURRENT",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+                "stale": 0,
+                "blocked": 0,
+                "ready_for_final_sound": 1,
+            },
+            final_sound_plan_state={
+                "status": "CURRENT",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+                "stale": 0,
+                "requirements": 2,
+            },
+            final_sound_assets={
+                "status": "WAITING_FOR_FINAL_SOUND_ASSETS",
+                "ready": False,
+                "plans": 1,
+                "expected": 2,
+                "resolved": 1,
+                "pending": 1,
+                "stale": 0,
+            },
         )
         self.assertEqual(
             workflow["state"],
-            "FINAL_PRODUCTION_HANDOFF_READY",
+            "WAITING_FOR_FINAL_SOUND_ASSETS",
         )
-        self.assertIn("Slice 20 stops here", workflow["current_detail"])
+        self.assertIn("does not call or pay", workflow["current_detail"])
+
+    def test_resolved_final_sound_stops_at_slice21_boundary(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={"status": "COMPLETE", "complete": True, "rework": 0},
+            final_handoff_state={
+                "status": "CURRENT",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+                "stale": 0,
+                "blocked": 0,
+                "ready_for_final_sound": 1,
+            },
+            final_sound_plan_state={
+                "status": "CURRENT",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+                "stale": 0,
+                "requirements": 2,
+            },
+            final_sound_assets={
+                "status": "FINAL_SOUND_ASSETS_READY",
+                "ready": True,
+                "plans": 1,
+                "expected": 2,
+                "resolved": 2,
+                "pending": 0,
+                "stale": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "FINAL_SOUND_ASSETS_READY")
+        self.assertIn("Slice 21 stops here", workflow["current_detail"])
+        self.assertIn("No final render", workflow["current_detail"])
 
     def test_blocked_final_handoff_stops_without_paid_action(self):
         workflow = self.workflow(
@@ -720,7 +878,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 9
+                search_index : search_index + 10
             ],
             [
                 "visual_search_acquire",
@@ -732,6 +890,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "edit_manifest_prepare",
                 "edit_preview_render",
                 "final_production_handoff_prepare",
+                "final_sound_plan_prepare",
             ],
         )
         self.assertIn("visual_rough_cut_prepare", server.ACTION_DEFS)
