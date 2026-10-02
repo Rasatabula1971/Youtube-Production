@@ -22,7 +22,7 @@ class StoryPlanEngineTests(unittest.TestCase):
                 "viewer_moment": "Watching a race",
                 "desired_outcome": "Understand why",
                 "packaging": {
-                    "title": "Old Working Title",
+                    "title": "Why Racing Brakes Work Backwards",
                     "one_sentence_promise": "Explain the counterintuitive behavior",
                     "expected_payoff": "A clear explanation",
                     "thumbnail": {"message": "Backwards?"},
@@ -92,7 +92,7 @@ class StoryPlanEngineTests(unittest.TestCase):
     def valid_response(self):
         return {
             "concept_id": "c1",
-            "title": "Why Racing Brakes Work Backwards",
+            "title": "Old Working Title",
             "story_question": "Why can racing brakes feel wrong before they work correctly?",
             "opening_hook_intent": "Create immediate tension around the apparently backwards behavior.",
             "viewer_state": {
