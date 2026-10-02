@@ -26,7 +26,12 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json
 from voice_performance import load_json, safe_slug, sha256_file, sha256_text
 from voice_review import APPROVED_DIR as APPROVED_VOICE_DIR
-from narration_preview_review import APPROVED_DIR as APPROVED_PREVIEW_DIR
+from narration_preview_review import (
+    APPROVED_DIR as APPROVED_PREVIEW_DIR,
+    PREVIEW_DIR as PREVIEW_MANIFEST_DIR,
+    RENDER_DIR as PREVIEW_RENDER_DIR,
+    current_render as current_preview_render,
+)
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "narration_render_config.json"
@@ -131,15 +136,39 @@ def _voice_prerequisites(spec: dict[str, Any]) -> list[str]:
 
 def _preview_approved(concept_id: str, fmt: str, spec_path: Path) -> bool:
     key = artifact_key(concept_id, fmt)
-    path = APPROVED_PREVIEW_DIR / f"{key}.approved_preview.json"
-    if not path.exists():
+    approval_path = APPROVED_PREVIEW_DIR / f"{key}.approved_preview.json"
+    manifest_path = PREVIEW_MANIFEST_DIR / f"{key}.narration_preview.json"
+    audio_path = PREVIEW_RENDER_DIR / f"{key}.preview.wav"
+    if not approval_path.is_file() or not spec_path.is_file():
         return False
-    payload = load_json(path)
+    try:
+        payload = load_json(approval_path)
+        manifest = load_json(manifest_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict) or not isinstance(manifest, dict):
+        return False
+    provenance = manifest.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return False
+    recorded_spec = Path(
+        str(provenance.get("approved_voice_spec") or "")
+    ).resolve()
+    if (
+        recorded_spec != spec_path.resolve()
+        or provenance.get("approved_voice_spec_sha256") != sha256_file(spec_path)
+    ):
+        return False
+    render_metadata = current_preview_render(manifest_path, audio_path)
+    if render_metadata is None:
+        return False
     return bool(
-        isinstance(payload, dict)
-        and payload.get("decision") == "APPROVE_FINAL"
+        payload.get("decision") == "APPROVE_FINAL"
         and str(payload.get("concept_id") or "") == concept_id
         and str(payload.get("format") or "") == fmt
+        and payload.get("preview_manifest_sha256") == sha256_file(manifest_path)
+        and payload.get("preview_audio_sha256") == render_metadata.get("audio_sha256")
+        and payload.get("approved_voice_spec_sha256") == sha256_file(spec_path)
     )
 
 

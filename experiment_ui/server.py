@@ -234,6 +234,8 @@ from voice_review import (
     snapshot as performance_gate_snapshot,
 )
 from narration_render import snapshot as narration_render_snapshot
+from pre_render_engagement import snapshot as pre_render_engagement_snapshot
+from narration_preview import snapshot as narration_preview_prepare_snapshot
 from narration_performance_review import (
     revise as revise_narration_performance,
     snapshot as narration_performance_revision_snapshot,
@@ -4045,18 +4047,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         or "WAITING_FOR_VOICE_PERFORMANCE_SPECS"
     )
     voice_visual_ready = bool(voice["visual_ready"])
-    engagement_payload = safe_load_json(PRODUCTION_ENGAGEMENT_SUMMARY)
-    engagement = engagement_payload if isinstance(engagement_payload, dict) else {
-        "status": "WAITING_FOR_APPROVED_PERFORMANCE", "processed": 0, "passed": 0, "blocked": 0, "items": []
-    }
+    engagement = pre_render_engagement_snapshot()
     engagement_passed = bool(
         engagement.get("status") == "PASS"
         and int(engagement.get("processed") or 0) > 0
     )
-    preview_prepare_payload = safe_load_json(PRODUCTION_PREVIEW_SUMMARY)
-    preview_prepare = preview_prepare_payload if isinstance(preview_prepare_payload, dict) else {
-        "status": "WAITING_FOR_ENGAGEMENT_VALIDATION", "prepared": 0
-    }
+    preview_prepare = narration_preview_prepare_snapshot()
     preview_render_payload = safe_load_json(PRODUCTION_PREVIEW_RENDER_SUMMARY)
     preview_render = preview_render_payload if isinstance(preview_render_payload, dict) else {
         "status": "WAITING_FOR_PREVIEW_MANIFESTS", "rendered": 0

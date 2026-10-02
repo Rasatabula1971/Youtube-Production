@@ -1594,3 +1594,33 @@ request by hash provenance. Valid unchanged provenance remains cacheable.
 
 The Human Performance Gate is the mandatory stopping point after automatic
 Voice Performance planning. This boundary spends no narration-provider credits.
+
+## D-080 — Performance completion automatically advances to the free Narration Preview Gate
+
+**Status:** Accepted
+
+A completed Human Performance Gate is followed by the zero-cost prototype chain
+without another routine run-button decision.
+
+The automatic workflow executes
+`pre_render_engagement → narration_preview_prepare → prototype_sound_prepare →
+narration_preview_render` and then stops at
+`HUMAN_NARRATION_PREVIEW_GATE`.
+
+No paid narration quote, provider render, or spend authorization may cross this
+boundary before the operator hears and approves the current free preview.
+
+The free preview chain is provenance-bound. A saved engagement PASS is current
+only when its approved Voice Performance spec path and SHA-256 still match.
+Likewise, a preview manifest, local preview render, and preview approval are
+current only when they remain bound to the exact current approved Voice
+Performance spec and exact preview audio hash.
+
+An old preview approval therefore cannot authorize a paid narration quote after
+the upstream performance plan changes.
+
+Kokoro is the current local preview renderer. Missing local dependencies fail
+closed; the workflow must not silently fall through to a paid TTS provider.
+
+The automatic runner treats the current Narration Preview Gate as a hard human
+boundary even if stale downstream quote/spend artifacts happen to exist.

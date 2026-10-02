@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
+import narration_preview_review
 import narration_render
 from voice_performance import sha256_text
 
@@ -106,6 +107,115 @@ class NarrationRenderTests(unittest.TestCase):
             self.assertFalse(request["paid_render_authorized"])
         finally:
             temp.cleanup()
+
+    def test_preview_approval_is_bound_to_current_voice_spec_and_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            voice_dir = root / "voice"
+            preview_approved = root / "preview_approved"
+            preview_manifests = root / "preview_manifests"
+            preview_audio = root / "preview_audio"
+            for directory in (
+                voice_dir,
+                preview_approved,
+                preview_manifests,
+                preview_audio,
+            ):
+                directory.mkdir()
+
+            spec_path = voice_dir / "concept-1.long_form.approved_voice_spec.json"
+            spec_path.write_text(json.dumps(approved_spec()), encoding="utf-8")
+            spec_hash = narration_render.sha256_file(spec_path)
+            manifest_path = (
+                preview_manifests
+                / "concept-1.long_form.narration_preview.json"
+            )
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "concept-1",
+                        "format": "long_form",
+                        "provenance": {
+                            "approved_voice_spec": str(spec_path.resolve()),
+                            "approved_voice_spec_sha256": spec_hash,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            audio_path = preview_audio / "concept-1.long_form.preview.wav"
+            audio_path.write_bytes(b"preview audio")
+            audio_hash = narration_render.sha256_file(audio_path)
+            audio_path.with_suffix(".meta.json").write_text(
+                json.dumps(
+                    {
+                        "manifest_sha256": narration_render.sha256_file(
+                            manifest_path
+                        ),
+                        "audio_sha256": audio_hash,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            approval_path = (
+                preview_approved
+                / "concept-1.long_form.approved_preview.json"
+            )
+            approval_path.write_text(
+                json.dumps(
+                    {
+                        "decision": "APPROVE_FINAL",
+                        "concept_id": "concept-1",
+                        "format": "long_form",
+                        "preview_manifest_sha256": narration_render.sha256_file(
+                            manifest_path
+                        ),
+                        "preview_audio_sha256": audio_hash,
+                        "approved_voice_spec_sha256": spec_hash,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(
+                    narration_render,
+                    "APPROVED_PREVIEW_DIR",
+                    preview_approved,
+                ),
+                patch.object(
+                    narration_render,
+                    "PREVIEW_MANIFEST_DIR",
+                    preview_manifests,
+                ),
+                patch.object(
+                    narration_render,
+                    "PREVIEW_RENDER_DIR",
+                    preview_audio,
+                ),
+                patch.object(
+                    narration_preview_review,
+                    "APPROVED_VOICE_DIR",
+                    voice_dir,
+                ),
+            ):
+                self.assertTrue(
+                    narration_render._preview_approved(
+                        "concept-1",
+                        "long_form",
+                        spec_path,
+                    )
+                )
+                changed = approved_spec()
+                changed["title"] = "Changed after preview approval"
+                spec_path.write_text(json.dumps(changed), encoding="utf-8")
+                self.assertFalse(
+                    narration_render._preview_approved(
+                        "concept-1",
+                        "long_form",
+                        spec_path,
+                    )
+                )
 
     def test_unverified_provider_contract_fails_closed(self) -> None:
         request, _, temp = self.build(verified=False)

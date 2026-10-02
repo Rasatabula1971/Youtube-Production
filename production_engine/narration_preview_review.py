@@ -20,6 +20,7 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from voice_performance import load_json, safe_slug, sha256_file
+from voice_review import APPROVED_DIR as APPROVED_VOICE_DIR
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -41,10 +42,51 @@ def _render_metadata_path(audio_path: Path) -> Path:
     return audio_path.with_suffix(".meta.json")
 
 
+def _current_manifest(manifest_path: Path) -> dict[str, Any] | None:
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = load_json(manifest_path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(manifest, dict):
+        return None
+    concept_id = str(manifest.get("concept_id") or "").strip()
+    fmt = str(manifest.get("format") or "").strip()
+    if not concept_id or not fmt:
+        return None
+    spec_path = APPROVED_VOICE_DIR / f"{_key(concept_id, fmt)}.approved_voice_spec.json"
+    if not spec_path.is_file():
+        return None
+    provenance = manifest.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    recorded = Path(str(provenance.get("approved_voice_spec") or "")).resolve()
+    if recorded != spec_path.resolve():
+        return None
+    if provenance.get("approved_voice_spec_sha256") != sha256_file(spec_path):
+        return None
+    try:
+        spec = load_json(spec_path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    gate = spec.get("performance_gate", {}) if isinstance(spec, dict) else {}
+    if not isinstance(gate, dict) or gate.get("status") != "PERFORMANCE_SPEC_APPROVED":
+        return None
+    if (
+        str(spec.get("concept_id") or "").strip() != concept_id
+        or str(spec.get("format") or "").strip() != fmt
+    ):
+        return None
+    return manifest
+
+
 def current_render(
     manifest_path: Path,
     audio_path: Path,
 ) -> dict[str, Any] | None:
+    if _current_manifest(manifest_path) is None:
+        return None
     metadata_path = _render_metadata_path(audio_path)
     if (
         not manifest_path.exists()
@@ -75,7 +117,10 @@ def snapshot() -> dict[str, Any]:
         key = _key(str(manifest.get("concept_id") or ""), str(manifest.get("format") or ""))
         audio = RENDER_DIR / f"{key}.preview.wav"
         response_path = RESPONSES_DIR / f"{key}.preview_review.json"
-        response = load_json(response_path) if response_path.exists() else {}
+        try:
+            response = load_json(response_path) if response_path.exists() else {}
+        except (OSError, json.JSONDecodeError):
+            response = {}
         render_metadata = current_render(path, audio)
         response_current = (
             isinstance(response, dict)
@@ -128,6 +173,9 @@ def apply_action(*, concept_id: str, format: str, decision: str, note: str = "")
     audio_path = RENDER_DIR / f"{key}.preview.wav"
     if not manifest_path.exists():
         raise ValueError("Preview manifest not found")
+    manifest = _current_manifest(manifest_path)
+    if manifest is None:
+        raise ValueError("Preview manifest is stale against the current approved Voice Performance spec")
     render_metadata = current_render(manifest_path, audio_path)
     if decision == "APPROVE_FINAL" and render_metadata is None:
         raise ValueError(
@@ -144,6 +192,9 @@ def apply_action(*, concept_id: str, format: str, decision: str, note: str = "")
         "decision": decision,
         "note": note.strip(),
         "preview_manifest_sha256": sha256_file(manifest_path),
+        "approved_voice_spec_sha256": manifest.get("provenance", {}).get(
+            "approved_voice_spec_sha256"
+        ),
         "preview_audio": (
             str(audio_path) if render_metadata is not None else None
         ),

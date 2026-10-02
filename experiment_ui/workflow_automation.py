@@ -93,9 +93,30 @@ def run_until_human_gate() -> dict[str, Any]:
 
     for _ in range(MAX_STEPS_PER_RUN):
         readiness = control.action_readiness()
+        guidance = control.workflow_guidance(readiness)
+        preview_machine_pending = any(
+            readiness.get(action_id, {}).get("enabled")
+            for action_id in (
+                "pre_render_engagement",
+                "narration_preview_prepare",
+                "prototype_sound_prepare",
+                "narration_preview_render",
+            )
+        )
+        if (
+            guidance.get("state") == "HUMAN_NARRATION_PREVIEW_GATE"
+            and not preview_machine_pending
+        ):
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Listen to the free narration preview before continuing.",
+            }
+
         action_id = next_enabled_action(readiness)
         if action_id is None:
-            guidance = control.workflow_guidance(readiness)
             return {
                 "status": "STOPPED_AT_BOUNDARY",
                 "completed_actions": completed_actions,
@@ -120,6 +141,17 @@ def run_until_human_gate() -> dict[str, Any]:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
                 if code == 2:
+                    message = (
+                        "The zero-cost local narration preview could not be rendered. "
+                        "Install/configure the local Kokoro preview dependencies and "
+                        "retry; paid fallback is forbidden."
+                        if action_id == "narration_preview_render"
+                        else (
+                            "Current artifacts were preserved, but the active "
+                            "provider/model did not produce new validated output. "
+                            "Retry Continue Automatically later."
+                        )
+                    )
                     return {
                         "status": "PARTIAL",
                         "failed_action": action_id,
@@ -127,11 +159,7 @@ def run_until_human_gate() -> dict[str, Any]:
                         "completed_actions": completed_actions,
                         "before_reason": before_reason,
                         "after_reason": after_reason,
-                        "message": (
-                            "Current artifacts were preserved, but the active "
-                            "provider/model did not produce new validated output. "
-                            "Retry Continue Automatically later."
-                        ),
+                        "message": message,
                     }
                 return {
                     "status": "NO_PROGRESS",

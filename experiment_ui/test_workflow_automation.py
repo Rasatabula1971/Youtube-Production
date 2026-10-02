@@ -243,6 +243,130 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["workflow_state"], "HUMAN_PERFORMANCE_GATE")
         self.assertEqual(result["message"], "Review Voice Performance")
 
+    def test_performance_gate_completion_runs_free_preview_chain_to_listen_gate(self):
+        state = {"completed": 0}
+        sequence = [
+            "pre_render_engagement",
+            "narration_preview_prepare",
+            "prototype_sound_prepare",
+            "narration_preview_render",
+        ]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
+                return {
+                    action_id: {
+                        "enabled": True,
+                        "reason": f"{action_id} ready",
+                    }
+                }
+            return {}
+
+        def guidance(_readiness):
+            if state["completed"] == len(sequence):
+                return {
+                    "state": "HUMAN_NARRATION_PREVIEW_GATE",
+                    "current_title": "Listen to Free Audio Prototype",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_title": "Continue automatic preview preparation",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, sequence[state["completed"]])
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(
+                automation,
+                "run_action",
+                side_effect=fake_run,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_NARRATION_PREVIEW_GATE",
+        )
+        self.assertEqual(result["message"], "Listen to Free Audio Prototype")
+
+    def test_preview_gate_blocks_stale_downstream_machine_action(self):
+        readiness = {
+            "narration_spend_gate_prepare": {
+                "enabled": True,
+                "reason": "stale prior quote still exists",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "HUMAN_NARRATION_PREVIEW_GATE",
+                    "current_title": "Listen to Free Audio Prototype",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_NARRATION_PREVIEW_GATE",
+        )
+
+    def test_local_preview_partial_has_specific_fail_closed_message(self):
+        readiness = {
+            "narration_preview_render": {
+                "enabled": True,
+                "reason": "Render the free local Kokoro prototype for listening.",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "ACTION_REQUIRED",
+                    "current_title": "Render preview",
+                },
+            ),
+            patch.object(automation, "run_action", return_value=2),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertIn("local Kokoro", result["message"])
+        self.assertIn("paid fallback is forbidden", result["message"])
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {

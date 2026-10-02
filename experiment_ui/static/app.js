@@ -3158,12 +3158,19 @@ async function submitPerformanceDecision(decision) {
     const nextPending = pendingPerformanceIndex(payload.specs || []);
     if (nextPending >= 0) performanceCursor = nextPending;
     renderPerformanceReview(payload, true);
+    const automaticPreviewStarted = Boolean(
+      decision === "ACCEPT" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
     showToast(
-      decision === "ACCEPT"
-        ? "Voice performance accepted."
-        : decision === "REWORK"
-          ? "Voice performance sent for rework."
-          : "Voice performance rejected.",
+      automaticPreviewStarted
+        ? "Performance Gate complete. Free narration preview started automatically."
+        : decision === "ACCEPT"
+          ? "Voice performance accepted."
+          : decision === "REWORK"
+            ? "Voice performance sent for rework."
+            : "Voice performance rejected.",
       false
     );
     await loadStatus();
