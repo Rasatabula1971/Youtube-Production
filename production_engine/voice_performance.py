@@ -547,6 +547,10 @@ def _prune_mismatched_active_voice_outputs(
             and (
                 not isinstance(report, dict)
                 or report.get("request_sha256") != request_hash
+                or (
+                    (spec_path.exists() or raw_path.exists())
+                    and report.get("status") != "VALIDATED"
+                )
             )
         )
         spec_mismatch = bool(
