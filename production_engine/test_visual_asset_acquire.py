@@ -165,6 +165,21 @@ class VisualAssetAcquireTests(unittest.TestCase):
                         "shot-001": {
                             "approved_for_rough_cut": True,
                             "candidate_id": "youtube-abc",
+                            "selection_candidate_fingerprint": (
+                                json.loads(
+                                    review_path.read_text(encoding="utf-8")
+                                )["decisions"]["shot-001"][
+                                    "candidate_fingerprint"
+                                ]
+                            ),
+                            "selection_result_fingerprint": (
+                                json.loads(
+                                    review_path.read_text(encoding="utf-8")
+                                )["decisions"]["shot-001"].get(
+                                    "result_fingerprint",
+                                    "",
+                                )
+                            ),
                         }
                     },
                 },
