@@ -6025,6 +6025,21 @@ def workflow_guidance(
     if visual_post.get("gap_plans_ready"):
         spend_gate = visual_spend_review_snapshot()
         hero_count = int(spend_gate.get("hero_candidates") or 0)
+
+        if spend_gate.get("status") == "INVALID_VISUAL_SPEND_AUTHORIZATION":
+            return {
+                "state": "VISUAL_SPEND_INVALID",
+                "current_action_id": None,
+                "current_title": "Visual Spend Authorization Is Invalid",
+                "current_detail": (
+                    "The current spend records exceed or violate the configured "
+                    "workflow cost boundary. No generation brief or assembly can "
+                    "continue until the current spend decisions are repaired."
+                ),
+                "next_action_id": None,
+                "next_title": "Repair the Human Visual Spend decisions",
+            }
+
         if hero_count > 0 and not spend_gate.get("complete"):
             return {
                 "state": "HUMAN_VISUAL_SPEND_GATE",
@@ -6037,35 +6052,7 @@ def workflow_guidance(
                     "workflow-wide USD hard cap applies across every current branch."
                 ),
                 "next_action_id": None,
-                "next_title": "Slice 18: prepare generation or assembly handoff",
-            }
-
-        if hero_count == 0:
-            return {
-                "state": "VISUAL_GAPS_READY_NO_SPEND",
-                "current_action_id": None,
-                "current_title": "Visual Gap Plan Ready — No Spend Needed",
-                "current_detail": (
-                    "The approved rough cut has current gap plans, but no unresolved "
-                    "shot met the premium-generation threshold. Slice 17 stops here "
-                    "with paid generation still locked."
-                ),
-                "next_action_id": None,
-                "next_title": "Slice 18: build the zero-cost visual assembly",
-            }
-
-        if spend_gate.get("complete"):
-            return {
-                "state": "VISUAL_SPEND_DECISIONS_COMPLETE",
-                "current_action_id": None,
-                "current_title": "Visual Spend Decisions Complete",
-                "current_detail": (
-                    "Every current premium candidate has a human decision and all "
-                    "authorized ceilings fit the global workflow cap. No generation "
-                    "brief or provider action is created in Slice 17."
-                ),
-                "next_action_id": None,
-                "next_title": "Slice 18: prepare generation or assembly handoff",
+                "next_title": "Prepare generation briefs or zero-cost assembly",
             }
 
         authorized = int(spend_gate.get("authorized") or 0)
@@ -6077,8 +6064,9 @@ def workflow_guidance(
                     "current_action_id": "auto_continue",
                     "current_title": "Prepare Premium Visual Generation Briefs",
                     "current_detail": (
-                        "Human spend ceilings are approved. Prepare provider-neutral "
-                        "cinematic briefs only; this step calls no paid provider."
+                        "The Human Visual Spend Gate is complete. Prepare only "
+                        "provenance-bound provider-neutral briefs for explicitly "
+                        "authorized shots. This step calls no provider and spends nothing."
                     ),
                     "next_action_id": None,
                     "next_title": "Build Visual Edit Assembly Plan",
@@ -6093,140 +6081,91 @@ def workflow_guidance(
                 "current_action_id": "auto_continue",
                 "current_title": "Build Visual Edit Assembly Plan",
                 "current_detail": (
-                    "Build the zero-cost timeline contract from current local "
-                    "visuals and explicit placeholders. Missing premium/editorial "
-                    "assets do not block a structural preview."
+                    "Build the deterministic zero-cost timeline from current managed "
+                    "assets, approved placeholders and any authorized premium slots. "
+                    "No media is rendered and no provider is called."
                 ),
                 "next_action_id": None,
-                "next_title": "Build Edit Preview Manifest",
+                "next_title": "Slice 18 assembly boundary",
             }
 
-        edit_manifest_state = edit_manifest_artifact_state(
-            visual_post.get("expected_branches", [])
+        retry_pending = int(
+            assembly_state.get("waiting_for_existing_retry") or 0
         )
-        if not edit_manifest_state.get("ready"):
-            return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Build Edit Preview Manifest",
-                "current_detail": (
-                    "Combine current narration timing, visual assembly and approved "
-                    "sound-design intent into a deterministic preview timeline."
-                ),
-                "next_action_id": None,
-                "next_title": "Render Free Structural Edit Preview",
-            }
-
-        edit_preview_state = edit_preview_artifact_state(
-            visual_post.get("expected_branches", [])
-        )
-        if not edit_preview_state.get("ready"):
-            return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Render Free Structural Edit Preview",
-                "current_detail": (
-                    "Render a local FFmpeg preview with current assets, placeholders "
-                    "and QC-passed narration. No paid visual provider or generated "
-                    "music/SFX is used."
-                ),
-                "next_action_id": None,
-                "next_title": "Human Edit Preview Gate",
-            }
-
-        edit_gate = edit_preview_review_snapshot()
-        if not edit_gate.get("complete"):
-            return {
-                "state": "HUMAN_EDIT_PREVIEW_GATE",
-                "current_action_id": None,
-                "current_title": "Review Structural Edit Preview",
-                "current_detail": (
-                    "Judge pacing, narration-to-picture rhythm and story flow before "
-                    "spending on unresolved hero shots. Dark placeholders are expected "
-                    "where final visual assets are still missing."
-                ),
-                "next_action_id": None,
-                "next_title": "Approve direction or return a layer for rework",
-            }
-
-        if int(edit_gate.get("rework") or 0) > 0:
-            return {
-                "state": "EDIT_PREVIEW_REWORK_REQUIRED",
-                "current_action_id": None,
-                "current_title": "Edit Preview Rework Requested",
-                "current_detail": (
-                    "A human return request was recorded for visuals, narration or "
-                    "sound. The instruction is preserved and must be applied at that "
-                    "upstream creative layer before a new preview is approved."
-                ),
-                "next_action_id": None,
-                "next_title": "Apply the human rework instruction",
-            }
-
-        premium_missing = int(
+        premium_pending = int(
             assembly_state.get("waiting_for_premium_assets") or 0
         )
-        local_missing = int(
+        local_pending = int(
             assembly_state.get("waiting_for_local_assets") or 0
         )
-        if premium_missing or local_missing:
+
+        if retry_pending:
             return {
-                "state": "WAITING_FOR_FINAL_VISUAL_ASSETS",
+                "state": "VISUAL_EXISTING_RETRY_REQUIRED",
                 "current_action_id": None,
-                "current_title": "Edit Direction Approved — Final Visuals Still Missing",
+                "current_title": "Retry Existing Visual Search Requested",
                 "current_detail": (
-                    f"The structural edit is approved. {premium_missing} branch(es) "
-                    f"still wait for premium-generated assets and {local_missing} "
-                    "branch(es) wait for approved local assets. Register those files; "
-                    "the assembly and preview approval will become stale automatically."
+                    f"{retry_pending} branch(es) contain a human Retry Existing "
+                    "decision. Slice 18 preserves those instructions and stops before "
+                    "edit preview work so the search can be rerun intentionally."
                 ),
                 "next_action_id": None,
-                "next_title": "Register final visual assets",
+                "next_title": "Rerun the requested existing/free visual search",
             }
 
-        final_handoff = final_production_handoff_artifact_state(
-            visual_post.get("expected_branches", [])
-        )
-        if not final_handoff.get("ready"):
+        if premium_pending and local_pending:
             return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Prepare Final Production Handoff",
+                "state": "WAITING_FOR_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Visual Assembly Ready — Final Assets Still Missing",
                 "current_detail": (
-                    "The structural edit and all current visual assets are approved. "
-                    "Build the zero-cost provider-neutral package containing the final "
-                    "visual timeline, narration and sound-design intent."
+                    f"{premium_pending} branch(es) wait for externally generated "
+                    f"premium assets and {local_pending} branch(es) wait for approved "
+                    "local/editorial files. The app has made no paid provider call."
                 ),
                 "next_action_id": None,
-                "next_title": "Final sound/provider boundary",
+                "next_title": "Register the missing visual assets",
             }
 
-        if int(final_handoff.get("blocked") or 0) > 0:
+        if premium_pending:
             return {
-                "state": "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+                "state": "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
                 "current_action_id": None,
-                "current_title": "Final Production Handoff Has Missing Inputs",
+                "current_title": "Premium Visual Briefs Ready — Awaiting External Assets",
                 "current_detail": (
-                    "One or more branches lost a current final visual, narration or "
-                    "sound-design input. Rebuild the stale upstream artifact before "
-                    "attempting final production."
+                    f"{premium_pending} branch(es) contain current, human-authorized "
+                    "generation briefs. Provider execution remains external/unbuilt "
+                    "in this slice; register the resulting files only within the "
+                    "authorized cost ceilings."
                 ),
                 "next_action_id": None,
-                "next_title": "Repair missing final-production inputs",
+                "next_title": "Register generated visual assets",
+            }
+
+        if local_pending:
+            return {
+                "state": "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Visual Assembly Ready — Local Assets Required",
+                "current_detail": (
+                    f"{local_pending} branch(es) still need approved local/editorial "
+                    "files. No paid generation is needed for those branches."
+                ),
+                "next_action_id": None,
+                "next_title": "Register approved local visual assets",
             }
 
         return {
-            "state": "FINAL_SOUND_PROVIDER_REQUIRED",
+            "state": "VISUAL_ASSEMBLY_READY",
             "current_action_id": None,
-            "current_title": "Final Production Handoff Ready",
+            "current_title": "Visual Assembly Plan Ready",
             "current_detail": (
-                "The approved visual edit and narration are packaged and current. "
-                "Final music/SFX are still descriptive intent only. No paid provider "
-                "has been called. Connect a commercial-safe final sound/provider path "
-                "before a publish-ready export."
+                "Current spend/no-spend decisions have been converted into a "
+                "provenance-bound zero-cost visual timeline. Slice 18 stops before "
+                "building or rendering the structural edit preview."
             ),
             "next_action_id": None,
-            "next_title": "Connect final sound/provider assets",
+            "next_title": "Slice 19: build the structural edit preview",
         }
 
     production_visual = production_visual_artifact_state()
