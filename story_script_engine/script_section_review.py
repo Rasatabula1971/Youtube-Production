@@ -1,7 +1,8 @@
 """Deterministic section-level review contract for Script Gate.
 
-Slice 1 only: build and validate review state. No human actions, model calls,
-regeneration, alternatives, or draft mutation are implemented here.
+Slice 1 builds review state. Slice 2 applies bounded backend state transitions.
+There are still no model calls, alternatives, narration replacements, or UI
+controls in this module.
 """
 
 from __future__ import annotations
@@ -402,15 +403,16 @@ def apply_target_action(
         target["rework_note"] = normalized_note
 
     elif normalized_action == "CANCEL_REWORK":
-        if previous_review_state != "REWORK_REQUESTED":
+        if previous_review_state == "ACCEPTED":
             raise ValueError(
-                "CANCEL_REWORK requires a REWORK_REQUESTED target"
+                "CANCEL_REWORK cannot reopen an ACCEPTED target"
             )
-        target["review_state"] = "PENDING"
-        target["locked"] = False
-        target["editable"] = True
-        target["rework_reason"] = None
-        target["rework_note"] = None
+        if previous_review_state == "REWORK_REQUESTED":
+            target["review_state"] = "PENDING"
+            target["locked"] = False
+            target["editable"] = True
+            target["rework_reason"] = None
+            target["rework_note"] = None
 
     elif normalized_action == "ACCEPT":
         target["review_state"] = "ACCEPTED"
