@@ -105,6 +105,56 @@ class FinalRenderTests(unittest.TestCase):
         self.assertEqual(segments[-1]["end_seconds"], 4.0)
         self.assertEqual(segments[-1]["duration_seconds"], 4.0)
 
+    def test_result_currentness_rejects_branch_identity_tamper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_dir = root / "results"
+            render_dir = root / "renders"
+            manifest_dir = root / "manifests"
+            manifest_path = write_json(
+                manifest_dir / "c1.short.final_render_manifest.json",
+                {"artifact": "final_render_manifest"},
+            )
+            render_path = render_dir / "c1.short.final_candidate.mp4"
+            render_path.parent.mkdir(parents=True, exist_ok=True)
+            render_path.write_bytes(b"candidate")
+            result = {
+                "artifact": "final_render_result",
+                "concept_id": "tampered",
+                "format": "short",
+                "status": "READY_FOR_HUMAN_FINAL_EXPORT_GATE",
+                "render_file": str(render_path),
+                "render_sha256": final_render.sha256_file(render_path),
+                "render_bytes": render_path.stat().st_size,
+                "duration_seconds": 4.0,
+                "provenance": {
+                    "final_render_manifest": str(manifest_path),
+                    "final_render_manifest_sha256": final_render.sha256_file(
+                        manifest_path
+                    ),
+                },
+            }
+            result_path = write_json(
+                result_dir / "c1.short.final_render_result.json",
+                result,
+            )
+            with (
+                patch.object(final_render, "RESULT_DIR", result_dir),
+                patch.object(final_render, "RENDER_DIR", render_dir),
+                patch.object(
+                    final_render,
+                    "manifest_is_current",
+                    return_value={
+                        "concept_id": "c1",
+                        "format": "short",
+                        "duration_seconds": 4.0,
+                    },
+                ),
+            ):
+                self.assertIsNone(
+                    final_render.result_is_current(result_path)
+                )
+
     def test_result_currentness_detects_render_byte_change(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
