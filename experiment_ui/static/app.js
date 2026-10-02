@@ -2158,6 +2158,8 @@ function syncWholeScriptAcceptWithSectionState(snapshot) {
     return target.decision === "REWORK_REQUESTED";
   });
   const stale = status === "STALE_SECTION_STATE";
+  scriptReject.disabled = Boolean(scriptSectionBusy);
+  scriptRework.disabled = Boolean(scriptSectionBusy);
   scriptAccept.disabled = Boolean(scriptSectionBusy || hasRework || stale);
   scriptAccept.title = stale
     ? "Resolve the stale section-review state before whole-script approval."
@@ -2373,6 +2375,7 @@ function renderScriptSectionReview(snapshot) {
 
   scriptSectionNextPending.disabled =
     scriptSectionBusy || !nextUnresolved ||
+    nextUnresolved.target_id === selected.target_id ||
     (counts.accepted === counts.total);
   scriptSectionNextPending.textContent = counts.accepted === counts.total
     ? "All targets resolved"
