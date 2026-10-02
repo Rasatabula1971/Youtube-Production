@@ -976,6 +976,66 @@ class ScriptReviewTests(unittest.TestCase):
             )
             self.assertIn("content changed", validation["detail"])
 
+
+    def test_prepare_rework_request_rejects_tampered_section_state_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="REWORK",
+                    reason="TOO_TECHNICAL",
+                    reviewer="r",
+                )
+                state_path = (
+                    states
+                    / "c1.short.script_section_review_state.json"
+                )
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                target = next(
+                    item
+                    for item in state["targets"]
+                    if item["target_id"] == "section:s1"
+                )
+                target["content_sha256"] = "tampered"
+                state_path.write_text(
+                    json.dumps(state),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "target metadata/hash does not match draft",
+                ):
+                    script_review.prepare_section_rework_request(
+                        concept_id="c1",
+                        format="short",
+                        target_id="section:s1",
+                    )
+
     def test_prepare_rework_request_requires_rework_requested_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
