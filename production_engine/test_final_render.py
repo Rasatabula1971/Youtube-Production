@@ -85,6 +85,26 @@ class FinalRenderTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "gap"):
                 final_render._final_visual_segments(manifest)
 
+    def test_final_visual_tail_holds_last_asset_to_render_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            asset = root / "v.mp4"
+            asset.write_bytes(b"video")
+            manifest = {
+                "duration_seconds": 4.0,
+                "visual_track": [{
+                    "scene_index": 0,
+                    "start_seconds": 0.0,
+                    "end_seconds": 3.0,
+                    "asset_file": str(asset),
+                    "asset_sha256": final_render.sha256_file(asset),
+                }],
+            }
+            segments = final_render._final_visual_segments(manifest)
+
+        self.assertEqual(segments[-1]["end_seconds"], 4.0)
+        self.assertEqual(segments[-1]["duration_seconds"], 4.0)
+
     def test_result_currentness_detects_render_byte_change(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
