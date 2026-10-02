@@ -416,10 +416,17 @@ def result_is_current(path: Path) -> dict[str, Any] | None:
     manifest_path = Path(
         str(provenance.get("final_render_manifest") or "")
     )
+    current_manifest = manifest_is_current(manifest_path)
     if (
-        manifest_is_current(manifest_path) is None
+        current_manifest is None
         or provenance.get("final_render_manifest_sha256")
         != sha256_file(manifest_path)
+        or str(result.get("concept_id") or "")
+        != str(current_manifest.get("concept_id") or "")
+        or str(result.get("format") or "")
+        != str(current_manifest.get("format") or "")
+        or float(result.get("duration_seconds") or 0)
+        != float(current_manifest.get("duration_seconds") or 0)
     ):
         return None
 
