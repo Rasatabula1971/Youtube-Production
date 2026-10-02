@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from channel_profile import (
+from channel_profiles.channel_profile import (
     load_active_profile_binding,
     normalize_binding,
     validate_profile,
@@ -114,9 +114,11 @@ class ChannelVoiceProfileTests(unittest.TestCase):
 
     def test_selector_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            container = Path(tmp)
+            root = container / "channel_profiles"
+            root.mkdir()
             selector = root / "active_profile.json"
-            outside = root.parent / "outside_profile.json"
+            outside = container / "outside_profile.json"
             outside.write_text(json.dumps(approved_profile()), encoding="utf-8")
             selector.write_text(
                 json.dumps(
