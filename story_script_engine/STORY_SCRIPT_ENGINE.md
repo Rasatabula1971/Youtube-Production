@@ -192,3 +192,34 @@ The endpoint supports preparing section state, target accept/lock/unlock/rework,
 bounded alternative generation, and explicit alternative selection. Rework or
 unlocking an accepted target invalidates any stale branch response and approved
 script bundle immediately.
+
+### Slice 4B — Human Script Gate controls
+
+The Human Script Gate exposes selective review as one compact target selector
+rather than repeating controls under every paragraph. The reviewer can choose
+the opening hook, any generated section or the closing; accept/lock it; unlock
+it; request bounded rework; generate A/B/C; or explicitly keep Original/use
+A/B/C. Whole-script Rework remains a separate branch-level action.
+
+### Slice 5A — manual target edit
+
+A human may also replace the wording of one **unlocked** target directly. Manual
+editing never bypasses the selective-rework safeguards:
+
+- the replacement must be non-empty and materially change the target;
+- locked targets must be explicitly unlocked first;
+- only the chosen target text field may change;
+- all non-target hashes must remain identical;
+- the complete revised script must pass the normal deterministic Script
+  validator;
+- the previous draft is saved under `script_versions/`;
+- the edited target becomes accepted and locked;
+- stale Human Script Gate approval/bundles are invalidated and the review
+  request is rebound to the revised draft; and
+- draft/state writes use the same recoverable transaction/rollback mechanism as
+  generated-alternative selection.
+
+Any previously generated alternatives for the edited target become stale by
+target hash/state version and are hidden; cleanup of those stale files is
+best-effort and cannot turn an already-committed manual edit into an apparent
+failure.
