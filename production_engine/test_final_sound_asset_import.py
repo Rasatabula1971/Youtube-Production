@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
@@ -35,13 +36,21 @@ class FinalSoundAssetImportTests(unittest.TestCase):
             "requirements_count": 1,
         }
 
-    def patched(self, root: Path, plan: dict):
-        return (
-            patch.object(sound_asset, "PLAN_DIR", root / "plans"),
-            patch.object(sound_asset, "ASSET_DIR", root / "assets"),
-            patch.object(sound_asset, "REGISTRY_DIR", root / "registry"),
-            patch.object(sound_asset, "plan_is_current", return_value=plan),
+    def patched(self, root: Path, plan: dict) -> ExitStack:
+        stack = ExitStack()
+        stack.enter_context(
+            patch.object(sound_asset, "PLAN_DIR", root / "plans")
         )
+        stack.enter_context(
+            patch.object(sound_asset, "ASSET_DIR", root / "assets")
+        )
+        stack.enter_context(
+            patch.object(sound_asset, "REGISTRY_DIR", root / "registry")
+        )
+        stack.enter_context(
+            patch.object(sound_asset, "plan_is_current", return_value=plan)
+        )
+        return stack
 
     def test_register_copies_licensed_asset_and_records_no_app_spend(self):
         with tempfile.TemporaryDirectory() as tmp:
