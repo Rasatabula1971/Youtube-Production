@@ -65,6 +65,14 @@ class ScriptSectionUiSlice6Tests(unittest.TestCase):
             "scriptSectionTarget.disabled = scriptSectionBusy;",
             self.script,
         )
+        self.assertIn(
+            "scriptReject.disabled = Boolean(scriptSectionBusy);",
+            self.script,
+        )
+        self.assertIn(
+            "scriptRework.disabled = Boolean(scriptSectionBusy);",
+            self.script,
+        )
 
     def test_whole_script_accept_waits_for_section_rework(self):
         self.assertIn(
@@ -91,6 +99,10 @@ class ScriptSectionUiSlice6Tests(unittest.TestCase):
         )
         self.assertIn(
             "renderScriptReview(payload, true);",
+            self.script,
+        )
+        self.assertIn(
+            "scriptCursor = index;",
             self.script,
         )
 
