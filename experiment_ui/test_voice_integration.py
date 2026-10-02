@@ -74,6 +74,18 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
             script,
         )
 
+    def test_static_ui_contains_authorized_narration_return(self) -> None:
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="narrationReturnPanel"', html)
+        self.assertIn("AUTHORIZED NARRATION RETURN", html)
+        self.assertIn("renderNarrationReturn", script)
+        self.assertIn("/api/narration-render-return", script)
+        self.assertIn(
+            "Final narration registered. Local Audio QC started automatically.",
+            script,
+        )
+
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (
             patch.object(
