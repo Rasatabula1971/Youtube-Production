@@ -19,6 +19,7 @@ from script_review import (
 from script_section_apply import (
     SCRIPT_VERSIONS_DIR,
     SELECTION_TRANSACTIONS_DIR,
+    apply_manual_edit,
     apply_selection,
 )
 from script_section_rework_runner import (
@@ -72,6 +73,19 @@ def _alternatives_path(
     return alternatives_dir / (
         f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
         f"{safe_slug(target_id)}.alternatives.json"
+    )
+
+
+def _rework_request_path(
+    concept_id: str,
+    fmt: str,
+    target_id: str,
+    *,
+    rework_requests_dir: Path,
+) -> Path:
+    return rework_requests_dir / (
+        f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+        f"{safe_slug(target_id)}.section_rework_request.json"
     )
 
 
@@ -327,6 +341,7 @@ def apply_action(
     reason: str | None = None,
     custom_instruction: str | None = None,
     selection_id: str | None = None,
+    replacement_text: str | None = None,
     reviewer: str | None = None,
     drafts_dir: Path = DRAFTS_DIR,
     state_dir: Path = SECTION_STATE_DIR,
@@ -448,6 +463,46 @@ def apply_action(
             review_responses_dir=review_responses_dir,
             approved_dir=approved_dir,
         )
+
+    elif action_value == "MANUAL_EDIT":
+        if not target_value:
+            raise ValueError("MANUAL_EDIT requires target_id")
+        if not state_path.is_file():
+            raise ValueError("Section state is not prepared")
+        if review_requests_dir is None:
+            from script_review import REVIEW_REQUESTS_DIR
+
+            review_requests_dir = REVIEW_REQUESTS_DIR
+
+        apply_manual_edit(
+            draft_path,
+            state_path,
+            target_id=target_value,
+            replacement_text=str(replacement_text or ""),
+            reviewer=reviewer_value,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+        stale_alternatives = _alternatives_path(
+            concept,
+            branch_format,
+            target_value,
+            alternatives_dir=alternatives_dir,
+        )
+        if stale_alternatives.exists():
+            stale_alternatives.unlink()
+        stale_request = _rework_request_path(
+            concept,
+            branch_format,
+            target_value,
+            rework_requests_dir=rework_requests_dir,
+        )
+        if stale_request.exists():
+            stale_request.unlink()
 
     else:
         raise ValueError(f"Unsupported section review action: {action_value}")
