@@ -26,5 +26,37 @@
     "unexpected",
     "mystery",
     "payoff"
-  ]
+  ],
+  "psychological_packaging": {
+    "angles_per_format": 5,
+    "allowed_primary_drivers": [
+      "curiosity_gap",
+      "danger",
+      "loss_aversion",
+      "consequence",
+      "surprise",
+      "awe",
+      "transformation",
+      "comparison",
+      "contradiction",
+      "specificity",
+      "mystery",
+      "challenge",
+      "achievement",
+      "failure",
+      "insider_knowledge",
+      "unexpected_result"
+    ]
+  },
+  "thumbnail_concepts": {
+    "concepts_per_angle": 1,
+    "aspect_ratio": "16:9",
+    "primary_focal_points": 1,
+    "maximum_meaningful_visual_elements": 3,
+    "preferred_text_words": 3,
+    "maximum_text_words": 4,
+    "require_timestamp_safe": true,
+    "require_mobile_legibility_intent": true,
+    "prohibit_critical_bottom_right_content": true
+  }
 }
