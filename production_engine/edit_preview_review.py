@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+from edit_manifest import manifest_is_current
 from visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
@@ -52,8 +53,9 @@ def _current_result(path: Path) -> dict[str, Any]:
     if not isinstance(provenance, dict):
         raise ValueError("Edit preview provenance is missing")
     manifest_path = Path(str(provenance.get("edit_manifest") or ""))
+    current_manifest = manifest_is_current(manifest_path)
     if (
-        not manifest_path.exists()
+        current_manifest is None
         or provenance.get("edit_manifest_sha256")
         != sha256_file(manifest_path)
     ):
