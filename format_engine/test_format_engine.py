@@ -662,19 +662,18 @@ class FormatEngineTests(unittest.TestCase):
         )
         self.assertTrue(all(existence))
 
-    def test_format_request_accepts_distinct_short_and_long_titles(self):
+    def test_format_request_ignores_legacy_public_title_selections(self):
         script = self.script("either")
         script["package"]["selected_titles"] = {
             "long_form": {
                 "candidate_id": "long-curiosity",
-                "title": "Why Racing Brakes Work Backwards",
+                "title": "Different Long Public Title",
             },
             "short": {
                 "candidate_id": "short-stakes",
                 "title": "Cold Brakes Can Betray You",
             },
         }
-        script["branch_scripts"]["short"]["title"] = "Cold Brakes Can Betray You"
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "script.json"
             path.write_text(json.dumps(script), encoding="utf-8")
@@ -686,11 +685,12 @@ class FormatEngineTests(unittest.TestCase):
         )
         self.assertEqual(
             request["branch_story_packages"]["short"]["title"],
-            "Cold Brakes Can Betray You",
+            "Why Racing Brakes Work Backwards",
         )
+        self.assertEqual(request["package"]["selected_titles"], {})
         self.assertEqual(
-            request["package"]["selected_titles"]["short"]["title"],
-            "Cold Brakes Can Betray You",
+            request["package"]["title_role"],
+            "INTERNAL_WORKING_TITLE",
         )
 
 
