@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import sys
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,12 +15,11 @@ if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from script_section_review import (
-    apply_target_action,
-    build_section_review_state,
-    validate_section_review_state,
+from script_section_state import (
+    SECTION_STATE_DIR,
+    assert_state_matches_draft,
+    state_path_for,
 )
-from script_section_rework_request import build_section_rework_request
 
 from story_script_engine import (
     DRAFTS_DIR,
@@ -36,12 +33,9 @@ from story_script_engine import (
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "script_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "script_review_responses"
 APPROVED_DIR = OUTPUT_DIR / "approved_scripts"
-SECTION_REVIEW_STATES_DIR = OUTPUT_DIR / "script_section_review_states"
-SECTION_REWORK_REQUESTS_DIR = OUTPUT_DIR / "script_section_rework_requests"
 SUMMARY_FILE = OUTPUT_DIR / "script_gate_summary.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
-_SECTION_REVIEW_ACTION_LOCK = threading.Lock()
 
 CRITERIA = (
     "package_promise_delivered",
@@ -63,87 +57,6 @@ def _branch_key(concept_id: str, fmt: str) -> str:
     return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
 
 
-def section_review_state_path(concept_id: str, fmt: str) -> Path:
-    return SECTION_REVIEW_STATES_DIR / (
-        f"{_branch_key(concept_id, fmt)}.script_section_review_state.json"
-    )
-
-
-def _target_file_token(target_id: str) -> str:
-    normalized = str(target_id or "").strip()
-    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
-    return f"{safe_slug(normalized)}-{digest}"
-
-
-def section_rework_request_path(
-    concept_id: str,
-    fmt: str,
-    target_id: str,
-) -> Path:
-    return SECTION_REWORK_REQUESTS_DIR / (
-        f"{_branch_key(concept_id, fmt)}."
-        f"{_target_file_token(target_id)}.script_section_rework_request.json"
-    )
-
-
-def _validated_section_review_state(
-    req: dict[str, Any],
-) -> tuple[dict[str, Any], Path]:
-    concept_id = str(req.get("concept_id") or "").strip()
-    fmt = str(req.get("format") or "").strip()
-    if not concept_id or not fmt:
-        raise ValueError("Script review request requires concept_id and format")
-
-    state_path = section_review_state_path(concept_id, fmt)
-    state = load_json(state_path) if state_path.exists() else req.get("section_review")
-    validation = validate_section_review_state(state)
-    if not validation["valid"]:
-        raise ValueError(
-            "Invalid section review state: " + "; ".join(validation["errors"])
-        )
-
-    provenance = req.get("request_provenance", {})
-    expected_hash = str(provenance.get("script_draft_sha256") or "")
-    if str(state.get("source_draft_sha256") or "") != expected_hash:
-        raise ValueError(
-            "STALE_SECTION_REVIEW_STATE: state is not bound to current review draft"
-        )
-
-    draft_path = Path(str(provenance.get("script_draft") or ""))
-    if (
-        not draft_path.exists()
-        or not expected_hash
-        or sha256_file(draft_path) != expected_hash
-    ):
-        raise ValueError(
-            "STALE_SECTION_REVIEW_STATE: current script draft does not match"
-        )
-    expected_state = build_section_review_state(
-        load_json(draft_path),
-        source_draft_sha256=expected_hash,
-    )
-    immutable_keys = (
-        "target_id",
-        "target_type",
-        "source_section_id",
-        "source_story_beat_ids",
-        "claim_ids",
-        "content_sha256",
-    )
-    actual_targets = state.get("targets", [])
-    expected_targets = expected_state.get("targets", [])
-    if len(actual_targets) != len(expected_targets):
-        raise ValueError(
-            "STALE_SECTION_REVIEW_STATE: target structure does not match draft"
-        )
-    for actual, expected in zip(actual_targets, expected_targets):
-        if any(actual.get(key) != expected.get(key) for key in immutable_keys):
-            raise ValueError(
-                "STALE_SECTION_REVIEW_STATE: target metadata/hash does not match draft"
-            )
-    return dict(state), state_path
-
-
 def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, Any]:
     concept_id = str(draft.get("concept_id", "")).strip()
     fmt = str(draft.get("format", "")).strip()
@@ -154,18 +67,6 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
     required_branches = draft.get("required_branches", [])
     if not isinstance(required_branches, list) or fmt not in required_branches:
         raise ValueError("Script draft required_branches do not include its format")
-
-    draft_sha256 = sha256_file(draft_path)
-    section_review = build_section_review_state(
-        draft,
-        source_draft_sha256=draft_sha256,
-    )
-    section_review_validation = validate_section_review_state(section_review)
-    if not section_review_validation["valid"]:
-        raise ValueError(
-            "Invalid section review contract: "
-            + "; ".join(section_review_validation["errors"])
-        )
 
     return {
         "request_type": "human_script_gate",
@@ -182,7 +83,6 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "story_plan": draft.get("story_plan", {}),
         "psychology_profile": draft.get("psychology_profile", {}),
         "channel_voice": draft.get("channel_voice", {}),
-        "section_review": section_review,
         "accepted_claims": draft.get("accepted_claims", []),
         "validation": draft.get("validation", {}),
         "source_overlap": draft.get("validation", {}).get("source_overlap", {}),
@@ -222,14 +122,13 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         },
         "request_provenance": {
             "script_draft": str(draft_path.resolve()),
-            "script_draft_sha256": draft_sha256,
+            "script_draft_sha256": sha256_file(draft_path),
         },
     }
 
 
 def prepare() -> dict[str, Any]:
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
-    SECTION_REVIEW_STATES_DIR.mkdir(parents=True, exist_ok=True)
     paths = (
         sorted(DRAFTS_DIR.glob("*.script_draft.json"))
         if DRAFTS_DIR.exists()
@@ -237,34 +136,8 @@ def prepare() -> dict[str, Any]:
     )
     prepared: list[dict[str, Any]] = []
     current: set[Path] = set()
-    current_section_states: set[Path] = set()
     for path in paths:
         req = build_review_request(load_json(path), path)
-        state_dest = section_review_state_path(
-            str(req["concept_id"]),
-            str(req["format"]),
-        )
-        initial_state = req["section_review"]
-        with _SECTION_REVIEW_ACTION_LOCK:
-            if state_dest.exists():
-                existing_state = load_json(state_dest)
-                validation = validate_section_review_state(existing_state)
-                if not validation["valid"]:
-                    raise ValueError(
-                        "Invalid persisted section review state: "
-                        + "; ".join(validation["errors"])
-                    )
-                if (
-                    existing_state.get("source_draft_sha256")
-                    == initial_state.get("source_draft_sha256")
-                ):
-                    req["section_review"] = existing_state
-                else:
-                    atomic_write_json(state_dest, initial_state)
-            else:
-                atomic_write_json(state_dest, initial_state)
-        current_section_states.add(state_dest.resolve())
-
         dest = REVIEW_REQUESTS_DIR / (
             f"{_branch_key(req['concept_id'], req['format'])}."
             "script_review_request.json"
@@ -280,11 +153,6 @@ def prepare() -> dict[str, Any]:
         )
     for stale in REVIEW_REQUESTS_DIR.glob("*.script_review_request.json"):
         if stale.resolve() not in current:
-            stale.unlink()
-    for stale in SECTION_REVIEW_STATES_DIR.glob(
-        "*.script_section_review_state.json"
-    ):
-        if stale.resolve() not in current_section_states:
             stale.unlink()
     return {
         "status": "SCRIPT_GATE_READY" if prepared else "WAITING_FOR_SCRIPT_DRAFTS",
@@ -341,6 +209,31 @@ def response_path(concept_id: str, fmt: str) -> Path:
     return RESPONSES_DIR / (
         f"{_branch_key(concept_id, fmt)}.script_review_response.json"
     )
+
+
+def _assert_no_pending_section_rework(
+    req: dict[str, Any],
+    draft_path: Path,
+) -> None:
+    concept_id = str(req.get("concept_id") or "").strip()
+    fmt = str(req.get("format") or "").strip()
+    state_path = state_path_for(concept_id, fmt, SECTION_STATE_DIR)
+    if not state_path.is_file():
+        return
+
+    state = load_json(state_path)
+    assert_state_matches_draft(state, draft_path)
+    pending = [
+        str(item.get("target_id") or "")
+        for item in state.get("targets", [])
+        if isinstance(item, dict)
+        and item.get("decision") == "REWORK_REQUESTED"
+    ]
+    if pending:
+        raise ValueError(
+            "ACCEPT blocked while section rework is pending: "
+            + ", ".join(pending)
+        )
 
 
 def _response_is_current(req: dict[str, Any], saved: dict[str, Any]) -> bool:
@@ -544,20 +437,12 @@ def _apply_rework_feedback(
     atomic_write_json(request_source, request)
 
 
-def _apply_payload_unlocked(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
+def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
     req = load_json(request_path)
     normalized = validate_response(req, response)
     source = assert_current_draft(req)
     if normalized["decision"] == "ACCEPT":
-        state, _ = _validated_section_review_state(req)
-        if any(
-            isinstance(target, dict)
-            and target.get("review_state") == "REWORK_REQUESTED"
-            for target in state.get("targets", [])
-        ):
-            raise ValueError(
-                "ACCEPT blocked while a section target is REWORK_REQUESTED"
-            )
+        _assert_no_pending_section_rework(req, source)
     reviewed_at = datetime.now(timezone.utc).isoformat()
 
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
@@ -598,12 +483,6 @@ def _apply_payload_unlocked(request_path: Path, response: dict[str, Any]) -> dic
     return result
 
 
-def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
-    """Apply a branch-level decision atomically with section-review actions."""
-    with _SECTION_REVIEW_ACTION_LOCK:
-        return _apply_payload_unlocked(request_path, response)
-
-
 def apply(request_path: Path, response_path_file: Path) -> dict[str, Any]:
     return apply_payload(request_path, load_json(response_path_file))
 
@@ -641,18 +520,9 @@ def snapshot() -> dict[str, Any]:
             saved = {}
         decision = str(saved.get("decision") or "PENDING").upper()
         counts[decision_key.get(decision, "pending")] += 1
-        try:
-            current_section_review, _ = _validated_section_review_state(req)
-            section_review_error = None
-        except (OSError, ValueError, TypeError) as exc:
-            current_section_review = req.get("section_review", {})
-            section_review_error = str(exc)
-
         scripts.append(
             {
                 **req,
-                "section_review": current_section_review,
-                "section_review_error": section_review_error,
                 "decision": decision,
                 "criteria_decisions": saved.get("criteria", {}),
                 "note": saved.get("note", ""),
@@ -671,343 +541,6 @@ def snapshot() -> dict[str, Any]:
         "scripts": scripts,
         "production_ready_concept_ids": ready_ids,
         **counts,
-    }
-
-
-def prepare_section_rework_request(
-    *,
-    concept_id: str,
-    format: str,
-    target_id: str,
-) -> dict[str, Any]:
-    """Prepare one Slice 3 selective rework request; never invoke a model."""
-    cid = str(concept_id or "").strip()
-    fmt = str(format or "").strip()
-    tid = str(target_id or "").strip()
-    if not cid or not fmt or not tid:
-        raise ValueError("concept_id, format and target_id are required")
-
-    review_path = REVIEW_REQUESTS_DIR / (
-        f"{_branch_key(cid, fmt)}.script_review_request.json"
-    )
-    if not review_path.exists():
-        raise ValueError("Script review request not found")
-
-    with _SECTION_REVIEW_ACTION_LOCK:
-        req = load_json(review_path)
-        if (
-            str(req.get("concept_id") or "").strip() != cid
-            or str(req.get("format") or "").strip() != fmt
-        ):
-            raise ValueError("Script section rework request identity mismatch")
-
-        draft_path = assert_current_draft(req)
-        draft = load_json(draft_path)
-        state, state_path = _validated_section_review_state(req)
-        if not state_path.exists():
-            raise ValueError(
-                "Selective rework requires persisted section review state"
-            )
-
-        target = next(
-            (
-                item
-                for item in state.get("targets", [])
-                if isinstance(item, dict)
-                and str(item.get("target_id") or "") == tid
-            ),
-            None,
-        )
-        if target is None:
-            raise ValueError(f"Unknown section review target: {tid}")
-        if target.get("review_state") != "REWORK_REQUESTED":
-            raise ValueError(
-                "Selective rework request requires a REWORK_REQUESTED target"
-            )
-
-        draft_provenance = draft.get("draft_provenance", {})
-        script_request_path = Path(
-            str(draft_provenance.get("request_source") or "")
-        ).resolve()
-        requests_root = REQUESTS_DIR.resolve()
-        if (
-            not script_request_path.exists()
-            or (
-                script_request_path != requests_root
-                and requests_root not in script_request_path.parents
-            )
-        ):
-            raise ValueError(
-                "Selective rework cannot find the current original script request"
-            )
-
-        script_request = load_json(script_request_path)
-        if (
-            str(script_request.get("concept_id") or "").strip() != cid
-            or str(script_request.get("format") or "").strip() != fmt
-        ):
-            raise ValueError("Original script request identity mismatch")
-
-        actual_script_request_sha = sha256_file(script_request_path)
-        expected_script_request_sha = str(
-            draft_provenance.get("request_sha256") or ""
-        ).strip()
-        if (
-            not expected_script_request_sha
-            or actual_script_request_sha != expected_script_request_sha
-        ):
-            raise ValueError(
-                "STALE_SCRIPT_REQUEST: original script request changed after draft generation"
-            )
-
-        provenance = {
-            "script_draft": str(draft_path.resolve()),
-            "script_draft_sha256": sha256_file(draft_path),
-            "section_state": str(state_path.resolve()),
-            "section_state_sha256": sha256_file(state_path),
-            "script_review_request": str(review_path.resolve()),
-            "script_review_request_sha256": sha256_file(review_path),
-            "script_request": str(script_request_path),
-            "script_request_sha256": actual_script_request_sha,
-        }
-        packet = build_section_rework_request(
-            draft=draft,
-            review_request=req,
-            section_state=state,
-            target_id=tid,
-            provenance=provenance,
-        )
-
-        SECTION_REWORK_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
-        dest = section_rework_request_path(cid, fmt, tid)
-        previous = load_json(dest) if dest.exists() else None
-        changed = previous != packet
-        if changed:
-            atomic_write_json(dest, packet)
-
-    return {
-        "status": (
-            "SECTION_REWORK_REQUEST_PREPARED"
-            if changed
-            else "SECTION_REWORK_REQUEST_CURRENT"
-        ),
-        "concept_id": cid,
-        "format": fmt,
-        "target_id": tid,
-        "request": str(dest),
-        "request_sha256": sha256_file(dest),
-        "state_revision": packet["request_provenance"]["state_revision"],
-        "target_revision": packet["request_provenance"]["target_revision"],
-        "model_called": False,
-        "script_changed": False,
-    }
-
-
-def _validate_prepared_section_rework_request_unlocked(
-    *,
-    concept_id: str,
-    format: str,
-    target_id: str,
-) -> dict[str, Any]:
-    """Check whether a prepared Slice 3 request still matches current state."""
-    cid = str(concept_id or "").strip()
-    fmt = str(format or "").strip()
-    tid = str(target_id or "").strip()
-    dest = section_rework_request_path(cid, fmt, tid)
-    if not dest.exists():
-        return {
-            "current": False,
-            "reason": "REQUEST_NOT_FOUND",
-            "request": str(dest),
-        }
-
-    try:
-        review_path = REVIEW_REQUESTS_DIR / (
-            f"{_branch_key(cid, fmt)}.script_review_request.json"
-        )
-        if not review_path.exists():
-            raise ValueError("Script review request not found")
-        req = load_json(review_path)
-        draft_path = assert_current_draft(req)
-        state, state_path = _validated_section_review_state(req)
-        if not state_path.exists():
-            raise ValueError("Persisted section review state not found")
-
-        packet = load_json(dest)
-        provenance = packet.get("request_provenance", {})
-        target = next(
-            (
-                item
-                for item in state.get("targets", [])
-                if isinstance(item, dict)
-                and str(item.get("target_id") or "") == tid
-            ),
-            None,
-        )
-        if target is None or target.get("review_state") != "REWORK_REQUESTED":
-            raise ValueError("Target is no longer REWORK_REQUESTED")
-
-        checks = {
-            "script_draft_sha256": sha256_file(draft_path),
-            "section_state_sha256": sha256_file(state_path),
-            "script_review_request_sha256": sha256_file(review_path),
-            "state_revision": state.get("state_revision"),
-            "script_revision": state.get("script_revision"),
-            "target_revision": target.get("revision"),
-            "target_content_sha256": target.get("content_sha256"),
-        }
-        for key, current_value in checks.items():
-            if provenance.get(key) != current_value:
-                raise ValueError(f"{key} changed")
-
-        script_request_path = Path(
-            str(provenance.get("script_request") or "")
-        ).resolve()
-        requests_root = REQUESTS_DIR.resolve()
-        if (
-            not script_request_path.exists()
-            or (
-                script_request_path != requests_root
-                and requests_root not in script_request_path.parents
-            )
-        ):
-            raise ValueError("Original script request is unavailable")
-        if (
-            sha256_file(script_request_path)
-            != provenance.get("script_request_sha256")
-        ):
-            raise ValueError("script_request_sha256 changed")
-        script_request = load_json(script_request_path)
-        if (
-            str(script_request.get("concept_id") or "").strip() != cid
-            or str(script_request.get("format") or "").strip() != fmt
-        ):
-            raise ValueError("Original script request identity changed")
-
-        expected_packet = build_section_rework_request(
-            draft=load_json(draft_path),
-            review_request=req,
-            section_state=state,
-            target_id=tid,
-            provenance={
-                "script_draft": str(draft_path.resolve()),
-                "script_draft_sha256": sha256_file(draft_path),
-                "section_state": str(state_path.resolve()),
-                "section_state_sha256": sha256_file(state_path),
-                "script_review_request": str(review_path.resolve()),
-                "script_review_request_sha256": sha256_file(review_path),
-                "script_request": str(script_request_path),
-                "script_request_sha256": sha256_file(script_request_path),
-            },
-        )
-        if packet != expected_packet:
-            raise ValueError("Prepared selective rework request content changed")
-
-    except (OSError, TypeError, ValueError) as exc:
-        return {
-            "current": False,
-            "reason": "STALE_SECTION_REWORK_REQUEST",
-            "detail": str(exc),
-            "request": str(dest),
-        }
-
-    return {
-        "current": True,
-        "reason": "CURRENT",
-        "request": str(dest),
-        "request_sha256": sha256_file(dest),
-    }
-
-
-def validate_prepared_section_rework_request(
-    *,
-    concept_id: str,
-    format: str,
-    target_id: str,
-) -> dict[str, Any]:
-    """Validate a Slice 3 packet atomically with section-review changes."""
-    with _SECTION_REVIEW_ACTION_LOCK:
-        return _validate_prepared_section_rework_request_unlocked(
-            concept_id=concept_id,
-            format=format,
-            target_id=target_id,
-        )
-
-
-def apply_section_review_action(
-    *,
-    concept_id: str,
-    format: str,
-    target_id: str,
-    action: str,
-    reason: str | None = None,
-    note: str | None = None,
-    reviewer: str | None = None,
-) -> dict[str, Any]:
-    """Apply one Slice 2 target action using logical branch identity only."""
-    cid = str(concept_id or "").strip()
-    fmt = str(format or "").strip()
-    if not cid or not fmt:
-        raise ValueError("concept_id and format are required")
-
-    request_path = REVIEW_REQUESTS_DIR / (
-        f"{_branch_key(cid, fmt)}.script_review_request.json"
-    )
-    if not request_path.exists():
-        raise ValueError("Script review request not found")
-
-    with _SECTION_REVIEW_ACTION_LOCK:
-        req = load_json(request_path)
-        if (
-            str(req.get("concept_id") or "").strip() != cid
-            or str(req.get("format") or "").strip() != fmt
-        ):
-            raise ValueError("Script section review request identity mismatch")
-
-        source = assert_current_draft(req)
-        state, state_path = _validated_section_review_state(req)
-        result = apply_target_action(
-            state,
-            source_draft_sha256=sha256_file(source),
-            target_id=target_id,
-            action=action,
-            reviewer=reviewer or reviewer_id(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            reason=reason,
-            note=note,
-        )
-
-        if result["changed"]:
-            SECTION_REVIEW_STATES_DIR.mkdir(parents=True, exist_ok=True)
-            atomic_write_json(state_path, result["state"])
-
-        invalidated = False
-        if result["invalidates_branch_approval"]:
-            branch_response = response_path(cid, fmt)
-            if branch_response.exists():
-                branch_response.unlink()
-                invalidated = True
-            approved_path = APPROVED_DIR / f"{safe_slug(cid)}.approved_script.json"
-            if approved_path.exists():
-                approved_path.unlink()
-                invalidated = True
-
-    return {
-        "status": (
-            "SECTION_REVIEW_UPDATED"
-            if result["changed"]
-            else "SECTION_REVIEW_NO_CHANGE"
-        ),
-        "concept_id": cid,
-        "format": fmt,
-        "target_id": str(target_id),
-        "action": str(action).strip().upper(),
-        "changed": result["changed"],
-        "branch_approval_invalidated": invalidated,
-        "state_revision": result["state"]["state_revision"],
-        "script_revision": result["state"]["script_revision"],
-        "target": result["target"],
-        "section_review": result["state"],
     }
 
 
@@ -1041,45 +574,16 @@ def apply_action(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Human Script Gate")
-    parser.add_argument(
-        "--mode",
-        choices=(
-            "prepare",
-            "apply",
-            "prepare-section-rework",
-            "validate-section-rework",
-        ),
-        required=True,
-    )
+    parser.add_argument("--mode", choices=("prepare", "apply"), required=True)
     parser.add_argument("--request", type=Path)
     parser.add_argument("--response", type=Path)
-    parser.add_argument("--concept-id")
-    parser.add_argument("--format")
-    parser.add_argument("--target-id")
     args = parser.parse_args()
     if args.mode == "prepare":
         result = prepare()
-    elif args.mode == "apply":
+    else:
         if not args.request or not args.response:
             raise SystemExit("--request and --response required")
         result = apply(args.request.resolve(), args.response.resolve())
-    else:
-        if not args.concept_id or not args.format or not args.target_id:
-            raise SystemExit(
-                "--concept-id, --format and --target-id required"
-            )
-        if args.mode == "prepare-section-rework":
-            result = prepare_section_rework_request(
-                concept_id=args.concept_id,
-                format=args.format,
-                target_id=args.target_id,
-            )
-        else:
-            result = validate_prepared_section_rework_request(
-                concept_id=args.concept_id,
-                format=args.format,
-                target_id=args.target_id,
-            )
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
