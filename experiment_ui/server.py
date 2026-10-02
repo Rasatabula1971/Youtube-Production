@@ -6643,6 +6643,24 @@ def workflow_guidance(
                 "next_title": "Route final-render rework",
             }
 
+        if (
+            int(final_export_gate.get("approved") or 0)
+            != int(final_export_gate.get("total") or 0)
+            or int(final_export_gate.get("total") or 0) <= 0
+        ):
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_action_id": None,
+                "current_title": "Review Final Render",
+                "current_detail": (
+                    "The saved export approval is missing or stale against the "
+                    "current final-render bytes. Review and approve the exact "
+                    "current render again before export."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve the exact current final render",
+            }
+
         return {
             "state": "FINAL_EXPORT_APPROVED",
             "current_action_id": None,
