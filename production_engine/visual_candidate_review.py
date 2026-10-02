@@ -21,6 +21,59 @@ RESULT_DIR = OUTPUT / "visual_search_results"
 STORYBOARD_DIR = OUTPUT / "storyboards"
 REVIEW_DIR = OUTPUT / "visual_candidate_reviews"
 
+AUTO_REUSE_TIERS = {
+    "OWN_LIBRARY",
+    "FREE_COMMERCIAL_LICENSE",
+    "PUBLIC_DOMAIN",
+    "CREATIVE_COMMONS_ALLOWED",
+}
+RIGHTS_CONTEXT_TIERS = {
+    "EDITORIAL_EXCERPT",
+    "CREATOR_EDITORIAL",
+}
+
+
+def candidate_selection_status(candidate: dict[str, Any]) -> str:
+    if not isinstance(candidate, dict):
+        raise ValueError("Visual candidate must be an object")
+
+    state = str(candidate.get("state") or "").upper()
+    tier = str(candidate.get("source_tier") or "UNKNOWN").upper()
+    rights = str(candidate.get("rights_status") or "UNKNOWN").upper()
+    commercial = candidate.get("commercial_use_allowed")
+    has_source = bool(
+        str(candidate.get("source_url") or "").strip()
+        or str(candidate.get("local_path") or "").strip()
+    )
+
+    requires_context = bool(
+        tier in RIGHTS_CONTEXT_TIERS
+        or rights == "DISCOVERY_ONLY"
+        or candidate.get("human_review_required") is True
+        or state == "HUMAN_REVIEW_REQUIRED"
+    )
+    if requires_context:
+        if not has_source:
+            raise ValueError(
+                "Rights/context candidate is missing source provenance"
+            )
+        return "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+
+    if state == "BLOCKED":
+        raise ValueError("Blocked candidate cannot be selected")
+
+    if (
+        tier in AUTO_REUSE_TIERS
+        and rights == "VERIFIED"
+        and commercial is True
+        and has_source
+    ):
+        return "SELECTED"
+
+    raise ValueError(
+        "Candidate rights metadata is not eligible for automatic reuse"
+    )
+
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -367,13 +420,7 @@ def apply_action(
         )
         if candidate is None:
             raise ValueError("Unknown candidate")
-        if candidate.get("state") == "BLOCKED":
-            raise ValueError("Blocked candidate cannot be selected")
-        decision_status = (
-            "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
-            if candidate.get("state") == "HUMAN_REVIEW_REQUIRED"
-            else "SELECTED"
-        )
+        decision_status = candidate_selection_status(candidate)
     else:
         decision_status = action
 
@@ -409,6 +456,13 @@ def apply_action(
         ),
         "candidate_source_tier": (
             candidate.get("source_tier") if candidate else None
+        ),
+        "rights_route": (
+            "HUMAN_RIGHTS_CONTEXT_GATE"
+            if decision_status == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+            else "AUTO_REUSE_VERIFIED"
+            if decision_status == "SELECTED"
+            else None
         ),
         "candidate_fingerprint": (
             _hash(
