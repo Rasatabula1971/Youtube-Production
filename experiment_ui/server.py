@@ -156,6 +156,7 @@ from title_direction_review import (
     apply_action as apply_title_direction_gate_action,
     snapshot as title_direction_gate_snapshot,
 )
+from packaging_brief import snapshot as packaging_brief_snapshot
 
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
@@ -175,6 +176,7 @@ TITLE_DIRECTION_CANDIDATES_FILE = (
 TITLE_DIRECTION_SELECTED_FILE = (
     PACKAGING_OUTPUT / "selected_title_directions.json"
 )
+PACKAGING_BRIEF_DIR = PACKAGING_OUTPUT / "packaging_briefs"
 
 RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 if str(RESEARCH_DIR) not in sys.path:
@@ -423,6 +425,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "title_direction_prepare",
     "title_direction_generate",
     "title_direction_gate_prepare",
+    "packaging_brief_prepare",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -1069,6 +1072,22 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Prepares the post-script Human Title Direction Gate. Selection records "
             "a preferred psychological direction; exact wording remains editable."
+        ),
+    },
+    "packaging_brief_prepare": {
+        "label": "Build Packaging Brief + Viewer Promise",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/packaging_brief.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Deterministically binds the current approved script, verified evidence, "
+            "selected title direction, hook, payoff and audience context into one "
+            "format-specific Packaging Brief and Viewer Promise Contract. No model "
+            "call, thumbnail generation, scoring or production action occurs."
         ),
     },
     "format_prepare": {
@@ -7091,6 +7110,7 @@ def status_payload() -> dict[str, Any]:
         "story_script": story,
         "script_gate": story["script_gate"],
         "title_direction": title_direction_artifact_state(),
+        "packaging_brief": packaging_brief_snapshot(),
         "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],
