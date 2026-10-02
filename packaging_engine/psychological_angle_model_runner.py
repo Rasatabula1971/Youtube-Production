@@ -76,10 +76,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         "properties": {
             "angle_id": {"type": "string", "minLength": 1},
             "primary_driver": {"type": "string", "enum": drivers},
-            "secondary_driver": {
-                "type": ["string", "null"],
-                "enum": drivers + [None],
-            },
+            "secondary_driver": {"type": "string", "enum": drivers},
             "viewer_question": {"type": "string", "minLength": 1},
             "emotional_trigger": {"type": "string", "minLength": 1},
             "stakes": {"type": "string", "minLength": 1},
