@@ -1,8 +1,9 @@
 """FAIR-backed selective script target alternative generation.
 
-Slice 2 is deliberately non-destructive: it may generate A/B/C replacements for
-one target that is already marked REWORK_REQUESTED, but it never edits the
-script draft. Human selection and replacement are a later slice.
+Slice 4 generates and deterministically validates A/B/C replacements for one
+target that is already REWORK_REQUESTED. Generation is non-destructive: it may
+write request/response/report/alternatives artifacts, but it never edits the
+Script Draft or section-review state.
 """
 
 from __future__ import annotations
