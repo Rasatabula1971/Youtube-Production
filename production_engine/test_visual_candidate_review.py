@@ -199,6 +199,90 @@ class VisualCandidateReviewTests(unittest.TestCase):
             self.assertEqual(snapshot["stale_shots"], 1)
             self.assertEqual(snapshot["packets"][0]["decisions"], {})
 
+    def test_editorial_candidate_routes_to_rights_even_if_state_is_tampered(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results, storyboards, reviews = self.paths(root)
+            current = card("shot-001", "creator crash clip")
+            self.write_board(storyboards, [current])
+            shot = result_shot(current, "creator-1")
+            shot["candidates"][0].update(
+                {
+                    "source_tier": "EDITORIAL_EXCERPT",
+                    "rights_status": "DISCOVERY_ONLY",
+                    "commercial_use_allowed": None,
+                    "human_review_required": True,
+                    "state": "ELIGIBLE",
+                }
+            )
+            shot["eligible"] = 0
+            shot["human_review_required"] = 1
+            result_path = self.write_results(results, [shot])
+
+            with (
+                patch.object(review, "RESULT_DIR", results),
+                patch.object(review, "STORYBOARD_DIR", storyboards),
+                patch.object(review, "REVIEW_DIR", reviews),
+                patch.object(
+                    review,
+                    "search_result_is_current",
+                    side_effect=current_result_state,
+                ),
+            ):
+                saved = review.apply_action(
+                    result_file=str(result_path),
+                    shot_id="shot-001",
+                    action="SELECT",
+                    candidate_id="creator-1",
+                )
+
+            decision = saved["decisions"]["shot-001"]
+            self.assertEqual(
+                decision["status"],
+                "SELECTED_PENDING_RIGHTS_CONTEXT_GATE",
+            )
+            self.assertEqual(
+                decision["rights_route"],
+                "HUMAN_RIGHTS_CONTEXT_GATE",
+            )
+
+    def test_unverified_candidate_cannot_fake_auto_reuse_eligibility(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results, storyboards, reviews = self.paths(root)
+            current = card("shot-001", "unknown stock clip")
+            self.write_board(storyboards, [current])
+            shot = result_shot(current, "candidate-1")
+            shot["candidates"][0].update(
+                {
+                    "rights_status": "UNKNOWN",
+                    "commercial_use_allowed": True,
+                    "state": "ELIGIBLE",
+                }
+            )
+            result_path = self.write_results(results, [shot])
+
+            with (
+                patch.object(review, "RESULT_DIR", results),
+                patch.object(review, "STORYBOARD_DIR", storyboards),
+                patch.object(review, "REVIEW_DIR", reviews),
+                patch.object(
+                    review,
+                    "search_result_is_current",
+                    side_effect=current_result_state,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "not eligible for automatic reuse",
+                ):
+                    review.apply_action(
+                        result_file=str(result_path),
+                        shot_id="shot-001",
+                        action="SELECT",
+                        candidate_id="candidate-1",
+                    )
+
     def test_stale_result_provenance_blocks_candidate_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
