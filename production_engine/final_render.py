@@ -92,7 +92,11 @@ def _final_visual_segments(
         cursor = end
 
     if cursor < total - 0.02:
-        raise ValueError("Final visual timeline does not cover render duration")
+        last = visuals[-1]
+        last["end_seconds"] = total
+        last["duration_seconds"] = total - float(
+            last.get("start_seconds") or 0
+        )
     return visuals
 
 
