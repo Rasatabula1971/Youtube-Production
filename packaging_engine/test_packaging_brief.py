@@ -342,6 +342,45 @@ class PackagingBriefTests(unittest.TestCase):
                         fmt="short",
                     )
 
+    def test_snapshot_expected_count_uses_actual_approved_branches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = self.fixture(Path(tmp))
+            fx["bundle"]["required_branches"] = ["short"]
+            fx["bundle"]["branch_scripts"] = {
+                "short": fx["bundle"]["branch_scripts"]["short"]
+            }
+            write_json(fx["script_path"], fx["bundle"])
+            current_brief = {
+                "concept_id": "c1",
+                "format": "short",
+                "video_id": "c1:short",
+                "search_vs_browse_intent": "BROWSE",
+                "viewer_promise_contract": {
+                    "viewer_expectation": "Expected promise."
+                },
+            }
+            brief_file = write_json(
+                fx["briefs"] / "c1.short.packaging_brief.json",
+                current_brief,
+            )
+            ps = self.patches(fx)
+            with (
+                ps[0], ps[1], ps[2], ps[3], ps[4], ps[5], ps[6],
+                patch.object(
+                    brief,
+                    "brief_is_current",
+                    side_effect=lambda path: (
+                        current_brief if path == brief_file else None
+                    ),
+                ),
+            ):
+                state = brief.snapshot()
+
+        self.assertTrue(state["ready"])
+        self.assertEqual(state["expected"], 1)
+        self.assertEqual(state["current"], 1)
+        self.assertTrue(state["expected_inputs_current"])
+
     def test_brief_currentness_breaks_when_evidence_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             fx = self.fixture(Path(tmp))
