@@ -64,6 +64,17 @@ class FormatUiIntegrationTests(unittest.TestCase):
             script,
         )
 
+    def test_format_accept_ui_announces_automatic_voice_handoff(self):
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            'payload.automation_job.action_id === "auto_continue"',
+            script,
+        )
+        self.assertIn(
+            "Format Gate complete. Voice Performance planning started automatically.",
+            script,
+        )
+
     def test_pending_format_gate_is_a_human_boundary(self):
         with (
             patch.object(
