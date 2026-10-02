@@ -1703,3 +1703,38 @@ when every current authorized branch passes does the workflow reach
 
 Slice 12 hard-stops at `NARRATION_AUDIO_READY`. Automatic visual production
 must not begin in this slice.
+
+## D-083 — QC-passed narration automatically advances to a current visual search plan
+
+**Status:** Accepted
+
+After every current authorized narration branch passes local Audio QC, the
+automatic workflow may run these deterministic, zero-spend steps:
+
+`production_visual_prepare → storyboard_prepare → visual_search_prepare`.
+
+Slice 13 stops at `VISUAL_SEARCH_READY`. The zero-cost/existing-source search
+adapters do not run in this slice.
+
+The visual acquisition manifest is now bound to both:
+
+- the exact current approved Format Plan hash; and
+- the exact current QC-passed narration timing-map path/hash.
+
+A manifest that is not bound to the current narration timing map does not count
+as current production state.
+
+Storyboards require exact one-to-one coverage between narration timing segment
+IDs and visual requirement beat IDs. Missing, extra or mismatched beats fail
+closed instead of receiving a generic fallback visual. Storyboards record the
+current timing-map and visual-manifest hashes and are stale when either changes.
+
+Visual search requests are rebuilt only from current storyboards. The request
+records the exact storyboard hash. Old search requests/results are removed when
+their storyboard is no longer current. Existing raw discovery data may remain
+as a cache, but it cannot become current search results unless every shot
+fingerprint matches the new request.
+
+All visual planning in Slice 13 keeps `paid_generation_calls_allowed: false`.
+Premium generation may be marked only as a future candidate for a high-value
+unfilled gap; it is never authorized or called here.
