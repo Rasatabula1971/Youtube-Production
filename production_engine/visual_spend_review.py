@@ -108,63 +108,41 @@ def _hero_gaps(plan: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _reconcile(
-    plan_path: Path,
-    plan: dict[str, Any],
-    stored: dict[str, Any],
-) -> tuple[dict[str, Any], int]:
-    hero_by_id = {
-        str(gap.get("shot_id") or ""): gap
-        for gap in _hero_gaps(plan)
-        if str(gap.get("shot_id") or "")
-    }
-    prior = (
-        stored.get("decisions", {})
-        if isinstance(stored, dict)
-        and isinstance(stored.get("decisions"), dict)
-        else {}
-    )
-    current: dict[str, Any] = {}
-    stale = 0
-    for shot_id, decision in prior.items():
-        gap = hero_by_id.get(shot_id)
-        if (
-            gap is not None
-            and isinstance(decision, dict)
-            and decision.get("gap_fingerprint") == _gap_fingerprint(gap)
-        ):
-            current[shot_id] = decision
-        else:
-            stale += 1
-
-    review = {
-        "artifact": "visual_spend_review",
-        "concept_id": plan.get("concept_id"),
-        "format": plan.get("format"),
-        "source_gap_plan": str(plan_path.resolve()),
-        "source_gap_plan_sha256": sha256_file(plan_path),
-        "decisions": current,
-    }
-    return review, stale
-
-
-def _current_plans() -> list[tuple[Path, dict[str, Any]]]:
-    items: list[tuple[Path, dict[str, Any]]] = []
-    if not GAPS.exists():
-        return items
-    for plan_path in sorted(GAPS.glob("*.visual_gap_plan.json")):
-        state = gap_plan_is_current(plan_path)
-        if state is not None:
-            items.append((plan_path, state[0]))
-    return items
-
-
 def _decision_cost(decision: dict[str, Any]) -> float:
     try:
         value = float(decision.get("max_cost_usd") or 0)
     except (TypeError, ValueError):
         return 0.0
     return value if math.isfinite(value) and value > 0 else 0.0
+
+
+def _decision_is_current(
+    decision: dict[str, Any],
+    gap: dict[str, Any],
+    config: dict[str, Any],
+) -> bool:
+    if decision.get("gap_fingerprint") != _gap_fingerprint(gap):
+        return False
+
+    action = str(decision.get("decision") or "")
+    paid = decision.get("paid_generation_authorized")
+    cost = _decision_cost(decision)
+
+    if action == "AUTHORIZE_GENERATION":
+        return bool(
+            paid is True
+            and cost > 0
+            and cost <= float(config["per_shot_hard_cap_usd"])
+        )
+    if action == "KEEP_PLACEHOLDER":
+        return paid is False and cost == 0
+    if action == "RETRY_EXISTING":
+        return bool(
+            paid is False
+            and cost == 0
+            and str(decision.get("note") or "").strip()
+        )
+    return False
 
 
 def _authorized_total_for_review(review: dict[str, Any]) -> float:
@@ -182,7 +160,108 @@ def _authorized_total_for_review(review: dict[str, Any]) -> float:
     )
 
 
-def _other_authorized_total(exclude_plan_path: Path) -> float:
+def _reconcile(
+    plan_path: Path,
+    plan: dict[str, Any],
+    stored: dict[str, Any],
+    config: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], int]:
+    config = config or load_config()
+    hero_by_id = {
+        str(gap.get("shot_id") or ""): gap
+        for gap in _hero_gaps(plan)
+        if str(gap.get("shot_id") or "")
+    }
+    prior = (
+        stored.get("decisions", {})
+        if isinstance(stored, dict)
+        and isinstance(stored.get("decisions"), dict)
+        else {}
+    )
+
+    current: dict[str, Any] = {}
+    stale = 0
+    for shot_id, decision in prior.items():
+        gap = hero_by_id.get(str(shot_id))
+        if (
+            gap is not None
+            and isinstance(decision, dict)
+            and _decision_is_current(decision, gap, config)
+        ):
+            current[str(shot_id)] = decision
+        else:
+            stale += 1
+
+    decided = len(set(current).intersection(hero_by_id))
+    authorized = sum(
+        decision.get("paid_generation_authorized") is True
+        for shot_id, decision in current.items()
+        if shot_id in hero_by_id
+    )
+    review = {
+        "artifact": "visual_spend_review",
+        "concept_id": plan.get("concept_id"),
+        "format": plan.get("format"),
+        "source_gap_plan": str(plan_path.resolve()),
+        "source_gap_plan_sha256": sha256_file(plan_path),
+        "decisions": current,
+        "authorized_max_total_usd": _authorized_total_for_review(
+            {"decisions": current}
+        ),
+        "summary": {
+            "required": len(hero_by_id),
+            "decided": decided,
+            "authorized": authorized,
+        },
+        "status": (
+            "COMPLETE"
+            if decided == len(hero_by_id)
+            else "REVIEW_IN_PROGRESS"
+        ),
+    }
+    return review, stale
+
+
+def _current_plans() -> list[tuple[Path, dict[str, Any]]]:
+    items: list[tuple[Path, dict[str, Any]]] = []
+    if not GAPS.exists():
+        return items
+    for plan_path in sorted(GAPS.glob("*.visual_gap_plan.json")):
+        state = gap_plan_is_current(plan_path)
+        if state is not None:
+            items.append((plan_path, state[0]))
+    return items
+
+
+def current_complete_review(
+    plan_path: Path,
+) -> tuple[dict[str, Any], Path] | None:
+    state = gap_plan_is_current(plan_path)
+    if state is None:
+        return None
+    plan = state[0]
+    spend_path = _path(plan_path)
+    if not spend_path.exists():
+        return None
+
+    stored = load_json(spend_path)
+    if not isinstance(stored, dict):
+        return None
+    canonical, _ = _reconcile(
+        plan_path,
+        plan,
+        stored,
+        load_config(),
+    )
+    if stored != canonical or canonical.get("status") != "COMPLETE":
+        return None
+    return canonical, spend_path
+
+
+def _other_authorized_total(
+    exclude_plan_path: Path,
+    config: dict[str, Any],
+) -> float:
     total = 0.0
     for plan_path, plan in _current_plans():
         if plan_path.resolve() == exclude_plan_path.resolve():
@@ -191,7 +270,14 @@ def _other_authorized_total(exclude_plan_path: Path) -> float:
         if not spend_path.exists():
             continue
         stored = load_json(spend_path)
-        review, _ = _reconcile(plan_path, plan, stored)
+        if not isinstance(stored, dict):
+            continue
+        review, _ = _reconcile(
+            plan_path,
+            plan,
+            stored,
+            config,
+        )
         total += _authorized_total_for_review(review)
     return round(total, 2)
 
@@ -215,7 +301,12 @@ def snapshot() -> dict[str, Any]:
             if spend_path.exists()
             else {"decisions": {}}
         )
-        review, stale = _reconcile(plan_path, plan, stored)
+        review, stale = _reconcile(
+            plan_path,
+            plan,
+            stored if isinstance(stored, dict) else {},
+            config,
+        )
         stale_removed += stale
         if spend_path.exists() and review != stored:
             atomic_write_json(spend_path, review)
@@ -240,14 +331,23 @@ def snapshot() -> dict[str, Any]:
         authorized_max_total += _authorized_total_for_review(
             {"decisions": decisions}
         )
+
+        spend_exists = spend_path.exists()
         items.append(
             {
                 "concept_id": plan.get("concept_id"),
                 "format": plan.get("format"),
                 "gap_plan_file": str(plan_path),
                 "gap_plan_sha256": sha256_file(plan_path),
+                "spend_review_file": (
+                    str(spend_path) if spend_exists else None
+                ),
+                "spend_review_sha256": (
+                    sha256_file(spend_path) if spend_exists else None
+                ),
                 "hero_candidates": hero,
                 "decisions": decisions,
+                "review_status": review.get("status"),
             }
         )
 
@@ -257,13 +357,18 @@ def snapshot() -> dict[str, Any]:
                 stale_path.unlink()
                 stale_removed += 1
 
-    complete = bool(items) and (
+    workflow_cap = float(config["workflow_hard_cap_usd"])
+    authorized_max_total = round(authorized_max_total, 2)
+    global_cap_valid = authorized_max_total <= workflow_cap
+    complete = bool(items) and global_cap_valid and (
         hero_total == 0 or hero_total == decided_total
     )
     return {
         "status": (
             "WAITING_FOR_CURRENT_GAP_PLANS"
             if not items
+            else "INVALID_VISUAL_SPEND_AUTHORIZATION"
+            if not global_cap_valid
             else "NO_PREMIUM_GENERATION_REQUIRED"
             if hero_total == 0
             else "COMPLETE"
@@ -271,14 +376,15 @@ def snapshot() -> dict[str, Any]:
             else "READY_FOR_VISUAL_SPEND_GATE"
         ),
         "complete": complete,
+        "global_cap_valid": global_cap_valid,
         "hero_candidates": hero_total,
         "decided": decided_total,
         "authorized": authorized,
-        "authorized_max_total_usd": round(authorized_max_total, 2),
+        "authorized_max_total_usd": authorized_max_total,
         "stale_removed": stale_removed,
         "currency": config["currency"],
         "per_shot_hard_cap_usd": config["per_shot_hard_cap_usd"],
-        "workflow_hard_cap_usd": config["workflow_hard_cap_usd"],
+        "workflow_hard_cap_usd": workflow_cap,
         "human_authorization_required": True,
         "paid_provider_calls_without_authorization": False,
         "items": items,
@@ -339,13 +445,13 @@ def apply_action(
         if not math.isfinite(requested_cost):
             raise ValueError("Visual authorization cost must be finite")
 
-        per_shot_cap = config["per_shot_hard_cap_usd"]
-        workflow_cap = config["workflow_hard_cap_usd"]
+        per_shot_cap = float(config["per_shot_hard_cap_usd"])
+        workflow_cap = float(config["workflow_hard_cap_usd"])
         if decision == "AUTHORIZE_GENERATION":
             if requested_cost <= 0 or requested_cost > per_shot_cap:
                 raise ValueError(
-                    "Per-shot authorization must be > $0 and <= "
-                    f"${per_shot_cap:.2f} USD"
+                    "Per-shot authorization must be > $0 and <= $"
+                    + f"{per_shot_cap:.2f} USD"
                 )
 
         spend_path = _path(plan_path)
@@ -354,8 +460,14 @@ def apply_action(
             if spend_path.exists()
             else {"decisions": {}}
         )
-        review, _ = _reconcile(plan_path, plan, stored)
-        review["decisions"][shot_id] = {
+        current, _ = _reconcile(
+            plan_path,
+            plan,
+            stored if isinstance(stored, dict) else {},
+            config,
+        )
+        decisions = dict(current.get("decisions", {}))
+        decisions[shot_id] = {
             "decision": decision,
             "max_cost_usd": (
                 round(requested_cost, 2)
@@ -370,44 +482,29 @@ def apply_action(
             "cinematic_direction": gap.get("cinematic_direction", {}),
             "desired_visual": gap.get("desired_visual"),
         }
+        review, _ = _reconcile(
+            plan_path,
+            plan,
+            {"decisions": decisions},
+            config,
+        )
 
-        branch_total = _authorized_total_for_review(review)
+        branch_total = float(review["authorized_max_total_usd"])
         workflow_total = round(
-            _other_authorized_total(plan_path) + branch_total,
+            _other_authorized_total(plan_path, config) + branch_total,
             2,
         )
         if workflow_total > workflow_cap:
             raise ValueError(
-                "Visual authorization total would exceed the configured "
-                f"${workflow_cap:.2f} USD hard cap"
+                "Visual authorization total would exceed the configured $"
+                + f"{workflow_cap:.2f} USD hard cap"
             )
 
-        review["authorized_max_total_usd"] = branch_total
-        review["authorized_workflow_total_usd"] = workflow_total
-        hero_ids = {
-            str(item.get("shot_id") or "")
-            for item in _hero_gaps(plan)
-            if str(item.get("shot_id") or "")
-        }
-        decided = len(
-            set(review["decisions"]).intersection(hero_ids)
-        )
-        review["summary"] = {
-            "required": len(hero_ids),
-            "decided": decided,
-            "authorized": sum(
-                item.get("paid_generation_authorized") is True
-                for shot, item in review["decisions"].items()
-                if shot in hero_ids
-            ),
-        }
-        review["status"] = (
-            "COMPLETE"
-            if decided == len(hero_ids)
-            else "REVIEW_IN_PROGRESS"
-        )
         atomic_write_json(spend_path, review)
-        return review
+        return {
+            **review,
+            "authorized_workflow_total_usd": workflow_total,
+        }
 
 
 def main() -> None:
