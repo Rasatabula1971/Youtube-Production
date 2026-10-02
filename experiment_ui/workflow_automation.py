@@ -58,6 +58,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "storyboard_prepare",
     "visual_search_prepare",
     "visual_search_acquire",
+    "visual_asset_acquire",
     "visual_rough_cut_prepare",
     "visual_gap_prepare",
 ]
@@ -152,6 +153,8 @@ def run_until_human_gate() -> dict[str, Any]:
             "NARRATION_AUDIO_QC_FAILED",
             "NARRATION_AUDIO_READY",
             "HUMAN_VISUAL_CANDIDATE_GATE",
+            "HUMAN_VISUAL_RIGHTS_GATE",
+            "HUMAN_ROUGH_CUT_GATE",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
