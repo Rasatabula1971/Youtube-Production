@@ -368,6 +368,93 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
             ):
                 rework_runner.assert_request_current(stale)
 
+
+    def test_state_change_during_fair_discards_returned_alternatives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            draft_path, state_path, _, request = self.build_request(root)
+            requests_dir = root / "rework_requests"
+            requests_dir.mkdir()
+            request_path = requests_dir / "c1.rework.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+
+            fake_result = {
+                "status": "ACCEPTED",
+                "reason_code": "OK",
+                "request_id": "req-1",
+                "provider_id": "test-provider",
+                "model_id": "test-model",
+                "paid_inference_executed": False,
+                "direct_backup_used": False,
+                "direct_backup_may_bill": False,
+                "billing_authorization": None,
+                "attempts": [],
+                "output": json.dumps(self.response()),
+            }
+            config = {
+                "runner": {
+                    "max_prompt_chars": 95000,
+                    "subprocess_timeout_seconds": 1,
+                }
+            }
+
+            def mutate_state_then_return(*args, **kwargs):
+                section_state.apply_target_action(
+                    state_path,
+                    draft_path,
+                    target_id="section:payoff_03",
+                    action="LOCK",
+                    reviewer="other-reviewer",
+                )
+                return fake_result
+
+            alternatives_dir = root / "alternatives"
+            with (
+                patch.object(
+                    rework_runner,
+                    "MODEL_RUNS_DIR",
+                    root / "model_runs",
+                ),
+                patch.object(
+                    rework_runner,
+                    "RAW_OUTPUTS_DIR",
+                    root / "raw",
+                ),
+                patch.object(
+                    rework_runner,
+                    "REWORK_RESPONSES_DIR",
+                    root / "responses",
+                ),
+                patch.object(
+                    rework_runner,
+                    "ALTERNATIVES_DIR",
+                    alternatives_dir,
+                ),
+                patch.object(
+                    rework_runner,
+                    "bridge_payload",
+                    return_value={"settings": {}},
+                ),
+                patch.object(
+                    rework_runner,
+                    "resolve_fair_paths",
+                    return_value={"python": Path(sys.executable)},
+                ),
+                patch.object(
+                    rework_runner,
+                    "call_fair_bridge",
+                    side_effect=mutate_state_then_return,
+                ),
+            ):
+                result = rework_runner.run_one(
+                    request_path,
+                    False,
+                    config,
+                )
+
+        self.assertEqual(result["status"], "STALE_REWORK_REQUEST")
+        self.assertFalse(alternatives_dir.exists())
+
     def test_artifact_starts_unselected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
