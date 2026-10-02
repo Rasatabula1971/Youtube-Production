@@ -334,3 +334,45 @@ The repository already contains capabilities beyond Slice 5:
   user-supplied artifact paths.
 
 Those downstream capabilities remain separate from Slice 4 generation.
+
+### Slice 6 — Human Script Gate selective-review UI
+
+Slice 6 exposes the canonical section-review backend inside the existing Human
+Script Gate. It does not add a second API or duplicate state model.
+
+The selective-review pane now provides:
+
+- compact target-level progress counts for accepted, pending, rework and locked
+  targets;
+- a target selector with clear decision/lock state;
+- a `Next unresolved` control;
+- direct `Accept + lock`, `Lock`, `Unlock`, `Request rework` and
+  `Cancel rework` actions;
+- a separate `Prepare rework request` button that exercises Slice 3 without a
+  model call;
+- `Generate A / B / C` for Slice 4;
+- inline `Original / A / B / C` cards with claim provenance;
+- a collapsible manual-edit control; and
+- whole-script `Accept / Rework / Reject` controls kept separate below the
+  target-level workflow.
+
+Every section mutation is single-flight in the browser. While an action is in
+progress, target navigation, section actions and whole-script decisions are
+disabled. Backend locking and Slice 5 transaction protection remain the final
+authority.
+
+Client-side validation rejects empty/unchanged manual edits and incomplete
+custom rework instructions before POSTing. Backend validation remains
+authoritative.
+
+Whole-script `Accept` is disabled while any canonical target is
+`REWORK_REQUESTED` or the section state is stale, matching the backend
+approval boundary.
+
+After any section action, the UI reloads the current Human Script Gate branch
+immediately and keeps the operator on the same concept/format. A selected A/B/C
+replacement or manual edit therefore appears in the main script text
+immediately instead of waiting for the periodic status refresh.
+
+The comparison layout uses two columns on wider screens and collapses to one
+column on small screens.
