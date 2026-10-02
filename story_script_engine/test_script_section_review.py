@@ -2,6 +2,7 @@ import unittest
 
 from script_section_review import (
     REWORK_REASONS,
+    apply_target_action,
     build_section_review_state,
     validate_section_review_state,
 )
@@ -137,6 +138,216 @@ class ScriptSectionReviewContractTests(unittest.TestCase):
                 draft,
                 source_draft_sha256="draft-sha",
             )
+
+
+    def action(self, state, *, target_id="section:s1", action, reason=None, note=None):
+        return apply_target_action(
+            state,
+            source_draft_sha256="draft-sha",
+            target_id=target_id,
+            action=action,
+            reviewer="tester",
+            updated_at="2026-10-01T21:02:00-04:00",
+            reason=reason,
+            note=note,
+        )
+
+    def test_accept_locks_target_and_increments_only_state_revision(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+        before_hash = next(
+            item["content_sha256"]
+            for item in state["targets"]
+            if item["target_id"] == "section:s1"
+        )
+
+        result = self.action(state, action="ACCEPT")
+
+        target = result["target"]
+        self.assertTrue(result["changed"])
+        self.assertEqual(target["review_state"], "ACCEPTED")
+        self.assertTrue(target["locked"])
+        self.assertFalse(target["editable"])
+        self.assertEqual(target["revision"], 1)
+        self.assertEqual(target["content_sha256"], before_hash)
+        self.assertEqual(target["last_action"], "ACCEPT")
+        self.assertEqual(target["last_reviewer"], "tester")
+        self.assertEqual(result["state"]["state_revision"], 1)
+        self.assertEqual(result["state"]["script_revision"], 0)
+
+    def test_lock_is_not_the_same_as_accept(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+
+        result = self.action(state, action="LOCK")
+
+        self.assertEqual(result["target"]["review_state"], "PENDING")
+        self.assertTrue(result["target"]["locked"])
+        self.assertFalse(result["target"]["editable"])
+        self.assertFalse(result["invalidates_branch_approval"])
+
+    def test_repeated_actions_are_no_ops_without_revision_inflation(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+        first = self.action(state, action="LOCK")
+        second = self.action(first["state"], action="LOCK")
+
+        self.assertFalse(second["changed"])
+        self.assertEqual(second["state"]["state_revision"], 1)
+        self.assertEqual(second["target"]["revision"], 1)
+
+        unlocked = self.action(second["state"], action="UNLOCK")
+        unlock_retry = self.action(unlocked["state"], action="UNLOCK")
+        self.assertFalse(unlock_retry["changed"])
+        self.assertEqual(unlock_retry["state"]["state_revision"], 2)
+
+    def test_unlocking_accepted_target_reopens_it_and_invalidates_branch(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+        accepted = self.action(state, action="ACCEPT")
+
+        reopened = self.action(accepted["state"], action="UNLOCK")
+
+        self.assertEqual(reopened["target"]["review_state"], "PENDING")
+        self.assertFalse(reopened["target"]["locked"])
+        self.assertTrue(reopened["target"]["editable"])
+        self.assertTrue(reopened["invalidates_branch_approval"])
+
+    def test_locked_target_cannot_be_marked_for_rework(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+        locked = self.action(state, action="LOCK")
+
+        with self.assertRaisesRegex(ValueError, "unlock it first"):
+            self.action(
+                locked["state"],
+                action="REWORK",
+                reason="TOO_TECHNICAL",
+            )
+
+    def test_rework_records_bounded_reason_and_cancel_clears_it(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+
+        rework = self.action(
+            state,
+            action="REWORK",
+            reason="TOO_TECHNICAL",
+            note="Translate the mechanism into normal language.",
+        )
+
+        self.assertEqual(rework["target"]["review_state"], "REWORK_REQUESTED")
+        self.assertEqual(rework["target"]["rework_reason"], "TOO_TECHNICAL")
+        self.assertEqual(
+            rework["target"]["rework_note"],
+            "Translate the mechanism into normal language.",
+        )
+        self.assertTrue(rework["invalidates_branch_approval"])
+
+        cancelled = self.action(rework["state"], action="CANCEL_REWORK")
+        self.assertEqual(cancelled["target"]["review_state"], "PENDING")
+        self.assertIsNone(cancelled["target"]["rework_reason"])
+        self.assertIsNone(cancelled["target"]["rework_note"])
+
+        retry = self.action(cancelled["state"], action="CANCEL_REWORK")
+        self.assertFalse(retry["changed"])
+        self.assertEqual(
+            retry["state"]["state_revision"],
+            cancelled["state"]["state_revision"],
+        )
+
+    def test_custom_rework_requires_human_instruction(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+
+        with self.assertRaisesRegex(ValueError, "non-empty rework_note"):
+            self.action(
+                state,
+                action="REWORK",
+                reason="CUSTOM_INSTRUCTION",
+                note="",
+            )
+
+    def test_unknown_reason_and_target_fail_closed(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+
+        with self.assertRaisesRegex(ValueError, "valid rework_reason"):
+            self.action(
+                state,
+                action="REWORK",
+                reason="MAKE_IT_VIRAL",
+            )
+
+        with self.assertRaisesRegex(ValueError, "Unknown section review target"):
+            self.action(
+                state,
+                target_id="section:missing",
+                action="LOCK",
+            )
+
+    def test_stale_draft_hash_fails_closed(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+
+        with self.assertRaisesRegex(ValueError, "STALE_SECTION_REVIEW_STATE"):
+            apply_target_action(
+                state,
+                source_draft_sha256="different-draft",
+                target_id="section:s1",
+                action="LOCK",
+                reviewer="tester",
+                updated_at="2026-10-01T21:02:00-04:00",
+            )
+
+    def test_rework_retry_preserves_metadata_and_is_no_op(self):
+        state = build_section_review_state(
+            self.draft(),
+            source_draft_sha256="draft-sha",
+        )
+        first = self.action(
+            state,
+            action="REWORK",
+            reason="WEAK_TRANSITION",
+            note="Bridge this more smoothly.",
+        )
+
+        retry = self.action(
+            first["state"],
+            action="REWORK",
+            reason="WEAK_TRANSITION",
+            note="Bridge this more smoothly.",
+        )
+        unlocked_retry = self.action(retry["state"], action="UNLOCK")
+
+        self.assertFalse(retry["changed"])
+        self.assertFalse(unlocked_retry["changed"])
+        self.assertEqual(
+            unlocked_retry["target"]["rework_reason"],
+            "WEAK_TRANSITION",
+        )
+        self.assertEqual(
+            unlocked_retry["target"]["rework_note"],
+            "Bridge this more smoothly.",
+        )
 
     def test_invalid_state_is_rejected(self):
         state = build_section_review_state(
