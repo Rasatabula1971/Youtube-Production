@@ -35,7 +35,20 @@ class ScriptReviewTests(unittest.TestCase):
                 "one_sentence_promise": "Promise",
                 "format_intent": "either",
             },
-            "story_plan": {"title": "T", "beats": []},
+            "story_plan": {
+                "title": "T",
+                "story_question": "Why does this happen?",
+                "opening_hook_intent": "Open the contradiction.",
+                "beats": [
+                    {
+                        "beat_id": "b1",
+                        "purpose": "Explain",
+                        "claim_ids": ["clm001"],
+                    }
+                ],
+                "payoff_intent": "Resolve the mechanism.",
+                "closing_intent": "Leave one clear takeaway.",
+            },
             "psychology_contract": {"opening_line": {"required": True}},
             "psychology_profile": {"reward_density": "HIGH" if fmt == "short" else "MODERATE"},
             "channel_voice": {
