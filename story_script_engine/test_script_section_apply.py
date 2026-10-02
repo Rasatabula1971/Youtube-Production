@@ -1,7 +1,9 @@
 import copy
 import json
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -402,8 +404,20 @@ class ScriptSectionApplyTests(unittest.TestCase):
             )
             self.assertTrue(version_path.exists())
             self.assertEqual(
-                rework_runner.load_json(version_path),
-                old_draft,
+                version_path.read_bytes(),
+                paths["draft"].parent.joinpath(
+                    paths["draft"].name
+                ).read_bytes()
+                if False
+                else json.dumps(old_draft).encode("utf-8"),
+            )
+            self.assertEqual(
+                revised["human_revision"]["previous_version_sha256"],
+                revised["human_revision"]["parent_draft_sha256"],
+            )
+            self.assertEqual(
+                revised["human_revision"]["selected_claim_ids_used"],
+                ["clm001"],
             )
 
             self.assertEqual(
@@ -628,6 +642,253 @@ class ScriptSectionApplyTests(unittest.TestCase):
             transaction = rework_runner.load_json(transactions[0])
             self.assertEqual(transaction["status"], "ROLLED_BACK")
 
+
+
+    def test_concurrent_a_and_b_selection_commits_only_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.selection_dirs(root)
+            barrier = threading.Barrier(2)
+
+            def choose(selection_id):
+                barrier.wait()
+                try:
+                    result = section_apply.apply_selection(
+                        paths["alternatives"],
+                        selection_id=selection_id,
+                        reviewer=f"reviewer-{selection_id}",
+                        **dirs,
+                    )
+                    return ("ok", result)
+                except ValueError as exc:
+                    return ("error", str(exc))
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(
+                    pool.map(choose, ["A", "B"])
+                )
+
+            successes = [item for item in results if item[0] == "ok"]
+            failures = [item for item in results if item[0] == "error"]
+            artifact = rework_runner.load_json(paths["alternatives"])
+            revised = rework_runner.load_json(paths["draft"])
+            transactions = list(
+                dirs["transactions_dir"].glob(
+                    "*.selection_transaction.json"
+                )
+            )
+
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("already been selected", failures[0][1])
+        self.assertEqual(
+            artifact["selection"]["selection_id"],
+            successes[0][1]["selection_id"],
+        )
+        self.assertEqual(revised["human_revision"]["revision"], 1)
+        self.assertEqual(len(transactions), 1)
+
+    def test_partial_gate_failure_restores_every_mutated_file_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.selection_dirs(root)
+
+            review_request = (
+                dirs["review_requests_dir"]
+                / "c1.long_form.script_review_request.json"
+            )
+            review_response = (
+                dirs["review_responses_dir"]
+                / "c1.long_form.script_review_response.json"
+            )
+            approved = dirs["approved_dir"] / "c1.approved_script.json"
+            review_response.write_text(
+                '{"decision":"ACCEPT"}',
+                encoding="utf-8",
+            )
+            approved.write_text(
+                '{"status":"APPROVED"}',
+                encoding="utf-8",
+            )
+            version_path = (
+                dirs["versions_dir"]
+                / "c1.long_form"
+                / "revision_0000.script_draft.json"
+            )
+
+            before = {
+                "draft": paths["draft"].read_bytes(),
+                "state": paths["state"].read_bytes(),
+                "alternatives": paths["alternatives"].read_bytes(),
+                "review_request": review_request.read_bytes(),
+                "review_response": review_response.read_bytes(),
+                "approved": approved.read_bytes(),
+            }
+            original_invalidate = (
+                section_apply._invalidate_and_refresh_script_gate
+            )
+
+            def mutate_gate_then_fail(*args, **kwargs):
+                original_invalidate(*args, **kwargs)
+                raise RuntimeError("failure after gate mutation")
+
+            with (
+                patch.object(
+                    section_apply,
+                    "_invalidate_and_refresh_script_gate",
+                    side_effect=mutate_gate_then_fail,
+                ),
+                self.assertRaisesRegex(
+                    RuntimeError,
+                    "failure after gate mutation",
+                ),
+            ):
+                section_apply.apply_selection(
+                    paths["alternatives"],
+                    selection_id="A",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            after = {
+                "draft": paths["draft"].read_bytes(),
+                "state": paths["state"].read_bytes(),
+                "alternatives": paths["alternatives"].read_bytes(),
+                "review_request": review_request.read_bytes(),
+                "review_response": review_response.read_bytes(),
+                "approved": approved.read_bytes(),
+            }
+            transactions = list(
+                dirs["transactions_dir"].glob(
+                    "*.selection_transaction.json"
+                )
+            )
+            transaction = rework_runner.load_json(transactions[0])
+
+        self.assertEqual(before, after)
+        self.assertFalse(version_path.exists())
+        self.assertEqual(transaction["status"], "ROLLED_BACK")
+        self.assertEqual(transaction["schema_version"], 2)
+        self.assertIn("script_review_request", transaction["file_snapshots"])
+        self.assertIn("previous_version", transaction["file_snapshots"])
+
+    def test_next_selection_recovers_uncaught_interruption_before_one_time_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.selection_dirs(root)
+            original_invalidate = (
+                section_apply._invalidate_and_refresh_script_gate
+            )
+
+            def mutate_gate_then_interrupt(*args, **kwargs):
+                original_invalidate(*args, **kwargs)
+                raise KeyboardInterrupt()
+
+            with (
+                patch.object(
+                    section_apply,
+                    "_invalidate_and_refresh_script_gate",
+                    side_effect=mutate_gate_then_interrupt,
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                section_apply.apply_selection(
+                    paths["alternatives"],
+                    selection_id="A",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            interrupted_artifact = rework_runner.load_json(
+                paths["alternatives"]
+            )
+            transactions = list(
+                dirs["transactions_dir"].glob(
+                    "*.selection_transaction.json"
+                )
+            )
+            interrupted_transaction = rework_runner.load_json(
+                transactions[0]
+            )
+            self.assertIsNotNone(interrupted_artifact["selection"])
+            self.assertEqual(
+                interrupted_transaction["status"],
+                "IN_PROGRESS",
+            )
+
+            result = section_apply.apply_selection(
+                paths["alternatives"],
+                selection_id="A",
+                reviewer="r",
+                **dirs,
+            )
+            final_artifact = rework_runner.load_json(paths["alternatives"])
+            final_draft = rework_runner.load_json(paths["draft"])
+            final_transaction = rework_runner.load_json(transactions[0])
+            version_path = Path(
+                final_draft["human_revision"]["previous_version"]
+            )
+
+        self.assertEqual(result["status"], "ALTERNATIVE_SELECTED")
+        self.assertEqual(final_artifact["selection"]["selection_id"], "A")
+        self.assertEqual(final_transaction["status"], "COMMITTED")
+        self.assertEqual(
+            rework_runner.sha256_file(version_path),
+            final_draft["human_revision"]["parent_draft_sha256"],
+        )
+
+    def test_corrupted_recovery_backup_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.selection_dirs(root)
+            original_invalidate = (
+                section_apply._invalidate_and_refresh_script_gate
+            )
+
+            def interrupt_after_mutation(*args, **kwargs):
+                original_invalidate(*args, **kwargs)
+                raise KeyboardInterrupt()
+
+            with (
+                patch.object(
+                    section_apply,
+                    "_invalidate_and_refresh_script_gate",
+                    side_effect=interrupt_after_mutation,
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                section_apply.apply_selection(
+                    paths["alternatives"],
+                    selection_id="A",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            transaction_path = next(
+                dirs["transactions_dir"].glob(
+                    "*.selection_transaction.json"
+                )
+            )
+            transaction = rework_runner.load_json(transaction_path)
+            backup = Path(
+                transaction["file_snapshots"]["draft"]["backup"]
+            )
+            backup.write_bytes(b"corrupted")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "backup hash changed",
+            ):
+                section_apply.apply_selection(
+                    paths["alternatives"],
+                    selection_id="A",
+                    reviewer="r",
+                    **dirs,
+                )
 
     def test_manual_edit_changes_only_selected_target_and_saves_version(self):
         with tempfile.TemporaryDirectory() as tmp:
