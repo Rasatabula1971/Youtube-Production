@@ -70,7 +70,7 @@ def _restore_backup_file(backup_path: Path, destination: Path) -> None:
 
 
 def recover_prepared_transaction(transaction_path: Path) -> dict[str, Any]:
-    """Roll back a PREPARED/IN_PROGRESS selection transaction from backups."""
+    """Roll back a PREPARED/IN_PROGRESS script-edit transaction from backups."""
     transaction_path = transaction_path.resolve()
     transaction = load_json(transaction_path)
     status = str(transaction.get("status") or "")
@@ -80,14 +80,16 @@ def recover_prepared_transaction(transaction_path: Path) -> dict[str, Any]:
     backups = transaction.get("backups")
     destinations = transaction.get("destinations")
     if not isinstance(backups, dict) or not isinstance(destinations, dict):
-        raise ValueError("Selection transaction is missing backup metadata")
+        raise ValueError("Script edit transaction is missing backup metadata")
+    if not backups or set(backups) != set(destinations):
+        raise ValueError("Script edit transaction backup metadata is inconsistent")
 
-    for key in ("draft", "state", "alternatives"):
+    for key in sorted(destinations):
         backup = Path(str(backups.get(key) or "")).resolve()
         destination = Path(str(destinations.get(key) or "")).resolve()
         if not backup.is_file():
             raise ValueError(
-                f"Cannot recover selection transaction: missing {key} backup"
+                f"Cannot recover script edit transaction: missing {key} backup"
             )
         destination.parent.mkdir(parents=True, exist_ok=True)
         _restore_backup_file(backup, destination)
@@ -109,7 +111,7 @@ def recover_incomplete_transactions(
         return []
     recovered: list[dict[str, Any]] = []
     for path in sorted(
-        transactions_dir.glob(f"{branch}.*.selection_transaction.json")
+        transactions_dir.glob(f"{branch}.*transaction.json")
     ):
         value = load_json(path)
         if str(value.get("status") or "") in {"PREPARED", "IN_PROGRESS"}:
@@ -201,6 +203,8 @@ def _assert_only_selected_target_changed(
 def _validate_revised_script(
     revised_draft: dict[str, Any],
     original_script_request: dict[str, Any],
+    *,
+    operation_label: str = "Selected alternative",
 ) -> dict[str, Any]:
     response = {
         "concept_id": revised_draft.get("concept_id"),
@@ -217,7 +221,7 @@ def _validate_revised_script(
     validation = validate_script_response(response, original_script_request)
     if not validation["valid"]:
         raise ValueError(
-            "Selected alternative fails full script validation: "
+            f"{operation_label} fails full script validation: "
             + "; ".join(validation["errors"])
         )
     return validation
@@ -230,7 +234,8 @@ def _rebase_state(
     *,
     selected_target_id: str,
     reviewer: str,
-    selection_id: str,
+    action_label: str = "SELECT_ALTERNATIVE",
+    selection_id: str | None = None,
 ) -> dict[str, Any]:
     validation = validate_state(old_state)
     if not validation["valid"]:
@@ -267,16 +272,16 @@ def _rebase_state(
     new_state["updated_at"] = _utc_now()
     new_state["targets"] = fresh_targets
     history = list(old_state.get("history", []))
-    history.append(
-        {
-            "state_version": new_state["state_version"],
-            "reviewed_at": new_state["updated_at"],
-            "reviewer": reviewer,
-            "target_id": selected_target_id,
-            "action": "SELECT_ALTERNATIVE",
-            "selection_id": selection_id,
-        }
-    )
+    history_item = {
+        "state_version": new_state["state_version"],
+        "reviewed_at": new_state["updated_at"],
+        "reviewer": reviewer,
+        "target_id": selected_target_id,
+        "action": action_label,
+    }
+    if selection_id is not None:
+        history_item["selection_id"] = selection_id
+    history.append(history_item)
     new_state["history"] = history
     return new_state
 
