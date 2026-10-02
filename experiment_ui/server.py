@@ -4303,7 +4303,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     final_sound_plan_ready = bool(final_sound_plan_state.get("ready"))
-    final_sound_assets = final_sound_asset_snapshot()
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
