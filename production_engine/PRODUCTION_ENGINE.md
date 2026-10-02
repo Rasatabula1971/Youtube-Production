@@ -364,3 +364,36 @@ visible placeholders.
 
 Slice 16 ends at the Human Rough-Cut Gate and never authorizes paid visual
 generation.
+
+## Slice 15 — provenance-bound visual Rights/Context Gate
+
+Visual candidate selection now derives its route from candidate provenance.
+
+Automatic reuse requires a recognized reusable source tier, `VERIFIED` rights,
+explicit commercial-use permission, and a source URL or local path.
+
+Recognized creator/editorial tiers are never treated as automatically reusable,
+even if a result payload is tampered to say `ELIGIBLE`. They route to the
+Human Rights/Context Gate.
+
+Unsupported source tiers cannot use the rights gate as an escape hatch. A
+candidate with unknown provenance is rejected even if it claims
+`DISCOVERY_ONLY` or `HUMAN_REVIEW_REQUIRED`.
+
+Before a rights/context decision can be displayed or written,
+`visual_rights_review.py` verifies:
+
+1. the candidate review is complete;
+2. its source-result SHA-256 matches the current result file;
+3. that result still passes `search_result_is_current`;
+4. concept and format identity match;
+5. the selected result/shot fingerprint is current;
+6. the selected candidate fingerprint is current; and
+7. the candidate still routes to the recognized Rights/Context Gate.
+
+The rights artifact records both the candidate-review provenance and the exact
+search-result provenance. Stale review files are excluded and any associated
+stale rights artifact is removed.
+
+This stage records human editorial/context intent only. It downloads no media,
+authorizes no spend, and stops before Slice 16 asset acquisition.

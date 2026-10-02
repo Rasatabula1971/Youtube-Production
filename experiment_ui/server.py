@@ -5920,7 +5920,7 @@ def workflow_guidance(
                 )
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Rights review or automatic rough cut",
+            "next_title": "Rights review or safe asset acquisition",
         }
 
     rights_gate = visual_post.get("rights_gate", {})
@@ -5938,7 +5938,7 @@ def workflow_guidance(
                 "the intended transformative/editorial purpose or reject its use."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Build Visual Rough Cut",
+            "next_title": "Acquire approved free assets",
         }
 
     asset_state = visual_asset_acquisition_artifact_state()

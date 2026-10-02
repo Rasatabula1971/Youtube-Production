@@ -86,6 +86,17 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
             script,
         )
 
+    def test_visual_candidate_ui_announces_rights_route(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            "Visual selected. Rights/context review is required before reuse.",
+            script,
+        )
+        self.assertIn(
+            "Visual selected with verified reuse rights.",
+            script,
+        )
+
     def test_ui_knows_visual_search_ready_boundary(self) -> None:
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
         self.assertIn("VISUAL_SEARCH_READY", script)

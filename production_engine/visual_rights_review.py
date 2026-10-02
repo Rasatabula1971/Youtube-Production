@@ -9,6 +9,8 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, sha256_file
+from visual_candidate_review import candidate_selection_status
+from visual_search import search_result_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -25,27 +27,68 @@ def _path(review_path: Path) -> Path:
     )
 
 
+def _current_review_result(
+    review_path: Path,
+    review: dict[str, Any],
+) -> tuple[Path, dict[str, Any]] | None:
+    if (
+        not isinstance(review, dict)
+        or review.get("status") != "READY_FOR_ROUGH_CUT"
+    ):
+        return None
+    result_path = Path(str(review.get("source_result") or ""))
+    if (
+        not result_path.is_file()
+        or result_path.parent.resolve() != SEARCH_RESULT_DIR.resolve()
+        or review.get("source_result_sha256") != sha256_file(result_path)
+    ):
+        return None
+
+    current = search_result_is_current(result_path)
+    if current is None:
+        return None
+    result = current[0]
+    if (
+        str(result.get("concept_id") or "")
+        != str(review.get("concept_id") or "")
+        or str(result.get("format") or "")
+        != str(review.get("format") or "")
+    ):
+        return None
+    return result_path, result
+
+
 def _candidate(
+    review_path: Path,
     review: dict[str, Any],
     shot_id: str,
 ) -> dict[str, Any] | None:
-    result_path = Path(str(review.get("source_result") or ""))
+    current = _current_review_result(review_path, review)
+    if current is None:
+        return None
+    _, result = current
+
+    decision = review.get("decisions", {}).get(shot_id, {})
     if (
-        not result_path.exists()
-        or result_path.parent.resolve() != SEARCH_RESULT_DIR.resolve()
+        not isinstance(decision, dict)
+        or decision.get("status")
+        != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
     ):
         return None
-    result = load_json(result_path)
-    decision = review.get("decisions", {}).get(shot_id, {})
-    cid = str(decision.get("candidate_id") or "")
+
+    candidate_id = str(decision.get("candidate_id") or "")
     shot = next(
         (
             item
             for item in result.get("shots", [])
-            if str(item.get("shot_id")) == shot_id
+            if isinstance(item, dict)
+            and str(item.get("shot_id") or "") == shot_id
         ),
-        {},
+        None,
     )
+    if not isinstance(shot, dict):
+        return None
+
     result_fingerprint = hashlib.sha256(
         json.dumps(
             shot,
@@ -56,16 +99,19 @@ def _candidate(
     ).hexdigest()
     if decision.get("result_fingerprint") != result_fingerprint:
         return None
+
     candidate = next(
         (
             item
             for item in shot.get("candidates", [])
-            if str(item.get("candidate_id")) == cid
+            if isinstance(item, dict)
+            and str(item.get("candidate_id") or "") == candidate_id
         ),
         None,
     )
     if candidate is None:
         return None
+
     candidate_fingerprint = hashlib.sha256(
         json.dumps(
             candidate,
@@ -76,10 +122,17 @@ def _candidate(
     ).hexdigest()
     if decision.get("candidate_fingerprint") != candidate_fingerprint:
         return None
+
+    try:
+        route = candidate_selection_status(candidate)
+    except ValueError:
+        return None
+    if route != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
+        return None
     return candidate
 
-
 def _selection_current(
+    review_path: Path,
     review: dict[str, Any],
     shot_id: str,
     rights_decision: dict[str, Any],
@@ -91,7 +144,7 @@ def _selection_current(
         != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
     ):
         return False
-    candidate = _candidate(review, shot_id)
+    candidate = _candidate(review_path, review, shot_id)
     return bool(
         candidate is not None
         and rights_decision.get("candidate_id") == candidate.get("candidate_id")
@@ -118,18 +171,31 @@ def _reconcile(
     for shot_id, rights_decision in old_decisions.items():
         if (
             isinstance(rights_decision, dict)
-            and _selection_current(review, shot_id, rights_decision)
+            and _selection_current(
+                review_path,
+                review,
+                shot_id,
+                rights_decision,
+            )
         ):
             current_decisions[shot_id] = rights_decision
         else:
             stale += 1
 
+    current = _current_review_result(review_path, review)
+    result_path = current[0] if current is not None else None
     reconciled = {
         "artifact": "visual_rights_review",
         "concept_id": review.get("concept_id"),
         "format": review.get("format"),
         "source_candidate_review": str(review_path.resolve()),
         "source_candidate_review_sha256": sha256_file(review_path),
+        "source_search_result": (
+            str(result_path.resolve()) if result_path is not None else None
+        ),
+        "source_search_result_sha256": (
+            sha256_file(result_path) if result_path is not None else None
+        ),
         "decisions": current_decisions,
     }
     return reconciled, stale
@@ -141,6 +207,7 @@ def snapshot() -> dict[str, Any]:
     decided_total = 0
     approved_total = 0
     stale_total = 0
+    stale_reviews = 0
     paths = (
         sorted(
             CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")
@@ -151,6 +218,11 @@ def snapshot() -> dict[str, Any]:
     for review_path in paths:
         review = load_json(review_path)
         rights_path = _path(review_path)
+        if _current_review_result(review_path, review) is None:
+            stale_reviews += 1
+            if rights_path.exists():
+                rights_path.unlink()
+            continue
         stored = (
             load_json(rights_path)
             if rights_path.exists()
@@ -170,7 +242,7 @@ def snapshot() -> dict[str, Any]:
             ):
                 continue
             required_total += 1
-            candidate = _candidate(review, shot_id)
+            candidate = _candidate(review_path, review, shot_id)
             decision = rights["decisions"].get(shot_id)
             if isinstance(decision, dict):
                 decided_total += 1
@@ -210,6 +282,7 @@ def snapshot() -> dict[str, Any]:
         "decided": decided_total,
         "approved": approved_total,
         "stale_removed": stale_total,
+        "stale_reviews": stale_reviews,
         "items": items,
     }
 
@@ -230,6 +303,8 @@ def apply_action(
         raise ValueError("Invalid candidate review file")
 
     review = load_json(review_path)
+    if _current_review_result(review_path, review) is None:
+        raise ValueError("STALE_VISUAL_CANDIDATE_REVIEW")
     selected = review.get("decisions", {}).get(shot_id)
     if (
         not selected
@@ -248,7 +323,7 @@ def apply_action(
             "Approval requires a documented transformative/editorial purpose"
         )
 
-    candidate = _candidate(review, shot_id)
+    candidate = _candidate(review_path, review, shot_id)
     if not candidate:
         raise ValueError("Selected candidate is unavailable or stale")
 
