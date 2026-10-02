@@ -35,6 +35,7 @@ QC_DIR = OUTPUT_DIR / "narration_audio_qc"
 TIMING_DIR = OUTPUT_DIR / "narration_timing_maps"
 QC_SUMMARY_FILE = OUTPUT_DIR / "narration_audio_qc_summary.json"
 SUMMARY_FILE = OUTPUT_DIR / "narration_render_return_summary.json"
+ALLOWED_AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".flac", ".aac", ".ogg", ".opus"}
 
 
 def _load_dict(path: Path) -> dict[str, Any] | None:
@@ -294,7 +295,9 @@ def register(
     registered_segments: list[dict[str, Any]] = []
     keep: set[Path] = set()
 
-    for supplied, planned in zip(segments, expected, strict=True):
+    for index, (supplied, planned) in enumerate(
+        zip(segments, expected, strict=True)
+    ):
         segment_id = str(supplied.get("segment_id") or "")
         attempt = int(supplied.get("attempt") or 0)
         if attempt < 1 or attempt > max_attempts:
@@ -305,8 +308,15 @@ def register(
         if not source_value:
             raise ValueError(f"{segment_id} audio_file is required")
         source = Path(source_value).expanduser().resolve()
-        suffix = source.suffix.lower() or ".audio"
-        destination = branch_dir / f"{safe_slug(segment_id)}{suffix}"
+        suffix = source.suffix.lower()
+        if suffix not in ALLOWED_AUDIO_SUFFIXES:
+            raise ValueError(
+                f"{segment_id} audio type {suffix or '<none>'} is not supported"
+            )
+        destination = (
+            branch_dir
+            / f"{index:03d}_{safe_slug(segment_id)}{suffix}"
+        )
         _copy_audio(source, destination)
         keep.add(destination.resolve())
         registered_segments.append(
