@@ -401,7 +401,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
     "visual_assembly_prepare",
-    "final_production_handoff_prepare",
+    "edit_manifest_prepare",
+    "edit_preview_render",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -6140,17 +6141,95 @@ def workflow_guidance(
                 "next_title": "Register approved local visual assets",
             }
 
+        expected_branches = visual_post.get("expected_branches", [])
+        edit_manifest_state = edit_manifest_artifact_state(
+            expected_branches
+        )
+        if not edit_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Edit Preview Manifest",
+                "current_detail": (
+                    "The current Slice 18 visual assembly is edit-ready. Build a "
+                    "provenance-bound structural preview manifest from that exact "
+                    "assembly and the current PASS narration QC/timing map."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Free Structural Edit Preview",
+            }
+
+        if not structural_ffmpeg_available():
+            return {
+                "state": "LOCAL_FFMPEG_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Local FFmpeg Required for Structural Preview",
+                "current_detail": (
+                    "The edit manifest is current, but the configured local FFmpeg "
+                    "binary is unavailable. Slice 19 will not use a paid/cloud "
+                    "fallback. Install or configure FFmpeg, then continue."
+                ),
+                "next_action_id": None,
+                "next_title": "Render the free local structural preview",
+            }
+
+        edit_preview_state = edit_preview_artifact_state(
+            expected_branches
+        )
+        if not edit_preview_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Free Structural Edit Preview",
+                "current_detail": (
+                    "Render the current manifest locally with FFmpeg using current "
+                    "visual assets, approved low-value placeholders and QC-passed "
+                    "narration. No paid provider, generated music or SFX is used."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Edit Preview Gate",
+            }
+
+        edit_gate = edit_preview_review_snapshot()
+        if not edit_gate.get("complete"):
+            return {
+                "state": "HUMAN_EDIT_PREVIEW_GATE",
+                "current_action_id": None,
+                "current_title": "Review Structural Edit Preview",
+                "current_detail": (
+                    "Judge pacing, narration-to-picture rhythm, visual continuity "
+                    "and story flow from the free local preview. This preview is "
+                    "structural only and is not publish-ready."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve direction or return a creative layer",
+            }
+
+        if int(edit_gate.get("rework") or 0) > 0:
+            return {
+                "state": "EDIT_PREVIEW_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Edit Preview Rework Requested",
+                "current_detail": (
+                    "The Human Edit Preview Gate returned visuals, narration or "
+                    "sound for rework. Slice 19 stops here; the exact instruction "
+                    "is preserved for the next routing slice."
+                ),
+                "next_action_id": None,
+                "next_title": "Route the approved rework instruction",
+            }
+
         return {
-            "state": "VISUAL_ASSEMBLY_READY",
+            "state": "EDIT_PREVIEW_DIRECTION_APPROVED",
             "current_action_id": None,
-            "current_title": "Visual Assembly Plan Ready",
+            "current_title": "Structural Edit Direction Approved",
             "current_detail": (
-                "Current spend/no-spend decisions have been converted into a "
-                "provenance-bound zero-cost visual timeline. Slice 18 stops before "
-                "building or rendering the structural edit preview."
+                "The current free structural preview has human approval. Slice 19 "
+                "stops here and performs no final production handoff, paid visual "
+                "execution, music/SFX generation, upload or publish action."
             ),
             "next_action_id": None,
-            "next_title": "Slice 19: build the structural edit preview",
+            "next_title": "Slice 20: final asset / production handoff boundary",
         }
 
     production_visual = production_visual_artifact_state()
