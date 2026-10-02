@@ -1566,3 +1566,31 @@ without forcing unnecessary FAIR calls for valid current work.
 
 The Human Format Gate is the mandatory stopping point after automatic Format
 preparation.
+
+## D-079 — Format completion automatically advances to the Human Performance Gate
+
+**Status:** Accepted
+
+A valid completed Human Format Gate is followed by deterministic Voice
+Performance machine work without another routine run-button decision.
+
+The existing automatic workflow runner executes
+`voice_prepare → voice_generate → voice_gate_prepare` and then stops at the
+Human Performance Gate. It must not auto-approve the performance plan or
+authorize/render paid narration before the human performance decision.
+
+The Format Gate POST handler starts `auto_continue` only when downstream
+machine work is ready and no other job is running. The browser explicitly
+announces the automatic continuation.
+
+The Format → Voice handoff is an invalidation boundary. When the approved
+Format input changes, Voice responses, performance specs, model-run records,
+raw model output, Human Performance Gate packets/decisions, and approved voice
+specs derived from the previous request are stale and removed.
+
+Current filenames alone are not proof of currency. Voice specs and Human
+Performance Gate artifacts must remain bound to the current canonical Voice
+request by hash provenance. Valid unchanged provenance remains cacheable.
+
+The Human Performance Gate is the mandatory stopping point after automatic
+Voice Performance planning. This boundary spends no narration-provider credits.
