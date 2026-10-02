@@ -603,3 +603,41 @@ The search contract remains existing/free-first and rights-aware:
 5. premium generation only as a later last-resort gap candidate.
 
 No item in Slice 13 authorizes premium generation.
+
+## Slice 14 — Visual Search Ready → Human Visual Candidate Gate
+
+Continue Automatically now advances the Slice 13 visual search plan through
+zero-cost discovery:
+
+```text
+VISUAL_SEARCH_READY
+        ↓
+Search Free / Existing Visuals
+        ↓
+normalize rights-aware candidates
+        ↓
+HUMAN_VISUAL_CANDIDATE_GATE
+```
+
+The search runner validates the current storyboard-bound search request before
+any provider call and rechecks it before each shot. If the request changes
+during the run, no additional provider calls are made and no stale compiled
+result is promoted.
+
+Search progress is checkpointed after every shot. Clean unchanged shots can be
+reused on a retry. Shots that changed or encountered provider errors are
+searched again.
+
+Pexels, Pixabay and YouTube creator discovery remain discovery sources only.
+Provider failures are isolated so one timeout does not erase candidates from
+another source. Provider errors are shown with the current candidate packet.
+
+The Human Visual Candidate Gate does not open on partial branch coverage. Every
+current search-required branch must have a current result bound to its exact
+search request.
+
+At the gate the reviewer can select a current eligible candidate, reject all
+candidates, or mark the shot as needing a better visual. Creator/editorial
+candidates still require the separate Rights/Context Gate before use.
+
+Slice 14 downloads no media and authorizes no paid visual generation.
