@@ -4483,6 +4483,19 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
+    title_direction = title_direction_artifact_state()
+    title_direction_requests_ready = bool(
+        title_direction.get("requests_ready")
+    )
+    title_direction_candidates_ready = bool(
+        title_direction.get("candidates_ready")
+    )
+    title_direction_gate = title_direction.get("gate", {})
+    title_direction_gate_status = str(
+        title_direction_gate.get("status")
+        or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
+    )
+    title_direction_selected = bool(title_direction.get("selected"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -7101,6 +7114,8 @@ def status_payload() -> dict[str, Any]:
         "research_gate": research["research_gate"],
         "story_script": story,
         "script_gate": story["script_gate"],
+        "title_direction": title_direction_artifact_state(),
+        "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],
         "voice_performance": voice,
@@ -7226,6 +7241,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/packaging-gate":
             self._send_json(packaging_gate_snapshot())
+            return
+        if route == "/api/title-direction-gate":
+            self._send_json(title_direction_gate_snapshot())
             return
         if route == "/api/research-gate":
             self._send_json(research_gate_snapshot())
@@ -7523,6 +7541,19 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                     selected_titles=body.get("selected_titles"),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/title-direction-gate":
+                payload = apply_title_direction_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    selected_titles=body.get("selected_titles"),
+                    note=str(body.get("note") or ""),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
