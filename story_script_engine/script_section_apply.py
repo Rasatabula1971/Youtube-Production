@@ -21,7 +21,10 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json
 from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
 from script_section_state import build_targets, validate_state
-from script_section_rework_runner import assert_request_current
+from script_section_rework_runner import (
+    assert_request_current,
+    validate_response as validate_rework_response,
+)
 
 from script_review import (
     APPROVED_DIR,
@@ -369,6 +372,53 @@ def apply_selection(
 
     rework_request = load_json(request_path)
     assert_request_current(rework_request)
+
+    if str(artifact.get("concept_id") or "") != str(
+        rework_request.get("concept_id") or ""
+    ):
+        raise ValueError("STALE_ALTERNATIVES: concept_id mismatch")
+    if str(artifact.get("format") or "") != str(
+        rework_request.get("format") or ""
+    ):
+        raise ValueError("STALE_ALTERNATIVES: format mismatch")
+    if str(artifact.get("target_id") or "") != str(
+        rework_request.get("target_id") or ""
+    ):
+        raise ValueError("STALE_ALTERNATIVES: target_id mismatch")
+    if str(artifact.get("target_sha256") or "") != str(
+        rework_request.get("target_sha256") or ""
+    ):
+        raise ValueError("STALE_ALTERNATIVES: target hash mismatch")
+    if int(artifact.get("state_version") or 0) != int(
+        rework_request.get("state_version") or -1
+    ):
+        raise ValueError("STALE_ALTERNATIVES: state version mismatch")
+    if artifact.get("original", {}).get("text") != rework_request.get(
+        "selected_target", {}
+    ).get("original_text"):
+        raise ValueError("STALE_ALTERNATIVES: original text mismatch")
+    if artifact.get("original", {}).get(
+        "immutable_metadata", {}
+    ) != rework_request.get("selected_target", {}).get(
+        "immutable_metadata", {}
+    ):
+        raise ValueError("STALE_ALTERNATIVES: immutable metadata mismatch")
+
+    regenerated_response = {
+        "concept_id": artifact.get("concept_id"),
+        "format": artifact.get("format"),
+        "target_id": artifact.get("target_id"),
+        "alternatives": artifact.get("alternatives", []),
+    }
+    regenerated_validation = validate_rework_response(
+        regenerated_response,
+        rework_request,
+    )
+    if not regenerated_validation["valid"]:
+        raise ValueError(
+            "Alternatives artifact failed revalidation: "
+            + "; ".join(regenerated_validation["errors"])
+        )
 
     request_provenance = rework_request.get("request_provenance", {})
     draft_path = Path(
