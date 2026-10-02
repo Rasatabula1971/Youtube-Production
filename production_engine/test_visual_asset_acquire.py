@@ -117,6 +117,19 @@ class VisualAssetAcquireTests(unittest.TestCase):
                 patch.object(acquire, "ASSET_DIR", asset_dir),
                 patch.object(acquire, "REGISTRY_DIR", registry_dir),
                 patch.object(acquire, "SUMMARY_FILE", summary),
+                patch.object(
+                    acquire,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
                 patch.object(acquire, "_download_stock", side_effect=fake_download),
             ):
                 result = acquire.acquire()
@@ -164,6 +177,19 @@ class VisualAssetAcquireTests(unittest.TestCase):
                 patch.object(acquire, "ASSET_DIR", root / "assets"),
                 patch.object(acquire, "REGISTRY_DIR", root / "registry"),
                 patch.object(acquire, "SUMMARY_FILE", root / "summary.json"),
+                patch.object(
+                    acquire,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
                 patch.object(acquire, "_download_stock") as downloader,
             ):
                 result = acquire.acquire()
