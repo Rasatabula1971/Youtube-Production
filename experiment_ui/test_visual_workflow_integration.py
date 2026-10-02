@@ -9,7 +9,13 @@ import workflow_automation
 
 
 class VisualWorkflowIntegrationTests(unittest.TestCase):
-    def workflow(self, visual_post, spend_gate=None):
+    def workflow(
+        self,
+        visual_post,
+        spend_gate=None,
+        handoff_state=None,
+        assembly_state=None,
+    ):
         stack = ExitStack()
         self.addCleanup(stack.close)
         patches = (
@@ -106,6 +112,35 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                         "complete": True,
                         "hero_candidates": 0,
                         "authorized": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "visual_generation_handoff_artifact_state",
+                return_value=(
+                    handoff_state
+                    if handoff_state is not None
+                    else {
+                        "status": "NO_PAID_VISUAL_GENERATION_AUTHORIZED",
+                        "ready": False,
+                        "expected": 0,
+                        "current": 0,
+                    }
+                ),
+            ),
+            patch.object(
+                server,
+                "visual_assembly_artifact_state",
+                return_value=(
+                    assembly_state
+                    if assembly_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                        "waiting_for_premium_assets": 0,
+                        "waiting_for_local_assets": 0,
+                        "waiting_for_existing_retry": 0,
                     }
                 ),
             ),
@@ -209,11 +244,15 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "gap_plans_ready": True,
             }
         )
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
         self.assertEqual(
-            workflow["state"],
-            "VISUAL_GAPS_READY_NO_SPEND",
+            workflow["current_title"],
+            "Build Visual Edit Assembly Plan",
         )
-        self.assertIn("no unresolved", workflow["current_detail"].lower())
+        self.assertEqual(
+            workflow["current_action_id"],
+            "auto_continue",
+        )
 
     def test_completed_spend_gate_exposes_authorized_generation_state(self):
         workflow = self.workflow(
@@ -234,12 +273,113 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "authorized": 1,
             },
         )
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Prepare Premium Visual Generation Briefs",
+        )
+        self.assertEqual(
+            workflow["current_action_id"],
+            "auto_continue",
+        )
+
+
+    def test_current_no_spend_assembly_stops_before_edit_preview(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [("c1", "short")],
+            },
+            assembly_state={
+                "status": "ASSEMBLY_PLANS_READY",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+            },
+        )
+        self.assertEqual(workflow["state"], "VISUAL_ASSEMBLY_READY")
+        self.assertIn("stops before", workflow["current_detail"])
+
+    def test_current_premium_assembly_waits_for_external_asset(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [("c1", "short")],
+            },
+            spend_gate={
+                "status": "COMPLETE",
+                "complete": True,
+                "global_cap_valid": True,
+                "hero_candidates": 1,
+                "authorized": 1,
+            },
+            handoff_state={
+                "status": "READY_FOR_PROVIDER_HANDOFF",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+            },
+            assembly_state={
+                "status": "ASSEMBLY_PLANS_READY",
+                "ready": True,
+                "waiting_for_premium_assets": 1,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+            },
+        )
         self.assertEqual(
             workflow["state"],
-            "VISUAL_SPEND_DECISIONS_COMPLETE",
+            "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
         )
-        self.assertIn("global workflow cap", workflow["current_detail"])
+        self.assertIn("no paid provider call", workflow["current_detail"])
 
+    def test_retry_existing_decision_stops_before_edit_preview(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [("c1", "short")],
+            },
+            spend_gate={
+                "status": "COMPLETE",
+                "complete": True,
+                "global_cap_valid": True,
+                "hero_candidates": 1,
+                "authorized": 0,
+            },
+            assembly_state={
+                "status": "ASSEMBLY_PLANS_READY",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 1,
+            },
+        )
+        self.assertEqual(
+            workflow["state"],
+            "VISUAL_EXISTING_RETRY_REQUIRED",
+        )
 
     def test_visual_machine_order_stops_at_human_boundaries(self):
         search_index = workflow_automation.AUTO_MACHINE_ACTION_ORDER.index(
@@ -247,13 +387,15 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 4
+                search_index : search_index + 6
             ],
             [
                 "visual_search_acquire",
                 "visual_asset_acquire",
                 "visual_rough_cut_prepare",
                 "visual_gap_prepare",
+                "visual_generation_handoff_prepare",
+                "visual_assembly_prepare",
             ],
         )
         self.assertIn("visual_rough_cut_prepare", server.ACTION_DEFS)
