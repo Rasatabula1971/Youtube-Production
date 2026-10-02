@@ -66,6 +66,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "edit_manifest_prepare",
     "edit_preview_render",
     "final_production_handoff_prepare",
+    "final_sound_plan_prepare",
 ]
 
 MAX_STEPS_PER_RUN = 40
@@ -171,7 +172,8 @@ def run_until_human_gate() -> dict[str, Any]:
             "EDIT_PREVIEW_REWORK_REQUIRED",
             "WAITING_FOR_FINAL_VISUAL_ASSETS",
             "FINAL_PRODUCTION_HANDOFF_BLOCKED",
-            "FINAL_PRODUCTION_HANDOFF_READY",
+            "WAITING_FOR_FINAL_SOUND_ASSETS",
+            "FINAL_SOUND_ASSETS_READY",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
