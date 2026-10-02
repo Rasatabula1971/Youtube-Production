@@ -81,7 +81,20 @@ class NarrationRenderTests(unittest.TestCase):
         path = Path(temp.name) / "approved.json"
         payload = approved_spec(configured=configured)
         path.write_text(json.dumps(payload), encoding="utf-8")
-        with patch.object(narration_render, "_preview_approved", return_value=True):
+        sound_brief = Path(temp.name) / "sound_design_brief.json"
+        sound_brief.write_text("{}", encoding="utf-8")
+        with (
+            patch.object(
+                narration_render,
+                "_preview_approved",
+                return_value=True,
+            ),
+            patch.object(
+                narration_render,
+                "current_brief_for_branch",
+                return_value=(sound_brief, {}),
+            ),
+        ):
             request = narration_render.build_render_request(
                 payload,
                 path,
@@ -216,6 +229,73 @@ class NarrationRenderTests(unittest.TestCase):
                         spec_path,
                     )
                 )
+
+    def test_current_sound_design_brief_is_required_before_quote(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "approved.json"
+            payload = approved_spec()
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with (
+                patch.object(
+                    narration_render,
+                    "_preview_approved",
+                    return_value=True,
+                ),
+                patch.object(
+                    narration_render,
+                    "current_brief_for_branch",
+                    return_value=None,
+                ),
+            ):
+                request = narration_render.build_render_request(
+                    payload,
+                    path,
+                    config(verified=True),
+                )
+
+        self.assertEqual(request["status"], "BLOCKED")
+        self.assertIn(
+            "SOUND_DESIGN_BRIEF_NOT_CURRENT",
+            request["render_blockers"],
+        )
+
+    def test_invalid_existing_quote_returns_to_waiting_instead_of_crashing(self) -> None:
+        request, request_path, temp = self.build()
+        try:
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            quote_path = Path(temp.name) / "quote.json"
+            quote_path.write_text(
+                json.dumps(
+                    {
+                        "artifact": "narration_provider_quote",
+                        "concept_id": "concept-1",
+                        "format": "long_form",
+                        "provider": "higgsfield",
+                        "render_request_sha256": "old-request",
+                        "currency": "USD",
+                        "initial_estimate_usd": 1.0,
+                        "worst_case_estimate_usd": 2.0,
+                        "attempts_per_segment": 3,
+                        "quote_reference": "old",
+                        "quoted_at": "2026-09-29T12:00:00Z",
+                        "quote_source": "provider_dry_run",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            estimate = narration_render.build_cost_estimate(
+                request,
+                request_path,
+                config(verified=True),
+                quote_path,
+            )
+            self.assertEqual(
+                estimate["status"],
+                "WAITING_FOR_PROVIDER_QUOTE",
+            )
+            self.assertIn("stale", estimate["quote_error"].lower())
+        finally:
+            temp.cleanup()
 
     def test_unverified_provider_contract_fails_closed(self) -> None:
         request, _, temp = self.build(verified=False)
