@@ -302,3 +302,34 @@ The search request policy remains:
 - never allow paid generation calls during this stage.
 
 Slice 13 intentionally stops before `visual_search_acquire`.
+
+## Slice 14 — resumable zero-cost visual discovery and candidate gate
+
+The current storyboard-driven search request now flows through zero-cost
+discovery before stopping for human selection.
+
+The acquisition runner accepts only a current search request. It records the
+exact request hash/fingerprint in the raw discovery artifact and revalidates
+the request before every shot-level provider call.
+
+Raw discovery is checkpointed per shot. A later run may reuse a prior shot only
+when its storyboard/search fingerprint is unchanged and that shot had no
+provider errors. This makes interrupted searches resumable without blindly
+repeating already-complete calls.
+
+Provider adapters are fail-soft at the provider boundary. One provider timeout
+or malformed payload is recorded without cancelling valid results from the
+other zero-cost sources. Candidate counts and provider errors are retained per
+shot.
+
+Compiled results inherit the exact search-request hash. A result is current
+only while its request file exists and matches the stored hash, that request is
+still current against the storyboard, concept/format identities match, and the
+result shot IDs/fingerprints exactly match the current request.
+
+The Human Visual Candidate Gate requires complete current result coverage for
+all branches that require search. Partial branch results cannot unlock review.
+
+This stage is discovery-only: no visual file is downloaded, creator/editorial
+footage is never auto-approved, and no paid generation provider is called.
+

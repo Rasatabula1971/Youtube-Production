@@ -100,8 +100,10 @@ class VisualSearchTests(unittest.TestCase):
 
             request_path = results / "c1.short.visual_search_request.json"
             request = {
+                "artifact": "visual_search_request",
                 "concept_id": "c1",
                 "format": "short",
+                "status": "SEARCH_REQUIRED",
                 "shots": [
                     {
                         "shot_id": "s1",
@@ -128,6 +130,7 @@ class VisualSearchTests(unittest.TestCase):
                             "s1": "fp-current-1",
                             "s2": "fp-old-2",
                         },
+                        "provider_errors": {},
                         "shots": {
                             "s1": [{"candidate_id": "old-s1"}],
                             "s2": [{"candidate_id": "old-s2"}],
@@ -138,16 +141,23 @@ class VisualSearchTests(unittest.TestCase):
             )
 
             discovered = {
-                "free": [
-                    {
-                        "candidate_id": "new-s2",
-                        "source_tier": "FREE_COMMERCIAL_LICENSE",
-                        "rights_status": "VERIFIED",
-                        "commercial_use_allowed": True,
-                        "source_url": "https://example.test/new-s2",
-                    }
-                ]
+                "providers": {
+                    "free": [
+                        {
+                            "candidate_id": "new-s2",
+                            "source_tier": "FREE_COMMERCIAL_LICENSE",
+                            "rights_status": "VERIFIED",
+                            "commercial_use_allowed": True,
+                            "source_url": "https://example.test/new-s2",
+                        }
+                    ]
+                },
+                "errors": [],
             }
+
+            def current_request(path):
+                return (request, Path("board")) if path == request_path else None
+
             with (
                 patch.object(visual_search_acquire, "RESULT_DIR", results),
                 patch.object(visual_search_acquire, "RAW_DIR", raw_dir),
@@ -158,7 +168,17 @@ class VisualSearchTests(unittest.TestCase):
                 ),
                 patch.object(
                     visual_search_acquire,
-                    "discover",
+                    "search_request_is_current",
+                    side_effect=current_request,
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "search_result_is_current",
+                    return_value=({}, request_path, request),
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "discover_with_diagnostics",
                     return_value=discovered,
                 ) as discover,
             ):
@@ -174,6 +194,126 @@ class VisualSearchTests(unittest.TestCase):
             self.assertEqual(
                 updated["shot_fingerprints"]["s2"],
                 "fp-current-2",
+            )
+
+    def test_stale_search_request_never_calls_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results = root / "results"
+            raw_dir = root / "raw"
+            results.mkdir()
+            raw_dir.mkdir()
+            request_path = results / "stale.visual_search_request.json"
+            request_path.write_text("{}", encoding="utf-8")
+
+            with (
+                patch.object(visual_search_acquire, "RESULT_DIR", results),
+                patch.object(visual_search_acquire, "RAW_DIR", raw_dir),
+                patch.object(
+                    visual_search_acquire,
+                    "SUMMARY_FILE",
+                    root / "summary.json",
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "search_request_is_current",
+                    return_value=None,
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "discover_with_diagnostics",
+                ) as discover,
+            ):
+                result = visual_search_acquire.acquire()
+
+            discover.assert_not_called()
+            self.assertEqual(result["stale_requests_skipped"], 1)
+
+    def test_provider_error_does_not_discard_other_provider_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results = root / "results"
+            raw_dir = root / "raw"
+            results.mkdir()
+            raw_dir.mkdir()
+            request_path = results / "c1.short.visual_search_request.json"
+            request = {
+                "artifact": "visual_search_request",
+                "concept_id": "c1",
+                "format": "short",
+                "status": "SEARCH_REQUIRED",
+                "shots": [
+                    {
+                        "shot_id": "s1",
+                        "shot_fingerprint": "fp1",
+                        "search_terms": ["impact"],
+                        "max_candidates_per_source": 5,
+                    }
+                ],
+            }
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            discovery = {
+                "providers": {
+                    "pexels": [
+                        {
+                            "candidate_id": "free-1",
+                            "source_tier": "FREE_COMMERCIAL_LICENSE",
+                            "rights_status": "VERIFIED",
+                            "commercial_use_allowed": True,
+                            "source_url": "https://example.test/free-1",
+                        }
+                    ],
+                    "pixabay": [],
+                },
+                "errors": [
+                    {
+                        "provider": "pixabay",
+                        "error_type": "TimeoutError",
+                        "error": "timed out",
+                    }
+                ],
+            }
+
+            with (
+                patch.object(visual_search_acquire, "RESULT_DIR", results),
+                patch.object(visual_search_acquire, "RAW_DIR", raw_dir),
+                patch.object(
+                    visual_search_acquire,
+                    "SUMMARY_FILE",
+                    root / "summary.json",
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "search_request_is_current",
+                    return_value=(request, Path("board")),
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "search_result_is_current",
+                    return_value=({}, request_path, request),
+                ),
+                patch.object(
+                    visual_search_acquire,
+                    "discover_with_diagnostics",
+                    return_value=discovery,
+                ),
+            ):
+                result = visual_search_acquire.acquire()
+
+            compiled_path = (
+                results / "c1.short.visual_search_results.json"
+            )
+            compiled = json.loads(
+                compiled_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(result["provider_errors"], 1)
+            self.assertEqual(
+                compiled["shots"][0]["candidates"][0]["candidate_id"],
+                "free-1",
+            )
+            self.assertEqual(
+                compiled["shots"][0]["provider_errors"][0]["provider"],
+                "pixabay",
             )
 
 

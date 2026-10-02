@@ -289,6 +289,7 @@ from storyboard_review import (
 )
 from storyboard import snapshot as production_storyboard_snapshot
 from visual_search import snapshot as visual_search_prepare_snapshot
+from visual_search_acquire import snapshot as visual_search_acquire_snapshot
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
@@ -4175,6 +4176,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         and int(visual_search_state.get("prepared") or 0)
         == int(storyboard_state.get("prepared") or 0)
     )
+    visual_search_acquire_state = visual_search_acquire_snapshot()
     visual_post = visual_post_search_artifact_state()
     visual_candidate_complete = bool(visual_post["candidate_complete"])
     visual_candidate_stale = int(
@@ -5079,20 +5081,22 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "visual_search_acquire": {
             "enabled": (
                 visual_search_requests_ready
-                and int(visual_search_state.get("search_required") or 0) > 0
-                and not (
-                    PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists()
-                    and any(
-                        PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob(
-                            "*.visual_search_results.json"
-                        )
-                    )
-                )
+                and visual_search_acquire_state.get("status")
+                == "READY_TO_SEARCH"
             ),
             "reason": (
-                "Search configured zero-cost/existing sources from current search requests, then stop for human candidate review."
-                if visual_search_requests_ready
-                else "Prepare current narration-bound visual search requests first."
+                "Search current zero-cost/existing sources. Results are discovery-only; no media is downloaded and no paid generation is called."
+                if (
+                    visual_search_requests_ready
+                    and visual_search_acquire_state.get("status")
+                    == "READY_TO_SEARCH"
+                )
+                else (
+                    "Current zero-cost visual search results are ready for human review."
+                    if visual_search_acquire_state.get("status")
+                    == "SEARCH_COMPLETE"
+                    else "Prepare current narration-bound visual search requests first."
+                )
             ),
         },
         "visual_asset_acquire": {
@@ -5806,30 +5810,36 @@ def workflow_guidance(
         }
 
     search_state = visual_search_prepare_snapshot()
+    search_acquire_state = visual_search_acquire_snapshot()
     candidate_snapshot = visual_candidate_review_snapshot()
     if (
         narration_state.get("audio_ready")
         and search_state.get("status") == "READY_FOR_SEARCH_ADAPTERS"
         and int(search_state.get("prepared") or 0) > 0
-        and not candidate_snapshot.get("packets")
+        and not candidate_snapshot.get("ready_for_review")
+        and search_acquire_state.get("status") == "READY_TO_SEARCH"
     ):
         return {
-            "state": "VISUAL_SEARCH_READY",
-            "current_action_id": None,
-            "current_title": "Visual Search Plan Ready",
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Search Free / Existing Visuals",
             "current_detail": (
-                "Current final narration now drives current visual manifests, "
-                "cinematic storyboards and rights-aware existing/free-first search "
-                "requests. Slice 13 stops before any search adapter runs."
+                "Run current zero-cost discovery across configured stock and "
+                "creator-discovery sources. Results are normalized and rights-aware; "
+                "no media is downloaded and no paid generation is allowed."
             ),
             "next_action_id": None,
-            "next_title": "Search Free / Existing Visuals",
+            "next_title": "Human Visual Candidate Gate",
         }
 
     visual_post = visual_post_search_artifact_state()
     candidate_gate = visual_post.get("candidate_gate", {})
     if (
-        candidate_gate.get("packets")
+        candidate_gate.get(
+            "ready_for_review",
+            bool(candidate_gate.get("packets")),
+        )
+        and candidate_gate.get("packets")
         and not visual_post.get("candidate_complete")
     ):
         return {
@@ -5844,8 +5854,16 @@ def workflow_guidance(
                 "One or more storyboard shots changed and their old search "
                 "results are stale. Continue Automatically to re-search them."
                 if int(candidate_gate.get("stale_shots") or 0) > 0
-                else "Choose a current visual, reject the available options, "
-                "or preserve the shot as a visual gap."
+                else (
+                    "Choose a current visual, reject the available options, or "
+                    "preserve the shot as a visual gap. "
+                    + (
+                        f"{int(candidate_gate.get('provider_errors') or 0)} provider "
+                        "error(s) were isolated; available current candidates remain reviewable."
+                        if int(candidate_gate.get("provider_errors") or 0) > 0
+                        else "All displayed candidates come from the current search request."
+                    )
+                )
             ),
             "next_action_id": "auto_continue",
             "next_title": "Rights review or automatic rough cut",
@@ -6200,6 +6218,7 @@ def status_payload() -> dict[str, Any]:
         "production_visual": production_visual,
         "storyboard": production_storyboard_snapshot(),
         "visual_search_prepare": visual_search_prepare_snapshot(),
+        "visual_search_acquire": visual_search_acquire_snapshot(),
         "visual_post_search": visual_post_search_artifact_state(),
         "visual_candidate_gate": visual_candidate_review_snapshot(),
         "visual_rights_gate": visual_rights_review_snapshot(),

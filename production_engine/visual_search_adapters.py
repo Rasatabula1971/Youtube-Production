@@ -11,7 +11,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, Callable
 
 
 def _json(url: str, *, headers: dict[str, str] | None = None, timeout: int = 20) -> dict[str, Any]:
@@ -111,10 +111,72 @@ def youtube_creator_discovery(query: str, limit: int = 5, *, creative_commons_on
     return out
 
 
-def discover(query: str, limit: int = 5) -> dict[str, Any]:
+def _safe_provider_call(
+    name: str,
+    call: Callable[[], list[dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
+    try:
+        value = call()
+    except Exception as exc:  # External provider/network boundary.
+        return [], {
+            "provider": name,
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:500],
+        }
+    if not isinstance(value, list):
+        return [], {
+            "provider": name,
+            "error_type": "InvalidProviderResponse",
+            "error": "Provider adapter did not return a list.",
+        }
+    return [item for item in value if isinstance(item, dict)], None
+
+
+def discover_with_diagnostics(
+    query: str,
+    limit: int = 5,
+) -> dict[str, Any]:
+    query = str(query or "").strip()
+    if not query:
+        raise ValueError("Visual discovery query is required")
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Visual discovery limit must be an integer") from exc
+    if limit < 1 or limit > 20:
+        raise ValueError("Visual discovery limit must be between 1 and 20")
+
+    providers: dict[str, list[dict[str, Any]]] = {}
+    errors: list[dict[str, str]] = []
+    calls: list[tuple[str, Callable[[], list[dict[str, Any]]]]] = [
+        ("pexels", lambda: pexels_videos(query, limit)),
+        ("pixabay", lambda: pixabay_videos(query, limit)),
+        (
+            "youtube_creator",
+            lambda: youtube_creator_discovery(query, limit),
+        ),
+        (
+            "youtube_creative_commons",
+            lambda: youtube_creator_discovery(
+                query,
+                limit,
+                creative_commons_only=True,
+            ),
+        ),
+    ]
+    for name, call in calls:
+        candidates, error = _safe_provider_call(name, call)
+        providers[name] = candidates
+        if error is not None:
+            errors.append(error)
+
     return {
-        "pexels": pexels_videos(query, limit),
-        "pixabay": pixabay_videos(query, limit),
-        "youtube_creator": youtube_creator_discovery(query, limit),
-        "youtube_creative_commons": youtube_creator_discovery(query, limit, creative_commons_only=True),
+        "providers": providers,
+        "errors": errors,
+        "paid_calls_allowed": False,
     }
+
+
+def discover(query: str, limit: int = 5) -> dict[str, Any]:
+    """Backward-compatible candidate-only discovery result."""
+    return discover_with_diagnostics(query, limit)["providers"]

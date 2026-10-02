@@ -53,10 +53,29 @@ def shot_fingerprint(card: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def request_fingerprint(request: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        request,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def raw_matches_request(
     request: dict[str, Any],
     raw: dict[str, Any],
 ) -> bool:
+    if (
+        str(raw.get("concept_id") or "")
+        != str(request.get("concept_id") or "")
+        or str(raw.get("format") or "")
+        != str(request.get("format") or "")
+        or raw.get("search_request_fingerprint")
+        not in {None, request_fingerprint(request)}
+    ):
+        return False
     fingerprints = raw.get("shot_fingerprints", {})
     if not isinstance(fingerprints, dict):
         return False
@@ -168,6 +187,12 @@ def compile_results(request: dict[str, Any], request_path: Path, raw: dict[str, 
         candidates = [normalize_candidate(x, shot_id) for x in entries if isinstance(x, dict)]
         priority = {tier: i for i, tier in enumerate(SOURCE_PRIORITY)}
         candidates.sort(key=lambda x: (0 if x["state"] == "ELIGIBLE" else 1 if x["state"] == "HUMAN_REVIEW_REQUIRED" else 2, priority.get(x["source_tier"], 99), x["estimated_cost_usd"]))
+        shot_errors = (
+            raw.get("provider_errors", {}).get(shot_id, [])
+            if isinstance(raw, dict)
+            and isinstance(raw.get("provider_errors"), dict)
+            else []
+        )
         results.append({
             "shot_id": shot_id,
             "creative_version": int(shot.get("creative_version") or 1),
@@ -176,6 +201,7 @@ def compile_results(request: dict[str, Any], request_path: Path, raw: dict[str, 
             "eligible": sum(x["state"] == "ELIGIBLE" for x in candidates),
             "human_review_required": sum(x["state"] == "HUMAN_REVIEW_REQUIRED" for x in candidates),
             "search_gap": not any(x["state"] in {"ELIGIBLE", "HUMAN_REVIEW_REQUIRED"} for x in candidates),
+            "provider_errors": shot_errors if isinstance(shot_errors, list) else [],
             "premium_generation_candidate": bool(shot.get("premium_generation_candidate")),
         })
     return {
@@ -280,6 +306,58 @@ def snapshot() -> dict[str, Any]:
         "items": items,
         "paid_generation_calls_allowed": False,
     }
+
+
+def search_result_is_current(
+    result_path: Path,
+) -> tuple[dict[str, Any], Path, dict[str, Any]] | None:
+    result = _load_dict(result_path)
+    if not isinstance(result, dict):
+        return None
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    request_path = Path(str(provenance.get("search_request") or ""))
+    if (
+        not request_path.is_file()
+        or request_path.parent.resolve() != RESULT_DIR.resolve()
+        or provenance.get("search_request_sha256") != sha256_file(request_path)
+    ):
+        return None
+    request_state = search_request_is_current(request_path)
+    if request_state is None:
+        return None
+    request = request_state[0]
+    if (
+        str(result.get("concept_id") or "")
+        != str(request.get("concept_id") or "")
+        or str(result.get("format") or "")
+        != str(request.get("format") or "")
+        or result.get("status") != "READY_FOR_CANDIDATE_REVIEW"
+    ):
+        return None
+
+    result_shots = result.get("shots", [])
+    request_shots = request.get("shots", [])
+    if not isinstance(result_shots, list) or not isinstance(request_shots, list):
+        return None
+    expected = {
+        str(item.get("shot_id") or ""): str(
+            item.get("shot_fingerprint") or ""
+        )
+        for item in request_shots
+        if isinstance(item, dict)
+    }
+    actual = {
+        str(item.get("shot_id") or ""): str(
+            item.get("shot_fingerprint") or ""
+        )
+        for item in result_shots
+        if isinstance(item, dict)
+    }
+    if not expected or expected != actual:
+        return None
+    return result, request_path, request
 
 
 def prepare() -> dict[str, Any]:

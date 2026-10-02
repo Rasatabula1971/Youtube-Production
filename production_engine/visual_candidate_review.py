@@ -9,7 +9,11 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, safe_slug, sha256_file
-from visual_search import shot_fingerprint
+from visual_search import (
+    search_request_is_current,
+    search_result_is_current,
+    shot_fingerprint,
+)
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -47,6 +51,27 @@ def _storyboard_path(result: dict[str, Any]) -> Path:
     return STORYBOARD_DIR / f"{concept_id}.{fmt}.storyboard.json"
 
 
+def _assert_result_current(
+    result_path: Path,
+    result: dict[str, Any],
+) -> None:
+    state = search_result_is_current(result_path)
+    if state is None:
+        raise ValueError(
+            "STALE_VISUAL_SEARCH: search result is not bound to the current request"
+        )
+    current = state[0]
+    if (
+        str(current.get("concept_id") or "")
+        != str(result.get("concept_id") or "")
+        or str(current.get("format") or "")
+        != str(result.get("format") or "")
+    ):
+        raise ValueError(
+            "STALE_VISUAL_SEARCH: current result identity changed"
+        )
+
+
 def _current_storyboard_card(
     result: dict[str, Any],
     shot_id: str,
@@ -75,9 +100,11 @@ def _current_storyboard_card(
 
 
 def _assert_result_shot_current(
+    result_path: Path,
     result: dict[str, Any],
     shot: dict[str, Any],
 ) -> dict[str, Any]:
+    _assert_result_current(result_path, result)
     shot_id = str(shot.get("shot_id") or "")
     card = _current_storyboard_card(result, shot_id)
     expected = str(shot.get("shot_fingerprint") or "")
@@ -90,12 +117,13 @@ def _assert_result_shot_current(
 
 
 def _decision_is_current(
+    result_path: Path,
     result: dict[str, Any],
     shot: dict[str, Any],
     decision: dict[str, Any],
 ) -> bool:
     try:
-        card = _assert_result_shot_current(result, shot)
+        card = _assert_result_shot_current(result_path, result, shot)
     except ValueError:
         return False
     return (
@@ -143,7 +171,12 @@ def _reconcile_review(
         if (
             shot_id in shots
             and isinstance(decision, dict)
-            and _decision_is_current(result, shots[shot_id], decision)
+            and _decision_is_current(
+                result_path,
+                result,
+                shots[shot_id],
+                decision,
+            )
         )
     }
     review = {
@@ -166,22 +199,46 @@ def _reconcile_review(
 
 
 def snapshot() -> dict[str, Any]:
+    expected_results = 0
+    current_results = 0
     packets: list[dict[str, Any]] = []
     stale_total = 0
-    paths = (
-        sorted(RESULT_DIR.glob("*.visual_search_results.json"))
+    provider_errors_total = 0
+
+    request_paths = (
+        sorted(RESULT_DIR.glob("*.visual_search_request.json"))
         if RESULT_DIR.exists()
         else []
     )
-    for result_path in paths:
-        result = load_json(result_path)
+    for request_path in request_paths:
+        request_state = search_request_is_current(request_path)
+        if request_state is None:
+            continue
+        request = request_state[0]
+        if request.get("status") != "SEARCH_REQUIRED":
+            continue
+        expected_results += 1
+        result_path = RESULT_DIR / request_path.name.replace(
+            ".visual_search_request.json",
+            ".visual_search_results.json",
+        )
+        result_state = search_result_is_current(result_path)
+        if result_state is None:
+            continue
+
+        result = result_state[0]
+        current_results += 1
         review_path = _review_path(result_path)
         review = (
             load_json(review_path)
             if review_path.exists()
             else {"decisions": {}}
         )
-        review, changed = _reconcile_review(result_path, result, review)
+        review, changed = _reconcile_review(
+            result_path,
+            result,
+            review,
+        )
         if changed and review_path.exists():
             atomic_write_json(review_path, review)
 
@@ -191,11 +248,18 @@ def snapshot() -> dict[str, Any]:
             if not isinstance(shot, dict):
                 continue
             try:
-                _assert_result_shot_current(result, shot)
+                _assert_result_shot_current(
+                    result_path,
+                    result,
+                    shot,
+                )
                 current = True
             except ValueError:
                 current = False
                 stale_shot_ids.append(str(shot.get("shot_id") or ""))
+            errors = shot.get("provider_errors", [])
+            if isinstance(errors, list):
+                provider_errors_total += len(errors)
             shots.append({**shot, "storyboard_current": current})
 
         stale_total += len(stale_shot_ids)
@@ -210,6 +274,12 @@ def snapshot() -> dict[str, Any]:
                 "stale_shot_ids": stale_shot_ids,
             }
         )
+
+    ready_for_review = (
+        expected_results > 0
+        and current_results == expected_results
+        and stale_total == 0
+    )
     shots_total = sum(
         len(packet.get("shots", []))
         for packet in packets
@@ -225,8 +295,7 @@ def snapshot() -> dict[str, Any]:
         if isinstance(decision, dict)
     )
     complete = (
-        bool(packets)
-        and stale_total == 0
+        ready_for_review
         and shots_total > 0
         and decided_total == shots_total
     )
@@ -237,17 +306,20 @@ def snapshot() -> dict[str, Any]:
             else "COMPLETE"
             if complete
             else "READY_FOR_VISUAL_CANDIDATE_REVIEW"
-            if packets
+            if ready_for_review
             else "WAITING_FOR_VISUAL_SEARCH_RESULTS"
         ),
         "complete": complete,
+        "ready_for_review": ready_for_review,
+        "expected_results": expected_results,
+        "current_results": current_results,
         "shots_total": shots_total,
         "shots_decided": decided_total,
         "rights_context_required": rights_context_required,
+        "provider_errors": provider_errors_total,
         "stale_shots": stale_total,
         "packets": packets,
     }
-
 
 def apply_action(
     *,
@@ -265,6 +337,7 @@ def apply_action(
         raise ValueError("Invalid visual search result file")
 
     result = load_json(result_path)
+    _assert_result_current(result_path, result)
     shot = next(
         (
             item
@@ -276,7 +349,7 @@ def apply_action(
     )
     if shot is None:
         raise ValueError("Unknown storyboard shot")
-    card = _assert_result_shot_current(result, shot)
+    card = _assert_result_shot_current(result_path, result, shot)
 
     actions = {"SELECT", "REJECT_ALL", "NEEDS_BETTER_VISUAL"}
     if action not in actions:
