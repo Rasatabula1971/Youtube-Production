@@ -170,3 +170,41 @@ previous approval cannot be reused after upstream performance changes.
 
 The preview renderer has no network/paid fallback. Missing Kokoro/local audio
 dependencies stop the chain before the human listen gate.
+
+## Slice 11 — narration request, quote and Human Spend Gate
+
+Human approval of the free narration prototype unlocks preparation, not
+spending.
+
+The Production Engine first creates a commercial-safe Sound Design Brief from
+the current preview approval. The brief copies descriptive timing, mood, SFX
+and ducking intent only; prototype/reference media is not attached.
+
+A narration render request is quote-eligible only when all of these are current:
+
+- approved Voice Performance spec;
+- approved free narration preview and exact preview audio;
+- Sound Design Brief;
+- configured licensed voice identity, licence reference and calibration;
+- verified provider narration contract.
+
+The render request records hashes for the Voice Performance spec and Sound
+Design Brief. Existing quote files are validated against the exact current
+render-request hash, provider, currency and attempt policy.
+
+A missing quote produces `WAITING_FOR_PROVIDER_QUOTE`. A stale, malformed or
+mismatched quote also returns to quote-required state; it does not crash the
+pipeline and does not reuse the old cost. The system never guesses provider
+pricing.
+
+Only a current provider quote can produce `READY_FOR_SPEND_GATE`. The Human
+Narration Spend Gate then displays the current initial estimate and worst-case
+USD amount and requires explicit approval of that ceiling. Its ACCEPT records
+authorization; it still does not execute the paid narration render.
+
+Changing the current estimate invalidates old spend-review decisions and
+approved spend artifacts.
+
+The checked-in Higgsfield narration provider contract remains intentionally
+unverified, so production will stop at provider setup/quote requirements until
+those prerequisites are supplied from verified provider information.
