@@ -31,6 +31,7 @@ from narration_render import (
     load_json,
     sha256_file,
 )
+from narration_render_import import current_result as current_registered_result
 
 RENDER_RESULTS_DIR = OUTPUT_DIR / "narration_render_results"
 QC_DIR = OUTPUT_DIR / "narration_audio_qc"
@@ -210,6 +211,18 @@ def qc_render_result(
     config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     config = config or load_config(CONFIG_FILE)
+    concept_id = str(result.get("concept_id") or "").strip()
+    fmt = str(result.get("format") or "").strip()
+    registered = current_registered_result(concept_id, fmt)
+    if (
+        registered is None
+        or registered[0].resolve() != result_path.resolve()
+        or registered[1].get("render_request_sha256")
+        != result.get("render_request_sha256")
+    ):
+        raise ValueError(
+            "Narration render result is not the current registered provider return"
+        )
     request_path, request, spend_path, _ = validate_render_result(result)
     request_segments = {
         str(item["segment_id"]): item for item in request["segments"]
@@ -227,7 +240,7 @@ def qc_render_result(
         planned = request_segments[segment_id]
         audio_value = str(segment.get("audio_file") or "").strip()
         expected_duration = _finite_positive(
-            segment.get("expected_duration_seconds"),
+            planned.get("expected_duration_seconds"),
             label=f"{segment_id}.expected_duration_seconds",
         )
         attempt = int(segment.get("attempt") or 0)
@@ -330,36 +343,67 @@ def qc_render_result(
     return qc_payload, timing_payload
 
 
-def batch(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    config = config or load_config(CONFIG_FILE)
-    QC_DIR.mkdir(parents=True, exist_ok=True)
-    TIMING_DIR.mkdir(parents=True, exist_ok=True)
-    paths = (
-        sorted(RENDER_RESULTS_DIR.glob("*.narration_render_result.json"))
-        if RENDER_RESULTS_DIR.exists()
-        else []
-    )
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def snapshot() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
-    for result_path in paths:
-        result = load_json(result_path)
+    if not RENDER_RESULTS_DIR.exists():
+        return {
+            "status": "WAITING_FOR_NARRATION_RENDER_RESULTS",
+            "processed": 0,
+            "passed": 0,
+            "failed": 0,
+            "items": [],
+        }
+
+    for result_path in sorted(
+        RENDER_RESULTS_DIR.glob("*.narration_render_result.json")
+    ):
+        result = _load_dict_or_none(result_path)
         if not isinstance(result, dict):
             continue
-        qc, timing = qc_render_result(result, result_path, config)
-        key = artifact_key(str(result["concept_id"]), str(result["format"]))
+        concept_id = str(result.get("concept_id") or "").strip()
+        fmt = str(result.get("format") or "").strip()
+        registered = current_registered_result(concept_id, fmt)
+        if registered is None or registered[0].resolve() != result_path.resolve():
+            continue
+        key = artifact_key(concept_id, fmt)
         qc_path = QC_DIR / f"{key}.narration_audio_qc.json"
         timing_path = TIMING_DIR / f"{key}.narration_timing_map.json"
-        atomic_write_json(qc_path, qc)
-        atomic_write_json(timing_path, timing)
+        qc = _load_dict_or_none(qc_path)
+        timing = _load_dict_or_none(timing_path)
+        if not isinstance(qc, dict) or not isinstance(timing, dict):
+            continue
+        provenance = qc.get("provenance", {})
+        if (
+            not isinstance(provenance, dict)
+            or provenance.get("render_result_sha256")
+            != sha256_file(result_path)
+            or timing.get("source_render_result_sha256")
+            != sha256_file(result_path)
+            or timing.get("source_audio_qc_status") != qc.get("status")
+        ):
+            continue
+        status = str(qc.get("status") or "")
+        if status not in {"PASS", "FAIL"}:
+            continue
         items.append(
             {
-                "concept_id": result["concept_id"],
-                "format": result["format"],
-                "status": qc["status"],
+                "concept_id": concept_id,
+                "format": fmt,
+                "status": status,
                 "qc": str(qc_path),
                 "timing_map": str(timing_path),
             }
         )
-    summary = {
+
+    return {
         "status": (
             "PASS"
             if items and all(item["status"] == "PASS" for item in items)
@@ -372,10 +416,51 @@ def batch(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "failed": sum(item["status"] == "FAIL" for item in items),
         "items": items,
     }
+
+
+def batch(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = config or load_config(CONFIG_FILE)
+    QC_DIR.mkdir(parents=True, exist_ok=True)
+    TIMING_DIR.mkdir(parents=True, exist_ok=True)
+    paths = (
+        sorted(RENDER_RESULTS_DIR.glob("*.narration_render_result.json"))
+        if RENDER_RESULTS_DIR.exists()
+        else []
+    )
+    current_qc: set[Path] = set()
+    current_timing: set[Path] = set()
+
+    for result_path in paths:
+        result = _load_dict_or_none(result_path)
+        if not isinstance(result, dict):
+            continue
+        concept_id = str(result.get("concept_id") or "").strip()
+        fmt = str(result.get("format") or "").strip()
+        registered = current_registered_result(concept_id, fmt)
+        if registered is None or registered[0].resolve() != result_path.resolve():
+            continue
+
+        qc, timing = qc_render_result(result, result_path, config)
+        key = artifact_key(concept_id, fmt)
+        qc_path = QC_DIR / f"{key}.narration_audio_qc.json"
+        timing_path = TIMING_DIR / f"{key}.narration_timing_map.json"
+        atomic_write_json(qc_path, qc)
+        atomic_write_json(timing_path, timing)
+        current_qc.add(qc_path.resolve())
+        current_timing.add(timing_path.resolve())
+
+    for directory, pattern, current in (
+        (QC_DIR, "*.narration_audio_qc.json", current_qc),
+        (TIMING_DIR, "*.narration_timing_map.json", current_timing),
+    ):
+        for stale in directory.glob(pattern):
+            if stale.resolve() not in current:
+                stale.unlink()
+
+    summary = snapshot()
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(SUMMARY_FILE, summary)
     return summary
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local narration Audio QC")
