@@ -1301,113 +1301,86 @@ retention, comment and performance evidence may justify Voice v2, v3 and later,
 but learning-driven changes remain explicit human-approved channel decisions.
 
 
-## D-071 — Selective Script Rework begins with a deterministic, non-destructive target contract
+## D-071 — Canonical selective Script Rework state is separate from the Script Draft
 
 **Status:** Accepted
 
-Selective Script Rework is implemented in slices rather than as one large
-change. Slice 1 adds data structure only; it does not change narration, make a
-model call, or add new Human Script Gate controls.
+Selective Script Rework uses `script_section_state.py` as its single
+per-target state contract. It does not embed mutable review state in the Script
+Draft or create a second competing section-state format.
 
-For each exact format-specific Script Draft, the Human Script Gate now derives
-stable review targets for the opening hook, every generated `section_id`, and
-the closing. The contract is bound to the exact draft SHA-256 and records:
+Stable target IDs are `hook:opening`, `section:<section_id>`, and
+`closing:closing`. Each target has a deterministic `target_sha256`, decision,
+locked flag, ordinal and optional rework metadata. The state records the exact
+source Script Draft path/SHA-256, a monotonically advancing `state_version`,
+timestamps and action history.
 
-- review state, initially `PENDING`;
-- `locked=false`;
-- `editable=true`;
-- per-target revision `0`;
-- script revision `0`;
-- section-state revision `0`;
-- bounded rework reason vocabulary with no reason/note selected yet; and
-- a deterministic content SHA-256 for every target.
+State creation fails closed for missing/duplicate section IDs and for target IDs
+that collide after filesystem normalization. Before use, the target set and
+hashes are recomputed from the exact Script Draft; changed draft content or
+tampered state is stale.
 
-Missing or duplicate generated section IDs fail closed when the review contract
-is created. The contract reserves later `ACCEPTED` and
-`REWORK_REQUESTED` states, but Slice 1 has no handlers that can transition into
-them.
-
-This creates the provenance needed for later slices to prove that selective
-rework changed only the chosen target while accepted/locked material remained
-unchanged.
+Slice 1 is non-destructive: it creates review state but never changes narration.
 
 
-## D-072 — Section review actions are persistent, idempotent and cannot mutate narration
+## D-072 — Section decisions and branch approval share one canonical consistency boundary
 
 **Status:** Accepted
 
-Selective Script Rework Slice 2 adds backend state transitions only. Script
-wording remains immutable and `script_revision` therefore remains unchanged.
+Section actions are handled by `script_section_service.py` and
+`script_section_state.py`. Supported target actions are `ACCEPT`, `LOCK`,
+`UNLOCK`, `REWORK`, and `CANCEL_REWORK`.
 
-The persisted section-review state supports `ACCEPT`, `LOCK`, `UNLOCK`,
-`REWORK`, and `CANCEL_REWORK`.
+`ACCEPT` marks a target accepted and locked. `LOCK` may freeze a pending
+target without accepting it. Unlocking an accepted target returns it to
+`PENDING`. A locked target cannot be reworked until explicitly unlocked.
+Rework requires a supported bounded reason or custom instruction; the canonical
+custom reason token is `CUSTOM`.
 
-`ACCEPT` means approved and frozen: the target becomes `ACCEPTED`, locked and
-non-editable. `LOCK` is weaker and may freeze a still-`PENDING` target without
-approving it. Unlocking an accepted target reopens it to `PENDING`.
+Every state action is written to history and advances `state_version`. These
+actions never mutate Script Draft text.
 
-A locked target cannot be marked for rework. Rework requires one bounded reason;
-`CUSTOM_INSTRUCTION` additionally requires a non-empty human instruction.
-Unknown target IDs, unsupported actions/reasons and stale draft hashes fail
-closed.
+The local UI supplies logical concept/format/target identities only; service
+code resolves project-owned artifact paths and validates draft identity.
+`REWORK` and `UNLOCK` invalidate stale branch-level response/bundle artifacts.
 
-Every material state transition increments both the target revision and the
-section-state revision. Equivalent retried operations are idempotent and do not
-inflate revisions. Section actions and whole-branch Script Gate decisions are
-serialized through the same in-process lock so concurrent threaded requests
-cannot leave a branch accepted while one of its sections is simultaneously
-marked for rework.
-
-Section state is stored separately from the immutable Script Draft and survives
-re-running Script Gate preparation while the source draft SHA-256 is unchanged.
-A new draft hash receives fresh state rather than inheriting decisions made
-against different words.
-
-Marking any target `REWORK_REQUESTED`, or unlocking an `ACCEPTED` target,
-invalidates an existing branch-level approval and approved script bundle.
-Branch-level `ACCEPT` cannot bypass an outstanding section rework request.
-
-Slice 2 adds no FAIR/model call, alternative generation, narration replacement,
-or browser control.
+Section mutations and whole-branch Human Script Gate decisions use the same
+in-process lock. Whole-branch `ACCEPT` checks the canonical state and fails if
+any target is `REWORK_REQUESTED`. This prevents a threaded branch-accept versus
+section-rework race from leaving contradictory approval state.
 
 
-## D-073 — Selective rework requests are bounded, immutable-context artifacts
+## D-073 — Slice 3 prepares one bounded, provenance-locked rework request before inference
 
 **Status:** Accepted
 
-Selective Script Rework Slice 3 prepares a request artifact only after a target
-has been explicitly marked `REWORK_REQUESTED`. It performs no model call and
-cannot change Script Draft text.
+A separate `PREPARE_REWORK_REQUEST` action exists before alternative
+generation. It may run only for a canonical target already marked
+`REWORK_REQUESTED`.
 
-The request contains the selected target, its immutable structural metadata and
-only the immediately adjacent targets as read-only flow context. It does not
-send the full script merely to rewrite one section.
+Slice 3 request preparation performs no FAIR/model call and cannot change the
+Script Draft. The request contains only the selected target, its immutable
+metadata, immediately adjacent read-only context, locked-target IDs, the human
+rework reason/instruction, target-scoped accepted claims, relevant Story Plan
+beats and shared story intent, psychology constraints, approved package
+constraints, and the exact bound Channel Voice.
 
-Factual scope is bounded to accepted claims already mapped to the selected
-target. Story context is limited to the target's referenced Story beat(s) plus
-the shared story question and opening/payoff/closing intent. The branch
-psychology profile/contract, approved package constraints and exact bound
-Channel Voice are preserved.
+The request is bound to SHA-256 provenance for the exact Script Draft, canonical
+section-state file, original Script Request and Human Script Gate review request,
+plus the current `state_version` and selected `target_sha256`.
 
-Each request is provenance-bound to the exact:
+Before a request can be trusted, `assert_request_current()` checks all bound
+artifacts and rebuilds the expected request from current trusted state. Edited
+request packets, changed source artifacts, cancelled rework, locked targets or
+changed target content fail closed.
 
-- Script Draft and SHA-256;
-- persisted section-review state file and SHA-256;
-- Human Script Gate request and SHA-256;
-- original Script Request and SHA-256;
-- section-state revision;
-- script revision;
-- target revision; and
-- target content SHA-256.
+Request preparation and current-state validation use the same state lock as
+human section decisions. The FAIR-backed runner also validates again after an
+inference call returns; if the human changes section state while FAIR is
+running, the stale result is discarded and no alternatives artifact is
+accepted.
 
-Before later inference may use the request, validation must prove those values
-still match. Validation rebuilds the expected request from current trusted
-artifacts, so manual packet edits are also detected.
-
-Preparation and validation are serialized with section-review actions through
-the same in-process lock. A concurrent cancel/rework/state change therefore
-cannot race a successful current-state validation.
-
-Slice 3 creates no alternatives and does not call FAIR. Alternative generation
-remains Slice 4.
-
+The repository already contains downstream A/B/C generation, human selection,
+safe single-target replacement, manual edit and UI/service capabilities. Those
+are distinct from Slice 3: preparing the request itself spends no inference and
+changes no narration.
