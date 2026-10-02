@@ -918,6 +918,64 @@ class ScriptReviewTests(unittest.TestCase):
                         target_id="section:s1",
                     )
 
+
+    def test_prepared_rework_request_tampering_is_detected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="REWORK",
+                    reason="TOO_TECHNICAL",
+                    note="Use plain language.",
+                    reviewer="r",
+                )
+                prepared = script_review.prepare_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+                path = Path(prepared["request"])
+                packet = json.loads(path.read_text(encoding="utf-8"))
+                packet["target"]["text"] = "Tampered replacement prompt text."
+                path.write_text(json.dumps(packet), encoding="utf-8")
+
+                validation = script_review.validate_prepared_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+
+            self.assertFalse(validation["current"])
+            self.assertEqual(
+                validation["reason"],
+                "STALE_SECTION_REWORK_REQUEST",
+            )
+            self.assertIn("content changed", validation["detail"])
+
     def test_prepare_rework_request_requires_rework_requested_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
