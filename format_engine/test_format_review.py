@@ -80,6 +80,83 @@ class FormatReviewTests(unittest.TestCase):
         self.assertEqual(snapshot["status"], "AWAITING_HUMAN_DECISION")
         self.assertEqual(snapshot["pending"], 1)
 
+
+    def test_prepare_ignores_stale_plans_and_cleans_stale_gate_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plans = root / "format_plans"
+            requests = root / "format_requests"
+            review_requests = root / "format_review_requests"
+            responses = root / "format_review_responses"
+            approved = root / "approved_format_plans"
+            for directory in (
+                plans,
+                requests,
+                review_requests,
+                responses,
+                approved,
+            ):
+                directory.mkdir()
+
+            current_request = requests / "c1.format_request.json"
+            current_request.write_text(
+                json.dumps({"concept_id": "c1"}),
+                encoding="utf-8",
+            )
+            current_plan = plan("c1")
+            current_plan["plan_provenance"] = {
+                "request_source": str(current_request.resolve()),
+                "request_sha256": format_review.sha256_file(current_request),
+            }
+            current_plan_path = plans / "c1.format_plan.json"
+            current_plan_path.write_text(
+                json.dumps(current_plan),
+                encoding="utf-8",
+            )
+
+            stale_plan = plan("c2")
+            stale_plan["plan_provenance"] = {
+                "request_source": str((requests / "c2.format_request.json").resolve()),
+                "request_sha256": "stale",
+            }
+            stale_plan_path = plans / "c2.format_plan.json"
+            stale_plan_path.write_text(
+                json.dumps(stale_plan),
+                encoding="utf-8",
+            )
+            stale_gate_paths = [
+                review_requests / "c2.format_review_request.json",
+                responses / "c2.format_review_response.json",
+                approved / "c2.approved_format_plan.json",
+            ]
+            for path in stale_gate_paths:
+                path.write_text("{}", encoding="utf-8")
+
+            summary = root / "format_gate_summary.json"
+            summary.write_text("{}", encoding="utf-8")
+
+            with (
+                patch.object(format_review, "PLANS_DIR", plans),
+                patch.object(format_review, "REQUESTS_DIR", requests),
+                patch.object(format_review, "REVIEW_REQUESTS_DIR", review_requests),
+                patch.object(format_review, "RESPONSES_DIR", responses),
+                patch.object(format_review, "APPROVED_DIR", approved),
+                patch.object(format_review, "SUMMARY_FILE", summary),
+            ):
+                result = format_review.prepare()
+
+            current_review_exists = (
+                review_requests / "c1.format_review_request.json"
+            ).exists()
+            stale_gate_exists = [path.exists() for path in stale_gate_paths]
+            summary_exists = summary.exists()
+
+        self.assertEqual(result["prepared"], 1)
+        self.assertEqual(result["skipped_stale_plans"], [str(stale_plan_path.resolve())])
+        self.assertTrue(current_review_exists)
+        self.assertTrue(all(not exists for exists in stale_gate_exists))
+        self.assertFalse(summary_exists)
+
     def test_accept_is_one_click_and_records_audit_criteria(self):
         request = {"concept_id": "c1", "required_accept_criteria": list(CRITERIA)}
         payload = accept_response(criteria={})
