@@ -397,3 +397,35 @@ stale rights artifact is removed.
 
 This stage records human editorial/context intent only. It downloads no media,
 authorizes no spend, and stops before Slice 16 asset acquisition.
+
+## Slice 17 — current gap planning and globally capped Visual Spend Gate
+
+`visual_gap_planner.py` now treats the Human Rough-Cut review as a strict
+provenance boundary. A gap plan is current only while:
+
+- the rough-cut file exists in the managed rough-cut directory;
+- the rough-cut review exists in the managed review directory;
+- the review decision is exactly `APPROVE_WITH_GAPS`;
+- `approved_for_gap_planning` is true;
+- the review points to the exact current rough-cut path/hash;
+- concept and format identities match; and
+- rebuilding the plan from those current inputs produces the exact stored plan.
+
+Gap preparation removes historical plans that no longer satisfy that contract.
+
+`visual_spend_review.py` consumes only current gap plans. Orphaned/stale spend
+reviews are pruned. Human decisions are fingerprint-bound to the current hero
+gap.
+
+Spend policy is fail-closed. The configuration must use USD, explicitly require
+human authorization, explicitly forbid paid calls without authorization, and
+provide finite positive per-shot/workflow caps.
+
+The workflow hard cap is calculated across all current gap-plan branches.
+`apply_action` serializes spend mutations with an in-process lock so two
+concurrent authorizations cannot both pass against the same remaining budget.
+Non-finite amounts are rejected before comparison.
+
+Slice 17 produces no generation handoff. It stops at the Human Visual Spend
+Gate, the no-spend boundary, or completed spend decisions. Paid provider
+execution remains impossible in this stage.
