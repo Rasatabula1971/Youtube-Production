@@ -1624,3 +1624,39 @@ closed; the workflow must not silently fall through to a paid TTS provider.
 
 The automatic runner treats the current Narration Preview Gate as a hard human
 boundary even if stale downstream quote/spend artifacts happen to exist.
+
+## D-081 — Preview approval advances to a provenance-bound Narration Spend boundary
+
+**Status:** Accepted
+
+A completed Human Narration Preview Gate may automatically continue through
+zero-spend final-audio preparation:
+
+`sound_design_brief_prepare → narration_prepare → narration_spend_gate_prepare`.
+
+The automatic workflow stops before paid narration in one of three states:
+
+1. `HUMAN_NARRATION_SPEND_GATE` when a current provider quote and current
+   worst-case cost exist;
+2. `WAITING_NARRATION_PROVIDER_QUOTE` when the current provider-bound request
+   and quote template are ready but no valid current quote exists; or
+3. `NARRATION_PROVIDER_SETUP_REQUIRED` when voice identity, licence,
+   calibration or verified provider-contract prerequisites are incomplete.
+
+No missing price may be guessed or synthesized. A Human Narration Spend Gate
+exists only for a current quote bound to the exact current narration render
+request.
+
+The Sound Design Brief is part of the provenance chain. It is current only when
+the Human Preview approval, preview manifest, preview audio and approved Voice
+Performance spec hashes still match. Narration render requests record the
+current Sound Design Brief hash.
+
+A stale or malformed provider quote returns the branch to quote-required state
+instead of crashing or inheriting an old cost. A changed cost estimate
+invalidates stale spend-review responses and approved spend authorizations.
+
+The Human Narration Spend Gate displays the initial and worst-case USD quote,
+requires every spend criterion, and requires an explicit human confirmation
+before an ACCEPT can authorize that ceiling. Preparing or viewing the gate
+does not call the paid provider.
