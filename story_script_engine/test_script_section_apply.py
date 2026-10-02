@@ -574,66 +574,65 @@ class ScriptSectionApplyTests(unittest.TestCase):
 
             revised = rework_runner.load_json(paths["draft"])
             state = section_state.load_json(paths["state"])
+            version_path = (
+                dirs["versions_dir"]
+                / "c1.long_form"
+                / "revision_0000.script_draft.json"
+            )
+            refreshed_request = (
+                dirs["review_requests_dir"]
+                / "c1.long_form.script_review_request.json"
+            )
 
-        self.assertEqual(result["status"], "MANUAL_EDIT_APPLIED")
-        self.assertEqual(result["revision"], 1)
-        self.assertEqual(revised["sections"][1]["narration"], replacement)
-        self.assertEqual(revised["sections"][0], old_draft["sections"][0])
-        self.assertEqual(revised["sections"][2], old_draft["sections"][2])
-        self.assertEqual(revised["opening_hook"], old_draft["opening_hook"])
-        self.assertEqual(revised["closing"], old_draft["closing"])
-        self.assertEqual(
-            {
-                key: value
-                for key, value in revised["sections"][1].items()
-                if key != "narration"
-            },
-            {
-                key: value
-                for key, value in old_draft["sections"][1].items()
-                if key != "narration"
-            },
-        )
-        self.assertEqual(
-            revised["human_revision"]["edit_type"],
-            "MANUAL_TARGET_EDIT",
-        )
-        self.assertEqual(
-            revised["human_revision"]["edited_target_id"],
-            "section:explanation_02",
-        )
+            self.assertEqual(result["status"], "MANUAL_EDIT_APPLIED")
+            self.assertEqual(result["revision"], 1)
+            self.assertEqual(revised["sections"][1]["narration"], replacement)
+            self.assertEqual(revised["sections"][0], old_draft["sections"][0])
+            self.assertEqual(revised["sections"][2], old_draft["sections"][2])
+            self.assertEqual(revised["opening_hook"], old_draft["opening_hook"])
+            self.assertEqual(revised["closing"], old_draft["closing"])
+            self.assertEqual(
+                {
+                    key: value
+                    for key, value in revised["sections"][1].items()
+                    if key != "narration"
+                },
+                {
+                    key: value
+                    for key, value in old_draft["sections"][1].items()
+                    if key != "narration"
+                },
+            )
+            self.assertEqual(
+                revised["human_revision"]["edit_type"],
+                "MANUAL_TARGET_EDIT",
+            )
+            self.assertEqual(
+                revised["human_revision"]["edited_target_id"],
+                "section:explanation_02",
+            )
 
-        selected = self.target(state, "section:explanation_02")
-        self.assertEqual(selected["decision"], "ACCEPTED")
-        self.assertTrue(selected["locked"])
-        self.assertEqual(state["history"][-1]["action"], "MANUAL_EDIT")
-        self.assertTrue(self.target(state, "section:setup_01")["locked"])
-        self.assertTrue(self.target(state, "section:payoff_03")["locked"])
-        self.assertNotEqual(
-            self.target(old_state, "section:explanation_02")["target_sha256"],
-            selected["target_sha256"],
-        )
+            selected = self.target(state, "section:explanation_02")
+            self.assertEqual(selected["decision"], "ACCEPTED")
+            self.assertTrue(selected["locked"])
+            self.assertEqual(state["history"][-1]["action"], "MANUAL_EDIT")
+            self.assertTrue(self.target(state, "section:setup_01")["locked"])
+            self.assertTrue(self.target(state, "section:payoff_03")["locked"])
+            self.assertNotEqual(
+                self.target(old_state, "section:explanation_02")["target_sha256"],
+                selected["target_sha256"],
+            )
 
-        version_path = (
-            dirs["versions_dir"]
-            / "c1.long_form"
-            / "revision_0000.script_draft.json"
-        )
-        self.assertTrue(version_path.exists())
-        self.assertEqual(rework_runner.load_json(version_path), old_draft)
-        self.assertFalse(response_file.exists())
-        self.assertFalse(approved_file.exists())
-
-        refreshed_request = (
-            dirs["review_requests_dir"]
-            / "c1.long_form.script_review_request.json"
-        )
-        self.assertTrue(refreshed_request.exists())
-        refreshed = rework_runner.load_json(refreshed_request)
-        self.assertEqual(
-            refreshed["request_provenance"]["script_draft_sha256"],
-            rework_runner.sha256_file(paths["draft"]),
-        )
+            self.assertTrue(version_path.exists())
+            self.assertEqual(rework_runner.load_json(version_path), old_draft)
+            self.assertFalse(response_file.exists())
+            self.assertFalse(approved_file.exists())
+            self.assertTrue(refreshed_request.exists())
+            refreshed = rework_runner.load_json(refreshed_request)
+            self.assertEqual(
+                refreshed["request_provenance"]["script_draft_sha256"],
+                rework_runner.sha256_file(paths["draft"]),
+            )
 
     def test_manual_edit_rejects_locked_target_until_unlocked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -655,7 +654,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
                     **dirs,
                 )
 
-        self.assertEqual(before, paths["draft"].read_bytes())
+            self.assertEqual(before, paths["draft"].read_bytes())
 
     def test_manual_edit_rejects_empty_or_unchanged_text(self):
         with tempfile.TemporaryDirectory() as tmp:
