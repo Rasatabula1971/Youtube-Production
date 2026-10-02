@@ -594,6 +594,62 @@ class ScriptReviewTests(unittest.TestCase):
             self.assertTrue(by_id["section:s1"]["locked"])
             self.assertEqual(state["state_revision"], 2)
 
+
+    def test_concurrent_branch_accept_and_section_rework_cannot_leave_acceptance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            states.mkdir()
+            summary = root / "summary.json"
+            short_request = requests / "c1.short.script_review_request.json"
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(script_review, "SUMMARY_FILE", summary),
+            ):
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    futures = [
+                        pool.submit(
+                            script_review.apply_payload,
+                            short_request,
+                            self.accept_payload("short"),
+                        ),
+                        pool.submit(
+                            script_review.apply_section_review_action,
+                            concept_id="c1",
+                            format="short",
+                            target_id="section:s1",
+                            action="REWORK",
+                            reason="WEAK_CURIOSITY",
+                            note="Sharpen the question.",
+                            reviewer="r",
+                        ),
+                    ]
+                    for future in futures:
+                        try:
+                            future.result()
+                        except ValueError as exc:
+                            self.assertIn("ACCEPT blocked", str(exc))
+
+                state = json.loads(
+                    (
+                        states
+                        / "c1.short.script_section_review_state.json"
+                    ).read_text(encoding="utf-8")
+                )
+                short_response = script_review.response_path("c1", "short")
+
+            target = next(
+                item for item in state["targets"]
+                if item["target_id"] == "section:s1"
+            )
+            self.assertEqual(target["review_state"], "REWORK_REQUESTED")
+            self.assertFalse(short_response.exists())
+
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
             "os.environ",
