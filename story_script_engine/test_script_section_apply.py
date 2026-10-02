@@ -544,5 +544,234 @@ class ScriptSectionApplyTests(unittest.TestCase):
             self.assertEqual(transaction["status"], "ROLLED_BACK")
 
 
+    def test_manual_edit_changes_only_selected_target_and_saves_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.apply_dirs(root)
+            old_draft = rework_runner.load_json(paths["draft"])
+            old_state = section_state.load_json(paths["state"])
+            response_file = (
+                dirs["review_responses_dir"]
+                / "c1.long_form.script_review_response.json"
+            )
+            approved_file = dirs["approved_dir"] / "c1.approved_script.json"
+            response_file.write_text("{}", encoding="utf-8")
+            approved_file.write_text("{}", encoding="utf-8")
+
+            replacement = (
+                "Picture the force entering the joint, then changing route "
+                "as the joint moves."
+            )
+            result = section_apply.apply_manual_edit(
+                paths["draft"],
+                paths["state"],
+                target_id="section:explanation_02",
+                replacement_text=replacement,
+                reviewer="ricky",
+                **dirs,
+            )
+
+            revised = rework_runner.load_json(paths["draft"])
+            state = section_state.load_json(paths["state"])
+            version_path = (
+                dirs["versions_dir"]
+                / "c1.long_form"
+                / "revision_0000.script_draft.json"
+            )
+            refreshed_request = (
+                dirs["review_requests_dir"]
+                / "c1.long_form.script_review_request.json"
+            )
+
+            self.assertEqual(result["status"], "MANUAL_EDIT_APPLIED")
+            self.assertEqual(result["revision"], 1)
+            self.assertEqual(revised["sections"][1]["narration"], replacement)
+            self.assertEqual(revised["sections"][0], old_draft["sections"][0])
+            self.assertEqual(revised["sections"][2], old_draft["sections"][2])
+            self.assertEqual(revised["opening_hook"], old_draft["opening_hook"])
+            self.assertEqual(revised["closing"], old_draft["closing"])
+            self.assertEqual(
+                {
+                    key: value
+                    for key, value in revised["sections"][1].items()
+                    if key != "narration"
+                },
+                {
+                    key: value
+                    for key, value in old_draft["sections"][1].items()
+                    if key != "narration"
+                },
+            )
+            self.assertEqual(
+                revised["human_revision"]["edit_type"],
+                "MANUAL_TARGET_EDIT",
+            )
+            self.assertEqual(
+                revised["human_revision"]["edited_target_id"],
+                "section:explanation_02",
+            )
+
+            selected = self.target(state, "section:explanation_02")
+            self.assertEqual(selected["decision"], "ACCEPTED")
+            self.assertTrue(selected["locked"])
+            self.assertEqual(state["history"][-1]["action"], "MANUAL_EDIT")
+            self.assertTrue(self.target(state, "section:setup_01")["locked"])
+            self.assertTrue(self.target(state, "section:payoff_03")["locked"])
+            self.assertNotEqual(
+                self.target(old_state, "section:explanation_02")["target_sha256"],
+                selected["target_sha256"],
+            )
+
+            self.assertTrue(version_path.exists())
+            self.assertEqual(rework_runner.load_json(version_path), old_draft)
+            self.assertFalse(response_file.exists())
+            self.assertFalse(approved_file.exists())
+            self.assertTrue(refreshed_request.exists())
+            refreshed = rework_runner.load_json(refreshed_request)
+            self.assertEqual(
+                refreshed["request_provenance"]["script_draft_sha256"],
+                rework_runner.sha256_file(paths["draft"]),
+            )
+
+    def test_manual_edit_rejects_locked_target_until_unlocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.apply_dirs(root)
+            before = paths["draft"].read_bytes()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Locked target cannot be manually edited until unlocked",
+            ):
+                section_apply.apply_manual_edit(
+                    paths["draft"],
+                    paths["state"],
+                    target_id="section:setup_01",
+                    replacement_text="A different setup line.",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            self.assertEqual(before, paths["draft"].read_bytes())
+
+    def test_manual_edit_rejects_empty_or_unchanged_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.apply_dirs(root)
+            original = rework_runner.load_json(paths["draft"])[
+                "sections"
+            ][1]["narration"]
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "non-empty replacement_text",
+            ):
+                section_apply.apply_manual_edit(
+                    paths["draft"],
+                    paths["state"],
+                    target_id="section:explanation_02",
+                    replacement_text="   ",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "must change the selected target text",
+            ):
+                section_apply.apply_manual_edit(
+                    paths["draft"],
+                    paths["state"],
+                    target_id="section:explanation_02",
+                    replacement_text="  " + original + "  ",
+                    reviewer="r",
+                    **dirs,
+                )
+
+    def test_manual_edit_runs_full_script_validator_before_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.apply_dirs(root)
+            before = paths["draft"].read_bytes()
+
+            with (
+                patch.object(
+                    section_apply,
+                    "validate_script_response",
+                    return_value={
+                        "valid": False,
+                        "errors": ["forced validation failure"],
+                    },
+                ) as validator,
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Manual edit fails full script validation",
+                ),
+            ):
+                section_apply.apply_manual_edit(
+                    paths["draft"],
+                    paths["state"],
+                    target_id="section:explanation_02",
+                    replacement_text="A valid-looking but forced-fail edit.",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            self.assertTrue(validator.called)
+            self.assertEqual(before, paths["draft"].read_bytes())
+
+    def test_manual_edit_failure_rolls_back_draft_and_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.apply_dirs(root)
+            old_draft = rework_runner.load_json(paths["draft"])
+            old_state = section_state.load_json(paths["state"])
+
+            with (
+                patch.object(
+                    section_apply,
+                    "_invalidate_and_refresh_script_gate",
+                    side_effect=RuntimeError("simulated manual interruption"),
+                ),
+                self.assertRaisesRegex(
+                    RuntimeError,
+                    "simulated manual interruption",
+                ),
+            ):
+                section_apply.apply_manual_edit(
+                    paths["draft"],
+                    paths["state"],
+                    target_id="section:explanation_02",
+                    replacement_text=(
+                        "The joint visibly redirects the force as it moves."
+                    ),
+                    reviewer="r",
+                    **dirs,
+                )
+
+            self.assertEqual(
+                rework_runner.load_json(paths["draft"]),
+                old_draft,
+            )
+            self.assertEqual(
+                section_state.load_json(paths["state"]),
+                old_state,
+            )
+            transactions = list(
+                dirs["transactions_dir"].glob(
+                    "*.manual_edit_transaction.json"
+                )
+            )
+            self.assertEqual(len(transactions), 1)
+            transaction = rework_runner.load_json(transactions[0])
+            self.assertEqual(transaction["status"], "ROLLED_BACK")
+
+
+
 if __name__ == "__main__":
     unittest.main()

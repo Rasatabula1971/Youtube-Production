@@ -121,6 +121,8 @@ const scriptSectionPrepare = document.getElementById("scriptSectionPrepare");
 const scriptSectionControls = document.getElementById("scriptSectionControls");
 const scriptSectionTarget = document.getElementById("scriptSectionTarget");
 const scriptSectionTargetDetail = document.getElementById("scriptSectionTargetDetail");
+const scriptSectionManualText = document.getElementById("scriptSectionManualText");
+const scriptSectionSaveManual = document.getElementById("scriptSectionSaveManual");
 const scriptSectionReason = document.getElementById("scriptSectionReason");
 const scriptSectionInstruction = document.getElementById("scriptSectionInstruction");
 const scriptSectionAccept = document.getElementById("scriptSectionAccept");
@@ -2199,6 +2201,7 @@ function renderScriptSectionReview(snapshot) {
   }
   if (targetChanged) {
     scriptSectionInstruction.value = selected.custom_instruction || "";
+    scriptSectionManualText.value = selected.text || "";
     scriptSectionRenderedTargetId = selected.target_id;
   }
 
@@ -2212,6 +2215,8 @@ function renderScriptSectionReview(snapshot) {
   scriptSectionCancelRework.disabled = scriptSectionBusy || !reworkRequested;
   scriptSectionCancelRework.hidden = !reworkRequested;
   scriptSectionGenerate.disabled = scriptSectionBusy || !reworkRequested;
+  scriptSectionManualText.disabled = scriptSectionBusy || locked;
+  scriptSectionSaveManual.disabled = scriptSectionBusy || locked;
   scriptSectionReason.disabled = scriptSectionBusy || locked;
   scriptSectionInstruction.disabled = scriptSectionBusy || locked;
   scriptSectionGenerate.textContent = scriptSectionBusy
@@ -2299,7 +2304,8 @@ async function submitScriptSectionAction(action, extra) {
   const extras = extra || {};
 
   scriptSectionBusy = action === "GENERATE_ALTERNATIVES" ||
-    action === "SELECT_ALTERNATIVE";
+    action === "SELECT_ALTERNATIVE" ||
+    action === "MANUAL_EDIT";
   if (latestScriptSectionSnapshot) {
     renderScriptSectionReview(latestScriptSectionSnapshot);
   }
@@ -2312,7 +2318,10 @@ async function submitScriptSectionAction(action, extra) {
       target_id: target ? target.target_id : null,
       reason: scriptSectionReason.value || null,
       custom_instruction: scriptSectionInstruction.value || null,
-      selection_id: extras.selection_id || null
+      selection_id: extras.selection_id || null,
+      replacement_text: action === "MANUAL_EDIT"
+        ? scriptSectionManualText.value
+        : null
     };
     const payload = await api("/api/script-section-review", {
       method: "POST",
@@ -2337,7 +2346,8 @@ async function submitScriptSectionAction(action, extra) {
         REWORK: "Selective rework requested.",
         CANCEL_REWORK: "Selective rework cancelled.",
         GENERATE_ALTERNATIVES: "A / B / C alternatives are ready.",
-        SELECT_ALTERNATIVE: "Selection applied. Review the updated script before whole-script approval."
+        SELECT_ALTERNATIVE: "Selection applied. Review the updated script before whole-script approval.",
+        MANUAL_EDIT: "Manual edit applied and locked. Review the updated script before whole-script approval."
       };
       showToast(messages[action] || "Script section updated.", false);
     }
@@ -4406,6 +4416,9 @@ scriptSectionTarget.addEventListener("change", function () {
 });
 scriptSectionPrepare.addEventListener("click", function () {
   submitScriptSectionAction("PREPARE");
+});
+scriptSectionSaveManual.addEventListener("click", function () {
+  submitScriptSectionAction("MANUAL_EDIT");
 });
 scriptSectionAccept.addEventListener("click", function () {
   submitScriptSectionAction("ACCEPT");

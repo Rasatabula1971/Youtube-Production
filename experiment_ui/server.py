@@ -6329,6 +6329,11 @@ class Handler(BaseHTTPRequestHandler):
                         if body.get("selection_id") is not None
                         else None
                     ),
+                    replacement_text=(
+                        str(body["replacement_text"])
+                        if body.get("replacement_text") is not None
+                        else None
+                    ),
                 )
                 self._send_json(payload)
                 return

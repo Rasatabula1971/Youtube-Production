@@ -19,6 +19,7 @@ from script_review import (
 from script_section_apply import (
     SCRIPT_VERSIONS_DIR,
     SELECTION_TRANSACTIONS_DIR,
+    apply_manual_edit,
     apply_selection,
 )
 from script_section_rework_runner import (
@@ -75,6 +76,19 @@ def _alternatives_path(
     )
 
 
+def _rework_request_path(
+    concept_id: str,
+    fmt: str,
+    target_id: str,
+    *,
+    rework_requests_dir: Path,
+) -> Path:
+    return rework_requests_dir / (
+        f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+        f"{safe_slug(target_id)}.section_rework_request.json"
+    )
+
+
 def _target_text(
     draft: dict[str, Any],
     target: dict[str, Any],
@@ -121,15 +135,19 @@ def _target_metadata(
 
 def _alternative_summary(
     path: Path,
+    *,
+    target_sha256: str,
+    state_version: int,
 ) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     artifact = load_json(path)
     if artifact.get("artifact") != "script_section_alternatives":
-        return {
-            "status": "INVALID_ARTIFACT",
-            "alternatives_file": str(path),
-        }
+        return None
+    if str(artifact.get("target_sha256") or "") != str(target_sha256 or ""):
+        return None
+    if int(artifact.get("state_version") or -1) != int(state_version):
+        return None
     return {
         "status": artifact.get("status"),
         "target_id": artifact.get("target_id"),
@@ -239,7 +257,11 @@ def branch_snapshot(
                 **target,
                 "text": _target_text(draft, target),
                 "metadata": _target_metadata(draft, target),
-                "alternatives": _alternative_summary(alternatives_path),
+                "alternatives": _alternative_summary(
+                    alternatives_path,
+                    target_sha256=str(target.get("target_sha256") or ""),
+                    state_version=int(state.get("state_version") or 0),
+                ),
             }
         )
 
@@ -327,6 +349,7 @@ def apply_action(
     reason: str | None = None,
     custom_instruction: str | None = None,
     selection_id: str | None = None,
+    replacement_text: str | None = None,
     reviewer: str | None = None,
     drafts_dir: Path = DRAFTS_DIR,
     state_dir: Path = SECTION_STATE_DIR,
@@ -448,6 +471,52 @@ def apply_action(
             review_responses_dir=review_responses_dir,
             approved_dir=approved_dir,
         )
+
+    elif action_value == "MANUAL_EDIT":
+        if not target_value:
+            raise ValueError("MANUAL_EDIT requires target_id")
+        if not state_path.is_file():
+            raise ValueError("Section state is not prepared")
+        if review_requests_dir is None:
+            from script_review import REVIEW_REQUESTS_DIR
+
+            review_requests_dir = REVIEW_REQUESTS_DIR
+
+        apply_manual_edit(
+            draft_path,
+            state_path,
+            target_id=target_value,
+            replacement_text=str(replacement_text or ""),
+            reviewer=reviewer_value,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+        stale_alternatives = _alternatives_path(
+            concept,
+            branch_format,
+            target_value,
+            alternatives_dir=alternatives_dir,
+        )
+        if stale_alternatives.exists():
+            try:
+                stale_alternatives.unlink()
+            except OSError:
+                pass
+        stale_request = _rework_request_path(
+            concept,
+            branch_format,
+            target_value,
+            rework_requests_dir=rework_requests_dir,
+        )
+        if stale_request.exists():
+            try:
+                stale_request.unlink()
+            except OSError:
+                pass
 
     else:
         raise ValueError(f"Unsupported section review action: {action_value}")
