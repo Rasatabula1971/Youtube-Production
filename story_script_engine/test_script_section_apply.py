@@ -877,6 +877,11 @@ class ScriptSectionApplyTests(unittest.TestCase):
                 transaction["file_snapshots"]["draft"]["backup"]
             )
             backup.write_bytes(b"corrupted")
+            half_written = {
+                "draft": paths["draft"].read_bytes(),
+                "state": paths["state"].read_bytes(),
+                "alternatives": paths["alternatives"].read_bytes(),
+            }
 
             with self.assertRaisesRegex(
                 ValueError,
@@ -888,6 +893,14 @@ class ScriptSectionApplyTests(unittest.TestCase):
                     reviewer="r",
                     **dirs,
                 )
+
+            after_failed_recovery = {
+                "draft": paths["draft"].read_bytes(),
+                "state": paths["state"].read_bytes(),
+                "alternatives": paths["alternatives"].read_bytes(),
+            }
+
+        self.assertEqual(half_written, after_failed_recovery)
 
     def test_manual_edit_changes_only_selected_target_and_saves_version(self):
         with tempfile.TemporaryDirectory() as tmp:
