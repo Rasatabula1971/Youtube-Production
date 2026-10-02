@@ -143,7 +143,11 @@ class FinalRenderTests(unittest.TestCase):
                 patch.object(
                     final_render,
                     "manifest_is_current",
-                    return_value={"current": True},
+                    return_value={
+                        "concept_id": "c1",
+                        "format": "short",
+                        "duration_seconds": 4.0,
+                    },
                 ),
             ):
                 self.assertIsNotNone(
