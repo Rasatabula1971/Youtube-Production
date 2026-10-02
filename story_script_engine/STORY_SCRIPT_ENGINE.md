@@ -174,3 +174,21 @@ invalidated so stale approval cannot flow downstream.
 Selection uses a recoverable transaction journal with backups of the draft,
 section state and alternatives artifact. A failed/interrupted operation rolls
 those core artifacts back instead of leaving a partially applied replacement.
+
+### Slice 4A — local UI service/API boundary
+
+The local control UI reaches selective rework through
+`/api/script-section-review`. Browser requests provide only logical
+`concept_id`, `format`, `target_id`, action/reason, and selection values.
+They never provide draft, state, request, alternatives, version or transaction
+filesystem paths.
+
+The service resolves those paths from project-owned output directories and
+verifies the draft identity after filesystem normalization. Target IDs that
+would collide after filename normalization are rejected when section state is
+created.
+
+The endpoint supports preparing section state, target accept/lock/unlock/rework,
+bounded alternative generation, and explicit alternative selection. Rework or
+unlocking an accepted target invalidates any stale branch response and approved
+script bundle immediately.
