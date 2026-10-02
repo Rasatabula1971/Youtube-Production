@@ -81,7 +81,8 @@ class ScriptReviewTests(unittest.TestCase):
             )
             draft_payload = self.draft(fmt, narration)
             draft_payload["draft_provenance"] = {
-                "request_source": str(script_request_path.resolve())
+                "request_source": str(script_request_path.resolve()),
+                "request_sha256": script_review.sha256_file(script_request_path),
             }
             draft_path = drafts / f"c1.{fmt}.script_draft.json"
             draft_path.write_text(
@@ -649,6 +650,295 @@ class ScriptReviewTests(unittest.TestCase):
             )
             self.assertEqual(target["review_state"], "REWORK_REQUESTED")
             self.assertFalse(short_response.exists())
+
+
+    def test_prepare_section_rework_request_is_bounded_and_non_destructive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+            draft_path = drafts / "c1.short.script_draft.json"
+            before_hash = script_review.sha256_file(draft_path)
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="REWORK",
+                    reason="TOO_TECHNICAL",
+                    note="Use plain language.",
+                    reviewer="r",
+                )
+                prepared = script_review.prepare_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+                packet = json.loads(
+                    Path(prepared["request"]).read_text(encoding="utf-8")
+                )
+                current = script_review.validate_prepared_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+
+            self.assertEqual(
+                script_review.sha256_file(draft_path),
+                before_hash,
+            )
+            self.assertFalse(prepared["model_called"])
+            self.assertFalse(prepared["script_changed"])
+            self.assertEqual(
+                packet["target"]["target_id"],
+                "section:s1",
+            )
+            self.assertEqual(
+                [item["target_id"] for item in packet["adjacent_context"]],
+                ["opening_hook", "closing"],
+            )
+            self.assertTrue(
+                all(
+                    item["read_only"]
+                    for item in packet["adjacent_context"]
+                )
+            )
+            self.assertEqual(
+                packet["channel_voice"]["binding"]["profile_sha256"],
+                "voice-v1",
+            )
+            self.assertEqual(
+                [item["claim_id"] for item in packet["allowed_claims"]],
+                ["clm001"],
+            )
+            self.assertTrue(current["current"])
+
+    def test_repeated_section_rework_prepare_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="REWORK",
+                    reason="WEAK_CURIOSITY",
+                    note="Sharpen the question.",
+                    reviewer="r",
+                )
+                first = script_review.prepare_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+                second = script_review.prepare_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+
+            self.assertEqual(
+                first["status"],
+                "SECTION_REWORK_REQUEST_PREPARED",
+            )
+            self.assertEqual(
+                second["status"],
+                "SECTION_REWORK_REQUEST_CURRENT",
+            )
+            self.assertEqual(
+                first["request_sha256"],
+                second["request_sha256"],
+            )
+
+    def test_prepared_rework_request_becomes_stale_after_state_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="REWORK",
+                    reason="WEAK_TRANSITION",
+                    note="Make the transition smoother.",
+                    reviewer="r",
+                )
+                script_review.prepare_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="CANCEL_REWORK",
+                    reviewer="r",
+                )
+                stale = script_review.validate_prepared_section_rework_request(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                )
+
+            self.assertFalse(stale["current"])
+            self.assertEqual(
+                stale["reason"],
+                "STALE_SECTION_REWORK_REQUEST",
+            )
+
+    def test_prepare_rework_request_fails_if_original_script_request_changed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+            original_request = (
+                root
+                / "script_requests"
+                / "c1.short.script_request.json"
+            )
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                script_review.apply_section_review_action(
+                    concept_id="c1",
+                    format="short",
+                    target_id="section:s1",
+                    action="REWORK",
+                    reason="TOO_LONG",
+                    reviewer="r",
+                )
+                changed = json.loads(
+                    original_request.read_text(encoding="utf-8")
+                )
+                changed["tampered"] = True
+                original_request.write_text(
+                    json.dumps(changed),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "STALE_SCRIPT_REQUEST",
+                ):
+                    script_review.prepare_section_rework_request(
+                        concept_id="c1",
+                        format="short",
+                        target_id="section:s1",
+                    )
+
+    def test_prepare_rework_request_requires_rework_requested_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "section_rework_requests"
+            states.mkdir()
+            rework_requests.mkdir()
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+                patch.object(
+                    script_review,
+                    "SECTION_REWORK_REQUESTS_DIR",
+                    rework_requests,
+                ),
+                patch.object(
+                    script_review,
+                    "REQUESTS_DIR",
+                    root / "script_requests",
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "REWORK_REQUESTED",
+                ):
+                    script_review.prepare_section_rework_request(
+                        concept_id="c1",
+                        format="short",
+                        target_id="section:s1",
+                    )
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
