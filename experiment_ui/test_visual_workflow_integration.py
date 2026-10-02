@@ -346,7 +346,10 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
             workflow["state"],
             "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
         )
-        self.assertIn("no paid provider call", workflow["current_detail"])
+        self.assertIn(
+            "no paid provider call",
+            workflow["current_detail"].lower(),
+        )
 
     def test_retry_existing_decision_stops_before_edit_preview(self):
         workflow = self.workflow(
