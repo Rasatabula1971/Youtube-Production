@@ -52,8 +52,15 @@ class ExperimentUiTests(unittest.TestCase):
 
     def test_script_gate_route_starts_automatic_downstream_work(self):
         source = (server.HERE / "server.py").read_text(encoding="utf-8")
-        start = source.index('if route == "/api/script-gate":')
-        end = source.index('if route == "/api/script-section-review":')
+        post_start = source.index("def do_POST")
+        start = source.index(
+            'if route == "/api/script-gate":',
+            post_start,
+        )
+        end = source.index(
+            'if route == "/api/script-section-review":',
+            start,
+        )
         block = source[start:end]
 
         self.assertIn("maybe_start_automatic_workflow()", block)
