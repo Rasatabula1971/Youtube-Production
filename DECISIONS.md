@@ -2116,3 +2116,59 @@ narration, or sound for rework. An approval explicitly keeps
 
 The successful Slice 22 boundary is `FINAL_EXPORT_APPROVED`. Upload and
 publishing remain later work.
+
+## D-093 — Packaging moves after approved script; the existing 5+5 gate becomes a title-direction gate
+
+**Status:** Accepted
+
+The earlier pipeline generated and approved title/thumbnail packaging before
+Research and Script. That made the public Packaging title an immutable
+dependency of Story, Script and Format. The Packaging Engine v1.0 contract
+requires the mature title + thumbnail + opening hook + Viewer Promise unit to
+be formed only after the script, hook, payoff and supporting evidence are
+stable.
+
+Slice 23 therefore changes the active order to:
+
+```text
+Concept Gate
+→ Research
+→ Research Gate
+→ Story / Script
+→ Script Section Review / Rework
+→ Human Script Gate
+→ 5 Short + 5 Long-form Title Directions
+→ Human Title Direction Gate
+→ STOP
+```
+
+The old pre-script Packaging Engine and its artifacts remain readable and its
+actions remain registered for audit/resumability, but those actions are removed
+from the automatic workflow and disabled in active readiness.
+
+Research now consumes the existing Concept Gate research handoff directly.
+Older package-bound research handoffs remain readable, and any explicit legacy
+packaging research dependencies are preserved as additional research questions.
+
+Story, Script and Format still carry a stable title field for artifact identity,
+but it is explicitly an `INTERNAL_WORKING_TITLE`. It is not the final public
+YouTube title and legacy selected title variants may not rewrite it.
+
+After all required script branches are human-approved, Slice 23 creates a
+post-script title-direction request bound to the exact approved-script hash.
+The established 5 Short + 5 Long-form behavior is preserved. Each title
+direction carries a stable ID, psychological angle, primary/secondary driver,
+core claim, approved evidence references, character count and SEARCH/BROWSE/
+HYBRID intent.
+
+The Human Title Direction Gate selects one Short and one Long-form direction.
+That selection means preferred title/psychological direction. Exact wording is
+explicitly editable later by the mature Packaging Engine. Rework targets only
+the title-direction request and must not modify approved script/evidence.
+
+Selection history is append-only. Duplicate identical submissions are
+idempotent; conflicting duplicate decisions fail closed.
+
+Format/Production are intentionally held after `TITLE_DIRECTION_SELECTED`
+until the mature Packaging Brief, Viewer Promise, thumbnail, pairing and
+validation stages are implemented.
