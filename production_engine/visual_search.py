@@ -282,6 +282,58 @@ def snapshot() -> dict[str, Any]:
     }
 
 
+def search_result_is_current(
+    result_path: Path,
+) -> tuple[dict[str, Any], Path, dict[str, Any]] | None:
+    result = _load_dict(result_path)
+    if not isinstance(result, dict):
+        return None
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    request_path = Path(str(provenance.get("search_request") or ""))
+    if (
+        not request_path.is_file()
+        or request_path.parent.resolve() != RESULT_DIR.resolve()
+        or provenance.get("search_request_sha256") != sha256_file(request_path)
+    ):
+        return None
+    request_state = search_request_is_current(request_path)
+    if request_state is None:
+        return None
+    request = request_state[0]
+    if (
+        str(result.get("concept_id") or "")
+        != str(request.get("concept_id") or "")
+        or str(result.get("format") or "")
+        != str(request.get("format") or "")
+        or result.get("status") != "READY_FOR_CANDIDATE_REVIEW"
+    ):
+        return None
+
+    result_shots = result.get("shots", [])
+    request_shots = request.get("shots", [])
+    if not isinstance(result_shots, list) or not isinstance(request_shots, list):
+        return None
+    expected = {
+        str(item.get("shot_id") or ""): str(
+            item.get("shot_fingerprint") or ""
+        )
+        for item in request_shots
+        if isinstance(item, dict)
+    }
+    actual = {
+        str(item.get("shot_id") or ""): str(
+            item.get("shot_fingerprint") or ""
+        )
+        for item in result_shots
+        if isinstance(item, dict)
+    }
+    if not expected or expected != actual:
+        return None
+    return result, request_path, request
+
+
 def prepare() -> dict[str, Any]:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     prepared = []
