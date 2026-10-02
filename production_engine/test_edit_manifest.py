@@ -292,6 +292,39 @@ class EditManifestTests(unittest.TestCase):
                 module.manifest_is_current(manifest_path)
             )
 
+    def test_manifest_without_sound_becomes_stale_when_sound_is_approved(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            ExitStack() as stack,
+        ):
+            data = self.setup_current_inputs(stack, Path(tmp))
+            Path(data["sound_path"]).unlink()
+            manifest = module.build_manifest(
+                assembly_path=data["assembly_path"],
+                assembly=data["assembly"],
+                qc_path=data["qc_path"],
+                qc=data["qc"],
+                timing_path=data["timing_path"],
+                timing=data["timing"],
+                sound_path=data["sound_path"],
+            )
+            manifest_path = write_json(
+                data["edit_dir"] / "c1.short.edit_manifest.json",
+                manifest,
+            )
+            self.assertIsNotNone(
+                module.manifest_is_current(manifest_path)
+            )
+
+            write_json(
+                data["sound_path"],
+                {"directions": [{"segment_id": "b1"}]},
+            )
+
+            self.assertIsNone(
+                module.manifest_is_current(manifest_path)
+            )
+
     def test_manifest_becomes_stale_when_audio_file_changes(self):
         with (
             tempfile.TemporaryDirectory() as tmp,
