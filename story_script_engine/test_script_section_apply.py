@@ -254,6 +254,12 @@ class ScriptSectionApplyTests(unittest.TestCase):
         )
         self.assertTrue(validation["valid"], validation["errors"])
 
+        response_path = root / "c1.long_form.section_rework_response.json"
+        response_path.write_text(
+            json.dumps(response),
+            encoding="utf-8",
+        )
+
         alternatives_dir = root / "alternatives"
         alternatives_dir.mkdir()
         alternatives_path = alternatives_dir / "c1.long_form.explanation.alternatives.json"
@@ -264,6 +270,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
             request_path=rework_request_path,
             provider_id="test-provider",
             model_id="test-model",
+            response_path=response_path,
         )
         alternatives_path.write_text(
             json.dumps(artifact),
@@ -486,7 +493,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError,
-                "failed revalidation",
+                "integrity check failed",
             ):
                 section_apply.apply_selection(
                     paths["alternatives"],
