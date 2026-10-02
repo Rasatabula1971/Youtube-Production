@@ -678,3 +678,40 @@ current local asset before the Human Rough-Cut Gate.
 
 The Human Rough-Cut Gate is a hard automation stop. Gap planning and all premium
 visual decisions remain downstream of that human approval.
+
+## Slice 15 — Candidate selection → Human Rights/Context Gate
+
+Slice 15 fills the logical stage between Slice 14 and Slice 16.
+
+After zero-cost discovery stops at the Human Visual Candidate Gate, each
+selected candidate is classified from its actual rights/source metadata rather
+than trusting a stored UI state.
+
+Verified reusable assets can continue toward safe asset acquisition. Recognized
+creator/editorial footage is recorded as:
+
+`SELECTED_PENDING_RIGHTS_CONTEXT_GATE`
+
+and the workflow stops at:
+
+`HUMAN_VISUAL_RIGHTS_GATE`
+
+The reviewer must either reject the footage or document the intended
+transformative/editorial purpose. Approval is context authorization for the
+pipeline, not a legal determination and not permission to auto-download the
+creator footage.
+
+The Rights Gate revalidates the exact current search result, candidate-review
+hash, shot fingerprint and candidate fingerprint before accepting a decision.
+If the upstream search/storyboard changed, the old rights decision cannot be
+used.
+
+Unknown or unsupported rights tiers fail closed; a source cannot gain
+eligibility merely by claiming it needs human review.
+
+The candidate UI now distinguishes:
+- a selection with verified reuse rights; and
+- a selection that still requires Rights/Context review.
+
+After the Rights Gate is complete, Slice 16 handles safe asset acquisition and
+rough-cut preparation.
