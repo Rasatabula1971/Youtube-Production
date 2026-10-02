@@ -115,6 +115,38 @@ def run_until_human_gate() -> dict[str, Any]:
                 or "Listen to the free narration preview before continuing.",
             }
 
+        narration_boundary_machine_pending = any(
+            readiness.get(action_id, {}).get("enabled")
+            for action_id in (
+                "sound_design_brief_prepare",
+                "narration_prepare",
+                "narration_spend_gate_prepare",
+            )
+        )
+        if guidance.get("state") == "HUMAN_NARRATION_SPEND_GATE":
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Review narration spend before any paid narration call.",
+            }
+        if (
+            guidance.get("state")
+            in {
+                "WAITING_NARRATION_PROVIDER_QUOTE",
+                "NARRATION_PROVIDER_SETUP_REQUIRED",
+            }
+            and not narration_boundary_machine_pending
+        ):
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Narration provider prerequisites are not ready.",
+            }
+
         action_id = next_enabled_action(readiness)
         if action_id is None:
             return {
