@@ -1808,3 +1808,43 @@ cut stale.
 Manual asset registration explicitly invalidates the affected rough cut and
 starts the normal automatic rebuild path. Paid visual generation remains locked
 throughout Slice 16.
+
+## D-086 — Backfill Slice 15 as the Candidate → Rights/Context human boundary
+
+**Status:** Accepted
+
+Slice 15 is the logical boundary between Slice 14 search/candidate review and
+Slice 16 managed-asset acquisition. It was implemented after Slice 16 because
+the numbering was skipped, but its runtime position remains:
+
+`HUMAN_VISUAL_CANDIDATE_GATE → HUMAN_VISUAL_RIGHTS_GATE when required`.
+
+Candidate selection no longer trusts the stored `state` field by itself.
+Automatic reuse is allowed only when the candidate belongs to a recognized
+auto-reuse tier, has verified rights, explicitly allows commercial use, and
+retains source/local provenance.
+
+Recognized creator/editorial tiers always route to the Human Rights/Context
+Gate even if a malformed or tampered result claims the candidate is
+`ELIGIBLE`. Conversely, an unknown/unsupported source cannot become eligible
+merely by claiming `DISCOVERY_ONLY` or `HUMAN_REVIEW_REQUIRED`.
+
+The Rights/Context Gate independently verifies that:
+
+- the candidate review is complete;
+- its exact search-result hash still matches;
+- the search result is still current against the storyboard/request chain;
+- concept/format identity still matches;
+- the selected shot and candidate fingerprints still match; and
+- the candidate still belongs on the recognized human-rights route.
+
+Stale candidate reviews cannot be approved. Historical rights decisions are
+reconciled against the current selection and stale decisions are removed.
+
+Human approval records the intended transformative/editorial context only. It
+does not make a legal fair-use determination and does not authorize download,
+asset acquisition or paid generation by itself.
+
+The automatic workflow hard-stops at the Human Rights/Context Gate. Slice 16
+remains responsible for any later zero-cost asset acquisition and rough-cut
+preparation.
