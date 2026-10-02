@@ -26,8 +26,10 @@ from script_section_state import (
     validate_state,
 )
 from script_section_rework_runner import (
+    alternatives_artifact_integrity_errors,
     assert_request_current,
     validate_response as validate_rework_response,
+    validation_contract_sha256 as rework_validation_contract_sha256,
 )
 
 from script_review import (
@@ -659,6 +661,22 @@ def apply_selection(
 
     rework_request = load_json(request_path)
     assert_request_current(rework_request)
+
+    response_path = Path(
+        str(provenance.get("model_response") or "")
+    ).resolve()
+    integrity_errors = alternatives_artifact_integrity_errors(
+        artifact,
+        rework_request,
+        request_path=request_path,
+        response_path=response_path,
+        contract_hash=rework_validation_contract_sha256(),
+    )
+    if integrity_errors:
+        raise ValueError(
+            "Alternatives artifact integrity check failed: "
+            + "; ".join(integrity_errors)
+        )
 
     if str(artifact.get("concept_id") or "") != str(
         rework_request.get("concept_id") or ""
