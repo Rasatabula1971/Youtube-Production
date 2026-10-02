@@ -55,6 +55,25 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
             script,
         )
 
+    def test_static_ui_contains_narration_spend_gate(self) -> None:
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="narrationSpendReviewPanel"', html)
+        self.assertIn("HUMAN NARRATION SPEND GATE", html)
+        self.assertIn("renderNarrationSpendReview", script)
+        self.assertIn("/api/narration-spend-gate", script)
+        self.assertIn(
+            "Accept Worst-Case Cost",
+            html,
+        )
+
+    def test_preview_approval_ui_announces_automatic_cost_preparation(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            "Sound brief and narration cost preparation started automatically.",
+            script,
+        )
+
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (
             patch.object(
