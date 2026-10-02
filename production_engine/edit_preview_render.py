@@ -446,6 +446,49 @@ def render_one(
     return {**result, "result_file": str(result_path)}
 
 
+def preview_result_is_current(
+    path: Path,
+) -> dict[str, Any] | None:
+    if (
+        not path.is_file()
+        or path.parent.resolve() != RESULT_DIR.resolve()
+    ):
+        return None
+    try:
+        result = load_json(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(result, dict)
+        or result.get("artifact") != "edit_preview_render_result"
+        or result.get("status") != "READY_FOR_HUMAN_EDIT_PREVIEW_GATE"
+    ):
+        return None
+
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    manifest_path = Path(
+        str(provenance.get("edit_manifest") or "")
+    )
+    if (
+        manifest_is_current(manifest_path) is None
+        or provenance.get("edit_manifest_sha256")
+        != sha256_file(manifest_path)
+    ):
+        return None
+
+    preview_path = Path(str(result.get("preview_file") or ""))
+    if (
+        not preview_path.is_file()
+        or preview_path.parent.resolve() != PREVIEW_DIR.resolve()
+        or result.get("preview_sha256") != sha256_file(preview_path)
+        or int(result.get("preview_bytes") or 0) != preview_path.stat().st_size
+    ):
+        return None
+    return result
+
+
 def batch() -> dict[str, Any]:
     paths = (
         sorted(EDIT_DIR.glob("*.edit_manifest.json"))
