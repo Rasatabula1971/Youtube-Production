@@ -417,11 +417,16 @@ def apply_action(
             raise ValueError("GENERATE_ALTERNATIVES requires target_id")
         if not state_path.is_file():
             raise ValueError("Section state is not prepared")
+        if review_requests_dir is None:
+            from script_review import REVIEW_REQUESTS_DIR
+
+            review_requests_dir = REVIEW_REQUESTS_DIR
         request_path = prepare_rework_request(
             state_path,
             draft_path,
             target_id=target_value,
             requests_dir=rework_requests_dir,
+            review_requests_dir=review_requests_dir,
         )
         generation = run_section_rework(
             request_path,
