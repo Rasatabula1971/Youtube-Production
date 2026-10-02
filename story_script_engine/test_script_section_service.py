@@ -249,5 +249,39 @@ class ScriptSectionServiceTests(unittest.TestCase):
         self.assertIn("STALE_SECTION_STATE", snapshot["error"])
 
 
+    def test_sanitized_identity_collision_does_not_open_other_draft(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dirs = self.dirs(root)
+            path = dirs["drafts_dir"] / "a_b.long_form.script_draft.json"
+            payload = self.draft()
+            payload["concept_id"] = "a/b"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            snapshot = service.branch_snapshot(
+                "a b",
+                "long_form",
+                drafts_dir=dirs["drafts_dir"],
+                state_dir=dirs["state_dir"],
+                alternatives_dir=dirs["alternatives_dir"],
+            )
+
+            self.assertEqual(
+                snapshot["status"],
+                "SCRIPT_DRAFT_IDENTITY_MISMATCH",
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "Script draft identity mismatch",
+            ):
+                service.apply_action(
+                    concept_id="a b",
+                    fmt="long_form",
+                    action="PREPARE",
+                    **dirs,
+                )
+
+
+
 if __name__ == "__main__":
     unittest.main()
