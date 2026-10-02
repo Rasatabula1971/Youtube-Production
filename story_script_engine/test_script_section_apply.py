@@ -333,6 +333,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
             paths = self.setup_artifacts(root)
             dirs = self.selection_dirs(root)
 
+            old_draft_bytes = paths["draft"].read_bytes()
             old_draft = rework_runner.load_json(paths["draft"])
             old_state = section_state.load_json(paths["state"])
             old_setup = copy.deepcopy(old_draft["sections"][0])
@@ -405,11 +406,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
             self.assertTrue(version_path.exists())
             self.assertEqual(
                 version_path.read_bytes(),
-                paths["draft"].parent.joinpath(
-                    paths["draft"].name
-                ).read_bytes()
-                if False
-                else json.dumps(old_draft).encode("utf-8"),
+                old_draft_bytes,
             )
             self.assertEqual(
                 revised["human_revision"]["previous_version_sha256"],
