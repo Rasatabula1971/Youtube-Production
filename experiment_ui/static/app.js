@@ -3529,7 +3529,7 @@ function renderNarrationReturn(snapshot, narrationState, workflow) {
       escapeHtml(segment.max_attempts || 1) + '" value="' +
       escapeHtml(segment.attempt || 1) + '"></label>' +
       '<label>Local audio path<input data-return-audio type="text" value="' +
-      escapeHtml(segment.audio_file || "") + '" placeholder="C:\\path\\segment.wav"></label>' +
+      escapeHtml(segment.audio_file || "") + '" placeholder="C:/path/segment.wav"></label>' +
       '</div>';
   }).join("");
 
@@ -3557,6 +3557,14 @@ function moveNarrationReturnCursor(delta) {
 async function submitNarrationReturn() {
   const item = currentNarrationReturnItem();
   if (!item) return;
+  if (!narrationProviderJobId.value.trim()) {
+    showToast("Provider job / receipt reference is required.", true);
+    return;
+  }
+  if (!narrationActualCost.value.trim()) {
+    showToast("Enter the actual cumulative narration cost.", true);
+    return;
+  }
   const rows = narrationReturnSegments.querySelectorAll("[data-narration-return-row]");
   const segments = Array.from(rows).map(function (row) {
     return {
