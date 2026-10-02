@@ -165,6 +165,17 @@ class WorkflowAutomationTests(unittest.TestCase):
             state["completed"] += 1
             return 0
 
+        def guidance(_readiness):
+            if state["completed"] < len(sequence):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_title": sequence[state["completed"]],
+                }
+            return {
+                "state": "HUMAN_TITLE_DIRECTION_GATE",
+                "current_title": "Select Preferred Title Directions",
+            }
+
         with (
             patch.object(
                 automation.control,
@@ -174,10 +185,7 @@ class WorkflowAutomationTests(unittest.TestCase):
             patch.object(
                 automation.control,
                 "workflow_guidance",
-                return_value={
-                    "state": "HUMAN_TITLE_DIRECTION_GATE",
-                    "current_title": "Select Preferred Title Directions",
-                },
+                side_effect=guidance,
             ),
             patch.object(
                 automation,
