@@ -2366,6 +2366,8 @@ def title_direction_artifact_state() -> dict[str, Any]:
                 concept_id not in request_hashes
                 or concept_id not in response_hashes
                 or item.get("request_sha256") != request_hashes[concept_id]
+                or item.get("response_sha256")
+                != response_hashes[concept_id]
                 or not isinstance(provenance, dict)
                 or provenance.get("request_sha256")
                 != request_hashes[concept_id]
