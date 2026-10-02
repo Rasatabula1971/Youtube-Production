@@ -3085,14 +3085,14 @@ async function submitScriptDecision(decision) {
     const nextPending = pendingScriptIndex(payload.scripts || []);
     if (nextPending >= 0) scriptCursor = nextPending;
     renderScriptReview(payload, true);
-    const automaticFormatStarted = Boolean(
+    const automaticTitleDirectionStarted = Boolean(
       decision === "ACCEPT" &&
       payload.automation_job &&
       payload.automation_job.action_id === "auto_continue"
     );
     showToast(
-      automaticFormatStarted
-        ? "Script Gate complete. Format planning started automatically."
+      automaticTitleDirectionStarted
+        ? "Script Gate complete. Title-direction generation started automatically."
         : decision === "ACCEPT"
           ? humanizeToken(script.format || "Script") + " branch accepted."
           : decision === "REWORK"
