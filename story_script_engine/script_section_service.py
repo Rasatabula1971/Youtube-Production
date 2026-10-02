@@ -135,15 +135,19 @@ def _target_metadata(
 
 def _alternative_summary(
     path: Path,
+    *,
+    target_sha256: str,
+    state_version: int,
 ) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     artifact = load_json(path)
     if artifact.get("artifact") != "script_section_alternatives":
-        return {
-            "status": "INVALID_ARTIFACT",
-            "alternatives_file": str(path),
-        }
+        return None
+    if str(artifact.get("target_sha256") or "") != str(target_sha256 or ""):
+        return None
+    if int(artifact.get("state_version") or -1) != int(state_version):
+        return None
     return {
         "status": artifact.get("status"),
         "target_id": artifact.get("target_id"),
@@ -253,7 +257,11 @@ def branch_snapshot(
                 **target,
                 "text": _target_text(draft, target),
                 "metadata": _target_metadata(draft, target),
-                "alternatives": _alternative_summary(alternatives_path),
+                "alternatives": _alternative_summary(
+                    alternatives_path,
+                    target_sha256=str(target.get("target_sha256") or ""),
+                    state_version=int(state.get("state_version") or 0),
+                ),
             }
         )
 
@@ -494,7 +502,10 @@ def apply_action(
             alternatives_dir=alternatives_dir,
         )
         if stale_alternatives.exists():
-            stale_alternatives.unlink()
+            try:
+                stale_alternatives.unlink()
+            except OSError:
+                pass
         stale_request = _rework_request_path(
             concept,
             branch_format,
@@ -502,7 +513,10 @@ def apply_action(
             rework_requests_dir=rework_requests_dir,
         )
         if stale_request.exists():
-            stale_request.unlink()
+            try:
+                stale_request.unlink()
+            except OSError:
+                pass
 
     else:
         raise ValueError(f"Unsupported section review action: {action_value}")
