@@ -6504,20 +6504,80 @@ def workflow_guidance(
                     "SEARCH/BROWSE/HYBRID intent. Missing evidence fails closed."
                 ),
                 "next_action_id": None,
-                "next_title": "Slice 24 Packaging Brief boundary",
+                "next_title": "Prepare psychological packaging angles",
             }
+
+        angle_requests = psychological_angle_request_snapshot()
+        angles = psychological_angle_snapshot()
+        if not angles.get("ready"):
+            if not angle_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Psychological Packaging Angles",
+                    "current_detail": (
+                        "Build one current request per approved format from the exact "
+                        "Packaging Brief. Five distinct primary psychological drivers "
+                        "are required and exactly one hypothesis remains anchored to "
+                        "the human-selected title direction."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Generate five diverse packaging hypotheses",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Generate Psychological Packaging Angles",
+                "current_detail": (
+                    "Use the configured free-first FAIR path to create five genuinely "
+                    "different packaging hypotheses per format. Creative framing may "
+                    "vary; facts, numbers and claims remain evidence-bound."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare thumbnail concepts",
+            }
+
+        thumbnail_requests = thumbnail_concept_request_snapshot()
+        thumbnails = thumbnail_concept_snapshot()
+        if not thumbnails.get("ready"):
+            if not thumbnail_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Thumbnail Concepts",
+                    "current_detail": (
+                        "Bind each current psychological angle to the exact Viewer "
+                        "Promise and approved evidence. Concepts must stay 16:9, "
+                        "mobile-legible, timestamp-safe and visually simple."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Generate one thumbnail concept per angle",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Generate Thumbnail Concepts",
+                "current_detail": (
+                    "Generate structured thumbnail concepts only. Each angle gets one "
+                    "visual proposition with one focal point, at most three meaningful "
+                    "elements, evidence-bound text and no image-generation spend."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 25 thumbnail concept boundary",
+            }
+
         return {
-            "state": "PACKAGING_BRIEF_READY",
+            "state": "THUMBNAIL_CONCEPTS_READY",
             "current_action_id": None,
-            "current_title": "Packaging Brief + Viewer Promise Ready",
+            "current_title": "Psychological Angles + Thumbnail Concepts Ready",
             "current_detail": (
-                "Every current format branch has an evidence-bound Packaging Brief "
-                "and explicit Viewer Promise Contract. Slice 24 stops here. No "
-                "thumbnail concepts, package scoring, final packaging approval or "
-                "production action has occurred."
+                "Every current format has five distinct psychological hypotheses and "
+                "one evidence-bound thumbnail concept per angle. Slice 25 stops here. "
+                "Titles and thumbnails have not been paired, scored or approved, and "
+                "no thumbnail image has been generated."
             ),
             "next_action_id": None,
-            "next_title": "Slice 25: psychological angles + thumbnail concepts",
+            "next_title": "Slice 26: title-thumbnail pairing + validation",
         }
 
     fmt = format_artifact_state()
