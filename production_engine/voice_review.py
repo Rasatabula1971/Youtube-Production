@@ -23,6 +23,7 @@ from voice_performance import (
     SPECS_DIR,
     OUTPUT_DIR,
     REQUESTS_DIR,
+    MODEL_RUNS_DIR,
     load_json,
     safe_slug,
     sha256_file,
@@ -147,6 +148,15 @@ def _current_spec_request_path(spec: dict[str, Any]) -> Path | None:
     if (
         str(request.get("concept_id") or "").strip() != concept_id
         or str(request.get("format") or "").strip() != fmt
+    ):
+        return None
+
+    report_path = MODEL_RUNS_DIR / f"{artifact_key(concept_id, fmt)}.model_run.json"
+    report = _load_dict_or_none(report_path)
+    if (
+        not isinstance(report, dict)
+        or report.get("status") != "VALIDATED"
+        or report.get("request_sha256") != expected_hash
     ):
         return None
     return expected
