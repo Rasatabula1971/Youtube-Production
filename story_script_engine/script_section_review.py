@@ -434,8 +434,11 @@ def apply_target_action(
         target["editable"] = True
         if previous_review_state == "ACCEPTED":
             target["review_state"] = "PENDING"
-        target["rework_reason"] = None
-        target["rework_note"] = None
+            target["rework_reason"] = None
+            target["rework_note"] = None
+        elif previous_review_state == "PENDING":
+            target["rework_reason"] = None
+            target["rework_note"] = None
 
     comparable_before = {
         key: value
