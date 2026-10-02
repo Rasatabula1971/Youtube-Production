@@ -32,6 +32,7 @@ from narration_preview_review import (
     RENDER_DIR as PREVIEW_RENDER_DIR,
     current_render as current_preview_render,
 )
+from sound_design_brief import current_brief_for_branch
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "narration_render_config.json"
@@ -239,6 +240,9 @@ def build_render_request(
     blockers = _voice_prerequisites(spec)
     if not _preview_approved(concept_id, fmt, spec_path):
         blockers.append("FREE_PREVIEW_NOT_APPROVED")
+    sound_brief_state = current_brief_for_branch(concept_id, fmt)
+    if sound_brief_state is None:
+        blockers.append("SOUND_DESIGN_BRIEF_NOT_CURRENT")
     identity = spec.get("voice_identity", {})
     if str(identity.get("provider") or "").strip() != str(config["provider"]):
         blockers.append("VOICE_PROVIDER_MISMATCH")
@@ -263,6 +267,16 @@ def build_render_request(
             "approved_voice_spec": str(spec_path.resolve()),
             "approved_voice_spec_sha256": sha256_file(spec_path),
             "approved_provenance": spec.get("approved_provenance", {}),
+            "sound_design_brief": (
+                str(sound_brief_state[0].resolve())
+                if sound_brief_state is not None
+                else None
+            ),
+            "sound_design_brief_sha256": (
+                sha256_file(sound_brief_state[0])
+                if sound_brief_state is not None
+                else None
+            ),
         },
     }
 
@@ -366,7 +380,20 @@ def build_cost_estimate(
             "provider_quote": None,
         }
 
-    quote = validate_quote(load_json(quote_path), request, request_path, config)
+    try:
+        quote_payload = load_json(quote_path)
+        if not isinstance(quote_payload, dict):
+            raise ValueError("Quote must be a JSON object")
+        quote = validate_quote(quote_payload, request, request_path, config)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        return {
+            **base,
+            "status": "WAITING_FOR_PROVIDER_QUOTE",
+            "initial_estimate_usd": None,
+            "worst_case_estimate_usd": None,
+            "provider_quote": None,
+            "quote_error": str(exc),
+        }
     return {
         **base,
         "status": "READY_FOR_SPEND_GATE",
