@@ -1100,36 +1100,43 @@ class WorkflowAutomationTests(unittest.TestCase):
             "HUMAN_EDIT_PREVIEW_GATE",
         )
 
-    def test_approved_edit_direction_runs_final_handoff_then_stops(self):
-        state = {"completed": False}
+    def test_approved_edit_runs_handoff_and_sound_plan_then_waits(self):
+        state = {"completed": 0}
+        sequence = [
+            "final_production_handoff_prepare",
+            "final_sound_plan_prepare",
+        ]
 
         def readiness():
-            if not state["completed"]:
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
                 return {
-                    "final_production_handoff_prepare": {
+                    action_id: {
                         "enabled": True,
-                        "reason": "approved edit direction is current",
+                        "reason": f"{action_id} ready",
                     }
                 }
             return {}
 
         def guidance(_readiness):
-            if not state["completed"]:
+            if state["completed"] == 0:
                 return {
                     "state": "ACTION_REQUIRED",
                     "current_title": "Prepare Final Production Handoff",
                 }
+            if state["completed"] == 1:
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_title": "Prepare Final Sound Requirements",
+                }
             return {
-                "state": "FINAL_PRODUCTION_HANDOFF_READY",
-                "current_title": "Final Production Handoff Ready",
+                "state": "WAITING_FOR_FINAL_SOUND_ASSETS",
+                "current_title": "Register Licensed Final Sound Assets",
             }
 
         def fake_run(action_id):
-            self.assertEqual(
-                action_id,
-                "final_production_handoff_prepare",
-            )
-            state["completed"] = True
+            self.assertEqual(action_id, sequence[state["completed"]])
+            state["completed"] += 1
             return 0
 
         with (
@@ -1151,14 +1158,11 @@ class WorkflowAutomationTests(unittest.TestCase):
         ):
             result = automation.run_until_human_gate()
 
-        self.assertEqual(
-            result["completed_actions"],
-            ["final_production_handoff_prepare"],
-        )
+        self.assertEqual(result["completed_actions"], sequence)
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(
             result["workflow_state"],
-            "FINAL_PRODUCTION_HANDOFF_READY",
+            "WAITING_FOR_FINAL_SOUND_ASSETS",
         )
 
     def test_partial_command_without_progress_stops_as_partial(self):
