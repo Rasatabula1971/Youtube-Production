@@ -44,6 +44,17 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
         self.assertIn("renderPerformanceReview", script)
         self.assertIn("/api/performance-gate", script)
 
+    def test_performance_accept_ui_announces_automatic_free_preview(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            'payload.automation_job.action_id === "auto_continue"',
+            script,
+        )
+        self.assertIn(
+            "Performance Gate complete. Free narration preview started automatically.",
+            script,
+        )
+
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (
             patch.object(
