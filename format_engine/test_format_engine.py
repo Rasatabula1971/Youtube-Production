@@ -490,6 +490,10 @@ class FormatEngineTests(unittest.TestCase):
             request_payload = json.loads(
                 new_request.read_text(encoding="utf-8")
             )
+            new_request_exists = new_request.exists()
+            stale_exists = [path.exists() for path in stale_paths]
+            model_summary_exists = model_summary.exists()
+            gate_summary_exists = gate_summary.exists()
 
         self.assertEqual(summary["prepared"], 1)
         self.assertEqual(
@@ -497,10 +501,10 @@ class FormatEngineTests(unittest.TestCase):
             ["c1"],
         )
         self.assertEqual(request_payload["concept_id"], "c1")
-        self.assertTrue(new_request.exists())
-        self.assertTrue(all(not path.exists() for path in stale_paths))
-        self.assertFalse(model_summary.exists())
-        self.assertFalse(gate_summary.exists())
+        self.assertTrue(new_request_exists)
+        self.assertTrue(all(not exists for exists in stale_exists))
+        self.assertFalse(model_summary_exists)
+        self.assertFalse(gate_summary_exists)
 
     def test_unchanged_current_format_provenance_preserves_valid_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
