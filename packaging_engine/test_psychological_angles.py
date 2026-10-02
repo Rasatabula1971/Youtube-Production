@@ -49,18 +49,20 @@ class PsychologicalAnglesTests(unittest.TestCase):
             "contradiction",
         ]
         values = []
+        labels = ["alpha", "bravo", "charlie", "delta", "echo"]
         for index, driver in enumerate(drivers):
+            label = labels[index]
             values.append(
                 {
                     "angle_id": f"angle-{driver}",
                     "primary_driver": driver,
                     "secondary_driver": "specificity",
-                    "viewer_question": f"What does angle {index} reveal about the brake?",
-                    "emotional_trigger": f"Tension from mechanism {index}.",
-                    "stakes": f"The viewer needs to understand consequence {index}.",
+                    "viewer_question": f"What does the {label} angle reveal about the brake?",
+                    "emotional_trigger": f"Tension from the {label} mechanism.",
+                    "stakes": f"The viewer needs to understand the {label} consequence.",
                     "information_given": "Temperature changes braking behavior.",
-                    "information_withheld": f"Why the design accepts tradeoff {index}.",
-                    "expected_click_reason": f"Resolve a different question {index}.",
+                    "information_withheld": f"Why the design accepts the {label} tradeoff.",
+                    "expected_click_reason": f"Resolve the {label} question.",
                     "evidence_refs": ["clm001"],
                     "selected_title_direction_alignment": (
                         "ANCHOR" if index == 0 else "ALTERNATIVE"
