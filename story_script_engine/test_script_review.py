@@ -445,10 +445,11 @@ class ScriptReviewTests(unittest.TestCase):
                     requests / "c1.short.script_review_request.json",
                     self.accept_payload("short"),
                 )
+            response_exists = (
+                responses / "c1.short.script_review_response.json"
+            ).exists()
 
-        self.assertFalse(
-            (responses / "c1.short.script_review_response.json").exists()
-        )
+        self.assertFalse(response_exists)
 
     def test_completed_section_review_is_bound_to_bundle_and_stale_state_revokes_readiness(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -514,6 +515,7 @@ class ScriptReviewTests(unittest.TestCase):
                     reviewer="r",
                 )
                 stale = script_review.snapshot()
+                bundle_exists = bundle_path.exists()
 
             short_provenance = bundle["approved_provenance"]["short"]
 
@@ -530,7 +532,7 @@ class ScriptReviewTests(unittest.TestCase):
         self.assertEqual(short_provenance["section_target_count"], 3)
         self.assertIn("c1", current["production_ready_concept_ids"])
         self.assertNotIn("c1", stale["production_ready_concept_ids"])
-        self.assertTrue(bundle_path.exists())
+        self.assertTrue(bundle_exists)
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
