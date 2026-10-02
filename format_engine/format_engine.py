@@ -28,6 +28,12 @@ CONFIG_FILE = HERE / "format_config.json"
 APPROVED_SCRIPTS_DIR = (
     PROJECT_ROOT / "story_script_engine" / "output" / "approved_scripts"
 )
+SCRIPT_SECTION_STATE_DIR = (
+    PROJECT_ROOT / "story_script_engine" / "output" / "script_section_states"
+)
+SCRIPT_DRAFTS_DIR = (
+    PROJECT_ROOT / "story_script_engine" / "output" / "script_drafts"
+)
 OUTPUT_DIR = HERE / "output"
 REQUESTS_DIR = OUTPUT_DIR / "format_requests"
 RESPONSES_DIR = OUTPUT_DIR / "format_responses"
@@ -52,6 +58,156 @@ def safe_slug(value: str) -> str:
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _expected_section_state_path(concept_id: str, fmt: str) -> Path:
+    return (
+        SCRIPT_SECTION_STATE_DIR
+        / (
+            f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+            "section_state.json"
+        )
+    ).resolve()
+
+
+def _expected_script_draft_path(concept_id: str, fmt: str) -> Path:
+    return (
+        SCRIPT_DRAFTS_DIR
+        / (
+            f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+            "script_draft.json"
+        )
+    ).resolve()
+
+
+def assert_section_review_provenance_current(
+    script: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Fail closed if prepared selective review is no longer current."""
+    concept_id = str(script.get("concept_id") or "").strip()
+    required = script.get("required_branches", [])
+    provenance = script.get("approved_provenance", {})
+    if not concept_id:
+        raise ValueError("Approved script bundle requires concept_id")
+    if not isinstance(required, list) or not required:
+        raise ValueError("Approved script bundle requires required_branches")
+    if not isinstance(provenance, dict):
+        raise ValueError("Approved script bundle requires approved_provenance")
+
+    result: dict[str, dict[str, Any]] = {}
+    for fmt in required:
+        branch = str(fmt or "").strip()
+        record = provenance.get(branch, {})
+        if not isinstance(record, dict):
+            raise ValueError(
+                f"Approved {branch} script is missing review provenance"
+            )
+        prepared = record.get("section_review_prepared") is True
+        if not prepared:
+            result[branch] = {
+                "prepared": False,
+                "section_state_sha256": None,
+                "state_version": None,
+            }
+            continue
+
+        expected_state = _expected_section_state_path(concept_id, branch)
+        recorded_state = Path(
+            str(record.get("section_state") or "")
+        ).resolve()
+        if recorded_state != expected_state:
+            raise ValueError(
+                f"Approved {branch} section-state path is not canonical"
+            )
+        if not expected_state.is_file():
+            raise ValueError(
+                f"Approved {branch} section-state artifact is unavailable"
+            )
+        expected_hash = str(
+            record.get("section_state_sha256") or ""
+        ).strip()
+        if not expected_hash or sha256_file(expected_state) != expected_hash:
+            raise ValueError(
+                f"Approved {branch} section-state provenance is stale"
+            )
+
+        state = load_json(expected_state)
+        if (
+            str(state.get("concept_id") or "") != concept_id
+            or str(state.get("format") or "") != branch
+        ):
+            raise ValueError(
+                f"Approved {branch} section-state identity mismatch"
+            )
+
+        expected_draft = _expected_script_draft_path(concept_id, branch)
+        recorded_draft = Path(
+            str(state.get("source_draft") or "")
+        ).resolve()
+        if recorded_draft != expected_draft:
+            raise ValueError(
+                f"Approved {branch} section state points to non-canonical draft"
+            )
+        if not expected_draft.is_file():
+            raise ValueError(
+                f"Approved {branch} Script Draft is unavailable"
+            )
+        if (
+            str(state.get("source_draft_sha256") or "")
+            != sha256_file(expected_draft)
+        ):
+            raise ValueError(
+                f"Approved {branch} section state is stale against Script Draft"
+            )
+
+        targets = [
+            item
+            for item in state.get("targets", [])
+            if isinstance(item, dict)
+        ]
+        unresolved = [
+            str(item.get("target_id") or "")
+            for item in targets
+            if item.get("decision") != "ACCEPTED"
+            or item.get("locked") is not True
+        ]
+        if unresolved:
+            raise ValueError(
+                f"Approved {branch} section review is incomplete: "
+                + ", ".join(unresolved)
+            )
+
+        state_version = int(state.get("state_version") or 0)
+        if int(record.get("section_state_version") or -1) != state_version:
+            raise ValueError(
+                f"Approved {branch} section-state version changed"
+            )
+        if int(record.get("section_target_count") or -1) != len(targets):
+            raise ValueError(
+                f"Approved {branch} section target count changed"
+            )
+        lineage = [
+            {
+                "target_id": str(item.get("target_id") or ""),
+                "target_sha256": str(item.get("target_sha256") or ""),
+            }
+            for item in sorted(
+                targets,
+                key=lambda item: int(item.get("ordinal") or 0),
+            )
+        ]
+        if record.get("section_targets") != lineage:
+            raise ValueError(
+                f"Approved {branch} section target lineage changed"
+            )
+
+        result[branch] = {
+            "prepared": True,
+            "section_state_sha256": expected_hash,
+            "state_version": state_version,
+            "target_count": len(targets),
+        }
+    return result
 
 
 def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
@@ -122,6 +278,10 @@ def build_format_request(
     concept_id = str(script.get("concept_id", "")).strip()
     if not concept_id:
         raise ValueError("Approved script bundle requires concept_id")
+
+    section_review_provenance = assert_section_review_provenance_current(
+        script
+    )
 
     package = script.get("package", {})
     if not isinstance(package, dict):
@@ -257,6 +417,7 @@ def build_format_request(
         "request_provenance": {
             "approved_script": str(script_path.resolve()),
             "approved_script_sha256": sha256_file(script_path),
+            "section_review": section_review_provenance,
         },
     }
 

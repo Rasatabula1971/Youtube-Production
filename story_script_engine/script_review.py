@@ -212,29 +212,68 @@ def response_path(concept_id: str, fmt: str) -> Path:
     )
 
 
-def _assert_no_pending_section_rework(
+def _section_review_provenance(
     req: dict[str, Any],
     draft_path: Path,
-) -> None:
+    *,
+    require_complete: bool,
+) -> dict[str, Any]:
+    """Return canonical section-review lineage for one branch.
+
+    Selective review remains optional. Once prepared, however, it becomes part
+    of the branch-acceptance contract: every target must be explicitly accepted
+    and locked before whole-branch approval can cross into Format.
+    """
     concept_id = str(req.get("concept_id") or "").strip()
     fmt = str(req.get("format") or "").strip()
-    state_path = state_path_for(concept_id, fmt, SECTION_STATE_DIR)
+    state_path = state_path_for(concept_id, fmt, SECTION_STATE_DIR).resolve()
     if not state_path.is_file():
-        return
+        return {
+            "prepared": False,
+            "section_state": None,
+            "section_state_sha256": None,
+            "state_version": None,
+            "target_count": 0,
+            "targets": [],
+        }
 
     state = load_json(state_path)
     assert_state_matches_draft(state, draft_path)
-    pending = [
-        str(item.get("target_id") or "")
+    targets = [
+        item
         for item in state.get("targets", [])
         if isinstance(item, dict)
-        and item.get("decision") == "REWORK_REQUESTED"
     ]
-    if pending:
+    unresolved = [
+        str(item.get("target_id") or "")
+        for item in targets
+        if item.get("decision") != "ACCEPTED"
+        or item.get("locked") is not True
+    ]
+    if require_complete and unresolved:
         raise ValueError(
-            "ACCEPT blocked while section rework is pending: "
-            + ", ".join(pending)
+            "ACCEPT blocked until prepared section review is complete: "
+            + ", ".join(unresolved)
         )
+
+    target_lineage = [
+        {
+            "target_id": str(item.get("target_id") or ""),
+            "target_sha256": str(item.get("target_sha256") or ""),
+        }
+        for item in sorted(
+            targets,
+            key=lambda item: int(item.get("ordinal") or 0),
+        )
+    ]
+    return {
+        "prepared": True,
+        "section_state": str(state_path),
+        "section_state_sha256": sha256_file(state_path),
+        "state_version": int(state.get("state_version") or 0),
+        "target_count": len(targets),
+        "targets": target_lineage,
+    }
 
 
 def _response_is_current(req: dict[str, Any], saved: dict[str, Any]) -> bool:
@@ -336,6 +375,11 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
 
         source = assert_current_draft(req)
         draft = load_json(source)
+        section_review = _section_review_provenance(
+            req,
+            source,
+            require_complete=True,
+        )
         channel_voice = draft.get("channel_voice", {})
         fingerprint = json.dumps(
             channel_voice,
@@ -365,12 +409,23 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
                 "reviewed_at": saved.get("reviewed_at"),
                 "criteria": saved.get("criteria", {}),
                 "note": saved.get("note", ""),
+                "section_review": {
+                    "prepared": section_review["prepared"],
+                    "state_version": section_review["state_version"],
+                    "target_count": section_review["target_count"],
+                },
             },
         }
         review_provenance[fmt] = {
             "script_review_request_sha256": sha256_file(request_path),
             "script_draft_sha256": sha256_file(source),
             "script_review_response_sha256": sha256_file(saved_path),
+            "section_review_prepared": section_review["prepared"],
+            "section_state": section_review["section_state"],
+            "section_state_sha256": section_review["section_state_sha256"],
+            "section_state_version": section_review["state_version"],
+            "section_target_count": section_review["target_count"],
+            "section_targets": section_review["targets"],
         }
 
     _assert_distinct_branch_scripts(branch_scripts)
@@ -398,6 +453,92 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
     APPROVED_DIR.mkdir(parents=True, exist_ok=True)
     atomic_write_json(approved_path, bundle)
     return approved_path
+
+
+def _approved_bundle_is_current(concept_id: str) -> bool:
+    approved_path = APPROVED_DIR / f"{safe_slug(concept_id)}.approved_script.json"
+    if not approved_path.is_file():
+        return False
+    try:
+        bundle = load_json(approved_path)
+        if (
+            bundle.get("artifact") != "approved_script_bundle"
+            or bundle.get("status") != "READY_FOR_PRODUCTION"
+        ):
+            return False
+
+        requests = _requests_for_concept(concept_id)
+        if not requests:
+            return False
+        required = {
+            str(item)
+            for item in requests[0][1].get("required_branches", [])
+            if str(item).strip()
+        }
+        if not required:
+            return False
+        by_format = {
+            str(req.get("format") or ""): (request_path, req)
+            for request_path, req in requests
+            if str(req.get("format") or "").strip()
+        }
+        if set(by_format) != required:
+            return False
+        if set(bundle.get("required_branches", [])) != required:
+            return False
+
+        provenance = bundle.get("approved_provenance", {})
+        if not isinstance(provenance, dict) or set(provenance) != required:
+            return False
+
+        for fmt in sorted(required):
+            request_path, req = by_format[fmt]
+            saved_path = response_path(concept_id, fmt)
+            saved = load_json(saved_path) if saved_path.is_file() else {}
+            if (
+                not _response_is_current(req, saved)
+                or str(saved.get("decision") or "").upper() != "ACCEPT"
+            ):
+                return False
+            source = assert_current_draft(req)
+            record = provenance.get(fmt, {})
+            if not isinstance(record, dict):
+                return False
+            if record.get("script_review_request_sha256") != sha256_file(request_path):
+                return False
+            if record.get("script_draft_sha256") != sha256_file(source):
+                return False
+            if record.get("script_review_response_sha256") != sha256_file(saved_path):
+                return False
+
+            section = _section_review_provenance(
+                req,
+                source,
+                require_complete=True,
+            )
+            recorded_prepared = (
+                record.get("section_review_prepared") is True
+            )
+            if recorded_prepared != section["prepared"]:
+                return False
+            if section["prepared"]:
+                if record.get("section_state") != section["section_state"]:
+                    return False
+                if record.get("section_state_sha256") != section["section_state_sha256"]:
+                    return False
+                if int(record.get("section_state_version") or -1) != int(
+                    section["state_version"]
+                ):
+                    return False
+                if int(record.get("section_target_count") or -1) != int(
+                    section["target_count"]
+                ):
+                    return False
+                if record.get("section_targets") != section["targets"]:
+                    return False
+        return True
+    except (FileNotFoundError, TypeError, ValueError):
+        return False
 
 
 def _apply_rework_feedback(
@@ -443,7 +584,11 @@ def _apply_payload_unlocked(request_path: Path, response: dict[str, Any]) -> dic
     normalized = validate_response(req, response)
     source = assert_current_draft(req)
     if normalized["decision"] == "ACCEPT":
-        _assert_no_pending_section_rework(req, source)
+        _section_review_provenance(
+            req,
+            source,
+            require_complete=True,
+        )
     reviewed_at = datetime.now(timezone.utc).isoformat()
 
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
@@ -538,7 +683,7 @@ def snapshot() -> dict[str, Any]:
     ready_ids = sorted(
         cid
         for cid in concepts
-        if (APPROVED_DIR / f"{safe_slug(cid)}.approved_script.json").exists()
+        if _approved_bundle_is_current(cid)
     )
     complete = bool(scripts) and counts["pending"] == 0
     return {

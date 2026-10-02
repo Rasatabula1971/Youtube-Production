@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import format_engine as module
 
@@ -102,6 +103,17 @@ class FormatEngineTests(unittest.TestCase):
                 "status": "READY_FOR_PRODUCTION",
                 "accepted_formats": required,
             },
+            "approved_provenance": {
+                fmt: {
+                    "section_review_prepared": False,
+                    "section_state": None,
+                    "section_state_sha256": None,
+                    "section_state_version": None,
+                    "section_target_count": 0,
+                    "section_targets": [],
+                }
+                for fmt in required
+            },
         }
 
     def request(self, format_intent="either"):
@@ -189,6 +201,147 @@ class FormatEngineTests(unittest.TestCase):
             path.write_text(json.dumps(script), encoding="utf-8")
             with self.assertRaises(ValueError):
                 build_format_request(script, path, self.config())
+
+
+    def test_prepared_section_review_provenance_is_verified_and_carried_forward(self):
+        script = self.script("short")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts = root / "script_drafts"
+            states = root / "script_section_states"
+            drafts.mkdir()
+            states.mkdir()
+
+            draft_path = drafts / "c1.short.script_draft.json"
+            draft_path.write_text(
+                json.dumps({"concept_id": "c1", "format": "short"}),
+                encoding="utf-8",
+            )
+            state_path = states / "c1.short.section_state.json"
+            targets = [
+                {
+                    "target_id": "hook:opening",
+                    "target_sha256": "h1",
+                    "ordinal": 0,
+                    "decision": "ACCEPTED",
+                    "locked": True,
+                },
+                {
+                    "target_id": "section:sh1",
+                    "target_sha256": "h2",
+                    "ordinal": 1,
+                    "decision": "ACCEPTED",
+                    "locked": True,
+                },
+            ]
+            state = {
+                "concept_id": "c1",
+                "format": "short",
+                "source_draft": str(draft_path.resolve()),
+                "source_draft_sha256": module.sha256_file(draft_path),
+                "state_version": 4,
+                "targets": targets,
+            }
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            script["approved_provenance"]["short"] = {
+                "section_review_prepared": True,
+                "section_state": str(state_path.resolve()),
+                "section_state_sha256": module.sha256_file(state_path),
+                "section_state_version": 4,
+                "section_target_count": 2,
+                "section_targets": [
+                    {
+                        "target_id": "hook:opening",
+                        "target_sha256": "h1",
+                    },
+                    {
+                        "target_id": "section:sh1",
+                        "target_sha256": "h2",
+                    },
+                ],
+            }
+            script_path = root / "approved.json"
+            script_path.write_text(json.dumps(script), encoding="utf-8")
+
+            with (
+                patch.object(module, "SCRIPT_DRAFTS_DIR", drafts),
+                patch.object(module, "SCRIPT_SECTION_STATE_DIR", states),
+            ):
+                request = build_format_request(
+                    script,
+                    script_path,
+                    self.config(),
+                )
+
+        section = request["request_provenance"]["section_review"]["short"]
+        self.assertTrue(section["prepared"])
+        self.assertEqual(section["state_version"], 4)
+        self.assertEqual(section["target_count"], 2)
+
+    def test_changed_prepared_section_state_blocks_format_handoff(self):
+        script = self.script("short")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts = root / "script_drafts"
+            states = root / "script_section_states"
+            drafts.mkdir()
+            states.mkdir()
+
+            draft_path = drafts / "c1.short.script_draft.json"
+            draft_path.write_text(
+                json.dumps({"concept_id": "c1", "format": "short"}),
+                encoding="utf-8",
+            )
+            state_path = states / "c1.short.section_state.json"
+            state = {
+                "concept_id": "c1",
+                "format": "short",
+                "source_draft": str(draft_path.resolve()),
+                "source_draft_sha256": module.sha256_file(draft_path),
+                "state_version": 2,
+                "targets": [
+                    {
+                        "target_id": "hook:opening",
+                        "target_sha256": "h1",
+                        "ordinal": 0,
+                        "decision": "ACCEPTED",
+                        "locked": True,
+                    }
+                ],
+            }
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            bound_hash = module.sha256_file(state_path)
+            script["approved_provenance"]["short"] = {
+                "section_review_prepared": True,
+                "section_state": str(state_path.resolve()),
+                "section_state_sha256": bound_hash,
+                "section_state_version": 2,
+                "section_target_count": 1,
+                "section_targets": [
+                    {
+                        "target_id": "hook:opening",
+                        "target_sha256": "h1",
+                    }
+                ],
+            }
+            state["state_version"] = 3
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            script_path = root / "approved.json"
+            script_path.write_text(json.dumps(script), encoding="utf-8")
+
+            with (
+                patch.object(module, "SCRIPT_DRAFTS_DIR", drafts),
+                patch.object(module, "SCRIPT_SECTION_STATE_DIR", states),
+                self.assertRaisesRegex(
+                    ValueError,
+                    "section-state provenance is stale",
+                ),
+            ):
+                build_format_request(
+                    script,
+                    script_path,
+                    self.config(),
+                )
 
     def test_separate_branches_pass(self):
         request = self.request("either")

@@ -83,3 +83,19 @@ python format_engine/format_review.py --mode apply --request <request> --respons
 ```
 
 No score, ranking, predicted retention or automatic branch winner is produced.
+
+## Script section-review provenance
+
+Format treats the approved Script bundle as a provenance-bound input.
+
+If selective section review was never prepared for a branch, Format preserves
+the original one-click Script Gate path.
+
+If selective review was prepared, Format verifies the exact canonical
+section-state before preparing a Format Request. The state path, SHA-256,
+version, target count, target lineage and bound Script Draft must all remain
+current, and every target must still be accepted and locked.
+
+A stale, redirected or incomplete prepared section state blocks the Script →
+Format handoff. The verified section-review summary is carried in
+`request_provenance.section_review`.

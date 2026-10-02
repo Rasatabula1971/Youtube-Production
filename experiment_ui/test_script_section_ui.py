@@ -74,17 +74,21 @@ class ScriptSectionUiSlice6Tests(unittest.TestCase):
             self.script,
         )
 
-    def test_whole_script_accept_waits_for_section_rework(self):
+    def test_whole_script_accept_waits_for_completed_prepared_section_review(self):
         self.assertIn(
             "syncWholeScriptAcceptWithSectionState",
             self.script,
         )
         self.assertIn(
-            'target.decision === "REWORK_REQUESTED"',
+            'latestScriptSectionSnapshot.status === "READY_FOR_SECTION_REVIEW"',
             self.script,
         )
         self.assertIn(
-            "Resolve requested section rework before accepting the whole script.",
+            'target.decision !== "ACCEPTED" || target.locked !== true',
+            self.script,
+        )
+        self.assertIn(
+            "Finish the prepared section review before accepting the whole script.",
             self.script,
         )
 

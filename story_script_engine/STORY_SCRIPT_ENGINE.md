@@ -376,3 +376,59 @@ immediately instead of waiting for the periodic status refresh.
 
 The comparison layout uses two columns on wider screens and collapses to one
 column on small screens.
+
+### Slice 7 — section-review completion becomes a real handoff contract
+
+Selective review remains optional at the branch level. If a branch never
+prepares canonical section state, the existing whole-script Human Script Gate
+can still approve that branch directly.
+
+Once canonical section state **is prepared**, however, it becomes part of the
+approval contract. Whole-script `ACCEPT` is blocked until every target is:
+
+- `ACCEPTED`; and
+- locked.
+
+A merely locked `PENDING` target is not resolved. A `REWORK_REQUESTED`
+target is not resolved. This prevents an operator from entering selective review
+and then bypassing unfinished targets with the branch-level Accept button.
+
+When all required branches are accepted, the approved-script bundle records
+per-branch selective-review lineage inside `approved_provenance`:
+
+- whether selective review was prepared;
+- canonical section-state path;
+- exact section-state SHA-256;
+- section-state version;
+- target count; and
+- ordered target ID / target SHA-256 lineage.
+
+The Script Gate no longer treats the mere existence of an approved bundle as
+production readiness. It revalidates the current branch review responses,
+Script Draft hashes and any prepared section-state lineage. A section-state
+change after approval therefore removes that concept from
+`production_ready_concept_ids` even if an old approved bundle file still
+exists.
+
+Older approved bundles remain compatible when no selective section review was
+ever prepared. If a canonical section-state file now exists, the old bundle is
+considered stale until the branch is reviewed and approved again.
+
+The Human Script Gate UI mirrors the same rule: after section review is
+prepared, whole-script Accept remains disabled until all targets are accepted
+and locked.
+
+Format is the receiving enforcement boundary. It independently verifies any
+prepared section-review provenance before creating a Format Request:
+
+- the section-state path must be the canonical path for concept/format;
+- the stored section-state SHA-256 must match;
+- the state must point to the canonical Script Draft;
+- the Script Draft SHA-256 must still match the state binding;
+- every target must remain accepted and locked;
+- state version and target count must match; and
+- ordered target ID/hash lineage must match.
+
+The verified section-review summary is copied into the Format Request
+provenance. Therefore a stale or manually redirected section-state cannot cross
+from Script approval into Format planning.

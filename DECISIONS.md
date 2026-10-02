@@ -1508,3 +1508,33 @@ remaining visible after an A/B/C selection or manual edit.
 
 Slice 6 adds no new script-generation behavior, model route, persistence
 contract or destructive backend operation.
+
+## D-077 — Prepared selective review is binding at the Script → Format seam
+
+**Status:** Accepted
+
+Selective section review is optional until its canonical state is prepared. A
+branch that never enters selective review may still use the original
+whole-script Human Script Gate.
+
+Once section state is prepared, every target must be explicitly `ACCEPTED`
+and locked before whole-branch `ACCEPT` may succeed. A pending locked target
+does not count as reviewed.
+
+The approved Script bundle records the exact section-state path, SHA-256,
+version, target count and ordered target ID/hash lineage for each reviewed
+branch.
+
+Production readiness is derived from current provenance, not from approved-file
+existence. If section state changes after branch approval, the concept is no
+longer considered production-ready even if the previous approved bundle remains
+on disk.
+
+Format independently validates the section-state provenance and its bound Script
+Draft before creating any Format Request. This prevents stale or redirected
+selective-review state from bypassing the Human Script Gate through a manual
+Format run.
+
+Backward compatibility is preserved only when no canonical section review was
+ever prepared. An older approved bundle becomes stale as soon as a prepared
+section-state exists without matching provenance.
