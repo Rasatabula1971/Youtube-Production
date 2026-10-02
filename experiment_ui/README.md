@@ -560,3 +560,46 @@ The workflow then stops at one of two boundaries:
 
 Even when narration is ready, Slice 12 prevents automatic continuation into
 visual production.
+
+## Slice 13 — Narration Audio Ready → Visual Search Plan Ready
+
+Once final narration is current and every authorized branch has passed local
+Audio QC, Continue Automatically now runs:
+
+```text
+NARRATION_AUDIO_READY
+        ↓
+production_visual_prepare
+        ↓
+storyboard_prepare
+        ↓
+visual_search_prepare
+        ↓
+STOP: VISUAL_SEARCH_READY
+```
+
+This slice performs no stock/creator search and makes no paid visual-generation
+call. The next action after the boundary is **Search Free / Existing Visuals**.
+
+The working visual state is now provenance-bound to final narration. A visual
+manifest counts only when its approved Format Plan hash and narration timing-map
+hash both match the current branch. Storyboards then bind the exact current
+manifest and timing map. Search requests bind the exact current storyboard.
+
+If final narration or its timing changes, the old visual manifest, storyboard
+and search request chain becomes stale. Continue Automatically rebuilds the
+current chain before any search adapter can run.
+
+Storyboard preparation also requires timing segment IDs and visual requirement
+beat IDs to match exactly. The system no longer silently substitutes a generic
+visual direction for an unmatched narration beat.
+
+The search contract remains existing/free-first and rights-aware:
+
+1. own/reusable library;
+2. verified free commercial sources;
+3. public domain / compatible Creative Commons;
+4. creator/editorial candidates only behind human rights/context review; and
+5. premium generation only as a later last-resort gap candidate.
+
+No item in Slice 13 authorizes premium generation.

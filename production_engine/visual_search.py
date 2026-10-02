@@ -15,6 +15,7 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, safe_slug, sha256_file
+from storyboard import storyboard_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -188,44 +189,161 @@ def compile_results(request: dict[str, Any], request_path: Path, raw: dict[str, 
     }
 
 
+def _load_dict(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def search_request_is_current(
+    request_path: Path,
+) -> tuple[dict[str, Any], Path] | None:
+    request = _load_dict(request_path)
+    if not isinstance(request, dict):
+        return None
+    provenance = request.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    board_path = Path(str(provenance.get("storyboard") or ""))
+    if (
+        not board_path.is_file()
+        or provenance.get("storyboard_sha256") != sha256_file(board_path)
+        or storyboard_is_current(board_path) is None
+    ):
+        return None
+    board = _load_dict(board_path)
+    if not isinstance(board, dict):
+        return None
+    if (
+        str(request.get("concept_id") or "")
+        != str(board.get("concept_id") or "")
+        or str(request.get("format") or "")
+        != str(board.get("format") or "")
+    ):
+        return None
+    expected = build_search_request(board, board_path)
+    if request != expected:
+        return None
+    return request, board_path
+
+
+def snapshot() -> dict[str, Any]:
+    current_boards = []
+    if STORYBOARD_DIR.exists():
+        for board_path in sorted(STORYBOARD_DIR.glob("*.storyboard.json")):
+            state = storyboard_is_current(board_path)
+            if state is not None:
+                current_boards.append(board_path)
+
+    items: list[dict[str, Any]] = []
+    current_requests = 0
+    search_required = 0
+    for board_path in current_boards:
+        board = _load_dict(board_path)
+        if not isinstance(board, dict):
+            continue
+        key = _key(
+            str(board.get("concept_id") or ""),
+            str(board.get("format") or ""),
+        )
+        request_path = RESULT_DIR / f"{key}.visual_search_request.json"
+        state = search_request_is_current(request_path)
+        is_current = state is not None
+        if is_current:
+            current_requests += 1
+            request = state[0]
+            if request.get("status") == "SEARCH_REQUIRED":
+                search_required += 1
+        items.append(
+            {
+                "concept_id": board.get("concept_id"),
+                "format": board.get("format"),
+                "request": str(request_path),
+                "current": is_current,
+            }
+        )
+
+    ready = bool(current_boards) and current_requests == len(current_boards)
+    return {
+        "status": (
+            "READY_FOR_SEARCH_ADAPTERS"
+            if ready
+            else "STALE_VISUAL_SEARCH_REQUESTS"
+            if current_boards
+            else "WAITING_FOR_STORYBOARDS"
+        ),
+        "prepared": current_requests,
+        "expected": len(current_boards),
+        "search_required": search_required,
+        "items": items,
+        "paid_generation_calls_allowed": False,
+    }
+
+
 def prepare() -> dict[str, Any]:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     prepared = []
-    for board_path in sorted(STORYBOARD_DIR.glob("*.storyboard.json")) if STORYBOARD_DIR.exists() else []:
-        board = load_json(board_path)
+    current_request_paths: set[Path] = set()
+    current_result_paths: set[Path] = set()
+
+    board_paths = (
+        sorted(STORYBOARD_DIR.glob("*.storyboard.json"))
+        if STORYBOARD_DIR.exists()
+        else []
+    )
+    for board_path in board_paths:
+        if storyboard_is_current(board_path) is None:
+            continue
+        board = _load_dict(board_path)
+        if not isinstance(board, dict):
+            continue
         request = build_search_request(board, board_path)
-        key = _key(str(board.get("concept_id") or ""), str(board.get("format") or ""))
+        key = _key(
+            str(board.get("concept_id") or ""),
+            str(board.get("format") or ""),
+        )
         request_path = RESULT_DIR / f"{key}.visual_search_request.json"
         atomic_write_json(request_path, request)
+        current_request_paths.add(request_path.resolve())
+
         raw_path = RAW_DIR / f"{key}.visual_search_raw.json"
         result_path = RESULT_DIR / f"{key}.visual_search_results.json"
         raw_current = False
         if raw_path.exists():
-            raw = load_json(raw_path)
+            raw = _load_dict(raw_path)
             raw_current = isinstance(raw, dict) and raw_matches_request(
-                request, raw
+                request,
+                raw,
             )
             if raw_current:
                 result = compile_results(request, request_path, raw)
                 atomic_write_json(result_path, result)
+                current_result_paths.add(result_path.resolve())
             elif result_path.exists():
                 result_path.unlink()
-        prepared.append({
-            "concept_id": board.get("concept_id"),
-            "format": board.get("format"),
-            "request": str(request_path),
-            "raw_results_present": raw_path.exists(),
-            "raw_results_current": raw_current,
-        })
-    summary = {
-        "status": "READY_FOR_SEARCH_ADAPTERS" if prepared else "WAITING_FOR_STORYBOARDS",
-        "prepared": len(prepared),
-        "items": prepared,
-        "paid_generation_calls_allowed": False,
-    }
+
+        prepared.append(
+            {
+                "concept_id": board.get("concept_id"),
+                "format": board.get("format"),
+                "request": str(request_path),
+                "raw_results_present": raw_path.exists(),
+                "raw_results_current": raw_current,
+            }
+        )
+
+    for stale in RESULT_DIR.glob("*.visual_search_request.json"):
+        if stale.resolve() not in current_request_paths:
+            stale.unlink()
+    for stale in RESULT_DIR.glob("*.visual_search_results.json"):
+        if stale.resolve() not in current_result_paths:
+            stale.unlink()
+
+    summary = snapshot()
     atomic_write_json(SUMMARY_FILE, summary)
     return summary
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Prepare storyboard-driven visual search")

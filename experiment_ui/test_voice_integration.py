@@ -86,6 +86,11 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
             script,
         )
 
+    def test_ui_knows_visual_search_ready_boundary(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn("VISUAL_SEARCH_READY", script)
+        self.assertIn("Visual search plan ready", script)
+
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (
             patch.object(

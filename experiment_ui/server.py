@@ -287,6 +287,8 @@ from storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
 )
+from storyboard import snapshot as production_storyboard_snapshot
+from visual_search import snapshot as visual_search_prepare_snapshot
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
@@ -2428,18 +2430,16 @@ def narration_artifact_state() -> dict[str, Any]:
 
 
 def production_visual_artifact_state() -> dict[str, Any]:
-    """Return current cheap-first visual-manifest coverage.
-
-    A manifest counts only when it is bound to the exact currently accepted
-    format plan for the same concept and format branch.
-    """
+    """Return visual-manifest coverage bound to current final narration timing."""
     fmt = format_artifact_state()
-    if not fmt.get("production_engine_ready"):
+    narration = narration_artifact_state()
+    if not fmt.get("production_engine_ready") or not narration.get("audio_ready"):
         return {
             "expected_branches": [],
             "current_branches": [],
             "manifests_ready": False,
             "manifest_count": 0,
+            "timing_ready": False,
         }
 
     gate = fmt.get("format_gate", {})
@@ -2472,6 +2472,20 @@ def production_visual_artifact_state() -> dict[str, Any]:
                 if branch_format:
                     expected.add((concept_id, branch_format))
 
+    timing_hashes: dict[tuple[str, str], tuple[str, str]] = {}
+    audio_qc = narration.get("audio_qc", {})
+    for item in audio_qc.get("items", []) if isinstance(audio_qc, dict) else []:
+        if not isinstance(item, dict) or item.get("status") != "PASS":
+            continue
+        concept_id = str(item.get("concept_id") or "").strip()
+        branch_format = str(item.get("format") or "").strip()
+        timing_path = Path(str(item.get("timing_map") or ""))
+        if concept_id and branch_format and timing_path.is_file():
+            timing_hashes[(concept_id, branch_format)] = (
+                str(timing_path.resolve()),
+                sha256_file(timing_path),
+            )
+
     current: set[tuple[str, str]] = set()
     if PRODUCTION_VISUAL_MANIFESTS_DIR.exists():
         for path in PRODUCTION_VISUAL_MANIFESTS_DIR.glob(
@@ -2482,17 +2496,25 @@ def production_visual_artifact_state() -> dict[str, Any]:
                 continue
             concept_id = str(payload.get("concept_id") or "").strip()
             branch_format = str(payload.get("format") or "").strip()
+            key = (concept_id, branch_format)
+            timing = timing_hashes.get(key)
             provenance = payload.get("manifest_provenance", {})
             if (
                 concept_id in plan_hashes
                 and branch_format
+                and timing is not None
                 and isinstance(provenance, dict)
                 and provenance.get("approved_format_plan_sha256")
                 == plan_hashes[concept_id]
+                and provenance.get("narration_timing_map")
+                == timing[0]
+                and provenance.get("narration_timing_map_sha256")
+                == timing[1]
             ):
-                current.add((concept_id, branch_format))
+                current.add(key)
 
-    ready = bool(expected) and expected.issubset(current)
+    timing_ready = bool(expected) and expected.issubset(set(timing_hashes))
+    ready = timing_ready and expected.issubset(current)
     return {
         "expected_branches": [
             {"concept_id": concept_id, "format": branch_format}
@@ -2504,6 +2526,7 @@ def production_visual_artifact_state() -> dict[str, Any]:
         ],
         "manifests_ready": ready,
         "manifest_count": len(current),
+        "timing_ready": timing_ready,
     }
 
 
@@ -4138,6 +4161,20 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     narration_audio_ready = bool(narration.get("audio_ready"))
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
+    storyboard_state = production_storyboard_snapshot()
+    storyboards_ready = bool(
+        visual_manifests_ready
+        and storyboard_state.get("status") == "READY_FOR_VISUAL_SEARCH"
+        and int(storyboard_state.get("prepared") or 0)
+        == int(production_visual.get("manifest_count") or 0)
+    )
+    visual_search_state = visual_search_prepare_snapshot()
+    visual_search_requests_ready = bool(
+        storyboards_ready
+        and visual_search_state.get("status") == "READY_FOR_SEARCH_ADAPTERS"
+        and int(visual_search_state.get("prepared") or 0)
+        == int(storyboard_state.get("prepared") or 0)
+    )
     visual_post = visual_post_search_artifact_state()
     visual_candidate_complete = bool(visual_post["candidate_complete"])
     visual_candidate_stale = int(
@@ -5010,33 +5047,53 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "storyboard_prepare": {
-            "enabled": visual_manifests_ready and not has_json_files(PRODUCTION_STORYBOARD_DIR),
-            "reason": "Build the cinematic storyboard from current narration timing and visual requirements." if visual_manifests_ready else "Visual requirements are not ready.",
+            "enabled": visual_manifests_ready and not storyboards_ready,
+            "reason": (
+                "Build or refresh the cinematic storyboard from current narration timing and current visual requirements."
+                if visual_manifests_ready and not storyboards_ready
+                else (
+                    "Current narration-bound storyboards are ready."
+                    if storyboards_ready
+                    else "Current narration-bound visual requirements are not ready."
+                )
+            ),
         },
         "visual_search_prepare": {
             "enabled": (
-                has_json_files(PRODUCTION_STORYBOARD_DIR)
+                storyboards_ready
                 and (
-                    visual_candidate_stale > 0
-                    or not (
-                        PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists()
-                        and any(
-                            PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob(
-                                "*.visual_search_request.json"
-                            )
+                    not visual_search_requests_ready
+                    or visual_candidate_stale > 0
+                )
+            ),
+            "reason": (
+                "Storyboard revisions made visual search stale; rebuild only current search requests."
+                if visual_candidate_stale > 0
+                else (
+                    "Prepare rights-aware, existing/free-first visual search requests from the current storyboard."
+                    if storyboards_ready and not visual_search_requests_ready
+                    else "Current visual search requests are ready."
+                )
+            ),
+        },
+        "visual_search_acquire": {
+            "enabled": (
+                visual_search_requests_ready
+                and int(visual_search_state.get("search_required") or 0) > 0
+                and not (
+                    PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists()
+                    and any(
+                        PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob(
+                            "*.visual_search_results.json"
                         )
                     )
                 )
             ),
             "reason": (
-                "Storyboard revisions made visual search stale; rebuild only the affected shot requests."
-                if visual_candidate_stale > 0
-                else "Prepare storyboard-driven visual search requests."
+                "Search configured zero-cost/existing sources from current search requests, then stop for human candidate review."
+                if visual_search_requests_ready
+                else "Prepare current narration-bound visual search requests first."
             ),
-        },
-        "visual_search_acquire": {
-            "enabled": any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_request.json")) and not any(PRODUCTION_VISUAL_SEARCH_RESULT_DIR.glob("*.visual_search_results.json")) if PRODUCTION_VISUAL_SEARCH_RESULT_DIR.exists() else False,
-            "reason": "Search zero-cost/existing visual sources, then stop for human candidate review.",
         },
         "visual_asset_acquire": {
             "enabled": (
@@ -5685,30 +5742,18 @@ def workflow_guidance(
                 "next_action_id": None,
                 "next_title": "Re-import corrected narration audio",
             }
-        if narration_state.get("audio_ready"):
+        if not narration_state.get("audio_ready"):
             return {
-                "state": "NARRATION_AUDIO_READY",
-                "current_action_id": None,
-                "current_title": "Final Narration Audio Ready",
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Run Narration Audio QC",
                 "current_detail": (
-                    "Current spend-authorized narration passed local Audio QC and "
-                    "the timing map is ready. Slice 12 stops here before visual "
-                    "production begins."
+                    "Current provider audio is registered against the exact spend "
+                    "authorization. Run deterministic local Audio QC and timing-map generation."
                 ),
                 "next_action_id": None,
-                "next_title": "Visual production boundary",
+                "next_title": "Prepare narration-bound visual plan",
             }
-        return {
-            "state": "ACTION_REQUIRED",
-            "current_action_id": "auto_continue",
-            "current_title": "Run Narration Audio QC",
-            "current_detail": (
-                "Current provider audio is registered against the exact spend "
-                "authorization. Run deterministic local Audio QC and timing-map generation."
-            ),
-            "next_action_id": None,
-            "next_title": "Stop before visual production",
-        }
 
     narration_items = [
         item
@@ -5758,6 +5803,27 @@ def workflow_guidance(
             ),
             "next_action_id": None,
             "next_title": "Human Narration Spend Gate",
+        }
+
+    search_state = visual_search_prepare_snapshot()
+    candidate_snapshot = visual_candidate_review_snapshot()
+    if (
+        narration_state.get("audio_ready")
+        and search_state.get("status") == "READY_FOR_SEARCH_ADAPTERS"
+        and int(search_state.get("prepared") or 0) > 0
+        and not candidate_snapshot.get("packets")
+    ):
+        return {
+            "state": "VISUAL_SEARCH_READY",
+            "current_action_id": None,
+            "current_title": "Visual Search Plan Ready",
+            "current_detail": (
+                "Current final narration now drives current visual manifests, "
+                "cinematic storyboards and rights-aware existing/free-first search "
+                "requests. Slice 13 stops before any search adapter runs."
+            ),
+            "next_action_id": None,
+            "next_title": "Search Free / Existing Visuals",
         }
 
     visual_post = visual_post_search_artifact_state()
@@ -6132,6 +6198,8 @@ def status_payload() -> dict[str, Any]:
         "narration_spend_gate": narration["spend_gate"],
         "narration_render_return": narration["render_return"],
         "production_visual": production_visual,
+        "storyboard": production_storyboard_snapshot(),
+        "visual_search_prepare": visual_search_prepare_snapshot(),
         "visual_post_search": visual_post_search_artifact_state(),
         "visual_candidate_gate": visual_candidate_review_snapshot(),
         "visual_rights_gate": visual_rights_review_snapshot(),

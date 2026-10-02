@@ -45,6 +45,51 @@ class VisualSearchTests(unittest.TestCase):
         self.assertTrue(request["shots"][0]["shot_fingerprint"])
 
 
+    def test_search_request_becomes_stale_when_storyboard_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            board_path = root / "c1.shorts.storyboard.json"
+            request_path = root / "c1.shorts.visual_search_request.json"
+            board = {
+                "concept_id": "c1",
+                "format": "shorts",
+                "status": "READY_FOR_VISUAL_SEARCH",
+                "cards": [
+                    {
+                        "shot_id": "shot-001",
+                        "beat_id": "b1",
+                        "time_range": {},
+                        "desired_visual": "impact",
+                        "search_terms": ["impact"],
+                        "cinematic_direction": {},
+                        "premium_generation_candidate": False,
+                        "source_strategy": {
+                            "selected_candidate_id": None,
+                            "creator_excerpt_allowed_only_after_human_rights_context_review": True,
+                        },
+                    }
+                ],
+            }
+            board_path.write_text(json.dumps(board), encoding="utf-8")
+            request = visual_search.build_search_request(
+                board,
+                board_path,
+            )
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            with patch.object(
+                visual_search,
+                "storyboard_is_current",
+                return_value=(board, Path("timing"), Path("visual")),
+            ):
+                self.assertIsNotNone(
+                    visual_search.search_request_is_current(request_path)
+                )
+                board["cards"][0]["desired_visual"] = "changed impact"
+                board_path.write_text(json.dumps(board), encoding="utf-8")
+                self.assertIsNone(
+                    visual_search.search_request_is_current(request_path)
+                )
+
     def test_acquire_reuses_unchanged_raw_shot_and_searches_changed_shot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
