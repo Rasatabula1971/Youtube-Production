@@ -152,6 +152,7 @@ def build_rework_request(
     draft_path: Path,
     *,
     target_id: str,
+    review_request_path: Path,
 ) -> dict[str, Any]:
     """Build one bounded model request for one selected target."""
     draft_path = draft_path.resolve()
@@ -194,20 +195,64 @@ def build_rework_request(
     )
 
     script_request_path, script_request = _bound_script_request(draft)
+
+    review_request_path = review_request_path.resolve()
+    if not review_request_path.is_file():
+        raise ValueError("Human Script Gate review request is unavailable")
+    review_request = load_json(review_request_path)
+    if str(review_request.get("concept_id") or "") != str(draft.get("concept_id") or ""):
+        raise ValueError("Human Script Gate request concept_id mismatch")
+    if str(review_request.get("format") or "") != str(draft.get("format") or ""):
+        raise ValueError("Human Script Gate request format mismatch")
+    review_provenance = review_request.get("request_provenance")
+    if not isinstance(review_provenance, dict):
+        raise ValueError("Human Script Gate request is missing provenance")
+    if str(review_provenance.get("script_draft_sha256") or "") != sha256_file(draft_path):
+        raise ValueError("STALE_REWORK_REQUEST: Human Script Gate request is stale")
+
     story_plan = script_request.get("story_plan", {})
-    source_beat_ids = set(target_metadata.get("source_story_beat_ids", []))
+    source_beat_ids = {
+        str(item)
+        for item in target_metadata.get("source_story_beat_ids", [])
+    }
+    story_beats = (
+        story_plan.get("beats", [])
+        if isinstance(story_plan, dict)
+        else []
+    )
     relevant_beats = [
         beat
-        for beat in (
-            story_plan.get("beats", [])
-            if isinstance(story_plan, dict)
-            else []
-        )
+        for beat in story_beats
         if isinstance(beat, dict)
-        and (
-            not source_beat_ids
-            or str(beat.get("beat_id") or "") in source_beat_ids
+        and str(beat.get("beat_id") or "") in source_beat_ids
+    ]
+    if source_beat_ids and {
+        str(beat.get("beat_id") or "")
+        for beat in relevant_beats
+    } != source_beat_ids:
+        raise ValueError("Selected target references missing Story Plan beats")
+
+    target_claim_ids = target_metadata.get("claim_ids")
+    if target_claim_ids is None:
+        target_claim_ids = target_metadata.get("opening_hook_claim_ids", [])
+    allowed_claim_ids = {str(item) for item in target_claim_ids or []}
+    all_claims = script_request.get("accepted_claims", [])
+    if not isinstance(all_claims, list):
+        raise ValueError("Script request accepted_claims must be a list")
+    claims_by_id = {
+        str(item.get("claim_id") or ""): item
+        for item in all_claims
+        if isinstance(item, dict) and str(item.get("claim_id") or "")
+    }
+    missing_claims = sorted(allowed_claim_ids - set(claims_by_id))
+    if missing_claims:
+        raise ValueError(
+            "Selected target references unavailable accepted claims: "
+            + ", ".join(missing_claims)
         )
+    allowed_claims = [
+        claims_by_id[claim_id]
+        for claim_id in sorted(allowed_claim_ids)
     ]
 
     return {
@@ -239,6 +284,16 @@ def build_rework_request(
         ],
         "package": script_request.get("package", {}),
         "story_constraints": {
+            "story_question": (
+                story_plan.get("story_question")
+                if isinstance(story_plan, dict)
+                else None
+            ),
+            "opening_hook_intent": (
+                story_plan.get("opening_hook_intent")
+                if isinstance(story_plan, dict)
+                else None
+            ),
             "viewer_state": (
                 story_plan.get("viewer_state", {})
                 if isinstance(story_plan, dict)
@@ -256,7 +311,8 @@ def build_rework_request(
                 else None
             ),
         },
-        "accepted_claims": script_request.get("accepted_claims", []),
+        "accepted_claims": allowed_claims,
+        "psychology_contract": script_request.get("psychology_contract", {}),
         "psychology_profile": script_request.get("psychology_profile", {}),
         "channel_voice": script_request.get("channel_voice", {}),
         "instructions": [
@@ -277,6 +333,10 @@ def build_rework_request(
             "section_state_sha256": sha256_file(state_path),
             "script_request": str(script_request_path),
             "script_request_sha256": sha256_file(script_request_path),
+            "script_review_request": str(review_request_path),
+            "script_review_request_sha256": sha256_file(review_request_path),
+            "state_version": state.get("state_version"),
+            "target_sha256": target.get("target_sha256"),
         },
     }
 
@@ -287,17 +347,27 @@ def prepare_rework_request(
     *,
     target_id: str,
     requests_dir: Path = REWORK_REQUESTS_DIR,
+    review_requests_dir: Path | None = None,
 ) -> Path:
     state_path = state_path.resolve()
     draft_path = draft_path.resolve()
     state = load_json(state_path)
     draft = load_json(draft_path)
+    if review_requests_dir is None:
+        from script_review import REVIEW_REQUESTS_DIR
+
+        review_requests_dir = REVIEW_REQUESTS_DIR
+    review_request_path = review_requests_dir / (
+        f"{safe_slug(str(draft.get('concept_id') or ''))}."
+        f"{safe_slug(str(draft.get('format') or ''))}.script_review_request.json"
+    )
     request = build_rework_request(
         state,
         state_path,
         draft,
         draft_path,
         target_id=target_id,
+        review_request_path=review_request_path,
     )
     destination = requests_dir / (
         f"{safe_slug(str(request['concept_id']))}."
@@ -319,11 +389,19 @@ def assert_request_current(request: dict[str, Any]) -> None:
     script_request_path = Path(
         str(provenance.get("script_request") or "")
     ).resolve()
+    review_request_path = Path(
+        str(provenance.get("script_review_request") or "")
+    ).resolve()
 
     checks = (
         (draft_path, "script_draft_sha256", "script draft"),
         (state_path, "section_state_sha256", "section state"),
         (script_request_path, "script_request_sha256", "script request"),
+        (
+            review_request_path,
+            "script_review_request_sha256",
+            "Human Script Gate request",
+        ),
     )
     for path, hash_key, label in checks:
         expected = str(provenance.get(hash_key) or "")
@@ -350,6 +428,19 @@ def assert_request_current(request: dict[str, Any]) -> None:
         raise ValueError("STALE_REWORK_REQUEST: concept_id changed")
     if str(draft.get("format") or "") != str(request.get("format") or ""):
         raise ValueError("STALE_REWORK_REQUEST: format changed")
+
+    expected = build_rework_request(
+        state,
+        state_path,
+        draft,
+        draft_path,
+        target_id=str(request.get("target_id") or ""),
+        review_request_path=review_request_path,
+    )
+    if request != expected:
+        raise ValueError(
+            "STALE_REWORK_REQUEST: prepared request content changed"
+        )
 
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
