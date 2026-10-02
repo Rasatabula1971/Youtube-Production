@@ -2580,6 +2580,29 @@ def visual_post_search_artifact_state() -> dict[str, Any]:
             != sha256_file(review_path)
         ):
             continue
+
+        managed_registry = provenance.get("managed_asset_registry", {})
+        if not isinstance(managed_registry, dict):
+            continue
+        managed_current = True
+        for entry in managed_registry.values():
+            if not isinstance(entry, dict):
+                managed_current = False
+                break
+            registry_path = Path(str(entry.get("registry_file") or ""))
+            asset_path = Path(str(entry.get("asset_file") or ""))
+            if (
+                not registry_path.exists()
+                or not asset_path.exists()
+                or entry.get("registry_sha256")
+                != sha256_file(registry_path)
+                or entry.get("asset_sha256")
+                != sha256_file(asset_path)
+            ):
+                managed_current = False
+                break
+        if not managed_current:
+            continue
         rights_required = any(
             isinstance(decision, dict)
             and decision.get("status")
@@ -2711,6 +2734,7 @@ def visual_asset_acquisition_artifact_state() -> dict[str, Any]:
         and expected_reviews
         and summary.get("source_review_sha256") == expected_reviews
         and summary.get("source_rights_sha256") == expected_rights
+        and int(summary.get("failures") or 0) == 0
     )
     return {
         "status": (
@@ -5885,6 +5909,45 @@ def workflow_guidance(
             ),
             "next_action_id": "auto_continue",
             "next_title": "Build Visual Rough Cut",
+        }
+
+    asset_state = visual_asset_acquisition_artifact_state()
+    if (
+        visual_post.get("candidate_complete")
+        and visual_post.get("rights_complete")
+        and not asset_state.get("current")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Acquire Approved Free Visual Assets",
+            "current_detail": (
+                "Copy approved local assets and download only verified zero-cost "
+                "stock media from allow-listed hosts. Editorial footage is never "
+                "auto-downloaded. Automatic acquisition failures must be resolved "
+                "or retried before the rough cut is built."
+            ),
+            "next_action_id": None,
+            "next_title": "Build Visual Rough Cut",
+        }
+
+    if (
+        visual_post.get("candidate_complete")
+        and visual_post.get("rights_complete")
+        and asset_state.get("current")
+        and not visual_post.get("rough_cuts_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Build Visual Rough Cut",
+            "current_detail": (
+                "Build the rough cut only from current managed local asset files. "
+                "Approved editorial clips that still need manual file supply remain "
+                "explicit placeholders and do not unlock paid generation."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Rough-Cut Gate",
         }
 
     rough_gate = visual_post.get("rough_gate", {})
