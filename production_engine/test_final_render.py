@@ -176,6 +176,7 @@ class FinalRenderTests(unittest.TestCase):
                 "render_file": str(render_path),
                 "render_sha256": final_render.sha256_file(render_path),
                 "render_bytes": render_path.stat().st_size,
+                "duration_seconds": 4.0,
                 "provenance": {
                     "final_render_manifest": str(manifest_path),
                     "final_render_manifest_sha256": final_render.sha256_file(
