@@ -147,9 +147,9 @@ def _base_from_verified_package(
         "thumbnail": {},
         "opening_frame": {},
         "one_sentence_promise": (
-            concept.get("audience_promise")
-            or legacy_packaging.get("one_sentence_promise")
+            legacy_packaging.get("one_sentence_promise")
             or legacy_packaging.get("core_promise")
+            or concept.get("audience_promise")
         ),
         "expected_payoff": (
             legacy_packaging.get("expected_payoff")
