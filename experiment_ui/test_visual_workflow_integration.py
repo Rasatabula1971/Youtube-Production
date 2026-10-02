@@ -83,6 +83,20 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
             ),
             patch.object(
                 server,
+                "visual_asset_acquisition_artifact_state",
+                return_value={
+                    "status": "CURRENT",
+                    "current": True,
+                    "acquired": 0,
+                    "manual_required": 0,
+                    "failures": 0,
+                    "items": [],
+                    "manual_items": [],
+                    "failure_items": [],
+                },
+            ),
+            patch.object(
+                server,
                 "visual_spend_review_snapshot",
                 return_value=(
                     spend_gate
