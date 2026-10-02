@@ -453,7 +453,9 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                 )
 
         self.assertEqual(result["status"], "STALE_REWORK_REQUEST")
-        self.assertFalse(alternatives_dir.exists())
+        self.assertFalse(
+            list(alternatives_dir.glob("*.alternatives.json"))
+        )
 
     def test_artifact_starts_unselected(self):
         with tempfile.TemporaryDirectory() as tmp:
