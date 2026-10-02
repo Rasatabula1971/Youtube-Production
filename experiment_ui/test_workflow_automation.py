@@ -200,16 +200,23 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["workflow_state"], "HUMAN_TITLE_DIRECTION_GATE")
         self.assertEqual(result["message"], "Select Preferred Title Directions")
 
-    def test_title_direction_selection_runs_packaging_brief_then_stops(self):
+    def test_title_direction_selection_runs_slice25_packaging_chain_then_stops(self):
         state = {"completed": 0}
-        sequence = ["packaging_brief_prepare"]
+        sequence = [
+            "packaging_brief_prepare",
+            "psychological_angle_prepare",
+            "psychological_angle_generate",
+            "thumbnail_concept_prepare",
+            "thumbnail_concept_generate",
+        ]
 
         def readiness():
             if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
                 return {
-                    "packaging_brief_prepare": {
+                    action_id: {
                         "enabled": True,
-                        "reason": "Packaging brief ready to build",
+                        "reason": f"{action_id} ready",
                     }
                 }
             return {}
@@ -218,11 +225,11 @@ class WorkflowAutomationTests(unittest.TestCase):
             if state["completed"] < len(sequence):
                 return {
                     "state": "ACTION_REQUIRED",
-                    "current_title": "Build Packaging Brief + Viewer Promise",
+                    "current_title": sequence[state["completed"]],
                 }
             return {
-                "state": "PACKAGING_BRIEF_READY",
-                "current_title": "Packaging Brief + Viewer Promise Ready",
+                "state": "THUMBNAIL_CONCEPTS_READY",
+                "current_title": "Psychological Angles + Thumbnail Concepts Ready",
             }
 
         def fake_run(action_id):
@@ -251,7 +258,7 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(result["completed_actions"], sequence)
-        self.assertEqual(result["workflow_state"], "PACKAGING_BRIEF_READY")
+        self.assertEqual(result["workflow_state"], "THUMBNAIL_CONCEPTS_READY")
 
     def test_format_gate_completion_runs_voice_chain_to_human_performance_gate(self):
         state = {"completed": 0}
