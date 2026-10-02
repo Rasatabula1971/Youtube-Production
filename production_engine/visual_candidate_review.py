@@ -46,18 +46,21 @@ def candidate_selection_status(candidate: dict[str, Any]) -> str:
         or str(candidate.get("local_path") or "").strip()
     )
 
-    requires_context = bool(
-        tier in RIGHTS_CONTEXT_TIERS
-        or rights == "DISCOVERY_ONLY"
-        or candidate.get("human_review_required") is True
-        or state == "HUMAN_REVIEW_REQUIRED"
-    )
-    if requires_context:
+    if tier in RIGHTS_CONTEXT_TIERS:
         if not has_source:
             raise ValueError(
                 "Rights/context candidate is missing source provenance"
             )
         return "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+
+    if (
+        rights == "DISCOVERY_ONLY"
+        or candidate.get("human_review_required") is True
+        or state == "HUMAN_REVIEW_REQUIRED"
+    ):
+        raise ValueError(
+            "Candidate requests rights review from an unsupported source tier"
+        )
 
     if state == "BLOCKED":
         raise ValueError("Blocked candidate cannot be selected")
