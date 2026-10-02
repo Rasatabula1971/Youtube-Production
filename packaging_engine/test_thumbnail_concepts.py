@@ -60,6 +60,8 @@ class ThumbnailConceptTests(unittest.TestCase):
 
     def response(self):
         values = []
+        labels = ["HOT", "GRIP", "WHY", "COLD", "LIMIT"]
+        questions = ["alpha", "bravo", "charlie", "delta", "echo"]
         for index, angle in enumerate(self.request()["angles"]):
             values.append(
                 {
@@ -73,9 +75,9 @@ class ThumbnailConceptTests(unittest.TestCase):
                     "composition": "Large hot disc left, small cold comparison right",
                     "background": "Dark pit-lane background",
                     "subject_separation_method": "Brightness and scale contrast",
-                    "text": f"HEAT {index}",
-                    "text_word_count": 2,
-                    "viewer_visual_question": f"Why does heat matter {index}?",
+                    "text": labels[index],
+                    "text_word_count": 1,
+                    "viewer_visual_question": f"Why does the {questions[index]} heat contrast matter?",
                     "timestamp_safe": True,
                     "mobile_legibility_intent": "Large disc and two-word text remain readable",
                     "evidence_refs": ["clm001"],
