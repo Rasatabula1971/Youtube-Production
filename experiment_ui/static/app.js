@@ -568,6 +568,7 @@ function statusTone(workflow) {
     state === "NARRATION_PROVIDER_SETUP_REQUIRED" ||
     state === "WAITING_NARRATION_RENDER_RETURN" ||
     state === "NARRATION_AUDIO_QC_FAILED" ||
+    state === "VISUAL_SEARCH_READY" ||
     state === "HUMAN_VISUAL_CANDIDATE_GATE" ||
     state === "HUMAN_VISUAL_RIGHTS_GATE" ||
     state === "HUMAN_ROUGH_CUT_GATE" ||
@@ -617,6 +618,7 @@ function primaryTargetForWorkflow(workflow) {
     WAITING_NARRATION_RENDER_RETURN: "Register final narration",
     NARRATION_AUDIO_QC_FAILED: "Fix narration audio",
     NARRATION_AUDIO_READY: "Narration audio ready",
+    VISUAL_SEARCH_READY: "Visual search plan ready",
     HUMAN_VISUAL_CANDIDATE_GATE: "Choose visuals",
     HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
     HUMAN_ROUGH_CUT_GATE: "Review rough cut",
@@ -4481,6 +4483,7 @@ function renderAnalysis(data) {
     "HUMAN_NARRATION_SPEND_GATE",
     "WAITING_NARRATION_PROVIDER_QUOTE",
     "NARRATION_PROVIDER_SETUP_REQUIRED",
+    "VISUAL_SEARCH_READY",
     "HUMAN_VISUAL_CANDIDATE_GATE",
     "HUMAN_VISUAL_RIGHTS_GATE",
     "HUMAN_ROUGH_CUT_GATE",
@@ -4572,6 +4575,7 @@ function renderAnalysis(data) {
       "WAITING_NARRATION_RENDER_RETURN",
       "NARRATION_AUDIO_QC_FAILED",
       "NARRATION_AUDIO_READY",
+      "VISUAL_SEARCH_READY",
       "HUMAN_VISUAL_CANDIDATE_GATE",
       "HUMAN_VISUAL_RIGHTS_GATE",
       "HUMAN_ROUGH_CUT_GATE",
