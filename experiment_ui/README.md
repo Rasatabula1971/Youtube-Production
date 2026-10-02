@@ -478,3 +478,45 @@ state until the free prototype is rebuilt and heard again.
 The local renderer is deliberately zero-cost. If Kokoro/local preview
 dependencies are unavailable, the automatic run returns a specific blocked
 message. There is no paid TTS fallback at this stage.
+
+## Slice 11 — automatic Preview → Narration Spend boundary
+
+After the current free narration prototype is approved, automatic continuation
+runs only zero-spend preparation:
+
+```text
+Human Narration Preview Gate approved
+        ↓
+sound_design_brief_prepare
+        ↓
+narration_prepare
+        ↓
+narration_spend_gate_prepare   (only when a current quote exists)
+        ↓
+STOP: HUMAN_NARRATION_SPEND_GATE
+```
+
+If a current quote does not exist, the runner stops at
+`WAITING_NARRATION_PROVIDER_QUOTE`. If required voice/provider configuration
+is incomplete, it stops at `NARRATION_PROVIDER_SETUP_REQUIRED`. It cannot
+skip either state and continue into visual production.
+
+The working UI now includes a Human Narration Spend Gate. It shows the provider,
+initial estimate, worst-case authorization ceiling, quote reference, segment
+count and maximum attempts. ACCEPT requires all spend criteria and a separate
+confirmation of the displayed worst-case amount.
+
+The gate itself makes no paid call. An accepted gate records authorization for
+the exact current quote only.
+
+The current repository configuration deliberately keeps the Higgsfield
+narration contract unverified until a documented endpoint/schema, licensed
+voice identity, licence reference and calibration are configured. Therefore a
+normal live run must stop safely rather than fabricate provider pricing.
+
+The provenance chain is:
+
+`approved preview + current preview audio → Sound Design Brief → narration
+render request → provider quote → cost estimate → Human Narration Spend Gate`.
+
+Changing any bound upstream artifact invalidates downstream spend eligibility.

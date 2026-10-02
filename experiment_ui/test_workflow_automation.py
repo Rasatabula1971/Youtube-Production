@@ -367,6 +367,128 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertIn("local Kokoro", result["message"])
         self.assertIn("paid fallback is forbidden", result["message"])
 
+    def test_preview_approval_runs_cost_chain_to_human_spend_gate(self):
+        state = {"completed": 0}
+        sequence = [
+            "sound_design_brief_prepare",
+            "narration_prepare",
+            "narration_spend_gate_prepare",
+        ]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
+                return {
+                    action_id: {
+                        "enabled": True,
+                        "reason": f"{action_id} ready",
+                    }
+                }
+            return {}
+
+        def guidance(_readiness):
+            if state["completed"] == len(sequence):
+                return {
+                    "state": "HUMAN_NARRATION_SPEND_GATE",
+                    "current_title": "Review Narration Spend",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_title": "Prepare narration cost boundary",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, sequence[state["completed"]])
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_NARRATION_SPEND_GATE",
+        )
+        self.assertEqual(result["message"], "Review Narration Spend")
+
+    def test_waiting_for_quote_blocks_downstream_visual_work(self):
+        readiness = {
+            "production_visual_prepare": {
+                "enabled": True,
+                "reason": "visual work would otherwise be ready",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "WAITING_NARRATION_PROVIDER_QUOTE",
+                    "current_title": "Current Narration Quote Required",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "WAITING_NARRATION_PROVIDER_QUOTE",
+        )
+
+    def test_provider_setup_blocker_stops_before_visual_work(self):
+        readiness = {
+            "visual_search_prepare": {
+                "enabled": True,
+                "reason": "stale visual path is ready",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "NARRATION_PROVIDER_SETUP_REQUIRED",
+                    "current_title": "Complete Narration Provider Setup",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "NARRATION_PROVIDER_SETUP_REQUIRED",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {

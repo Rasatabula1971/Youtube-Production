@@ -236,6 +236,7 @@ from voice_review import (
 from narration_render import snapshot as narration_render_snapshot
 from pre_render_engagement import snapshot as pre_render_engagement_snapshot
 from narration_preview import snapshot as narration_preview_prepare_snapshot
+from sound_design_brief import snapshot as sound_design_brief_snapshot
 from narration_performance_review import (
     revise as revise_narration_performance,
     snapshot as narration_performance_revision_snapshot,
@@ -4072,14 +4073,20 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     sound_reference = sound_reference_payload if isinstance(sound_reference_payload, dict) else {}
     sound_reference_prepared = sound_reference.get("status") == "READY_FOR_REFERENCE_SOUND_GENERATION"
     preview_approved = bool(preview_gate.get("complete"))
-    sound_brief_payload = safe_load_json(PRODUCTION_SOUND_BRIEF_SUMMARY)
-    sound_brief = sound_brief_payload if isinstance(sound_brief_payload, dict) else {}
-    sound_brief_ready = sound_brief.get("status") == "READY_FOR_FINAL_PROVIDER_HANDOFF"
+    sound_brief = sound_design_brief_snapshot()
+    sound_brief_ready = (
+        sound_brief.get("status") == "READY_FOR_FINAL_PROVIDER_HANDOFF"
+    )
     narration = narration_artifact_state()
     narration_render = narration["render"]
     narration_spend_gate = narration["spend_gate"]
     narration_prepared = int(narration_render.get("prepared") or 0) > 0
-    narration_ready_for_spend_gate = narration_render.get("status") == "READY_FOR_SPEND_GATE"
+    narration_refresh_required = bool(
+        narration_render.get("refresh_required")
+    )
+    narration_ready_for_spend_gate = (
+        narration_render.get("status") == "READY_FOR_SPEND_GATE"
+    )
     narration_spend_gate_status = str(narration_spend_gate.get("status") or "WAITING_FOR_PROVIDER_QUOTE")
     narration_spend_complete = bool(narration_spend_gate.get("complete"))
     narration_spend_accepted = bool(
@@ -4895,19 +4902,43 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "narration_prepare": {
-            "enabled": preview_approved and sound_brief_ready and not narration_prepared,
+            "enabled": (
+                preview_approved
+                and sound_brief_ready
+                and (not narration_prepared or narration_refresh_required)
+            ),
             "reason": (
-                "The free prototype and Sound Design Brief are approved; final provider quote preparation may now begin."
-                if preview_approved and sound_brief_ready and not narration_prepared
-                else ("Final narration preparation already exists." if narration_prepared else "Listen to and approve the free narration prototype before any paid-provider quote.")
+                "The free prototype and current Sound Design Brief are approved; prepare or refresh the provider-bound narration request and zero-spend quote boundary."
+                if (
+                    preview_approved
+                    and sound_brief_ready
+                    and (not narration_prepared or narration_refresh_required)
+                )
+                else (
+                    "Narration request and cost boundary are current."
+                    if narration_prepared and not narration_refresh_required
+                    else "Listen to and approve the free narration prototype before any provider quote."
+                )
             ),
         },
         "narration_spend_gate_prepare": {
-            "enabled": narration_ready_for_spend_gate and narration_spend_gate_status == "READY_TO_PREPARE",
+            "enabled": (
+                narration_prepared
+                and not narration_refresh_required
+                and narration_spend_gate_status == "READY_TO_PREPARE"
+            ),
             "reason": (
-                "A current provider quote and worst-case estimate are ready for human spend approval."
-                if narration_ready_for_spend_gate and narration_spend_gate_status == "READY_TO_PREPARE"
-                else ("Narration Spend Gate is already prepared or complete." if narration_ready_for_spend_gate else "Narration remains blocked until provider prerequisites and a current quote exist.")
+                "Refresh the Human Narration Spend Gate from the current narration cost state."
+                if (
+                    narration_prepared
+                    and not narration_refresh_required
+                    and narration_spend_gate_status == "READY_TO_PREPARE"
+                )
+                else (
+                    "Narration Spend Gate is already prepared or complete."
+                    if narration_ready_for_spend_gate
+                    else "Narration remains blocked until provider prerequisites and a current quote exist."
+                )
             ),
         },
         "narration_audio_qc": {
@@ -5536,6 +5567,75 @@ def workflow_guidance(
             ),
             "next_action_id": "auto_continue",
             "next_title": "Prepare Final Narration Quote",
+        }
+
+    narration_state = narration_artifact_state()
+    narration_render_state = narration_state.get("render", {})
+    narration_spend_state = narration_state.get("spend_gate", {})
+    if (
+        narration_spend_state.get("status") == "AWAITING_HUMAN_DECISION"
+        and narration_spend_state.get("items")
+    ):
+        return {
+            "state": "HUMAN_NARRATION_SPEND_GATE",
+            "current_action_id": None,
+            "current_title": "Review Narration Spend",
+            "current_detail": (
+                "Review the current provider quote and worst-case narration cost. "
+                "No paid narration call has been authorized yet."
+            ),
+            "next_action_id": None,
+            "next_title": "Paid narration remains locked until you accept.",
+        }
+
+    narration_items = [
+        item
+        for item in narration_render_state.get("items", [])
+        if isinstance(item, dict)
+    ]
+    narration_blockers = sorted(
+        {
+            str(blocker)
+            for item in narration_items
+            for blocker in item.get("render_blockers", [])
+            if str(blocker)
+        }
+    )
+    if (
+        preview_gate.get("complete")
+        and narration_items
+        and narration_blockers
+    ):
+        return {
+            "state": "NARRATION_PROVIDER_SETUP_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Complete Narration Provider Setup",
+            "current_detail": (
+                "Paid narration is still locked. Current blockers: "
+                + ", ".join(narration_blockers)
+            ),
+            "next_action_id": None,
+            "next_title": "Prepare a verified quote only after setup is complete.",
+        }
+
+    if (
+        preview_gate.get("complete")
+        and narration_items
+        and not narration_blockers
+        and narration_render_state.get("status")
+        == "NARRATION_PREPARED_WITH_BLOCKERS"
+    ):
+        return {
+            "state": "WAITING_NARRATION_PROVIDER_QUOTE",
+            "current_action_id": None,
+            "current_title": "Current Narration Quote Required",
+            "current_detail": (
+                "The provider-bound narration request and quote template are ready. "
+                "Supply a current zero-spend/dry-run or documented provider quote; "
+                "the system will not guess a price."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Narration Spend Gate",
         }
 
     visual_post = visual_post_search_artifact_state()

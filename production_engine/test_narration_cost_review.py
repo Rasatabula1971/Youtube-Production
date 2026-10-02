@@ -83,6 +83,20 @@ class NarrationCostReviewTests(unittest.TestCase):
                     "SUMMARY_FILE",
                     root / "summary.json",
                 ),
+                patch.object(
+                    narration_cost_review,
+                    "narration_render_snapshot",
+                    return_value={
+                        "status": "READY_FOR_SPEND_GATE",
+                        "items": [
+                            {
+                                "concept_id": "concept-1",
+                                "format": "long_form",
+                                "status": "READY_FOR_SPEND_GATE",
+                            }
+                        ],
+                    },
+                ),
             ):
                 prepared = narration_cost_review.prepare()
                 self.assertEqual(prepared["prepared"], 1)
@@ -108,6 +122,61 @@ class NarrationCostReviewTests(unittest.TestCase):
             )
             self.assertEqual(payload["worst_case_estimate_usd"], 6.0)
 
+
+    def test_prepare_removes_stale_response_and_spend_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            estimates = root / "estimates"
+            requests = root / "requests"
+            responses = root / "responses"
+            approved = root / "approved"
+            for directory in (estimates, requests, responses, approved):
+                directory.mkdir()
+
+            stale_response = (
+                responses
+                / "concept-1.long_form.narration_spend_review_response.json"
+            )
+            stale_approved = (
+                approved
+                / "concept-1.long_form.approved_narration_spend.json"
+            )
+            stale_response.write_text("{}", encoding="utf-8")
+            stale_approved.write_text("{}", encoding="utf-8")
+
+            with (
+                patch.object(narration_cost_review, "ESTIMATES_DIR", estimates),
+                patch.object(
+                    narration_cost_review,
+                    "REVIEW_REQUESTS_DIR",
+                    requests,
+                ),
+                patch.object(narration_cost_review, "RESPONSES_DIR", responses),
+                patch.object(narration_cost_review, "APPROVED_DIR", approved),
+                patch.object(
+                    narration_cost_review,
+                    "SUMMARY_FILE",
+                    root / "summary.json",
+                ),
+                patch.object(
+                    narration_cost_review,
+                    "narration_render_snapshot",
+                    return_value={
+                        "status": "NARRATION_PREPARED_WITH_BLOCKERS",
+                        "items": [],
+                    },
+                ),
+            ):
+                prepared = narration_cost_review.prepare()
+                snapshot = narration_cost_review.snapshot()
+
+            self.assertEqual(prepared["prepared"], 0)
+            self.assertFalse(stale_response.exists())
+            self.assertFalse(stale_approved.exists())
+            self.assertEqual(
+                snapshot["status"],
+                "WAITING_FOR_PROVIDER_QUOTE",
+            )
 
 if __name__ == "__main__":
     unittest.main()
