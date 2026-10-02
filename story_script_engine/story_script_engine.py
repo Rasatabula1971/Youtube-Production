@@ -209,8 +209,9 @@ def build_script_request(
         "Use the supplied format psychology profile rather than generic engagement advice.",
         (
             "Apply the approved Channel Voice Profile to wording, narrator posture, "
-            "technical-language treatment and prohibited-style rules. Research, "
-            "Packaging and format psychology remain higher-priority constraints."
+            "technical-language treatment and prohibited-style rules. Verified "
+            "research, the accepted viewer/story contract and format psychology "
+            "remain higher-priority constraints."
             if voice_is_active
             else (
                 "No approved Channel Voice Profile exists. Do not invent a persistent "
