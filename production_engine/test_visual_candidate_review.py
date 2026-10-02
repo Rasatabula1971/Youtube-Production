@@ -283,6 +283,45 @@ class VisualCandidateReviewTests(unittest.TestCase):
                         candidate_id="candidate-1",
                     )
 
+    def test_unknown_discovery_only_source_cannot_use_rights_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results, storyboards, reviews = self.paths(root)
+            current = card("shot-001", "unknown discovery clip")
+            self.write_board(storyboards, [current])
+            shot = result_shot(current, "unknown-1")
+            shot["candidates"][0].update(
+                {
+                    "source_tier": "UNKNOWN",
+                    "rights_status": "DISCOVERY_ONLY",
+                    "commercial_use_allowed": None,
+                    "human_review_required": True,
+                    "state": "HUMAN_REVIEW_REQUIRED",
+                }
+            )
+            result_path = self.write_results(results, [shot])
+
+            with (
+                patch.object(review, "RESULT_DIR", results),
+                patch.object(review, "STORYBOARD_DIR", storyboards),
+                patch.object(review, "REVIEW_DIR", reviews),
+                patch.object(
+                    review,
+                    "search_result_is_current",
+                    side_effect=current_result_state,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "unsupported source tier",
+                ):
+                    review.apply_action(
+                        result_file=str(result_path),
+                        shot_id="shot-001",
+                        action="SELECT",
+                        candidate_id="unknown-1",
+                    )
+
     def test_stale_result_provenance_blocks_candidate_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
