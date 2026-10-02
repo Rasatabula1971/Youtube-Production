@@ -38,6 +38,9 @@ class VisualRightsReviewTests(unittest.TestCase):
             "source_url": "https://example.test/creator-1",
             "creator": "Example Creator",
             "license": "Context review required",
+            "rights_status": "DISCOVERY_ONLY",
+            "commercial_use_allowed": None,
+            "human_review_required": True,
             "state": "HUMAN_REVIEW_REQUIRED",
         }
         shot = {
@@ -58,7 +61,9 @@ class VisualRightsReviewTests(unittest.TestCase):
             "artifact": "visual_candidate_review",
             "concept_id": "c1",
             "format": "short",
+            "status": "READY_FOR_ROUGH_CUT",
             "source_result": str(result_path),
+            "source_result_sha256": rights.sha256_file(result_path),
             "decisions": {
                 "shot-001": {
                     "action": "SELECT",
@@ -81,6 +86,136 @@ class VisualRightsReviewTests(unittest.TestCase):
                 patch.object(rights, "SEARCH_RESULT_DIR", result_dir),
                 patch.object(rights, "CANDIDATE_REVIEW_DIR", review_dir),
                 patch.object(rights, "RIGHTS_DIR", rights_dir),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    side_effect=lambda path: (
+                        (
+                            json.loads(path.read_text(encoding="utf-8")),
+                            Path("request"),
+                            {},
+                        )
+                        if path.exists()
+                        else None
+                    ),
+                ),
             ):
                 saved = rights.apply_action(
                     candidate_review_file=str(review_path),
@@ -107,6 +242,36 @@ class VisualRightsReviewTests(unittest.TestCase):
             self.assertEqual(snapshot["decided"], 1)
             self.assertEqual(snapshot["approved"], 1)
             self.assertEqual(snapshot["stale_removed"], 0)
+
+    def test_stale_search_result_blocks_rights_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_dir, review_dir, rights_dir, _, review_path = self.fixture(root)
+            with (
+                patch.object(rights, "SEARCH_RESULT_DIR", result_dir),
+                patch.object(rights, "CANDIDATE_REVIEW_DIR", review_dir),
+                patch.object(rights, "RIGHTS_DIR", rights_dir),
+                patch.object(
+                    rights,
+                    "search_result_is_current",
+                    return_value=None,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "STALE_VISUAL_CANDIDATE_REVIEW",
+                ):
+                    rights.apply_action(
+                        candidate_review_file=str(review_path),
+                        shot_id="shot-001",
+                        decision="APPROVE_CONTEXT_USE",
+                        transformative_purpose="Explain the event.",
+                    )
+                snapshot = rights.snapshot()
+
+            self.assertEqual(snapshot["required"], 0)
+            self.assertEqual(snapshot["stale_reviews"], 1)
+            self.assertEqual(snapshot["items"], [])
 
     def test_selected_candidate_change_invalidates_old_rights_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
