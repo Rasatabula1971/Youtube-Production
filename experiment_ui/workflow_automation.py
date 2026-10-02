@@ -151,13 +151,14 @@ def run_until_human_gate() -> dict[str, Any]:
             "WAITING_NARRATION_RENDER_RETURN",
             "NARRATION_AUDIO_QC_FAILED",
             "NARRATION_AUDIO_READY",
+            "VISUAL_SEARCH_READY",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
                 "completed_actions": completed_actions,
                 "workflow_state": guidance.get("state"),
                 "message": guidance.get("current_title")
-                or "Narration audio is at a human/provider boundary.",
+                or "Workflow reached the current production boundary.",
             }
 
         action_id = next_enabled_action(readiness)
