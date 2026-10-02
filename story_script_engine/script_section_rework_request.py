@@ -340,7 +340,7 @@ def build_section_rework_request(
             "Rewrite only the selected target in a later generation step.",
             "Adjacent context is read-only and must not be rewritten.",
             "Preserve every field in target.immutable_metadata exactly.",
-            "Do not add factual claims outside target.allowed claim IDs.",
+            "Do not add factual claims outside allowed_claims or change the target claim IDs.",
             "Preserve the approved package promise, Story Plan intent, psychology constraints, and bound Channel Voice.",
             "Do not copy or closely paraphrase source-video wording.",
             "Return no replacement during Slice 3; this artifact is request preparation only.",
