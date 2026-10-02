@@ -119,11 +119,11 @@ def _snapshot_file(
     return snapshot
 
 
-def _restore_file_snapshot(
+def _validated_snapshot_paths(
     snapshot: dict[str, Any],
     *,
     allowed_backup_root: Path,
-) -> None:
+) -> tuple[Path, Path | None]:
     if not isinstance(snapshot, dict):
         raise ValueError("Transaction file snapshot must be an object")
     destination_text = str(snapshot.get("destination") or "").strip()
@@ -135,13 +135,11 @@ def _restore_file_snapshot(
         raise ValueError("Transaction file snapshot existed must be boolean")
 
     if not existed:
-        if destination.exists():
-            if not destination.is_file():
-                raise ValueError(
-                    f"Cannot roll back non-file destination: {destination}"
-                )
-            destination.unlink()
-        return
+        if destination.exists() and not destination.is_file():
+            raise ValueError(
+                f"Cannot roll back non-file destination: {destination}"
+            )
+        return destination, None
 
     backup_text = str(snapshot.get("backup") or "").strip()
     expected_hash = str(snapshot.get("backup_sha256") or "").strip()
@@ -154,6 +152,22 @@ def _restore_file_snapshot(
         raise ValueError(f"Cannot recover transaction: missing backup {backup}")
     if sha256_file(backup) != expected_hash:
         raise ValueError("Transaction backup hash changed")
+    return destination, backup
+
+
+def _restore_file_snapshot(
+    snapshot: dict[str, Any],
+    *,
+    allowed_backup_root: Path,
+) -> None:
+    destination, backup = _validated_snapshot_paths(
+        snapshot,
+        allowed_backup_root=allowed_backup_root,
+    )
+    if backup is None:
+        if destination.exists():
+            destination.unlink()
+        return
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write_bytes(destination, backup.read_bytes())
@@ -201,6 +215,12 @@ def recover_prepared_transaction(transaction_path: Path) -> dict[str, Any]:
         if not snapshots:
             raise ValueError("Script edit transaction has no file snapshots")
         allowed_backup_root = transaction_path.parent / "backups"
+        # Preflight every snapshot before changing any destination.
+        for key in sorted(snapshots):
+            _validated_snapshot_paths(
+                snapshots[key],
+                allowed_backup_root=allowed_backup_root,
+            )
         for key in sorted(snapshots):
             _restore_file_snapshot(
                 snapshots[key],
