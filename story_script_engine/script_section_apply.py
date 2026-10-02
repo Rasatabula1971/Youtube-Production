@@ -26,6 +26,7 @@ from script_section_state import (
     validate_state,
 )
 from script_section_rework_runner import (
+    REWORK_RESPONSES_DIR,
     alternatives_artifact_integrity_errors,
     assert_request_current,
     validate_response as validate_rework_response,
@@ -612,6 +613,7 @@ def apply_selection(
     review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
     review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
     approved_dir: Path = APPROVED_DIR,
+    rework_responses_dir: Path = REWORK_RESPONSES_DIR,
 ) -> dict[str, Any]:
     """Apply ORIGINAL/A/B/C only after verifying all bound artifacts are current."""
     alternatives_path = alternatives_path.resolve()
@@ -662,8 +664,12 @@ def apply_selection(
     rework_request = load_json(request_path)
     assert_request_current(rework_request)
 
-    response_path = Path(
-        str(provenance.get("model_response") or "")
+    response_path = (
+        rework_responses_dir
+        / (
+            f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+            f"{safe_slug(target_id)}.json"
+        )
     ).resolve()
     integrity_errors = alternatives_artifact_integrity_errors(
         artifact,
