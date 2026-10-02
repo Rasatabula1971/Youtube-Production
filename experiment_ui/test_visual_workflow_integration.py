@@ -19,6 +19,8 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         edit_preview_state=None,
         ffmpeg_ready=True,
         edit_gate=None,
+        final_handoff_state=None,
+        readiness=None,
     ):
         stack = ExitStack()
         self.addCleanup(stack.close)
@@ -190,10 +192,27 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                     }
                 ),
             ),
+            patch.object(
+                server,
+                "final_production_handoff_artifact_state",
+                return_value=(
+                    final_handoff_state
+                    if final_handoff_state is not None
+                    else {
+                        "status": "STALE_OR_INCOMPLETE",
+                        "ready": False,
+                        "expected": 1,
+                        "current": 0,
+                        "stale": 0,
+                        "blocked": 0,
+                        "ready_for_final_sound": 0,
+                    }
+                ),
+            ),
         )
         for context in patches:
             stack.enter_context(context)
-        return server.workflow_guidance({})
+        return server.workflow_guidance(readiness or {})
 
     def test_candidate_gate_precedes_rights_and_rough_cut(self):
         workflow = self.workflow(
@@ -472,6 +491,153 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
             workflow["current_detail"],
         )
 
+    def test_approved_edit_direction_unlocks_final_handoff_prepare(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={
+                "status": "COMPLETE",
+                "complete": True,
+                "rework": 0,
+                "approved": 1,
+            },
+            final_handoff_state={
+                "status": "STALE_OR_INCOMPLETE",
+                "ready": False,
+                "expected": 1,
+                "current": 0,
+                "stale": 0,
+                "blocked": 0,
+                "ready_for_final_sound": 0,
+            },
+            readiness={
+                "final_production_handoff_prepare": {
+                    "enabled": True,
+                    "reason": "ready",
+                }
+            },
+        )
+        self.assertEqual(workflow["state"], "ACTION_REQUIRED")
+        self.assertEqual(
+            workflow["current_title"],
+            "Prepare Final Production Handoff",
+        )
+
+    def test_current_final_handoff_stops_at_slice20_boundary(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={
+                "status": "COMPLETE",
+                "complete": True,
+                "rework": 0,
+                "approved": 1,
+            },
+            final_handoff_state={
+                "status": "CURRENT",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+                "stale": 0,
+                "blocked": 0,
+                "ready_for_final_sound": 1,
+            },
+        )
+        self.assertEqual(
+            workflow["state"],
+            "FINAL_PRODUCTION_HANDOFF_READY",
+        )
+        self.assertIn("Slice 20 stops here", workflow["current_detail"])
+
+    def test_blocked_final_handoff_stops_without_paid_action(self):
+        workflow = self.workflow(
+            {
+                "candidate_gate": {"packets": [], "stale_shots": 0},
+                "candidate_complete": True,
+                "rights_gate": {"required": 0, "complete": True},
+                "rights_complete": True,
+                "rough_cuts_ready": True,
+                "rough_gate": {"items": [], "complete": True},
+                "rough_gate_complete": True,
+                "gap_plans_ready": True,
+                "expected_branches": [["c1", "short"]],
+            },
+            assembly_state={
+                "status": "CURRENT",
+                "ready": True,
+                "waiting_for_premium_assets": 0,
+                "waiting_for_local_assets": 0,
+                "waiting_for_existing_retry": 0,
+                "ready_for_edit_assembly": 1,
+                "expected": 1,
+            },
+            edit_manifest_state={"status": "CURRENT", "ready": True},
+            edit_preview_state={"status": "CURRENT", "ready": True},
+            edit_gate={
+                "status": "COMPLETE",
+                "complete": True,
+                "rework": 0,
+                "approved": 1,
+            },
+            final_handoff_state={
+                "status": "CURRENT",
+                "ready": True,
+                "expected": 1,
+                "current": 1,
+                "stale": 0,
+                "blocked": 1,
+                "ready_for_final_sound": 0,
+            },
+        )
+        self.assertEqual(
+            workflow["state"],
+            "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+        )
+        self.assertIn(
+            "no paid provider",
+            workflow["current_detail"].lower(),
+        )
+
     def test_current_premium_assembly_waits_for_external_asset(self):
         workflow = self.workflow(
             {
@@ -554,7 +720,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow_automation.AUTO_MACHINE_ACTION_ORDER[
-                search_index : search_index + 8
+                search_index : search_index + 9
             ],
             [
                 "visual_search_acquire",
@@ -565,6 +731,7 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "visual_assembly_prepare",
                 "edit_manifest_prepare",
                 "edit_preview_render",
+                "final_production_handoff_prepare",
             ],
         )
         self.assertIn("visual_rough_cut_prepare", server.ACTION_DEFS)
