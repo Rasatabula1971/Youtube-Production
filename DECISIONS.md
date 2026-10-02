@@ -1370,3 +1370,44 @@ Branch-level `ACCEPT` cannot bypass an outstanding section rework request.
 Slice 2 adds no FAIR/model call, alternative generation, narration replacement,
 or browser control.
 
+
+## D-073 — Selective rework requests are bounded, immutable-context artifacts
+
+**Status:** Accepted
+
+Selective Script Rework Slice 3 prepares a request artifact only after a target
+has been explicitly marked `REWORK_REQUESTED`. It performs no model call and
+cannot change Script Draft text.
+
+The request contains the selected target, its immutable structural metadata and
+only the immediately adjacent targets as read-only flow context. It does not
+send the full script merely to rewrite one section.
+
+Factual scope is bounded to accepted claims already mapped to the selected
+target. Story context is limited to the target's referenced Story beat(s) plus
+the shared story question and opening/payoff/closing intent. The branch
+psychology profile/contract, approved package constraints and exact bound
+Channel Voice are preserved.
+
+Each request is provenance-bound to the exact:
+
+- Script Draft and SHA-256;
+- persisted section-review state file and SHA-256;
+- Human Script Gate request and SHA-256;
+- original Script Request and SHA-256;
+- section-state revision;
+- script revision;
+- target revision; and
+- target content SHA-256.
+
+Before later inference may use the request, validation must prove those values
+still match. Validation rebuilds the expected request from current trusted
+artifacts, so manual packet edits are also detected.
+
+Preparation and validation are serialized with section-review actions through
+the same in-process lock. A concurrent cancel/rework/state change therefore
+cannot race a successful current-state validation.
+
+Slice 3 creates no alternatives and does not call FAIR. Alternative generation
+remains Slice 4.
+
