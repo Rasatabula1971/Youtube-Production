@@ -268,8 +268,10 @@ def validate_response(
         primary = _required_text(item.get("primary_driver"), f"angles[{index}].primary_driver")
         if primary not in allowed_drivers:
             raise ValueError(f"Unsupported primary_driver: {primary}")
-        secondary = str(item.get("secondary_driver") or "").strip() or None
-        if secondary is not None and secondary not in allowed_drivers:
+        secondary = _required_text(
+            item.get("secondary_driver"), f"angles[{index}].secondary_driver"
+        )
+        if secondary not in allowed_drivers:
             raise ValueError(f"Unsupported secondary_driver: {secondary}")
         if secondary == primary:
             raise ValueError("secondary_driver must differ from primary_driver")
