@@ -128,6 +128,8 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/packaging-gate", script)
         self.assertIn("renderTitleDirectionReview", script)
         self.assertIn("/api/title-direction-gate", script)
+        self.assertIn('id="packagingBriefPanel"', html)
+        self.assertIn("renderPackagingBrief", script)
         self.assertIn("renderResearchReview", script)
         self.assertIn("/api/research-gate", script)
         self.assertIn("renderScriptSectionReview", script)
@@ -151,6 +153,7 @@ class ExperimentUiTests(unittest.TestCase):
             "title_direction_prepare",
             "title_direction_generate",
             "title_direction_gate_prepare",
+            "packaging_brief_prepare",
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
@@ -159,12 +162,13 @@ class ExperimentUiTests(unittest.TestCase):
         )
         self.assertEqual(
             server.AUTO_MACHINE_ACTION_ORDER[
-                script_index + 1 : script_index + 4
+                script_index + 1 : script_index + 5
             ],
             [
                 "title_direction_prepare",
                 "title_direction_generate",
                 "title_direction_gate_prepare",
+                "packaging_brief_prepare",
             ],
         )
 
