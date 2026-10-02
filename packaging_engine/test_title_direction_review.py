@@ -174,9 +174,10 @@ class TitleDirectionReviewTests(unittest.TestCase):
                 request = json.loads(
                     paths["request_path"].read_text(encoding="utf-8")
                 )
+                upstream_after = upstream.read_bytes()
 
         self.assertEqual(result["status"], "TITLE_DIRECTION_REWORK_REQUESTED")
-        self.assertEqual(upstream.read_bytes(), before)
+        self.assertEqual(upstream_after, before)
         self.assertEqual(request["human_rework_iteration"], 1)
         self.assertEqual(
             request["human_rework_scope"],
