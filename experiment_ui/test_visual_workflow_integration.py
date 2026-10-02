@@ -209,8 +209,11 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "gap_plans_ready": True,
             }
         )
-        self.assertEqual(workflow["state"], "VISUAL_ASSEMBLY_READY")
-        self.assertIn("No unresolved shot met", workflow["current_detail"])
+        self.assertEqual(
+            workflow["state"],
+            "VISUAL_GAPS_READY_NO_SPEND",
+        )
+        self.assertIn("no unresolved", workflow["current_detail"].lower())
 
     def test_completed_spend_gate_exposes_authorized_generation_state(self):
         workflow = self.workflow(
@@ -231,8 +234,11 @@ class VisualWorkflowIntegrationTests(unittest.TestCase):
                 "authorized": 1,
             },
         )
-        self.assertEqual(workflow["state"], "VISUAL_GENERATION_AUTHORIZED")
-        self.assertIn("cost ceilings", workflow["current_detail"])
+        self.assertEqual(
+            workflow["state"],
+            "VISUAL_SPEND_DECISIONS_COMPLETE",
+        )
+        self.assertIn("global workflow cap", workflow["current_detail"])
 
 
     def test_visual_machine_order_stops_at_human_boundaries(self):

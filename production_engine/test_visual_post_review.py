@@ -20,10 +20,10 @@ def test_rights_approved_editorial_excerpt_can_enter_rough_cut(tmp_path):
  assert rough["scenes"][0]["visual_assignment"]["status"]=="APPROVED_EDITORIAL_EXCERPT"
 
 def test_gap_planner_keeps_paid_generation_locked(tmp_path):
- rough={"concept_id":"c","format":"long","scenes":[{"shot_id":"s1","time_range":{},"story_purpose":"hook","desired_visual":"hero","cinematic_direction":{"camera_movement":"push_in"},"visual_value_score":{"total":20},"premium_generation_candidate":True,"visual_assignment":{"status":"PLACEHOLDER","reason":"gap"}}]}
+ rough={"status":"READY_FOR_HUMAN_ROUGH_CUT_GATE","concept_id":"c","format":"long","scenes":[{"shot_id":"s1","time_range":{},"story_purpose":"hook","desired_visual":"hero","cinematic_direction":{"camera_movement":"push_in"},"visual_value_score":{"total":20},"premium_generation_candidate":True,"visual_assignment":{"status":"PLACEHOLDER","reason":"gap"}}]}
  rp=tmp_path/"rough.json";reviewp=tmp_path/"review.json";rp.write_text("rough",encoding="utf-8");reviewp.write_text("review",encoding="utf-8")
  import hashlib
- review={"approved_for_gap_planning":True,"source_rough_cut_sha256":hashlib.sha256(b"rough").hexdigest()}
+ review={"concept_id":"c","format":"long","decision":"APPROVE_WITH_GAPS","approved_for_gap_planning":True,"source_rough_cut":str(rp.resolve()),"source_rough_cut_sha256":hashlib.sha256(b"rough").hexdigest()}
  plan=build_gaps(rough,review,rp,reviewp)
  assert plan["gaps"][0]["resolution_class"]=="D_HERO_GENERATION"
  assert plan["gaps"][0]["premium_generation_authorized"] is False

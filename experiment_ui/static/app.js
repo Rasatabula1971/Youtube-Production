@@ -622,7 +622,9 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_VISUAL_CANDIDATE_GATE: "Choose visuals",
     HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
     HUMAN_ROUGH_CUT_GATE: "Review rough cut",
-    HUMAN_VISUAL_SPEND_GATE: "Review visual spend"
+    HUMAN_VISUAL_SPEND_GATE: "Review visual spend",
+    VISUAL_GAPS_READY_NO_SPEND: "No visual spend needed",
+    VISUAL_SPEND_DECISIONS_COMPLETE: "Visual spend decisions complete"
   };
   if (analysisHumanGateLabels[workflow.state]) {
     return {
@@ -4499,6 +4501,8 @@ function renderAnalysis(data) {
     "HUMAN_VISUAL_RIGHTS_GATE",
     "HUMAN_ROUGH_CUT_GATE",
     "HUMAN_VISUAL_SPEND_GATE",
+    "VISUAL_GAPS_READY_NO_SPEND",
+    "VISUAL_SPEND_DECISIONS_COMPLETE",
     "HUMAN_EDIT_PREVIEW_GATE"
   ].includes(workflow.state);
 
@@ -4550,9 +4554,11 @@ function renderAnalysis(data) {
   );
   renderVisualRoughCutReview(data.visual_rough_cut_gate || {});
   renderVisualSpendReview(
-    ["HUMAN_VISUAL_SPEND_GATE", "VISUAL_GENERATION_AUTHORIZED"].includes(
-      workflow.state
-    )
+    [
+      "HUMAN_VISUAL_SPEND_GATE",
+      "VISUAL_SPEND_DECISIONS_COMPLETE",
+      "VISUAL_GENERATION_AUTHORIZED"
+    ].includes(workflow.state)
       ? (data.visual_spend_gate || {})
       : {}
   );
@@ -4591,6 +4597,8 @@ function renderAnalysis(data) {
       "HUMAN_VISUAL_RIGHTS_GATE",
       "HUMAN_ROUGH_CUT_GATE",
       "HUMAN_VISUAL_SPEND_GATE",
+      "VISUAL_GAPS_READY_NO_SPEND",
+      "VISUAL_SPEND_DECISIONS_COMPLETE",
       "HUMAN_EDIT_PREVIEW_GATE",
       "WAITING_FOR_FINAL_VISUAL_ASSETS",
       "FINAL_EDIT_DIRECTION_APPROVED"

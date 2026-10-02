@@ -271,6 +271,7 @@ from visual_spend_review import (
     apply_action as apply_visual_spend_review_action,
     snapshot as visual_spend_review_snapshot,
 )
+from visual_gap_planner import gap_plan_is_current
 from visual_generated_asset_import import (
     register as register_generated_visual_asset,
     snapshot as generated_visual_asset_snapshot,
@@ -2687,20 +2688,14 @@ def visual_post_search_artifact_state() -> dict[str, Any]:
             )
             if not review_path.exists() or not gap_path.exists():
                 continue
-            gap = safe_load_json(gap_path)
-            provenance = (
-                gap.get("provenance", {})
-                if isinstance(gap, dict)
-                else {}
-            )
-            if (
-                isinstance(provenance, dict)
-                and provenance.get("rough_cut_sha256")
-                == sha256_file(rough_path)
-                and provenance.get("rough_cut_review_sha256")
-                == sha256_file(review_path)
-            ):
-                gap_current.add((concept_id, branch_format))
+            gap_state = gap_plan_is_current(gap_path)
+            if gap_state is not None:
+                gap = gap_state[0]
+                if (
+                    str(gap.get("concept_id") or "") == concept_id
+                    and str(gap.get("format") or "") == branch_format
+                ):
+                    gap_current.add((concept_id, branch_format))
 
     gap_plans_ready = (
         bool(rough_gate.get("complete"))
@@ -6008,10 +6003,39 @@ def workflow_guidance(
                 "current_detail": (
                     "Existing/free sourcing has already been tried. For each "
                     "high-value unresolved shot, retry existing sources, keep a "
-                    "placeholder, or authorize a specific maximum spend."
+                    "placeholder, or authorize a specific maximum spend. The "
+                    "workflow-wide USD hard cap applies across every current branch."
                 ),
                 "next_action_id": None,
-                "next_title": "Prepare generation briefs or assembly plan",
+                "next_title": "Slice 18: prepare generation or assembly handoff",
+            }
+
+        if hero_count == 0:
+            return {
+                "state": "VISUAL_GAPS_READY_NO_SPEND",
+                "current_action_id": None,
+                "current_title": "Visual Gap Plan Ready — No Spend Needed",
+                "current_detail": (
+                    "The approved rough cut has current gap plans, but no unresolved "
+                    "shot met the premium-generation threshold. Slice 17 stops here "
+                    "with paid generation still locked."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 18: build the zero-cost visual assembly",
+            }
+
+        if spend_gate.get("complete"):
+            return {
+                "state": "VISUAL_SPEND_DECISIONS_COMPLETE",
+                "current_action_id": None,
+                "current_title": "Visual Spend Decisions Complete",
+                "current_detail": (
+                    "Every current premium candidate has a human decision and all "
+                    "authorized ceilings fit the global workflow cap. No generation "
+                    "brief or provider action is created in Slice 17."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 18: prepare generation or assembly handoff",
             }
 
         authorized = int(spend_gate.get("authorized") or 0)

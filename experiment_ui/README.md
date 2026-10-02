@@ -715,3 +715,43 @@ The candidate UI now distinguishes:
 
 After the Rights Gate is complete, Slice 16 handles safe asset acquisition and
 rough-cut preparation.
+
+## Slice 17 — Human Rough-Cut approval → Visual Spend boundary
+
+After the Human Rough-Cut Gate accepts the current rough cut with unresolved
+gaps, Continue Automatically runs deterministic zero-spend gap planning and
+then stops.
+
+The possible Slice 17 endpoints are:
+
+```text
+HUMAN_ROUGH_CUT_GATE
+        ↓
+Plan Remaining Visual Gaps
+        ↓
+HUMAN_VISUAL_SPEND_GATE
+```
+
+when a high-value unresolved shot qualifies for premium generation, or:
+
+```text
+VISUAL_GAPS_READY_NO_SPEND
+```
+
+when no unresolved shot reaches the premium threshold.
+
+After every premium candidate receives a human decision, Slice 17 stops at
+`VISUAL_SPEND_DECISIONS_COMPLETE`. Generation briefs and edit assembly are
+left to the next slice.
+
+Gap planning is provenance-bound to the exact current rough cut and exact
+rough-cut approval. Old gap plans are removed after rough-cut rework or
+mutation.
+
+The spend gate enforces both the per-shot cap and one workflow-wide USD cap
+across every current branch. Authorizations are serialized so simultaneous
+approvals cannot race past the workflow cap. NaN, Infinity, stale plans and
+invalid spend configuration fail closed.
+
+Choosing **Authorize Generation** records only a maximum permitted spend. It
+does not call a provider, create a generation job, or spend money in Slice 17.

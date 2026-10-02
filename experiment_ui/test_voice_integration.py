@@ -102,6 +102,13 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
         self.assertIn("VISUAL_SEARCH_READY", script)
         self.assertIn("Visual search plan ready", script)
 
+    def test_ui_knows_slice17_visual_spend_boundaries(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn("VISUAL_GAPS_READY_NO_SPEND", script)
+        self.assertIn("VISUAL_SPEND_DECISIONS_COMPLETE", script)
+        self.assertIn("No visual spend needed", script)
+        self.assertIn("Visual spend decisions complete", script)
+
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (
             patch.object(

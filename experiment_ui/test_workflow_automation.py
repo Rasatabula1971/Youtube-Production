@@ -842,6 +842,129 @@ class WorkflowAutomationTests(unittest.TestCase):
             "HUMAN_ROUGH_CUT_GATE",
         )
 
+    def test_rough_cut_approval_runs_gap_plan_then_stops_at_spend_gate(self):
+        state = {"done": False}
+
+        def readiness():
+            if not state["done"]:
+                return {
+                    "visual_gap_prepare": {
+                        "enabled": True,
+                        "reason": "approved rough cut needs gap planning",
+                    }
+                }
+            return {
+                "visual_generation_handoff_prepare": {
+                    "enabled": True,
+                    "reason": "must not run before spend decision",
+                }
+            }
+
+        def guidance(_readiness):
+            if state["done"]:
+                return {
+                    "state": "HUMAN_VISUAL_SPEND_GATE",
+                    "current_title": "Decide Whether Any Visual Is Worth Paying For",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_title": "Plan Remaining Visual Gaps",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, "visual_gap_prepare")
+            state["done"] = True
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(
+            result["completed_actions"],
+            ["visual_gap_prepare"],
+        )
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_VISUAL_SPEND_GATE",
+        )
+
+    def test_no_spend_gap_boundary_blocks_assembly(self):
+        readiness = {
+            "visual_assembly_prepare": {
+                "enabled": True,
+                "reason": "stale downstream readiness",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "VISUAL_GAPS_READY_NO_SPEND",
+                    "current_title": "Visual Gap Plan Ready — No Spend Needed",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "VISUAL_GAPS_READY_NO_SPEND",
+        )
+
+    def test_completed_visual_spend_blocks_generation_handoff(self):
+        readiness = {
+            "visual_generation_handoff_prepare": {
+                "enabled": True,
+                "reason": "authorized downstream work",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "VISUAL_SPEND_DECISIONS_COMPLETE",
+                    "current_title": "Visual Spend Decisions Complete",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "VISUAL_SPEND_DECISIONS_COMPLETE",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {
