@@ -1331,3 +1331,39 @@ This creates the provenance needed for later slices to prove that selective
 rework changed only the chosen target while accepted/locked material remained
 unchanged.
 
+
+## D-072 — Section review actions are persistent, idempotent and cannot mutate narration
+
+**Status:** Accepted
+
+Selective Script Rework Slice 2 adds backend state transitions only. Script
+wording remains immutable and `script_revision` therefore remains unchanged.
+
+The persisted section-review state supports `ACCEPT`, `LOCK`, `UNLOCK`,
+`REWORK`, and `CANCEL_REWORK`.
+
+`ACCEPT` means approved and frozen: the target becomes `ACCEPTED`, locked and
+non-editable. `LOCK` is weaker and may freeze a still-`PENDING` target without
+approving it. Unlocking an accepted target reopens it to `PENDING`.
+
+A locked target cannot be marked for rework. Rework requires one bounded reason;
+`CUSTOM_INSTRUCTION` additionally requires a non-empty human instruction.
+Unknown target IDs, unsupported actions/reasons and stale draft hashes fail
+closed.
+
+Every material state transition increments both the target revision and the
+section-state revision. Equivalent retried operations are idempotent and do not
+inflate revisions.
+
+Section state is stored separately from the immutable Script Draft and survives
+re-running Script Gate preparation while the source draft SHA-256 is unchanged.
+A new draft hash receives fresh state rather than inheriting decisions made
+against different words.
+
+Marking any target `REWORK_REQUESTED`, or unlocking an `ACCEPTED` target,
+invalidates an existing branch-level approval and approved script bundle.
+Branch-level `ACCEPT` cannot bypass an outstanding section rework request.
+
+Slice 2 adds no FAIR/model call, alternative generation, narration replacement,
+or browser control.
+
