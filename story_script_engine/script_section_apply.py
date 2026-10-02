@@ -1,8 +1,9 @@
 """Human selection and safe application of script rework alternatives.
 
-Slice 3 is the first destructive selective-rework step. It changes only one
-chosen target after explicit human selection and protects the operation with
-backups plus a recoverable transaction journal.
+This downstream selective-rework step is destructive only after explicit human
+selection. It changes one chosen target, verifies the exact Slice 4 alternatives
+artifact/model response, and protects the operation with backups plus a
+recoverable transaction journal.
 """
 
 from __future__ import annotations
@@ -26,8 +27,11 @@ from script_section_state import (
     validate_state,
 )
 from script_section_rework_runner import (
+    REWORK_RESPONSES_DIR,
+    alternatives_artifact_integrity_errors,
     assert_request_current,
     validate_response as validate_rework_response,
+    validation_contract_sha256 as rework_validation_contract_sha256,
 )
 
 from script_review import (
@@ -610,6 +614,7 @@ def apply_selection(
     review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
     review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
     approved_dir: Path = APPROVED_DIR,
+    rework_responses_dir: Path = REWORK_RESPONSES_DIR,
 ) -> dict[str, Any]:
     """Apply ORIGINAL/A/B/C only after verifying all bound artifacts are current."""
     alternatives_path = alternatives_path.resolve()
@@ -659,6 +664,26 @@ def apply_selection(
 
     rework_request = load_json(request_path)
     assert_request_current(rework_request)
+
+    response_path = (
+        rework_responses_dir
+        / (
+            f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+            f"{safe_slug(target_id)}.json"
+        )
+    ).resolve()
+    integrity_errors = alternatives_artifact_integrity_errors(
+        artifact,
+        rework_request,
+        request_path=request_path,
+        response_path=response_path,
+        contract_hash=rework_validation_contract_sha256(),
+    )
+    if integrity_errors:
+        raise ValueError(
+            "Alternatives artifact integrity check failed: "
+            + "; ".join(integrity_errors)
+        )
 
     if str(artifact.get("concept_id") or "") != str(
         rework_request.get("concept_id") or ""

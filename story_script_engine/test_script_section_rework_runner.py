@@ -189,16 +189,19 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                     "alternative_id": "A",
                     "replacement_text": "Instead of taking the force in one rigid hit, the joint redirects part of that load as it moves.",
                     "change_summary": "Uses a concrete force-path image with minimal structural change.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "B",
                     "replacement_text": "Picture the force entering the joint and being guided through a different path as the joint flexes.",
                     "change_summary": "Makes the mechanism more visual and conversational.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "C",
                     "replacement_text": "The motion is doing work: it changes the route the force takes through the structure.",
                     "change_summary": "Uses a shorter reveal-first explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
             ],
         }
@@ -308,6 +311,117 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
             _, _, _, request = self.build_request(Path(tmp))
             validation = rework_runner.validate_response(
                 self.response(),
+                request,
+            )
+
+        self.assertTrue(validation["valid"], validation["errors"])
+
+
+    def test_schema_requires_exact_claim_ids_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            schema = rework_runner.response_schema(request)
+
+        item = schema["properties"]["alternatives"]["items"]
+        self.assertIn("claim_ids_used", item["required"])
+        claim_schema = item["properties"]["claim_ids_used"]
+        self.assertEqual(claim_schema["minItems"], 1)
+        self.assertEqual(claim_schema["maxItems"], 1)
+        self.assertEqual(
+            claim_schema["items"]["enum"],
+            ["clm001"],
+        )
+
+    def test_response_rejects_extra_fields_and_wrong_types(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            response = self.response()
+            response["unexpected"] = "nope"
+            response["alternatives"][0]["extra"] = "nope"
+            response["alternatives"][1]["replacement_text"] = 123
+
+            validation = rework_runner.validate_response(
+                response,
+                request,
+            )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            any("unsupported fields" in item for item in validation["errors"])
+        )
+        self.assertTrue(
+            any(
+                "replacement_text must be a string" in item
+                for item in validation["errors"]
+            )
+        )
+
+    def test_response_rejects_wrong_or_missing_claim_ids_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            wrong = self.response()
+            wrong["alternatives"][0]["claim_ids_used"] = ["clm999"]
+            missing = self.response()
+            missing["alternatives"][1].pop("claim_ids_used")
+
+            wrong_validation = rework_runner.validate_response(
+                wrong,
+                request,
+            )
+            missing_validation = rework_runner.validate_response(
+                missing,
+                request,
+            )
+
+        self.assertFalse(wrong_validation["valid"])
+        self.assertTrue(
+            any(
+                "claim_ids_used must exactly match" in item
+                for item in wrong_validation["errors"]
+            )
+        )
+        self.assertFalse(missing_validation["valid"])
+        self.assertTrue(
+            any(
+                "missing fields: claim_ids_used" in item
+                for item in missing_validation["errors"]
+            )
+        )
+
+    def test_response_rejects_unsupported_numeric_fact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            response = self.response()
+            response["alternatives"][0]["replacement_text"] = (
+                "The joint redirects the force by exactly 37 percent."
+            )
+
+            validation = rework_runner.validate_response(
+                response,
+                request,
+            )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            any(
+                "unsupported numeric facts" in item
+                for item in validation["errors"]
+            )
+        )
+
+    def test_numeric_fact_is_allowed_when_present_in_bound_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            request["accepted_claims"][0]["statement"] = (
+                "The flexible joint changes load distribution by 20%."
+            )
+            response = self.response()
+            response["alternatives"][0]["replacement_text"] = (
+                "The joint changes load distribution by 20% as it moves."
+            )
+
+            validation = rework_runner.validate_response(
+                response,
                 request,
             )
 
@@ -492,6 +606,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
             request_path = requests_dir / "c1.rework.json"
             request_path.write_text(json.dumps(request), encoding="utf-8")
             before = draft_path.read_bytes()
+            state_before = state_path.read_bytes()
 
             fake_result = {
                 "status": "ACCEPTED",
@@ -557,14 +672,245 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                 )
 
             after = draft_path.read_bytes()
+            state_after = state_path.read_bytes()
             artifact = json.loads(
                 Path(result["alternatives"]).read_text(encoding="utf-8")
             )
 
         self.assertEqual(result["status"], "VALIDATED")
         self.assertEqual(before, after)
+        self.assertEqual(state_before, state_after)
         self.assertIsNone(artifact["selection"])
         self.assertEqual(artifact["target_id"], "section:explanation_02")
+
+
+    def test_run_one_passes_strict_claim_schema_to_fair_bridge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, _, _, request = self.build_request(root)
+            request_path = root / "c1.rework.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            captured = {}
+
+            def capture_bridge_payload(**kwargs):
+                captured["schema"] = kwargs["schema"]
+                return {"settings": {}}
+
+            fake_result = {
+                "status": "ACCEPTED",
+                "reason_code": "OK",
+                "request_id": "req-schema",
+                "provider_id": "test-provider",
+                "model_id": "test-model",
+                "paid_inference_executed": False,
+                "direct_backup_used": False,
+                "direct_backup_may_bill": False,
+                "billing_authorization": None,
+                "attempts": [],
+                "output": json.dumps(self.response()),
+            }
+            config = {
+                "runner": {
+                    "max_prompt_chars": 95000,
+                    "subprocess_timeout_seconds": 1,
+                }
+            }
+
+            with (
+                patch.object(
+                    rework_runner,
+                    "MODEL_RUNS_DIR",
+                    root / "model_runs",
+                ),
+                patch.object(
+                    rework_runner,
+                    "RAW_OUTPUTS_DIR",
+                    root / "raw",
+                ),
+                patch.object(
+                    rework_runner,
+                    "REWORK_RESPONSES_DIR",
+                    root / "responses",
+                ),
+                patch.object(
+                    rework_runner,
+                    "ALTERNATIVES_DIR",
+                    root / "alternatives",
+                ),
+                patch.object(
+                    rework_runner,
+                    "bridge_payload",
+                    side_effect=capture_bridge_payload,
+                ),
+                patch.object(
+                    rework_runner,
+                    "resolve_fair_paths",
+                    return_value={"python": Path(sys.executable)},
+                ),
+                patch.object(
+                    rework_runner,
+                    "call_fair_bridge",
+                    return_value=fake_result,
+                ),
+            ):
+                result = rework_runner.run_one(
+                    request_path,
+                    False,
+                    config,
+                )
+
+        self.assertEqual(result["status"], "VALIDATED")
+        item = captured["schema"]["properties"]["alternatives"]["items"]
+        self.assertIn("claim_ids_used", item["required"])
+        self.assertEqual(
+            item["properties"]["claim_ids_used"]["items"]["enum"],
+            ["clm001"],
+        )
+
+    def test_validated_cache_is_reused_without_new_model_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, _, _, request = self.build_request(root)
+            request_path = root / "c1.rework.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            config = {
+                "runner": {
+                    "max_prompt_chars": 95000,
+                    "subprocess_timeout_seconds": 1,
+                }
+            }
+            fake_result = {
+                "status": "ACCEPTED",
+                "reason_code": "OK",
+                "request_id": "req-cache",
+                "provider_id": "test-provider",
+                "model_id": "test-model",
+                "paid_inference_executed": False,
+                "direct_backup_used": False,
+                "direct_backup_may_bill": False,
+                "billing_authorization": None,
+                "attempts": [],
+                "output": json.dumps(self.response()),
+            }
+
+            model_runs = root / "model_runs"
+            raw = root / "raw"
+            responses = root / "responses"
+            alternatives = root / "alternatives"
+            with (
+                patch.object(rework_runner, "MODEL_RUNS_DIR", model_runs),
+                patch.object(rework_runner, "RAW_OUTPUTS_DIR", raw),
+                patch.object(rework_runner, "REWORK_RESPONSES_DIR", responses),
+                patch.object(rework_runner, "ALTERNATIVES_DIR", alternatives),
+                patch.object(
+                    rework_runner,
+                    "bridge_payload",
+                    return_value={"settings": {}},
+                ),
+                patch.object(
+                    rework_runner,
+                    "resolve_fair_paths",
+                    return_value={"python": Path(sys.executable)},
+                ),
+                patch.object(
+                    rework_runner,
+                    "call_fair_bridge",
+                    return_value=fake_result,
+                ) as model_call,
+            ):
+                first = rework_runner.run_one(request_path, False, config)
+                second = rework_runner.run_one(request_path, False, config)
+
+            calls = model_call.call_count
+
+        self.assertEqual(first["status"], "VALIDATED")
+        self.assertEqual(second["status"], "SKIPPED_ALREADY_VALIDATED")
+        self.assertEqual(calls, 1)
+
+    def test_tampered_cached_alternatives_fail_closed_without_model_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, _, _, request = self.build_request(root)
+            request_path = root / "c1.rework.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            config = {
+                "runner": {
+                    "max_prompt_chars": 95000,
+                    "subprocess_timeout_seconds": 1,
+                }
+            }
+            fake_result = {
+                "status": "ACCEPTED",
+                "reason_code": "OK",
+                "request_id": "req-cache",
+                "provider_id": "test-provider",
+                "model_id": "test-model",
+                "paid_inference_executed": False,
+                "direct_backup_used": False,
+                "direct_backup_may_bill": False,
+                "billing_authorization": None,
+                "attempts": [],
+                "output": json.dumps(self.response()),
+            }
+
+            model_runs = root / "model_runs"
+            raw = root / "raw"
+            responses = root / "responses"
+            alternatives = root / "alternatives"
+            with (
+                patch.object(rework_runner, "MODEL_RUNS_DIR", model_runs),
+                patch.object(rework_runner, "RAW_OUTPUTS_DIR", raw),
+                patch.object(rework_runner, "REWORK_RESPONSES_DIR", responses),
+                patch.object(rework_runner, "ALTERNATIVES_DIR", alternatives),
+                patch.object(
+                    rework_runner,
+                    "bridge_payload",
+                    return_value={"settings": {}},
+                ),
+                patch.object(
+                    rework_runner,
+                    "resolve_fair_paths",
+                    return_value={"python": Path(sys.executable)},
+                ),
+                patch.object(
+                    rework_runner,
+                    "call_fair_bridge",
+                    return_value=fake_result,
+                ) as model_call,
+            ):
+                first = rework_runner.run_one(request_path, False, config)
+                artifact_path = Path(first["alternatives"])
+                artifact = json.loads(
+                    artifact_path.read_text(encoding="utf-8")
+                )
+                artifact["alternatives"][0]["replacement_text"] = (
+                    "Tampered cached wording."
+                )
+                artifact_path.write_text(
+                    json.dumps(artifact),
+                    encoding="utf-8",
+                )
+                second = rework_runner.run_one(
+                    request_path,
+                    False,
+                    config,
+                )
+
+            calls = model_call.call_count
+
+        self.assertEqual(first["status"], "VALIDATED")
+        self.assertEqual(
+            second["status"],
+            "CACHED_ALTERNATIVES_INVALID",
+        )
+        self.assertTrue(
+            any(
+                "artifact content changed" in item
+                for item in second["errors"]
+            )
+        )
+        self.assertEqual(calls, 1)
+
 
 
 if __name__ == "__main__":

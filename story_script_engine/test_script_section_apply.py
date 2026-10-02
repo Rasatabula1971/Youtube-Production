@@ -156,16 +156,19 @@ class ScriptSectionApplyTests(unittest.TestCase):
                     "alternative_id": "A",
                     "replacement_text": "Instead of taking the force in one rigid hit, the joint redirects part of that load as it moves.",
                     "change_summary": "A concrete, surgical force-path explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "B",
                     "replacement_text": "Picture the force entering the joint and being guided through a different path as the joint flexes.",
                     "change_summary": "A more visual and conversational explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "C",
                     "replacement_text": "The motion is doing work: it changes the route the force takes through the structure.",
                     "change_summary": "A shorter reveal-first explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
             ],
         }
@@ -251,6 +254,17 @@ class ScriptSectionApplyTests(unittest.TestCase):
         )
         self.assertTrue(validation["valid"], validation["errors"])
 
+        rework_responses_dir = root / "rework_responses"
+        rework_responses_dir.mkdir()
+        response_path = (
+            rework_responses_dir
+            / "c1.long_form.section_explanation_02.json"
+        )
+        response_path.write_text(
+            json.dumps(response),
+            encoding="utf-8",
+        )
+
         alternatives_dir = root / "alternatives"
         alternatives_dir.mkdir()
         alternatives_path = alternatives_dir / "c1.long_form.explanation.alternatives.json"
@@ -261,6 +275,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
             request_path=rework_request_path,
             provider_id="test-provider",
             model_id="test-model",
+            response_path=response_path,
         )
         alternatives_path.write_text(
             json.dumps(artifact),
@@ -303,11 +318,18 @@ class ScriptSectionApplyTests(unittest.TestCase):
             "transactions_dir": transactions,
         }
 
+    def selection_dirs(self, root):
+        values = self.apply_dirs(root)
+        rework_responses = root / "rework_responses"
+        rework_responses.mkdir(exist_ok=True)
+        values["rework_responses_dir"] = rework_responses
+        return values
+
     def test_select_a_changes_only_selected_target_and_versions_previous_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
 
             old_draft = rework_runner.load_json(paths["draft"])
             old_state = section_state.load_json(paths["state"])
@@ -417,7 +439,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             before = paths["draft"].read_bytes()
 
             result = section_apply.apply_selection(
@@ -446,7 +468,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             section_apply.apply_selection(
                 paths["alternatives"],
                 selection_id="A",
@@ -469,7 +491,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             before = paths["draft"].read_bytes()
 
             artifact = rework_runner.load_json(paths["alternatives"])
@@ -483,7 +505,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError,
-                "failed revalidation",
+                "integrity check failed",
             ):
                 section_apply.apply_selection(
                     paths["alternatives"],
@@ -494,11 +516,51 @@ class ScriptSectionApplyTests(unittest.TestCase):
 
             self.assertEqual(before, paths["draft"].read_bytes())
 
+
+    def test_tampered_model_response_pointer_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self.setup_artifacts(root)
+            dirs = self.selection_dirs(root)
+            before = paths["draft"].read_bytes()
+
+            fake_response = root / "attacker_response.json"
+            fake_response.write_text(
+                json.dumps(self.alternatives_response()),
+                encoding="utf-8",
+            )
+            artifact = rework_runner.load_json(paths["alternatives"])
+            artifact["artifact_provenance"]["model_response"] = str(
+                fake_response.resolve()
+            )
+            artifact["artifact_provenance"]["model_response_sha256"] = (
+                rework_runner.sha256_file(fake_response)
+            )
+            paths["alternatives"].write_text(
+                json.dumps(artifact),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "integrity check failed",
+            ):
+                section_apply.apply_selection(
+                    paths["alternatives"],
+                    selection_id="A",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            after = paths["draft"].read_bytes()
+
+        self.assertEqual(before, after)
+
     def test_stale_section_state_blocks_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             section_state.apply_target_action(
                 paths["state"],
                 paths["draft"],
@@ -522,7 +584,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             old_draft = rework_runner.load_json(paths["draft"])
             old_state = section_state.load_json(paths["state"])
             old_artifact = rework_runner.load_json(paths["alternatives"])

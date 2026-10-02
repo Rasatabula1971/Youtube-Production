@@ -25,6 +25,7 @@ from script_section_apply import (
 from script_section_rework_runner import (
     ALTERNATIVES_DIR,
     REWORK_REQUESTS_DIR,
+    REWORK_RESPONSES_DIR,
     load_runner_config,
     prepare_rework_request,
     run_one as run_section_rework,
@@ -354,6 +355,7 @@ def apply_action(
     drafts_dir: Path = DRAFTS_DIR,
     state_dir: Path = SECTION_STATE_DIR,
     rework_requests_dir: Path = REWORK_REQUESTS_DIR,
+    rework_responses_dir: Path = REWORK_RESPONSES_DIR,
     alternatives_dir: Path = ALTERNATIVES_DIR,
     versions_dir: Path = SCRIPT_VERSIONS_DIR,
     transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
@@ -510,6 +512,7 @@ def apply_action(
             review_requests_dir=review_requests_dir,
             review_responses_dir=review_responses_dir,
             approved_dir=approved_dir,
+            rework_responses_dir=rework_responses_dir,
         )
 
     elif action_value == "MANUAL_EDIT":

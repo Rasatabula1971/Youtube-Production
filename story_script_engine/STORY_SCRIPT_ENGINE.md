@@ -208,13 +208,63 @@ lock. If state changes while a FAIR call is in flight, the runner checks the
 request again before accepting the returned alternatives and writes no
 alternatives artifact from the stale result.
 
+### Slice 4 — bounded A/B/C generation and integrity validation
+
+`GENERATE_ALTERNATIVES` consumes the exact Slice 3 request and asks FAIR for
+three candidate rewrites only. It never edits the Script Draft or section state.
+
+The response contract is strict both in the schema handed to FAIR and in local
+deterministic validation. The top-level response may contain only
+`concept_id`, `format`, `target_id` and `alternatives`. Each alternative
+must contain exactly:
+
+- `alternative_id` — A, B or C in order;
+- `replacement_text`;
+- `change_summary`; and
+- `claim_ids_used`.
+
+`claim_ids_used` must exactly match the accepted claim IDs already mapped to
+the selected target. A target with no mapped claims must return an empty list.
+This field is validation metadata only; it cannot change Script metadata.
+
+A deterministic numeric-fact guard rejects a candidate that introduces a
+numeric value not already present in the original selected text or its bound
+accepted claim statements. This is deliberately conservative and supplements,
+rather than replaces, the normal accepted-claim and full-script validation
+boundaries.
+
+A/B/C must be distinct from one another and from the original target, and each
+candidate still passes the source-overlap block.
+
+The runner validates that the Slice 3 request is still current before FAIR and
+again after FAIR returns. Human state changes while inference is in flight
+therefore discard the returned result.
+
+Validated alternatives are provenance-bound to:
+
+- the exact Slice 3 request and SHA-256;
+- the current validation-contract SHA-256;
+- the exact saved model-response path and SHA-256;
+- the Script Draft and section-state provenance already carried by Slice 3; and
+- the provider/model identity.
+
+Cached alternatives are not trusted merely because a prior model-run report says
+`VALIDATED`. The cached model response is revalidated, the alternatives
+artifact is rebuilt deterministically, and any mismatch fails closed as
+`CACHED_ALTERNATIVES_INVALID` without making another model call.
+
+Human selection resolves the expected model-response path deterministically from
+concept/format/target identity rather than trusting a path stored in the
+alternatives artifact. Before A/B/C can be selected, the artifact must still
+match the exact validated model response and current validation contract.
+
+Slice 4 generation is non-destructive: tests assert both the Script Draft bytes
+and section-state bytes remain unchanged.
+
 ### Existing downstream selective-rework capabilities
 
-The repository already contains later selective-rework capabilities beyond
-Slice 3:
+The repository already contains capabilities beyond Slice 4:
 
-- `GENERATE_ALTERNATIVES` uses the bounded request to ask FAIR for exactly
-  A/B/C and does not mutate the draft;
 - human selection can keep Original or apply A/B/C;
 - selected replacement changes only the chosen target and runs the normal full
   Script validator;
@@ -224,5 +274,4 @@ Slice 3:
 - the local UI/API exposes logical section-review actions without accepting
   user-supplied artifact paths.
 
-Those downstream capabilities remain separate from Slice 3 request preparation,
-so the request can be inspected or validated before any model call.
+Those downstream capabilities remain separate from Slice 4 generation.
