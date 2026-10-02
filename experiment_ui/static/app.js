@@ -4439,6 +4439,125 @@ async function registerGeneratedVisualAsset() {
   }
 }
 
+function finalSoundPendingItems(snapshot) {
+  return (((snapshot && snapshot.items) || [])).filter(function (item) {
+    return item && item.resolved !== true;
+  });
+}
+
+function renderFinalSoundImport(snapshot) {
+  latestFinalSoundSnapshot = snapshot || {};
+  const items = finalSoundPendingItems(latestFinalSoundSnapshot);
+
+  finalSoundImportPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  finalSoundCursor = Math.max(
+    0,
+    Math.min(finalSoundCursor, items.length - 1)
+  );
+  const item = items[finalSoundCursor] || {};
+  const requirement = item.requirement || {};
+
+  finalSoundImportTitle.textContent =
+    "Resolve final sound — " +
+    humanizeToken(requirement.kind || "sound") +
+    " · " + (requirement.segment_id || "");
+  finalSoundImportSummary.textContent =
+    (finalSoundCursor + 1) + " of " + items.length +
+    " unresolved · " +
+    Number(latestFinalSoundSnapshot.resolved || 0) +
+    " already resolved";
+  finalSoundImportStatus.textContent = "WAITING FOR ASSET";
+  finalSoundImportStatus.className = "status-chip running";
+
+  finalSoundImportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>APPROVED SOUND REQUIREMENT</h4>' +
+    '<h3>' + escapeHtml(requirement.requirement_id || "") + '</h3>' +
+    '<p><strong>Concept:</strong> ' + escapeHtml(item.concept_id || "") +
+    '<br><strong>Format:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Segment:</strong> ' + escapeHtml(requirement.segment_id || "") +
+    '<br><strong>Type:</strong> ' + escapeHtml(humanizeToken(requirement.kind || "")) +
+    '<br><strong>Direction:</strong> ' + escapeHtml(requirement.direction || "") +
+    '<br><strong>Duck under narration:</strong> ' +
+    escapeHtml(requirement.duck_under_narration ? "Yes" : "No") +
+    '</p><p class="muted">Use an already licensed/owned file. If the sound should be intentionally absent, omit it with a human note.</p></div>';
+
+  finalSoundAssetPath.value = "";
+  finalSoundLicenceReference.value = "";
+  finalSoundSourceName.value = "human_supplied";
+  finalSoundProviderJobId.value = "";
+  finalSoundActualCost.value = "0";
+  finalSoundCommercialUse.checked = false;
+  finalSoundExternalPurchase.checked = false;
+  finalSoundAttributionRequired.checked = false;
+  finalSoundAttributionText.value = "";
+  finalSoundNote.value = "";
+  finalSoundPrev.disabled = finalSoundCursor === 0;
+  finalSoundNext.disabled = finalSoundCursor >= items.length - 1;
+}
+
+async function submitFinalSoundResolution(mode) {
+  const items = finalSoundPendingItems(latestFinalSoundSnapshot || {});
+  const item = items[finalSoundCursor];
+  if (!item) return;
+  const requirement = item.requirement || {};
+
+  if (mode === "register") {
+    if (!finalSoundAssetPath.value.trim()) {
+      showToast("Enter the local licensed sound file path.", true);
+      return;
+    }
+    if (!finalSoundLicenceReference.value.trim()) {
+      showToast("Enter the licence or ownership reference.", true);
+      return;
+    }
+    if (!finalSoundCommercialUse.checked) {
+      showToast("Confirm commercial-use permission before registering.", true);
+      return;
+    }
+  } else if (!finalSoundNote.value.trim()) {
+    showToast("Explain why this planned sound should be omitted.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/final-sound-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: mode,
+        plan_file: item.plan_file,
+        requirement_id: requirement.requirement_id,
+        asset_file: finalSoundAssetPath.value.trim(),
+        licence_reference: finalSoundLicenceReference.value.trim(),
+        commercial_use_confirmed: finalSoundCommercialUse.checked,
+        actual_cost_usd: Number(finalSoundActualCost.value || 0),
+        external_purchase_confirmed: finalSoundExternalPurchase.checked,
+        source_name: finalSoundSourceName.value.trim() || "human_supplied",
+        provider_job_id: finalSoundProviderJobId.value.trim(),
+        attribution_required: finalSoundAttributionRequired.checked,
+        attribution_text: finalSoundAttributionText.value.trim(),
+        note: finalSoundNote.value
+      })
+    });
+    latestFinalSoundSnapshot = payload.final_sound_assets || {};
+    const remaining = finalSoundPendingItems(latestFinalSoundSnapshot);
+    if (finalSoundCursor >= remaining.length) {
+      finalSoundCursor = Math.max(0, remaining.length - 1);
+    }
+    renderFinalSoundImport(latestFinalSoundSnapshot);
+    showToast(
+      mode === "omit"
+        ? "Final sound requirement intentionally omitted."
+        : "Licensed final sound asset registered.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function formatElapsed(milliseconds) {
   const totalSeconds = Math.max(
     0,
