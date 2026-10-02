@@ -294,7 +294,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
             versions,
             transactions,
         ):
-            path.mkdir()
+            path.mkdir(exist_ok=True)
         return {
             "review_requests_dir": review_requests,
             "review_responses_dir": review_responses,
