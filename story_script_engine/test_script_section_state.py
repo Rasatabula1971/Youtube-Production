@@ -284,5 +284,18 @@ class ScriptSectionStateTests(unittest.TestCase):
                 )
 
 
+    def test_target_ids_that_collide_on_disk_are_rejected(self):
+        draft = self.draft()
+        draft["sections"][0]["section_id"] = "gear/ratio"
+        draft["sections"][1]["section_id"] = "gear ratio"
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "collide after filesystem normalization",
+        ):
+            section_state.build_targets(draft)
+
+
+
 if __name__ == "__main__":
     unittest.main()
