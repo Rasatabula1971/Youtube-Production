@@ -263,6 +263,26 @@ const editPreviewSound = document.getElementById("editPreviewSound");
 const editPreviewApprove = document.getElementById("editPreviewApprove");
 const editPreviewNext = document.getElementById("editPreviewNext");
 
+const finalSoundImportPanel = document.getElementById("finalSoundImportPanel");
+const finalSoundImportTitle = document.getElementById("finalSoundImportTitle");
+const finalSoundImportSummary = document.getElementById("finalSoundImportSummary");
+const finalSoundImportStatus = document.getElementById("finalSoundImportStatus");
+const finalSoundImportDetail = document.getElementById("finalSoundImportDetail");
+const finalSoundAssetPath = document.getElementById("finalSoundAssetPath");
+const finalSoundLicenceReference = document.getElementById("finalSoundLicenceReference");
+const finalSoundSourceName = document.getElementById("finalSoundSourceName");
+const finalSoundProviderJobId = document.getElementById("finalSoundProviderJobId");
+const finalSoundActualCost = document.getElementById("finalSoundActualCost");
+const finalSoundCommercialUse = document.getElementById("finalSoundCommercialUse");
+const finalSoundExternalPurchase = document.getElementById("finalSoundExternalPurchase");
+const finalSoundAttributionRequired = document.getElementById("finalSoundAttributionRequired");
+const finalSoundAttributionText = document.getElementById("finalSoundAttributionText");
+const finalSoundNote = document.getElementById("finalSoundNote");
+const finalSoundPrev = document.getElementById("finalSoundPrev");
+const finalSoundOmit = document.getElementById("finalSoundOmit");
+const finalSoundRegister = document.getElementById("finalSoundRegister");
+const finalSoundNext = document.getElementById("finalSoundNext");
+
 const previewReviewPanel = document.getElementById("previewReviewPanel");
 const previewReviewTitle = document.getElementById("previewReviewTitle");
 const previewReviewSummary = document.getElementById("previewReviewSummary");
@@ -384,6 +404,8 @@ let visualSpendCursor = 0;
 let latestGeneratedVisualHandoff = null;
 let latestGeneratedVisualAssets = null;
 let generatedVisualCursor = 0;
+let latestFinalSoundSnapshot = null;
+let finalSoundCursor = 0;
 
 const ROUTES = {
   "/": {
@@ -582,7 +604,8 @@ function statusTone(workflow) {
     state === "HUMAN_EDIT_PREVIEW_GATE" ||
     state === "EDIT_PREVIEW_REWORK_REQUIRED" ||
     state === "WAITING_FOR_FINAL_VISUAL_ASSETS" ||
-    state === "FINAL_PRODUCTION_HANDOFF_BLOCKED"
+    state === "FINAL_PRODUCTION_HANDOFF_BLOCKED" ||
+    state === "WAITING_FOR_FINAL_SOUND_ASSETS"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -643,7 +666,9 @@ function primaryTargetForWorkflow(workflow) {
     EDIT_PREVIEW_DIRECTION_APPROVED: "Edit direction approved",
     WAITING_FOR_FINAL_VISUAL_ASSETS: "Register final visuals",
     FINAL_PRODUCTION_HANDOFF_BLOCKED: "Resolve final handoff",
-    FINAL_PRODUCTION_HANDOFF_READY: "Final handoff ready"
+    FINAL_PRODUCTION_HANDOFF_READY: "Final handoff ready",
+    WAITING_FOR_FINAL_SOUND_ASSETS: "Register final sound",
+    FINAL_SOUND_ASSETS_READY: "Final sound ready"
   };
   if (analysisHumanGateLabels[workflow.state]) {
     return {
