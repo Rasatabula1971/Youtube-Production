@@ -31,7 +31,10 @@ from narration_render import (
     load_json,
     sha256_file,
 )
-from narration_render_import import current_result as current_registered_result
+from narration_render_import import (
+    current_result as current_registered_result,
+    snapshot as narration_render_return_snapshot,
+)
 
 RENDER_RESULTS_DIR = OUTPUT_DIR / "narration_render_results"
 QC_DIR = OUTPUT_DIR / "narration_audio_qc"
@@ -403,17 +406,22 @@ def snapshot() -> dict[str, Any]:
             }
         )
 
+    expected = int(narration_render_return_snapshot().get("current") or 0)
+    passed = sum(item["status"] == "PASS" for item in items)
+    failed = sum(item["status"] == "FAIL" for item in items)
+    status = (
+        "FAIL"
+        if failed > 0
+        else "PASS"
+        if expected > 0 and len(items) == expected and passed == expected
+        else "WAITING_FOR_NARRATION_RENDER_RESULTS"
+    )
     return {
-        "status": (
-            "PASS"
-            if items and all(item["status"] == "PASS" for item in items)
-            else "FAIL"
-            if items
-            else "WAITING_FOR_NARRATION_RENDER_RESULTS"
-        ),
+        "status": status,
         "processed": len(items),
-        "passed": sum(item["status"] == "PASS" for item in items),
-        "failed": sum(item["status"] == "FAIL" for item in items),
+        "expected": expected,
+        "passed": passed,
+        "failed": failed,
         "items": items,
     }
 
