@@ -170,6 +170,17 @@ def branch_snapshot(
         }
 
     draft = load_json(draft_path)
+    if (
+        str(draft.get("concept_id") or "") != concept
+        or str(draft.get("format") or "") != branch_format
+    ):
+        return {
+            "status": "SCRIPT_DRAFT_IDENTITY_MISMATCH",
+            "concept_id": concept,
+            "format": branch_format,
+            "prepared": False,
+            "targets": [],
+        }
     state_path = state_path_for(concept, branch_format, state_dir)
     if not state_path.is_file():
         preview_targets = build_targets(draft)
@@ -344,6 +355,12 @@ def apply_action(
     )
     if not draft_path.is_file():
         raise ValueError("Script draft not found")
+    draft_identity = load_json(draft_path)
+    if (
+        str(draft_identity.get("concept_id") or "") != concept
+        or str(draft_identity.get("format") or "") != branch_format
+    ):
+        raise ValueError("Script draft identity mismatch")
 
     state_path = state_path_for(concept, branch_format, state_dir)
 
