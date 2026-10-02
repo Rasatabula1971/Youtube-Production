@@ -670,6 +670,46 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="finalSoundImportPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">FINAL SOUND ASSET BOUNDARY</p>
+                <h2 id="finalSoundImportTitle">Register licensed final sound</h2>
+                <p class="muted" id="finalSoundImportSummary"></p>
+              </div>
+              <span class="status-chip running" id="finalSoundImportStatus">WAITING FOR ASSET</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="finalSoundImportDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">This form never calls or pays a sound provider. Register only an already licensed/owned local file, or explicitly omit the sound with a note.</div>
+                <label class="vision-label" for="finalSoundAssetPath">Local sound file path</label>
+                <input id="finalSoundAssetPath" type="text" placeholder="C:\path\to\licensed-sound.wav">
+                <label class="vision-label" for="finalSoundLicenceReference">Licence / ownership reference</label>
+                <input id="finalSoundLicenceReference" type="text" maxlength="500" placeholder="Required for registered assets">
+                <label class="vision-label" for="finalSoundSourceName">Source / library</label>
+                <input id="finalSoundSourceName" type="text" value="human_supplied">
+                <label class="vision-label" for="finalSoundProviderJobId">Provider / receipt reference (optional)</label>
+                <input id="finalSoundProviderJobId" type="text" maxlength="300">
+                <label class="vision-label" for="finalSoundActualCost">Actual external cost (USD)</label>
+                <input id="finalSoundActualCost" type="number" min="0" step="0.01" value="0">
+                <label><input id="finalSoundCommercialUse" type="checkbox"> I confirm commercial use is permitted by the licence/ownership terms.</label>
+                <label><input id="finalSoundExternalPurchase" type="checkbox"> If cost is above $0, I confirm I already made this purchase externally.</label>
+                <label><input id="finalSoundAttributionRequired" type="checkbox"> Attribution is required.</label>
+                <label class="vision-label" for="finalSoundAttributionText">Attribution text</label>
+                <input id="finalSoundAttributionText" type="text" maxlength="700">
+                <label class="vision-label" for="finalSoundNote">Human note</label>
+                <textarea id="finalSoundNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required when omitting a planned sound. Optional when registering an asset."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="finalSoundPrev" type="button">← Previous</button>
+                  <button class="ghost" id="finalSoundOmit" type="button">Omit this sound</button>
+                  <button id="finalSoundRegister" type="button">Register licensed asset</button>
+                  <button class="ghost" id="finalSoundNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
             <div class="panel-head">
               <div>

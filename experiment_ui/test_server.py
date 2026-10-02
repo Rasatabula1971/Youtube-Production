@@ -103,6 +103,9 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="scriptSectionReason"', html)
         self.assertIn('id="scriptSectionGenerate"', html)
         self.assertIn('id="scriptSectionAlternativeCards"', html)
+        self.assertIn('id="finalSoundImportPanel"', html)
+        self.assertIn('id="finalSoundLicenceReference"', html)
+        self.assertIn('id="finalSoundCommercialUse"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -125,6 +128,19 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("replacement_text", script)
         self.assertIn("/api/script-section-review", script)
         self.assertIn("data-script-section-selection", script)
+        self.assertIn("renderFinalSoundImport", script)
+        self.assertIn("/api/final-sound-asset", script)
+
+    def test_final_sound_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/final-sound-asset",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        self.assertIn("final_sound_plan_prepare", server.ACTION_DEFS)
+        self.assertIn(
+            "production_engine/final_sound_plan.py",
+            server.ACTION_DEFS["final_sound_plan_prepare"]["command"][1],
+        )
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)

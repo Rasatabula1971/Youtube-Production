@@ -551,3 +551,49 @@ no final music/SFX generation, no final video render, no upload, and no publish
 action. A successful handoff therefore reports readiness for a later final
 sound/provider-or-licensed-asset registration stage rather than claiming that
 the video is publish-ready.
+
+## Slice 21 — final sound requirement and licensed-asset boundary
+
+The current Slice 20 final-production handoff now automatically becomes an exact
+final-sound plan before any final rendering work begins:
+
+```text
+current final-production handoff
+        ↓
+final_sound_plan_prepare
+        ↓
+fingerprinted MUSIC / SFX requirements
+        ↓
+WAITING_FOR_FINAL_SOUND_ASSETS
+        ↓
+human registers licensed local asset
+        or explicitly omits requirement
+        ↓
+FINAL_SOUND_ASSETS_READY
+        ↓
+STOP
+```
+
+`final_sound_plan.py` accepts only a current rebuild-valid Slice 20 handoff.
+It converts approved sound-design intent into stable requirement IDs and
+fingerprints while explicitly keeping provider calls, spend authorization,
+final rendering, upload and publishing disabled.
+
+`final_sound_asset_import.py` is the managed-media trust boundary. A registered
+file must be a supported audio type, non-empty, explicitly commercial-safe and
+bound to a licence/ownership reference. The local file is copied into
+`production_engine/output/final_sound_assets/` and its SHA-256 and byte count
+are recorded against the exact current sound plan and requirement fingerprint.
+
+A non-zero cost is accepted only as a record of an already completed external
+human purchase. The human must explicitly confirm that fact. The app never
+interprets registration as permission to buy media and never executes the
+provider transaction.
+
+A planned sound may also be intentionally omitted, but only through an explicit
+human note. This avoids forcing unnecessary sound into an edit while preventing
+a missing asset from silently becoming an omission.
+
+Slice 21 stops at `FINAL_SOUND_ASSETS_READY`. It does not mix final sound into
+video, create a publish-ready render, upload, or publish. Those remain the next
+production boundary.

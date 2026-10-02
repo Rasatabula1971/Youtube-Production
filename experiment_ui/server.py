@@ -54,6 +54,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/generated-visual-asset",
     "/api/managed-visual-asset",
     "/api/edit-preview-review",
+    "/api/final-sound-asset",
     "/api/storyboard-review",
     "/api/narration-performance-review",
 }
@@ -291,6 +292,12 @@ from edit_preview_review import (
     snapshot as edit_preview_review_snapshot,
 )
 from final_production_handoff import handoff_is_current
+from final_sound_plan import plan_is_current as final_sound_plan_is_current
+from final_sound_asset_import import (
+    omit as omit_final_sound_requirement,
+    register as register_final_sound_asset,
+    snapshot as final_sound_asset_snapshot,
+)
 from storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
@@ -352,6 +359,7 @@ PRODUCTION_FINAL_HANDOFF_DIR = (
 PRODUCTION_FINAL_HANDOFF_SUMMARY = (
     PRODUCTION_OUTPUT / "final_production_handoff_summary.json"
 )
+PRODUCTION_FINAL_SOUND_PLAN_DIR = PRODUCTION_OUTPUT / "final_sound_plans"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -405,6 +413,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "edit_manifest_prepare",
     "edit_preview_render",
     "final_production_handoff_prepare",
+    "final_sound_plan_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -1235,6 +1244,21 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "Builds a provenance-bound provider-neutral final production package "
             "from the approved structural edit, current visual assets, narration "
             "and sound-design intent. It makes no provider call and spends nothing."
+        ),
+    },
+    "final_sound_plan_prepare": {
+        "label": "Prepare Final Sound Requirements",
+        "stage": "11",
+        "command": [
+            sys.executable,
+            "production_engine/final_sound_plan.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Converts the current final-production handoff into exact licensed "
+            "music/SFX requirements. It calls no provider, authorizes no spend, "
+            "renders no final media, and does not publish."
         ),
     },
     "production_visual_prepare": {
@@ -3153,6 +3177,47 @@ def final_production_handoff_artifact_state(
     }
 
 
+def final_sound_plan_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    requirements = 0
+
+    if PRODUCTION_FINAL_SOUND_PLAN_DIR.exists():
+        for path in PRODUCTION_FINAL_SOUND_PLAN_DIR.glob(
+            "*.final_sound_plan.json"
+        ):
+            payload = final_sound_plan_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+            requirements += int(payload.get("requirements_count") or 0)
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "requirements": requirements,
+    }
+
+
 def current_action_id() -> str | None:
     manager = globals().get("JOB_MANAGER")
     if manager is None:
@@ -4235,6 +4300,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     final_handoff_ready = bool(final_handoff_state.get("ready"))
+    final_sound_plan_state = final_sound_plan_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_sound_plan_ready = bool(final_sound_plan_state.get("ready"))
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
@@ -5328,6 +5397,37 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "final_sound_plan_prepare": {
+            "enabled": (
+                final_handoff_ready
+                and int(final_handoff_state.get("blocked") or 0) == 0
+                and int(final_handoff_state.get("ready_for_final_sound") or 0)
+                == int(final_handoff_state.get("expected") or 0)
+                and not final_sound_plan_ready
+            ),
+            "reason": (
+                "Current final-production handoffs are ready to become exact "
+                "licensed music/SFX requirements."
+                if (
+                    final_handoff_ready
+                    and int(final_handoff_state.get("blocked") or 0) == 0
+                    and int(final_handoff_state.get("ready_for_final_sound") or 0)
+                    == int(final_handoff_state.get("expected") or 0)
+                    and not final_sound_plan_ready
+                )
+                else (
+                    "Final sound requirements are current."
+                    if final_sound_plan_ready
+                    else (
+                        "Resolve final-production handoff blockers before final "
+                        "sound planning."
+                        if final_handoff_ready
+                        and int(final_handoff_state.get("blocked") or 0) > 0
+                        else "Prepare the current final-production handoff first."
+                    )
+                )
+            ),
+        },
         "production_visual_prepare": {
             "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
@@ -6253,18 +6353,51 @@ def workflow_guidance(
                 "next_title": "Resolve final-production blockers",
             }
 
+        final_sound_plan_state = final_sound_plan_artifact_state(
+            expected_branches
+        )
+        if not final_sound_plan_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Prepare Final Sound Requirements",
+                "current_detail": (
+                    "The current final-production handoff is ready. Convert its "
+                    "approved sound-design intent into exact, fingerprinted music/SFX "
+                    "requirements. This step calls no provider, authorizes no spend, "
+                    "and renders no final media."
+                ),
+                "next_action_id": None,
+                "next_title": "Register licensed final sound assets",
+            }
+
+        final_sound_assets = final_sound_asset_snapshot()
+        if not final_sound_assets.get("ready"):
+            return {
+                "state": "WAITING_FOR_FINAL_SOUND_ASSETS",
+                "current_action_id": None,
+                "current_title": "Register Licensed Final Sound Assets",
+                "current_detail": (
+                    f"{int(final_sound_assets.get('pending') or 0)} final sound "
+                    "requirement(s) still need either a commercial-safe local asset "
+                    "with licence provenance or an explicit human omission. The app "
+                    "does not call or pay a sound provider."
+                ),
+                "next_action_id": None,
+                "next_title": "Complete final sound asset registration",
+            }
+
         return {
-            "state": "FINAL_PRODUCTION_HANDOFF_READY",
+            "state": "FINAL_SOUND_ASSETS_READY",
             "current_action_id": None,
-            "current_title": "Final Production Handoff Ready",
+            "current_title": "Final Sound Assets Ready",
             "current_detail": (
-                "The approved edit direction is now packaged against exact current "
-                "visual, narration and sound-intent provenance. Slice 20 stops here. "
-                "No final music/SFX provider, final render, upload or publish action "
-                "has been executed or authorized."
+                "Every current final sound requirement is resolved by a managed "
+                "commercial-safe asset or an explicit human omission. Slice 21 "
+                "stops here. No final render, upload or publish action has occurred."
             ),
             "next_action_id": None,
-            "next_title": "Slice 21: final sound/media execution boundary",
+            "next_title": "Slice 22: local final render and human export gate",
         }
 
     production_visual = production_visual_artifact_state()
@@ -6426,6 +6559,10 @@ def status_payload() -> dict[str, Any]:
         "final_production_handoff": final_production_handoff_artifact_state(
             visual_post_search_artifact_state().get("expected_branches", [])
         ),
+        "final_sound_plan": final_sound_plan_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_sound_assets": final_sound_asset_snapshot(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -6586,6 +6723,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/edit-preview-review":
             self._send_json(edit_preview_review_snapshot())
+            return
+        if route == "/api/final-sound-asset":
+            self._send_json(final_sound_asset_snapshot())
             return
         if route == "/api/edit-preview-video":
             query = parse_qs(urlparse(self.path).query)
@@ -6978,6 +7118,54 @@ class Handler(BaseHTTPRequestHandler):
                 response = dict(payload)
                 if auto_job:
                     response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/final-sound-asset":
+                mode = str(body.get("mode") or "register").strip().lower()
+                if mode == "omit":
+                    payload = omit_final_sound_requirement(
+                        plan_file=str(body.get("plan_file", "")),
+                        requirement_id=str(body.get("requirement_id", "")),
+                        note=str(body.get("note") or ""),
+                    )
+                elif mode == "register":
+                    payload = register_final_sound_asset(
+                        plan_file=str(body.get("plan_file", "")),
+                        requirement_id=str(body.get("requirement_id", "")),
+                        asset_file=str(body.get("asset_file", "")),
+                        licence_reference=str(
+                            body.get("licence_reference") or ""
+                        ),
+                        commercial_use_confirmed=(
+                            body.get("commercial_use_confirmed") is True
+                        ),
+                        actual_cost_usd=float(
+                            body.get("actual_cost_usd") or 0
+                        ),
+                        external_purchase_confirmed=(
+                            body.get("external_purchase_confirmed") is True
+                        ),
+                        source_name=str(
+                            body.get("source_name") or "human_supplied"
+                        ),
+                        provider_job_id=str(
+                            body.get("provider_job_id") or ""
+                        ),
+                        attribution_required=(
+                            body.get("attribution_required") is True
+                        ),
+                        attribution_text=str(
+                            body.get("attribution_text") or ""
+                        ),
+                        note=str(body.get("note") or ""),
+                    )
+                else:
+                    raise ValueError("Unsupported final sound asset mode")
+                response = {
+                    "registered": payload,
+                    "final_sound_assets": final_sound_asset_snapshot(),
+                }
                 self._send_json(response)
                 return
 
