@@ -1300,3 +1300,34 @@ Future profiles are versioned rather than silently overwritten. Published
 retention, comment and performance evidence may justify Voice v2, v3 and later,
 but learning-driven changes remain explicit human-approved channel decisions.
 
+
+## D-071 — Selective Script Rework begins with a deterministic, non-destructive target contract
+
+**Status:** Accepted
+
+Selective Script Rework is implemented in slices rather than as one large
+change. Slice 1 adds data structure only; it does not change narration, make a
+model call, or add new Human Script Gate controls.
+
+For each exact format-specific Script Draft, the Human Script Gate now derives
+stable review targets for the opening hook, every generated `section_id`, and
+the closing. The contract is bound to the exact draft SHA-256 and records:
+
+- review state, initially `PENDING`;
+- `locked=false`;
+- `editable=true`;
+- per-target revision `0`;
+- script revision `0`;
+- section-state revision `0`;
+- bounded rework reason vocabulary with no reason/note selected yet; and
+- a deterministic content SHA-256 for every target.
+
+Missing or duplicate generated section IDs fail closed when the review contract
+is created. The contract reserves later `ACCEPTED` and
+`REWORK_REQUESTED` states, but Slice 1 has no handlers that can transition into
+them.
+
+This creates the provenance needed for later slices to prove that selective
+rework changed only the chosen target while accepted/locked material remained
+unchanged.
+
