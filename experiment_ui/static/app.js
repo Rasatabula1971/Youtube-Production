@@ -688,6 +688,7 @@ function primaryTargetForWorkflow(workflow) {
     TITLE_DIRECTION_REJECTED: "Rework title directions",
     TITLE_DIRECTION_SELECTED: "Title directions selected",
     PACKAGING_BRIEF_READY: "Packaging brief ready",
+    THUMBNAIL_CONCEPTS_READY: "Thumbnail concepts ready",
     HUMAN_FORMAT_GATE: "Review format",
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
@@ -1926,21 +1927,60 @@ async function submitTitleDirectionDecision(decision) {
   }
 }
 
-function renderPackagingBrief(snapshot) {
+function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot) {
   const value = snapshot || {};
+  const anglesValue = anglesSnapshot || {};
+  const thumbnailValue = thumbnailSnapshot || {};
   const briefs = Array.isArray(value.briefs) ? value.briefs : [];
+  const angleItems = Array.isArray(anglesValue.items) ? anglesValue.items : [];
+  const thumbnailItems = Array.isArray(thumbnailValue.items) ? thumbnailValue.items : [];
   const ready = value.status === "PACKAGING_BRIEF_READY" && value.ready === true;
+  const slice25Ready =
+    thumbnailValue.status === "THUMBNAIL_CONCEPTS_READY" &&
+    thumbnailValue.ready === true;
   packagingBriefPanel.hidden = !briefs.length;
   if (!briefs.length) return;
 
-  packagingBriefStatus.textContent = ready ? "READY" : "STALE";
+  packagingBriefStatus.textContent = slice25Ready ? "SLICE 25 READY" : (ready ? "BRIEF READY" : "STALE");
   packagingBriefStatus.className =
-    "status-chip " + (ready ? "success" : "failed");
+    "status-chip " + ((ready && !value.stale) ? "success" : "failed");
   packagingBriefSummary.textContent =
     briefs.length + " current format brief" + (briefs.length === 1 ? "" : "s") +
-    " · no model-generated facts";
+    " · " + Number(anglesValue.current || 0) + " angle set(s)" +
+    " · " + Number(thumbnailValue.current || 0) + " thumbnail set(s)";
 
   packagingBriefDetail.innerHTML = briefs.map(function (item) {
+    const angleSet = angleItems.find(function (entry) {
+      return entry.video_id === item.video_id;
+    }) || {};
+    const thumbSet = thumbnailItems.find(function (entry) {
+      return entry.video_id === item.video_id;
+    }) || {};
+    const angles = Array.isArray(angleSet.angles) ? angleSet.angles : [];
+    const thumbs = Array.isArray(thumbSet.thumbnail_concepts)
+      ? thumbSet.thumbnail_concepts
+      : [];
+    const angleHtml = angles.length
+      ? '<div class="concept-meta">' + angles.map(function (angle) {
+          return '<span>' +
+            escapeHtml(humanizeToken(angle.primary_driver || "")) +
+            (angle.selected_title_direction_alignment === "ANCHOR" ? " · Anchor" : "") +
+            '</span>';
+        }).join("") + '</div>'
+      : '<p class="muted">Psychological angles not generated yet.</p>';
+    const thumbHtml = thumbs.length
+      ? thumbs.map(function (thumb) {
+          return (
+            '<div class="criterion-item">' +
+              '<span><strong>' + escapeHtml(humanizeToken(thumb.angle_id || "")) + '</strong>' +
+              ' — ' + escapeHtml(thumb.hero_subject || "") +
+              (thumb.text ? ' · “' + escapeHtml(thumb.text) + '”' : '') +
+              (thumb.visual_anomaly ? '<br><small>Anomaly: ' + escapeHtml(thumb.visual_anomaly) + '</small>' : '') +
+              '</span>' +
+            '</div>'
+          );
+        }).join("")
+      : '<p class="muted">Thumbnail concepts not generated yet.</p>';
     return (
       '<div class="concept-detail-card">' +
         '<h4>' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
@@ -1951,6 +1991,8 @@ function renderPackagingBrief(snapshot) {
         '<br><strong>Video ID:</strong> ' +
           escapeHtml(item.video_id || "") +
         '</p>' +
+        '<h4>Psychological hypotheses</h4>' + angleHtml +
+        '<h4>Thumbnail concepts</h4>' + thumbHtml +
       '</div>'
     );
   }).join("");
@@ -5076,7 +5118,11 @@ function renderAnalysis(data) {
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
   renderTitleDirectionReview(data.title_direction_gate || {}, false);
-  renderPackagingBrief(data.packaging_brief || {});
+  renderPackagingBrief(
+    data.packaging_brief || {},
+    data.psychological_angles || {},
+    data.thumbnail_concepts || {}
+  );
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
@@ -5173,7 +5219,8 @@ function renderAnalysis(data) {
       "HUMAN_TITLE_DIRECTION_GATE",
       "TITLE_DIRECTION_REJECTED",
       "TITLE_DIRECTION_SELECTED",
-      "PACKAGING_BRIEF_READY"
+      "PACKAGING_BRIEF_READY",
+      "THUMBNAIL_CONCEPTS_READY"
     ].includes(workflow.state) ||
     Boolean((data.title_direction || {}).requests_ready) ||
     Boolean((data.title_direction || {}).candidates_ready)

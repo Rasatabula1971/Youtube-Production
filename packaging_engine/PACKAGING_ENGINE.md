@@ -286,3 +286,107 @@ derived contract invalidates the brief.
 Slice 24 deliberately does not generate thumbnails, pair titles and thumbnails,
 score packages, approve final packaging, or unlock Format/Production. Those are
 later Packaging slices.
+
+## Slice 25 — Psychological Packaging Angles + Thumbnail Concepts
+
+Slice 25 expands the evidence-bound Packaging Brief into deliberate packaging
+hypotheses before any title-thumbnail pairing:
+
+```text
+PACKAGING_BRIEF_READY
+        ↓
+prepare psychological angle requests
+        ↓
+FAIR free-first angle generation
+        ↓
+5 distinct psychological hypotheses per format
+        ↓
+prepare thumbnail concept requests
+        ↓
+FAIR free-first thumbnail concept generation
+        ↓
+1 structured thumbnail concept per angle
+        ↓
+THUMBNAIL_CONCEPTS_READY
+        ↓
+STOP
+```
+
+### Psychological angle contract
+
+Every format receives exactly five hypotheses with:
+
+- `angle_id`;
+- `primary_driver`;
+- `secondary_driver`;
+- `viewer_question`;
+- `emotional_trigger`;
+- `stakes`;
+- `information_given`;
+- `information_withheld`;
+- `expected_click_reason`;
+- `evidence_refs`;
+- `selected_title_direction_alignment`.
+
+Five different primary drivers are mandatory. Exactly one hypothesis is the
+`ANCHOR` to the human-selected title direction; four are deliberate
+`ALTERNATIVE` hypotheses.
+
+SEARCH emphasizes subject/problem/payoff clarity. BROWSE emphasizes attention,
+curiosity, stakes and consequence. HYBRID balances semantic clarity with
+psychological attraction. Shorts prioritize instant comprehension and rapid
+promise confirmation; Long-form can support deeper mystery and open loops.
+
+The model may propose creative framing, but it may not invent facts. Evidence
+refs must come from approved claims. Unapproved numbers and unsupported
+high-risk factual words are rejected.
+
+### Thumbnail concept contract
+
+Every current angle receives one concept containing:
+
+- `thumbnail_id`;
+- `angle_id`;
+- `hero_subject`;
+- `secondary_element`;
+- `visual_anomaly`;
+- `visual_action`;
+- `emotion`;
+- `composition`;
+- `background`;
+- `subject_separation_method`;
+- `text`;
+- `text_word_count`;
+- `viewer_visual_question`;
+- `timestamp_safe`;
+- `mobile_legibility_intent`;
+- `evidence_refs`;
+- `aspect_ratio`;
+- `primary_focal_points`;
+- `meaningful_visual_elements`;
+- `critical_bottom_right_content`;
+- `face_present`.
+
+The validator enforces 16:9, one primary focal point, no more than three
+meaningful visual elements, four thumbnail-text words maximum, exact word-count
+metadata, timestamp safety and no critical bottom-right content.
+
+Thumbnail evidence must be approved and remain connected to the originating
+angle. Unsupported numbers, unsupported high-risk factual wording and obvious
+multi-word repetition of the selected title direction are rejected.
+
+### Cost and retry behavior
+
+Both generation stages use the existing free-first FAIR bridge and the existing
+direct backup policy. Work is split per internal `video_id`, so a provider
+failure does not destroy already validated format outputs. Validated responses
+are skipped on retry when their request hash is unchanged.
+
+### Slice 25 boundary
+
+`THUMBNAIL_CONCEPTS_READY` is not packaging approval. No image is rendered,
+no title-thumbnail pair is selected, no package score is produced, and
+Format/Production remain locked.
+
+Slice 26 can now evaluate cross-candidate title-thumbnail compatibility,
+redundancy, information gain, promise consistency and claim/hook alignment.

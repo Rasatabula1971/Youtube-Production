@@ -157,6 +157,14 @@ from title_direction_review import (
     snapshot as title_direction_gate_snapshot,
 )
 from packaging_brief import snapshot as packaging_brief_snapshot
+from psychological_angles import (
+    request_snapshot as psychological_angle_request_snapshot,
+    snapshot as psychological_angle_snapshot,
+)
+from thumbnail_concepts import (
+    request_snapshot as thumbnail_concept_request_snapshot,
+    snapshot as thumbnail_concept_snapshot,
+)
 
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
@@ -426,6 +434,10 @@ AUTO_MACHINE_ACTION_ORDER = [
     "title_direction_generate",
     "title_direction_gate_prepare",
     "packaging_brief_prepare",
+    "psychological_angle_prepare",
+    "psychological_angle_generate",
+    "thumbnail_concept_prepare",
+    "thumbnail_concept_generate",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -1088,6 +1100,62 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "selected title direction, hook, payoff and audience context into one "
             "format-specific Packaging Brief and Viewer Promise Contract. No model "
             "call, thumbnail generation, scoring or production action occurs."
+        ),
+    },
+    "psychological_angle_prepare": {
+        "label": "Prepare Psychological Packaging Angles",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/psychological_angles.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds current evidence-bound requests for five meaningfully different "
+            "psychological packaging hypotheses per approved format."
+        ),
+    },
+    "psychological_angle_generate": {
+        "label": "Generate Psychological Packaging Angles",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/psychological_angle_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses the existing free-first FAIR path to generate five diverse angle "
+            "hypotheses. Creative framing may vary; facts remain bound to approved evidence."
+        ),
+    },
+    "thumbnail_concept_prepare": {
+        "label": "Prepare Thumbnail Concept Requests",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/thumbnail_concepts.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Binds each current psychological angle to the evidence-backed Packaging "
+            "Brief before thumbnail concept generation."
+        ),
+    },
+    "thumbnail_concept_generate": {
+        "label": "Generate Thumbnail Concepts",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/thumbnail_concept_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Generates structured 16:9 mobile-legible thumbnail concepts only. "
+            "No image generation, download, paid provider call, pairing or scoring occurs."
         ),
     },
     "format_prepare": {
@@ -3842,6 +3910,12 @@ def stage_statuses() -> list[dict[str, Any]]:
     title_direction_selected = bool(title_direction.get("selected"))
     packaging_brief = packaging_brief_snapshot()
     packaging_brief_ready = bool(packaging_brief.get("ready"))
+    angle_requests = psychological_angle_request_snapshot()
+    angles = psychological_angle_snapshot()
+    angles_ready = bool(angles.get("ready"))
+    thumbnail_requests = thumbnail_concept_request_snapshot()
+    thumbnails = thumbnail_concept_snapshot()
+    thumbnails_ready = bool(thumbnails.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -3895,10 +3969,23 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if packaging_brief_ready:
-        package_human = "PACKAGING BRIEF READY — SLICE 24 COMPLETE"
+    if thumbnails_ready:
+        package_human = "THUMBNAIL CONCEPTS READY — SLICE 25 COMPLETE"
         package_tone = "complete"
-        package_next = "Build psychological angles and thumbnail concepts in Slice 25."
+        package_next = "Pair titles + thumbnails and validate package complementarity in Slice 26."
+    elif active_action in {
+        "psychological_angle_prepare",
+        "psychological_angle_generate",
+        "thumbnail_concept_prepare",
+        "thumbnail_concept_generate",
+    }:
+        package_human = "PACKAGING CREATIVE HYPOTHESES RUNNING"
+        package_tone = "running"
+        package_next = "Wait for current angles and thumbnail concepts to finish."
+    elif packaging_brief_ready:
+        package_human = "PACKAGING BRIEF READY — ANGLES NEEDED"
+        package_tone = "ready"
+        package_next = "Generate psychological packaging angles and thumbnail concepts."
     elif active_action in {
         "packaging_brief_prepare",
     }:
@@ -4372,30 +4459,46 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "label": "Packaging Brief + Viewer Promise current",
                     "done": packaging_brief_ready,
                 },
+                {
+                    "label": "Five diverse psychological angles per format",
+                    "done": angles_ready,
+                },
+                {
+                    "label": "One thumbnail concept per psychological angle",
+                    "done": thumbnails_ready,
+                },
             ],
-            "complete": packaging_brief_ready,
+            "complete": thumbnails_ready,
             "ready": production_ready,
-            "current": production_ready and not packaging_brief_ready,
+            "current": production_ready and not thumbnails_ready,
         },
         {
             "id": "08",
             "title": "Format / Production Hold",
             "state": (
                 "WAITING_FOR_MATURE_PACKAGING"
-                if packaging_brief_ready
+                if thumbnails_ready
                 else (
-                    "WAITING_FOR_PACKAGING_BRIEF"
-                    if title_direction_selected
-                    else "WAITING_FOR_TITLE_DIRECTION"
+                    "WAITING_FOR_THUMBNAIL_CONCEPTS"
+                    if angles_ready
+                    else (
+                        "WAITING_FOR_PSYCHOLOGICAL_ANGLES"
+                        if packaging_brief_ready
+                        else (
+                            "WAITING_FOR_PACKAGING_BRIEF"
+                            if title_direction_selected
+                            else "WAITING_FOR_TITLE_DIRECTION"
+                        )
+                    )
                 )
             ),
             "human_status": format_human,
             "tone": format_tone,
             "detail": (
-                "Format and Production remain intentionally held after Slice 24. "
-                "The evidence-bound Packaging Brief and Viewer Promise are ready, "
-                "but psychological angle expansion, thumbnail concepts, pairing and "
-                "final package validation must still be built."
+                "Format and Production remain intentionally held after Slice 25. "
+                "Packaging Briefs, diverse psychological hypotheses and thumbnail "
+                "concepts are current, but title-thumbnail pairing, redundancy, claim, "
+                "promise and hook validation plus the final Packaging Human Gate remain."
             ),
             "next_action": format_next,
             "criteria": [
@@ -4406,6 +4509,10 @@ def stage_statuses() -> list[dict[str, Any]]:
                 {
                     "label": "Packaging Brief + Viewer Promise ready",
                     "done": packaging_brief_ready,
+                },
+                {
+                    "label": "Psychological angles + thumbnail concepts ready",
+                    "done": thumbnails_ready,
                 },
                 {
                     "label": "Mature Packaging Engine validation complete",
@@ -4518,6 +4625,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     title_direction_selected = bool(title_direction.get("selected"))
     packaging_brief = packaging_brief_snapshot()
     packaging_brief_ready = bool(packaging_brief.get("ready"))
+    angle_requests = psychological_angle_request_snapshot()
+    angles = psychological_angle_snapshot()
+    angles_ready = bool(angles.get("ready"))
+    thumbnail_requests = thumbnail_concept_request_snapshot()
+    thumbnails = thumbnail_concept_snapshot()
+    thumbnails_ready = bool(thumbnails.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -5348,18 +5461,88 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "psychological_angle_prepare": {
+            "enabled": (
+                packaging_brief_ready
+                and not angles_ready
+                and not bool(angle_requests.get("ready"))
+            ),
+            "reason": (
+                "Current Packaging Briefs are ready; prepare evidence-bound requests "
+                "for five distinct psychological hypotheses per format."
+                if packaging_brief_ready and not angles_ready and not bool(angle_requests.get("ready"))
+                else (
+                    "Psychological angle requests are current."
+                    if bool(angle_requests.get("ready"))
+                    else (
+                        "Psychological angles are already current."
+                        if angles_ready
+                        else "Build current Packaging Briefs first."
+                    )
+                )
+            ),
+        },
+        "psychological_angle_generate": {
+            "enabled": bool(angle_requests.get("ready")) and not angles_ready,
+            "reason": (
+                "Current psychological-angle requests are ready for free-first FAIR generation."
+                if bool(angle_requests.get("ready")) and not angles_ready
+                else (
+                    "Psychological angles are current."
+                    if angles_ready
+                    else "Prepare current psychological-angle requests first."
+                )
+            ),
+        },
+        "thumbnail_concept_prepare": {
+            "enabled": (
+                angles_ready
+                and not thumbnails_ready
+                and not bool(thumbnail_requests.get("ready"))
+            ),
+            "reason": (
+                "Five distinct psychological hypotheses are current; bind each to a "
+                "thumbnail concept request."
+                if angles_ready and not thumbnails_ready and not bool(thumbnail_requests.get("ready"))
+                else (
+                    "Thumbnail concept requests are current."
+                    if bool(thumbnail_requests.get("ready"))
+                    else (
+                        "Thumbnail concepts are already current."
+                        if thumbnails_ready
+                        else "Generate current psychological angles first."
+                    )
+                )
+            ),
+        },
+        "thumbnail_concept_generate": {
+            "enabled": bool(thumbnail_requests.get("ready")) and not thumbnails_ready,
+            "reason": (
+                "Current thumbnail requests are ready for free-first FAIR concept generation."
+                if bool(thumbnail_requests.get("ready")) and not thumbnails_ready
+                else (
+                    "Thumbnail concepts are current."
+                    if thumbnails_ready
+                    else "Prepare current thumbnail concept requests first."
+                )
+            ),
+        },
         "format_prepare": {
             "enabled": False,
             "reason": (
-                "Slice 24 intentionally stops after the evidence-bound Packaging "
-                "Brief + Viewer Promise Contract. Psychological angles, thumbnails, "
-                "pairing and final Packaging validation must be built before Format "
-                "planning is re-enabled."
-                if packaging_brief_ready
+                "Slice 25 intentionally stops after diverse psychological hypotheses "
+                "and thumbnail concepts. Title-thumbnail pairing, redundancy checks, "
+                "claim/promise/hook validation and the final Packaging Human Gate must "
+                "be built before Format planning is re-enabled."
+                if thumbnails_ready
                 else (
-                    "Build current Packaging Briefs first."
-                    if title_direction_selected
-                    else "Complete the post-script Title Direction Gate first."
+                    "Finish current Slice 25 packaging hypotheses first."
+                    if packaging_brief_ready
+                    else (
+                        "Build current Packaging Briefs first."
+                        if title_direction_selected
+                        else "Complete the post-script Title Direction Gate first."
+                    )
                 )
             ),
         },
@@ -6321,20 +6504,80 @@ def workflow_guidance(
                     "SEARCH/BROWSE/HYBRID intent. Missing evidence fails closed."
                 ),
                 "next_action_id": None,
-                "next_title": "Slice 24 Packaging Brief boundary",
+                "next_title": "Prepare psychological packaging angles",
             }
+
+        angle_requests = psychological_angle_request_snapshot()
+        angles = psychological_angle_snapshot()
+        if not angles.get("ready"):
+            if not angle_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Psychological Packaging Angles",
+                    "current_detail": (
+                        "Build one current request per approved format from the exact "
+                        "Packaging Brief. Five distinct primary psychological drivers "
+                        "are required and exactly one hypothesis remains anchored to "
+                        "the human-selected title direction."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Generate five diverse packaging hypotheses",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Generate Psychological Packaging Angles",
+                "current_detail": (
+                    "Use the configured free-first FAIR path to create five genuinely "
+                    "different packaging hypotheses per format. Creative framing may "
+                    "vary; facts, numbers and claims remain evidence-bound."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare thumbnail concepts",
+            }
+
+        thumbnail_requests = thumbnail_concept_request_snapshot()
+        thumbnails = thumbnail_concept_snapshot()
+        if not thumbnails.get("ready"):
+            if not thumbnail_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Thumbnail Concepts",
+                    "current_detail": (
+                        "Bind each current psychological angle to the exact Viewer "
+                        "Promise and approved evidence. Concepts must stay 16:9, "
+                        "mobile-legible, timestamp-safe and visually simple."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Generate one thumbnail concept per angle",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Generate Thumbnail Concepts",
+                "current_detail": (
+                    "Generate structured thumbnail concepts only. Each angle gets one "
+                    "visual proposition with one focal point, at most three meaningful "
+                    "elements, evidence-bound text and no image-generation spend."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 25 thumbnail concept boundary",
+            }
+
         return {
-            "state": "PACKAGING_BRIEF_READY",
+            "state": "THUMBNAIL_CONCEPTS_READY",
             "current_action_id": None,
-            "current_title": "Packaging Brief + Viewer Promise Ready",
+            "current_title": "Psychological Angles + Thumbnail Concepts Ready",
             "current_detail": (
-                "Every current format branch has an evidence-bound Packaging Brief "
-                "and explicit Viewer Promise Contract. Slice 24 stops here. No "
-                "thumbnail concepts, package scoring, final packaging approval or "
-                "production action has occurred."
+                "Every current format has five distinct psychological hypotheses and "
+                "one evidence-bound thumbnail concept per angle. Slice 25 stops here. "
+                "Titles and thumbnails have not been paired, scored or approved, and "
+                "no thumbnail image has been generated."
             ),
             "next_action_id": None,
-            "next_title": "Slice 25: psychological angles + thumbnail concepts",
+            "next_title": "Slice 26: title-thumbnail pairing + validation",
         }
 
     fmt = format_artifact_state()
@@ -7172,6 +7415,10 @@ def status_payload() -> dict[str, Any]:
         "script_gate": story["script_gate"],
         "title_direction": title_direction_artifact_state(),
         "packaging_brief": packaging_brief_snapshot(),
+        "psychological_angle_requests": psychological_angle_request_snapshot(),
+        "psychological_angles": psychological_angle_snapshot(),
+        "thumbnail_concept_requests": thumbnail_concept_request_snapshot(),
+        "thumbnail_concepts": thumbnail_concept_snapshot(),
         "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],
