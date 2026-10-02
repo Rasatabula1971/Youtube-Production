@@ -714,6 +714,134 @@ class WorkflowAutomationTests(unittest.TestCase):
             "HUMAN_VISUAL_CANDIDATE_GATE",
         )
 
+    def test_candidate_and_rights_complete_runs_assets_then_rough_cut(self):
+        state = {"completed": 0}
+        sequence = [
+            "visual_asset_acquire",
+            "visual_rough_cut_prepare",
+        ]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
+                return {
+                    action_id: {
+                        "enabled": True,
+                        "reason": f"{action_id} ready",
+                    }
+                }
+            return {
+                "visual_gap_prepare": {
+                    "enabled": True,
+                    "reason": "must wait for rough-cut human approval",
+                }
+            }
+
+        def guidance(_readiness):
+            if state["completed"] == len(sequence):
+                return {
+                    "state": "HUMAN_ROUGH_CUT_GATE",
+                    "current_title": "Review Visual Rough Cut",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_title": "Continue current visual preparation",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(
+                action_id,
+                sequence[state["completed"]],
+            )
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_ROUGH_CUT_GATE",
+        )
+
+    def test_rights_gate_blocks_asset_acquisition_and_rough_cut(self):
+        readiness = {
+            "visual_asset_acquire": {
+                "enabled": True,
+                "reason": "stale downstream readiness",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "HUMAN_VISUAL_RIGHTS_GATE",
+                    "current_title": "Review Creator Footage Context",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_VISUAL_RIGHTS_GATE",
+        )
+
+    def test_rough_cut_gate_blocks_gap_planning(self):
+        readiness = {
+            "visual_gap_prepare": {
+                "enabled": True,
+                "reason": "stale downstream readiness",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "HUMAN_ROUGH_CUT_GATE",
+                    "current_title": "Review Visual Rough Cut",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "HUMAN_ROUGH_CUT_GATE",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {
