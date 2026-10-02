@@ -299,14 +299,12 @@ class ScriptSectionApplyTests(unittest.TestCase):
     def apply_dirs(self, root):
         review_requests = root / "review_requests"
         review_responses = root / "review_responses"
-        rework_responses = root / "rework_responses"
         approved = root / "approved"
         versions = root / "versions"
         transactions = root / "transactions"
         for path in (
             review_requests,
             review_responses,
-            rework_responses,
             approved,
             versions,
             transactions,
@@ -315,17 +313,23 @@ class ScriptSectionApplyTests(unittest.TestCase):
         return {
             "review_requests_dir": review_requests,
             "review_responses_dir": review_responses,
-            "rework_responses_dir": rework_responses,
             "approved_dir": approved,
             "versions_dir": versions,
             "transactions_dir": transactions,
         }
 
+    def selection_dirs(self, root):
+        values = self.apply_dirs(root)
+        rework_responses = root / "rework_responses"
+        rework_responses.mkdir(exist_ok=True)
+        values["rework_responses_dir"] = rework_responses
+        return values
+
     def test_select_a_changes_only_selected_target_and_versions_previous_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
 
             old_draft = rework_runner.load_json(paths["draft"])
             old_state = section_state.load_json(paths["state"])
@@ -435,7 +439,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             before = paths["draft"].read_bytes()
 
             result = section_apply.apply_selection(
@@ -464,7 +468,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             section_apply.apply_selection(
                 paths["alternatives"],
                 selection_id="A",
@@ -487,7 +491,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             before = paths["draft"].read_bytes()
 
             artifact = rework_runner.load_json(paths["alternatives"])
@@ -517,7 +521,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             before = paths["draft"].read_bytes()
 
             fake_response = root / "attacker_response.json"
@@ -556,7 +560,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             section_state.apply_target_action(
                 paths["state"],
                 paths["draft"],
@@ -580,7 +584,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = self.setup_artifacts(root)
-            dirs = self.apply_dirs(root)
+            dirs = self.selection_dirs(root)
             old_draft = rework_runner.load_json(paths["draft"])
             old_state = section_state.load_json(paths["state"])
             old_artifact = rework_runner.load_json(paths["alternatives"])
