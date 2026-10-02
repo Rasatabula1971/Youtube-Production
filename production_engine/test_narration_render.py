@@ -324,6 +324,22 @@ class NarrationRenderTests(unittest.TestCase):
         finally:
             temp.cleanup()
 
+    def test_render_request_derives_duration_from_locked_text_and_speed(self) -> None:
+        request, _, temp = self.build()
+        try:
+            segment = request["segments"][0]
+            self.assertIn("expected_duration_seconds", segment)
+            self.assertGreater(segment["expected_duration_seconds"], 0)
+            self.assertEqual(
+                segment["expected_duration_seconds"],
+                narration_render.expected_speech_duration_seconds(
+                    segment["immutable_narration"],
+                    segment["delivery"]["speed"],
+                ),
+            )
+        finally:
+            temp.cleanup()
+
     def test_render_request_preserves_exact_narration(self) -> None:
         request, _, temp = self.build()
         try:
