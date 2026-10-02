@@ -4675,7 +4675,9 @@ function renderAnalysis(data) {
     "EDIT_PREVIEW_DIRECTION_APPROVED",
     "WAITING_FOR_FINAL_VISUAL_ASSETS",
     "FINAL_PRODUCTION_HANDOFF_BLOCKED",
-    "FINAL_PRODUCTION_HANDOFF_READY"
+    "FINAL_PRODUCTION_HANDOFF_READY",
+    "WAITING_FOR_FINAL_SOUND_ASSETS",
+    "FINAL_SOUND_ASSETS_READY"
   ].includes(workflow.state);
 
   const opportunityApproved =
@@ -4740,6 +4742,7 @@ function renderAnalysis(data) {
     data.generated_visual_assets || {}
   );
   renderEditPreviewReview(data.edit_preview_gate || {});
+  renderFinalSoundImport(data.final_sound_assets || {});
   api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
   api("/api/storyboard-review").then(function (value) {
     latestStoryboardSnapshot = value;
@@ -4782,6 +4785,8 @@ function renderAnalysis(data) {
       "WAITING_FOR_FINAL_VISUAL_ASSETS",
       "FINAL_PRODUCTION_HANDOFF_BLOCKED",
       "FINAL_PRODUCTION_HANDOFF_READY",
+      "WAITING_FOR_FINAL_SOUND_ASSETS",
+      "FINAL_SOUND_ASSETS_READY",
       "FINAL_EDIT_DIRECTION_APPROVED"
     ].includes(workflow.state) ||
     voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
@@ -5475,6 +5480,25 @@ generatedVisualNext.addEventListener("click", function () {
   );
 });
 generatedVisualRegister.addEventListener("click", registerGeneratedVisualAsset);
+
+finalSoundPrev.addEventListener("click", function () {
+  finalSoundCursor = Math.max(0, finalSoundCursor - 1);
+  renderFinalSoundImport(latestFinalSoundSnapshot || {});
+});
+finalSoundNext.addEventListener("click", function () {
+  const items = finalSoundPendingItems(latestFinalSoundSnapshot || {});
+  finalSoundCursor = Math.min(
+    Math.max(0, items.length - 1),
+    finalSoundCursor + 1
+  );
+  renderFinalSoundImport(latestFinalSoundSnapshot || {});
+});
+finalSoundRegister.addEventListener("click", function () {
+  submitFinalSoundResolution("register");
+});
+finalSoundOmit.addEventListener("click", function () {
+  submitFinalSoundResolution("omit");
+});
 
 narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
 narrationSaveRevision.addEventListener("click", saveNarrationSegmentRevision);
