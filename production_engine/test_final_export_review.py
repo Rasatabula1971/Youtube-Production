@@ -121,6 +121,44 @@ class FinalExportReviewTests(unittest.TestCase):
         self.assertEqual(snapshot["rework"], 1)
         self.assertFalse(approval_path.exists())
 
+    def test_missing_approval_reopens_approved_review_as_pending(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_dir, result_path, result, _render = self.result_fixture(
+                root
+            )
+            review_dir = root / "reviews"
+            approved_dir = root / "approved"
+            with (
+                patch.object(export_review, "RESULT_DIR", result_dir),
+                patch.object(export_review, "REVIEW_DIR", review_dir),
+                patch.object(export_review, "APPROVED_DIR", approved_dir),
+                patch.object(export_review, "REWORK_DIR", root / "rework"),
+                patch.object(
+                    export_review,
+                    "result_is_current",
+                    return_value=result,
+                ),
+            ):
+                export_review.apply_action(
+                    result_file=str(result_path),
+                    decision="APPROVE_EXPORT",
+                    note="",
+                )
+                approval_path = (
+                    approved_dir / "c1.short.approved_final_export.json"
+                )
+                approval_path.unlink()
+                snapshot = export_review.snapshot()
+
+        self.assertFalse(snapshot["complete"])
+        self.assertEqual(snapshot["pending"], 1)
+        self.assertEqual(snapshot["approved"], 0)
+        self.assertEqual(
+            snapshot["items"][0]["decision"],
+            "PENDING",
+        )
+
     def test_changed_render_invalidates_saved_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
