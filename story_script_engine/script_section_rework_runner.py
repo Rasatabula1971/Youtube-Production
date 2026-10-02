@@ -21,7 +21,10 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json, atomic_write_text
 from source_overlap import check_texts
 from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
-from script_section_state import assert_state_matches_draft
+from script_section_state import (
+    SECTION_STATE_ACTION_LOCK,
+    assert_state_matches_draft,
+)
 
 EXP2_DIR = _ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -341,7 +344,7 @@ def build_rework_request(
     }
 
 
-def prepare_rework_request(
+def _prepare_rework_request_unlocked(
     state_path: Path,
     draft_path: Path,
     *,
@@ -379,7 +382,25 @@ def prepare_rework_request(
     return destination
 
 
-def assert_request_current(request: dict[str, Any]) -> None:
+def prepare_rework_request(
+    state_path: Path,
+    draft_path: Path,
+    *,
+    target_id: str,
+    requests_dir: Path = REWORK_REQUESTS_DIR,
+    review_requests_dir: Path | None = None,
+) -> Path:
+    with SECTION_STATE_ACTION_LOCK:
+        return _prepare_rework_request_unlocked(
+            state_path,
+            draft_path,
+            target_id=target_id,
+            requests_dir=requests_dir,
+            review_requests_dir=review_requests_dir,
+        )
+
+
+def _assert_request_current_unlocked(request: dict[str, Any]) -> None:
     provenance = request.get("request_provenance")
     if not isinstance(provenance, dict):
         raise ValueError("Rework request is missing provenance")
@@ -441,6 +462,11 @@ def assert_request_current(request: dict[str, Any]) -> None:
         raise ValueError(
             "STALE_REWORK_REQUEST: prepared request content changed"
         )
+
+
+def assert_request_current(request: dict[str, Any]) -> None:
+    with SECTION_STATE_ACTION_LOCK:
+        _assert_request_current_unlocked(request)
 
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
@@ -756,6 +782,17 @@ def run_one(
                 if result.get("status") == "ESCALATION_REQUIRED"
                 else "MODEL_FAILED"
             ),
+        }
+        atomic_write_json(report_path, report)
+        return report
+
+    try:
+        assert_request_current(request)
+    except (OSError, TypeError, ValueError) as exc:
+        report = {
+            **base,
+            "status": "STALE_REWORK_REQUEST",
+            "message": str(exc)[:1000],
         }
         atomic_write_json(report_path, report)
         return report
