@@ -14,8 +14,11 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 16],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 19],
             [
+                "title_direction_prepare",
+                "title_direction_generate",
+                "title_direction_gate_prepare",
                 "format_prepare",
                 "format_generate",
                 "format_gate_prepare",
@@ -53,14 +56,14 @@ class FormatUiIntegrationTests(unittest.TestCase):
         self.assertIn("/api/format-gate", script)
 
 
-    def test_script_accept_ui_announces_automatic_format_handoff(self):
+    def test_script_accept_ui_announces_automatic_title_direction_handoff(self):
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
         self.assertIn(
             'payload.automation_job.action_id === "auto_continue"',
             script,
         )
         self.assertIn(
-            "Script Gate complete. Format planning started automatically.",
+            "Script Gate complete. Title-direction generation started automatically.",
             script,
         )
 
