@@ -189,16 +189,19 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                     "alternative_id": "A",
                     "replacement_text": "Instead of taking the force in one rigid hit, the joint redirects part of that load as it moves.",
                     "change_summary": "Uses a concrete force-path image with minimal structural change.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "B",
                     "replacement_text": "Picture the force entering the joint and being guided through a different path as the joint flexes.",
                     "change_summary": "Makes the mechanism more visual and conversational.",
+                    "claim_ids_used": ["clm001"],
                 },
                 {
                     "alternative_id": "C",
                     "replacement_text": "The motion is doing work: it changes the route the force takes through the structure.",
                     "change_summary": "Uses a shorter reveal-first explanation.",
+                    "claim_ids_used": ["clm001"],
                 },
             ],
         }
@@ -308,6 +311,117 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
             _, _, _, request = self.build_request(Path(tmp))
             validation = rework_runner.validate_response(
                 self.response(),
+                request,
+            )
+
+        self.assertTrue(validation["valid"], validation["errors"])
+
+
+    def test_schema_requires_exact_claim_ids_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            schema = rework_runner.response_schema(request)
+
+        item = schema["properties"]["alternatives"]["items"]
+        self.assertIn("claim_ids_used", item["required"])
+        claim_schema = item["properties"]["claim_ids_used"]
+        self.assertEqual(claim_schema["minItems"], 1)
+        self.assertEqual(claim_schema["maxItems"], 1)
+        self.assertEqual(
+            claim_schema["items"]["enum"],
+            ["clm001"],
+        )
+
+    def test_response_rejects_extra_fields_and_wrong_types(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            response = self.response()
+            response["unexpected"] = "nope"
+            response["alternatives"][0]["extra"] = "nope"
+            response["alternatives"][1]["replacement_text"] = 123
+
+            validation = rework_runner.validate_response(
+                response,
+                request,
+            )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            any("unsupported fields" in item for item in validation["errors"])
+        )
+        self.assertTrue(
+            any(
+                "replacement_text must be a string" in item
+                for item in validation["errors"]
+            )
+        )
+
+    def test_response_rejects_wrong_or_missing_claim_ids_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            wrong = self.response()
+            wrong["alternatives"][0]["claim_ids_used"] = ["clm999"]
+            missing = self.response()
+            missing["alternatives"][1].pop("claim_ids_used")
+
+            wrong_validation = rework_runner.validate_response(
+                wrong,
+                request,
+            )
+            missing_validation = rework_runner.validate_response(
+                missing,
+                request,
+            )
+
+        self.assertFalse(wrong_validation["valid"])
+        self.assertTrue(
+            any(
+                "claim_ids_used must exactly match" in item
+                for item in wrong_validation["errors"]
+            )
+        )
+        self.assertFalse(missing_validation["valid"])
+        self.assertTrue(
+            any(
+                "missing fields: claim_ids_used" in item
+                for item in missing_validation["errors"]
+            )
+        )
+
+    def test_response_rejects_unsupported_numeric_fact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            response = self.response()
+            response["alternatives"][0]["replacement_text"] = (
+                "The joint redirects the force by exactly 37 percent."
+            )
+
+            validation = rework_runner.validate_response(
+                response,
+                request,
+            )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            any(
+                "unsupported numeric facts" in item
+                for item in validation["errors"]
+            )
+        )
+
+    def test_numeric_fact_is_allowed_when_present_in_bound_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+            request["accepted_claims"][0]["statement"] = (
+                "The flexible joint changes load distribution by 20%."
+            )
+            response = self.response()
+            response["alternatives"][0]["replacement_text"] = (
+                "The joint changes load distribution by 20% as it moves."
+            )
+
+            validation = rework_runner.validate_response(
+                response,
                 request,
             )
 
