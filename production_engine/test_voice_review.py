@@ -269,7 +269,9 @@ class VoiceReviewTests(unittest.TestCase):
             requests = root / "requests"
             responses = root / "responses"
             approved = root / "approved"
+            model_runs = root / "model_runs"
             specs.mkdir()
+            model_runs.mkdir()
             planner_request = root / "concept-1.long_form.voice_request.json"
             planner_request.write_text(
                 json.dumps({"concept_id": "concept-1", "format": "long_form"}),
