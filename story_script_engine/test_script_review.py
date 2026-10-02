@@ -1,10 +1,12 @@
 import json
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
 import script_review
+import script_section_service as section_service
 import script_section_state as section_state
 
 
@@ -311,6 +313,98 @@ class ScriptReviewTests(unittest.TestCase):
                     requests / "c1.short.script_review_request.json",
                     self.accept_payload("short"),
                 )
+
+
+    def test_concurrent_branch_accept_and_section_rework_cannot_coexist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            rework_requests = root / "rework_requests"
+            alternatives = root / "alternatives"
+            versions = root / "versions"
+            transactions = root / "transactions"
+            for path in (
+                states,
+                rework_requests,
+                alternatives,
+                versions,
+                transactions,
+            ):
+                path.mkdir()
+
+            draft_path = drafts / "c1.short.script_draft.json"
+            section_state.prepare_state(
+                draft_path,
+                state_dir=states,
+            )
+            short_request = (
+                requests / "c1.short.script_review_request.json"
+            )
+
+            service_dirs = {
+                "drafts_dir": drafts,
+                "state_dir": states,
+                "rework_requests_dir": rework_requests,
+                "alternatives_dir": alternatives,
+                "versions_dir": versions,
+                "transactions_dir": transactions,
+                "review_requests_dir": requests,
+                "review_responses_dir": responses,
+                "approved_dir": approved,
+            }
+
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_STATE_DIR", states),
+            ):
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    futures = [
+                        pool.submit(
+                            script_review.apply_payload,
+                            short_request,
+                            self.accept_payload("short"),
+                        ),
+                        pool.submit(
+                            section_service.apply_action,
+                            concept_id="c1",
+                            fmt="short",
+                            action="REWORK",
+                            target_id="section:s1",
+                            reason="TOO_TECHNICAL",
+                            custom_instruction="Use plain language.",
+                            reviewer="r",
+                            **service_dirs,
+                        ),
+                    ]
+                    for future in futures:
+                        try:
+                            future.result()
+                        except ValueError as exc:
+                            self.assertIn(
+                                "ACCEPT blocked while section rework is pending",
+                                str(exc),
+                            )
+
+            state_path = section_state.state_path_for(
+                "c1",
+                "short",
+                states,
+            )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            target = next(
+                item
+                for item in state["targets"]
+                if item["target_id"] == "section:s1"
+            )
+            branch_response = (
+                responses / "c1.short.script_review_response.json"
+            )
+
+        self.assertEqual(target["decision"], "REWORK_REQUESTED")
+        self.assertFalse(branch_response.exists())
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
