@@ -119,12 +119,13 @@ class EditPreviewReviewTests(unittest.TestCase):
             payload = json.loads(
                 approval.read_text(encoding="utf-8")
             )
+            expected_result_sha256 = review.sha256_file(result_path)
 
         self.assertTrue(snapshot["complete"])
         self.assertEqual(snapshot["approved"], 1)
         self.assertEqual(
             payload["source_preview_result_sha256"],
-            review.sha256_file(result_path),
+            expected_result_sha256,
         )
         self.assertEqual(
             payload["placeholder_segments_at_approval"],
