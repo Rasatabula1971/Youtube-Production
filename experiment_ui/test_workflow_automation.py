@@ -616,6 +616,104 @@ class WorkflowAutomationTests(unittest.TestCase):
             "NARRATION_AUDIO_QC_FAILED",
         )
 
+    def test_audio_ready_runs_visual_plan_chain_then_stops_before_search(self):
+        state = {"completed": 0}
+        sequence = [
+            "production_visual_prepare",
+            "storyboard_prepare",
+            "visual_search_prepare",
+        ]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
+                return {
+                    action_id: {
+                        "enabled": True,
+                        "reason": f"{action_id} ready",
+                    }
+                }
+            return {
+                "visual_search_acquire": {
+                    "enabled": True,
+                    "reason": "free search would be next",
+                }
+            }
+
+        def guidance(_readiness):
+            if state["completed"] == len(sequence):
+                return {
+                    "state": "VISUAL_SEARCH_READY",
+                    "current_title": "Visual Search Plan Ready",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_title": "Build narration-bound visual plan",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(
+                action_id,
+                sequence[state["completed"]],
+            )
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertNotIn("visual_search_acquire", result["completed_actions"])
+        self.assertEqual(
+            result["workflow_state"],
+            "VISUAL_SEARCH_READY",
+        )
+
+    def test_visual_search_ready_blocks_stale_search_adapter_action(self):
+        readiness = {
+            "visual_search_acquire": {
+                "enabled": True,
+                "reason": "search adapter is ready",
+            }
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "VISUAL_SEARCH_READY",
+                    "current_title": "Visual Search Plan Ready",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "VISUAL_SEARCH_READY",
+        )
+
     def test_partial_command_without_progress_stops_as_partial(self):
         readiness = {
             "concept_generate": {
