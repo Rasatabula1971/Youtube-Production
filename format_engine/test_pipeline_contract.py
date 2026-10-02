@@ -657,15 +657,10 @@ class PipelineContractTests(unittest.TestCase):
                         request["psychology_profile"]["hook_target_seconds"],
                         3,
                     )
-                    self.assertEqual(
-                        request["package"]["title"],
-                        "F1 Brakes Hate Being Cold",
-                    )
-                else:
-                    self.assertEqual(
-                        request["package"]["title"],
-                        "Why F1 Brakes Work Backwards",
-                    )
+                self.assertEqual(
+                    request["package"]["title"],
+                    "Why Racing Brakes Behave Backwards",
+                )
 
                 response = {
                     "concept_id": "c1",
