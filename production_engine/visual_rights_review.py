@@ -59,26 +59,36 @@ def _current_review_result(
 
 
 def _candidate(
+    review_path: Path,
     review: dict[str, Any],
     shot_id: str,
 ) -> dict[str, Any] | None:
-    result_path = Path(str(review.get("source_result") or ""))
+    current = _current_review_result(review_path, review)
+    if current is None:
+        return None
+    _, result = current
+
+    decision = review.get("decisions", {}).get(shot_id, {})
     if (
-        not result_path.exists()
-        or result_path.parent.resolve() != SEARCH_RESULT_DIR.resolve()
+        not isinstance(decision, dict)
+        or decision.get("status")
+        != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
     ):
         return None
-    result = load_json(result_path)
-    decision = review.get("decisions", {}).get(shot_id, {})
-    cid = str(decision.get("candidate_id") or "")
+
+    candidate_id = str(decision.get("candidate_id") or "")
     shot = next(
         (
             item
             for item in result.get("shots", [])
-            if str(item.get("shot_id")) == shot_id
+            if isinstance(item, dict)
+            and str(item.get("shot_id") or "") == shot_id
         ),
-        {},
+        None,
     )
+    if not isinstance(shot, dict):
+        return None
+
     result_fingerprint = hashlib.sha256(
         json.dumps(
             shot,
@@ -89,16 +99,19 @@ def _candidate(
     ).hexdigest()
     if decision.get("result_fingerprint") != result_fingerprint:
         return None
+
     candidate = next(
         (
             item
             for item in shot.get("candidates", [])
-            if str(item.get("candidate_id")) == cid
+            if isinstance(item, dict)
+            and str(item.get("candidate_id") or "") == candidate_id
         ),
         None,
     )
     if candidate is None:
         return None
+
     candidate_fingerprint = hashlib.sha256(
         json.dumps(
             candidate,
@@ -109,10 +122,17 @@ def _candidate(
     ).hexdigest()
     if decision.get("candidate_fingerprint") != candidate_fingerprint:
         return None
+
+    try:
+        route = candidate_selection_status(candidate)
+    except ValueError:
+        return None
+    if route != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE":
+        return None
     return candidate
 
-
 def _selection_current(
+    review_path: Path,
     review: dict[str, Any],
     shot_id: str,
     rights_decision: dict[str, Any],
@@ -124,7 +144,7 @@ def _selection_current(
         != "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
     ):
         return False
-    candidate = _candidate(review, shot_id)
+    candidate = _candidate(review_path, review, shot_id)
     return bool(
         candidate is not None
         and rights_decision.get("candidate_id") == candidate.get("candidate_id")
@@ -151,7 +171,12 @@ def _reconcile(
     for shot_id, rights_decision in old_decisions.items():
         if (
             isinstance(rights_decision, dict)
-            and _selection_current(review, shot_id, rights_decision)
+            and _selection_current(
+                review_path,
+                review,
+                shot_id,
+                rights_decision,
+            )
         ):
             current_decisions[shot_id] = rights_decision
         else:
