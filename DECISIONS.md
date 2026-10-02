@@ -2031,3 +2031,47 @@ The successful Slice 20 boundary is `FINAL_PRODUCTION_HANDOFF_READY`. The
 handoff records provider-neutral instructions and explicitly keeps provider
 execution unauthorized. Final licensed music/SFX acquisition/provider execution
 and publish-ready rendering remain later work.
+
+## D-091 — Final sound is resolved by licensed asset registration or explicit omission before rendering
+
+**Status:** Accepted
+
+Slice 21 extends the current Slice 20 final-production handoff only through the
+final sound asset trust boundary.
+
+The automatic path is:
+
+`FINAL_PRODUCTION_HANDOFF_READY → final_sound_plan_prepare → WAITING_FOR_FINAL_SOUND_ASSETS`
+
+The deterministic sound plan derives stable, fingerprinted requirements from
+the exact current final-production handoff. Each approved music direction
+becomes a MUSIC requirement and each approved SFX direction becomes a separate
+SFX requirement.
+
+Slice 21 never calls a music/SFX provider, initiates a purchase, generates final
+sound, renders final video, uploads, or publishes.
+
+A human may resolve each current requirement in one of two ways:
+
+1. register an already owned/licensed local sound file; or
+2. explicitly omit the requirement with a human note.
+
+Registered sound files must use a supported audio extension, be non-empty, have
+explicit commercial-use confirmation, and carry a licence/ownership reference.
+They are copied into managed project storage and hash-bound to the exact current
+sound plan and requirement fingerprint.
+
+If an asset has a non-zero external cost, registration is rejected unless the
+human explicitly confirms that the purchase already occurred outside the app.
+That confirmation is a record of an external action, not app spend
+authorization. The record always states that the app neither authorized spend
+nor executed a provider call.
+
+A stored resolution is current only while the exact sound plan remains current,
+the requirement fingerprint still matches, and any registered managed file
+still matches its recorded SHA-256 and byte count. A plan mutation therefore
+invalidates old registrations automatically.
+
+The successful Slice 21 boundary is `FINAL_SOUND_ASSETS_READY`: every current
+requirement has either a current licensed asset or an explicit human omission.
+Final mixing/rendering remains Slice 22 work.
