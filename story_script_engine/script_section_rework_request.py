@@ -292,6 +292,13 @@ def build_section_rework_request(
         raise ValueError(
             "Selective rework provenance missing: " + ", ".join(missing)
         )
+    if (
+        str(provenance.get("script_draft_sha256") or "")
+        != str(section_state.get("source_draft_sha256") or "")
+    ):
+        raise ValueError(
+            "Selective rework provenance draft hash does not match section state"
+        )
 
     package = draft.get("package", {})
     if not isinstance(package, dict):
