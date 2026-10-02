@@ -3829,7 +3829,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
         transform_tone = "complete"
-        transform_next = "Proceed to Packaging / Research."
+        transform_next = "Proceed to Research."
     elif active_action in {
         "transform_prepare",
         "concept_generate",
@@ -3872,46 +3872,46 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if packaging_research_ready:
-        package_human = "PACKAGE ACCEPTED — STAGE COMPLETE"
+    if title_direction_selected:
+        package_human = "TITLE DIRECTIONS SELECTED — SLICE 23 COMPLETE"
         package_tone = "complete"
-        package_next = "Proceed to Research."
+        package_next = "Build Slice 24 Packaging Brief + Viewer Promise."
     elif active_action in {
-        "package_prepare",
-        "package_generate",
-        "package_gate_prepare",
+        "title_direction_prepare",
+        "title_direction_generate",
+        "title_direction_gate_prepare",
     }:
-        package_human = "PACKAGING WORK RUNNING"
+        package_human = "TITLE DIRECTION WORK RUNNING"
         package_tone = "running"
-        package_next = "Wait for the current Packaging job to finish."
-    elif not research_ready:
-        package_human = "WAITING FOR ACCEPTED CONCEPT"
+        package_next = "Wait for the current title-direction job to finish."
+    elif not production_ready:
+        package_human = "WAITING FOR APPROVED SCRIPT"
         package_tone = "blocked"
-        package_next = "Accept a concept first."
-    elif not package_requests:
-        package_human = "READY TO PREPARE PACKAGES"
+        package_next = "Approve all required script branches first."
+    elif not title_direction_requests_ready:
+        package_human = "READY TO PREPARE TITLE DIRECTIONS"
         package_tone = "ready"
-        package_next = "Run Prepare Package Requests."
-    elif not package_candidates:
-        package_human = "PACKAGE GENERATION NEEDED"
+        package_next = "Run Prepare Title Direction Requests."
+    elif not title_direction_candidates_ready:
+        package_human = "5+5 TITLE GENERATION NEEDED"
         package_tone = "action"
-        package_next = "Run Generate Package Candidates."
-    elif packaging_gate_status == "READY_TO_PREPARE":
-        package_human = "PREPARE PACKAGING GATE"
+        package_next = "Generate five Short and five Long-form directions."
+    elif title_direction_gate_status == "READY_TO_PREPARE":
+        package_human = "PREPARE TITLE DIRECTION GATE"
         package_tone = "action"
-        package_next = "Run Prepare Packaging Gate."
-    elif packaging_gate_status == "AWAITING_HUMAN_DECISION":
-        package_human = "HUMAN PACKAGE DECISION NEEDED"
+        package_next = "Prepare the Human Title Direction Gate."
+    elif title_direction_gate_status == "AWAITING_HUMAN_TITLE_DIRECTION":
+        package_human = "HUMAN TITLE DIRECTION DECISION NEEDED"
         package_tone = "action"
-        package_next = "Review package candidates in Analyze & Create."
-    elif packaging_gate_complete:
-        package_human = "NO APPROVED PACKAGE"
+        package_next = "Select one Short and one Long-form direction."
+    elif title_direction_gate_status == "TITLE_DIRECTION_REJECTED":
+        package_human = "TITLE DIRECTION REWORK REQUIRED"
         package_tone = "action"
-        package_next = "Rework or regenerate packages before research."
+        package_next = "Rework or regenerate title directions."
     else:
-        package_human = "PACKAGING NEEDS ATTENTION"
+        package_human = "TITLE DIRECTION NEEDS ATTENTION"
         package_tone = "action"
-        package_next = "Inspect the Packaging Gate state."
+        package_next = "Inspect the Title Direction Gate state."
 
     if story_ready:
         research_human = "RESEARCH APPROVED — STAGE COMPLETE"
@@ -3926,10 +3926,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         research_human = "RESEARCH WORK RUNNING"
         research_tone = "running"
         research_next = "Wait for the current Research job to finish."
-    elif not packaging_research_ready:
-        research_human = "WAITING FOR APPROVED PACKAGE"
+    elif not research_ready:
+        research_human = "WAITING FOR ACCEPTED CONCEPT"
         research_tone = "blocked"
-        research_next = "Approve a package first."
+        research_next = "Accept a concept first."
     elif not research_plans:
         research_human = "READY TO PREPARE RESEARCH"
         research_tone = "ready"
@@ -3962,7 +3962,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     if production_ready:
         script_human = "SCRIPT APPROVED — STAGE COMPLETE"
         script_tone = "complete"
-        script_next = "Proceed to Format."
+        script_next = "Proceed to post-script Title Direction."
     elif active_action in {
         "story_prepare",
         "story_generate",
@@ -4004,7 +4004,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif script_gate_complete:
         script_human = "NO APPROVED SCRIPT"
         script_tone = "action"
-        script_next = "Rework or regenerate scripts before Format."
+        script_next = "Rework or regenerate scripts before Title Direction."
     else:
         script_human = "SCRIPT NEEDS ATTENTION"
         script_tone = "action"
@@ -4014,42 +4014,17 @@ def stage_statuses() -> list[dict[str, Any]]:
         format_human = "FORMAT APPROVED — STAGE COMPLETE"
         format_tone = "complete"
         format_next = "Ready for the Production Engine."
-    elif active_action in {
-        "format_prepare",
-        "format_generate",
-        "format_gate_prepare",
-    }:
-        format_human = "FORMAT WORK RUNNING"
-        format_tone = "running"
-        format_next = "Wait for the current Format job to finish."
-    elif not production_ready:
-        format_human = "WAITING FOR APPROVED SCRIPT"
+    elif not title_direction_selected:
+        format_human = "WAITING FOR TITLE DIRECTION"
         format_tone = "blocked"
-        format_next = "Approve a script first."
-    elif not format_requests_ready:
-        format_human = "READY TO PREPARE FORMATS"
-        format_tone = "ready"
-        format_next = "Run Prepare Format Requests."
-    elif not format_plans_ready:
-        format_human = "FORMAT PLANNING NEEDED"
-        format_tone = "action"
-        format_next = "Run Generate Format Plans."
-    elif format_gate_status == "READY_TO_PREPARE":
-        format_human = "PREPARE FORMAT GATE"
-        format_tone = "action"
-        format_next = "Run Prepare Format Gate."
-    elif format_gate_status == "AWAITING_HUMAN_DECISION":
-        format_human = "HUMAN FORMAT DECISION NEEDED"
-        format_tone = "action"
-        format_next = "Review format plans in Analyze & Create."
-    elif format_gate_complete:
-        format_human = "NO APPROVED FORMAT PLAN"
-        format_tone = "action"
-        format_next = "Rework or regenerate format plans before production."
+        format_next = "Complete the post-script Title Direction Gate first."
     else:
-        format_human = "FORMAT NEEDS ATTENTION"
-        format_tone = "action"
-        format_next = "Inspect the Format Gate state."
+        format_human = "HELD FOR MATURE PACKAGING"
+        format_tone = "blocked"
+        format_next = (
+            "Slice 24 must validate title + thumbnail + hook + Viewer Promise "
+            "before Format/Production resumes."
+        )
 
     return [
         {
