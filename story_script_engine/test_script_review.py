@@ -402,9 +402,10 @@ class ScriptReviewTests(unittest.TestCase):
             branch_response = (
                 responses / "c1.short.script_review_response.json"
             )
+            branch_response_exists = branch_response.exists()
 
         self.assertEqual(target["decision"], "REWORK_REQUESTED")
-        self.assertFalse(branch_response.exists())
+        self.assertFalse(branch_response_exists)
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(
