@@ -141,12 +141,12 @@ class WorkflowAutomationTests(unittest.TestCase):
         )
 
 
-    def test_script_gate_completion_runs_format_chain_to_human_format_gate(self):
+    def test_script_gate_completion_runs_title_direction_chain_to_human_gate(self):
         state = {"completed": 0}
         sequence = [
-            "format_prepare",
-            "format_generate",
-            "format_gate_prepare",
+            "title_direction_prepare",
+            "title_direction_generate",
+            "title_direction_gate_prepare",
         ]
 
         def readiness():
@@ -175,8 +175,8 @@ class WorkflowAutomationTests(unittest.TestCase):
                 automation.control,
                 "workflow_guidance",
                 return_value={
-                    "state": "HUMAN_FORMAT_GATE",
-                    "current_title": "Review Format Plan",
+                    "state": "HUMAN_TITLE_DIRECTION_GATE",
+                    "current_title": "Select Preferred Title Directions",
                 },
             ),
             patch.object(
@@ -189,8 +189,8 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(result["completed_actions"], sequence)
-        self.assertEqual(result["workflow_state"], "HUMAN_FORMAT_GATE")
-        self.assertEqual(result["message"], "Review Format Plan")
+        self.assertEqual(result["workflow_state"], "HUMAN_TITLE_DIRECTION_GATE")
+        self.assertEqual(result["message"], "Select Preferred Title Directions")
 
     def test_format_gate_completion_runs_voice_chain_to_human_performance_gate(self):
         state = {"completed": 0}
