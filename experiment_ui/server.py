@@ -39,6 +39,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/human-analysis-review",
     "/api/concept-gate",
     "/api/packaging-gate",
+    "/api/title-direction-gate",
     "/api/research-gate",
     "/api/script-gate",
     "/api/script-section-review",
@@ -151,6 +152,10 @@ from package_review import (
 from package_review import (
     snapshot as packaging_gate_snapshot,
 )
+from title_direction_review import (
+    apply_action as apply_title_direction_gate_action,
+    snapshot as title_direction_gate_snapshot,
+)
 
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
@@ -158,6 +163,18 @@ PACKAGING_REQUESTS_DIR = PACKAGING_OUTPUT / "package_requests"
 PACKAGING_RESPONSES_DIR = PACKAGING_OUTPUT / "package_responses"
 PACKAGING_CANDIDATES_FILE = PACKAGING_OUTPUT / "package_candidates.json"
 PACKAGING_RESEARCH_HANDOFF = PACKAGING_OUTPUT / "research_handoff.json"
+TITLE_DIRECTION_REQUESTS_DIR = (
+    PACKAGING_OUTPUT / "title_direction_requests"
+)
+TITLE_DIRECTION_RESPONSES_DIR = (
+    PACKAGING_OUTPUT / "title_direction_responses"
+)
+TITLE_DIRECTION_CANDIDATES_FILE = (
+    PACKAGING_OUTPUT / "title_direction_candidates.json"
+)
+TITLE_DIRECTION_SELECTED_FILE = (
+    PACKAGING_OUTPUT / "selected_title_directions.json"
+)
 
 RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 if str(RESEARCH_DIR) not in sys.path:
@@ -394,9 +411,6 @@ AUTO_MACHINE_ACTION_ORDER = [
     "concept_generate",
     "concept_triage",
     "concept_gate_prepare",
-    "package_prepare",
-    "package_generate",
-    "package_gate_prepare",
     "research_prepare",
     "research_acquire",
     "research_generate",
@@ -406,6 +420,9 @@ AUTO_MACHINE_ACTION_ORDER = [
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
+    "title_direction_prepare",
+    "title_direction_generate",
+    "title_direction_gate_prepare",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -903,7 +920,9 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": (
-            "Turns approved packages into bounded research questions, including package promise dependencies."
+            "Turns human-accepted concepts directly into bounded research questions. "
+            "Pre-script packaging is no longer required; legacy package dependencies "
+            "remain readable on older resumable handoffs."
         ),
     },
     "research_acquire": {
@@ -956,7 +975,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Builds story-structure requests from verified research and the "
-            "approved title/package before any narration is written."
+            "accepted concept/viewer contract. The carried title is internal only."
         ),
     },
     "story_generate": {
@@ -1009,6 +1028,48 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": ("Prepares the human Script Gate before production."),
+    },
+    "title_direction_prepare": {
+        "label": "Prepare Title Direction Requests",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds post-script title-direction requests from exact current "
+            "human-approved scripts, opening hooks, payoffs and approved evidence."
+        ),
+    },
+    "title_direction_generate": {
+        "label": "Generate 5+5 Title Directions",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-first routing to generate five Short and five Long-form "
+            "title directions with stable IDs and psychology/evidence metadata."
+        ),
+    },
+    "title_direction_gate_prepare": {
+        "label": "Prepare Title Direction Gate",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the post-script Human Title Direction Gate. Selection records "
+            "a preferred psychological direction; exact wording remains editable."
+        ),
     },
     "format_prepare": {
         "label": "Prepare Format Requests",
