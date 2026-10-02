@@ -43,6 +43,7 @@ class ScriptSectionServiceTests(unittest.TestCase):
             "drafts_dir": root / "drafts",
             "state_dir": root / "states",
             "rework_requests_dir": root / "rework_requests",
+            "rework_responses_dir": root / "rework_responses",
             "alternatives_dir": root / "alternatives",
             "versions_dir": root / "versions",
             "transactions_dir": root / "transactions",
