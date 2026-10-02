@@ -763,9 +763,10 @@ class ScriptSectionApplyTests(unittest.TestCase):
                 )
             )
             transaction = rework_runner.load_json(transactions[0])
+            version_exists_after = version_path.exists()
 
         self.assertEqual(before, after)
-        self.assertFalse(version_path.exists())
+        self.assertFalse(version_exists_after)
         self.assertEqual(transaction["status"], "ROLLED_BACK")
         self.assertEqual(transaction["schema_version"], 2)
         self.assertIn("script_review_request", transaction["file_snapshots"])
@@ -828,12 +829,13 @@ class ScriptSectionApplyTests(unittest.TestCase):
             version_path = Path(
                 final_draft["human_revision"]["previous_version"]
             )
+            version_sha256 = rework_runner.sha256_file(version_path)
 
         self.assertEqual(result["status"], "ALTERNATIVE_SELECTED")
         self.assertEqual(final_artifact["selection"]["selection_id"], "A")
         self.assertEqual(final_transaction["status"], "COMMITTED")
         self.assertEqual(
-            rework_runner.sha256_file(version_path),
+            version_sha256,
             final_draft["human_revision"]["parent_draft_sha256"],
         )
 
