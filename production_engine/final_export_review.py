@@ -121,6 +121,17 @@ def snapshot() -> dict[str, Any]:
             if approval_path.exists()
             else None
         )
+        review_decision = (
+            str(review.get("decision") or "PENDING")
+            if isinstance(review, dict)
+            else "PENDING"
+        )
+        if (
+            review_decision == "APPROVE_EXPORT"
+            and approval is None
+        ):
+            review_decision = "PENDING"
+
         items.append({
             "concept_id": result.get("concept_id"),
             "format": result.get("format"),
@@ -137,11 +148,7 @@ def snapshot() -> dict[str, Any]:
             "sound_omissions": int(
                 result.get("sound_omissions") or 0
             ),
-            "decision": (
-                review.get("decision")
-                if isinstance(review, dict)
-                else "PENDING"
-            ),
+            "decision": review_decision,
             "note": (
                 review.get("note", "")
                 if isinstance(review, dict)
