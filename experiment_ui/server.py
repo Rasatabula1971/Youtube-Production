@@ -2294,6 +2294,126 @@ def story_script_artifact_state() -> dict[str, Any]:
     }
 
 
+def title_direction_artifact_state() -> dict[str, Any]:
+    upstream = story_script_artifact_state()
+    approved_hashes: dict[str, str] = {}
+    if upstream.get("production_ready") and SCRIPT_APPROVED_DIR.exists():
+        for path in SCRIPT_APPROVED_DIR.glob("*.approved_script.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            gate_info = payload.get("script_gate", {})
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if (
+                concept_id
+                and isinstance(gate_info, dict)
+                and gate_info.get("status") == "READY_FOR_PRODUCTION"
+            ):
+                approved_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if TITLE_DIRECTION_REQUESTS_DIR.exists():
+        for path in TITLE_DIRECTION_REQUESTS_DIR.glob(
+            "*.title_direction_request.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in approved_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("approved_script_sha256")
+                == approved_hashes[concept_id]
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    response_hashes: dict[str, str] = {}
+    if TITLE_DIRECTION_RESPONSES_DIR.exists():
+        for path in TITLE_DIRECTION_RESPONSES_DIR.glob(
+            "*.title_direction_response.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("response_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256")
+                == request_hashes[concept_id]
+            ):
+                response_hashes[concept_id] = sha256_file(path)
+
+    candidates = safe_load_json(TITLE_DIRECTION_CANDIDATES_FILE)
+    candidate_ids: set[str] = set()
+    candidates_current = False
+    if (
+        isinstance(candidates, dict)
+        and candidates.get("artifact") == "title_direction_candidates"
+        and isinstance(candidates.get("concepts"), list)
+    ):
+        current = True
+        for item in candidates.get("concepts", []):
+            if not isinstance(item, dict):
+                current = False
+                break
+            concept_id = str(item.get("concept_id") or "").strip()
+            provenance = item.get("response_provenance", {})
+            if (
+                concept_id not in request_hashes
+                or concept_id not in response_hashes
+                or item.get("request_sha256") != request_hashes[concept_id]
+                or not isinstance(provenance, dict)
+                or provenance.get("request_sha256")
+                != request_hashes[concept_id]
+            ):
+                current = False
+                break
+            candidate_ids.add(concept_id)
+        candidates_current = (
+            current
+            and bool(approved_hashes)
+            and set(approved_hashes) == candidate_ids
+        )
+
+    requests_ready = (
+        bool(approved_hashes)
+        and set(approved_hashes).issubset(request_hashes)
+    )
+    responses_complete = (
+        requests_ready
+        and set(request_hashes).issubset(response_hashes)
+    )
+    candidates_ready = responses_complete and candidates_current
+    gate = (
+        title_direction_gate_snapshot()
+        if candidates_ready
+        else {
+            "status": "WAITING_FOR_TITLE_DIRECTION_CANDIDATES",
+            "complete": False,
+            "ready": False,
+            "concepts": [],
+        }
+    )
+    return {
+        "approved_script_concept_ids": sorted(approved_hashes),
+        "request_concept_ids": sorted(request_hashes),
+        "response_concept_ids": sorted(response_hashes),
+        "candidate_concept_ids": sorted(candidate_ids),
+        "requests_ready": requests_ready,
+        "responses_complete": responses_complete,
+        "candidates_ready": candidates_ready,
+        "candidates_current": candidates_current,
+        "gate": gate,
+        "gate_complete": bool(gate.get("complete")),
+        "selected": bool(gate.get("ready")),
+        "status": gate.get("status"),
+    }
+
+
 def format_artifact_state() -> dict[str, Any]:
     upstream = story_script_artifact_state()
     approved_hashes: dict[str, str] = {}
