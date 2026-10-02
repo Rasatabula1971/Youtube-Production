@@ -1773,3 +1773,38 @@ permission. Those candidates remain behind the separate human rights/context
 gate. Unknown or unsupported rights remain blocked.
 
 Slice 14 downloads no visual media and calls no paid generation provider.
+
+## D-085 — Approved visual selections advance through managed assets to the Human Rough-Cut Gate
+
+**Status:** Accepted
+
+Slice 16 advances a completed Human Visual Candidate Gate, and any required
+Human Rights/Context Gate, through the zero-cost asset/rough-cut path:
+
+`candidate complete → rights complete → visual_asset_acquire → visual_rough_cut_prepare → HUMAN_ROUGH_CUT_GATE`.
+
+Human gates remain hard stops. Automatic workflow must not bypass either the
+Visual Candidate Gate, the Rights/Context Gate, or the Human Rough-Cut Gate.
+
+A selected visual is usable media only when a current managed local asset record
+exists. The managed record must remain bound to the current search result,
+candidate review, optional rights review, selected candidate fingerprint and
+local asset hash.
+
+Verified zero-cost stock may be downloaded only through the existing allow-list
+and size/type checks. Creator/editorial footage is never auto-downloaded. Once
+its rights/context decision is approved, missing editorial media remains an
+explicit rough-cut placeholder until a human supplies the local file.
+
+Automatic acquisition failures are not silently converted into successful
+placeholders. They keep asset acquisition non-current so Continue Automatically
+can retry/fix acquisition before a rough cut is promoted.
+
+Rough-cut provenance records every managed asset registry/file hash actually
+used. Server readiness also compares that set with all current managed assets
+for the branch. Adding or replacing a local asset therefore makes the old rough
+cut stale.
+
+Manual asset registration explicitly invalidates the affected rough cut and
+starts the normal automatic rebuild path. Paid visual generation remains locked
+throughout Slice 16.
