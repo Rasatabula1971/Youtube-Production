@@ -6353,18 +6353,51 @@ def workflow_guidance(
                 "next_title": "Resolve final-production blockers",
             }
 
+        final_sound_plan_state = final_sound_plan_artifact_state(
+            expected_branches
+        )
+        if not final_sound_plan_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Prepare Final Sound Requirements",
+                "current_detail": (
+                    "The current final-production handoff is ready. Convert its "
+                    "approved sound-design intent into exact, fingerprinted music/SFX "
+                    "requirements. This step calls no provider, authorizes no spend, "
+                    "and renders no final media."
+                ),
+                "next_action_id": None,
+                "next_title": "Register licensed final sound assets",
+            }
+
+        final_sound_assets = final_sound_asset_snapshot()
+        if not final_sound_assets.get("ready"):
+            return {
+                "state": "WAITING_FOR_FINAL_SOUND_ASSETS",
+                "current_action_id": None,
+                "current_title": "Register Licensed Final Sound Assets",
+                "current_detail": (
+                    f"{int(final_sound_assets.get('pending') or 0)} final sound "
+                    "requirement(s) still need either a commercial-safe local asset "
+                    "with licence provenance or an explicit human omission. The app "
+                    "does not call or pay a sound provider."
+                ),
+                "next_action_id": None,
+                "next_title": "Complete final sound asset registration",
+            }
+
         return {
-            "state": "FINAL_PRODUCTION_HANDOFF_READY",
+            "state": "FINAL_SOUND_ASSETS_READY",
             "current_action_id": None,
-            "current_title": "Final Production Handoff Ready",
+            "current_title": "Final Sound Assets Ready",
             "current_detail": (
-                "The approved edit direction is now packaged against exact current "
-                "visual, narration and sound-intent provenance. Slice 20 stops here. "
-                "No final music/SFX provider, final render, upload or publish action "
-                "has been executed or authorized."
+                "Every current final sound requirement is resolved by a managed "
+                "commercial-safe asset or an explicit human omission. Slice 21 "
+                "stops here. No final render, upload or publish action has occurred."
             ),
             "next_action_id": None,
-            "next_title": "Slice 21: final sound/media execution boundary",
+            "next_title": "Slice 22: local final render and human export gate",
         }
 
     production_visual = production_visual_artifact_state()
