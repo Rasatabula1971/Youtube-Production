@@ -200,6 +200,59 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["workflow_state"], "HUMAN_TITLE_DIRECTION_GATE")
         self.assertEqual(result["message"], "Select Preferred Title Directions")
 
+    def test_title_direction_selection_runs_packaging_brief_then_stops(self):
+        state = {"completed": 0}
+        sequence = ["packaging_brief_prepare"]
+
+        def readiness():
+            if state["completed"] < len(sequence):
+                return {
+                    "packaging_brief_prepare": {
+                        "enabled": True,
+                        "reason": "Packaging brief ready to build",
+                    }
+                }
+            return {}
+
+        def guidance(_readiness):
+            if state["completed"] < len(sequence):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_title": "Build Packaging Brief + Viewer Promise",
+                }
+            return {
+                "state": "PACKAGING_BRIEF_READY",
+                "current_title": "Packaging Brief + Viewer Promise Ready",
+            }
+
+        def fake_run(action_id):
+            self.assertEqual(action_id, sequence[state["completed"]])
+            state["completed"] += 1
+            return 0
+
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                side_effect=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                side_effect=guidance,
+            ),
+            patch.object(
+                automation,
+                "run_action",
+                side_effect=fake_run,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], sequence)
+        self.assertEqual(result["workflow_state"], "PACKAGING_BRIEF_READY")
+
     def test_format_gate_completion_runs_voice_chain_to_human_performance_gate(self):
         state = {"completed": 0}
         sequence = [
