@@ -222,13 +222,13 @@ class StoryScriptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unrequested script branch"):
             self.request("long_form", format_intent="short")
 
-    def test_script_cannot_rewrite_approved_title(self):
+    def test_script_cannot_rewrite_internal_working_title(self):
         response = self.valid_response()
         response["title"] = "New Title"
         result = validate_script_response(response, self.request())
         self.assertFalse(result["valid"])
         self.assertTrue(
-            any("approved Packaging title" in error for error in result["errors"])
+            any("internal working title" in error for error in result["errors"])
         )
 
     def test_format_identity_is_locked(self):
@@ -284,7 +284,7 @@ class StoryScriptTests(unittest.TestCase):
             )
 
 
-    def test_script_requests_use_format_specific_selected_titles(self):
+    def test_legacy_selected_titles_do_not_mutate_script_working_title(self):
         plan = self.plan("either")
         plan["package"]["selected_titles"] = {
             "long_form": {
@@ -308,7 +308,7 @@ class StoryScriptTests(unittest.TestCase):
         )
         self.assertEqual(
             short_request["package"]["title"],
-            "Cold Brakes Can Betray You",
+            "Why Racing Brakes Work Backwards",
         )
 
 
