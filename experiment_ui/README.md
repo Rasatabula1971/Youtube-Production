@@ -438,3 +438,43 @@ without the human decision.
 Slice 9 also makes this handoff self-cleaning. A changed Voice request
 invalidates downstream Voice model/spec/gate artifacts, while valid unchanged
 provenance remains reusable.
+
+## Slice 10 — automatic Performance → free Narration Preview continuation
+
+After the final current Voice Performance plan is accepted, the server starts
+the existing `auto_continue` job when the zero-cost preview chain is ready.
+
+The deterministic sequence is:
+
+```text
+Human Performance Gate completes
+        ↓
+pre_render_engagement
+        ↓
+narration_preview_prepare
+        ↓
+prototype_sound_prepare
+        ↓
+narration_preview_render
+        ↓
+STOP: HUMAN_NARRATION_PREVIEW_GATE
+```
+
+The browser reports **“Performance Gate complete. Free narration preview
+started automatically.”**
+
+The listen gate is a hard boundary. Automatic work cannot jump from a current
+preview directly into narration quote/spend preparation because stale downstream
+artifacts happen to exist.
+
+Preview validity is chained to hashes:
+
+`approved Voice spec → engagement PASS → preview manifest → preview audio →
+human preview approval`.
+
+Changing any upstream performance artifact invalidates the downstream current
+state until the free prototype is rebuilt and heard again.
+
+The local renderer is deliberately zero-cost. If Kokoro/local preview
+dependencies are unavailable, the automatic run returns a specific blocked
+message. There is no paid TTS fallback at this stage.
