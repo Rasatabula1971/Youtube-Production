@@ -22,6 +22,52 @@ class VisualSearchAdapterTests(unittest.TestCase):
         self.assertEqual(result["rights_status"], "DISCOVERY_ONLY")
         self.assertTrue(result["human_review_required"])
 
+    def test_one_provider_failure_does_not_cancel_other_sources(self) -> None:
+        with (
+            patch.object(
+                adapters,
+                "pexels_videos",
+                return_value=[{"candidate_id": "pexels-1"}],
+            ),
+            patch.object(
+                adapters,
+                "pixabay_videos",
+                side_effect=TimeoutError("timed out"),
+            ),
+            patch.object(
+                adapters,
+                "youtube_creator_discovery",
+                return_value=[{"candidate_id": "youtube-1"}],
+            ),
+        ):
+            result = adapters.discover_with_diagnostics(
+                "racing tyre",
+                5,
+            )
+
+        self.assertFalse(result["paid_calls_allowed"])
+        self.assertEqual(
+            result["providers"]["pexels"][0]["candidate_id"],
+            "pexels-1",
+        )
+        self.assertEqual(result["providers"]["pixabay"], [])
+        self.assertEqual(result["errors"][0]["provider"], "pixabay")
+
+    def test_invalid_provider_payload_is_isolated(self) -> None:
+        candidates, error = adapters._safe_provider_call(
+            "pexels",
+            lambda: {"not": "a list"},
+        )
+        self.assertEqual(candidates, [])
+        self.assertEqual(
+            error["error_type"],
+            "InvalidProviderResponse",
+        )
+
+    def test_discovery_rejects_unbounded_candidate_limit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "between 1 and 20"):
+            adapters.discover_with_diagnostics("query", 1000)
+
     def test_pexels_normalizes_as_zero_cost_stock(self) -> None:
         payload={"videos":[{"id":1,"url":"https://pexels.test/1","duration":5,"user":{"name":"A"},"video_files":[{"link":"https://cdn.test/a.mp4"}],"video_pictures":[{"picture":"https://cdn.test/a.jpg"}]}]}
         with patch.dict(os.environ, {"PEXELS_API_KEY":"key"}, clear=True), patch.object(adapters, "_json", return_value=payload):
