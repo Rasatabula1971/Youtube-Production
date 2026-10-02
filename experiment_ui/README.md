@@ -374,3 +374,35 @@ the job completes.
 The saved visual report records `visual_source_mode` so downstream review can
 distinguish direct-stream evidence from temporary-file fallback. The temporary
 file is not retained as a project artifact.
+
+## Slice 8 — automatic Script → Format continuation
+
+After the final current Script branch is accepted, the server reevaluates
+machine readiness and starts the existing `auto_continue` job automatically.
+The operator does not press another run button.
+
+The deterministic post-Script sequence is:
+
+```text
+Human Script Gate completes
+        ↓
+format_prepare
+        ↓
+format_generate
+        ↓
+format_gate_prepare
+        ↓
+STOP: HUMAN_FORMAT_GATE
+```
+
+The browser explicitly reports **“Script Gate complete. Format planning started
+automatically.”** when the final Script decision launches that job.
+
+The automation runner still stops at the Human Format Gate. It does not approve
+a Format Plan or continue into Voice Performance without the human Format
+decision.
+
+Slice 8 also makes the handoff self-cleaning. When the approved Script input
+changes, Format preparation invalidates downstream artifacts derived from the
+old request rather than allowing stale plans or human decisions to survive into
+the next run.
