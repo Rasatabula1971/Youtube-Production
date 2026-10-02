@@ -154,3 +154,23 @@ the script until a later Human Selection slice explicitly applies one.
 The rework request is bound to the exact script draft, exact section-state file,
 state version, target hash and original script request. Any intervening change
 makes the request stale before a model call is allowed.
+
+### Slice 3 — human selection and safe replacement
+
+Generated alternatives still cannot edit a script by themselves. A human must
+explicitly choose `ORIGINAL`, `A`, `B`, or `C`.
+
+Choosing `ORIGINAL` keeps the draft bytes unchanged and marks that target
+accepted/locked. Choosing A/B/C changes only the selected text field. All other
+targets, including every locked target, must retain the same deterministic
+target hash. The selected replacement is then run through the normal full-script
+validator before it can be written.
+
+Before a replacement, the prior draft is saved under `script_versions/`.
+The section state is rebased to the new draft hash, the selected target becomes
+accepted/locked, and existing Human Script Gate responses/approved bundles are
+invalidated so stale approval cannot flow downstream.
+
+Selection uses a recoverable transaction journal with backups of the draft,
+section state and alternatives artifact. A failed/interrupted operation rolls
+those core artifacts back instead of leaving a partially applied replacement.
