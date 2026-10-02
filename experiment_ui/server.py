@@ -6566,17 +6566,94 @@ def workflow_guidance(
                 "next_title": "Complete final sound asset registration",
             }
 
+        final_render_manifest_state = final_render_manifest_artifact_state(
+            expected_branches
+        )
+        if not final_render_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Final Render Manifest",
+                "current_detail": (
+                    "All final sound requirements are resolved. Bind the exact "
+                    "current visuals, narration, licensed sound assets and explicit "
+                    "omissions into a rebuild-current local final-render manifest."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Local Final Candidate",
+            }
+
+        if not final_ffmpeg_available():
+            return {
+                "state": "LOCAL_FINAL_FFMPEG_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Local FFmpeg Required for Final Render",
+                "current_detail": (
+                    "The final render manifest is current, but local FFmpeg is "
+                    "unavailable. Slice 22 will not use a cloud or paid rendering "
+                    "fallback. Install/configure FFmpeg, then continue."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Local Final Candidate",
+            }
+
+        final_render_state = final_render_artifact_state(
+            expected_branches
+        )
+        if not final_render_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Local Final Candidate",
+                "current_detail": (
+                    "Render the rebuild-current final manifest locally with FFmpeg. "
+                    "This produces a publish-quality candidate but does not approve "
+                    "export, upload, or publishing."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Final Export Gate",
+            }
+
+        final_export_gate = final_export_review_snapshot()
+        if not final_export_gate.get("complete"):
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_action_id": None,
+                "current_title": "Review Final Render",
+                "current_detail": (
+                    "Watch the exact local final candidate with final visuals, "
+                    "narration and licensed/omitted sound decisions. Approve export "
+                    "or return visuals, narration or sound for rework."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve export or return a creative layer",
+            }
+
+        if int(final_export_gate.get("rework") or 0) > 0:
+            return {
+                "state": "FINAL_EXPORT_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Final Render Rework Requested",
+                "current_detail": (
+                    "The Human Final Export Gate returned a creative layer for "
+                    "rework. The exact final render result and human instruction "
+                    "are preserved. No upload or publishing is authorized."
+                ),
+                "next_action_id": None,
+                "next_title": "Route final-render rework",
+            }
+
         return {
-            "state": "FINAL_SOUND_ASSETS_READY",
+            "state": "FINAL_EXPORT_APPROVED",
             "current_action_id": None,
-            "current_title": "Final Sound Assets Ready",
+            "current_title": "Final Export Approved",
             "current_detail": (
-                "Every current final sound requirement is resolved by a managed "
-                "commercial-safe asset or an explicit human omission. Slice 21 "
-                "stops here. No final render, upload or publish action has occurred."
+                "The exact current local final-render bytes passed the Human Final "
+                "Export Gate. Slice 22 stops here. The video is export-approved, "
+                "but upload and publish remain unauthorized and unperformed."
             ),
             "next_action_id": None,
-            "next_title": "Slice 22: local final render and human export gate",
+            "next_title": "Slice 23: publishing package and upload boundary",
         }
 
     production_visual = production_visual_artifact_state()
