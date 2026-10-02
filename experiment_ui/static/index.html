@@ -713,6 +713,33 @@
               </div>
             </div>
           </section>
+
+          <section class="panel concept-review-panel" id="narrationSpendReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN NARRATION SPEND GATE</p>
+                <h2 id="narrationSpendReviewTitle">Review narration spend</h2>
+                <p class="muted" id="narrationSpendReviewSummary">Verify the current quote and worst-case cost before any paid narration call.</p>
+              </div>
+              <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="narrationSpendDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Nothing is purchased by viewing or preparing this gate. Accept is the explicit spend authorization.</div>
+                <div class="concept-criteria" id="narrationSpendCriteria"></div>
+                <label class="vision-label" for="narrationSpendNote">Spend decision note</label>
+                <textarea id="narrationSpendNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="narrationSpendPrev" type="button">← Previous</button>
+                  <button class="danger" id="narrationSpendReject" type="button">Reject Spend</button>
+                  <button class="ghost" id="narrationSpendRework" type="button">Rework Quote / Setup</button>
+                  <button id="narrationSpendAccept" type="button">Accept Worst-Case Cost</button>
+                  <button class="ghost" id="narrationSpendNext" type="button">Next branch →</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="app-view" data-view="tools" id="viewTools" hidden>
