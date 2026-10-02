@@ -2078,6 +2078,280 @@ function currentScriptItem() {
   return { item: items[scriptCursor], items: items };
 }
 
+
+function scriptSectionTargetLabel(target) {
+  const marker = target.locked
+    ? "🔒 "
+    : target.decision === "REWORK_REQUESTED"
+      ? "⚠ "
+      : "";
+  const name = target.section_id ||
+    humanizeToken(target.target_type || target.target_id || "Target");
+  return marker + name + " — " + humanizeToken(target.decision || "PENDING");
+}
+
+function currentScriptSectionTarget() {
+  const targets = (latestScriptSectionSnapshot && latestScriptSectionSnapshot.targets) || [];
+  if (!targets.length) return null;
+  const selected = scriptSectionTargetId ||
+    (scriptSectionTarget && scriptSectionTarget.value) ||
+    targets[0].target_id;
+  return targets.find(function (target) {
+    return target.target_id === selected;
+  }) || targets[0];
+}
+
+function renderScriptSectionReview(snapshot) {
+  latestScriptSectionSnapshot = snapshot || {};
+  const status = String((snapshot && snapshot.status) || "");
+
+  scriptSectionPrepare.hidden = status !== "SECTION_STATE_NOT_PREPARED";
+  scriptSectionControls.hidden = status !== "READY_FOR_SECTION_REVIEW";
+
+  if (status === "SECTION_STATE_NOT_PREPARED") {
+    scriptSectionReviewState.textContent =
+      "Section review is not prepared for this exact draft yet.";
+    scriptSectionAlternativeCards.innerHTML = "";
+    scriptSectionAlternatives.hidden = true;
+    return;
+  }
+
+  if (status === "STALE_SECTION_STATE") {
+    scriptSectionReviewState.textContent =
+      "Section state is stale because the script draft changed. " +
+      "Use whole-script rework/reset before continuing selective edits.";
+    scriptSectionControls.hidden = true;
+    scriptSectionPrepare.hidden = true;
+    return;
+  }
+
+  if (status !== "READY_FOR_SECTION_REVIEW") {
+    scriptSectionReviewState.textContent =
+      status === "SCRIPT_DRAFT_NOT_FOUND"
+        ? "The current script draft is not available."
+        : "Selective section review is not ready.";
+    scriptSectionControls.hidden = true;
+    return;
+  }
+
+  const targets = snapshot.targets || [];
+  if (!targets.length) {
+    scriptSectionReviewState.textContent = "No script targets are available.";
+    scriptSectionControls.hidden = true;
+    return;
+  }
+
+  scriptSectionReviewState.textContent =
+    "State v" + String(snapshot.state_version || "—") +
+    " · accepted targets stay locked until you explicitly unlock them.";
+
+  const existingTarget = scriptSectionTargetId || scriptSectionTarget.value;
+  let selected = targets.find(function (target) {
+    return target.target_id === existingTarget;
+  });
+  if (!selected) {
+    selected =
+      targets.find(function (target) {
+        return target.decision === "REWORK_REQUESTED";
+      }) ||
+      targets.find(function (target) {
+        return target.decision === "PENDING";
+      }) ||
+      targets[0];
+  }
+  scriptSectionTargetId = selected.target_id;
+
+  scriptSectionTarget.innerHTML = targets.map(function (target) {
+    return '<option value="' + escapeHtml(target.target_id || "") + '">' +
+      escapeHtml(scriptSectionTargetLabel(target)) +
+      '</option>';
+  }).join("");
+  scriptSectionTarget.value = selected.target_id;
+
+  const meta = selected.metadata || {};
+  scriptSectionTargetDetail.innerHTML =
+    '<strong>' + escapeHtml(
+      selected.section_id || humanizeToken(selected.target_type || "Target")
+    ) + '</strong>' +
+    '<br><span>' + escapeHtml(selected.text || "") + '</span>' +
+    '<br><span class="muted">Status: ' +
+    escapeHtml(humanizeToken(selected.decision || "PENDING")) +
+    (selected.locked ? " · LOCKED" : " · unlocked") +
+    (meta.psychology_mechanism
+      ? " · " + escapeHtml(humanizeToken(meta.psychology_mechanism))
+      : "") +
+    '</span>';
+
+  const reasons = snapshot.rework_reasons || [];
+  const targetChanged = scriptSectionRenderedTargetId !== selected.target_id;
+  const currentReason = targetChanged
+    ? String(selected.rework_reason || "")
+    : String(scriptSectionReason.value || selected.rework_reason || "");
+  scriptSectionReason.innerHTML =
+    '<option value="">Select reason</option>' +
+    reasons.map(function (reason) {
+      return '<option value="' + escapeHtml(reason) + '">' +
+        escapeHtml(humanizeToken(reason)) +
+        '</option>';
+    }).join("");
+  if (reasons.includes(currentReason)) {
+    scriptSectionReason.value = currentReason;
+  }
+  if (targetChanged) {
+    scriptSectionInstruction.value = selected.custom_instruction || "";
+    scriptSectionRenderedTargetId = selected.target_id;
+  }
+
+  const locked = Boolean(selected.locked);
+  const reworkRequested = selected.decision === "REWORK_REQUESTED";
+  scriptSectionAccept.disabled = scriptSectionBusy ||
+    (selected.decision === "ACCEPTED" && locked);
+  scriptSectionLock.disabled = scriptSectionBusy || locked || reworkRequested;
+  scriptSectionUnlock.disabled = scriptSectionBusy || !locked;
+  scriptSectionRework.disabled = scriptSectionBusy || locked || reworkRequested;
+  scriptSectionCancelRework.disabled = scriptSectionBusy || !reworkRequested;
+  scriptSectionCancelRework.hidden = !reworkRequested;
+  scriptSectionGenerate.disabled = scriptSectionBusy || !reworkRequested;
+  scriptSectionReason.disabled = scriptSectionBusy || locked;
+  scriptSectionInstruction.disabled = scriptSectionBusy || locked;
+  scriptSectionGenerate.textContent = scriptSectionBusy
+    ? "Generating…"
+    : "Generate A / B / C";
+
+  const alternatives = selected.alternatives;
+  if (!alternatives) {
+    scriptSectionAlternatives.hidden = true;
+    scriptSectionAlternativeCards.innerHTML = "";
+    return;
+  }
+
+  scriptSectionAlternatives.hidden = false;
+  const selection = alternatives.selection || null;
+  if (selection) {
+    scriptSectionAlternativeCards.innerHTML =
+      '<div class="concept-complete">Selected ' +
+      escapeHtml(selection.selection_id || "") +
+      ' · target is now accepted and locked.</div>';
+    return;
+  }
+
+  const original = alternatives.original || {};
+  const originalCard =
+    '<div class="concept-detail-card"><h4>ORIGINAL</h4><p>' +
+    escapeHtml(original.text || selected.text || "") +
+    '</p><button class="ghost" type="button" data-script-section-selection="ORIGINAL"' +
+    (scriptSectionBusy ? " disabled" : "") +
+    '>Keep original</button></div>';
+
+  const optionCards = (alternatives.alternatives || []).map(function (item) {
+    return '<div class="concept-detail-card"><h4>OPTION ' +
+      escapeHtml(item.alternative_id || "") + '</h4><p>' +
+      escapeHtml(item.replacement_text || "") +
+      '</p><p class="muted">' +
+      escapeHtml(item.change_summary || "") +
+      '</p><button type="button" data-script-section-selection="' +
+      escapeHtml(item.alternative_id || "") + '"' +
+      (scriptSectionBusy ? " disabled" : "") +
+      '>Use ' + escapeHtml(item.alternative_id || "") + '</button></div>';
+  }).join("");
+
+  scriptSectionAlternativeCards.innerHTML = originalCard + optionCards;
+}
+
+async function loadScriptSectionReviewForCurrent() {
+  const current = currentScriptItem();
+  if (!current) return;
+  const script = current.item || {};
+  const conceptId = String(script.concept_id || "");
+  const format = String(script.format || "");
+  if (!conceptId || !format) return;
+
+  const token = ++scriptSectionLoadToken;
+  try {
+    const payload = await api(
+      "/api/script-section-review?concept_id=" +
+      encodeURIComponent(conceptId) +
+      "&format=" +
+      encodeURIComponent(format)
+    );
+    if (token !== scriptSectionLoadToken) return;
+    const latest = currentScriptItem();
+    if (
+      !latest ||
+      String(latest.item.concept_id || "") !== conceptId ||
+      String(latest.item.format || "") !== format
+    ) {
+      return;
+    }
+    renderScriptSectionReview(payload);
+  } catch (error) {
+    if (token !== scriptSectionLoadToken) return;
+    scriptSectionReviewState.textContent =
+      "Selective review error: " + error.message;
+  }
+}
+
+async function submitScriptSectionAction(action, extra) {
+  const current = currentScriptItem();
+  if (!current || scriptSectionBusy) return;
+  const script = current.item || {};
+  const target = currentScriptSectionTarget();
+  const extras = extra || {};
+
+  scriptSectionBusy = action === "GENERATE_ALTERNATIVES" ||
+    action === "SELECT_ALTERNATIVE";
+  if (latestScriptSectionSnapshot) {
+    renderScriptSectionReview(latestScriptSectionSnapshot);
+  }
+
+  try {
+    const body = {
+      concept_id: script.concept_id,
+      format: script.format,
+      action: action,
+      target_id: target ? target.target_id : null,
+      reason: scriptSectionReason.value || null,
+      custom_instruction: scriptSectionInstruction.value || null,
+      selection_id: extras.selection_id || null
+    };
+    const payload = await api("/api/script-section-review", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    const sectionPayload = payload.section_review || payload;
+    renderScriptSectionReview(sectionPayload);
+
+    if (payload.status === "ALTERNATIVE_GENERATION_FAILED") {
+      const generation = payload.generation || {};
+      showToast(
+        "Alternative generation failed: " +
+        humanizeToken(generation.status || "UNKNOWN"),
+        true
+      );
+    } else {
+      const messages = {
+        PREPARE: "Section review prepared.",
+        ACCEPT: "Target accepted and locked.",
+        LOCK: "Target locked.",
+        UNLOCK: "Target unlocked.",
+        REWORK: "Selective rework requested.",
+        CANCEL_REWORK: "Selective rework cancelled.",
+        GENERATE_ALTERNATIVES: "A / B / C alternatives are ready.",
+        SELECT_ALTERNATIVE: "Selection applied. Review the updated script before whole-script approval."
+      };
+      showToast(messages[action] || "Script section updated.", false);
+    }
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    scriptSectionBusy = false;
+    if (latestScriptSectionSnapshot) {
+      renderScriptSectionReview(latestScriptSectionSnapshot);
+    }
+  }
+}
+
 function renderScriptReview(snapshot, force) {
   latestScriptSnapshot = snapshot || {};
   if (
