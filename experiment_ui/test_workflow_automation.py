@@ -901,38 +901,47 @@ class WorkflowAutomationTests(unittest.TestCase):
             "HUMAN_VISUAL_SPEND_GATE",
         )
 
-    def test_no_spend_boundary_runs_assembly_then_stops(self):
-        state = {"done": False}
+    def test_no_spend_path_runs_assembly_manifest_preview_to_human_gate(self):
+        state = {"completed": 0}
+        sequence = [
+            "visual_assembly_prepare",
+            "edit_manifest_prepare",
+            "edit_preview_render",
+        ]
 
         def readiness():
-            if not state["done"]:
+            if state["completed"] < len(sequence):
+                action_id = sequence[state["completed"]]
                 return {
-                    "visual_assembly_prepare": {
+                    action_id: {
                         "enabled": True,
-                        "reason": "no-spend gap plan is ready",
+                        "reason": f"{action_id} ready",
                     }
                 }
             return {
-                "edit_manifest_prepare": {
+                "final_production_handoff_prepare": {
                     "enabled": True,
-                    "reason": "must wait for Slice 19",
+                    "reason": "must wait for human edit review",
                 }
             }
 
         def guidance(_readiness):
-            if state["done"]:
+            if state["completed"] == len(sequence):
                 return {
-                    "state": "VISUAL_ASSEMBLY_READY",
-                    "current_title": "Visual Assembly Plan Ready",
+                    "state": "HUMAN_EDIT_PREVIEW_GATE",
+                    "current_title": "Review Structural Edit Preview",
                 }
             return {
                 "state": "ACTION_REQUIRED",
-                "current_title": "Build Visual Edit Assembly Plan",
+                "current_title": "Continue Slice 19",
             }
 
         def fake_run(action_id):
-            self.assertEqual(action_id, "visual_assembly_prepare")
-            state["done"] = True
+            self.assertEqual(
+                action_id,
+                sequence[state["completed"]],
+            )
+            state["completed"] += 1
             return 0
 
         with (
@@ -950,14 +959,11 @@ class WorkflowAutomationTests(unittest.TestCase):
         ):
             result = automation.run_until_human_gate()
 
-        self.assertEqual(
-            result["completed_actions"],
-            ["visual_assembly_prepare"],
-        )
+        self.assertEqual(result["completed_actions"], sequence)
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(
             result["workflow_state"],
-            "VISUAL_ASSEMBLY_READY",
+            "HUMAN_EDIT_PREVIEW_GATE",
         )
 
     def test_authorized_spend_runs_brief_and_assembly_then_waits(self):
@@ -1026,9 +1032,45 @@ class WorkflowAutomationTests(unittest.TestCase):
             "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
         )
 
-    def test_visual_assembly_boundary_blocks_edit_manifest(self):
+    def test_local_ffmpeg_required_blocks_preview_render(self):
         readiness = {
-            "edit_manifest_prepare": {
+            "edit_preview_render": {
+                "enabled": False,
+                "reason": "configured local FFmpeg is unavailable",
+            },
+            "final_production_handoff_prepare": {
+                "enabled": True,
+                "reason": "stale downstream readiness",
+            },
+        }
+        with (
+            patch.object(
+                automation.control,
+                "action_readiness",
+                return_value=readiness,
+            ),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={
+                    "state": "LOCAL_FFMPEG_REQUIRED",
+                    "current_title": "Local FFmpeg Required",
+                },
+            ),
+            patch.object(automation, "run_action") as run_action,
+        ):
+            result = automation.run_until_human_gate()
+
+        run_action.assert_not_called()
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(
+            result["workflow_state"],
+            "LOCAL_FFMPEG_REQUIRED",
+        )
+
+    def test_human_edit_preview_gate_blocks_final_handoff(self):
+        readiness = {
+            "final_production_handoff_prepare": {
                 "enabled": True,
                 "reason": "stale downstream readiness",
             }
@@ -1043,8 +1085,8 @@ class WorkflowAutomationTests(unittest.TestCase):
                 automation.control,
                 "workflow_guidance",
                 return_value={
-                    "state": "VISUAL_ASSEMBLY_READY",
-                    "current_title": "Visual Assembly Plan Ready",
+                    "state": "HUMAN_EDIT_PREVIEW_GATE",
+                    "current_title": "Review Structural Edit Preview",
                 },
             ),
             patch.object(automation, "run_action") as run_action,
@@ -1055,7 +1097,7 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(
             result["workflow_state"],
-            "VISUAL_ASSEMBLY_READY",
+            "HUMAN_EDIT_PREVIEW_GATE",
         )
 
     def test_partial_command_without_progress_stops_as_partial(self):
