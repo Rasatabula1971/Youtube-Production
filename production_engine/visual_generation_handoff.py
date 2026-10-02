@@ -1,7 +1,7 @@
 """Prepare zero-cost premium visual generation handoff requests.
 
-Consumes Human Visual Spend Gate decisions and current visual gap plans.
-Only shots explicitly authorized for paid generation are emitted.
+Consumes the canonical Human Visual Spend Gate snapshot. Only shots explicitly
+authorized in the complete current spend state are emitted.
 
 This module NEVER calls an image/video provider and NEVER spends money.
 """
@@ -9,12 +9,15 @@ This module NEVER calls an image/video provider and NEVER spends money.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from visual_acquisition import load_json, safe_slug, sha256_file
+from visual_gap_planner import gap_plan_is_current
+from visual_spend_review import snapshot as visual_spend_snapshot
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -34,6 +37,17 @@ def _request_path(concept_id: str, fmt: str, shot_id: str) -> Path:
     return REQUEST_DIR / (
         f"{_key(concept_id, fmt, shot_id)}.visual_generation_request.json"
     )
+
+
+def _fingerprint(value: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _authorized_decisions(
@@ -61,8 +75,11 @@ def _generation_brief(
     decision: dict[str, Any],
 ) -> dict[str, Any]:
     if (
-        spend_review.get("source_gap_plan_sha256")
+        spend_review.get("source_gap_plan")
+        != str(gap_plan_path.resolve())
+        or spend_review.get("source_gap_plan_sha256")
         != sha256_file(gap_plan_path)
+        or str(spend_review.get("status") or "") != "COMPLETE"
     ):
         raise ValueError("STALE_VISUAL_SPEND_REVIEW")
 
@@ -78,11 +95,18 @@ def _generation_brief(
     if gap is None:
         raise ValueError("Authorized shot is missing from current gap plan")
     if gap.get("premium_generation_recommended") is not True:
-        raise ValueError("Authorized shot is no longer a premium-generation gap")
+        raise ValueError(
+            "Authorized shot is no longer a premium-generation gap"
+        )
 
-    max_cost = float(decision.get("max_cost_usd") or 0)
+    try:
+        max_cost = round(float(decision.get("max_cost_usd") or 0), 2)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Authorized generation cost is invalid") from exc
     if max_cost <= 0:
-        raise ValueError("Authorized generation request requires max_cost_usd > 0")
+        raise ValueError(
+            "Authorized generation request requires max_cost_usd > 0"
+        )
 
     cinematic = (
         gap.get("cinematic_direction", {})
@@ -131,7 +155,7 @@ def _generation_brief(
         },
         "spend_authorization": {
             "human_authorized": True,
-            "max_cost_usd": round(max_cost, 2),
+            "max_cost_usd": max_cost,
             "authorization_note": str(decision.get("note") or ""),
             "execution_authorized": False,
         },
@@ -145,6 +169,7 @@ def _generation_brief(
             "gap_plan_sha256": sha256_file(gap_plan_path),
             "visual_spend_review": str(spend_path.resolve()),
             "visual_spend_review_sha256": sha256_file(spend_path),
+            "visual_spend_decision_sha256": _fingerprint(decision),
         },
     }
 
@@ -155,25 +180,54 @@ def prepare() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     total_max_cost = 0.0
 
-    spend_paths = (
-        sorted(SPEND_DIR.glob("*.visual_spend_review.json"))
-        if SPEND_DIR.exists()
-        else []
-    )
-    for spend_path in spend_paths:
-        review = load_json(spend_path)
-        if str(review.get("status") or "") != "COMPLETE":
-            continue
-
-        gap_path = Path(str(review.get("source_gap_plan") or ""))
-        if (
-            not gap_path.exists()
-            or gap_path.parent.resolve() != GAP_DIR.resolve()
+    spend_state = visual_spend_snapshot()
+    if not spend_state.get("complete"):
+        for stale in REQUEST_DIR.glob(
+            "*.visual_generation_request.json"
         ):
-            continue
-        gap_plan = load_json(gap_path)
+            stale.unlink()
+        summary = {
+            "status": "WAITING_FOR_COMPLETE_VISUAL_SPEND_DECISIONS",
+            "prepared": 0,
+            "authorized_max_total_usd": 0.0,
+            "provider_calls": 0,
+            "paid_inference_executed": False,
+            "items": [],
+        }
+        atomic_write_json(SUMMARY_FILE, summary)
+        return summary
 
-        for shot_id, decision in _authorized_decisions(review):
+    for item in spend_state.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        decisions = item.get("decisions", {})
+        if not isinstance(decisions, dict):
+            continue
+        authorized = _authorized_decisions({"decisions": decisions})
+        if not authorized:
+            continue
+
+        gap_path = Path(str(item.get("gap_plan_file") or ""))
+        spend_path = Path(str(item.get("spend_review_file") or ""))
+        if (
+            not gap_path.is_file()
+            or gap_path.parent.resolve() != GAP_DIR.resolve()
+            or not spend_path.is_file()
+            or spend_path.parent.resolve() != SPEND_DIR.resolve()
+            or item.get("gap_plan_sha256") != sha256_file(gap_path)
+            or item.get("spend_review_sha256") != sha256_file(spend_path)
+        ):
+            raise ValueError("STALE_VISUAL_SPEND_REVIEW")
+
+        gap_state = gap_plan_is_current(gap_path)
+        if gap_state is None:
+            raise ValueError("STALE_VISUAL_GAP_PLAN")
+        gap_plan = gap_state[0]
+        review = load_json(spend_path)
+        if not isinstance(review, dict):
+            raise ValueError("Visual spend review is malformed")
+
+        for shot_id, decision in authorized:
             request = _generation_brief(
                 gap_plan_path=gap_path,
                 gap_plan=gap_plan,
@@ -182,15 +236,18 @@ def prepare() -> dict[str, Any]:
                 shot_id=shot_id,
                 decision=decision,
             )
-            dest = _request_path(
+            destination = _request_path(
                 str(request.get("concept_id") or ""),
                 str(request.get("format") or ""),
                 shot_id,
             )
-            atomic_write_json(dest, request)
-            current_paths.add(dest.resolve())
+            atomic_write_json(destination, request)
+            current_paths.add(destination.resolve())
             max_cost = float(
-                request.get("spend_authorization", {}).get("max_cost_usd") or 0
+                request.get(
+                    "spend_authorization",
+                    {},
+                ).get("max_cost_usd") or 0
             )
             total_max_cost += max_cost
             items.append(
@@ -200,13 +257,24 @@ def prepare() -> dict[str, Any]:
                     "shot_id": shot_id,
                     "preferred_provider": "higgsfield",
                     "max_cost_usd": round(max_cost, 2),
-                    "request": str(dest),
+                    "request": str(destination),
+                    "request_sha256": sha256_file(destination),
                 }
             )
 
     for stale in REQUEST_DIR.glob("*.visual_generation_request.json"):
         if stale.resolve() not in current_paths:
             stale.unlink()
+
+    expected_total = round(
+        float(spend_state.get("authorized_max_total_usd") or 0),
+        2,
+    )
+    prepared_total = round(total_max_cost, 2)
+    if prepared_total != expected_total:
+        raise ValueError(
+            "VISUAL_GENERATION_HANDOFF_COST_MISMATCH"
+        )
 
     summary = {
         "status": (
@@ -215,7 +283,7 @@ def prepare() -> dict[str, Any]:
             else "NO_PAID_VISUAL_GENERATION_AUTHORIZED"
         ),
         "prepared": len(items),
-        "authorized_max_total_usd": round(total_max_cost, 2),
+        "authorized_max_total_usd": prepared_total,
         "provider_calls": 0,
         "paid_inference_executed": False,
         "items": items,
