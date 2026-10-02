@@ -304,6 +304,7 @@ def snapshot(
     drafts_dir: Path = DRAFTS_DIR,
     state_dir: Path = SECTION_STATE_DIR,
     alternatives_dir: Path = ALTERNATIVES_DIR,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
 ) -> dict[str, Any]:
     if concept_id is not None or fmt is not None:
         if concept_id is None or fmt is None:
@@ -463,6 +464,7 @@ def apply_action(
                     drafts_dir=drafts_dir,
                     state_dir=state_dir,
                     alternatives_dir=alternatives_dir,
+                    versions_dir=versions_dir,
                 ),
             }
 
