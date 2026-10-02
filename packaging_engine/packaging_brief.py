@@ -500,11 +500,38 @@ def snapshot() -> dict[str, Any]:
             )
     gate = title_direction_snapshot()
     expected = 0
+    expected_inputs_current = True
     if gate.get("status") == "TITLE_DIRECTION_SELECTED":
         for item in gate.get("concepts", []):
-            if isinstance(item, dict) and item.get("decision") == "ACCEPT":
-                expected += 2
-    ready = expected > 0 and len(current) == expected and stale == 0
+            if not isinstance(item, dict) or item.get("decision") != "ACCEPT":
+                continue
+            concept_id = str(item.get("concept_id") or "").strip()
+            script_path = APPROVED_SCRIPTS_DIR / (
+                f"{safe_slug(concept_id)}.approved_script.json"
+            )
+            try:
+                if not concept_id or not _approved_bundle_is_current(concept_id):
+                    raise ValueError("MISSING_APPROVED_SCRIPT")
+                bundle = load_json(script_path)
+                required = bundle.get("required_branches", [])
+                if not isinstance(required, list) or not required:
+                    raise ValueError("MISSING_APPROVED_SCRIPT")
+                normalized = [str(x) for x in required]
+                if (
+                    len(normalized) != len(set(normalized))
+                    or any(x not in {"short", "long_form"} for x in normalized)
+                ):
+                    raise ValueError("INVALID_PACKAGING_BRIEF")
+                expected += len(normalized)
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                expected_inputs_current = False
+
+    ready = (
+        expected_inputs_current
+        and expected > 0
+        and len(current) == expected
+        and stale == 0
+    )
     return {
         "status": (
             "PACKAGING_BRIEF_READY"
@@ -515,6 +542,7 @@ def snapshot() -> dict[str, Any]:
         ),
         "ready": ready,
         "expected": expected,
+        "expected_inputs_current": expected_inputs_current,
         "current": len(current),
         "stale": stale,
         "briefs": current,
