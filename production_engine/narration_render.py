@@ -498,44 +498,174 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def snapshot() -> dict[str, Any]:
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _request_is_current(
+    request: dict[str, Any],
+    request_path: Path,
+    config: dict[str, Any],
+) -> bool:
+    concept_id = str(request.get("concept_id") or "").strip()
+    fmt = str(request.get("format") or "").strip()
+    if not concept_id or not fmt:
+        return False
+    provenance = request.get("render_provenance", {})
+    if not isinstance(provenance, dict):
+        return False
+    spec_path = APPROVED_VOICE_DIR / (
+        f"{artifact_key(concept_id, fmt)}.approved_voice_spec.json"
+    )
+    if (
+        not spec_path.is_file()
+        or Path(str(provenance.get("approved_voice_spec") or "")).resolve()
+        != spec_path.resolve()
+        or provenance.get("approved_voice_spec_sha256") != sha256_file(spec_path)
+    ):
+        return False
+    if not _preview_approved(concept_id, fmt, spec_path):
+        return False
+    sound_state = current_brief_for_branch(concept_id, fmt)
+    if sound_state is None:
+        return False
+    sound_path, _sound_brief = sound_state
+    if (
+        provenance.get("sound_design_brief") != str(sound_path.resolve())
+        or provenance.get("sound_design_brief_sha256") != sha256_file(sound_path)
+    ):
+        return False
+    if str(request.get("provider") or "") != str(config["provider"]):
+        return False
+    if request.get("provider_contract") != config.get("provider_contract"):
+        return False
+    if int(request.get("max_regenerations_per_segment") or 0) != int(
+        config["max_regenerations_per_segment"]
+    ):
+        return False
+    return request_path.is_file()
+
+
+def snapshot(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = config or load_config()
     if not ESTIMATES_DIR.exists():
         return {
             "status": "WAITING_FOR_APPROVED_VOICE_SPECS",
             "prepared": 0,
             "ready_for_spend_gate": 0,
+            "refresh_required": False,
+            "stale": 0,
             "items": [],
         }
+
     items: list[dict[str, Any]] = []
+    ready = 0
+    stale = 0
+    refresh_required = False
+
     for path in sorted(ESTIMATES_DIR.glob("*.narration_cost_estimate.json")):
-        payload = load_json(path)
+        payload = _load_dict_or_none(path)
         if not isinstance(payload, dict):
+            stale += 1
+            refresh_required = True
             continue
+        concept_id = str(payload.get("concept_id") or "").strip()
+        fmt = str(payload.get("format") or "").strip()
+        if not concept_id or not fmt:
+            stale += 1
+            refresh_required = True
+            continue
+
+        key = artifact_key(concept_id, fmt)
+        request_path = REQUESTS_DIR / f"{key}.narration_render_request.json"
+        request = _load_dict_or_none(request_path)
+        current_request = bool(
+            isinstance(request, dict)
+            and _request_is_current(request, request_path, config)
+            and payload.get("render_request_sha256") == sha256_file(request_path)
+        )
+        status = str(payload.get("status") or "")
+        quote_path = QUOTES_DIR / f"{key}.narration_provider_quote.json"
+        quote_valid = False
+        quote_error = None
+        if (
+            current_request
+            and isinstance(request, dict)
+            and quote_path.is_file()
+            and not request.get("render_blockers")
+        ):
+            quote_payload = _load_dict_or_none(quote_path)
+            try:
+                if not isinstance(quote_payload, dict):
+                    raise ValueError("Quote must be a JSON object")
+                validate_quote(quote_payload, request, request_path, config)
+                quote_valid = True
+            except (OSError, TypeError, ValueError) as exc:
+                quote_error = str(exc)
+
+        item_stale = not current_request
+        if status == "READY_FOR_SPEND_GATE":
+            provider_quote = payload.get("provider_quote", {})
+            quote_hash_matches = bool(
+                isinstance(provider_quote, dict)
+                and quote_path.is_file()
+                and provider_quote.get("sha256") == sha256_file(quote_path)
+            )
+            if not quote_valid or not quote_hash_matches:
+                item_stale = True
+                refresh_required = True
+            else:
+                ready += 1
+        elif (
+            status == "WAITING_FOR_PROVIDER_QUOTE"
+            and quote_valid
+            and current_request
+        ):
+            refresh_required = True
+
+        if item_stale:
+            stale += 1
+            refresh_required = True
+
         items.append(
             {
-                "concept_id": payload.get("concept_id"),
-                "format": payload.get("format"),
-                "status": payload.get("status"),
+                "concept_id": concept_id,
+                "format": fmt,
+                "status": "STALE" if item_stale else status,
                 "initial_estimate_usd": payload.get("initial_estimate_usd"),
                 "worst_case_estimate_usd": payload.get("worst_case_estimate_usd"),
                 "render_blockers": payload.get("render_blockers", []),
+                "quote_error": quote_error or payload.get("quote_error"),
+                "quote_template": str(
+                    QUOTE_TEMPLATES_DIR
+                    / f"{key}.narration_provider_quote.template.json"
+                ),
+                "provider_quote": str(quote_path) if quote_path.exists() else None,
                 "estimate": str(path),
             }
         )
-    ready = sum(item.get("status") == "READY_FOR_SPEND_GATE" for item in items)
+
+    status = (
+        "REFRESH_REQUIRED"
+        if refresh_required
+        else "READY_FOR_SPEND_GATE"
+        if items and ready == len(items)
+        else "NARRATION_PREPARED_WITH_BLOCKERS"
+        if items
+        else "WAITING_FOR_APPROVED_VOICE_SPECS"
+    )
     return {
-        "status": (
-            "READY_FOR_SPEND_GATE"
-            if items and ready == len(items)
-            else "NARRATION_PREPARED_WITH_BLOCKERS"
-            if items
-            else "WAITING_FOR_APPROVED_VOICE_SPECS"
-        ),
+        "status": status,
         "prepared": len(items),
         "ready_for_spend_gate": ready,
+        "refresh_required": refresh_required,
+        "stale": stale,
         "items": items,
     }
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Narration render preparation")
