@@ -404,6 +404,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_assembly_prepare",
     "edit_manifest_prepare",
     "edit_preview_render",
+    "final_production_handoff_prepare",
 ]
 
 WORKFLOW_ACTION_ORDER = [
