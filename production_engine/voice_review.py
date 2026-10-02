@@ -161,6 +161,14 @@ def _remove_if_exists(path: Path) -> bool:
     return True
 
 
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_gate_config()
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -187,14 +195,21 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
         response = response_path(request["concept_id"], request["format"])
         if response.is_file():
-            saved = load_json(response)
-            if saved.get("voice_performance_spec_sha256") != current_spec_hash:
+            saved = _load_dict_or_none(response)
+            if (
+                not isinstance(saved, dict)
+                or saved.get("voice_performance_spec_sha256") != current_spec_hash
+            ):
                 response.unlink()
 
         approved_path = APPROVED_DIR / f"{key}.approved_voice_spec.json"
         if approved_path.is_file():
-            approved = load_json(approved_path)
-            provenance = approved.get("approved_provenance", {})
+            approved = _load_dict_or_none(approved_path)
+            provenance = (
+                approved.get("approved_provenance", {})
+                if isinstance(approved, dict)
+                else {}
+            )
             if (
                 not isinstance(provenance, dict)
                 or provenance.get("voice_performance_spec_sha256")
