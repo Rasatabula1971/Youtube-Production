@@ -304,6 +304,142 @@ def _prune_invalidated_format_outputs(
     }
 
 
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _prune_mismatched_active_format_outputs(
+    current_hashes: dict[str, str],
+) -> dict[str, Any]:
+    removed: list[str] = []
+    invalidated_review_slugs: set[str] = set()
+
+    for slug, request_hash in sorted(current_hashes.items()):
+        response_path = RESPONSES_DIR / f"{slug}.json"
+        plan_path = PLANS_DIR / f"{slug}.format_plan.json"
+        run_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
+        raw_path = RAW_OUTPUTS_DIR / f"{slug}.txt"
+        review_request_path = (
+            FORMAT_REVIEW_REQUESTS_DIR
+            / f"{slug}.format_review_request.json"
+        )
+        review_response_path = (
+            FORMAT_REVIEW_RESPONSES_DIR
+            / f"{slug}.format_review_response.json"
+        )
+        approved_plan_path = (
+            APPROVED_FORMAT_PLANS_DIR
+            / f"{slug}.approved_format_plan.json"
+        )
+
+        response = _load_dict_or_none(response_path)
+        response_provenance = (
+            response.get("response_provenance", {})
+            if isinstance(response, dict)
+            else {}
+        )
+        response_current = bool(
+            response
+            and isinstance(response_provenance, dict)
+            and response_provenance.get("request_sha256") == request_hash
+        )
+        if response_path.exists() and not response_current:
+            if _remove_file(response_path):
+                removed.append(str(response_path.resolve()))
+
+        plan = _load_dict_or_none(plan_path)
+        plan_provenance = (
+            plan.get("plan_provenance", {})
+            if isinstance(plan, dict)
+            else {}
+        )
+        plan_current = bool(
+            plan
+            and isinstance(plan_provenance, dict)
+            and plan_provenance.get("request_sha256") == request_hash
+        )
+        if plan_path.exists() and not plan_current:
+            if _remove_file(plan_path):
+                removed.append(str(plan_path.resolve()))
+            invalidated_review_slugs.add(slug)
+
+        run = _load_dict_or_none(run_path)
+        run_current = bool(
+            run
+            and run.get("status") == "VALIDATED"
+            and run.get("request_sha256") == request_hash
+        )
+        if run_path.exists() and not run_current:
+            if _remove_file(run_path):
+                removed.append(str(run_path.resolve()))
+            if _remove_file(raw_path):
+                removed.append(str(raw_path.resolve()))
+
+        if not plan_current:
+            invalidated_review_slugs.add(slug)
+            continue
+
+        plan_hash = sha256_file(plan_path)
+        review_request = _load_dict_or_none(review_request_path)
+        review_provenance = (
+            review_request.get("request_provenance", {})
+            if isinstance(review_request, dict)
+            else {}
+        )
+        review_request_current = bool(
+            review_request
+            and isinstance(review_provenance, dict)
+            and review_provenance.get("format_plan")
+            == str(plan_path.resolve())
+            and review_provenance.get("format_plan_sha256") == plan_hash
+        )
+        if review_request_path.exists() and not review_request_current:
+            if _remove_file(review_request_path):
+                removed.append(str(review_request_path.resolve()))
+            invalidated_review_slugs.add(slug)
+
+        review_response = _load_dict_or_none(review_response_path)
+        review_response_current = bool(
+            review_request_current
+            and review_response
+            and review_response.get("format_plan_sha256") == plan_hash
+        )
+        if review_response_path.exists() and not review_response_current:
+            if _remove_file(review_response_path):
+                removed.append(str(review_response_path.resolve()))
+
+        approved = _load_dict_or_none(approved_plan_path)
+        approved_provenance = (
+            approved.get("approved_provenance", {})
+            if isinstance(approved, dict)
+            else {}
+        )
+        approved_current = bool(
+            review_request_current
+            and approved
+            and isinstance(approved_provenance, dict)
+            and approved_provenance.get("format_plan_sha256") == plan_hash
+        )
+        if approved_plan_path.exists() and not approved_current:
+            if _remove_file(approved_plan_path):
+                removed.append(str(approved_plan_path.resolve()))
+
+    if invalidated_review_slugs and _remove_file(FORMAT_GATE_SUMMARY_FILE):
+        removed.append(str(FORMAT_GATE_SUMMARY_FILE.resolve()))
+
+    return {
+        "checked_concept_slugs": sorted(current_hashes),
+        "review_invalidated_concept_slugs": sorted(
+            invalidated_review_slugs
+        ),
+        "removed_artifacts": removed,
+    }
+
+
 def load_config(path: Path = CONFIG_FILE) -> dict[str, Any]:
     config = load_json(path)
     required = {"allowed_formats", "format_intent_branches", "branch_constraints"}
@@ -809,6 +945,11 @@ def run_prepare(
     cleanup = _prune_invalidated_format_outputs(
         previous_request_hashes,
         current_request_hashes,
+    )
+    cleanup["active_provenance_cleanup"] = (
+        _prune_mismatched_active_format_outputs(
+            current_request_hashes,
+        )
     )
     summary = {
         "status": (
