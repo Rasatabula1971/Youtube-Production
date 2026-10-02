@@ -2172,3 +2172,50 @@ idempotent; conflicting duplicate decisions fail closed.
 Format/Production are intentionally held after `TITLE_DIRECTION_SELECTED`
 until the mature Packaging Brief, Viewer Promise, thumbnail, pairing and
 validation stages are implemented.
+
+## D-094 — Packaging Brief is deterministic, format-specific, evidence-bound, and pre-thumbnail
+
+**Status:** Accepted
+
+Slice 24 begins the mature post-script Packaging Engine after the Human Title
+Direction Gate.
+
+The automatic path is:
+
+`TITLE_DIRECTION_SELECTED → packaging_brief_prepare → PACKAGING_BRIEF_READY`
+
+One brief is created per concept + format because Short and Long-form may carry
+different selected title directions, hooks and SEARCH/BROWSE/HYBRID intent.
+
+The brief is a deterministic projection of current human-approved artifacts. It
+does not call an AI model and may not invent missing facts. It binds:
+
+- exact current approved script bundle and branch;
+- exact opening hook and approved script sections;
+- Story Plan central question and payoff;
+- exact current selected title direction;
+- verified Research Gate sources and accepted claims;
+- approved numerical tokens extracted from accepted claims;
+- Human Framing visual opening, stakes and desired resolution;
+- Research Gate rejected/rework claims as prohibited/unsupported context when available;
+- audience context already present in the approved channel/concept artifacts.
+
+A pre-publish internal `video_id` uses `concept_id:format`. It is explicitly
+namespaced `PIPELINE_INTERNAL_PRE_PUBLISH` and is not a YouTube video ID.
+
+The Viewer Promise Contract stores `viewer_expectation`, `promise_subject`,
+`promise_question`, `promise_stakes` and `promise_payoff`.
+
+The selected title direction's SEARCH/BROWSE/HYBRID classification is preserved
+per format. Slice 24 does not optimize or regenerate the title.
+
+Missing approved script, opening hook, evidence, selected title direction,
+invalid intent, evidence conflicts or invented evidence references fail closed.
+
+Brief currentness is rebuild-based: changes to the approved script, selected
+title artifact, verified research, reviewed research or any derived field
+invalidate the saved brief.
+
+Slice 24 performs no thumbnail generation, title/thumbnail pairing, package
+scoring, final packaging approval, Format planning or production work. The
+successful boundary is `PACKAGING_BRIEF_READY`.

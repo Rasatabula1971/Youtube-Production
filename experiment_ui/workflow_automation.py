@@ -40,6 +40,7 @@ AUTO_MACHINE_ACTION_ORDER = [
     "title_direction_prepare",
     "title_direction_generate",
     "title_direction_gate_prepare",
+    "packaging_brief_prepare",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -182,6 +183,7 @@ def run_until_human_gate() -> dict[str, Any]:
             "HUMAN_FINAL_EXPORT_GATE",
             "FINAL_EXPORT_REWORK_REQUIRED",
             "FINAL_EXPORT_APPROVED",
+            "PACKAGING_BRIEF_READY",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",

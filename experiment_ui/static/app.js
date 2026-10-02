@@ -150,6 +150,11 @@ const titleDirectionRework = document.getElementById("titleDirectionRework");
 const titleDirectionAccept = document.getElementById("titleDirectionAccept");
 const titleDirectionNext = document.getElementById("titleDirectionNext");
 
+const packagingBriefPanel = document.getElementById("packagingBriefPanel");
+const packagingBriefSummary = document.getElementById("packagingBriefSummary");
+const packagingBriefStatus = document.getElementById("packagingBriefStatus");
+const packagingBriefDetail = document.getElementById("packagingBriefDetail");
+
 const formatReviewPanel = document.getElementById("formatReviewPanel");
 const formatReviewTitle = document.getElementById("formatReviewTitle");
 const formatReviewSummary = document.getElementById("formatReviewSummary");
@@ -682,6 +687,7 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_TITLE_DIRECTION_GATE: "Select title directions",
     TITLE_DIRECTION_REJECTED: "Rework title directions",
     TITLE_DIRECTION_SELECTED: "Title directions selected",
+    PACKAGING_BRIEF_READY: "Packaging brief ready",
     HUMAN_FORMAT_GATE: "Review format",
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
@@ -1918,6 +1924,36 @@ async function submitTitleDirectionDecision(decision) {
   } catch (error) {
     showToast(error.message, true);
   }
+}
+
+function renderPackagingBrief(snapshot) {
+  const value = snapshot || {};
+  const briefs = Array.isArray(value.briefs) ? value.briefs : [];
+  const ready = value.status === "PACKAGING_BRIEF_READY" && value.ready === true;
+  packagingBriefPanel.hidden = !briefs.length;
+  if (!briefs.length) return;
+
+  packagingBriefStatus.textContent = ready ? "READY" : "STALE";
+  packagingBriefStatus.className =
+    "status-chip " + (ready ? "success" : "failed");
+  packagingBriefSummary.textContent =
+    briefs.length + " current format brief" + (briefs.length === 1 ? "" : "s") +
+    " · no model-generated facts";
+
+  packagingBriefDetail.innerHTML = briefs.map(function (item) {
+    return (
+      '<div class="concept-detail-card">' +
+        '<h4>' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
+        '<p><strong>Intent:</strong> ' +
+          escapeHtml(item.search_vs_browse_intent || "") +
+        '<br><strong>Viewer promise:</strong> ' +
+          escapeHtml(item.viewer_expectation || "") +
+        '<br><strong>Video ID:</strong> ' +
+          escapeHtml(item.video_id || "") +
+        '</p>' +
+      '</div>'
+    );
+  }).join("");
 }
 
 function pendingPackagingIndex(items) {
@@ -5040,6 +5076,7 @@ function renderAnalysis(data) {
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
   renderTitleDirectionReview(data.title_direction_gate || {}, false);
+  renderPackagingBrief(data.packaging_brief || {});
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
@@ -5135,7 +5172,8 @@ function renderAnalysis(data) {
     [
       "HUMAN_TITLE_DIRECTION_GATE",
       "TITLE_DIRECTION_REJECTED",
-      "TITLE_DIRECTION_SELECTED"
+      "TITLE_DIRECTION_SELECTED",
+      "PACKAGING_BRIEF_READY"
     ].includes(workflow.state) ||
     Boolean((data.title_direction || {}).requests_ready) ||
     Boolean((data.title_direction || {}).candidates_ready)

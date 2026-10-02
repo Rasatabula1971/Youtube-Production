@@ -226,3 +226,63 @@ The successful boundary is:
 Format and Production remain held after that point until Slice 24 builds the
 Packaging Brief and Viewer Promise Contract and begins mature title/thumbnail
 coordination.
+
+## Slice 24 — Packaging Brief + Viewer Promise Contract
+
+Slice 24 starts after the post-script Human Title Direction Gate and builds one
+deterministic brief per concept/format:
+
+```text
+TITLE_DIRECTION_SELECTED
+        ↓
+packaging_brief_prepare
+        ↓
+approved script + opening hook + payoff
++ verified research + selected title direction
++ Human Framing + audience context
+        ↓
+PACKAGING_BRIEF_READY
+        ↓
+STOP
+```
+
+The brief does not use a model. It only projects already-approved upstream
+artifacts, which keeps the truth boundary explicit before psychological angle
+expansion and thumbnail creation.
+
+Each brief contains:
+
+- internal pre-publish `video_id` (`concept_id:format`);
+- format;
+- compact source evidence;
+- approved concept;
+- approved script metadata and exact approved sections;
+- opening hook;
+- central question;
+- payoff;
+- selected title direction and psychology metadata;
+- target audience context;
+- SEARCH/BROWSE/HYBRID intent;
+- approved claims;
+- approved numeric tokens;
+- strongest approved visual opening event;
+- strongest core fact;
+- strongest approved stakes/consequence;
+- strongest desired transformation/resolution;
+- rejected/rework research claims as prohibited/unsupported context;
+- Viewer Promise Contract.
+
+The Viewer Promise Contract explicitly records what a click is supposed to mean:
+
+`viewer_expectation`, `promise_subject`, `promise_question`,
+`promise_stakes`, and `promise_payoff`.
+
+The brief fails closed on missing script/hook/evidence/title direction, evidence
+conflicts, unsupported evidence references and invalid intent classifications.
+
+Saved briefs are rebuild-current. Any upstream byte change that changes the
+derived contract invalidates the brief.
+
+Slice 24 deliberately does not generate thumbnails, pair titles and thumbnails,
+score packages, approve final packaging, or unlock Format/Production. Those are
+later Packaging slices.

@@ -14,11 +14,12 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 19],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 20],
             [
                 "title_direction_prepare",
                 "title_direction_generate",
                 "title_direction_gate_prepare",
+                "packaging_brief_prepare",
                 "format_prepare",
                 "format_generate",
                 "format_gate_prepare",
