@@ -258,3 +258,47 @@ PASS result. Partial branch coverage cannot report a global PASS.
 
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
+
+## Slice 13 — narration-bound visual manifest, storyboard and search request
+
+Visual production now begins only after final narration has passed deterministic
+local Audio QC.
+
+The zero-spend planning chain is:
+
+```text
+current QC-passed narration timing map
+        ↓
+visual acquisition manifest
+        ↓
+cinematic storyboard
+        ↓
+rights-aware visual search request
+        ↓
+VISUAL_SEARCH_READY
+```
+
+The visual acquisition manifest records the exact approved Format Plan and the
+exact narration timing-map path/hash. Server readiness independently checks both
+against current production state, so a historical manifest cannot unlock the
+storyboard after narration changes.
+
+Storyboard cards are timed from the final narration map. Narration segment IDs
+must exactly equal the visual requirement beat IDs for the branch. The
+storyboard records hashes of both inputs and is current only while both remain
+unchanged.
+
+The visual search request records the exact storyboard hash and per-shot
+fingerprints. Rebuilding search preparation removes stale request/result files.
+Raw discovery results can be reused only when the corresponding shot
+fingerprint is unchanged.
+
+The search request policy remains:
+
+- search existing assets before generation;
+- never treat downloadability as reuse permission;
+- never auto-approve creator/editorial excerpts;
+- never auto-approve unknown rights; and
+- never allow paid generation calls during this stage.
+
+Slice 13 intentionally stops before `visual_search_acquire`.
