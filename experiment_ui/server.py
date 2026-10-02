@@ -2534,6 +2534,7 @@ def production_visual_artifact_state() -> dict[str, Any]:
 def visual_post_search_artifact_state() -> dict[str, Any]:
     candidate_gate = visual_candidate_review_snapshot()
     rights_gate = visual_rights_review_snapshot()
+    managed_assets_state = managed_visual_asset_snapshot()
     candidate_complete = bool(candidate_gate.get("complete"))
     rights_complete = bool(rights_gate.get("complete"))
 
@@ -2584,20 +2585,49 @@ def visual_post_search_artifact_state() -> dict[str, Any]:
         managed_registry = provenance.get("managed_asset_registry", {})
         if not isinstance(managed_registry, dict):
             continue
-        managed_current = True
-        for entry in managed_registry.values():
-            if not isinstance(entry, dict):
-                managed_current = False
-                break
-            registry_path = Path(str(entry.get("registry_file") or ""))
-            asset_path = Path(str(entry.get("asset_file") or ""))
+
+        expected_managed: dict[str, dict[str, Any]] = {}
+        for managed_item in managed_assets_state.get("items", []):
+            if not isinstance(managed_item, dict):
+                continue
             if (
-                not registry_path.exists()
-                or not asset_path.exists()
+                str(managed_item.get("concept_id") or "") != concept_id
+                or str(managed_item.get("format") or "") != branch_format
+            ):
+                continue
+            shot_id = str(managed_item.get("shot_id") or "")
+            registry_file = Path(
+                str(managed_item.get("registry_file") or "")
+            )
+            asset_file = Path(str(managed_item.get("asset_file") or ""))
+            if (
+                not shot_id
+                or not registry_file.exists()
+                or not asset_file.exists()
+            ):
+                continue
+            expected_managed[shot_id] = {
+                "registry_file": str(registry_file.resolve()),
+                "registry_sha256": sha256_file(registry_file),
+                "asset_file": str(asset_file.resolve()),
+                "asset_sha256": sha256_file(asset_file),
+            }
+
+        if set(managed_registry) != set(expected_managed):
+            continue
+        managed_current = True
+        for shot_id, expected_entry in expected_managed.items():
+            entry = managed_registry.get(shot_id)
+            if (
+                not isinstance(entry, dict)
+                or entry.get("registry_file")
+                != expected_entry["registry_file"]
                 or entry.get("registry_sha256")
-                != sha256_file(registry_path)
+                != expected_entry["registry_sha256"]
+                or entry.get("asset_file")
+                != expected_entry["asset_file"]
                 or entry.get("asset_sha256")
-                != sha256_file(asset_path)
+                != expected_entry["asset_sha256"]
             ):
                 managed_current = False
                 break
