@@ -555,7 +555,7 @@ def _save_previous_version(
     return version_path
 
 
-def apply_manual_edit(
+def _apply_manual_edit_unlocked(
     draft_path: Path,
     state_path: Path,
     *,
@@ -752,7 +752,7 @@ def apply_manual_edit(
     }
 
 
-def apply_selection(
+def _apply_selection_unlocked(
     alternatives_path: Path,
     *,
     selection_id: str,
@@ -933,16 +933,54 @@ def apply_selection(
         target_id=target_id,
         transactions_dir=transactions_dir,
     )
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_draft = backup_dir / "draft.json"
-    backup_state = backup_dir / "state.json"
-    backup_alternatives = backup_dir / "alternatives.json"
-    atomic_write_json(backup_draft, old_draft)
-    atomic_write_json(backup_state, old_state)
-    atomic_write_json(backup_alternatives, old_artifact)
+
+    branch = _branch_key(concept_id, fmt)
+    review_request_path = (
+        review_requests_dir / f"{branch}.script_review_request.json"
+    ).resolve()
+    review_response_path = (
+        review_responses_dir / f"{branch}.script_review_response.json"
+    ).resolve()
+    approved_path = (
+        approved_dir / f"{safe_slug(concept_id)}.approved_script.json"
+    ).resolve()
+    version_path = (
+        _previous_version_path(
+            concept_id=concept_id,
+            fmt=fmt,
+            revision=revision,
+            versions_dir=versions_dir,
+        ).resolve()
+        if selection != "ORIGINAL"
+        else None
+    )
+
+    mutable_files: dict[str, Path] = {
+        "draft": draft_path,
+        "state": state_path,
+        "alternatives": alternatives_path,
+        "script_review_request": review_request_path,
+        "script_review_response": review_response_path,
+        "approved_script": approved_path,
+    }
+    if version_path is not None:
+        mutable_files["previous_version"] = version_path
+
+    file_snapshots = {
+        key: _snapshot_file(
+            destination,
+            backup_dir=backup_dir,
+            key=key,
+        )
+        for key, destination in mutable_files.items()
+    }
+    parent_draft_sha256 = sha256_file(draft_path)
+    parent_state_sha256 = sha256_file(state_path)
+    alternatives_sha256_before_selection = sha256_file(alternatives_path)
 
     transaction = {
         "artifact": "script_section_selection_transaction",
+        "schema_version": 2,
         "status": "PREPARED",
         "concept_id": concept_id,
         "format": fmt,
@@ -950,16 +988,16 @@ def apply_selection(
         "selection_id": selection,
         "reviewer": reviewer_value,
         "prepared_at": _utc_now(),
-        "backups": {
-            "draft": str(backup_draft.resolve()),
-            "state": str(backup_state.resolve()),
-            "alternatives": str(backup_alternatives.resolve()),
-        },
-        "destinations": {
-            "draft": str(draft_path),
-            "state": str(state_path),
-            "alternatives": str(alternatives_path),
-        },
+        "parent_draft_sha256": parent_draft_sha256,
+        "parent_state_sha256": parent_state_sha256,
+        "alternatives_sha256_before_selection": (
+            alternatives_sha256_before_selection
+        ),
+        "rework_request": str(request_path),
+        "rework_request_sha256": sha256_file(request_path),
+        "model_response": str(response_path),
+        "model_response_sha256": sha256_file(response_path),
+        "file_snapshots": file_snapshots,
     }
     transaction_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(transaction_path, transaction)
@@ -999,7 +1037,7 @@ def apply_selection(
                 original_script_request,
             )
 
-            version_path = _save_previous_version(
+            saved_version_path = _save_previous_version(
                 old_draft,
                 draft_path,
                 concept_id=concept_id,
@@ -1007,20 +1045,37 @@ def apply_selection(
                 revision=revision,
                 versions_dir=versions_dir,
             )
+            if version_path is None or saved_version_path.resolve() != version_path:
+                raise ValueError("Previous-version path changed during selection")
+            previous_version_sha256 = sha256_file(saved_version_path)
+            if previous_version_sha256 != parent_draft_sha256:
+                raise ValueError(
+                    "Previous version hash does not match parent draft hash"
+                )
 
             revised_draft["validation"] = validation
             revised_draft["human_revision"] = {
                 "revision": revision,
-                "parent_draft_sha256": sha256_file(draft_path),
+                "parent_draft_sha256": parent_draft_sha256,
+                "parent_state_sha256": parent_state_sha256,
                 "selected_target_id": target_id,
                 "selection_id": selection,
                 "selected_by": reviewer_value,
                 "selected_at": _utc_now(),
-                "alternatives_artifact": str(alternatives_path),
-                "alternatives_artifact_sha256_before_selection": sha256_file(
-                    alternatives_path
+                "selected_replacement_sha256": _sha256_text(replacement_text),
+                "selected_claim_ids_used": list(
+                    selected.get("claim_ids_used", [])
                 ),
-                "previous_version": str(version_path.resolve()),
+                "rework_request": str(request_path),
+                "rework_request_sha256": sha256_file(request_path),
+                "model_response": str(response_path),
+                "model_response_sha256": sha256_file(response_path),
+                "alternatives_artifact": str(alternatives_path),
+                "alternatives_artifact_sha256_before_selection": (
+                    alternatives_sha256_before_selection
+                ),
+                "previous_version": str(saved_version_path.resolve()),
+                "previous_version_sha256": previous_version_sha256,
             }
             atomic_write_json(draft_path, revised_draft)
 
@@ -1043,13 +1098,41 @@ def apply_selection(
         artifact["selection"] = {
             "selection_id": selection,
             "replacement_text": replacement_text,
+            "replacement_text_sha256": _sha256_text(replacement_text),
+            "claim_ids_used": (
+                []
+                if selection == "ORIGINAL"
+                else list(selected.get("claim_ids_used", []))
+            ),
             "reviewer": reviewer_value,
             "selected_at": _utc_now(),
+            "parent_draft_sha256": parent_draft_sha256,
+            "parent_state_sha256": parent_state_sha256,
+            "rework_request_sha256": sha256_file(request_path),
+            "model_response_sha256": sha256_file(response_path),
             "resulting_draft_sha256": sha256_file(draft_path),
             "resulting_state_version": new_state.get("state_version"),
             "revision": revision,
         }
         atomic_write_json(alternatives_path, artifact)
+
+        persisted_draft = load_json(draft_path)
+        persisted_state = load_json(state_path)
+        assert_state_matches_draft(persisted_state, draft_path)
+        if selection == "ORIGINAL":
+            if sha256_file(draft_path) != parent_draft_sha256:
+                raise ValueError("ORIGINAL selection changed the Script Draft")
+        else:
+            _assert_only_selected_target_changed(
+                old_draft,
+                persisted_draft,
+                target_id=target_id,
+                old_state=old_state,
+            )
+            if version_path is None or sha256_file(version_path) != parent_draft_sha256:
+                raise ValueError(
+                    "Previous version does not preserve exact parent draft"
+                )
 
         _invalidate_and_refresh_script_gate(
             revised_draft,
@@ -1065,6 +1148,14 @@ def apply_selection(
         transaction["resulting_state_sha256"] = sha256_file(state_path)
         transaction["resulting_alternatives_sha256"] = sha256_file(
             alternatives_path
+        )
+        transaction["resulting_script_review_request_sha256"] = sha256_file(
+            review_request_path
+        )
+        transaction["previous_version_sha256"] = (
+            sha256_file(version_path)
+            if version_path is not None and version_path.is_file()
+            else None
         )
         atomic_write_json(transaction_path, transaction)
 
@@ -1084,3 +1175,59 @@ def apply_selection(
         "alternatives": str(alternatives_path),
         "transaction": str(transaction_path),
     }
+
+def apply_manual_edit(
+    draft_path: Path,
+    state_path: Path,
+    *,
+    target_id: str,
+    replacement_text: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+) -> dict[str, Any]:
+    """Serialize a human manual target edit with all section-state mutations."""
+    with SECTION_STATE_ACTION_LOCK:
+        return _apply_manual_edit_unlocked(
+            draft_path,
+            state_path,
+            target_id=target_id,
+            replacement_text=replacement_text,
+            reviewer=reviewer,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+
+def apply_selection(
+    alternatives_path: Path,
+    *,
+    selection_id: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+    rework_responses_dir: Path = REWORK_RESPONSES_DIR,
+) -> dict[str, Any]:
+    """Serialize ORIGINAL/A/B/C selection with all section-state mutations."""
+    with SECTION_STATE_ACTION_LOCK:
+        return _apply_selection_unlocked(
+            alternatives_path,
+            selection_id=selection_id,
+            reviewer=reviewer,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+            rework_responses_dir=rework_responses_dir,
+        )
+
