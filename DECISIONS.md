@@ -1894,3 +1894,53 @@ costs such as NaN or Infinity are rejected.
 
 All spend decisions remain authorization records only. No visual generation
 request or provider action is created in Slice 17.
+
+## D-088 — Completed visual spend decisions advance only to zero-cost briefs and assembly
+
+**Status:** Accepted
+
+Slice 18 owns the transition after Slice 17's completed spend/no-spend boundary.
+
+The normal machine path is:
+
+`visual_generation_handoff_prepare` (only when paid generation was explicitly
+authorized) → `visual_assembly_prepare`.
+
+If no premium generation is authorized, the generation-handoff step is skipped
+and the workflow builds the assembly plan directly.
+
+Slice 18 never calls a paid provider, never renders media, and never starts the
+structural edit preview. It stops at one of these boundaries:
+
+- `VISUAL_ASSEMBLY_READY`;
+- `WAITING_FOR_PREMIUM_VISUAL_ASSETS`;
+- `WAITING_FOR_LOCAL_VISUAL_ASSETS`;
+- `WAITING_FOR_VISUAL_ASSETS`; or
+- `VISUAL_EXISTING_RETRY_REQUIRED`.
+
+The visual spend review is canonical. Reading the spend snapshot must preserve
+the recorded `COMPLETE` status, summary and authorized ceiling instead of
+silently stripping them. Spend decisions are revalidated against their current
+gap fingerprint and configured per-shot cap before any downstream stage can
+trust them.
+
+Premium generation briefs are derived only from the complete, globally valid
+current spend snapshot. Every brief binds the exact gap-plan hash, spend-review
+hash and exact human spend-decision hash. Preparing a brief authorizes no
+provider call and sets `execution_authorized=false`.
+
+Visual assembly is built only from the exact current rough cut, current
+rough-cut approval, current gap plan and, for hero gaps, a complete current
+spend review.
+
+Slice 18 recognizes the managed asset statuses introduced by Slice 16:
+`MANAGED_EXISTING_ASSET` and `MANAGED_EDITORIAL_ASSET`. A selected URL is
+never treated as usable media unless its managed registry and local file remain
+current.
+
+`RETRY_EXISTING` is a real unresolved state. It blocks edit-preview
+progression rather than being silently converted into a placeholder.
+
+Authorized premium slots remain pending until a current generated asset is
+registered against the exact generation request and within the approved cost
+ceiling. Slice 18 does not implement provider execution.
