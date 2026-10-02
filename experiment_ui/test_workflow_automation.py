@@ -616,12 +616,13 @@ class WorkflowAutomationTests(unittest.TestCase):
             "NARRATION_AUDIO_QC_FAILED",
         )
 
-    def test_audio_ready_runs_visual_plan_chain_then_stops_before_search(self):
+    def test_audio_ready_runs_visual_plan_and_search_to_human_candidate_gate(self):
         state = {"completed": 0}
         sequence = [
             "production_visual_prepare",
             "storyboard_prepare",
             "visual_search_prepare",
+            "visual_search_acquire",
         ]
 
         def readiness():
@@ -634,21 +635,21 @@ class WorkflowAutomationTests(unittest.TestCase):
                     }
                 }
             return {
-                "visual_search_acquire": {
+                "visual_rough_cut_prepare": {
                     "enabled": True,
-                    "reason": "free search would be next",
+                    "reason": "stale downstream action should not run",
                 }
             }
 
         def guidance(_readiness):
             if state["completed"] == len(sequence):
                 return {
-                    "state": "VISUAL_SEARCH_READY",
-                    "current_title": "Visual Search Plan Ready",
+                    "state": "HUMAN_VISUAL_CANDIDATE_GATE",
+                    "current_title": "Choose Visual Candidates",
                 }
             return {
                 "state": "ACTION_REQUIRED",
-                "current_title": "Build narration-bound visual plan",
+                "current_title": "Continue zero-cost visual discovery",
             }
 
         def fake_run(action_id):
@@ -676,17 +677,16 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(result["completed_actions"], sequence)
-        self.assertNotIn("visual_search_acquire", result["completed_actions"])
         self.assertEqual(
             result["workflow_state"],
-            "VISUAL_SEARCH_READY",
+            "HUMAN_VISUAL_CANDIDATE_GATE",
         )
 
-    def test_visual_search_ready_blocks_stale_search_adapter_action(self):
+    def test_human_visual_candidate_gate_blocks_downstream_machine_work(self):
         readiness = {
-            "visual_search_acquire": {
+            "visual_rough_cut_prepare": {
                 "enabled": True,
-                "reason": "search adapter is ready",
+                "reason": "stale downstream action",
             }
         }
         with (
@@ -699,8 +699,8 @@ class WorkflowAutomationTests(unittest.TestCase):
                 automation.control,
                 "workflow_guidance",
                 return_value={
-                    "state": "VISUAL_SEARCH_READY",
-                    "current_title": "Visual Search Plan Ready",
+                    "state": "HUMAN_VISUAL_CANDIDATE_GATE",
+                    "current_title": "Choose Visual Candidates",
                 },
             ),
             patch.object(automation, "run_action") as run_action,
@@ -711,7 +711,7 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(
             result["workflow_state"],
-            "VISUAL_SEARCH_READY",
+            "HUMAN_VISUAL_CANDIDATE_GATE",
         )
 
     def test_partial_command_without_progress_stops_as_partial(self):
