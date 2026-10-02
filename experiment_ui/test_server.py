@@ -49,6 +49,16 @@ class ExperimentUiTests(unittest.TestCase):
             {"/", "/opportunity", "/analysis", "/tools"},
         )
 
+
+    def test_script_gate_route_starts_automatic_downstream_work(self):
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        start = source.index('if route == "/api/script-gate":')
+        end = source.index('if route == "/api/script-section-review":')
+        block = source[start:end]
+
+        self.assertIn("maybe_start_automatic_workflow()", block)
+        self.assertIn('"automation_job": auto_job', block)
+
     def test_script_section_review_route_is_human_gate_guarded(self):
         self.assertIn(
             "/api/script-section-review",
