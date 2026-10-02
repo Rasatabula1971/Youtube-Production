@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ if str(_INTEGRITY_ROOT) not in sys.path:
 
 from pipeline_integrity import atomic_write_json
 from script_section_review import (
+    apply_target_action,
     build_section_review_state,
     validate_section_review_state,
 )
@@ -32,9 +34,11 @@ from story_script_engine import (
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "script_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "script_review_responses"
 APPROVED_DIR = OUTPUT_DIR / "approved_scripts"
+SECTION_REVIEW_STATES_DIR = OUTPUT_DIR / "script_section_review_states"
 SUMMARY_FILE = OUTPUT_DIR / "script_gate_summary.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
+_SECTION_REVIEW_ACTION_LOCK = threading.Lock()
 
 CRITERIA = (
     "package_promise_delivered",
@@ -54,6 +58,38 @@ def reviewer_id() -> str:
 
 def _branch_key(concept_id: str, fmt: str) -> str:
     return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
+
+
+def section_review_state_path(concept_id: str, fmt: str) -> Path:
+    return SECTION_REVIEW_STATES_DIR / (
+        f"{_branch_key(concept_id, fmt)}.script_section_review_state.json"
+    )
+
+
+def _validated_section_review_state(
+    req: dict[str, Any],
+) -> tuple[dict[str, Any], Path]:
+    concept_id = str(req.get("concept_id") or "").strip()
+    fmt = str(req.get("format") or "").strip()
+    if not concept_id or not fmt:
+        raise ValueError("Script review request requires concept_id and format")
+
+    state_path = section_review_state_path(concept_id, fmt)
+    state = load_json(state_path) if state_path.exists() else req.get("section_review")
+    validation = validate_section_review_state(state)
+    if not validation["valid"]:
+        raise ValueError(
+            "Invalid section review state: " + "; ".join(validation["errors"])
+        )
+
+    expected_hash = str(
+        req.get("request_provenance", {}).get("script_draft_sha256") or ""
+    )
+    if str(state.get("source_draft_sha256") or "") != expected_hash:
+        raise ValueError(
+            "STALE_SECTION_REVIEW_STATE: state is not bound to current review draft"
+        )
+    return dict(state), state_path
 
 
 def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, Any]:
@@ -141,6 +177,7 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
 
 def prepare() -> dict[str, Any]:
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
+    SECTION_REVIEW_STATES_DIR.mkdir(parents=True, exist_ok=True)
     paths = (
         sorted(DRAFTS_DIR.glob("*.script_draft.json"))
         if DRAFTS_DIR.exists()
@@ -148,8 +185,34 @@ def prepare() -> dict[str, Any]:
     )
     prepared: list[dict[str, Any]] = []
     current: set[Path] = set()
+    current_section_states: set[Path] = set()
     for path in paths:
         req = build_review_request(load_json(path), path)
+        state_dest = section_review_state_path(
+            str(req["concept_id"]),
+            str(req["format"]),
+        )
+        initial_state = req["section_review"]
+        with _SECTION_REVIEW_ACTION_LOCK:
+            if state_dest.exists():
+                existing_state = load_json(state_dest)
+                validation = validate_section_review_state(existing_state)
+                if not validation["valid"]:
+                    raise ValueError(
+                        "Invalid persisted section review state: "
+                        + "; ".join(validation["errors"])
+                    )
+                if (
+                    existing_state.get("source_draft_sha256")
+                    == initial_state.get("source_draft_sha256")
+                ):
+                    req["section_review"] = existing_state
+                else:
+                    atomic_write_json(state_dest, initial_state)
+            else:
+                atomic_write_json(state_dest, initial_state)
+        current_section_states.add(state_dest.resolve())
+
         dest = REVIEW_REQUESTS_DIR / (
             f"{_branch_key(req['concept_id'], req['format'])}."
             "script_review_request.json"
@@ -165,6 +228,11 @@ def prepare() -> dict[str, Any]:
         )
     for stale in REVIEW_REQUESTS_DIR.glob("*.script_review_request.json"):
         if stale.resolve() not in current:
+            stale.unlink()
+    for stale in SECTION_REVIEW_STATES_DIR.glob(
+        "*.script_section_review_state.json"
+    ):
+        if stale.resolve() not in current_section_states:
             stale.unlink()
     return {
         "status": "SCRIPT_GATE_READY" if prepared else "WAITING_FOR_SCRIPT_DRAFTS",
@@ -424,10 +492,20 @@ def _apply_rework_feedback(
     atomic_write_json(request_source, request)
 
 
-def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
+def _apply_payload_unlocked(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
     req = load_json(request_path)
     normalized = validate_response(req, response)
     source = assert_current_draft(req)
+    if normalized["decision"] == "ACCEPT":
+        state, _ = _validated_section_review_state(req)
+        if any(
+            isinstance(target, dict)
+            and target.get("review_state") == "REWORK_REQUESTED"
+            for target in state.get("targets", [])
+        ):
+            raise ValueError(
+                "ACCEPT blocked while a section target is REWORK_REQUESTED"
+            )
     reviewed_at = datetime.now(timezone.utc).isoformat()
 
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
@@ -468,6 +546,12 @@ def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any
     return result
 
 
+def apply_payload(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
+    """Apply a branch-level decision atomically with section-review actions."""
+    with _SECTION_REVIEW_ACTION_LOCK:
+        return _apply_payload_unlocked(request_path, response)
+
+
 def apply(request_path: Path, response_path_file: Path) -> dict[str, Any]:
     return apply_payload(request_path, load_json(response_path_file))
 
@@ -505,9 +589,18 @@ def snapshot() -> dict[str, Any]:
             saved = {}
         decision = str(saved.get("decision") or "PENDING").upper()
         counts[decision_key.get(decision, "pending")] += 1
+        try:
+            current_section_review, _ = _validated_section_review_state(req)
+            section_review_error = None
+        except (OSError, ValueError, TypeError) as exc:
+            current_section_review = req.get("section_review", {})
+            section_review_error = str(exc)
+
         scripts.append(
             {
                 **req,
+                "section_review": current_section_review,
+                "section_review_error": section_review_error,
                 "decision": decision,
                 "criteria_decisions": saved.get("criteria", {}),
                 "note": saved.get("note", ""),
@@ -526,6 +619,83 @@ def snapshot() -> dict[str, Any]:
         "scripts": scripts,
         "production_ready_concept_ids": ready_ids,
         **counts,
+    }
+
+
+def apply_section_review_action(
+    *,
+    concept_id: str,
+    format: str,
+    target_id: str,
+    action: str,
+    reason: str | None = None,
+    note: str | None = None,
+    reviewer: str | None = None,
+) -> dict[str, Any]:
+    """Apply one Slice 2 target action using logical branch identity only."""
+    cid = str(concept_id or "").strip()
+    fmt = str(format or "").strip()
+    if not cid or not fmt:
+        raise ValueError("concept_id and format are required")
+
+    request_path = REVIEW_REQUESTS_DIR / (
+        f"{_branch_key(cid, fmt)}.script_review_request.json"
+    )
+    if not request_path.exists():
+        raise ValueError("Script review request not found")
+
+    with _SECTION_REVIEW_ACTION_LOCK:
+        req = load_json(request_path)
+        if (
+            str(req.get("concept_id") or "").strip() != cid
+            or str(req.get("format") or "").strip() != fmt
+        ):
+            raise ValueError("Script section review request identity mismatch")
+
+        source = assert_current_draft(req)
+        state, state_path = _validated_section_review_state(req)
+        result = apply_target_action(
+            state,
+            source_draft_sha256=sha256_file(source),
+            target_id=target_id,
+            action=action,
+            reviewer=reviewer or reviewer_id(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
+            reason=reason,
+            note=note,
+        )
+
+        if result["changed"]:
+            SECTION_REVIEW_STATES_DIR.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(state_path, result["state"])
+
+        invalidated = False
+        if result["invalidates_branch_approval"]:
+            branch_response = response_path(cid, fmt)
+            if branch_response.exists():
+                branch_response.unlink()
+                invalidated = True
+            approved_path = APPROVED_DIR / f"{safe_slug(cid)}.approved_script.json"
+            if approved_path.exists():
+                approved_path.unlink()
+                invalidated = True
+
+    return {
+        "status": (
+            "SECTION_REVIEW_UPDATED"
+            if result["changed"]
+            else "SECTION_REVIEW_NO_CHANGE"
+        ),
+        "concept_id": cid,
+        "format": fmt,
+        "target_id": str(target_id),
+        "action": str(action).strip().upper(),
+        "changed": result["changed"],
+        "branch_approval_invalidated": invalidated,
+        "state_revision": result["state"]["state_revision"],
+        "script_revision": result["state"]["script_revision"],
+        "target": result["target"],
+        "section_review": result["state"],
     }
 
 
