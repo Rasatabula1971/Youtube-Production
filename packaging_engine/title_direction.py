@@ -22,11 +22,11 @@ if str(_STORY) not in sys.path:
     sys.path.insert(0, str(_STORY))
 
 from pipeline_integrity import atomic_write_json
-from story_script_engine.script_review import (
+from script_review import (
     APPROVED_DIR as APPROVED_SCRIPTS_DIR,
     _approved_bundle_is_current,
 )
-from story_script_engine.story_script_engine import load_json, safe_slug, sha256_file
+from story_script_engine import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
