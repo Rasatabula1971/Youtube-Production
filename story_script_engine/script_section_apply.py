@@ -510,26 +510,48 @@ def _text_for_target(draft: dict[str, Any], target_id: str) -> str:
     raise ValueError(f"Unsupported or missing script target: {target_id}")
 
 
-def _save_previous_version(
-    old_draft: dict[str, Any],
+def _previous_version_path(
     *,
     concept_id: str,
     fmt: str,
     revision: int,
     versions_dir: Path,
 ) -> Path:
-    branch_versions_dir = versions_dir / _branch_key(concept_id, fmt)
-    branch_versions_dir.mkdir(parents=True, exist_ok=True)
-    previous_revision = revision - 1
-    version_path = (
-        branch_versions_dir
-        / f"revision_{previous_revision:04d}.script_draft.json"
+    return (
+        versions_dir
+        / _branch_key(concept_id, fmt)
+        / f"revision_{revision - 1:04d}.script_draft.json"
     )
+
+
+def _save_previous_version(
+    old_draft: dict[str, Any],
+    source_draft_path: Path,
+    *,
+    concept_id: str,
+    fmt: str,
+    revision: int,
+    versions_dir: Path,
+) -> Path:
+    source_draft_path = source_draft_path.resolve()
+    if load_json(source_draft_path) != old_draft:
+        raise ValueError("Previous-version source does not match old draft payload")
+
+    version_path = _previous_version_path(
+        concept_id=concept_id,
+        fmt=fmt,
+        revision=revision,
+        versions_dir=versions_dir,
+    )
+    source_bytes = source_draft_path.read_bytes()
     if version_path.exists():
-        if load_json(version_path) != old_draft:
+        if not version_path.is_file() or version_path.read_bytes() != source_bytes:
             raise ValueError("Script version collision with different content")
     else:
-        atomic_write_json(version_path, old_draft)
+        _atomic_write_bytes(version_path, source_bytes)
+
+    if sha256_file(version_path) != sha256_file(source_draft_path):
+        raise ValueError("Previous version is not an exact copy of parent draft")
     return version_path
 
 
@@ -667,6 +689,7 @@ def apply_manual_edit(
 
         version_path = _save_previous_version(
             old_draft,
+            draft_path,
             concept_id=concept_id,
             fmt=fmt,
             revision=revision,
@@ -976,20 +999,14 @@ def apply_selection(
                 original_script_request,
             )
 
-            branch_versions_dir = versions_dir / _branch_key(concept_id, fmt)
-            branch_versions_dir.mkdir(parents=True, exist_ok=True)
-            previous_revision = revision - 1
-            version_path = (
-                branch_versions_dir
-                / f"revision_{previous_revision:04d}.script_draft.json"
+            version_path = _save_previous_version(
+                old_draft,
+                draft_path,
+                concept_id=concept_id,
+                fmt=fmt,
+                revision=revision,
+                versions_dir=versions_dir,
             )
-            if version_path.exists():
-                if load_json(version_path) != old_draft:
-                    raise ValueError(
-                        "Script version collision with different content"
-                    )
-            else:
-                atomic_write_json(version_path, old_draft)
 
             revised_draft["validation"] = validation
             revised_draft["human_revision"] = {
