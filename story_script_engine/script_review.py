@@ -90,8 +90,9 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
         "required_accept_criteria": list(CRITERIA),
         "criteria": {
             "package_promise_delivered": (
-                "This branch delivers the approved title/thumbnail promise and "
-                "expected payoff in a form appropriate to its format."
+                "Compatibility key: this branch delivers the accepted viewer/story "
+                "promise and expected payoff in a form appropriate to its format. "
+                "Final title/thumbnail packaging is selected after script approval."
             ),
             "facts_within_verified_claims": (
                 "Factual statements stay within human-accepted research claims."
@@ -109,8 +110,9 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
                 "adapting its sequence and compression for this format."
             ),
             "opening_hook_high_impact_truthful": (
-                "The first spoken line creates immediate interest, matches the "
-                "package promise and does not exaggerate beyond verified research."
+                "The first spoken line creates immediate interest, confirms the "
+                "accepted viewer/story promise and does not exaggerate beyond "
+                "verified research."
             ),
             "audience_psychology_coherent": (
                 "The format-specific psychology profile is used coherently. For "
