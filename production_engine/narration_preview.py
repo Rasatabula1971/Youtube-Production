@@ -56,10 +56,92 @@ def _cue(purpose: str, index: int, total: int) -> dict[str, Any]:
 
 def _engagement_passes(spec_path: Path) -> bool:
     matches = list(ENGAGEMENT_DIR.glob(f"{spec_path.stem}.engagement.json"))
-    if not matches:
+    if len(matches) != 1:
         return False
     payload = load_json(matches[0])
-    return isinstance(payload, dict) and payload.get("status") == "PASS"
+    if not isinstance(payload, dict) or payload.get("status") != "PASS":
+        return False
+    provenance = payload.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return False
+    recorded = Path(str(provenance.get("approved_voice_spec") or "")).resolve()
+    return bool(
+        recorded == spec_path.resolve()
+        and provenance.get("approved_voice_spec_sha256") == sha256_file(spec_path)
+    )
+
+
+def _manifest_path(concept_id: str, fmt: str) -> Path:
+    key = f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
+    return MANIFEST_DIR / f"{key}.narration_preview.json"
+
+
+def manifest_is_current(spec_path: Path, manifest_path: Path) -> bool:
+    if not spec_path.is_file() or not manifest_path.is_file():
+        return False
+    manifest = load_json(manifest_path)
+    if not isinstance(manifest, dict):
+        return False
+    provenance = manifest.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return False
+    recorded = Path(str(provenance.get("approved_voice_spec") or "")).resolve()
+    if recorded != spec_path.resolve():
+        return False
+    if provenance.get("approved_voice_spec_sha256") != sha256_file(spec_path):
+        return False
+    spec = load_json(spec_path)
+    return bool(
+        isinstance(spec, dict)
+        and str(manifest.get("concept_id") or "") == str(spec.get("concept_id") or "")
+        and str(manifest.get("format") or "") == str(spec.get("format") or "")
+    )
+
+
+def snapshot() -> dict[str, Any]:
+    paths = (
+        sorted(APPROVED_DIR.glob("*.approved_voice_spec.json"))
+        if APPROVED_DIR.exists()
+        else []
+    )
+    items: list[dict[str, Any]] = []
+    waiting = 0
+    stale = 0
+    for spec_path in paths:
+        if not _engagement_passes(spec_path):
+            waiting += 1
+            continue
+        spec = load_json(spec_path)
+        concept_id = str(spec.get("concept_id") or "").strip()
+        fmt = str(spec.get("format") or "").strip()
+        manifest_path = _manifest_path(concept_id, fmt)
+        current = manifest_is_current(spec_path, manifest_path)
+        stale += not current
+        if current:
+            items.append(
+                {
+                    "concept_id": concept_id,
+                    "format": fmt,
+                    "manifest": str(manifest_path),
+                }
+            )
+    prepared = len(items)
+    status = (
+        "READY_FOR_FREE_PREVIEW_RENDER"
+        if paths and waiting == 0 and stale == 0 and prepared == len(paths)
+        else "WAITING_FOR_ENGAGEMENT_VALIDATION"
+        if waiting
+        else "STALE_PREVIEW_MANIFESTS"
+        if paths
+        else "WAITING_FOR_ENGAGEMENT_VALIDATION"
+    )
+    return {
+        "status": status,
+        "prepared": prepared,
+        "waiting": waiting,
+        "stale": stale,
+        "items": items,
+    }
 
 
 def build_manifest(spec: dict[str, Any], spec_path: Path) -> dict[str, Any]:
@@ -142,12 +224,7 @@ def prepare() -> dict[str, Any]:
     for stale in MANIFEST_DIR.glob("*.narration_preview.json"):
         if stale.resolve() not in current:
             stale.unlink()
-    result = {
-        "status": "READY_FOR_FREE_PREVIEW_RENDER" if items and not waiting else "WAITING_FOR_ENGAGEMENT_VALIDATION",
-        "prepared": len(items),
-        "waiting": waiting,
-        "items": items,
-    }
+    result = snapshot()
     atomic_write_json(SUMMARY_FILE, result)
     return result
 
