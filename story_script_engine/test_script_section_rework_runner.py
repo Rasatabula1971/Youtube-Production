@@ -20,6 +20,8 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                 "expected_payoff": "The strange motion becomes mechanically clear.",
             },
             "story_plan": {
+                "story_question": "Why can controlled movement make a structure stronger?",
+                "opening_hook_intent": "Show movement that looks like failure.",
                 "viewer_state": {
                     "awareness": "The viewer sees movement that looks wrong.",
                     "expectation": "Strong parts should stay rigid.",
@@ -49,8 +51,15 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                 {
                     "claim_id": "clm001",
                     "statement": "The flexible joint changes how load is distributed.",
-                }
+                },
+                {
+                    "claim_id": "clm999",
+                    "statement": "An unrelated accepted fact that this target does not use.",
+                },
             ],
+            "psychology_contract": {
+                "opening_line": {"required": True}
+            },
             "psychology_profile": {
                 "reward_density": "MODERATE",
             },
@@ -142,18 +151,33 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
             reason="TOO_TECHNICAL",
             custom_instruction="Make the mechanism visual and easy to picture.",
         )
-        return draft_path, state_path
+        review_request_path = root / "c1.long_form.script_review_request.json"
+        review_request_path.write_text(
+            json.dumps(
+                {
+                    "concept_id": "c1",
+                    "format": "long_form",
+                    "request_provenance": {
+                        "script_draft": str(draft_path.resolve()),
+                        "script_draft_sha256": rework_runner.sha256_file(draft_path),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return draft_path, state_path, review_request_path
 
     def build_request(self, root):
-        draft_path, state_path = self.setup_rework(root)
+        draft_path, state_path, review_request_path = self.setup_rework(root)
         request = rework_runner.build_rework_request(
             section_state.load_json(state_path),
             state_path,
             rework_runner.load_json(draft_path),
             draft_path,
             target_id="section:explanation_02",
+            review_request_path=review_request_path,
         )
-        return draft_path, state_path, request
+        return draft_path, state_path, review_request_path, request
 
     def response(self):
         return {
@@ -181,7 +205,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
 
     def test_request_contains_only_selected_target_and_adjacent_context(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, _, request = self.build_request(Path(tmp))
+            _, _, _, request = self.build_request(Path(tmp))
 
         self.assertEqual(
             request["selected_target"]["original_text"],
@@ -202,10 +226,61 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
         self.assertIn("section:setup_01", request["locked_target_ids"])
         self.assertNotIn("section:explanation_02", request["locked_target_ids"])
 
+
+    def test_request_scopes_claims_and_story_context_to_selected_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, _, request = self.build_request(Path(tmp))
+
+        self.assertEqual(
+            [item["claim_id"] for item in request["accepted_claims"]],
+            ["clm001"],
+        )
+        self.assertEqual(
+            [item["beat_id"] for item in request["story_constraints"]["relevant_beats"]],
+            ["b2"],
+        )
+        self.assertEqual(
+            request["story_constraints"]["story_question"],
+            "Why can controlled movement make a structure stronger?",
+        )
+        self.assertEqual(
+            request["psychology_contract"]["opening_line"]["required"],
+            True,
+        )
+        self.assertIn(
+            "script_review_request_sha256",
+            request["request_provenance"],
+        )
+
+    def test_prepared_request_tampering_fails_current_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, _, _, request = self.build_request(root)
+            request["selected_target"]["original_text"] = "Tampered prompt text."
+            with self.assertRaisesRegex(
+                ValueError,
+                "prepared request content changed",
+            ):
+                rework_runner.assert_request_current(request)
+
+    def test_review_request_change_makes_rework_request_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, _, review_request_path, request = self.build_request(root)
+            review = json.loads(review_request_path.read_text(encoding="utf-8"))
+            review["tampered"] = True
+            review_request_path.write_text(json.dumps(review), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Human Script Gate request changed",
+            ):
+                rework_runner.assert_request_current(request)
+
     def test_non_rework_target_cannot_generate_request(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            draft_path, state_path = self.setup_rework(root)
+            draft_path, state_path, review_request_path = self.setup_rework(root)
             with self.assertRaisesRegex(
                 ValueError,
                 "not marked REWORK_REQUESTED",
@@ -216,11 +291,12 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
                     rework_runner.load_json(draft_path),
                     draft_path,
                     target_id="section:payoff_03",
+                    review_request_path=review_request_path,
                 )
 
     def test_prompt_explicitly_forbids_adjacent_rewrites(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, _, request = self.build_request(Path(tmp))
+            _, _, _, request = self.build_request(Path(tmp))
             prompt = rework_runner.build_prompt(request, 95000)
 
         self.assertIn("Rewrite ONLY selected_target.original_text", prompt)
@@ -229,7 +305,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
 
     def test_valid_response_requires_distinct_abc_alternatives(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, _, request = self.build_request(Path(tmp))
+            _, _, _, request = self.build_request(Path(tmp))
             validation = rework_runner.validate_response(
                 self.response(),
                 request,
@@ -239,7 +315,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
 
     def test_duplicate_or_unchanged_alternatives_fail(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, _, request = self.build_request(Path(tmp))
+            _, _, _, request = self.build_request(Path(tmp))
             response = self.response()
             response["alternatives"][1]["replacement_text"] = (
                 response["alternatives"][0]["replacement_text"]
@@ -259,7 +335,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
 
     def test_wrong_alternative_ids_fail(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, _, request = self.build_request(Path(tmp))
+            _, _, _, request = self.build_request(Path(tmp))
             response = self.response()
             response["alternatives"][2]["alternative_id"] = "D"
             validation = rework_runner.validate_response(response, request)
@@ -273,7 +349,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
     def test_request_becomes_stale_when_review_state_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            draft_path, state_path, request = self.build_request(root)
+            draft_path, state_path, _, request = self.build_request(root)
             request_path = root / "rework.json"
             request_path.write_text(json.dumps(request), encoding="utf-8")
 
@@ -292,10 +368,99 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
             ):
                 rework_runner.assert_request_current(stale)
 
+
+    def test_state_change_during_fair_discards_returned_alternatives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            draft_path, state_path, _, request = self.build_request(root)
+            requests_dir = root / "rework_requests"
+            requests_dir.mkdir()
+            request_path = requests_dir / "c1.rework.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+
+            fake_result = {
+                "status": "ACCEPTED",
+                "reason_code": "OK",
+                "request_id": "req-1",
+                "provider_id": "test-provider",
+                "model_id": "test-model",
+                "paid_inference_executed": False,
+                "direct_backup_used": False,
+                "direct_backup_may_bill": False,
+                "billing_authorization": None,
+                "attempts": [],
+                "output": json.dumps(self.response()),
+            }
+            config = {
+                "runner": {
+                    "max_prompt_chars": 95000,
+                    "subprocess_timeout_seconds": 1,
+                }
+            }
+
+            def mutate_state_then_return(*args, **kwargs):
+                section_state.apply_target_action(
+                    state_path,
+                    draft_path,
+                    target_id="section:payoff_03",
+                    action="LOCK",
+                    reviewer="other-reviewer",
+                )
+                return fake_result
+
+            alternatives_dir = root / "alternatives"
+            with (
+                patch.object(
+                    rework_runner,
+                    "MODEL_RUNS_DIR",
+                    root / "model_runs",
+                ),
+                patch.object(
+                    rework_runner,
+                    "RAW_OUTPUTS_DIR",
+                    root / "raw",
+                ),
+                patch.object(
+                    rework_runner,
+                    "REWORK_RESPONSES_DIR",
+                    root / "responses",
+                ),
+                patch.object(
+                    rework_runner,
+                    "ALTERNATIVES_DIR",
+                    alternatives_dir,
+                ),
+                patch.object(
+                    rework_runner,
+                    "bridge_payload",
+                    return_value={"settings": {}},
+                ),
+                patch.object(
+                    rework_runner,
+                    "resolve_fair_paths",
+                    return_value={"python": Path(sys.executable)},
+                ),
+                patch.object(
+                    rework_runner,
+                    "call_fair_bridge",
+                    side_effect=mutate_state_then_return,
+                ),
+            ):
+                result = rework_runner.run_one(
+                    request_path,
+                    False,
+                    config,
+                )
+
+        self.assertEqual(result["status"], "STALE_REWORK_REQUEST")
+        self.assertFalse(
+            list(alternatives_dir.glob("*.alternatives.json"))
+        )
+
     def test_artifact_starts_unselected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            _, _, request = self.build_request(root)
+            _, _, _, request = self.build_request(root)
             request_path = root / "rework_request.json"
             request_path.write_text(json.dumps(request), encoding="utf-8")
             validation = rework_runner.validate_response(
@@ -321,7 +486,7 @@ class ScriptSectionReworkRunnerTests(unittest.TestCase):
     def test_run_one_writes_alternatives_without_mutating_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            draft_path, state_path, request = self.build_request(root)
+            draft_path, state_path, _, request = self.build_request(root)
             requests_dir = root / "rework_requests"
             requests_dir.mkdir()
             request_path = requests_dir / "c1.rework.json"

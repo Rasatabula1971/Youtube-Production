@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from pipeline_integrity import atomic_write_json
 from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
 
 SECTION_STATE_DIR = OUTPUT_DIR / "script_section_states"
+SECTION_STATE_ACTION_LOCK = threading.RLock()
 
 ALLOWED_DECISIONS = {"PENDING", "ACCEPTED", "REWORK_REQUESTED"}
 ALLOWED_ACTIONS = {"ACCEPT", "LOCK", "UNLOCK", "REWORK", "CANCEL_REWORK"}
@@ -280,7 +282,7 @@ def state_path_for(concept_id: str, fmt: str, state_dir: Path = SECTION_STATE_DI
     )
 
 
-def prepare_state(
+def _prepare_state_unlocked(
     draft_path: Path,
     *,
     state_dir: Path = SECTION_STATE_DIR,
@@ -302,6 +304,18 @@ def prepare_state(
     return state
 
 
+def prepare_state(
+    draft_path: Path,
+    *,
+    state_dir: Path = SECTION_STATE_DIR,
+) -> dict[str, Any]:
+    with SECTION_STATE_ACTION_LOCK:
+        return _prepare_state_unlocked(
+            draft_path,
+            state_dir=state_dir,
+        )
+
+
 def _target_by_id(state: dict[str, Any], target_id: str) -> dict[str, Any]:
     normalized = str(target_id or "").strip()
     for target in state.get("targets", []):
@@ -310,7 +324,7 @@ def _target_by_id(state: dict[str, Any], target_id: str) -> dict[str, Any]:
     raise ValueError(f"Unknown script rework target: {normalized}")
 
 
-def apply_target_action(
+def _apply_target_action_unlocked(
     state_path: Path,
     draft_path: Path,
     *,
@@ -407,3 +421,26 @@ def apply_target_action(
     )
     atomic_write_json(state_path, state)
     return state
+
+    
+
+def apply_target_action(
+    state_path: Path,
+    draft_path: Path,
+    *,
+    target_id: str,
+    action: str,
+    reviewer: str,
+    reason: str | None = None,
+    custom_instruction: str | None = None,
+) -> dict[str, Any]:
+    with SECTION_STATE_ACTION_LOCK:
+        return _apply_target_action_unlocked(
+            state_path,
+            draft_path,
+            target_id=target_id,
+            action=action,
+            reviewer=reviewer,
+            reason=reason,
+            custom_instruction=custom_instruction,
+        )

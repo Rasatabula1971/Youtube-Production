@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from story_script_engine import DRAFTS_DIR, load_json, safe_slug
+from story_script_engine import DRAFTS_DIR, load_json, safe_slug, sha256_file
 from script_review import (
     APPROVED_DIR,
     RESPONSES_DIR as SCRIPT_REVIEW_RESPONSES_DIR,
@@ -412,16 +412,56 @@ def apply_action(
                 approved_dir=approved_dir,
             )
 
-    elif action_value == "GENERATE_ALTERNATIVES":
+    elif action_value == "PREPARE_REWORK_REQUEST":
         if not target_value:
-            raise ValueError("GENERATE_ALTERNATIVES requires target_id")
+            raise ValueError("PREPARE_REWORK_REQUEST requires target_id")
         if not state_path.is_file():
             raise ValueError("Section state is not prepared")
+        if review_requests_dir is None:
+            from script_review import REVIEW_REQUESTS_DIR
+
+            review_requests_dir = REVIEW_REQUESTS_DIR
         request_path = prepare_rework_request(
             state_path,
             draft_path,
             target_id=target_value,
             requests_dir=rework_requests_dir,
+            review_requests_dir=review_requests_dir,
+        )
+        snapshot = branch_snapshot(
+            concept,
+            branch_format,
+            drafts_dir=drafts_dir,
+            state_dir=state_dir,
+            alternatives_dir=alternatives_dir,
+        )
+        return {
+            **snapshot,
+            "rework_request": {
+                "status": "SECTION_REWORK_REQUEST_READY",
+                "target_id": target_value,
+                "request_file": str(request_path),
+                "request_sha256": sha256_file(request_path),
+                "model_called": False,
+                "script_changed": False,
+            },
+        }
+
+    elif action_value == "GENERATE_ALTERNATIVES":
+        if not target_value:
+            raise ValueError("GENERATE_ALTERNATIVES requires target_id")
+        if not state_path.is_file():
+            raise ValueError("Section state is not prepared")
+        if review_requests_dir is None:
+            from script_review import REVIEW_REQUESTS_DIR
+
+            review_requests_dir = REVIEW_REQUESTS_DIR
+        request_path = prepare_rework_request(
+            state_path,
+            draft_path,
+            target_id=target_value,
+            requests_dir=rework_requests_dir,
+            review_requests_dir=review_requests_dir,
         )
         generation = run_section_rework(
             request_path,

@@ -213,12 +213,35 @@ class ScriptSectionApplyTests(unittest.TestCase):
             custom_instruction="Make the mechanism visual.",
         )
 
+        review_requests_dir = root / "review_requests"
+        review_requests_dir.mkdir()
+        review_request_path = (
+            review_requests_dir
+            / "c1.long_form.script_review_request.json"
+        )
+        review_request_path.write_text(
+            json.dumps(
+                {
+                    "concept_id": "c1",
+                    "format": "long_form",
+                    "request_provenance": {
+                        "script_draft": str(draft_path.resolve()),
+                        "script_draft_sha256": rework_runner.sha256_file(
+                            draft_path
+                        ),
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
         requests_dir = root / "section_rework_requests"
         rework_request_path = rework_runner.prepare_rework_request(
             state_path,
             draft_path,
             target_id="section:explanation_02",
             requests_dir=requests_dir,
+            review_requests_dir=review_requests_dir,
         )
         rework_request = rework_runner.load_json(rework_request_path)
         response = self.alternatives_response()
@@ -271,7 +294,7 @@ class ScriptSectionApplyTests(unittest.TestCase):
             versions,
             transactions,
         ):
-            path.mkdir()
+            path.mkdir(exist_ok=True)
         return {
             "review_requests_dir": review_requests,
             "review_responses_dir": review_responses,

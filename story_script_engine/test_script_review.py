@@ -6,6 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import script_review
+import script_section_service as section_service
+import script_section_state as section_state
 
 
 class ScriptReviewTests(unittest.TestCase):
@@ -121,55 +123,6 @@ class ScriptReviewTests(unittest.TestCase):
                 sorted(item["format"] for item in snap["scripts"]),
                 ["long_form", "short"],
             )
-
-
-    def test_review_request_contains_slice1_section_contract(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            draft = self.draft("short", "Short proof, reveal, payoff.")
-            path = Path(tmp) / "c1.short.script_draft.json"
-            path.write_text(json.dumps(draft), encoding="utf-8")
-
-            request = script_review.build_review_request(draft, path)
-
-        state = request["section_review"]
-        self.assertEqual(state["artifact"], "script_section_review_state")
-        self.assertEqual(
-            state["source_draft_sha256"],
-            request["request_provenance"]["script_draft_sha256"],
-        )
-        self.assertEqual(
-            [item["target_id"] for item in state["targets"]],
-            ["opening_hook", "section:s1", "closing"],
-        )
-        for item in state["targets"]:
-            self.assertEqual(item["review_state"], "PENDING")
-            self.assertFalse(item["locked"])
-            self.assertTrue(item["editable"])
-            self.assertEqual(item["revision"], 0)
-
-    def test_snapshot_preserves_section_review_contract(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _, requests, responses, approved = self.setup_gate(root)
-            with (
-                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
-                patch.object(script_review, "RESPONSES_DIR", responses),
-                patch.object(script_review, "APPROVED_DIR", approved),
-            ):
-                snapshot = script_review.snapshot()
-
-        short = next(
-            item for item in snapshot["scripts"]
-            if item["format"] == "short"
-        )
-        self.assertEqual(
-            [item["target_id"] for item in short["section_review"]["targets"]],
-            ["opening_hook", "section:s1", "closing"],
-        )
-        self.assertEqual(
-            short["section_review"]["source_draft_sha256"],
-            short["request_provenance"]["script_draft_sha256"],
-        )
 
     def test_accept_is_one_click_and_records_audit_criteria(self):
         req = {
@@ -321,295 +274,91 @@ class ScriptReviewTests(unittest.TestCase):
                 )
 
 
-    def test_section_action_persists_without_changing_script_draft(self):
+    def test_branch_accept_is_blocked_by_canonical_section_rework_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             drafts, requests, responses, approved = self.setup_gate(root)
             states = root / "section_states"
             states.mkdir()
             draft_path = drafts / "c1.short.script_draft.json"
-            before_hash = script_review.sha256_file(draft_path)
-
-            with (
-                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
-                patch.object(script_review, "RESPONSES_DIR", responses),
-                patch.object(script_review, "APPROVED_DIR", approved),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
-            ):
-                result = script_review.apply_section_review_action(
-                    concept_id="c1",
-                    format="short",
-                    target_id="section:s1",
-                    action="LOCK",
-                    reviewer="r",
-                )
-                snapshot = script_review.snapshot()
-
-            after_hash = script_review.sha256_file(draft_path)
-            self.assertEqual(before_hash, after_hash)
-            self.assertEqual(result["status"], "SECTION_REVIEW_UPDATED")
-            self.assertEqual(result["script_revision"], 0)
-            state_file = (
-                states / "c1.short.script_section_review_state.json"
+            state = section_state.prepare_state(
+                draft_path,
+                state_dir=states,
             )
-            self.assertTrue(state_file.exists())
-            short = next(
-                item for item in snapshot["scripts"]
-                if item["format"] == "short"
-            )
-            target = next(
-                item for item in short["section_review"]["targets"]
-                if item["target_id"] == "section:s1"
-            )
-            self.assertTrue(target["locked"])
-            self.assertEqual(target["review_state"], "PENDING")
-
-    def test_prepare_preserves_section_state_for_same_draft(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            drafts = root / "drafts"
-            requests = root / "review_requests"
-            states = root / "section_states"
-            responses = root / "responses"
-            approved = root / "approved"
-            for path in (drafts, requests, states, responses, approved):
-                path.mkdir()
-
-            draft = self.draft(
+            state_path = section_state.state_path_for(
+                "c1",
                 "short",
-                "Short proof, reveal, payoff.",
+                states,
             )
-            draft_path = drafts / "c1.short.script_draft.json"
-            draft_path.write_text(json.dumps(draft), encoding="utf-8")
-
-            with (
-                patch.object(script_review, "DRAFTS_DIR", drafts),
-                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
-                patch.object(script_review, "RESPONSES_DIR", responses),
-                patch.object(script_review, "APPROVED_DIR", approved),
-            ):
-                script_review.prepare()
-                first = script_review.apply_section_review_action(
-                    concept_id="c1",
-                    format="short",
-                    target_id="section:s1",
-                    action="LOCK",
-                    reviewer="r",
-                )
-                self.assertEqual(first["state_revision"], 1)
-
-                script_review.prepare()
-                state = json.loads(
-                    (
-                        states
-                        / "c1.short.script_section_review_state.json"
-                    ).read_text(encoding="utf-8")
-                )
-                request = json.loads(
-                    (
-                        requests
-                        / "c1.short.script_review_request.json"
-                    ).read_text(encoding="utf-8")
-                )
-
-            target = next(
-                item for item in state["targets"]
-                if item["target_id"] == "section:s1"
+            section_state.apply_target_action(
+                state_path,
+                draft_path,
+                target_id="section:s1",
+                action="REWORK",
+                reviewer="r",
+                reason="TOO_TECHNICAL",
             )
-            request_target = next(
-                item for item in request["section_review"]["targets"]
-                if item["target_id"] == "section:s1"
-            )
-            self.assertTrue(target["locked"])
-            self.assertEqual(state["state_revision"], 1)
-            self.assertTrue(request_target["locked"])
-            self.assertEqual(
-                request["section_review"]["state_revision"],
-                1,
-            )
-
-    def test_section_rework_invalidates_branch_acceptance_and_bundle(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _, requests, responses, approved = self.setup_gate(root)
-            states = root / "section_states"
-            states.mkdir()
-            summary = root / "summary.json"
 
             with (
                 patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(script_review, "RESPONSES_DIR", responses),
                 patch.object(script_review, "APPROVED_DIR", approved),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
-                patch.object(script_review, "SUMMARY_FILE", summary),
-            ):
-                for fmt in ("long_form", "short"):
-                    script_review.apply_payload(
-                        requests / f"c1.{fmt}.script_review_request.json",
-                        self.accept_payload(fmt),
-                    )
-
-                bundle = approved / "c1.approved_script.json"
-                short_response = script_review.response_path("c1", "short")
-                long_response = script_review.response_path("c1", "long_form")
-                self.assertTrue(bundle.exists())
-                self.assertTrue(short_response.exists())
-                self.assertTrue(long_response.exists())
-
-                result = script_review.apply_section_review_action(
-                    concept_id="c1",
-                    format="short",
-                    target_id="section:s1",
-                    action="REWORK",
-                    reason="WEAK_CURIOSITY",
-                    note="Make the question sharper.",
-                    reviewer="r",
-                )
-
-            self.assertTrue(result["branch_approval_invalidated"])
-            self.assertFalse(bundle.exists())
-            self.assertFalse(short_response.exists())
-            self.assertTrue(long_response.exists())
-
-    def test_branch_accept_is_blocked_while_section_rework_is_pending(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _, requests, responses, approved = self.setup_gate(root)
-            states = root / "section_states"
-            states.mkdir()
-
-            with (
-                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
-                patch.object(script_review, "RESPONSES_DIR", responses),
-                patch.object(script_review, "APPROVED_DIR", approved),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
-            ):
-                script_review.apply_section_review_action(
-                    concept_id="c1",
-                    format="short",
-                    target_id="section:s1",
-                    action="REWORK",
-                    reason="TOO_LONG",
-                    reviewer="r",
-                )
-                with self.assertRaisesRegex(
+                patch.object(script_review, "SECTION_STATE_DIR", states),
+                self.assertRaisesRegex(
                     ValueError,
-                    "ACCEPT blocked",
-                ):
-                    script_review.apply_payload(
-                        requests / "c1.short.script_review_request.json",
-                        self.accept_payload("short"),
-                    )
-
-    def test_unlocking_accepted_target_invalidates_existing_branch_acceptance(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _, requests, responses, approved = self.setup_gate(root)
-            states = root / "section_states"
-            states.mkdir()
-            summary = root / "summary.json"
-
-            with (
-                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
-                patch.object(script_review, "RESPONSES_DIR", responses),
-                patch.object(script_review, "APPROVED_DIR", approved),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
-                patch.object(script_review, "SUMMARY_FILE", summary),
+                    "ACCEPT blocked while section rework is pending",
+                ),
             ):
-                script_review.apply_section_review_action(
-                    concept_id="c1",
-                    format="short",
-                    target_id="section:s1",
-                    action="ACCEPT",
-                    reviewer="r",
-                )
                 script_review.apply_payload(
                     requests / "c1.short.script_review_request.json",
                     self.accept_payload("short"),
                 )
-                short_response = script_review.response_path("c1", "short")
-                self.assertTrue(short_response.exists())
-
-                result = script_review.apply_section_review_action(
-                    concept_id="c1",
-                    format="short",
-                    target_id="section:s1",
-                    action="UNLOCK",
-                    reviewer="r",
-                )
-
-            self.assertTrue(result["branch_approval_invalidated"])
-            self.assertFalse(short_response.exists())
-            self.assertEqual(result["target"]["review_state"], "PENDING")
 
 
-    def test_concurrent_section_actions_do_not_lose_updates(self):
+    def test_concurrent_branch_accept_and_section_rework_cannot_coexist(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            _, requests, responses, approved = self.setup_gate(root)
+            drafts, requests, responses, approved = self.setup_gate(root)
             states = root / "section_states"
-            states.mkdir()
-
-            with (
-                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
-                patch.object(script_review, "RESPONSES_DIR", responses),
-                patch.object(script_review, "APPROVED_DIR", approved),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
+            rework_requests = root / "rework_requests"
+            alternatives = root / "alternatives"
+            versions = root / "versions"
+            transactions = root / "transactions"
+            for path in (
+                states,
+                rework_requests,
+                alternatives,
+                versions,
+                transactions,
             ):
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    futures = [
-                        pool.submit(
-                            script_review.apply_section_review_action,
-                            concept_id="c1",
-                            format="short",
-                            target_id="opening_hook",
-                            action="LOCK",
-                            reviewer="r1",
-                        ),
-                        pool.submit(
-                            script_review.apply_section_review_action,
-                            concept_id="c1",
-                            format="short",
-                            target_id="section:s1",
-                            action="LOCK",
-                            reviewer="r2",
-                        ),
-                    ]
-                    for future in futures:
-                        future.result()
+                path.mkdir()
 
-                state = json.loads(
-                    (
-                        states
-                        / "c1.short.script_section_review_state.json"
-                    ).read_text(encoding="utf-8")
-                )
+            draft_path = drafts / "c1.short.script_draft.json"
+            section_state.prepare_state(
+                draft_path,
+                state_dir=states,
+            )
+            short_request = (
+                requests / "c1.short.script_review_request.json"
+            )
 
-            by_id = {
-                item["target_id"]: item
-                for item in state["targets"]
+            service_dirs = {
+                "drafts_dir": drafts,
+                "state_dir": states,
+                "rework_requests_dir": rework_requests,
+                "alternatives_dir": alternatives,
+                "versions_dir": versions,
+                "transactions_dir": transactions,
+                "review_requests_dir": requests,
+                "review_responses_dir": responses,
+                "approved_dir": approved,
             }
-            self.assertTrue(by_id["opening_hook"]["locked"])
-            self.assertTrue(by_id["section:s1"]["locked"])
-            self.assertEqual(state["state_revision"], 2)
-
-
-    def test_concurrent_branch_accept_and_section_rework_cannot_leave_acceptance(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _, requests, responses, approved = self.setup_gate(root)
-            states = root / "section_states"
-            states.mkdir()
-            summary = root / "summary.json"
-            short_request = requests / "c1.short.script_review_request.json"
 
             with (
                 patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
                 patch.object(script_review, "RESPONSES_DIR", responses),
                 patch.object(script_review, "APPROVED_DIR", approved),
-                patch.object(script_review, "SECTION_REVIEW_STATES_DIR", states),
-                patch.object(script_review, "SUMMARY_FILE", summary),
+                patch.object(script_review, "SECTION_STATE_DIR", states),
             ):
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     futures = [
@@ -619,36 +368,44 @@ class ScriptReviewTests(unittest.TestCase):
                             self.accept_payload("short"),
                         ),
                         pool.submit(
-                            script_review.apply_section_review_action,
+                            section_service.apply_action,
                             concept_id="c1",
-                            format="short",
-                            target_id="section:s1",
+                            fmt="short",
                             action="REWORK",
-                            reason="WEAK_CURIOSITY",
-                            note="Sharpen the question.",
+                            target_id="section:s1",
+                            reason="TOO_TECHNICAL",
+                            custom_instruction="Use plain language.",
                             reviewer="r",
+                            **service_dirs,
                         ),
                     ]
                     for future in futures:
                         try:
                             future.result()
                         except ValueError as exc:
-                            self.assertIn("ACCEPT blocked", str(exc))
+                            self.assertIn(
+                                "ACCEPT blocked while section rework is pending",
+                                str(exc),
+                            )
 
-                state = json.loads(
-                    (
-                        states
-                        / "c1.short.script_section_review_state.json"
-                    ).read_text(encoding="utf-8")
-                )
-                short_response = script_review.response_path("c1", "short")
-
+            state_path = section_state.state_path_for(
+                "c1",
+                "short",
+                states,
+            )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
             target = next(
-                item for item in state["targets"]
+                item
+                for item in state["targets"]
                 if item["target_id"] == "section:s1"
             )
-            self.assertEqual(target["review_state"], "REWORK_REQUESTED")
-            self.assertFalse(short_response.exists())
+            branch_response = (
+                responses / "c1.short.script_review_response.json"
+            )
+            branch_response_exists = branch_response.exists()
+
+        self.assertEqual(target["decision"], "REWORK_REQUESTED")
+        self.assertFalse(branch_response_exists)
 
     def test_reviewer_identity_can_be_configured(self):
         with patch.dict(

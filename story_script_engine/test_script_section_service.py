@@ -96,6 +96,128 @@ class ScriptSectionServiceTests(unittest.TestCase):
             "The joint changes how the force travels.",
         )
 
+
+    def test_prepare_rework_request_is_standalone_and_zero_inference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dirs = self.dirs(root)
+
+            script_request = root / "c1.long_form.script_request.json"
+            script_request.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "format": "long_form",
+                        "package": {
+                            "title": "T",
+                            "one_sentence_promise": "Explain the mechanism.",
+                        },
+                        "story_plan": {
+                            "story_question": "Why does it move?",
+                            "opening_hook_intent": "Show the contradiction.",
+                            "viewer_state": {},
+                            "beats": [
+                                {"beat_id": "b1", "purpose": "Setup"},
+                                {"beat_id": "b2", "purpose": "Explain"},
+                            ],
+                            "payoff_intent": "Resolve it.",
+                            "closing_intent": "Leave one model.",
+                        },
+                        "accepted_claims": [
+                            {
+                                "claim_id": "clm001",
+                                "statement": "The joint changes the force path.",
+                            }
+                        ],
+                        "psychology_contract": {},
+                        "psychology_profile": {"reward_density": "MODERATE"},
+                        "channel_voice": {
+                            "profile": {
+                                "profile_id": "UNCONFIGURED",
+                                "version": 0,
+                                "status": "UNCONFIGURED",
+                            },
+                            "apply_to_generation": False,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            draft = self.draft()
+            draft["draft_provenance"] = {
+                "request_source": str(script_request.resolve()),
+                "request_sha256": service.sha256_file(script_request),
+            }
+            draft_path = (
+                dirs["drafts_dir"]
+                / "c1.long_form.script_draft.json"
+            )
+            draft_path.write_text(json.dumps(draft), encoding="utf-8")
+            before = draft_path.read_bytes()
+
+            review_request = (
+                dirs["review_requests_dir"]
+                / "c1.long_form.script_review_request.json"
+            )
+            review_request.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "format": "long_form",
+                        "request_provenance": {
+                            "script_draft": str(draft_path.resolve()),
+                            "script_draft_sha256": service.sha256_file(
+                                draft_path
+                            ),
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            service.apply_action(
+                concept_id="c1",
+                fmt="long_form",
+                action="PREPARE",
+                **dirs,
+            )
+            service.apply_action(
+                concept_id="c1",
+                fmt="long_form",
+                action="REWORK",
+                target_id="section:explanation_02",
+                reason="TOO_TECHNICAL",
+                custom_instruction="Use plain language.",
+                reviewer="r",
+                **dirs,
+            )
+
+            with patch.object(
+                service,
+                "run_section_rework",
+            ) as model_call:
+                result = service.apply_action(
+                    concept_id="c1",
+                    fmt="long_form",
+                    action="PREPARE_REWORK_REQUEST",
+                    target_id="section:explanation_02",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            request_meta = result["rework_request"]
+            request_path = Path(request_meta["request_file"])
+            request_exists = request_path.exists()
+            after = draft_path.read_bytes()
+            model_was_called = model_call.called
+
+        self.assertFalse(model_was_called)
+        self.assertFalse(request_meta["model_called"])
+        self.assertFalse(request_meta["script_changed"])
+        self.assertTrue(request_exists)
+        self.assertEqual(before, after)
+
     def test_rework_invalidates_branch_response_and_approved_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
