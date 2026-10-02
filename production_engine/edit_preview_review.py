@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+from edit_preview_render import preview_result_is_current
 from visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
@@ -37,34 +38,9 @@ def _key(concept_id: str, fmt: str) -> str:
 
 
 def _current_result(path: Path) -> dict[str, Any]:
-    if (
-        not path.exists()
-        or path.parent.resolve() != RESULT_DIR.resolve()
-    ):
-        raise ValueError("Invalid edit preview result")
-    result = load_json(path)
-    if result.get("artifact") != "edit_preview_render_result":
-        raise ValueError("Not an edit preview result")
-    if result.get("status") != "READY_FOR_HUMAN_EDIT_PREVIEW_GATE":
-        raise ValueError("Edit preview is not ready for human review")
-
-    provenance = result.get("provenance", {})
-    if not isinstance(provenance, dict):
-        raise ValueError("Edit preview provenance is missing")
-    manifest_path = Path(str(provenance.get("edit_manifest") or ""))
-    if (
-        not manifest_path.exists()
-        or provenance.get("edit_manifest_sha256")
-        != sha256_file(manifest_path)
-    ):
+    result = preview_result_is_current(path)
+    if result is None:
         raise ValueError("STALE_EDIT_PREVIEW_RESULT")
-
-    preview_path = Path(str(result.get("preview_file") or ""))
-    if (
-        not preview_path.exists()
-        or result.get("preview_sha256") != sha256_file(preview_path)
-    ):
-        raise ValueError("Edit preview media is missing or stale")
     return result
 
 

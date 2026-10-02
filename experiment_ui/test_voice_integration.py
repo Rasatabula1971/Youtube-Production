@@ -102,14 +102,17 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
         self.assertIn("VISUAL_SEARCH_READY", script)
         self.assertIn("Visual search plan ready", script)
 
-    def test_ui_knows_slice18_visual_assembly_boundaries(self) -> None:
+    def test_ui_knows_slice19_edit_preview_boundaries(self) -> None:
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
-        self.assertIn("VISUAL_ASSEMBLY_READY", script)
-        self.assertIn("VISUAL_EXISTING_RETRY_REQUIRED", script)
-        self.assertIn("WAITING_FOR_PREMIUM_VISUAL_ASSETS", script)
-        self.assertIn("WAITING_FOR_LOCAL_VISUAL_ASSETS", script)
-        self.assertIn("Visual assembly ready", script)
-        self.assertIn("Register premium visuals", script)
+        self.assertIn('id="editPreviewReviewPanel"', html)
+        self.assertIn("HUMAN EDIT PREVIEW GATE", html)
+        self.assertIn("LOCAL_FFMPEG_REQUIRED", script)
+        self.assertIn("HUMAN_EDIT_PREVIEW_GATE", script)
+        self.assertIn("EDIT_PREVIEW_REWORK_REQUIRED", script)
+        self.assertIn("EDIT_PREVIEW_DIRECTION_APPROVED", script)
+        self.assertIn("Configure local FFmpeg", script)
+        self.assertIn("Review edit preview", script)
 
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (

@@ -470,3 +470,44 @@ Assembly plans can be independently rebuilt and compared through
 timeline instead of silently surviving.
 
 Slice 18 ends before edit-manifest creation and before any video rendering.
+
+## Slice 19 — provenance-bound edit manifest and local structural preview
+
+`edit_manifest.py` now treats currentness as a rebuildable contract.
+
+A manifest can be produced only from a current
+`READY_FOR_EDIT_ASSEMBLY` visual assembly and current PASS narration
+QC/timing. Narration QC is tied to the current registered render result, and
+every QC/timing segment must match in exact unique order.
+
+The manifest records SHA-256 hashes for:
+
+- visual assembly;
+- narration Audio-QC;
+- narration timing map;
+- approved sound-design brief when present; and
+- every narration audio file used by the preview timeline.
+
+`manifest_is_current` reloads and rebuilds the complete manifest from current
+inputs. Any assembly, narration file, QC/timing or sound change invalidates the
+stored manifest.
+
+`edit_preview_render.py` rejects a stale manifest before FFmpeg execution.
+Rendering is local-only. It produces neutral placeholders where the manifest
+explicitly permits them, muxes QC-passed narration at timing-map positions, and
+writes a non-publishable structural preview.
+
+`preview_result_is_current` requires the exact current manifest hash, exact
+preview SHA-256 and exact preview byte count. Stale result JSON and stale preview
+media are pruned during batch rendering.
+
+The render command exits partial/non-zero when any current manifest fails to
+render, rather than reporting successful automation with hidden render
+failures.
+
+`edit_preview_review.py` consumes the same current-preview contract, so a
+human cannot approve a preview after its manifest or preview bytes have become
+stale.
+
+No paid provider, premium visual execution, generated music/SFX, upload or
+publish action exists in Slice 19.

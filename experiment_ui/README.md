@@ -790,3 +790,42 @@ human maximum spend but set provider-call and execution authorization to false.
 
 The workflow does not automatically continue into edit-manifest creation or
 FFmpeg preview rendering in Slice 18.
+
+## Slice 19 — current visual assembly → free structural edit preview gate
+
+When Slice 18 reaches a fully edit-ready visual assembly, Continue Automatically
+runs:
+
+```text
+Current Visual Assembly
+        ↓
+Build Edit Preview Manifest
+        ↓
+Render Free Structural Edit Preview (local FFmpeg only)
+        ↓
+HUMAN_EDIT_PREVIEW_GATE
+```
+
+The manifest is provenance-bound to the exact current visual assembly,
+QC-passed narration audio/timing and approved sound-design intent. Any later
+change makes the old manifest and preview stale.
+
+The preview renderer uses only the configured local FFmpeg binary. If FFmpeg is
+not available, the workflow stops at `LOCAL_FFMPEG_REQUIRED`. There is no
+paid/cloud rendering fallback.
+
+The preview may contain approved low-value placeholders, but it is never marked
+publish-ready and does not generate music or SFX.
+
+At the Human Edit Preview Gate, the reviewer can:
+
+- approve the structural edit direction;
+- return visuals for rework;
+- return narration for rework; or
+- return sound for rework.
+
+A return decision requires a specific human note. Slice 19 preserves the
+instruction and stops; routing/rebuild behavior belongs to the next slice.
+
+After approval, Slice 19 stops at `EDIT_PREVIEW_DIRECTION_APPROVED`. It does
+not automatically run final production handoff.

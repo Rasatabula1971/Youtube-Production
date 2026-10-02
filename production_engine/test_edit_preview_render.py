@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from contextlib import ExitStack
+from pathlib import Path
+from unittest.mock import patch
 
 import edit_preview_render as module
+
+
+def write_json(path: Path, payload: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
 
 
 class EditPreviewRenderTests(unittest.TestCase):
@@ -74,8 +85,114 @@ class EditPreviewRenderTests(unittest.TestCase):
 
         self.assertIn("[1:a]adelay=250:all=1[a1]", filters)
         self.assertIn("[2:a]adelay=2000:all=1[a2]", filters)
-        self.assertTrue(any("amix=inputs=2" in item for item in filters))
+        self.assertTrue(
+            any("amix=inputs=2" in item for item in filters)
+        )
         self.assertEqual(label, "[narration]")
+
+    def test_render_one_rejects_stale_manifest_before_ffmpeg(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path = write_json(
+                root / "edit" / "c1.short.edit_manifest.json",
+                {
+                    "artifact": "edit_manifest",
+                    "status": "READY_FOR_LOCAL_PREVIEW_RENDER",
+                    "concept_id": "c1",
+                    "format": "short",
+                },
+            )
+            with (
+                patch.object(
+                    module,
+                    "manifest_is_current",
+                    return_value=None,
+                ),
+                patch.object(module, "_run") as run,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "STALE_EDIT_MANIFEST",
+                ):
+                    module.render_one(
+                        manifest_path,
+                        json.loads(
+                            manifest_path.read_text(encoding="utf-8")
+                        ),
+                    )
+
+        run.assert_not_called()
+
+    def test_preview_result_requires_current_manifest_and_exact_media(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            ExitStack() as stack,
+        ):
+            root = Path(tmp)
+            edit_dir = root / "edit"
+            preview_dir = root / "preview"
+            result_dir = root / "result"
+            stack.enter_context(
+                patch.object(module, "EDIT_DIR", edit_dir)
+            )
+            stack.enter_context(
+                patch.object(module, "PREVIEW_DIR", preview_dir)
+            )
+            stack.enter_context(
+                patch.object(module, "RESULT_DIR", result_dir)
+            )
+
+            manifest = {
+                "artifact": "edit_manifest",
+                "status": "READY_FOR_LOCAL_PREVIEW_RENDER",
+                "concept_id": "c1",
+                "format": "short",
+            }
+            manifest_path = write_json(
+                edit_dir / "c1.short.edit_manifest.json",
+                manifest,
+            )
+            preview = preview_dir / "c1.short.structural_preview.mp4"
+            preview.parent.mkdir(parents=True, exist_ok=True)
+            preview.write_bytes(b"preview-v1")
+            result_path = write_json(
+                result_dir / "c1.short.edit_preview_result.json",
+                {
+                    "artifact": "edit_preview_render_result",
+                    "concept_id": "c1",
+                    "format": "short",
+                    "status": "READY_FOR_HUMAN_EDIT_PREVIEW_GATE",
+                    "preview_file": str(preview.resolve()),
+                    "preview_sha256": module.sha256_file(preview),
+                    "preview_bytes": preview.stat().st_size,
+                    "provenance": {
+                        "edit_manifest": str(manifest_path.resolve()),
+                        "edit_manifest_sha256": module.sha256_file(
+                            manifest_path
+                        ),
+                    },
+                },
+            )
+            stack.enter_context(
+                patch.object(
+                    module,
+                    "manifest_is_current",
+                    side_effect=lambda path: (
+                        manifest
+                        if path.resolve() == manifest_path.resolve()
+                        else None
+                    ),
+                )
+            )
+
+            self.assertIsNotNone(
+                module.preview_result_is_current(result_path)
+            )
+            preview.write_bytes(b"preview-v2")
+
+            self.assertIsNone(
+                module.preview_result_is_current(result_path)
+            )
 
 
 if __name__ == "__main__":

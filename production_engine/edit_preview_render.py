@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+from edit_manifest import manifest_is_current
 from visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
@@ -50,6 +51,10 @@ def ffmpeg_binary() -> str:
             pass
     return os.getenv("FFMPEG_BINARY", "ffmpeg")
 
+
+def ffmpeg_available() -> bool:
+    binary = ffmpeg_binary()
+    return shutil.which(binary) is not None or Path(binary).is_file()
 
 def _run(command: list[str]) -> None:
     completed = subprocess.run(
@@ -342,20 +347,37 @@ def render_one(
     manifest_path: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
+    current = manifest_is_current(manifest_path)
+    if current is None or current != manifest:
+        raise ValueError("STALE_EDIT_MANIFEST")
     if manifest.get("status") != "READY_FOR_LOCAL_PREVIEW_RENDER":
         raise ValueError("Edit manifest is not preview-render ready")
 
     concept_id = str(manifest.get("concept_id") or "")
     fmt = str(manifest.get("format") or "")
+    if not concept_id or not fmt:
+        raise ValueError("Edit manifest identity is missing")
     key = _key(concept_id, fmt)
+
     binary = ffmpeg_binary()
-    if shutil.which(binary) is None and not Path(binary).exists():
+    if not ffmpeg_available():
         raise RuntimeError(f"FFmpeg binary not found: {binary}")
 
     profile = manifest.get("video_profile", {})
-    duration = float(
-        manifest.get("duration", {}).get("preview_seconds") or 0
-    )
+    if not isinstance(profile, dict):
+        raise ValueError("Edit manifest video profile is invalid")
+    try:
+        width = int(profile.get("width") or 0)
+        height = int(profile.get("height") or 0)
+        fps = int(profile.get("fps") or 0)
+        duration = float(
+            manifest.get("duration", {}).get("preview_seconds") or 0
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Edit preview profile/duration is invalid") from exc
+    if width <= 0 or height <= 0 or fps <= 0 or duration <= 0:
+        raise ValueError("Edit preview profile/duration must be positive")
+
     work_dir = WORK_DIR / key
     if work_dir.exists():
         shutil.rmtree(work_dir)
@@ -390,7 +412,7 @@ def render_one(
         destination=preview_path,
         binary=binary,
     )
-    if not preview_path.exists() or preview_path.stat().st_size <= 0:
+    if not preview_path.is_file() or preview_path.stat().st_size <= 0:
         raise RuntimeError("Structural preview render did not create output")
 
     result = {
@@ -411,6 +433,7 @@ def render_one(
             "publish_ready": False,
             "paid_provider_calls": 0,
             "music_or_sfx_generated": False,
+            "local_ffmpeg_only": True,
         },
         "provenance": {
             "edit_manifest": str(manifest_path.resolve()),
@@ -423,6 +446,49 @@ def render_one(
     return {**result, "result_file": str(result_path)}
 
 
+def preview_result_is_current(
+    path: Path,
+) -> dict[str, Any] | None:
+    if (
+        not path.is_file()
+        or path.parent.resolve() != RESULT_DIR.resolve()
+    ):
+        return None
+    try:
+        result = load_json(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(result, dict)
+        or result.get("artifact") != "edit_preview_render_result"
+        or result.get("status") != "READY_FOR_HUMAN_EDIT_PREVIEW_GATE"
+    ):
+        return None
+
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, dict):
+        return None
+    manifest_path = Path(
+        str(provenance.get("edit_manifest") or "")
+    )
+    if (
+        manifest_is_current(manifest_path) is None
+        or provenance.get("edit_manifest_sha256")
+        != sha256_file(manifest_path)
+    ):
+        return None
+
+    preview_path = Path(str(result.get("preview_file") or ""))
+    if (
+        not preview_path.is_file()
+        or preview_path.parent.resolve() != PREVIEW_DIR.resolve()
+        or result.get("preview_sha256") != sha256_file(preview_path)
+        or int(result.get("preview_bytes") or 0) != preview_path.stat().st_size
+    ):
+        return None
+    return result
+
+
 def batch() -> dict[str, Any]:
     paths = (
         sorted(EDIT_DIR.glob("*.edit_manifest.json"))
@@ -432,13 +498,22 @@ def batch() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     current_results: set[Path] = set()
+    current_previews: set[Path] = set()
 
     for path in paths:
+        manifest = manifest_is_current(path)
+        if manifest is None:
+            failures.append({
+                "manifest": str(path),
+                "error_type": "ValueError",
+                "error": "STALE_EDIT_MANIFEST",
+            })
+            continue
         try:
-            manifest = load_json(path)
             result = render_one(path, manifest)
             items.append(result)
             current_results.add(Path(result["result_file"]).resolve())
+            current_previews.add(Path(result["preview_file"]).resolve())
         except Exception as exc:
             failures.append({
                 "manifest": str(path),
@@ -449,6 +524,11 @@ def batch() -> dict[str, Any]:
     if RESULT_DIR.exists():
         for stale in RESULT_DIR.glob("*.edit_preview_result.json"):
             if stale.resolve() not in current_results:
+                stale.unlink()
+
+    if PREVIEW_DIR.exists():
+        for stale in PREVIEW_DIR.glob("*.structural_preview.mp4"):
+            if stale.resolve() not in current_previews:
                 stale.unlink()
 
     summary = {
@@ -464,6 +544,7 @@ def batch() -> dict[str, Any]:
         "rendered": len(items),
         "failed": len(failures),
         "paid_provider_calls": 0,
+        "media_rendered_locally": bool(items),
         "items": items,
         "failures": failures,
     }
@@ -477,7 +558,10 @@ def main() -> None:
     )
     parser.add_argument("--mode", choices=("batch",), required=True)
     parser.parse_args()
-    print(json.dumps(batch(), indent=2, ensure_ascii=False))
+    result = batch()
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if int(result.get("failed") or 0) > 0:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

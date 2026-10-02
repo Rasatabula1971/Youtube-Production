@@ -273,6 +273,11 @@ from visual_spend_review import (
 )
 from visual_gap_planner import gap_plan_is_current
 from visual_assembly_plan import assembly_plan_is_current
+from edit_manifest import manifest_is_current
+from edit_preview_render import (
+    ffmpeg_available as structural_ffmpeg_available,
+    preview_result_is_current,
+)
 from visual_generated_asset_import import (
     register as register_generated_visual_asset,
     snapshot as generated_visual_asset_snapshot,
@@ -396,7 +401,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "visual_gap_prepare",
     "visual_generation_handoff_prepare",
     "visual_assembly_prepare",
-    "final_production_handoff_prepare",
+    "edit_manifest_prepare",
+    "edit_preview_render",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -3014,8 +3020,10 @@ def edit_manifest_artifact_state(
     placeholders = 0
 
     if PRODUCTION_EDIT_MANIFEST_DIR.exists():
-        for path in PRODUCTION_EDIT_MANIFEST_DIR.glob("*.edit_manifest.json"):
-            payload = safe_load_json(path)
+        for path in PRODUCTION_EDIT_MANIFEST_DIR.glob(
+            "*.edit_manifest.json"
+        ):
+            payload = manifest_is_current(path)
             if not isinstance(payload, dict):
                 stale += 1
                 continue
@@ -3023,43 +3031,14 @@ def edit_manifest_artifact_state(
                 str(payload.get("concept_id") or ""),
                 str(payload.get("format") or ""),
             )
-            provenance = payload.get("provenance", {})
-            if not isinstance(provenance, dict):
-                stale += 1
-                continue
-            valid = True
-            for path_key, hash_key in (
-                ("visual_assembly_plan", "visual_assembly_plan_sha256"),
-                ("narration_audio_qc", "narration_audio_qc_sha256"),
-                ("narration_timing_map", "narration_timing_map_sha256"),
-            ):
-                source = Path(str(provenance.get(path_key) or ""))
-                if (
-                    not source.exists()
-                    or provenance.get(hash_key) != sha256_file(source)
-                ):
-                    valid = False
-                    break
-            sound_source = str(provenance.get("sound_design_brief") or "")
-            if valid and sound_source:
-                sound_path = Path(sound_source)
-                if (
-                    not sound_path.exists()
-                    or provenance.get("sound_design_brief_sha256")
-                    != sha256_file(sound_path)
-                ):
-                    valid = False
-            if (
-                not valid
-                or payload.get("status") != "READY_FOR_LOCAL_PREVIEW_RENDER"
-                or (expected and key not in expected)
-            ):
+            if expected and key not in expected:
                 stale += 1
                 continue
             current.add(key)
             placeholders += int(
                 payload.get("preview_policy", {}).get(
-                    "placeholder_count", 0
+                    "placeholder_count",
+                    0,
                 )
             )
 
@@ -3090,7 +3069,7 @@ def edit_preview_artifact_state(
         for path in PRODUCTION_EDIT_PREVIEW_RESULT_DIR.glob(
             "*.edit_preview_result.json"
         ):
-            payload = safe_load_json(path)
+            payload = preview_result_is_current(path)
             if not isinstance(payload, dict):
                 stale += 1
                 continue
@@ -3098,31 +3077,13 @@ def edit_preview_artifact_state(
                 str(payload.get("concept_id") or ""),
                 str(payload.get("format") or ""),
             )
-            provenance = payload.get("provenance", {})
-            manifest_path = Path(
-                str(
-                    provenance.get("edit_manifest")
-                    if isinstance(provenance, dict)
-                    else ""
-                )
-            )
-            preview_path = Path(str(payload.get("preview_file") or ""))
-            valid = bool(
-                isinstance(provenance, dict)
-                and manifest_path.exists()
-                and preview_path.exists()
-                and provenance.get("edit_manifest_sha256")
-                == sha256_file(manifest_path)
-                and payload.get("preview_sha256")
-                == sha256_file(preview_path)
-                and payload.get("status")
-                == "READY_FOR_HUMAN_EDIT_PREVIEW_GATE"
-            )
-            if not valid or (expected and key not in expected):
+            if expected and key not in expected:
                 stale += 1
                 continue
             current.add(key)
-            placeholders += int(payload.get("placeholder_segments") or 0)
+            placeholders += int(
+                payload.get("placeholder_segments") or 0
+            )
 
     ready = bool(expected) and expected.issubset(current) and stale == 0
     return {
@@ -3133,7 +3094,6 @@ def edit_preview_artifact_state(
         "stale": stale,
         "placeholder_segments": placeholders,
     }
-
 
 def final_production_handoff_artifact_state(
     expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
@@ -4280,6 +4240,14 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     visual_assembly_ready = bool(visual_assembly.get("ready"))
+    visual_assembly_edit_ready = bool(
+        visual_assembly_ready
+        and int(visual_assembly.get("waiting_for_premium_assets") or 0) == 0
+        and int(visual_assembly.get("waiting_for_local_assets") or 0) == 0
+        and int(visual_assembly.get("waiting_for_existing_retry") or 0) == 0
+        and int(visual_assembly.get("ready_for_edit_assembly") or 0)
+        == int(visual_assembly.get("expected") or 0)
+    )
     edit_manifest_state = edit_manifest_artifact_state(
         visual_post.get("expected_branches", [])
     )
@@ -4288,6 +4256,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         visual_post.get("expected_branches", [])
     )
     edit_preview_ready = bool(edit_preview_state.get("ready"))
+    local_structural_ffmpeg_ready = structural_ffmpeg_available()
     edit_gate_state = edit_preview_review_snapshot()
     final_handoff_state = final_production_handoff_artifact_state(
         visual_post.get("expected_branches", [])
@@ -5298,27 +5267,56 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "edit_manifest_prepare": {
-            "enabled": visual_assembly_ready and not edit_manifest_ready,
+            "enabled": (
+                narration_audio_ready
+                and visual_assembly_edit_ready
+                and not edit_manifest_ready
+            ),
             "reason": (
-                "Current visual assembly and narration timing are ready for the "
-                "structural edit manifest."
-                if visual_assembly_ready and not edit_manifest_ready
+                "Current PASS narration timing and final-for-preview visual "
+                "assembly are ready for the structural edit manifest."
+                if (
+                    narration_audio_ready
+                    and visual_assembly_edit_ready
+                    and not edit_manifest_ready
+                )
                 else (
                     "Edit preview manifests are current."
                     if edit_manifest_ready
-                    else "Build the current visual assembly plan first."
+                    else (
+                        "Narration Audio QC/timing must be current before Slice 19."
+                        if not narration_audio_ready
+                        else (
+                            "Register/retry required visual assets before Slice 19."
+                            if visual_assembly_ready
+                            else "Build the current visual assembly plan first."
+                        )
+                    )
                 )
             ),
         },
         "edit_preview_render": {
-            "enabled": edit_manifest_ready and not edit_preview_ready,
+            "enabled": (
+                edit_manifest_ready
+                and local_structural_ffmpeg_ready
+                and not edit_preview_ready
+            ),
             "reason": (
                 "Current edit manifests are ready for free local FFmpeg preview."
-                if edit_manifest_ready and not edit_preview_ready
+                if (
+                    edit_manifest_ready
+                    and local_structural_ffmpeg_ready
+                    and not edit_preview_ready
+                )
                 else (
                     "Structural edit previews are current."
                     if edit_preview_ready
-                    else "Build current edit manifests first."
+                    else (
+                        "Configured local FFmpeg is required for the structural preview."
+                        if edit_manifest_ready
+                        and not local_structural_ffmpeg_ready
+                        else "Build current edit manifests first."
+                    )
                 )
             ),
         },
@@ -6155,17 +6153,95 @@ def workflow_guidance(
                 "next_title": "Register approved local visual assets",
             }
 
+        expected_branches = visual_post.get("expected_branches", [])
+        edit_manifest_state = edit_manifest_artifact_state(
+            expected_branches
+        )
+        if not edit_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Edit Preview Manifest",
+                "current_detail": (
+                    "The current Slice 18 visual assembly is edit-ready. Build a "
+                    "provenance-bound structural preview manifest from that exact "
+                    "assembly and the current PASS narration QC/timing map."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Free Structural Edit Preview",
+            }
+
+        if not structural_ffmpeg_available():
+            return {
+                "state": "LOCAL_FFMPEG_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Local FFmpeg Required for Structural Preview",
+                "current_detail": (
+                    "The edit manifest is current, but the configured local FFmpeg "
+                    "binary is unavailable. Slice 19 will not use a paid/cloud "
+                    "fallback. Install or configure FFmpeg, then continue."
+                ),
+                "next_action_id": None,
+                "next_title": "Render the free local structural preview",
+            }
+
+        edit_preview_state = edit_preview_artifact_state(
+            expected_branches
+        )
+        if not edit_preview_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Free Structural Edit Preview",
+                "current_detail": (
+                    "Render the current manifest locally with FFmpeg using current "
+                    "visual assets, approved low-value placeholders and QC-passed "
+                    "narration. No paid provider, generated music or SFX is used."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Edit Preview Gate",
+            }
+
+        edit_gate = edit_preview_review_snapshot()
+        if not edit_gate.get("complete"):
+            return {
+                "state": "HUMAN_EDIT_PREVIEW_GATE",
+                "current_action_id": None,
+                "current_title": "Review Structural Edit Preview",
+                "current_detail": (
+                    "Judge pacing, narration-to-picture rhythm, visual continuity "
+                    "and story flow from the free local preview. This preview is "
+                    "structural only and is not publish-ready."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve direction or return a creative layer",
+            }
+
+        if int(edit_gate.get("rework") or 0) > 0:
+            return {
+                "state": "EDIT_PREVIEW_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Edit Preview Rework Requested",
+                "current_detail": (
+                    "The Human Edit Preview Gate returned visuals, narration or "
+                    "sound for rework. Slice 19 stops here; the exact instruction "
+                    "is preserved for the next routing slice."
+                ),
+                "next_action_id": None,
+                "next_title": "Route the approved rework instruction",
+            }
+
         return {
-            "state": "VISUAL_ASSEMBLY_READY",
+            "state": "EDIT_PREVIEW_DIRECTION_APPROVED",
             "current_action_id": None,
-            "current_title": "Visual Assembly Plan Ready",
+            "current_title": "Structural Edit Direction Approved",
             "current_detail": (
-                "Current spend/no-spend decisions have been converted into a "
-                "provenance-bound zero-cost visual timeline. Slice 18 stops before "
-                "building or rendering the structural edit preview."
+                "The current free structural preview has human approval. Slice 19 "
+                "stops here and performs no final production handoff, paid visual "
+                "execution, music/SFX generation, upload or publish action."
             ),
             "next_action_id": None,
-            "next_title": "Slice 19: build the structural edit preview",
+            "next_title": "Slice 20: final asset / production handoff boundary",
         }
 
     production_visual = production_visual_artifact_state()

@@ -578,7 +578,9 @@ function statusTone(workflow) {
     state === "WAITING_FOR_VISUAL_ASSETS" ||
     state === "WAITING_FOR_PREMIUM_VISUAL_ASSETS" ||
     state === "WAITING_FOR_LOCAL_VISUAL_ASSETS" ||
-    state === "HUMAN_EDIT_PREVIEW_GATE"
+    state === "LOCAL_FFMPEG_REQUIRED" ||
+    state === "HUMAN_EDIT_PREVIEW_GATE" ||
+    state === "EDIT_PREVIEW_REWORK_REQUIRED"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -633,7 +635,10 @@ function primaryTargetForWorkflow(workflow) {
     WAITING_FOR_VISUAL_ASSETS: "Register missing visuals",
     WAITING_FOR_PREMIUM_VISUAL_ASSETS: "Register premium visuals",
     WAITING_FOR_LOCAL_VISUAL_ASSETS: "Register local visuals",
-    VISUAL_ASSEMBLY_READY: "Visual assembly ready"
+    LOCAL_FFMPEG_REQUIRED: "Configure local FFmpeg",
+    HUMAN_EDIT_PREVIEW_GATE: "Review edit preview",
+    EDIT_PREVIEW_REWORK_REQUIRED: "Route edit rework",
+    EDIT_PREVIEW_DIRECTION_APPROVED: "Edit direction approved"
   };
   if (analysisHumanGateLabels[workflow.state]) {
     return {
@@ -4515,8 +4520,10 @@ function renderAnalysis(data) {
     "WAITING_FOR_VISUAL_ASSETS",
     "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
     "WAITING_FOR_LOCAL_VISUAL_ASSETS",
-    "VISUAL_ASSEMBLY_READY",
-    "HUMAN_EDIT_PREVIEW_GATE"
+    "LOCAL_FFMPEG_REQUIRED",
+    "HUMAN_EDIT_PREVIEW_GATE",
+    "EDIT_PREVIEW_REWORK_REQUIRED",
+    "EDIT_PREVIEW_DIRECTION_APPROVED"
   ].includes(workflow.state);
 
   const opportunityApproved =
@@ -4616,8 +4623,10 @@ function renderAnalysis(data) {
       "WAITING_FOR_VISUAL_ASSETS",
       "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
       "WAITING_FOR_LOCAL_VISUAL_ASSETS",
-      "VISUAL_ASSEMBLY_READY",
+      "LOCAL_FFMPEG_REQUIRED",
       "HUMAN_EDIT_PREVIEW_GATE",
+      "EDIT_PREVIEW_REWORK_REQUIRED",
+      "EDIT_PREVIEW_DIRECTION_APPROVED",
       "WAITING_FOR_FINAL_VISUAL_ASSETS",
       "FINAL_EDIT_DIRECTION_APPROVED"
     ].includes(workflow.state) ||
