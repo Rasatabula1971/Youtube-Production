@@ -1848,3 +1848,49 @@ asset acquisition or paid generation by itself.
 The automatic workflow hard-stops at the Human Rights/Context Gate. Slice 16
 remains responsible for any later zero-cost asset acquisition and rough-cut
 preparation.
+
+## D-087 — Rough-cut approval advances only to a current, globally capped Visual Spend boundary
+
+**Status:** Accepted
+
+Slice 17 owns the transition from Human Rough-Cut approval into unresolved-gap
+planning and the Human Visual Spend boundary.
+
+The normal flow is:
+
+`HUMAN_ROUGH_CUT_GATE → visual_gap_prepare`
+
+and then one of three stops:
+
+- `HUMAN_VISUAL_SPEND_GATE` when at least one current unresolved hero shot
+  meets the premium-generation threshold;
+- `VISUAL_GAPS_READY_NO_SPEND` when current gap plans contain no premium
+  generation candidate; or
+- `VISUAL_SPEND_DECISIONS_COMPLETE` after every current premium candidate has
+  a human decision.
+
+Slice 17 does not prepare generation briefs, call a provider, build visual
+assembly, or execute paid inference.
+
+Gap plans are valid only while bound to the exact current rough cut and exact
+current `APPROVE_WITH_GAPS` review. Rework, rough-cut mutation, or review
+mutation makes the old gap plan stale. Preparation prunes stale gap-plan files.
+
+The Visual Spend Gate accepts only current gap plans. Historical spend-review
+files for stale/non-current plans are removed.
+
+Spend configuration fails closed unless:
+
+- currency is USD;
+- human authorization is explicitly required;
+- paid provider calls without authorization are explicitly forbidden;
+- per-shot and workflow caps are finite and positive; and
+- the per-shot cap does not exceed the workflow cap.
+
+The workflow cap applies across all current branches, not per spend-review file.
+Spend mutations are serialized in-process so concurrent approvals cannot each
+observe the same remaining budget and jointly exceed the global cap. Non-finite
+costs such as NaN or Infinity are rejected.
+
+All spend decisions remain authorization records only. No visual generation
+request or provider action is created in Slice 17.
