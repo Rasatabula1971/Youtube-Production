@@ -409,8 +409,32 @@ def build_analysis_request(
             "Place unsupported interpretations in working_hypotheses with an explicit limitation.",
             "Keep transferable mechanisms separate from source-specific expression.",
             "Transformation opportunities must pass the Source Dependency Test.",
+            *opportunity_instructions(profile),
         ],
     }
+
+
+# Spec v2.1 section 15: the opportunity questions, mapped onto the existing
+# output fields so the response contract does not change. Historical study
+# items carry no opportunity_context, so their requests stay identical.
+OPPORTUNITY_INSTRUCTIONS = [
+    "source.opportunity_context says where this video came from (a human idea or a "
+    "radar breakout); treat its numbers as context, never as proof of a mechanism.",
+    "In working_hypotheses, state which viewer need appears to drive interest, which "
+    "expectation the video violates, and which hidden mechanism or unresolved question "
+    "creates pull, each with its limitation.",
+    "In source_specific_elements, name what appears to belong only to this source "
+    "(creator, footage, timing, event).",
+    "In transferable_mechanisms, name only what could work without this source.",
+    "In transformation_opportunities, describe an independent angle for a new video "
+    "that does not copy the source, noting what the source already covered and what "
+    "it left weakly covered.",
+]
+
+
+def opportunity_instructions(profile: dict[str, Any]) -> list[str]:
+    source = profile.get("source") or {}
+    return list(OPPORTUNITY_INSTRUCTIONS) if source.get("opportunity_context") else []
 
 
 def supported_finding_or_hypothesis(
