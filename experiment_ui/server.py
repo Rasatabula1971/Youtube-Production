@@ -4763,7 +4763,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     research_gate_status = str(
         research_gate.get("status") or "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"
     )
-    research_gate_complete = bool(research["research_gate_complete"])
     story = story_script_artifact_state()
     story_requests_ready = bool(story.get("story_requests_ready", False))
     story_plans_ready = bool(story.get("story_plans_ready", False))
