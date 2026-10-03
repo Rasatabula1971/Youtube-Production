@@ -89,7 +89,7 @@ def _candidate_video(item: dict[str, Any]) -> dict[str, Any]:
         "title": item.get("title"),
         "channel_id": item.get("channel_id"),
         "channel_title": item.get("channel_title"),
-        "format": item.get("format_candidate"),
+        "format": models.FORMAT_ALIASES.get(str(item.get("format_candidate") or "")),
         "published_at": item.get("published_at"),
         "views": item.get("views"),
         "measurement_source": "YOUTUBE_DATA_API",
@@ -107,6 +107,10 @@ def packets_from_study_set(
     for group in _group(study_set):
         items = group["items"]
         topic, niche, fmt = group["topic"], group["niche"], group["format"]
+        try:
+            packet_format = models.normalize_format(fmt)
+        except ValueError:
+            continue
         label = topic.replace("_", " ")
         titles = " ".join(str(item.get("title") or "") for item in items)
         channel = channel_scope.route(f"{label} {titles}", niche=niche, config=config)
@@ -116,7 +120,7 @@ def packets_from_study_set(
             build_packet(
                 opportunity_id=opportunity_id(models.SOURCE_HISTORICAL, niche, topic, fmt),
                 source_type=models.SOURCE_HISTORICAL,
-                title=f"{label.title()} ({fmt.replace('_', '-')})",
+                title=f"{label.title()} ({packet_format.replace('_', '-')})",
                 summary=(
                     f"Historical demand for {label} in {niche or 'an unlabelled niche'}: "
                     f"{len(items)} study video(s); age-matched velocity index {metric}."
@@ -124,7 +128,7 @@ def packets_from_study_set(
                 channel=channel,
                 topic=topic,
                 niche=niche,
-                formats=[fmt],
+                formats=[packet_format],
                 evidence_state={
                     "historical_demand": _historical_demand(items),
                     "cross_channel_replication": _replication(topic_evidence, config),

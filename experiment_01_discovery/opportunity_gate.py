@@ -21,6 +21,8 @@ if str(_INTEGRITY_ROOT) not in sys.path:
 
 from pipeline_integrity import atomic_write_json
 
+from opportunity_engine import active_source
+
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output" / "experiment_01_5"
 STUDY_SET_FILE = OUTPUT_DIR / "study_set.json"
@@ -307,8 +309,46 @@ def _materialize_approved(
     return ready, approved
 
 
+def _human_video_override() -> dict[str, Any] | None:
+    """Materialise an active human-submitted video as the approved study set."""
+    active = active_source.load_active()
+    try:
+        current = load_json(APPROVED_STUDY_SET_FILE) if APPROVED_STUDY_SET_FILE.exists() else None
+    except (OSError, ValueError):
+        current = None
+    if active is None:
+        # A human-video study set left behind after the video stopped being
+        # active must not keep feeding Experiment 02.
+        if isinstance(current, list) and any(
+            str((row or {}).get("handoff_id", "")).startswith("human_video:")
+            for row in current
+            if isinstance(row, dict)
+        ):
+            APPROVED_STUDY_SET_FILE.unlink()
+        return None
+    rows = active["study_set"]
+    if current != rows:
+        atomic_write_json(APPROVED_STUDY_SET_FILE, rows)
+    return active
+
+
+def _human_video_only_snapshot(active: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": "APPROVED_HUMAN_VIDEO",
+        "ready_for_experiment_02": True,
+        "gate_complete": True,
+        "approved_video_count": len(active["study_set"]),
+        "approved_study_set": str(APPROVED_STUDY_SET_FILE),
+        "active_human_video": active_source.summary(active),
+        "opportunities": [],
+    }
+
+
 def gate_snapshot() -> dict[str, Any]:
+    human_video = _human_video_override()
     if not STUDY_SET_FILE.exists():
+        if human_video:
+            return _human_video_only_snapshot(human_video)
         return {
             "status": "WAITING_FOR_01_5",
             "ready_for_experiment_02": False,
@@ -318,6 +358,8 @@ def gate_snapshot() -> dict[str, Any]:
 
     study_set = load_json(STUDY_SET_FILE)
     if not isinstance(study_set, list) or not study_set:
+        if human_video:
+            return _human_video_only_snapshot(human_video)
         return {
             "status": "NO_STUDY_SET",
             "ready_for_experiment_02": False,
@@ -335,11 +377,14 @@ def gate_snapshot() -> dict[str, Any]:
         vidiq_opportunities = {}
 
     state = load_state(study_set)
-    ready, approved = _materialize_approved(
-        state,
-        study_set,
-        packets,
-    )
+    if human_video:
+        ready, approved = True, list(human_video["study_set"])
+    else:
+        ready, approved = _materialize_approved(
+            state,
+            study_set,
+            packets,
+        )
 
     lookup = _packet_lookup(study_set, packets)
     opportunities_payload = []
@@ -413,7 +458,9 @@ def gate_snapshot() -> dict[str, Any]:
         decision in {"APPROVE", "REJECT", "HOLD"} for decision in decisions
     )
 
-    if ready:
+    if human_video:
+        status = "APPROVED_HUMAN_VIDEO"
+    elif ready:
         status = "APPROVED"
     elif gate_complete:
         status = "COMPLETE_NO_APPROVED_TOPIC"
@@ -428,6 +475,7 @@ def gate_snapshot() -> dict[str, Any]:
         "source_study_set_sha256": state.get("source_study_set_sha256"),
         "decision_file": str(DECISION_FILE),
         "approved_study_set": str(APPROVED_STUDY_SET_FILE),
+        "active_human_video": active_source.summary(human_video),
         "vidiq": {
             "status": vidiq_payload.get("status") if vidiq_payload else "NOT_RUN",
             "provider_remaining_credits": (
@@ -523,5 +571,10 @@ def apply_gate_action(
         opportunity["decision"] = "HOLD"
 
     save_state(state)
-    _materialize_approved(state, study_set, packets)
+    # Approving a historical topic makes it the active study set again (R9);
+    # other decisions leave an active human-submitted video in place.
+    if action == "APPROVE_TOPIC":
+        active_source.clear_active()
+    if active_source.load_active() is None:
+        _materialize_approved(state, study_set, packets)
     return gate_snapshot()

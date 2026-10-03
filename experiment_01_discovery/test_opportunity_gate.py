@@ -5,10 +5,23 @@ from pathlib import Path
 from unittest.mock import patch
 
 import opportunity_gate as gate
+from opportunity_engine import active_source
+from opportunity_engine import human_video_intake as hvi
+
+VID = "dQw4w9WgXcQ"
 
 
 class OpportunityGateTests(unittest.TestCase):
     def setUp(self):
+        isolation = tempfile.TemporaryDirectory()
+        self.addCleanup(isolation.cleanup)
+        self.isolated = Path(isolation.name)
+        for item in (
+            patch.object(active_source, "ACTIVE_FILE", self.isolated / "active.json"),
+            patch.object(hvi, "PACKETS_DIR", self.isolated / "human_video"),
+        ):
+            item.start()
+            self.addCleanup(item.stop)
         self.study_set = [
             {
                 "gate_status": "PASS",
@@ -93,6 +106,71 @@ class OpportunityGateTests(unittest.TestCase):
             patch.object(gate, "APPROVED_STUDY_SET_FILE", approved),
             approved,
         )
+
+    def activate_human_video(self):
+        packet = hvi.build_video_packet(
+            {
+                "video_id": VID,
+                "title": "How hummingbirds hover",
+                "tags": [],
+                "channel_id": "UC9",
+                "channel_title": "Nature Lab",
+                "published_at": "2026-09-01T00:00:00Z",
+                "duration_seconds": 600,
+                "views": 400000,
+                "likes": 1,
+                "made_for_kids": False,
+                "measurement_source": "YOUTUBE_DATA_API",
+            }
+        )
+        hvi.save_packet(packet)
+        return active_source.set_active(VID)
+
+    def test_human_video_is_the_study_set_without_any_historical_run(self):
+        approved = self.isolated / "approved_study_set.json"
+        with (
+            patch.object(gate, "STUDY_SET_FILE", self.isolated / "missing_study_set.json"),
+            patch.object(gate, "APPROVED_STUDY_SET_FILE", approved),
+        ):
+            self.assertEqual(gate.gate_snapshot()["status"], "WAITING_FOR_01_5")
+            self.activate_human_video()
+            snapshot = gate.gate_snapshot()
+            self.assertEqual(snapshot["status"], "APPROVED_HUMAN_VIDEO")
+            self.assertTrue(snapshot["ready_for_experiment_02"])
+            self.assertEqual(snapshot["active_human_video"]["video_id"], VID)
+            rows = json.loads(approved.read_text(encoding="utf-8"))
+            self.assertEqual([row["video_id"] for row in rows], [VID])
+
+            active_source.clear_active()
+            snapshot = gate.gate_snapshot()
+            self.assertFalse(snapshot["ready_for_experiment_02"])
+            self.assertFalse(approved.exists())
+
+    def test_historical_approval_replaces_an_active_human_video(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            patches = self.patched_paths(Path(tmp))
+            approved = patches[-1]
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                self.activate_human_video()
+                snapshot = gate.gate_snapshot()
+                self.assertEqual(snapshot["status"], "APPROVED_HUMAN_VIDEO")
+                self.assertEqual(len(snapshot["opportunities"]), 1)
+                key = snapshot["opportunities"][0]["opportunity_id"]
+
+                # Reviewing historical examples leaves the human video active.
+                for video_id in ("v1", "v2"):
+                    gate.apply_gate_action(
+                        action="KEEP_EXAMPLE", opportunity_key=key, video_id=video_id
+                    )
+                rows = json.loads(approved.read_text(encoding="utf-8"))
+                self.assertEqual([row["video_id"] for row in rows], [VID])
+
+                result = gate.apply_gate_action(action="APPROVE_TOPIC", opportunity_key=key)
+                self.assertEqual(result["status"], "APPROVED")
+                self.assertIsNone(result["active_human_video"])
+                self.assertIsNone(active_source.load_active())
+                rows = json.loads(approved.read_text(encoding="utf-8"))
+                self.assertEqual([row["video_id"] for row in rows], ["v1", "v2"])
 
     def test_approval_requires_every_selected_example_to_be_kept(self):
         with tempfile.TemporaryDirectory() as tmp:

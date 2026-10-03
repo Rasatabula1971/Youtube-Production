@@ -1983,3 +1983,68 @@ button.danger {
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* Analyze a video (Opportunity Discovery O5) */
+.analyze-video-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+.analyze-video-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+.analyze-video-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0d131b;
+  color: var(--text);
+  font-size: 12px;
+}
+.analyze-video-form input:focus {
+  outline: none;
+  border-color: rgba(47,129,247,.72);
+}
+.submitted-videos {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.submitted-video {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+}
+.submitted-video.active { border-color: #347b41; }
+.submitted-video-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.submitted-video-copy a {
+  color: var(--text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.submitted-video-copy a:hover { text-decoration: underline; }
+.submitted-video-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+@media (max-width: 760px) {
+  .analyze-video-form { grid-template-columns: 1fr; }
+  .submitted-video { flex-direction: column; align-items: stretch; }
+}

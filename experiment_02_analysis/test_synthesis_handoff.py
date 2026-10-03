@@ -13,6 +13,18 @@ from synthesis_handoff import (
 )
 
 
+
+_study_set_patch = patch.object(module, "current_study_video_ids", return_value=set())
+
+
+def setUpModule():
+    # Keep these tests independent of any approved study set on this machine.
+    _study_set_patch.start()
+
+
+def tearDownModule():
+    _study_set_patch.stop()
+
 class SynthesisHandoffTests(unittest.TestCase):
     def setUp(self):
         self.experiment_config = {
@@ -306,6 +318,22 @@ class SynthesisHandoffTests(unittest.TestCase):
 
         self.assertEqual(valid, {"v1"})
         self.assertEqual(tampered, set())
+
+
+
+class CurrentStudySetFilterTests(unittest.TestCase):
+    def test_profiles_from_a_previous_study_set_are_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for video_id in ("old1", "new1"):
+                (root / f"{video_id}.json").write_text("{}", encoding="utf-8")
+            with patch.object(module, "current_study_video_ids", return_value={"new1"}):
+                self.assertEqual([p.stem for p in module.current_profile_paths(root)], ["new1"])
+            with patch.object(module, "current_study_video_ids", return_value=set()):
+                self.assertEqual(
+                    [p.stem for p in module.current_profile_paths(root)], ["new1", "old1"]
+                )
+            self.assertEqual(module.current_profile_paths(root / "missing"), [])
 
 
 if __name__ == "__main__":

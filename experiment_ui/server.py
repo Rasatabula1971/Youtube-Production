@@ -35,6 +35,8 @@ IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
 HUMAN_GATE_MUTATION_ROUTES = {
     "/api/opportunity-gate",
+    "/api/opportunity/video/analyze",
+    "/api/opportunity/video/stop",
     "/api/vision-review",
     "/api/human-analysis-review",
     "/api/concept-gate",
@@ -87,6 +89,9 @@ from opportunity_gate import (
 from opportunity_gate import (
     gate_snapshot as opportunity_gate_snapshot,
 )
+
+from opportunity_engine import active_source as opportunity_active_source
+from opportunity_engine import human_video_intake
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -1879,8 +1884,79 @@ def current_visual_ready_ids(prepared_ids: set[str]) -> set[str]:
     return ready
 
 
+def approved_study_video_ids() -> set[str]:
+    payload = safe_load_json(EXP15_DIR / "approved_study_set.json")
+    if not isinstance(payload, list):
+        return set()
+    return {
+        str(item.get("video_id"))
+        for item in payload
+        if isinstance(item, dict) and item.get("video_id")
+    }
+
+
+def submitted_video_summary(packet: dict[str, Any]) -> dict[str, Any]:
+    video = (packet.get("candidate_videos") or [{}])[0]
+    channel = packet.get("channel") or {}
+    return {
+        "opportunity_id": packet.get("opportunity_id"),
+        "video_id": video.get("video_id"),
+        "title": video.get("title"),
+        "youtube_url": video.get("youtube_url"),
+        "channel_title": video.get("channel_title"),
+        "views": video.get("views"),
+        "likes": video.get("likes"),
+        "format": video.get("format"),
+        "age_days": video.get("age_days"),
+        "measurement_source": video.get("measurement_source"),
+        "route": channel.get("route"),
+        "route_channel_id": channel.get("channel_id"),
+        "route_rule_id": channel.get("rule_id"),
+        "route_reason": channel.get("reason"),
+        "notes": packet.get("human_notes") or [],
+        "created_at": packet.get("created_at"),
+    }
+
+
+def submitted_videos_snapshot() -> dict[str, Any]:
+    active = opportunity_active_source.load_active()
+    return {
+        "videos": [
+            submitted_video_summary(packet)
+            for packet in human_video_intake.list_packets()
+        ],
+        "active": opportunity_active_source.summary(active),
+    }
+
+
+def analyze_submitted_video(
+    *, video_id: str, confirm_replace: bool, allow_excluded: bool
+) -> dict[str, Any]:
+    """Make a submitted video the active study set (Analyze why it worked)."""
+    active = opportunity_active_source.load_active()
+    if active and active.get("video_id") == video_id:
+        return submitted_videos_snapshot()
+    existing_work = bool(json_stems(EXP2_PREPARED_DIR)) or bool(
+        approved_study_video_ids()
+    )
+    if existing_work and not confirm_replace:
+        raise ValueError(
+            "CONFIRM_REPLACE: Analyzing this video replaces the active study set. "
+            "Experiment 02 and everything after it (concepts, research, scripts) "
+            "restart for this video, and current work there becomes stale."
+        )
+    opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    opportunity_gate_snapshot()
+    return submitted_videos_snapshot()
+
+
 def exp2_artifact_state() -> dict[str, Any]:
     prepared_ids = json_stems(EXP2_PREPARED_DIR)
+    approved_ids = approved_study_video_ids()
+    if approved_ids and prepared_ids != approved_ids:
+        # Profiles prepared for a different approved study set (another topic,
+        # or a human-submitted video) are stale: Experiment 02 prepares again.
+        prepared_ids = set()
     enriched_ids = enriched_transcript_ready_ids()
     visual_report_ids = current_visual_report_ids(prepared_ids)
     visual_ready_ids = current_visual_ready_ids(prepared_ids)
@@ -7677,6 +7753,7 @@ def status_payload() -> dict[str, Any]:
             "status": checkpoint_status(),
         },
         "opportunity_gate": opportunity_gate_snapshot(),
+        "submitted_videos": submitted_videos_snapshot(),
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
@@ -7814,6 +7891,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/opportunity-gate":
             self._send_json(opportunity_gate_snapshot())
+            return
+        if route == "/api/opportunity/videos":
+            self._send_json(submitted_videos_snapshot())
             return
         if route == "/api/vision-review":
             self._send_json(vision_review_snapshot())
@@ -8093,6 +8173,33 @@ class Handler(BaseHTTPRequestHandler):
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
+                return
+
+            if route == "/api/opportunity/video":
+                human_video_intake.intake(
+                    str(body.get("url", "")),
+                    note=str(body.get("note", "")),
+                    topic=str(body.get("topic", "")),
+                )
+                self._send_json(submitted_videos_snapshot())
+                return
+
+            if route == "/api/opportunity/video/analyze":
+                payload = analyze_submitted_video(
+                    video_id=str(body.get("video_id", "")),
+                    confirm_replace=body.get("confirm_replace") is True,
+                    allow_excluded=body.get("allow_excluded") is True,
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/opportunity/video/stop":
+                opportunity_active_source.clear_active()
+                opportunity_gate_snapshot()
+                self._send_json(submitted_videos_snapshot())
                 return
 
             if route == "/api/vision-review":

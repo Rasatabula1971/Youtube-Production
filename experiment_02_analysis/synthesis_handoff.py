@@ -17,7 +17,12 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from experiment_02 import load_config, load_json, validate_profile
+from experiment_02 import (
+    load_config,
+    load_json,
+    load_study_set_video_ids,
+    validate_profile,
+)
 
 HERE = Path(__file__).resolve().parent
 SYNTHESIS_CONFIG_FILE = HERE / "synthesis_config.json"
@@ -71,7 +76,7 @@ def validated_reviewed_video_ids(profiles_dir: Path) -> set[str]:
         return set()
 
     validated: set[str] = set()
-    for profile_path in sorted(profiles_dir.glob("*.json")):
+    for profile_path in current_profile_paths(profiles_dir):
         try:
             profile = load_json(profile_path)
         except (OSError, json.JSONDecodeError):
@@ -526,10 +531,26 @@ def preferred_profiles_dir() -> Path:
     return ANALYZED_PROFILES_DIR
 
 
-def load_profiles(profiles_dir: Path) -> list[dict[str, Any]]:
+def current_study_video_ids() -> set[str]:
+    return load_study_set_video_ids()
+
+
+def current_profile_paths(profiles_dir: Path) -> list[Path]:
+    """Profiles for the current approved study set only.
+
+    When the approved study set changes (a different topic, or a human-submitted
+    video), profiles left over from the previous set must not leak into the
+    synthesis.
+    """
     if not profiles_dir.exists():
         return []
-    return [load_json(path) for path in sorted(profiles_dir.glob("*.json"))]
+    paths = sorted(profiles_dir.glob("*.json"))
+    allowed = current_study_video_ids()
+    return [path for path in paths if path.stem in allowed] if allowed else paths
+
+
+def load_profiles(profiles_dir: Path) -> list[dict[str, Any]]:
+    return [load_json(path) for path in current_profile_paths(profiles_dir)]
 
 
 def run_build(profiles_dir: Path) -> dict[str, Any]:
@@ -565,7 +586,7 @@ def run_build(profiles_dir: Path) -> dict[str, Any]:
     )
     handoff = build_transformation_handoff(library, synthesis_config)
     profile_hashes = {
-        path.stem: sha256_file(path) for path in sorted(profiles_dir.glob("*.json"))
+        path.stem: sha256_file(path) for path in current_profile_paths(profiles_dir)
     }
     synthesis_provenance = {
         "profiles_dir": str(profiles_dir.resolve()),
