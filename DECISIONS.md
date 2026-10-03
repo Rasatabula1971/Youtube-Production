@@ -2837,3 +2837,48 @@ but never shown as packets. *Watch* (radar only) moves an item to Watching.
 `APPROVED_VIRAL_RADAR`. The radar runs only when asked (*Run viral radar*);
 scheduling is O13.
 
+## D-113 — Themes need independent channels; the inbox is the one gate
+
+**Status:** Accepted
+
+**O10: themes.** After each radar run, breakouts are grouped by shared title
+keywords (`opportunity_engine/viral_cluster.py`). The method is deterministic,
+labelled `deterministic_title_keywords`, and replaceable later by AI
+clustering behind the same output.
+
+- **Independent channels only.** A theme counts one video per channel, and a
+  near-identical title of similar length on another channel counts as a
+  re-upload, not as a second channel.
+- **Kinds.** Each theme is labelled SAME_EVENT, SAME_VIEWER_QUESTION,
+  SAME_MECHANISM or SAME_TOPIC. Event-bound wins when most members are about
+  one event.
+- **Breadth.** Three or more independent channels make a theme REPLICATED.
+  Replication evidence comes from written rules:
+  - `CL-REPLICATED`, or `CL-REPLICATED-STRONG` at five or more channels;
+  - `CL-EVENT-BOUND`: replicated, but around one event, so weak (LOW);
+  - `CL-PAIR`: two channels;
+  - `CL-ONE-OFF`: one channel.
+
+**O11: bridge.** *Approve theme* makes one video per independent channel the
+study set; its rows are frozen and invalid only if a member's packet
+disappears. Every human-seeded or radar study row carries
+`opportunity_context`. Experiment 02 puts the real source in the upstream
+evidence item (same evidence id) and adds the spec's opportunity questions,
+mapped onto its existing output fields, so its response contract is
+unchanged. Historical rows carry no context, so their profiles and analysis
+requests are byte-identical to before and no current work goes stale.
+
+**O12: unified gate.** The inbox decides everything with Approve, Rework, Watch,
+Save and Reject (R11).
+- **Rework** needs a note. It re-measures a submitted video, re-searches a
+  topic, and keeps a breakout in Watching.
+- **Historical topics.** Save and Reject on a historical topic become the
+  existing gate's HOLD and REJECT. Approval stays in Historical review because
+  examples must be reviewed first.
+- **Decision record.** Every decision is recorded with time, note and the
+  packet hash it was made against. A later change shows "evidence has moved
+  since your decision" and never undoes the decision (R8).
+- **Locking.** Because inbox decisions can now change the historical gate,
+  `POST /api/opportunity/inbox` waits for running jobs like the other gate
+  routes.
+

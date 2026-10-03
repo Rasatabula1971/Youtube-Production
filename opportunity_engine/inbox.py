@@ -1,12 +1,15 @@
-"""Opportunity Inbox: every idea from every lane in one list (slice O3).
+"""Opportunity Inbox and unified Human Opportunity Gate (slices O3 and O12).
 
-The inbox is a view. Evidence stays in the packets and historical decisions
-stay in the existing Human Opportunity Gate; this module only merges them and
-stores the human's inbox choices (save / reject / restore) for human-seeded
-ideas in a separate state file, outside every evidence hash.
+Every idea from every lane appears in one list, and every decision is made
+here: APPROVE, REWORK (note required), WATCH (radar only), SAVE and REJECT
+(R11). Evidence stays in the packets. Decisions about human-seeded and radar
+ideas are stored in a separate state file, outside every evidence hash, with
+their history and the packet hash they were made against: when the evidence
+moves later the card says so, but the decision stands (R8). Historical topics
+keep their decisions in the existing gate, which the server calls.
 
 Statuses follow the spec tabs: NEEDS_REVIEW, WATCHING, APPROVED, SAVED,
-REJECTED. WATCHING is for viral-radar candidates only (R11).
+REJECTED.
 """
 
 from __future__ import annotations
@@ -43,7 +46,23 @@ SAVED = "SAVED"
 REJECTED = "REJECTED"
 STATUSES = (NEEDS_REVIEW, WATCHING, APPROVED, SAVED, REJECTED)
 
-INBOX_ACTIONS = {"SAVE": SAVED, "REJECT": REJECTED, "WATCH": WATCHING, "RESTORE": None}
+INBOX_ACTIONS = {
+    "SAVE": SAVED,
+    "REJECT": REJECTED,
+    "WATCH": WATCHING,
+    "REWORK": NEEDS_REVIEW,
+    # Explicit, so a future-channel idea moved back to review stays there.
+    "RESTORE": NEEDS_REVIEW,
+}
+HISTORY_LIMIT = 30
+EVIDENCE_ORDER = (
+    "historical_demand",
+    "current_breakout",
+    "cross_channel_replication",
+    "viewer_need",
+    "mechanism_evidence",
+    "content_gap",
+)
 HISTORICAL_DECISIONS = {
     "APPROVE": APPROVED,
     "REJECT": REJECTED,
@@ -98,6 +117,21 @@ def _evidence_chips(packet: dict[str, Any]) -> list[dict[str, Any]]:
     return chips
 
 
+def _evidence_matrix(packet: dict[str, Any]) -> list[dict[str, Any]]:
+    """All six evidence dimensions, including the unassessed ones."""
+    state = packet.get("evidence_state") or {}
+    return [
+        {
+            "dimension": dimension,
+            "label": EVIDENCE_LABELS[dimension],
+            "level": (state.get(dimension) or {}).get("level") or "UNASSESSED",
+            "rule_id": (state.get(dimension) or {}).get("rule_id"),
+            "basis": (state.get(dimension) or {}).get("basis") or [],
+        }
+        for dimension in EVIDENCE_ORDER
+    ]
+
+
 def _videos(packet: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
     return [
         {
@@ -127,6 +161,8 @@ def _base_item(packet: dict[str, Any]) -> dict[str, Any]:
         "route_rule_id": channel.get("rule_id"),
         "route_reason": channel.get("reason"),
         "evidence": _evidence_chips(packet),
+        "matrix": _evidence_matrix(packet),
+        "packet_sha256": packet.get("packet_sha256"),
         "video_count": len(packet.get("candidate_videos") or []),
         "videos": _videos(packet),
         "notes": packet.get("human_notes") or [],
@@ -146,6 +182,18 @@ def _base_item(packet: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_active(packet: dict[str, Any], active: dict[str, Any] | None) -> bool:
+    if not active:
+        return False
+    if active.get("opportunity_id") == packet.get("opportunity_id"):
+        return True
+    # A radar theme makes each of its member breakouts active.
+    if active.get("cluster_id") and packet.get("source_type") == models.SOURCE_VIRAL_RADAR:
+        video_id = (packet.get("candidate_videos") or [{}])[0].get("video_id")
+        return any(row.get("video_id") == video_id for row in active.get("study_set") or [])
+    return False
+
+
 def _human_item(
     packet: dict[str, Any],
     state_items: dict[str, Any],
@@ -159,9 +207,15 @@ def _human_item(
     else:
         key = {"topic_key": (packet.get("intake") or {}).get("topic_key")}
     item.update(key)
+    saved = state_items.get(str(packet.get("opportunity_id"))) or {}
+    item["decision_history"] = saved.get("history") or []
+    item["evidence_moved"] = bool(
+        saved.get("packet_sha256") and saved.get("packet_sha256") != packet.get("packet_sha256")
+    )
     if is_viral:
         item["viral"] = _viral_summary(packet)
-    if active and active.get("opportunity_id") == packet.get("opportunity_id"):
+    theme = "APPROVE_THEME" if is_viral and (item["viral"] or {}).get("breadth") == "REPLICATED" else None
+    if _is_active(packet, active):
         item.update(
             status=APPROVED,
             is_active=True,
@@ -169,29 +223,36 @@ def _human_item(
             actions=["STOP"],
         )
         return item
-    saved = state_items.get(str(packet.get("opportunity_id"))) or {}
-    analyze = "ANALYZE" if item["video_count"] else None
+    approve = "APPROVE" if item["video_count"] else None
     watch = "WATCH" if is_viral else None
-    if saved.get("status") == WATCHING and is_viral:
+    status = saved.get("status")
+    if status == WATCHING and is_viral:
         item.update(
             status=WATCHING,
             status_reason=saved.get("note") or "You are watching this breakout; the radar keeps tracking it.",
-            actions=[a for a in (analyze, "SAVE", "REJECT", "RESTORE") if a],
+            actions=[a for a in (approve, theme, "REWORK", "SAVE", "REJECT", "RESTORE") if a],
         )
-    elif saved.get("status") in (SAVED, REJECTED):
+    elif status in (SAVED, REJECTED):
         item.update(
-            status=saved["status"],
+            status=status,
             status_reason=saved.get("note") or "",
-            actions=[a for a in ("RESTORE", analyze) if a],
+            actions=[a for a in ("RESTORE", approve) if a],
         )
-    elif item["route"] == models.ROUTE_FUTURE:
+    elif item["route"] == models.ROUTE_FUTURE and status != NEEDS_REVIEW:
         item.update(
             status=SAVED,
             status_reason=f"Parked on the future-channel shelf: {item['route_channel_id']}.",
-            actions=[a for a in (analyze, "REJECT") if a],
+            actions=[a for a in (approve, "REJECT", "RESTORE") if a],
         )
     else:
-        item.update(actions=[a for a in (analyze, watch, "SAVE", "REJECT") if a])
+        reason = ""
+        if status == NEEDS_REVIEW and saved.get("note"):
+            reason = "Reworked: " + saved["note"]
+        item.update(
+            status=NEEDS_REVIEW,
+            status_reason=reason,
+            actions=[a for a in (approve, theme, "REWORK", watch, "SAVE", "REJECT") if a],
+        )
     return item
 
 
@@ -215,6 +276,7 @@ def _viral_summary(packet: dict[str, Any]) -> dict[str, Any]:
         "views_per_follower": metrics.get("views_per_follower"),
         "baseline_median_views": baseline.get("median_views"),
         "baseline_sample_size": baseline.get("sample_size"),
+        "cluster": viral.get("cluster"),
         "intervals": viral.get("intervals") or [],
         "trajectory_history_available": viral.get("trajectory_history_available"),
         "outcome": viral.get("outcome"),
@@ -256,7 +318,12 @@ def _historical_items(
             status=status,
             is_active=is_active,
             status_reason=reasons[status],
-            actions=["REVIEW_BELOW"],
+            # Approval needs the examples kept or replaced, so it stays in
+            # Historical review; save (hold) and reject can happen here.
+            actions=["REVIEW_BELOW"]
+            + [a for a, s in (("SAVE", SAVED), ("REJECT", REJECTED)) if status != s],
+            decision_history=[],
+            evidence_moved=False,
         )
         items.append(item)
     return items, None
@@ -306,28 +373,78 @@ def _find_human_packet(opportunity_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _save_decision(
+    state: dict[str, Any], packet: dict[str, Any], action: str, status: str | None, note: str
+) -> None:
+    opportunity_id = str(packet["opportunity_id"])
+    entry = state["items"].get(opportunity_id) or {}
+    history = list(entry.get("history") or [])
+    history.append(
+        {
+            "action": action,
+            "note": note.strip()[:500],
+            "at": utc_now(),
+            "packet_sha256": packet.get("packet_sha256"),
+        }
+    )
+    if status is None:
+        entry = {"history": history[-HISTORY_LIMIT:]}
+    else:
+        entry = {
+            "status": status,
+            "note": note.strip()[:500],
+            "updated_at": utc_now(),
+            "packet_sha256": packet.get("packet_sha256"),
+            "history": history[-HISTORY_LIMIT:],
+        }
+    state["items"][opportunity_id] = entry
+
+
 def apply_action(opportunity_id: str, action: str, note: str = "") -> None:
-    """Save, reject, watch (radar only) or restore an idea."""
+    """SAVE, REJECT, WATCH (radar only), REWORK (note required) or RESTORE an idea."""
     if action not in INBOX_ACTIONS:
         raise ValueError(f"Unsupported inbox action: {action}")
     if str(opportunity_id).startswith("opp_historical__"):
-        raise ValueError("Historical opportunities are decided in Historical review.")
+        raise ValueError("Historical opportunities are decided through the historical gate.")
     packet = _find_human_packet(opportunity_id)
     if packet is None:
         raise ValueError("Unknown opportunity.")
     if action == "WATCH" and packet.get("source_type") != models.SOURCE_VIRAL_RADAR:
         raise ValueError("Only viral-radar candidates can be watched.")
-    active = active_source.load_active()
-    if active and active.get("opportunity_id") == opportunity_id:
+    if action == "REWORK" and not note.strip():
+        raise ValueError("Say what evidence is missing: a rework needs a note.")
+    if _is_active(packet, active_source.load_active()):
         raise ValueError("This idea is being analysed. Stop analysing it first.")
+    if action == "REWORK":
+        packet = _refresh_evidence(packet, note) or packet
     state = load_state()
-    if action == "RESTORE":
-        state["items"].pop(opportunity_id, None)
-    else:
-        state["items"][opportunity_id] = {
-            "status": INBOX_ACTIONS[action],
-            "note": note.strip()[:500],
-            "updated_at": utc_now(),
-        }
+    status = INBOX_ACTIONS[action]
+    if action == "REWORK" and packet.get("source_type") == models.SOURCE_VIRAL_RADAR:
+        status = WATCHING  # more evidence for a breakout means more snapshots
+    _save_decision(state, packet, action, status, note)
+    state["schema_version"] = SCHEMA_VERSION
+    atomic_write_json(STATE_FILE, state)
+
+
+def _refresh_evidence(packet: dict[str, Any], note: str) -> dict[str, Any] | None:
+    """REWORK gathers fresh evidence where that is cheap and immediate."""
+    source = packet.get("source_type")
+    if source == models.SOURCE_HUMAN_VIDEO:
+        video_id = packet["candidate_videos"][0]["video_id"]
+        return human_video_intake.intake(
+            human_video_intake.watch_url(video_id), note=note, topic=str(packet.get("topic") or "")
+        )
+    if source == models.SOURCE_HUMAN_TOPIC:
+        return human_topic_search.explore(str(packet.get("title") or ""), note=note)
+    return None  # radar: the next runs add snapshots
+
+
+def record_decision(opportunity_id: str, action: str, note: str = "") -> None:
+    """Record an APPROVE made through the analyze routes in the same history."""
+    packet = _find_human_packet(opportunity_id)
+    if packet is None:
+        return
+    state = load_state()
+    _save_decision(state, packet, action, None, note)
     state["schema_version"] = SCHEMA_VERSION
     atomic_write_json(STATE_FILE, state)

@@ -82,13 +82,53 @@ def empty_analysis(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def opportunity_context_summary(context: dict[str, Any]) -> str:
+    """One readable line describing a non-historical opportunity source."""
+    parts = [f"Source: {context.get('source_type')}."]
+    if context.get("seed_question"):
+        parts.append(f"Human question: {context['seed_question']}.")
+    elif context.get("seed_topic"):
+        parts.append(f"Human topic: {context['seed_topic']}.")
+    breakout = context.get("breakout") or {}
+    if breakout:
+        parts.append(
+            f"Breakout {breakout.get('strength')} ({breakout.get('channel_multiple')}x its channel's "
+            f"normal views, trajectory {breakout.get('trajectory')}, breadth {breakout.get('breadth')})."
+        )
+        if breakout.get("theme"):
+            parts.append(
+                f"Theme '{breakout['theme']}' ({breakout.get('theme_kind')}) across "
+                f"{breakout.get('theme_independent_channels')} independent channels."
+            )
+    return " ".join(parts)
+
+
 def build_profile_from_study_item(
     study_item: dict[str, Any],
     config: dict[str, Any],
 ) -> dict[str, Any]:
     video_id = str(study_item.get("video_id", ""))
     title = str(study_item.get("title", ""))
+    context = study_item.get("opportunity_context")
+    context = context if isinstance(context, dict) else None
 
+    upstream = {
+        "evidence_id": "opportunity.01_5",
+        "type": "opportunity_evidence",
+        "locator": "Experiment 01.5 handoff packet",
+        "observation": (
+            "Upstream demand evidence is context only; it does not prove "
+            "a creative mechanism caused performance."
+        ),
+    }
+    if context:
+        # Human-seeded and radar opportunities (D-113): same evidence id, so the
+        # rest of Experiment 02 is unchanged; the text names the real source.
+        upstream["locator"] = f"Opportunity packet ({context.get('source_type')})"
+        upstream["observation"] = (
+            opportunity_context_summary(context)
+            + " Context only; it does not prove a creative mechanism caused performance."
+        )
     evidence = [
         {
             "evidence_id": "metadata.title",
@@ -96,15 +136,7 @@ def build_profile_from_study_item(
             "locator": "video title",
             "observation": title,
         },
-        {
-            "evidence_id": "opportunity.01_5",
-            "type": "opportunity_evidence",
-            "locator": "Experiment 01.5 handoff packet",
-            "observation": (
-                "Upstream demand evidence is context only; it does not prove "
-                "a creative mechanism caused performance."
-            ),
-        },
+        upstream,
     ]
 
     return {
@@ -125,6 +157,7 @@ def build_profile_from_study_item(
                 study_item.get("primary_metric", {}).get("value")
             ),
             "replicated_families": study_item.get("replicated_families", []),
+            **({"opportunity_context": context} if context else {}),
         },
         "source_inputs": {
             "transcript": {"status": "NOT_PROVIDED", "source": None},

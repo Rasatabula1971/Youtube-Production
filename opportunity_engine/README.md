@@ -6,7 +6,7 @@ Human Opportunity Gate reviews evidence the same way whatever the source.
 Spec: [`OPPORTUNITY_DISCOVERY_SPEC.md`](OPPORTUNITY_DISCOVERY_SPEC.md) (v2.1 —
 read the *v2.1 Revisions* section first).
 
-## Built so far (slices O1–O9)
+## Built so far (slices O1–O12)
 
 | Module | Role |
 |---|---|
@@ -20,6 +20,7 @@ read the *v2.1 Revisions* section first).
 | `active_source.py` | "Analyze why it worked" / "Analyze these videos": makes a submitted video, or a topic's strongest videos, the active study set for Experiment 02 |
 | `inbox.py` | O3: merges every lane into one inbox (Needs review / Watching / Approved / Saved / Rejected) and stores save / reject / restore choices outside the evidence |
 | `viral_radar.py` | O6–O9: watchlist discovery, channel baselines, append-only snapshots and the four-axis breakout classifier |
+| `viral_cluster.py` | O10: groups breakouts into themes, checks the channels are independent, labels each theme (event, question, mechanism, topic) and sets breadth |
 | `config.json` | Active channel, future channels, exclusion rules, written evidence rules, radar thresholds |
 
 Run the historical adapter:
@@ -55,6 +56,41 @@ topics are still decided in **Historical review** under the inbox (the existing
 gate), and the inbox mirrors those decisions. Inbox choices live in
 `output/inbox_state.json`, never in the evidence packets.
 
+## The unified gate (O12)
+
+The inbox is the one place to decide, with the spec's vocabulary:
+
+| Decision | What it does |
+|---|---|
+| **Approve** | Makes the idea the study set for Experiment 02 (your video, your topic's videos, or a breakout). For a replicated theme, **Approve theme** sends one video per independent channel. |
+| **Rework…** | A note is required: say what evidence is missing. Your video is re-measured, your topic is re-searched, and a breakout keeps being watched for more snapshots. |
+| **Watch** | Radar breakouts only: keep tracking it in the Watching tab. |
+| **Save / Reject** | Park or drop it. For historical topics these become the gate's HOLD / REJECT. |
+
+Historical topics are still *approved* in Historical review, because their
+examples must be kept or replaced first. Every card shows the six-dimension
+evidence matrix: demand, breakout, replication, viewer need, mechanism and
+content gap, with the rule behind each assessed level. Each decision is
+recorded with its time, note and the evidence hash it was made against. When
+the evidence changes later, the card says so; the decision still stands (R8).
+
+## Themes and the bridge into Experiment 02 (O10–O11)
+
+After each radar run, breakouts are grouped by the words their titles share
+(`viral_clustering` in `config.json`). A theme counts only **independent**
+channels: one video per channel, and re-uploads (near-identical title and
+length on another channel) are not counted. Three or more independent channels
+make it **REPLICATED** (five or more: strong). A theme about one news event is
+marked event-bound and is weak evidence. Themes are in
+`output/viral/clusters.json`.
+
+When a human-seeded or radar video enters Experiment 02, its study row carries
+`opportunity_context`: source, your question or topic, breakout numbers and
+theme. Experiment 02 is then asked the spec's opportunity questions (viewer
+need, violated expectation, hidden mechanism, source-specific vs transferable,
+covered vs weakly covered, an independent angle). These map onto its existing
+output fields. Historical topics get exactly the same requests as before.
+
 ## Viral / breakout radar (O6–O9)
 
 *Run viral radar* on the Opportunity page (or
@@ -74,7 +110,7 @@ gate), and the inbox mirrors those decisions. Inbox choices live in
    views/hour. `strength_rules` (hypotheses) set EARLY_SIGNAL /
    BREAKOUT_CANDIDATE / BREAKOUT. Trajectory comes from snapshots
    (ACCELERATING, STABLE_HIGH, DECELERATING, FLAT). Historical alignment checks
-   the historical topics. Breadth waits for theme clustering (O10).
+   the historical topics. Breadth comes from theme clustering (O10, below).
 4. **Track (O8).** Promising videos are snapshotted every 6 h (under 2 days),
    12 h (2–7 days) and 24 h (7–15 days), append-only, into
    `output/viral/snapshots.jsonl` (the D-021 format). After 15 days a video

@@ -26,6 +26,7 @@ if str(_ROOT) not in sys.path:
 from pipeline_integrity import atomic_write_json  # noqa: E402
 
 from opportunity_engine import (  # noqa: E402
+    channel_scope,
     human_topic_search,
     human_video_intake,
     models,
@@ -37,7 +38,40 @@ ACTIVE_FILE = HERE / "output" / "active_study_source.json"
 SCHEMA_VERSION = 1
 
 
-HUMAN_HANDOFF_PREFIXES = ("human_video:", "human_topic:", "viral_radar:")
+HUMAN_HANDOFF_PREFIXES = ("human_video:", "human_topic:", "viral_radar:", "viral_cluster:")
+
+
+def opportunity_context(packet: dict[str, Any]) -> dict[str, Any]:
+    """What Experiment 02 is told about where a human-seeded or radar video came from.
+
+    Context only: performance evidence never proves a creative mechanism.
+    """
+    viral = packet.get("viral_evidence") or {}
+    metrics = viral.get("metrics") or {}
+    cluster = viral.get("cluster") or {}
+    seed = packet.get("seed") or {}
+    context: dict[str, Any] = {
+        "source_type": packet.get("source_type"),
+        "opportunity_title": packet.get("title"),
+        "seed_question": seed.get("question"),
+        "seed_topic": seed.get("topic"),
+        "channel_route": (packet.get("channel") or {}).get("route"),
+        "human_notes": packet.get("human_notes") or [],
+    }
+    if viral:
+        context["breakout"] = {
+            "strength": viral.get("strength"),
+            "trajectory": viral.get("trajectory"),
+            "breadth": viral.get("breadth"),
+            "channel_multiple": metrics.get("lifetime_ratio"),
+            "views_per_hour_multiple": metrics.get("vph_ratio"),
+            "ratio_basis": metrics.get("ratio_basis") or [],
+            "age_hours": metrics.get("age_hours"),
+            "theme": cluster.get("label"),
+            "theme_kind": cluster.get("kind"),
+            "theme_independent_channels": cluster.get("independent_channel_count"),
+        }
+    return context
 
 
 def study_row(
@@ -46,6 +80,8 @@ def study_row(
     *,
     video: dict[str, Any] | None = None,
     sequence: int = 1,
+    handoff_override: str | None = None,
+    context_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Shape one human-seeded video like an approved 01.5 study-set row."""
     video = video or packet["candidate_videos"][0]
@@ -62,9 +98,11 @@ def study_row(
         handoff_id = f"human_video:{video_id}"
         basis = "human-submitted video (Analyze why it worked)"
         reason = "submitted by the human; no historical demand gate applied"
+    handoff_id = handoff_override or handoff_id
     return {
         "experiment_id": packet["source_type"],
         "handoff_id": handoff_id,
+        "opportunity_context": opportunity_context(context_packet or packet),
         "gate_status": "HUMAN_SEEDED",
         "gate_reasons": [reason],
         "video_id": video_id,
@@ -176,6 +214,46 @@ def set_active_topic(topic_key: str, *, allow_excluded: bool = False) -> dict[st
     return record
 
 
+def set_active_cluster(cluster_id: str) -> dict[str, Any]:
+    """A replicated radar theme: its strongest independent videos become the study set.
+
+    Excluded breakouts never get packets, so no excluded video can be selected.
+    """
+    found = viral_radar.load_cluster(cluster_id)
+    if found is None:
+        raise ValueError("That theme is no longer in the latest radar run. Run the radar again.")
+    settings = channel_scope.load_config()["viral_clustering"]
+    members = sorted(
+        (m for m in found.get("members") or [] if m.get("independence") == "INDEPENDENT"),
+        key=lambda m: -(m.get("lifetime_ratio") or 0),
+    )
+    packets = [p for p in (viral_radar.load_packet(m["video_id"]) for m in members) if p]
+    packets = packets[: int(settings["max_study_videos"])]
+    if not packets:
+        raise ValueError("None of this theme's videos has a saved radar packet.")
+    activated_at = datetime.now(timezone.utc).isoformat()
+    record = {
+        "schema_version": SCHEMA_VERSION,
+        "source_type": models.SOURCE_VIRAL_RADAR,
+        "opportunity_id": "opp_viral_cluster__" + cluster_id,
+        "cluster_id": cluster_id,
+        "title": f"Theme: {found.get('label')} ({found.get('independent_channel_count')} channels)",
+        "channel_route": models.ROUTE_ACTIVE,
+        "activated_at": activated_at,
+        "study_set": [
+            study_row(
+                packet,
+                activated_at,
+                sequence=index,
+                handoff_override=f"viral_cluster:{cluster_id}:{packet['candidate_videos'][0]['video_id']}",
+            )
+            for index, packet in enumerate(packets, start=1)
+        ],
+    }
+    atomic_write_json(ACTIVE_FILE, record)
+    return record
+
+
 def clear_active() -> bool:
     if ACTIVE_FILE.exists():
         ACTIVE_FILE.unlink()
@@ -197,6 +275,11 @@ def load_active() -> dict[str, Any] | None:
     ):
         return None
     source = record.get("source_type")
+    if source == models.SOURCE_VIRAL_RADAR and record.get("cluster_id"):
+        # A theme: every frozen row must still have its radar packet.
+        if any(viral_radar.load_packet(str(row["video_id"])) is None for row in rows):
+            return None
+        return record
     if source in (models.SOURCE_HUMAN_VIDEO, models.SOURCE_VIRAL_RADAR):
         video_id = str(record.get("video_id") or "")
         if len(rows) != 1 or rows[0].get("video_id") != video_id:
@@ -225,6 +308,7 @@ def summary(record: dict[str, Any] | None) -> dict[str, Any] | None:
         "opportunity_id": record.get("opportunity_id"),
         "video_id": record.get("video_id"),
         "topic_key": record.get("topic_key"),
+        "cluster_id": record.get("cluster_id"),
         "title": record.get("title"),
         "channel_title": row.get("channel_title"),
         "youtube_url": row.get("youtube_url"),

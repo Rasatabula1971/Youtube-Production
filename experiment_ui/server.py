@@ -39,6 +39,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/opportunity/video/stop",
     "/api/opportunity/topic/analyze",
     "/api/opportunity/viral/analyze",
+    "/api/opportunity/inbox",
     "/api/vision-review",
     "/api/human-analysis-review",
     "/api/concept-gate",
@@ -1921,6 +1922,35 @@ def opportunity_inbox_snapshot(gate: dict[str, Any] | None = None) -> dict[str, 
     )
 
 
+HISTORICAL_INBOX_ACTIONS = {"SAVE": "HOLD_TOPIC", "REJECT": "REJECT_TOPIC"}
+
+
+def apply_inbox_decision(*, opportunity_id: str, action: str, note: str) -> dict[str, Any]:
+    """The unified gate (O12): historical saves and rejects go to the existing gate."""
+    if opportunity_id.startswith("opp_historical__"):
+        if action not in HISTORICAL_INBOX_ACTIONS:
+            raise ValueError(
+                "Approve historical topics in Historical review: their examples must be kept or replaced first."
+            )
+        item = next(
+            (
+                entry
+                for entry in opportunity_inbox_snapshot()["items"]
+                if entry.get("opportunity_id") == opportunity_id
+            ),
+            None,
+        )
+        if item is None or not item.get("gate_opportunity_id"):
+            raise ValueError("Unknown historical opportunity.")
+        apply_gate_action(
+            action=HISTORICAL_INBOX_ACTIONS[action],
+            opportunity_key=str(item["gate_opportunity_id"]),
+        )
+        return opportunity_inbox_snapshot()
+    opportunity_inbox.apply_action(opportunity_id, action, note=note)
+    return opportunity_inbox_snapshot()
+
+
 def _confirm_replacing_study_set(confirm_replace: bool, what: str) -> None:
     existing_work = bool(json_stems(EXP2_PREPARED_DIR)) or bool(
         approved_study_video_ids()
@@ -1941,23 +1971,39 @@ def analyze_submitted_video(
     if active and active.get("video_id") == video_id:
         return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this video")
-    opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    record = opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
 
 
 def analyze_viral_candidate(
-    *, video_id: str, confirm_replace: bool, allow_excluded: bool
+    *,
+    video_id: str,
+    confirm_replace: bool,
+    allow_excluded: bool,
+    cluster_id: str = "",
 ) -> dict[str, Any]:
-    """Make a radar breakout the active study set (Analyze why it worked)."""
+    """Make a radar breakout, or a whole replicated theme, the active study set."""
     active = opportunity_active_source.load_active()
+    if cluster_id:
+        if active and active.get("cluster_id") == cluster_id:
+            return opportunity_inbox_snapshot()
+        _confirm_replacing_study_set(confirm_replace, "this theme's videos")
+        record = opportunity_active_source.set_active_cluster(cluster_id)
+        for row in record["study_set"]:
+            opportunity_inbox.record_decision(
+                str(row["human_opportunity_gate"]["opportunity_id"]), "APPROVE_THEME"
+            )
+        return opportunity_inbox_snapshot()
     if active and active.get("video_id") == video_id:
         return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this breakout")
-    opportunity_active_source.set_active(
+    record = opportunity_active_source.set_active(
         video_id,
         allow_excluded=allow_excluded,
         source_type=opportunity_models.SOURCE_VIRAL_RADAR,
     )
+    opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
 
 
@@ -1969,7 +2015,8 @@ def analyze_explored_topic(
     if active and active.get("topic_key") == topic_key:
         return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this topic's videos")
-    opportunity_active_source.set_active_topic(topic_key, allow_excluded=allow_excluded)
+    record = opportunity_active_source.set_active_topic(topic_key, allow_excluded=allow_excluded)
+    opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
 
 
@@ -8229,6 +8276,7 @@ class Handler(BaseHTTPRequestHandler):
                     video_id=str(body.get("video_id", "")),
                     confirm_replace=body.get("confirm_replace") is True,
                     allow_excluded=body.get("allow_excluded") is True,
+                    cluster_id=str(body.get("cluster_id", "")),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
@@ -8266,12 +8314,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if route == "/api/opportunity/inbox":
-                opportunity_inbox.apply_action(
-                    str(body.get("opportunity_id", "")),
-                    str(body.get("action", "")),
-                    note=str(body.get("note", "")),
+                self._send_json(
+                    apply_inbox_decision(
+                        opportunity_id=str(body.get("opportunity_id", "")),
+                        action=str(body.get("action", "")),
+                        note=str(body.get("note", "")),
+                    )
                 )
-                self._send_json(opportunity_inbox_snapshot())
                 return
 
             if route == "/api/vision-review":

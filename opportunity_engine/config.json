@@ -312,6 +312,33 @@
         "minimum_views": 100000,
         "description": "No relevant video with 100K+ views was found."
       }
+    ],
+    "viral_replication": [
+      {
+        "rule_id": "CL-REPLICATED-STRONG",
+        "level": "STRONG",
+        "description": "5+ independent channels breaking out on the same question, mechanism or topic."
+      },
+      {
+        "rule_id": "CL-REPLICATED",
+        "level": "MODERATE",
+        "description": "3-4 independent channels breaking out on the same question, mechanism or topic."
+      },
+      {
+        "rule_id": "CL-EVENT-BOUND",
+        "level": "LOW",
+        "description": "Replicated, but around one news event: weaker evidence of durable demand."
+      },
+      {
+        "rule_id": "CL-PAIR",
+        "level": "LOW",
+        "description": "Two independent channels share the theme."
+      },
+      {
+        "rule_id": "CL-ONE-OFF",
+        "level": "NONE",
+        "description": "No other independent channel is breaking out on this theme."
+      }
     ]
   },
   "human_topic": {
@@ -450,5 +477,67 @@
       "BREAKOUT_CANDIDATE": "MODERATE",
       "EARLY_SIGNAL": "WEAK"
     }
+  },
+  "viral_clustering": {
+    "_note": "Deterministic keyword clustering; thresholds are hypotheses. AI theme clustering can replace it later behind the same output.",
+    "min_shared_keywords": 2,
+    "min_jaccard": 0.25,
+    "replicated_min_independent_channels": 3,
+    "strong_min_independent_channels": 5,
+    "member_strengths": [
+      "BREAKOUT_CANDIDATE",
+      "BREAKOUT",
+      "EARLY_SIGNAL"
+    ],
+    "reupload_title_similarity": 0.8,
+    "reupload_duration_tolerance": 0.05,
+    "kind_terms": {
+      "SAME_EVENT": [
+        "crash",
+        "crashes",
+        "wins",
+        "won",
+        "win",
+        "announced",
+        "announces",
+        "breaking",
+        "live",
+        "today",
+        "yesterday",
+        "2025",
+        "2026",
+        "record",
+        "disaster",
+        "explosion",
+        "recall",
+        "leaked",
+        "grand prix",
+        "race"
+      ],
+      "SAME_VIEWER_QUESTION": [
+        "why",
+        "how",
+        "what",
+        "when",
+        "can",
+        "does",
+        "do",
+        "is",
+        "are"
+      ],
+      "SAME_MECHANISM": [
+        "works",
+        "work",
+        "physics",
+        "science",
+        "explained",
+        "engineering",
+        "mechanism",
+        "inside",
+        "secret",
+        "hidden"
+      ]
+    },
+    "max_study_videos": 4
   }
 }

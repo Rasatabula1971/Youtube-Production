@@ -44,7 +44,7 @@ from experiment_01_discovery.market_intelligence import (  # noqa: E402
     calculate_snapshot_velocity,
     load_snapshot_history,
 )
-from opportunity_engine import channel_scope, historical_adapter, models  # noqa: E402
+from opportunity_engine import channel_scope, historical_adapter, models, viral_cluster  # noqa: E402
 from opportunity_engine.human_video_intake import (  # noqa: E402
     VIDEO_ID_PATTERN,
     _iso8601_seconds,
@@ -59,6 +59,7 @@ RADAR_DIR = HERE / "output" / "viral"
 STATE_FILE = RADAR_DIR / "radar_state.json"
 SUMMARY_FILE = RADAR_DIR / "last_run.json"
 SNAPSHOT_FILE = RADAR_DIR / "snapshots.jsonl"
+CLUSTERS_FILE = RADAR_DIR / "clusters.json"
 PACKETS_DIR = HERE / "output" / "opportunities" / "viral"
 GENERATOR = "opportunity_engine.viral_radar"
 SCHEMA_VERSION = 1
@@ -617,6 +618,18 @@ def build_viral_packet(record: dict[str, Any], config: dict[str, Any]) -> dict[s
                 f"{record['metrics'].get('vph_ratio')}x channel median lifetime views/hour",
             ],
         )
+    cluster_info = record.get("cluster") or {}
+    rule_id = cluster_info.get("replication_rule_id")
+    if rule_id:
+        rules = {r["rule_id"]: r for r in config["evidence_rules"]["viral_replication"]}
+        state["cross_channel_replication"] = evidence(
+            rules[rule_id]["level"],
+            rule_id,
+            [
+                f"{cluster_info.get('independent_channel_count')} independent channel(s) breaking out on "
+                f"'{cluster_info.get('label')}' ({cluster_info.get('kind')})"
+            ],
+        )
     if record["historical_alignment"] == "ESTABLISHED_DEMAND":
         state["historical_demand"] = evidence(
             "STRONG", "HA-STUDY-SET-TOPIC", [f"title matches historical topic {record.get('historical_topic')}"]
@@ -643,7 +656,7 @@ def build_viral_packet(record: dict[str, Any], config: dict[str, Any]) -> dict[s
         viral_evidence={
             "strength": strength,
             "trajectory": record["trajectory"],
-            "breadth": "UNASSESSED",
+            "breadth": record.get("breadth") or "UNASSESSED",
             "historical_alignment": record["historical_alignment"],
             "trajectory_history_available": len(record.get("snapshots_taken") or []) >= 2,
             "strength_rule_id": record.get("strength_rule_id"),
@@ -655,7 +668,8 @@ def build_viral_packet(record: dict[str, Any], config: dict[str, Any]) -> dict[s
             "outcome": record.get("outcome"),
             "candidate_video_ids": [video["video_id"]],
             "tracked_video_ids": [video["video_id"]],
-            "topic_cluster_id": None,
+            "topic_cluster_id": cluster_info.get("cluster_id"),
+            "cluster": cluster_info or None,
             "not_publicly_observable": ["CTR", "average view duration", "retention", "viewed vs swiped away"],
         },
         candidate_videos=[
@@ -830,18 +844,33 @@ def run(
         record["classifications"] = record["classifications"][-60:]
         state["tracked"][video_id] = record
         summary["tracked"] += 1
-        packet = build_viral_packet(record, config)
-        if packet["channel"]["route"] == models.ROUTE_EXCLUDED:
-            summary["excluded_candidates"] += 1
-            continue
-        save_packet(packet)
-        summary["packets_written"] += 1
 
     # Tracked videos that disappeared (deleted or private) stop being tracked.
     for video_id in [v for v in state["tracked"] if v not in measured]:
         record = state["tracked"].pop(video_id)
         record["tracking_status"] = "UNAVAILABLE"
         state["completed"][video_id] = {"at": observed_at, "reason": "video unavailable", "last": record.get("metrics")}
+
+    # O10: themes across independent channels, then one packet per breakout.
+    clusters = viral_cluster.cluster(state["tracked"], config["viral_clustering"])
+    by_video = {m["video_id"]: c for c in clusters for m in c["members"]}
+    for video_id, record in state["tracked"].items():
+        found = by_video.get(video_id)
+        record["breadth"] = found["breadth"] if found else "UNASSESSED"
+        record["cluster"] = (
+            {k: v for k, v in found.items() if k != "members"} if found else None
+        )
+        packet = build_viral_packet(record, config)
+        if packet["channel"]["route"] == models.ROUTE_EXCLUDED:
+            summary["excluded_candidates"] += 1
+            continue
+        save_packet(packet)
+        summary["packets_written"] += 1
+    atomic_write_json(CLUSTERS_FILE, {"generated_at": observed_at, "clusters": clusters})
+    summary["clusters"] = {
+        "count": len(clusters),
+        "replicated": sum(1 for c in clusters if c["breadth"] == "REPLICATED"),
+    }
 
     # The seen-id cache only needs to cover the active window (plus margin).
     cutoff = now - timedelta(days=float(settings["active_window_days"]) * 2)
@@ -880,6 +909,19 @@ def _write_summary(summary: dict[str, Any]) -> None:
     atomic_write_json(SUMMARY_FILE, summary)
 
 
+def load_clusters() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(CLUSTERS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    clusters = payload.get("clusters") if isinstance(payload, dict) else None
+    return clusters if isinstance(clusters, list) else []
+
+
+def load_cluster(cluster_id: str) -> dict[str, Any] | None:
+    return next((c for c in load_clusters() if c.get("cluster_id") == cluster_id), None)
+
+
 def status_snapshot() -> dict[str, Any]:
     state = load_state()
     try:
@@ -892,6 +934,7 @@ def status_snapshot() -> dict[str, Any]:
         "tracked_count": len(state["tracked"]),
         "completed_count": len(state["completed"]),
         "throttled_until": state.get("throttled_until"),
+        "replicated_themes": sum(1 for c in load_clusters() if c.get("breadth") == "REPLICATED"),
     }
 
 

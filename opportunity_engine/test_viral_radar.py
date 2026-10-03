@@ -93,6 +93,7 @@ class RadarTestCase(unittest.TestCase):
             patch.object(vr, "STATE_FILE", root / "viral" / "state.json"),
             patch.object(vr, "SUMMARY_FILE", root / "viral" / "last_run.json"),
             patch.object(vr, "SNAPSHOT_FILE", root / "viral" / "snapshots.jsonl"),
+            patch.object(vr, "CLUSTERS_FILE", root / "viral" / "clusters.json"),
             patch.object(vr, "PACKETS_DIR", root / "packets"),
             patch.object(hvi, "PACKETS_DIR", root / "hv"),
             patch.object(hts, "PACKETS_DIR", root / "ht"),
@@ -135,7 +136,8 @@ class RunTests(RadarTestCase):
         viral = breakout["viral_evidence"]
         self.assertEqual((viral["strength"], viral["strength_rule_id"]), ("BREAKOUT", "VS-BREAKOUT"))
         self.assertEqual(viral["trajectory"], "INSUFFICIENT_SNAPSHOTS")
-        self.assertEqual(viral["breadth"], "UNASSESSED")
+        self.assertEqual(viral["breadth"], "ONE_OFF")
+        self.assertEqual(breakout["evidence_state"]["cross_channel_replication"]["rule_id"], "CL-ONE-OFF")
         self.assertFalse(viral["trajectory_history_available"])
         self.assertEqual(viral["metrics"]["ratio_basis"], ["lifetime_vs_lifetime", "vph_vs_lifetime_vph"])
         self.assertEqual(viral["baseline"]["sample_size"], 6)

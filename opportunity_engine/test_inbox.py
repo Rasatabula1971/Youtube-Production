@@ -69,6 +69,7 @@ class InboxTests(unittest.TestCase):
             patch.object(vr, "STATE_FILE", self.root / "viral" / "state.json"),
             patch.object(vr, "SUMMARY_FILE", self.root / "viral" / "last_run.json"),
             patch.object(vr, "SNAPSHOT_FILE", self.root / "viral" / "snapshots.jsonl"),
+            patch.object(vr, "CLUSTERS_FILE", self.root / "viral" / "clusters.json"),
             patch.object(vr, "PACKETS_DIR", self.root / "viral_packets"),
         ):
             item.start()
@@ -106,10 +107,11 @@ class InboxTests(unittest.TestCase):
         tyres = items["opp_historical__automotive_racing__tyres_tires__long_form_candidate"]
         self.assertEqual((brakes["status"], brakes["is_active"]), ("APPROVED", True))
         self.assertEqual(tyres["status"], "SAVED")
-        self.assertEqual(brakes["actions"], ["REVIEW_BELOW"])
+        self.assertEqual(brakes["actions"], ["REVIEW_BELOW", "SAVE", "REJECT"])
+        self.assertEqual(tyres["actions"], ["REVIEW_BELOW", "REJECT"])
         self.assertEqual(brakes["source_label"], "HISTORICAL")
         self.assertEqual(brakes["created_at"], "2023-11-14T22:13:20+00:00")
-        with self.assertRaisesRegex(ValueError, "Historical review"):
+        with self.assertRaisesRegex(ValueError, "historical gate"):
             inbox.apply_action(brakes["opportunity_id"], "REJECT")
 
         # A human idea that is active takes the active slot from the historical approval.
@@ -132,11 +134,14 @@ class InboxTests(unittest.TestCase):
         packet = self.save_video()
         oid = packet["opportunity_id"]
         item = self.by_id(inbox.build_inbox({}))[oid]
-        self.assertEqual((item["status"], item["actions"]), ("NEEDS_REVIEW", ["ANALYZE", "SAVE", "REJECT"]))
+        self.assertEqual((item["status"], item["actions"]), ("NEEDS_REVIEW", ["APPROVE", "REWORK", "SAVE", "REJECT"]))
+        self.assertEqual([m["dimension"] for m in item["matrix"]][:2], ["historical_demand", "current_breakout"])
+        self.assertEqual(len(item["matrix"]), 6)
         inbox.apply_action(oid, "REJECT", note="Too generic")
         item = self.by_id(inbox.build_inbox({}))[oid]
         self.assertEqual((item["status"], item["status_reason"]), ("REJECTED", "Too generic"))
-        self.assertEqual(item["actions"], ["RESTORE", "ANALYZE"])
+        self.assertEqual(item["actions"], ["RESTORE", "APPROVE"])
+        self.assertEqual([h["action"] for h in item["decision_history"]], ["REJECT"])
         inbox.apply_action(oid, "SAVE")
         self.assertEqual(self.by_id(inbox.build_inbox({}))[oid]["status"], "SAVED")
         inbox.apply_action(oid, "RESTORE")
@@ -155,7 +160,10 @@ class InboxTests(unittest.TestCase):
         item = self.by_id(inbox.build_inbox({}))[packet["opportunity_id"]]
         self.assertEqual(item["status"], "SAVED")
         self.assertIn("car_modifications", item["status_reason"])
-        self.assertEqual(item["actions"], ["ANALYZE", "REJECT"])
+        self.assertEqual(item["actions"], ["APPROVE", "REJECT", "RESTORE"])
+        inbox.apply_action(packet["opportunity_id"], "RESTORE")
+        item = self.by_id(inbox.build_inbox({}))[packet["opportunity_id"]]
+        self.assertEqual(item["status"], "NEEDS_REVIEW")
 
     def test_topic_items_and_newest_first(self):
         self.save_video(when=datetime(2026, 9, 1, tzinfo=timezone.utc))
@@ -187,7 +195,7 @@ class InboxTests(unittest.TestCase):
         snapshot = inbox.build_inbox({})
         breakout = snapshot["items"][0]
         self.assertEqual((breakout["source_label"], breakout["status"]), ("VIRAL", "NEEDS_REVIEW"))
-        self.assertEqual(breakout["actions"], ["ANALYZE", "WATCH", "SAVE", "REJECT"])
+        self.assertEqual(breakout["actions"], ["APPROVE", "REWORK", "WATCH", "SAVE", "REJECT"])
         self.assertEqual(breakout["viral"]["strength"], "BREAKOUT")
         self.assertEqual(breakout["viral"]["ratio_basis"], ["lifetime_vs_lifetime", "vph_vs_lifetime_vph"])
         inbox.apply_action(breakout["opportunity_id"], "WATCH")
@@ -209,6 +217,64 @@ class InboxTests(unittest.TestCase):
         packet = self.save_video()
         with self.assertRaisesRegex(ValueError, "Only viral-radar"):
             inbox.apply_action(packet["opportunity_id"], "WATCH")
+
+    def test_rework_needs_a_note_and_refreshes_evidence(self):
+        packet = self.save_video()
+        oid = packet["opportunity_id"]
+        with self.assertRaisesRegex(ValueError, "needs a note"):
+            inbox.apply_action(oid, "REWORK", note="  ")
+        fresh = dict(video_metadata(), views=999_000)
+        with patch.object(hvi, "fetch_metadata", return_value={"status": "COMPLETE", "metadata": fresh, "attempts": []}):
+            inbox.apply_action(oid, "REWORK", note="Check the view count again")
+        item = self.by_id(inbox.build_inbox({}))[oid]
+        self.assertEqual(item["status"], "NEEDS_REVIEW")
+        self.assertEqual(item["status_reason"], "Reworked: Check the view count again")
+        self.assertEqual(item["videos"][0]["views"], 999_000)
+        self.assertEqual(item["decision_history"][-1]["action"], "REWORK")
+        self.assertFalse(item["evidence_moved"])
+
+    def test_rework_on_a_topic_re_explores(self):
+        hts.explore(
+            "Turbo lag",
+            searcher=lambda q, l, t: [],
+            measurer=lambda ids: {},
+        )
+        oid = "opp_human_topic__turbo_lag"
+        calls = []
+
+        def explore(text, note=""):
+            calls.append((text, note))
+            return hts.load_packet("turbo_lag")
+
+        with patch.object(hts, "explore", side_effect=explore):
+            inbox.apply_action(oid, "REWORK", note="Search for Shorts too")
+        self.assertEqual(calls, [("Turbo lag", "Search for Shorts too")])
+
+    def test_decisions_stand_when_evidence_moves(self):
+        packet = self.save_video()
+        oid = packet["opportunity_id"]
+        inbox.apply_action(oid, "SAVE", note="Later")
+        self.assertFalse(self.by_id(inbox.build_inbox({}))[oid]["evidence_moved"])
+        moved = hvi.build_video_packet(dict(video_metadata(), views=5_000_000), now=datetime(2026, 10, 3, tzinfo=timezone.utc))
+        hvi.save_packet(moved)
+        item = self.by_id(inbox.build_inbox({}))[oid]
+        self.assertEqual(item["status"], "SAVED")
+        self.assertTrue(item["evidence_moved"])
+
+    def test_radar_rework_means_keep_watching(self):
+        self.run_radar()
+        oid = inbox.build_inbox({})["items"][0]["opportunity_id"]
+        inbox.apply_action(oid, "REWORK", note="Need two more snapshots")
+        item = self.by_id(inbox.build_inbox({}))[oid]
+        self.assertEqual(item["status"], "WATCHING")
+
+    def test_approve_is_recorded_in_history(self):
+        packet = self.save_video()
+        inbox.record_decision(packet["opportunity_id"], "APPROVE")
+        inbox.record_decision("opp_unknown", "APPROVE")
+        item = self.by_id(inbox.build_inbox({}))[packet["opportunity_id"]]
+        self.assertEqual([h["action"] for h in item["decision_history"]], ["APPROVE"])
+        self.assertEqual(item["status"], "NEEDS_REVIEW")
 
     def test_corrupt_state_file_is_ignored(self):
         inbox.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)

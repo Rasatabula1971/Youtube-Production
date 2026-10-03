@@ -156,7 +156,11 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
 5. **O6–O9** — watchlist radar, API snapshots, four-axis classifier (built:
    `viral_radar.py`, *Run viral radar*, VIRAL inbox cards and the Watching
    tab; breadth stays UNASSESSED until O10).
-6. **O10**, then **O11 + O12**.
+6. **O10**, then **O11 + O12** (built: `viral_cluster.py` deterministic
+   keyword themes with independence and re-upload checks; theme approval and
+   `opportunity_context` + opportunity questions in Experiment 02; the inbox
+   as the unified gate with Approve / Rework / Watch / Save / Reject, the
+   evidence matrix, decision history and the evidence-moved notice).
 7. **O13 + O14** — extend the scheduler; trajectory charts.
 
 Also pending: an `everyday_science` 01.3 topic set (01.3 is currently scoped to
