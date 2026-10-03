@@ -6,7 +6,7 @@ Human Opportunity Gate reviews evidence the same way whatever the source.
 Spec: [`OPPORTUNITY_DISCOVERY_SPEC.md`](OPPORTUNITY_DISCOVERY_SPEC.md) (v2.1 —
 read the *v2.1 Revisions* section first).
 
-## Built so far (slices O1, O2, O4 and O5)
+## Built so far (slices O1–O5)
 
 | Module | Role |
 |---|---|
@@ -18,6 +18,7 @@ read the *v2.1 Revisions* section first).
 | `human_video_intake.py` | O5: paste a YouTube link → validated id → metadata (API, then yt-dlp; never a download) → HUMAN_VIDEO packet |
 | `human_topic_search.py` | O4: a topic or question → search variants → yt-dlp flat searches → API measurement → relevance and scope filters → HUMAN_TOPIC packet with rule-backed evidence |
 | `active_source.py` | "Analyze why it worked" / "Analyze these videos": makes a submitted video, or a topic's strongest videos, the active study set for Experiment 02 |
+| `inbox.py` | O3: merges every lane into one inbox (Needs review / Watching / Approved / Saved / Rejected) and stores save / reject / restore choices outside the evidence |
 | `config.json` | Active channel, future channels, exclusion rules, written evidence rules |
 
 Run the historical adapter:
@@ -29,6 +30,29 @@ python opportunity_engine/historical_adapter.py
 It reads `experiment_01_discovery/output/experiment_01_5/study_set.json` and
 writes `opportunity_engine/output/opportunities/historical.json`. Nothing in
 the UI reads it yet; the existing Opportunity Gate is unchanged until O12.
+
+## The Opportunity workspace (O3)
+
+The **Opportunity** page opens with four entry cards: *Discover proven
+demand* (runs the historical engine), *Explore my topic*, *Analyze a video*,
+and *Find viral / breakout videos* (shown, but disabled until the radar slices).
+
+Below them, the **Opportunity Inbox** lists every idea from every lane as one
+compact card: a source chip (HISTORICAL, YOUR TOPIC, YOUR VIDEO), the channel
+route, rule-backed evidence chips, and an *Evidence and videos* expander.
+
+| Tab | What lands there |
+|---|---|
+| Needs review | New ideas; historical topics still pending at the gate |
+| Watching | Viral candidates you keep tracking (radar slices) |
+| Approved | The active study set (pinned, marked ACTIVE) and historical approvals |
+| Saved | Ideas you saved, historical topics on HOLD, and future-channel ideas (parked automatically) |
+| Rejected | Ideas you rejected, historical rejections |
+
+Your own ideas are saved, rejected or moved back from the card. Historical
+topics are still decided in **Historical review** under the inbox (the existing
+gate), and the inbox mirrors those decisions. Inbox choices live in
+`output/inbox_state.json`, never in the evidence packets.
 
 ## Explore my topic (O4)
 

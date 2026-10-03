@@ -172,6 +172,8 @@ class ExploreTests(unittest.TestCase):
         )
         self.assertEqual(packet["candidate_videos"], [])
         self.assertEqual(packet["evidence_state"]["historical_demand"]["level"], "UNASSESSED")
+        # An API answer with no items is not an API measurement.
+        self.assertEqual(packet["intake"]["measurement"]["source"], "YT_DLP_FLAT_SEARCH")
         with self.assertRaisesRegex(ValueError, "no relevant videos"):
             active_source.set_active_topic("turbo_lag")
 

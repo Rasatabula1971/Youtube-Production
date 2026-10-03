@@ -7,7 +7,9 @@ from unittest.mock import patch
 import server
 from opportunity_engine import active_source
 from opportunity_engine import human_topic_search as hts
+from opportunity_engine import historical_adapter
 from opportunity_engine import human_video_intake as hvi
+from opportunity_engine import inbox
 
 VID = "dQw4w9WgXcQ"
 
@@ -45,6 +47,8 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             patch.object(active_source, "ACTIVE_FILE", self.root / "active.json"),
             patch.object(hvi, "PACKETS_DIR", self.root / "human_video"),
             patch.object(hts, "PACKETS_DIR", self.root / "human_topic"),
+            patch.object(inbox, "STATE_FILE", self.root / "inbox_state.json"),
+            patch.object(historical_adapter, "STUDY_SET_FILE", self.root / "no_study_set.json"),
             patch.object(server, "EXP2_PREPARED_DIR", self.prepared),
             patch.object(server, "EXP15_DIR", self.exp15),
             patch.object(server, "opportunity_gate_snapshot", return_value={}),
@@ -59,30 +63,44 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
         self.assertIn("/api/opportunity/topic/analyze", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertNotIn("/api/opportunity/topic", server.HUMAN_GATE_MUTATION_ROUTES)
 
-    def test_static_ui_has_the_analyze_video_card(self):
+    def test_static_ui_is_a_workspace_with_an_inbox(self):
         static = Path(server.__file__).resolve().parent / "static"
         html = (static / "index.html").read_text(encoding="utf-8")
         script = (static / "app.js").read_text(encoding="utf-8")
-        self.assertIn('id="analyzeVideoForm"', html)
-        self.assertIn('id="submittedVideos"', html)
-        self.assertIn('id="exploreTopicForm"', html)
-        self.assertIn('id="exploredTopics"', html)
-        self.assertIn("/api/opportunity/topic/analyze", script)
-        self.assertIn("renderExploredTopics", script)
+        for element_id in (
+            "historicalEntryPanel",
+            "exploreTopicForm",
+            "analyzeVideoForm",
+            "viralEntryPanel",
+            "opportunityInboxTabs",
+            "opportunityInbox",
+            "historicalReviewPanel",
+            "opportunityGate",
+        ):
+            self.assertIn(f'id="{element_id}"', html)
         for needle in (
             "/api/opportunity/video/analyze",
+            "/api/opportunity/topic/analyze",
             "/api/opportunity/video/stop",
+            "/api/opportunity/inbox",
             "CONFIRM_REPLACE: ",
-            "renderSubmittedVideos(data.submitted_videos",
+            "renderInbox(data.opportunity_inbox",
+            'runAction("opportunity_research")',
         ):
             self.assertIn(needle, script)
 
-    def test_snapshot_lists_submitted_videos_and_the_active_one(self):
+    def test_inbox_lists_submitted_videos_and_the_active_one(self):
         save_packet()
-        snapshot = server.submitted_videos_snapshot()
-        self.assertEqual([v["video_id"] for v in snapshot["videos"]], [VID])
-        self.assertEqual(snapshot["videos"][0]["route"], "ACTIVE_CHANNEL")
+        snapshot = server.opportunity_inbox_snapshot()
+        self.assertEqual([i["video_id"] for i in snapshot["items"]], [VID])
+        self.assertEqual(snapshot["items"][0]["route"], "ACTIVE_CHANNEL")
+        self.assertEqual(snapshot["items"][0]["status"], "NEEDS_REVIEW")
         self.assertIsNone(snapshot["active"])
+        server.analyze_submitted_video(video_id=VID, confirm_replace=False, allow_excluded=False)
+        item = server.opportunity_inbox_snapshot()["items"][0]
+        self.assertEqual((item["status"], item["is_active"], item["actions"]), ("APPROVED", True, ["STOP"]))
+        with self.assertRaisesRegex(ValueError, "Stop analysing it first"):
+            inbox.apply_action(item["opportunity_id"], "REJECT")
 
     def test_replacing_existing_work_needs_confirmation(self):
         save_packet()
@@ -112,11 +130,14 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
 
     def test_topic_snapshot_and_analyze(self):
         self.explore_topic()
-        snapshot = server.submitted_videos_snapshot()
-        topic = snapshot["topics"][0]
+        snapshot = server.opportunity_inbox_snapshot()
+        topic = snapshot["items"][0]
         self.assertEqual(topic["topic_key"], "aircraft_windows_are_round")
-        self.assertEqual(topic["demand"]["rule_id"], "HT-DEMAND-MODERATE")
-        self.assertEqual(len(topic["top_videos"]), 2)
+        self.assertEqual(
+            {chip["label"]: chip["rule_id"] for chip in topic["evidence"]},
+            {"Demand": "HT-DEMAND-MODERATE", "Replication": "HT-CCR-LOW"},
+        )
+        self.assertEqual(len(topic["videos"]), 2)
         (self.prepared / "oldvideo001.json").write_text("{}", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "^CONFIRM_REPLACE: Analyzing this topic"):
             server.analyze_explored_topic(
