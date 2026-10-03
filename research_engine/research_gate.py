@@ -5,7 +5,8 @@ claims are safe to carry into the Story / Script Engine.
 
 ACCEPT requires all configured criteria. Conflicted claims require an explicit
 resolution note. The final package remains RESEARCH_INCOMPLETE when any original
-research question lacks an accepted claim.
+research question lacks an accepted claim. Questions created from human rework
+notes (origin "human_rework") are instructions for regeneration and never block.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
+HUMAN_REWORK_ORIGIN = "human_rework"
 CONFIG_FILE = HERE / "research_gate_config.json"
 
 OUTPUT_DIR = HERE / "output"
@@ -341,13 +343,23 @@ def apply_gate(
             if question_id in claim.get("question_ids", [])
         ]
         resolved = bool(linked)
-        if not resolved:
+        # A human rework note becomes a question so the model addresses it, but
+        # it is an instruction, not research the script depends on. Only the
+        # original research questions must be answered by an accepted claim.
+        instruction = question.get("origin") == HUMAN_REWORK_ORIGIN
+        if not resolved and not instruction:
             unresolved.append(question_id)
         question_status.append(
             {
                 "question_id": question_id,
                 "question": question.get("question"),
-                "status": ("RESOLVED_FOR_SCRIPT" if resolved else "UNRESOLVED"),
+                "status": (
+                    "RESOLVED_FOR_SCRIPT"
+                    if resolved
+                    else "HUMAN_REWORK_INSTRUCTION"
+                    if instruction
+                    else "UNRESOLVED"
+                ),
                 "accepted_claim_ids": [claim["claim_id"] for claim in linked],
             }
         )
