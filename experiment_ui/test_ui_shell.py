@@ -380,6 +380,27 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertNotIn('Drawer.setAttribute("aria-hidden"', script)
         self.assertNotIn('behavior: "smooth"', script)
 
+    def test_craft_consistency(self) -> None:
+        # Step navigation uses one tab style on every gate page.
+        for module in ["gate-reviews.js", "produce.js", "packaging.js"]:
+            with self.subTest(module=module):
+                script = (STATIC / "js" / module).read_text(encoding="utf-8")
+                self.assertIn('class="pw-tab', script)
+                self.assertNotIn('class="inbox-tab', script)
+        # Buttons have one base size; empty states have one style.
+        legacy = (STATIC / "styles.css").read_text(encoding="utf-8")
+        button = legacy.split("\nbutton {", 1)[1].split("}", 1)[0]
+        self.assertIn("font-size: var(--text-sm);", button)
+        empty = legacy.split("\n.empty-state {", 1)[1].split("}", 1)[0]
+        self.assertIn("font-size: var(--text-sm);", empty)
+        self.assertIn("grid-column: 1 / -1;", empty)
+        # The retired page name is not shown anywhere.
+        sources = [self.html, (STATIC / "app.js").read_text(encoding="utf-8")]
+        sources.append((Path(server.__file__)).read_text(encoding="utf-8"))
+        for text in sources:
+            self.assertNotIn("Analyze & Create", text)
+            self.assertNotIn("Analyze &amp; Create", text)
+
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
         for route in server.APP_ROUTES:

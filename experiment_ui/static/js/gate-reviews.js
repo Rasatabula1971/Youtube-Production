@@ -783,15 +783,16 @@
   function renderSwitcher() {
     const bar = document.getElementById("gateReviewSwitcher");
     if (!bar) return;
-    const html = '<div class="inbox-tabs" role="tablist" aria-label="Gate">' + GATES.map(function (gate) {
+    // Same underline tab bar and switcher row as Packaging and Produce (UI-17).
+    const html = '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Gate">' + GATES.map(function (gate) {
       const on = gate === activeGate;
       const count = pendingCount(gate);
-      return '<button type="button" role="tab" class="inbox-tab' + (on ? " active" : "") + '" aria-selected="' + on +
+      return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on +
         '" data-gate-tab="' + gate + '">' + esc(CONFIGS[gate].label) + ' <span class="tab-count">' + count + "</span></button>";
     }).join("") + "</div>" +
-      '<label class="gate-toggle"><input type="checkbox" data-gate-show-decided' + (showDecided ? " checked" : "") +
+      '<div class="gate-switcher"><label class="gate-toggle"><input type="checkbox" data-gate-show-decided' + (showDecided ? " checked" : "") +
       "> Include decided items</label>" +
-      '<button type="button" class="ghost compact" data-route="/analysis" title="The original panels, with every option">Classic view</button>';
+      '<button type="button" class="ghost compact" data-route="/analysis" title="The original panels, with every option">Classic view</button></div>';
     if (html === switcherHtml && bar.innerHTML) return;
     switcherHtml = html;
     bar.innerHTML = html;

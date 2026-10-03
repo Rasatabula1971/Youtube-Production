@@ -23,6 +23,13 @@
 .entry-card > button,
 .entry-form button { font-size: 13px; padding: 8px 12px; }
 
+/* Every entry card ends on its action row, whatever its form length. */
+.entry-form { display: flex; flex-direction: column; flex: 1; }
+.entry-form > button { margin-top: auto; align-self: flex-start; }
+.entry-card > button { margin-top: auto; align-self: flex-start; }
+
+p.radar-note { margin: 0 0 var(--space-3); }
+
 /* Counts strip. */
 .opportunity-counts {
   display: flex;
