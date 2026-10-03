@@ -280,6 +280,27 @@ to match the redesign's navigation:
     rework reason and ready alternatives. Package and Format show progress and
     decisions. Produce shows each version's voice, narration and final render.
   - **Keys.** Tabs follow the WAI-ARIA pattern: ← → move, Home/End jump.
+- `/review#<gate>` — **Gate Reviews** (D-118): the Analysis, Concept and
+  Research gates on the shared review workspace, one item at a time, with a
+  gate switcher showing pending counts and "Include decided items" for
+  revisiting.
+  - **Same requests.** Each decision posts exactly what the classic panel
+    posts: `/api/human-analysis-review`, `/api/concept-gate` and
+    `/api/research-gate`, with empty criteria (the server fills them in from
+    the decision).
+  - **Notes.** Rework needs a note. Accepting a claim whose sources conflict
+    needs a resolution note.
+  - **Research.** Claims show their sources with stance, locator and quote,
+    the concept's research questions with answered/waived status, and
+    Waive / Remove waiver.
+  - **Revisiting.** A decided item opens with its decision and note
+    pre-filled. Unsaved drafts stay with their item while you move around.
+  - **Links in.** `/review#concept/<concept_id>` links to one item. The
+    Command Center hero, its attention cards, the Review Queue, a production's
+    "Continue review" (research) and a "Review one at a time" button on each
+    classic panel all open it.
+  - **Classic view.** It stays in Workspace with every option, including the
+    concept override bank and saved ideas.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions.
 - `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
@@ -326,7 +347,7 @@ four state colours `--status-human|running|blocked|complete`, spacing, type,
 radius, shadow, motion, z-index) and aliases the old variable names so
 `styles.css` keeps working while later patches move its rules across.
 Split-out files so far: `static/css/shell.css`, `command-center.css`,
-`opportunity.css`, `review.css` and `production.css`; `static/js/production-workspace.js`, `static/js/command-center.js`,
+`opportunity.css`, `review.css` and `production.css`; `static/js/production-workspace.js`, `gate-reviews.js`, `static/js/command-center.js`,
 `review-workspace.js` (the shared review workspace), `opportunity-review.js`
 and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
 API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves

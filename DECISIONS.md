@@ -3071,3 +3071,50 @@ workspace.
 - **Evidence tab.** It shows the evidence recorded on the concept, not the
   original opportunity packet, because concepts do not yet record which inbox
   opportunity they came from.
+
+
+## D-118 — UI Patch 4: Analysis, Concept and Research gates on the shared review workspace
+
+**Status:** Accepted
+
+**One review experience, same decisions.** The Analysis, Concept and Research
+gates now run on the review workspace from D-116, at `/review#<gate>`. Each
+gate keeps its domain content:
+- the analysis finding with its supporting evidence;
+- the concept's idea, audience evidence, mechanism, research questions and
+  checks;
+- the research claim's sources (stance, locator, quote), its concept's
+  research questions, and what accepting confirms.
+
+The header, "N of M", previous/next, keys, decision panel and notes are
+shared.
+
+**Same requests as the classic panels.** Decisions post the same bodies to the
+same endpoints, with `criteria: {}` because the gates derive criteria from the
+decision. The server's job lock and mutation routes are unchanged. The UI adds
+only stricter guidance; it never adds a rule the server lacks:
+- Rework needs a note (the server already requires it).
+- Accepting a CONFLICTED claim asks for a resolution note, matching the
+  research gate's `require_conflict_resolution_note`.
+
+**Revisiting and drafts.**
+- "Include decided items" puts decided items back in the queue with their
+  decision and note pre-filled.
+- Unsaved drafts are kept per item, so moving between items never carries one
+  item's note to another. This fixes a carry-over bug in the Patch 2 workspace.
+- A research claim's question panel refreshes when a waiver or another claim
+  changes coverage.
+
+**Entry points.** These open the matching gate:
+- the Command Center hero for HUMAN_ANALYSIS_GATE, HUMAN_CONCEPT_GATE and
+  HUMAN_RESEARCH_GATE;
+- attention cards and Review Queue rows for pending analysis findings and
+  concepts (research is counted per production);
+- a production's "Continue review" at the research stage, which opens its
+  first pending claim;
+- a "Review one at a time" button on each classic panel.
+
+**The classic panels stay.** Workspace keeps every original option, including
+the concept override bank (bringing a non-shortlisted concept in) and saved
+ideas, until the remaining gates move across (UI-11 onward: Script,
+Packaging, Format, Voice, then the production gates).

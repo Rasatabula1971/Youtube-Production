@@ -524,6 +524,12 @@ const ROUTES = {
     title: "Viral Radar",
     subtitle: "Recent channel-relative outliers, tracked for up to 15 days."
   },
+  "/review": {
+    view: "gate-review",
+    kicker: "PRODUCTIONS",
+    title: "Gate Reviews",
+    subtitle: "Analysis findings, concepts and research claims, one at a time."
+  },
   "/production": {
     view: "production",
     kicker: "PRODUCTION",
@@ -666,6 +672,7 @@ function renderRoute(options) {
     if (path === "/radar" && window.RadarPage) window.RadarPage.show();
     if (path === "/opportunity/review" && window.OpportunityReview) window.OpportunityReview.render();
     if (path === "/production" && window.ProductionWorkspace) window.ProductionWorkspace.show();
+    if (path === "/review" && window.GateReviews) window.GateReviews.show();
   }
   closeSidebar();
   if (shouldScroll && renderedPath !== path) {
@@ -717,6 +724,8 @@ function applySubroute(path, subroute) {
     window.OpportunityReview.focus(decodeURIComponent(subroute));
   } else if (path === "/production" && window.ProductionWorkspace) {
     window.ProductionWorkspace.open(decodeURIComponent(subroute));
+  } else if (path === "/review" && window.GateReviews) {
+    window.GateReviews.open(subroute);
   }
   if (anchor) {
     anchor.scrollIntoView({ block: "start", behavior: "auto" });
@@ -815,8 +824,18 @@ function primaryTargetForWorkflow(workflow) {
   if (workflow.state === "HUMAN_VISION_GATE") {
     return { type: "route", value: "/analysis", label: "Review visual evidence" };
   }
-  if (workflow.state === "HUMAN_ANALYSIS_GATE") {
-    return { type: "route", value: "/analysis", label: "Review analysis findings" };
+  const gateReviews = {
+    HUMAN_ANALYSIS_GATE: ["analysis", "Review analysis findings"],
+    HUMAN_CONCEPT_GATE: ["concept", "Review concepts"],
+    HUMAN_RESEARCH_GATE: ["research", "Review research"]
+  };
+  if (gateReviews[workflow.state]) {
+    return {
+      type: "route",
+      value: "/review",
+      subroute: gateReviews[workflow.state][0],
+      label: gateReviews[workflow.state][1]
+    };
   }
   const analysisHumanGateLabels = {
     HUMAN_ANALYSIS_GATE: "Review analysis findings",
@@ -903,7 +922,8 @@ function renderHomeWorkflow(data) {
       escapeHtml(target.label) + '</button>';
   } else if (target.type === "route") {
     homePrimaryAction.innerHTML =
-      '<button class="primary-cta" data-route="' + escapeHtml(target.value) + '">' +
+      '<button class="primary-cta" data-route="' + escapeHtml(target.value) + '"' +
+      (target.subroute ? ' data-subroute="' + escapeHtml(target.subroute) + '"' : "") + '>' +
       escapeHtml(target.label) + '</button>';
   } else {
     homePrimaryAction.innerHTML =
@@ -1698,7 +1718,9 @@ window.YP = {
   decide: performInboxDecision,
   analyzeTheme: analyzeTheme,
   openEvidence: function (opportunityId, trigger) { return openEvidenceDrawer(opportunityId, trigger); },
-  routeLabel: function (route) { return ROUTE_LABELS[route] || route; }
+  routeLabel: function (route) { return ROUTE_LABELS[route] || route; },
+  status: function () { return latestStatus; },
+  refresh: function () { return loadStatus(); }
 };
 
 if (opportunityInbox) {
@@ -6955,6 +6977,7 @@ function renderAll(data) {
   renderInbox(data.opportunity_inbox || {});
   if (window.RadarPage) window.RadarPage.render(data);
   if (window.ProductionWorkspace) window.ProductionWorkspace.refresh(data);
+  if (window.GateReviews) window.GateReviews.render();
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);

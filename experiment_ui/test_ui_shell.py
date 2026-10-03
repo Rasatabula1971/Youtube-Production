@@ -196,6 +196,25 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertIn('getElementById("opportunityReview")', review)
         self.assertIn('id="opportunityReview"', self.html)
 
+    def test_gate_review_roots_exist(self) -> None:
+        script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
+        gates = re.search(r'const GATES = \[([^\]]+)\]', script)
+        assert gates is not None
+        for gate in re.findall(r'"([a-z]+)"', gates.group(1)):
+            with self.subTest(gate=gate):
+                self.assertIn(f'id="gateReview-{gate}"', self.html)
+                self.assertIn(f'data-subroute="{gate}"', self.html)
+        self.assertIn('id="gateReviewSwitcher"', self.html)
+
+    def test_gate_reviews_post_the_classic_payloads(self) -> None:
+        script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
+        app = (STATIC / "app.js").read_text(encoding="utf-8")
+        for endpoint in ["/api/human-analysis-review", "/api/concept-gate", "/api/research-gate"]:
+            with self.subTest(endpoint=endpoint):
+                self.assertIn(f'"{endpoint}"', script)
+                self.assertIn(f'"{endpoint}"', app)
+                self.assertIn(endpoint, server.HUMAN_GATE_MUTATION_ROUTES)
+
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
         for route in server.APP_ROUTES:

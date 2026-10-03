@@ -24,6 +24,8 @@
   function create(options) {
     const root = options.root;
     let currentKey = null;
+    let renderedKey = null; // the item whose decision panel is on screen
+    const drafts = {}; // unsaved choice and note per item, kept while moving around
     let currentIndex = 0;
     let lastSignature = "";
     let busy = false;
@@ -46,7 +48,7 @@
       const checked = root.querySelector('input[name="' + uid + '-decision"]:checked');
       const note = root.querySelector("[data-rw-note]");
       return {
-        key: currentKey,
+        key: renderedKey,
         value: checked ? checked.value : "",
         note: note ? note.value : ""
       };
@@ -97,14 +99,25 @@
 
       if (!item) {
         currentKey = null;
+        renderedKey = null;
         currentIndex = 0;
-        root.innerHTML = '<div class="rw-empty">' + (options.emptyHtml || "<p>Nothing to review.</p>") + "</div>";
+        const empty = typeof options.emptyHtml === "function" ? options.emptyHtml() : options.emptyHtml;
+        root.innerHTML = '<div class="rw-empty">' + (empty || "<p>Nothing to review.</p>") + "</div>";
         return;
       }
-      const draft = readDraft();
+      const onScreen = readDraft();
+      if (onScreen.key && (onScreen.value || onScreen.note)) drafts[onScreen.key] = onScreen;
+      else if (onScreen.key) delete drafts[onScreen.key];
+      const draft = drafts[options.key(item)] || onScreen;
       const keepDraft = draft.key === options.key(item);
+      // Revisiting a decided item starts from the decision and note on file.
+      const initial = {
+        value: options.initialValue ? String(options.initialValue(item) || "") : "",
+        note: options.initialNote ? String(options.initialNote(item) || "") : ""
+      };
       currentIndex = index;
       currentKey = options.key(item);
+      renderedKey = currentKey;
       root.innerHTML =
         '<header class="rw-head">' +
           '<div class="rw-head-copy">' +
@@ -121,7 +134,7 @@
         '<div class="rw-body">' +
           '<section class="rw-evidence" aria-label="Evidence">' + options.renderEvidence(item) + "</section>" +
           '<aside class="rw-panel" aria-label="Decision">' +
-            decisionPanel(item, keepDraft ? draft : { value: "", note: "" }) +
+            decisionPanel(item, keepDraft ? draft : initial) +
           "</aside>" +
         "</div>";
       if (options.onShow) options.onShow(item);
@@ -165,6 +178,7 @@
       render(true);
       try {
         await options.decide(item, decision.value, decision.takesNote === false ? "" : draft.note.trim());
+        if (!list().some(function (entry) { return options.key(entry) === draft.key; })) delete drafts[draft.key];
       } finally {
         // A decided item leaves the queue and its draft goes with it; a failed
         // decision keeps the item and the draft so nothing typed is lost.

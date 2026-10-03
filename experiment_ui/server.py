@@ -38,6 +38,7 @@ APP_ROUTES = {
     "/opportunity/review",
     "/radar",
     "/production",
+    "/review",
     "/analysis",
     "/productions",
     "/tools",

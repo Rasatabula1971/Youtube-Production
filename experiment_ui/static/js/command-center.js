@@ -117,6 +117,31 @@
     return parts.join(" · ") || "New breakout from the radar";
   }
 
+  // Gates that come before a production exists (D-118). Research claims are
+  // already counted per production, so only Analysis and Concept are listed.
+  function gateWaiting(data) {
+    const pending = function (rows) {
+      return (rows || []).filter(function (row) { return row && String(row.decision || "PENDING").toUpperCase() === "PENDING"; }).length;
+    };
+    const gates = [
+      {
+        id: "analysis",
+        label: "Analysis",
+        noun: "finding",
+        count: pending((data.human_analysis_review || {}).items),
+        detail: "Accept or reject what Experiment 02 found in the study videos."
+      },
+      {
+        id: "concept",
+        label: "Concept",
+        noun: "concept",
+        count: (data.concept_gate || {}).complete ? 0 : pending((data.concept_gate || {}).concepts),
+        detail: "Accepted concepts become productions."
+      }
+    ];
+    return gates.filter(function (gate) { return gate.count > 0; });
+  }
+
   function attentionItems(data) {
     const productions = ((data.productions || {}).productions || []);
     const cards = [];
@@ -142,6 +167,18 @@
           subroute: encodeURIComponent(production.concept_id)
         });
       }
+    });
+
+    gateWaiting(data).forEach(function (gate) {
+      cards.push({
+        tone: "human",
+        kicker: gate.label + " Gate",
+        title: plural(gate.count, gate.noun) + " to review",
+        detail: gate.detail,
+        action: "Review " + gate.noun + "s",
+        route: "/review",
+        subroute: gate.id
+      });
     });
 
     const waiting = inboxItems(data);
@@ -186,7 +223,8 @@
     const productionCount = productions.filter(function (production) {
       return production.status === "HUMAN_REVIEW" || production.status === "BLOCKED";
     }).length;
-    const total = productionCount + waiting.length + (job.status === "FAILED" ? 1 : 0);
+    const gateCount = gateWaiting(data).reduce(function (sum, gate) { return sum + gate.count; }, 0);
+    const total = productionCount + gateCount + waiting.length + (job.status === "FAILED" ? 1 : 0);
     return { cards: cards, total: total };
   }
 
@@ -350,6 +388,17 @@
         subroute: encodeURIComponent(production.concept_id)
       });
     });
+    gateWaiting(data).forEach(function (gate) {
+      queue.push({
+        title: plural(gate.count, gate.noun) + " waiting",
+        kind: gate.label + " Gate",
+        detail: gate.detail,
+        tone: "human",
+        route: "/review",
+        subroute: gate.id,
+        count: gate.count
+      });
+    });
     inboxItems(data).forEach(function (item) {
       queue.push({
         title: item.title || item.opportunity_id,
@@ -365,7 +414,8 @@
 
   function reviewQueueHtml(queue) {
     if (!queue.length) return '<p class="empty-state">' + esc(PRODUCTION_EMPTY.review) + "</p>";
-    return '<div class="queue-head"><p><strong>' + plural(queue.length, "decision") + "</strong> waiting</p>" +
+    const total = queue.reduce(function (sum, entry) { return sum + (entry.count || 1); }, 0);
+    return '<div class="queue-head"><p><strong>' + plural(total, "decision") + "</strong> waiting</p>" +
       '<button type="button" class="primary-cta" data-route="' + esc(queue[0].route) + '" data-subroute="' +
         esc(queue[0].subroute) + '">Start review queue →</button></div>' +
       '<ol class="review-queue">' + queue.map(function (entry) {
@@ -386,7 +436,9 @@
     const productions = ((latest.productions || {}).productions || []);
     const queue = reviewQueue(latest);
     tabs.innerHTML = PRODUCTION_FILTERS.map(function (tab) {
-      const count = tab[0] === "review" ? queue.length : filterProductions(productions, tab[0]).length;
+      const count = tab[0] === "review"
+        ? queue.reduce(function (sum, entry) { return sum + (entry.count || 1); }, 0)
+        : filterProductions(productions, tab[0]).length;
       const active = tab[0] === productionFilter;
       return '<button type="button" role="tab" class="inbox-tab' + (active ? " active" : "") +
         '" aria-selected="' + active + '" data-production-filter="' + tab[0] + '">' +
