@@ -14,6 +14,9 @@ if str(_ROOT) not in sys.path:
 from opportunity_engine import active_source, historical_adapter, inbox  # noqa: E402
 from opportunity_engine import human_topic_search as hts  # noqa: E402
 from opportunity_engine import human_video_intake as hvi  # noqa: E402
+from opportunity_engine import viral_radar as vr  # noqa: E402
+from opportunity_engine.test_viral_radar import MATURE, NOW, FakeApi  # noqa: E402
+from opportunity_engine.test_viral_radar import item as radar_item  # noqa: E402
 
 VID = "dQw4w9WgXcQ"
 
@@ -62,6 +65,11 @@ class InboxTests(unittest.TestCase):
             patch.object(hvi, "PACKETS_DIR", self.root / "human_video"),
             patch.object(hts, "PACKETS_DIR", self.root / "human_topic"),
             patch.object(historical_adapter, "STUDY_SET_FILE", self.study_file),
+            patch.object(vr, "RADAR_DIR", self.root / "viral"),
+            patch.object(vr, "STATE_FILE", self.root / "viral" / "state.json"),
+            patch.object(vr, "SUMMARY_FILE", self.root / "viral" / "last_run.json"),
+            patch.object(vr, "SNAPSHOT_FILE", self.root / "viral" / "snapshots.jsonl"),
+            patch.object(vr, "PACKETS_DIR", self.root / "viral_packets"),
         ):
             item.start()
             self.addCleanup(item.stop)
@@ -165,6 +173,42 @@ class InboxTests(unittest.TestCase):
         self.assertEqual(topic["topic_key"], "turbo_lag")
         self.assertEqual([c["label"] for c in topic["evidence"]], ["Demand", "Replication"])
         self.assertEqual(topic["search_count"], 5)
+
+    def run_radar(self):
+        from opportunity_engine import channel_scope
+
+        config = json.loads(json.dumps(channel_scope.load_config()))
+        config["viral_radar"]["watchlist_handles"] = ["@brakelab"]
+        api = FakeApi(MATURE + [radar_item(10, 48, 80_000)], handles={"@brakelab": "UC" + "a" * 22})
+        vr.run(api=api, searcher=lambda u, l, t: [], config=config, now=NOW)
+
+    def test_radar_breakouts_can_be_watched_and_analysed(self):
+        self.run_radar()
+        snapshot = inbox.build_inbox({})
+        breakout = snapshot["items"][0]
+        self.assertEqual((breakout["source_label"], breakout["status"]), ("VIRAL", "NEEDS_REVIEW"))
+        self.assertEqual(breakout["actions"], ["ANALYZE", "WATCH", "SAVE", "REJECT"])
+        self.assertEqual(breakout["viral"]["strength"], "BREAKOUT")
+        self.assertEqual(breakout["viral"]["ratio_basis"], ["lifetime_vs_lifetime", "vph_vs_lifetime_vph"])
+        inbox.apply_action(breakout["opportunity_id"], "WATCH")
+        watched = inbox.build_inbox({})["items"][0]
+        self.assertEqual(watched["status"], "WATCHING")
+        self.assertEqual(snapshot["counts"]["NEEDS_REVIEW"], 1)
+
+        record = active_source.set_active("video000010", source_type="VIRAL_RADAR")
+        self.assertEqual(record["study_set"][0]["handoff_id"], "viral_radar:video000010")
+        self.assertEqual(active_source.load_active(), record)
+        active_item = inbox.build_inbox({})["items"][0]
+        self.assertEqual((active_item["status"], active_item["is_active"]), ("APPROVED", True))
+
+        # Re-running the radar (new evidence) keeps the frozen decision.
+        self.run_radar()
+        self.assertEqual(active_source.load_active()["study_set"], record["study_set"])
+
+    def test_only_radar_items_can_be_watched(self):
+        packet = self.save_video()
+        with self.assertRaisesRegex(ValueError, "Only viral-radar"):
+            inbox.apply_action(packet["opportunity_id"], "WATCH")
 
     def test_corrupt_state_file_is_ignored(self):
         inbox.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)

@@ -2791,3 +2791,49 @@ The inbox is a view, not a new source of truth:
 Historical packets now take their timestamp from the study-set file so
 rebuilding them on every refresh does not reorder the inbox.
 
+## D-112 — The viral radar measures against each channel's own normal, from first sight
+
+**Status:** Accepted
+
+Slices O6–O9 add a topicless breakout radar (`opportunity_engine/viral_radar.py`).
+
+**Discovery is watchlist-led (R2).** The watchlist holds the seed handles in
+`config.json` plus every channel the system has already seen. It is crawled
+through each channel's uploads playlist: about 1 API unit per channel plus 1
+unit per 50 videos, with no `search.list` quota. yt-dlp "this week" bucket
+searches, rotated four per run, only add channels. Measurement uses the
+official API (R3).
+
+**Baselines are the channel's own mature uploads** (15+ days old, same format;
+Shorts only after the March 2025 view-count change), extending the 01.2
+same-format median with a maturity filter. Fewer than three gives
+`INSUFFICIENT_EVIDENCE`.
+
+**Classification is four axes, from first sight.**
+- **Strength** is set by written rules that are hypotheses. Every ratio
+  records its basis (`lifetime_vs_lifetime`, `vph_vs_lifetime_vph`), and an
+  early signal needs both (R4).
+- **Trajectory** comes from the system's own snapshots, using the D-021
+  velocity rules.
+- **Historical alignment** comes from the historical topics.
+- **Breadth** stays `UNASSESSED` until theme clustering (O10).
+
+**Tracking.** Promising videos are tracked on an age-based cadence (6 h /
+12 h / 24 h) with append-only snapshots. Past views are never reconstructed.
+At 15 days a video leaves the radar and its final outcome is stored beside its
+24 h / 3 d / 7 d classifications, to calibrate the rules (R7). Deleted or
+private videos stop being tracked.
+
+**Failures are named and back off.**
+- `API_VALIDATION_UNAVAILABLE`: no API key, or quota exhausted.
+- `YT_DLP_DISCOVERY_FAILED`.
+- `DISCOVERY_THROTTLED`: no YouTube searches for 6 hours.
+
+An empty watchlist is reported, never shown as "no breakouts".
+
+**Inbox.** Breakouts appear as VIRAL inbox items. Excluded ones are tracked
+but never shown as packets. *Watch* (radar only) moves an item to Watching.
+*Analyze why it worked* reuses the D-109 handoff, giving gate status
+`APPROVED_VIRAL_RADAR`. The radar runs only when asked (*Run viral radar*);
+scheduling is O13.
+

@@ -6,7 +6,7 @@ Human Opportunity Gate reviews evidence the same way whatever the source.
 Spec: [`OPPORTUNITY_DISCOVERY_SPEC.md`](OPPORTUNITY_DISCOVERY_SPEC.md) (v2.1 —
 read the *v2.1 Revisions* section first).
 
-## Built so far (slices O1–O5)
+## Built so far (slices O1–O9)
 
 | Module | Role |
 |---|---|
@@ -19,7 +19,8 @@ read the *v2.1 Revisions* section first).
 | `human_topic_search.py` | O4: a topic or question → search variants → yt-dlp flat searches → API measurement → relevance and scope filters → HUMAN_TOPIC packet with rule-backed evidence |
 | `active_source.py` | "Analyze why it worked" / "Analyze these videos": makes a submitted video, or a topic's strongest videos, the active study set for Experiment 02 |
 | `inbox.py` | O3: merges every lane into one inbox (Needs review / Watching / Approved / Saved / Rejected) and stores save / reject / restore choices outside the evidence |
-| `config.json` | Active channel, future channels, exclusion rules, written evidence rules |
+| `viral_radar.py` | O6–O9: watchlist discovery, channel baselines, append-only snapshots and the four-axis breakout classifier |
+| `config.json` | Active channel, future channels, exclusion rules, written evidence rules, radar thresholds |
 
 Run the historical adapter:
 
@@ -53,6 +54,38 @@ Your own ideas are saved, rejected or moved back from the card. Historical
 topics are still decided in **Historical review** under the inbox (the existing
 gate), and the inbox mirrors those decisions. Inbox choices live in
 `output/inbox_state.json`, never in the evidence packets.
+
+## Viral / breakout radar (O6–O9)
+
+*Run viral radar* on the Opportunity page (or
+`python opportunity_engine/viral_radar.py run`) does one pass:
+
+1. **Watchlist (O6).** The seed handles in `config.json → viral_radar`
+   (Veritasium, Steve Mould, Real Engineering, …) plus every channel the
+   system has already seen (your videos, your topics, the historical study
+   set). Up to 4 rotating "this week" yt-dlp bucket searches add new channels.
+   Each channel's uploads playlist is read with the API: about 1 unit per
+   channel plus 1 unit per 50 videos. There is no `search.list` call.
+2. **Baseline (O7).** Each channel's own uploads at least 15 days old, in the
+   same format (Shorts only after the March 2025 view-count change). At least
+   3 are needed or the video is `INSUFFICIENT_EVIDENCE`.
+3. **Classify (O9), on first sight.** Two ratios with their basis named:
+   views vs the channel's median views, and views/hour vs its median lifetime
+   views/hour. `strength_rules` (hypotheses) set EARLY_SIGNAL /
+   BREAKOUT_CANDIDATE / BREAKOUT. Trajectory comes from snapshots
+   (ACCELERATING, STABLE_HIGH, DECELERATING, FLAT). Historical alignment checks
+   the historical topics. Breadth waits for theme clustering (O10).
+4. **Track (O8).** Promising videos are snapshotted every 6 h (under 2 days),
+   12 h (2–7 days) and 24 h (7–15 days), append-only, into
+   `output/viral/snapshots.jsonl` (the D-021 format). After 15 days a video
+   leaves the radar and its outcome is kept beside its 24 h / 3 d / 7 d
+   classifications, to calibrate the thresholds (R7).
+
+Breakouts appear in the inbox as **VIRAL** cards. *Watch* moves one to the
+Watching tab, and *Analyze why it worked* makes it the study set. Failures are
+named: `API_VALIDATION_UNAVAILABLE` (no key or quota), `YT_DLP_DISCOVERY_FAILED`
+and `DISCOVERY_THROTTLED` (the radar backs off from YouTube search for 6 hours).
+CTR, retention and viewed-vs-swiped are never estimated.
 
 ## Explore my topic (O4)
 

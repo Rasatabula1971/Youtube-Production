@@ -54,6 +54,7 @@ ignore = ["TRY004"]
 # after "--" so it cannot become an option.
 "opportunity_engine/human_video_intake.py" = ["S603"]
 "opportunity_engine/human_topic_search.py" = ["S603"]
+"opportunity_engine/viral_radar.py" = ["S603"]
 # Fetch is pinned to https://i.ytimg.com/vi/ and Ollama to loopback; ffmpeg/ffprobe
 # run with fixed argv lists.
 "packaging_engine/niche_thumbnail_study.py" = ["S310", "S603", "S607"]
