@@ -3118,3 +3118,50 @@ only stricter guidance; it never adds a rule the server lacks:
 the concept override bank (bringing a non-shortlisted concept in) and saved
 ideas, until the remaining gates move across (UI-11 onward: Script,
 Packaging, Format, Voice, then the production gates).
+
+
+## D-119 — UI Patch 5: the Script gate on the shared review workspace
+
+**Status:** Accepted
+
+**Part by part, then the whole.** `/review#script` lists, for each script
+branch awaiting a decision, its opening hook, every section and its closing,
+then a "Whole script" item. Each part shows:
+- its live text;
+- why it exists (purpose, psychology mechanism, reward type);
+- the accepted research claims it uses, with their statements.
+
+The whole-script item shows each part's state, the live hook and closing,
+validation errors, and the approved claims.
+
+**Decisions map one-to-one onto the existing section actions.**
+- Accept and lock → `ACCEPT`.
+- Rework → `REWORK` with the server's reason list (a test keeps the two in
+  step) and an optional instruction. Like the classic panel, it needs a
+  reason or an instruction, and CUSTOM needs an instruction.
+- Edit by hand → `MANUAL_EDIT`. It starts from the current text and refuses
+  an unchanged edit.
+- Unlock → `UNLOCK`; Cancel rework → `CANCEL_REWORK`.
+- Whole script → `/api/script-gate`.
+
+Accepting with parts still open shows the classic panel's confirmation and
+sends `accept_open_sections: true`.
+
+**Spending stays explicit.** Requesting a rework never calls the model.
+"Generate A / B / C" is a separate button that says it calls the model once.
+The alternatives then appear beside the original, and picking one, or keeping
+the original, applies `SELECT_ALTERNATIVE`, which locks the part.
+
+**Behaviour fixes in the shared workspace.**
+- A gate can add a choice list and its own note label to a decision.
+- A text-editing decision starts from the current text, and switching away
+  clears it.
+- A draft whose decision no longer applies, such as a rework instruction once
+  the rework is pending, is cleared.
+- Script items appear only once a branch's sections have loaded, so review
+  starts at the opening hook.
+- Section data reloads whenever the Script Gate changes from anywhere.
+
+**Kept in the classic view.** Preparing a bounded rework request without
+calling the model, and restoring a saved script version. Both are rare, and
+restoring needs the version picker.

@@ -827,7 +827,8 @@ function primaryTargetForWorkflow(workflow) {
   const gateReviews = {
     HUMAN_ANALYSIS_GATE: ["analysis", "Review analysis findings"],
     HUMAN_CONCEPT_GATE: ["concept", "Review concepts"],
-    HUMAN_RESEARCH_GATE: ["research", "Review research"]
+    HUMAN_RESEARCH_GATE: ["research", "Review research"],
+    HUMAN_SCRIPT_GATE: ["script", "Review script"]
   };
   if (gateReviews[workflow.state]) {
     return {

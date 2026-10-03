@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  const GATES = ["analysis", "concept", "research"];
+  const GATES = ["analysis", "concept", "research", "script"];
   let activeGate = "analysis";
   let showDecided = false;
   const workspaces = {};
@@ -260,20 +260,342 @@
     }
   };
 
-  const CONFIGS = { analysis: analysis, concept: concept, research: research };
+  // ------------------------------------------------------------------ Script
+  // A script branch is reviewed section by section (hook, sections, closing),
+  // then as a whole. Section actions use /api/script-section-review and the
+  // whole-script decision /api/script-gate, exactly as the classic panel does.
+  const sectionSnapshots = {};
+  const sectionLoading = {};
+  const REWORK_REASONS = [
+    ["", "Choose a reason (or write an instruction)"],
+    ["TOO_BORING", "Too boring"],
+    ["TOO_LONG", "Too long"],
+    ["TOO_TECHNICAL", "Too technical"],
+    ["NOT_DRAMATIC_ENOUGH", "Not dramatic enough"],
+    ["WEAK_TRANSITION", "Weak transition"],
+    ["FACT_UNCLEAR", "Fact unclear"],
+    ["UNNATURAL", "Sounds unnatural"],
+    ["WEAK_CURIOSITY", "Weak curiosity"],
+    ["WEAK_EMOTION", "Weak emotion"],
+    ["CUSTOM", "Custom (instruction below)"]
+  ];
+
+  function branchKey(conceptId, format) { return conceptId + "::" + format; }
+
+  function scripts() {
+    return ((status().script_gate || {}).scripts || []).filter(Boolean);
+  }
+
+  async function loadSections(conceptId, format) {
+    const key = branchKey(conceptId, format);
+    if (sectionLoading[key]) return;
+    sectionLoading[key] = true;
+    try {
+      sectionSnapshots[key] = await yp().api(
+        "/api/script-section-review?concept_id=" + encodeURIComponent(conceptId) +
+        "&format=" + encodeURIComponent(format)
+      );
+    } catch (error) {
+      sectionSnapshots[key] = { status: "ERROR", error: error.message, targets: [] };
+    } finally {
+      sectionLoading[key] = false;
+      if (workspaces.script) workspaces.script.refresh();
+      renderSwitcher();
+    }
+  }
+
+  function targetLabel(target) {
+    if (target.target_type === "OPENING_HOOK") return "Opening hook";
+    if (target.target_type === "CLOSING") return "Closing";
+    const purpose = (target.metadata || {}).purpose;
+    return (target.section_id || "Section") + (purpose ? ": " + purpose : "");
+  }
+
+  function sectionState(target) {
+    if (target.locked) return target.decision === "ACCEPTED" ? "ACCEPTED" : "LOCKED";
+    return String(target.decision || "PENDING").toUpperCase();
+  }
+
+  const script = {
+    label: "Script",
+    kicker: "SCRIPT REVIEW",
+    snapshot: function () { return status().script_gate || {}; },
+    sections: function (item) { return sectionSnapshots[branchKey(item.concept_id, item.format)] || null; },
+    all: function () {
+      const rows = [];
+      scripts().forEach(function (branch) {
+        const key = branchKey(branch.concept_id, branch.format);
+        const decided = String(branch.decision || "PENDING").toUpperCase() !== "PENDING";
+        if (!sectionSnapshots[key]) {
+          // List nothing for this branch until its sections are known, so the
+          // review starts at the opening hook rather than the whole script.
+          loadSections(branch.concept_id, branch.format);
+          return;
+        }
+        const snap = sectionSnapshots[key];
+        ((snap && snap.targets) || []).forEach(function (target) {
+          rows.push({ kind: "section", concept_id: branch.concept_id, format: branch.format, branch: branch, target: target, branchDecided: decided });
+        });
+        rows.push({ kind: "whole", concept_id: branch.concept_id, format: branch.format, branch: branch, decision: branch.decision, note: branch.note, branchDecided: decided });
+      });
+      return rows;
+    },
+    isPending: function (item) {
+      if (item.branchDecided) return false;
+      if (item.kind === "whole") return true;
+      return !(item.target.locked && item.target.decision === "ACCEPTED");
+    },
+    initialValue: function (item) {
+      if (item.kind !== "whole") return "";
+      const decision = String(item.decision || "PENDING").toUpperCase();
+      return decision === "PENDING" ? "" : decision;
+    },
+    key: function (item) {
+      return branchKey(item.concept_id, item.format) + "::" + (item.kind === "whole" ? "WHOLE" : item.target.target_id);
+    },
+    extraSignature: function (item) {
+      const snap = this.sections(item) || {};
+      if (item.kind === "whole") {
+        return (snap.status || "") + ":" + JSON.stringify((snap.targets || []).map(sectionState));
+      }
+      const t = item.target;
+      return [snap.status, t.decision, t.locked, t.rework_reason, t.target_sha256, JSON.stringify(t.alternatives || null)].join("|");
+    },
+    title: function (item) {
+      return item.kind === "whole"
+        ? "Whole script: " + (item.branch.title || item.concept_id)
+        : targetLabel(item.target);
+    },
+    meta: function (item) {
+      const chip = '<span class="source-chip">' + esc(words(item.format)) + "</span>";
+      if (item.kind === "whole") {
+        return chip + '<span class="rw-meta-text">' + esc(item.concept_id) + " · whole-script decision</span>" + decidedBadge(item.decision);
+      }
+      const state = sectionState(item.target);
+      const tone = state === "ACCEPTED" || state === "LOCKED" ? "complete" : state === "REWORK_REQUESTED" ? "blocked" : "human";
+      return chip + '<span class="rw-meta-text">' + esc(item.branch.title || item.concept_id) + "</span>" +
+        '<span class="status-badge status-' + tone + '">' + esc(words(state)) + (item.target.locked ? " · locked" : "") + "</span>";
+    },
+    claims: function (item, ids) {
+      const byId = {};
+      (item.branch.accepted_claims || []).forEach(function (c) { if (c && c.claim_id) byId[c.claim_id] = c.statement; });
+      return (ids || []).map(function (id) { return byId[id] ? id + ": " + byId[id] : id; });
+    },
+    evidence: function (item) {
+      const snap = this.sections(item);
+      const notice = !snap
+        ? '<p class="muted">Loading the section review…</p>'
+        : snap.status === "STALE_SECTION_STATE"
+          ? '<p class="radar-error">Section review is out of date with the draft: ' + esc(snap.error || "") + " Use the classic view to resolve it.</p>"
+          : snap.status === "ERROR"
+            ? '<p class="radar-error">' + esc(snap.error || "Section review could not be loaded.") + "</p>"
+            : "";
+      if (item.kind === "whole") return notice + this.wholeEvidence(item, snap);
+      const target = item.target;
+      const meta = target.metadata || {};
+      const branch = branchKey(item.concept_id, item.format);
+      let rework = "";
+      if (target.decision === "REWORK_REQUESTED") {
+        rework = section("Rework requested",
+          '<p>' + esc(words(target.rework_reason || "custom")) + (target.custom_instruction ? " — " + esc(target.custom_instruction) : "") + "</p>" +
+          '<div class="rw-actions">' +
+            '<button type="button" class="compact" data-script-act="GENERATE_ALTERNATIVES" data-branch="' + esc(branch) + '" data-target="' + esc(target.target_id) + '">Generate A / B / C</button>' +
+            '<button type="button" class="ghost compact" data-script-act="CANCEL_REWORK" data-branch="' + esc(branch) + '" data-target="' + esc(target.target_id) + '">Cancel rework</button>' +
+          "</div>" +
+          '<p class="muted">Generating calls the script model once for three bounded alternatives; nothing changes until you pick one.</p>');
+      }
+      const alternatives = target.alternatives;
+      let options = "";
+      if (alternatives && alternatives.selection) {
+        options = section("Alternatives", '<p>Selected <strong>' + esc(alternatives.selection.selection_id || "") + "</strong>; this part is accepted and locked.</p>");
+      } else if (alternatives && (alternatives.alternatives || []).length) {
+        const cards = [{ id: "ORIGINAL", text: (alternatives.original || {}).text || target.text, summary: "Keep the current text", claims: meta.claim_ids }]
+          .concat((alternatives.alternatives || []).map(function (alt) {
+            return { id: alt.alternative_id, text: alt.replacement_text, summary: alt.change_summary, claims: alt.claim_ids_used };
+          }));
+        options = section("Alternatives", '<div class="rw-alternatives">' + cards.map(function (card) {
+          return '<article class="rw-alternative"><p class="attention-kicker">' + esc(card.id === "ORIGINAL" ? "Original" : "Option " + card.id) + "</p>" +
+            '<p class="rw-script-text">' + esc(card.text || "") + "</p>" +
+            (card.summary ? '<p class="muted">' + esc(card.summary) + "</p>" : "") +
+            '<p class="muted">Claims: ' + esc((card.claims || []).join(", ") || "none") + "</p>" +
+            '<button type="button" class="' + (card.id === "ORIGINAL" ? "ghost " : "") + 'compact" data-script-act="SELECT_ALTERNATIVE" data-selection="' + esc(card.id) +
+              '" data-branch="' + esc(branch) + '" data-target="' + esc(target.target_id) + '">' + (card.id === "ORIGINAL" ? "Keep original" : "Use " + esc(card.id)) + "</button>" +
+          "</article>";
+        }).join("") + "</div>");
+      }
+      return notice +
+        section("Script text", '<p class="rw-script-text">' + esc(target.text || "") + "</p>") +
+        section("Why this part exists", facts([
+          ["Purpose", meta.purpose],
+          ["Psychology", meta.psychology_mechanism],
+          ["Reward", meta.reward_type]
+        ])) +
+        section("Claims used", list(this.claims(item, meta.claim_ids || (target.target_type === "OPENING_HOOK" ? item.branch.opening_hook_claim_ids : [])))) +
+        rework + options;
+    },
+    wholeEvidence: function (item, snap) {
+      const rows = ((snap && snap.targets) || []).map(function (t) {
+        const state = sectionState(t);
+        const tone = state === "ACCEPTED" || state === "LOCKED" ? "complete" : state === "REWORK_REQUESTED" ? "blocked" : "human";
+        return "<tr><th scope=\"row\">" + esc(targetLabel(t)) + '</th><td><span class="status-badge status-' + tone + '">' + esc(words(state)) + "</span></td></tr>";
+      }).join("");
+      const validation = item.branch.validation || {};
+      // Prefer the live section text, which already reflects edits and selections.
+      const live = function (type, fallback) {
+        const found = ((snap && snap.targets) || []).find(function (t) { return t.target_type === type; });
+        return (found && found.text) || fallback || "";
+      };
+      return section("Opening hook", '<p class="rw-script-text">' + esc(live("OPENING_HOOK", item.branch.opening_hook)) + "</p>") +
+        section("Sections", rows ? '<table class="pw-rows"><tbody>' + rows + "</tbody></table>" : '<p class="muted">Sections appear once the section review loads.</p>') +
+        section("Closing", '<p class="rw-script-text">' + esc(live("CLOSING", item.branch.closing)) + "</p>") +
+        section("Validation", (validation.errors || []).length
+          ? list(validation.errors)
+          : '<p class="muted">' + (validation.valid === false ? "Not valid." : "No validation errors recorded.") + "</p>") +
+        section("Approved claims available", list(this.claims(item, (item.branch.accepted_claims || []).map(function (c) { return c.claim_id; }))));
+    },
+    openTargets: function (item) {
+      const snap = this.sections(item);
+      if (!snap || snap.status !== "READY_FOR_SECTION_REVIEW") return [];
+      return (snap.targets || []).filter(function (t) { return t.decision !== "ACCEPTED" || t.locked !== true; });
+    },
+    decisions: function (item) {
+      if (item.kind === "whole") {
+        const self = this;
+        return [
+          {
+            value: "ACCEPT", label: "Accept the whole script", tone: "complete",
+            hint: "Packaging (title directions) starts automatically.",
+            confirm: function () {
+              const open = self.openTargets(item);
+              if (!open.length) return "";
+              return "Accept the whole script as it stands? " + open.length +
+                " section(s) you have not edited or accepted will be accepted too" +
+                (open.some(function (t) { return t.decision === "REWORK_REQUESTED"; }) ? ", and pending section reworks will be cancelled." : ".");
+            }
+          },
+          { value: "REWORK", label: "Rework the whole script", hint: "Regenerate the draft with your direction.", tone: "running", needsNote: true, notePlaceholder: "say what must change" },
+          { value: "REJECT", label: "Reject", hint: "This branch will not be produced.", tone: "blocked" }
+        ];
+      }
+      const target = item.target;
+      if (target.locked) {
+        return [{ value: "UNLOCK", label: "Unlock to change it", hint: "Withdraws any whole-script approval for this branch.", tone: "running", takesNote: false }];
+      }
+      const manual = {
+        value: "MANUAL_EDIT", label: "Edit by hand", hint: "Your text replaces this part and locks it.", tone: "human",
+        needsNote: true, noteLabel: "New text", noteRows: 8, noteMaxLength: 6000, notePlaceholder: "write the replacement text",
+        notePrefill: function () { return target.text || ""; },
+        validate: function (_item, draft) {
+          return draft.note.trim() === String(target.text || "").trim() ? "Change the text before saving the edit." : "";
+        }
+      };
+      if (target.decision === "REWORK_REQUESTED") {
+        return [
+          { value: "CANCEL_REWORK", label: "Cancel rework", hint: "Keep this part as it is for now.", tone: "running", takesNote: false },
+          manual
+        ];
+      }
+      return [
+        { value: "ACCEPT", label: "Accept and lock", hint: "This part is final unless you unlock it.", tone: "complete", takesNote: false },
+        {
+          value: "REWORK", label: "Rework", hint: "Ask for A / B / C alternatives for this part only.", tone: "running",
+          select: { label: "Reason", options: REWORK_REASONS }, noteLabel: "Instruction", notePlaceholder: "what should change (optional with a reason)",
+          validate: function (_item, draft) {
+            if (!draft.select && !draft.note.trim()) return "Choose a rework reason or write an instruction.";
+            if (draft.select === "CUSTOM" && !draft.note.trim()) return "A custom rework needs an instruction.";
+            return "";
+          }
+        },
+        manual
+      ];
+    },
+    decide: function (item, decision, note, extras) {
+      if (item.kind === "whole") {
+        const open = this.openTargets(item);
+        const messages = { ACCEPT: words(item.format) + " script accepted.", REWORK: "Script sent for rework.", REJECT: "Script rejected." };
+        return post("/api/script-gate", {
+          concept_id: item.concept_id,
+          format: item.format,
+          decision: decision,
+          criteria: {},
+          note: note,
+          accept_open_sections: decision === "ACCEPT" && open.length > 0
+        }, messages[decision] || "Saved.").then(function () { return loadSections(item.concept_id, item.format); });
+      }
+      return sectionAction(item.concept_id, item.format, decision, item.target.target_id, {
+        reason: decision === "REWORK" ? (extras.select || null) : null,
+        custom_instruction: decision === "REWORK" ? (note || null) : null,
+        replacement_text: decision === "MANUAL_EDIT" ? note : null
+      });
+    }
+  };
+
+  const SECTION_MESSAGES = {
+    ACCEPT: "Accepted and locked.",
+    UNLOCK: "Unlocked.",
+    REWORK: "Rework requested. Generate A / B / C when you are ready.",
+    CANCEL_REWORK: "Rework cancelled.",
+    GENERATE_ALTERNATIVES: "A / B / C alternatives are ready.",
+    SELECT_ALTERNATIVE: "Selection applied and locked.",
+    MANUAL_EDIT: "Edit applied and locked."
+  };
+
+  async function sectionAction(conceptId, format, action, targetId, extra) {
+    const snap = sectionSnapshots[branchKey(conceptId, format)] || {};
+    const body = function (act) {
+      return {
+        concept_id: conceptId,
+        format: format,
+        action: act,
+        target_id: act === "PREPARE" ? null : targetId,
+        reason: (extra && extra.reason) || null,
+        custom_instruction: (extra && extra.custom_instruction) || null,
+        selection_id: (extra && extra.selection_id) || null,
+        replacement_text: (extra && extra.replacement_text) || null,
+        version_id: null
+      };
+    };
+    try {
+      // Section actions need the section state; prepare it first, as the
+      // classic panel's Edit button does.
+      if (snap.status !== "READY_FOR_SECTION_REVIEW") {
+        await yp().api("/api/script-section-review", { method: "POST", body: JSON.stringify(body("PREPARE")) });
+      }
+      const payload = await yp().api("/api/script-section-review", { method: "POST", body: JSON.stringify(body(action)) });
+      if (payload && payload.status === "ALTERNATIVE_GENERATION_FAILED") {
+        yp().showToast("Alternative generation failed: " + words((payload.generation || {}).status || "unknown"), true);
+      } else {
+        yp().showToast(SECTION_MESSAGES[action] || "Script section updated.", false);
+      }
+    } catch (error) {
+      yp().showToast(error.message, true);
+    }
+    await loadSections(conceptId, format);
+    await yp().refresh();
+  }
+
+  const CONFIGS = { analysis: analysis, concept: concept, research: research, script: script };
+
+  function isPending(gate, item) {
+    const config = CONFIGS[gate];
+    if (config.isPending) return config.isPending(item);
+    return String((item || {}).decision || "PENDING").toUpperCase() === "PENDING";
+  }
 
   function items(gate) {
-    const config = CONFIGS[gate];
-    const all = config.all().filter(Boolean);
-    return showDecided ? all : all.filter(function (item) { return String(item.decision || "PENDING").toUpperCase() === "PENDING"; });
+    const all = CONFIGS[gate].all().filter(Boolean);
+    return showDecided ? all : all.filter(function (item) { return isPending(gate, item); });
   }
 
   function pendingCount(gate) {
-    return CONFIGS[gate].all().filter(function (item) { return String((item || {}).decision || "PENDING").toUpperCase() === "PENDING"; }).length;
+    return CONFIGS[gate].all().filter(function (item) { return item && isPending(gate, item); }).length;
   }
 
   function emptyHtml(gate) {
     const config = CONFIGS[gate];
+    if (gate === "script" && Object.keys(sectionLoading).some(function (key) { return sectionLoading[key]; })) {
+      return '<p class="muted">Loading the script sections…</p>';
+    }
     const snap = config.snapshot();
     const total = config.all().length;
     const state = snap.status ? words(snap.status) : "not started";
@@ -305,11 +627,12 @@
       renderEvidence: function (item) { return config.evidence(item); },
       decisions: function (item) { return config.decisions(item); },
       initialValue: function (item) {
+        if (config.initialValue) return config.initialValue(item);
         const decision = String(item.decision || "PENDING").toUpperCase();
         return decision === "PENDING" ? "" : decision;
       },
       initialNote: function (item) { return item.note || ""; },
-      decide: function (item, decision, note) { return config.decide(item, decision, note); },
+      decide: function (item, decision, note, extras) { return config.decide(item, decision, note, extras || {}); },
       onNavigate: function (key) {
         if (window.location.pathname === "/review") {
           history.replaceState({}, "", "/review#" + gate + "/" + encodeURIComponent(key));
@@ -339,7 +662,22 @@
     bar.innerHTML = html;
   }
 
+  // Section snapshots are fetched separately; drop them whenever the Script
+  // Gate itself changes (a decision here, in the classic panel, or a redraft).
+  let scriptsSignature = "";
+
+  function syncScripts() {
+    const signature = JSON.stringify(scripts().map(function (b) {
+      return [b.concept_id, b.format, b.decision, (b.request_provenance || {}).script_draft_sha256];
+    }));
+    if (signature !== scriptsSignature) {
+      scriptsSignature = signature;
+      Object.keys(sectionSnapshots).forEach(function (key) { delete sectionSnapshots[key]; });
+    }
+  }
+
   function render() {
+    syncScripts();
     renderSwitcher();
     GATES.forEach(function (gate) {
       const root = document.getElementById("gateReview-" + gate);
@@ -374,6 +712,16 @@
       activeGate = tab.dataset.gateTab;
       history.replaceState({}, "", "/review#" + activeGate);
       render();
+      return;
+    }
+    const act = event.target.closest("[data-script-act]");
+    if (act) {
+      const parts = act.dataset.branch.split("::");
+      act.disabled = true;
+      if (act.dataset.scriptAct === "GENERATE_ALTERNATIVES") act.textContent = "Generating…";
+      sectionAction(parts[0], parts.slice(1).join("::"), act.dataset.scriptAct, act.dataset.target, {
+        selection_id: act.dataset.selection || null
+      });
       return;
     }
     const waive = event.target.closest("[data-waive]");
