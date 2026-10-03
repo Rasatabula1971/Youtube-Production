@@ -14,7 +14,7 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 24],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 26],
             [
                 "title_direction_prepare",
                 "title_direction_generate",
@@ -24,6 +24,8 @@ class FormatUiIntegrationTests(unittest.TestCase):
                 "psychological_angle_generate",
                 "thumbnail_concept_prepare",
                 "thumbnail_concept_generate",
+                "package_pairing_prepare",
+                "package_pairing_generate",
                 "format_prepare",
                 "format_generate",
                 "format_gate_prepare",
