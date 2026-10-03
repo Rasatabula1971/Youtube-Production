@@ -374,3 +374,458 @@ the job completes.
 The saved visual report records `visual_source_mode` so downstream review can
 distinguish direct-stream evidence from temporary-file fallback. The temporary
 file is not retained as a project artifact.
+
+## Slice 8 — automatic Script → Format continuation
+
+After the final current Script branch is accepted, the server reevaluates
+machine readiness and starts the existing `auto_continue` job automatically.
+The operator does not press another run button.
+
+The deterministic post-Script sequence is:
+
+```text
+Human Script Gate completes
+        ↓
+format_prepare
+        ↓
+format_generate
+        ↓
+format_gate_prepare
+        ↓
+STOP: HUMAN_FORMAT_GATE
+```
+
+The browser explicitly reports **“Script Gate complete. Format planning started
+automatically.”** when the final Script decision launches that job.
+
+The automation runner still stops at the Human Format Gate. It does not approve
+a Format Plan or continue into Voice Performance without the human Format
+decision.
+
+Slice 8 also makes the handoff self-cleaning. When the approved Script input
+changes, Format preparation invalidates downstream artifacts derived from the
+old request rather than allowing stale plans or human decisions to survive into
+the next run.
+
+## Slice 9 — automatic Format → Voice Performance continuation
+
+After the final current Format Plan is accepted, the server reevaluates machine
+readiness and starts the existing `auto_continue` job automatically. The
+operator does not press another run button.
+
+The deterministic post-Format sequence is:
+
+```text
+Human Format Gate completes
+        ↓
+voice_prepare
+        ↓
+voice_generate
+        ↓
+voice_gate_prepare
+        ↓
+STOP: HUMAN_PERFORMANCE_GATE
+```
+
+The browser explicitly reports **“Format Gate complete. Voice Performance
+planning started automatically.”** when the final Format decision launches that
+job.
+
+The automation runner still stops at the Human Performance Gate. It does not
+approve the performance plan, render narration, or authorize paid narration
+without the human decision.
+
+Slice 9 also makes this handoff self-cleaning. A changed Voice request
+invalidates downstream Voice model/spec/gate artifacts, while valid unchanged
+provenance remains reusable.
+
+## Slice 10 — automatic Performance → free Narration Preview continuation
+
+After the final current Voice Performance plan is accepted, the server starts
+the existing `auto_continue` job when the zero-cost preview chain is ready.
+
+The deterministic sequence is:
+
+```text
+Human Performance Gate completes
+        ↓
+pre_render_engagement
+        ↓
+narration_preview_prepare
+        ↓
+prototype_sound_prepare
+        ↓
+narration_preview_render
+        ↓
+STOP: HUMAN_NARRATION_PREVIEW_GATE
+```
+
+The browser reports **“Performance Gate complete. Free narration preview
+started automatically.”**
+
+The listen gate is a hard boundary. Automatic work cannot jump from a current
+preview directly into narration quote/spend preparation because stale downstream
+artifacts happen to exist.
+
+Preview validity is chained to hashes:
+
+`approved Voice spec → engagement PASS → preview manifest → preview audio →
+human preview approval`.
+
+Changing any upstream performance artifact invalidates the downstream current
+state until the free prototype is rebuilt and heard again.
+
+The local renderer is deliberately zero-cost. If Kokoro/local preview
+dependencies are unavailable, the automatic run returns a specific blocked
+message. There is no paid TTS fallback at this stage.
+
+## Slice 11 — automatic Preview → Narration Spend boundary
+
+After the current free narration prototype is approved, automatic continuation
+runs only zero-spend preparation:
+
+```text
+Human Narration Preview Gate approved
+        ↓
+sound_design_brief_prepare
+        ↓
+narration_prepare
+        ↓
+narration_spend_gate_prepare   (only when a current quote exists)
+        ↓
+STOP: HUMAN_NARRATION_SPEND_GATE
+```
+
+If a current quote does not exist, the runner stops at
+`WAITING_NARRATION_PROVIDER_QUOTE`. If required voice/provider configuration
+is incomplete, it stops at `NARRATION_PROVIDER_SETUP_REQUIRED`. It cannot
+skip either state and continue into visual production.
+
+The working UI now includes a Human Narration Spend Gate. It shows the provider,
+initial estimate, worst-case authorization ceiling, quote reference, segment
+count and maximum attempts. ACCEPT requires all spend criteria and a separate
+confirmation of the displayed worst-case amount.
+
+The gate itself makes no paid call. An accepted gate records authorization for
+the exact current quote only.
+
+The current repository configuration deliberately keeps the Higgsfield
+narration contract unverified until a documented endpoint/schema, licensed
+voice identity, licence reference and calibration are configured. Therefore a
+normal live run must stop safely rather than fabricate provider pricing.
+
+The provenance chain is:
+
+`approved preview + current preview audio → Sound Design Brief → narration
+render request → provider quote → cost estimate → Human Narration Spend Gate`.
+
+Changing any bound upstream artifact invalidates downstream spend eligibility.
+
+## Slice 12 — Spend approval → provider return → local Audio QC
+
+After the Human Narration Spend Gate accepts the current quote, the app does
+not call an unverified paid provider. It stops at:
+
+`WAITING_NARRATION_RENDER_RETURN`
+
+The working page displays an **Authorized Narration Return** panel. For each
+current branch, the operator supplies the provider job/receipt reference,
+actual cumulative USD cost, and one local audio path for every requested
+narration segment. Each segment also records its attempt number.
+
+The return registry:
+
+- requires a current Human Narration Spend approval;
+- checks the current request/estimate/spend provenance chain;
+- refuses actual cost above the approved worst-case ceiling;
+- requires exact segment order and full coverage;
+- enforces the maximum attempts per segment;
+- accepts only supported audio file extensions;
+- copies provider audio into managed project storage; and
+- invalidates stale QC/timing output whenever audio is re-registered.
+
+A complete current return automatically unlocks
+`narration_audio_qc`. Local ffprobe/ffmpeg checks then produce a deterministic
+Audio QC record and narration timing map.
+
+QC duration targets come from the current narration render request. They are
+derived from immutable narration text plus the approved delivery speed, not
+from provider-returned metadata.
+
+The workflow then stops at one of two boundaries:
+
+- `NARRATION_AUDIO_QC_FAILED` — corrected provider audio must be registered;
+- `NARRATION_AUDIO_READY` — every current authorized branch passed QC and its
+  timing map is current.
+
+Even when narration is ready, Slice 12 prevents automatic continuation into
+visual production.
+
+## Slice 13 — Narration Audio Ready → Visual Search Plan Ready
+
+Once final narration is current and every authorized branch has passed local
+Audio QC, Continue Automatically now runs:
+
+```text
+NARRATION_AUDIO_READY
+        ↓
+production_visual_prepare
+        ↓
+storyboard_prepare
+        ↓
+visual_search_prepare
+        ↓
+STOP: VISUAL_SEARCH_READY
+```
+
+This slice performs no stock/creator search and makes no paid visual-generation
+call. The next action after the boundary is **Search Free / Existing Visuals**.
+
+The working visual state is now provenance-bound to final narration. A visual
+manifest counts only when its approved Format Plan hash and narration timing-map
+hash both match the current branch. Storyboards then bind the exact current
+manifest and timing map. Search requests bind the exact current storyboard.
+
+If final narration or its timing changes, the old visual manifest, storyboard
+and search request chain becomes stale. Continue Automatically rebuilds the
+current chain before any search adapter can run.
+
+Storyboard preparation also requires timing segment IDs and visual requirement
+beat IDs to match exactly. The system no longer silently substitutes a generic
+visual direction for an unmatched narration beat.
+
+The search contract remains existing/free-first and rights-aware:
+
+1. own/reusable library;
+2. verified free commercial sources;
+3. public domain / compatible Creative Commons;
+4. creator/editorial candidates only behind human rights/context review; and
+5. premium generation only as a later last-resort gap candidate.
+
+No item in Slice 13 authorizes premium generation.
+
+## Slice 14 — Visual Search Ready → Human Visual Candidate Gate
+
+Continue Automatically now advances the Slice 13 visual search plan through
+zero-cost discovery:
+
+```text
+VISUAL_SEARCH_READY
+        ↓
+Search Free / Existing Visuals
+        ↓
+normalize rights-aware candidates
+        ↓
+HUMAN_VISUAL_CANDIDATE_GATE
+```
+
+The search runner validates the current storyboard-bound search request before
+any provider call and rechecks it before each shot. If the request changes
+during the run, no additional provider calls are made and no stale compiled
+result is promoted.
+
+Search progress is checkpointed after every shot. Clean unchanged shots can be
+reused on a retry. Shots that changed or encountered provider errors are
+searched again.
+
+Pexels, Pixabay and YouTube creator discovery remain discovery sources only.
+Provider failures are isolated so one timeout does not erase candidates from
+another source. Provider errors are shown with the current candidate packet.
+
+The Human Visual Candidate Gate does not open on partial branch coverage. Every
+current search-required branch must have a current result bound to its exact
+search request.
+
+At the gate the reviewer can select a current eligible candidate, reject all
+candidates, or mark the shot as needing a better visual. Creator/editorial
+candidates still require the separate Rights/Context Gate before use.
+
+Slice 14 downloads no media and authorizes no paid visual generation.
+
+## Slice 16 — reviewed visuals → managed assets → Human Rough-Cut Gate
+
+After the Human Visual Candidate Gate is complete, the workflow still stops at
+the Human Rights/Context Gate whenever selected creator/editorial footage needs
+context review.
+
+Once candidate and rights decisions are complete, Continue Automatically runs:
+
+```text
+Acquire Approved Free Visual Assets
+        ↓
+Build Visual Rough Cut
+        ↓
+STOP: HUMAN_ROUGH_CUT_GATE
+```
+
+Automatic acquisition is limited to current, rights-verified zero-cost assets.
+Stock downloads retain the existing HTTPS/provider allow-list, media-type and
+size limits. Creator/editorial footage is never downloaded automatically.
+
+The rough cut now distinguishes a human selection from an actual current local
+asset. A selected clip appears as real media only when its managed registry and
+local file hashes are current. Missing selected stock, stale files and approved
+editorial clips that still need manual supply remain explicit placeholders.
+
+Automatic acquisition failures keep the acquisition step retryable and prevent
+the rough cut from being promoted as current. Manual editorial supply is
+different: the structural rough cut may proceed with a clearly labelled
+placeholder.
+
+When the reviewer later registers the approved local editorial/visual file, the
+old rough cut is invalidated and the automatic workflow rebuilds it from the new
+current local asset before the Human Rough-Cut Gate.
+
+The Human Rough-Cut Gate is a hard automation stop. Gap planning and all premium
+visual decisions remain downstream of that human approval.
+
+## Slice 15 — Candidate selection → Human Rights/Context Gate
+
+Slice 15 fills the logical stage between Slice 14 and Slice 16.
+
+After zero-cost discovery stops at the Human Visual Candidate Gate, each
+selected candidate is classified from its actual rights/source metadata rather
+than trusting a stored UI state.
+
+Verified reusable assets can continue toward safe asset acquisition. Recognized
+creator/editorial footage is recorded as:
+
+`SELECTED_PENDING_RIGHTS_CONTEXT_GATE`
+
+and the workflow stops at:
+
+`HUMAN_VISUAL_RIGHTS_GATE`
+
+The reviewer must either reject the footage or document the intended
+transformative/editorial purpose. Approval is context authorization for the
+pipeline, not a legal determination and not permission to auto-download the
+creator footage.
+
+The Rights Gate revalidates the exact current search result, candidate-review
+hash, shot fingerprint and candidate fingerprint before accepting a decision.
+If the upstream search/storyboard changed, the old rights decision cannot be
+used.
+
+Unknown or unsupported rights tiers fail closed; a source cannot gain
+eligibility merely by claiming it needs human review.
+
+The candidate UI now distinguishes:
+- a selection with verified reuse rights; and
+- a selection that still requires Rights/Context review.
+
+After the Rights Gate is complete, Slice 16 handles safe asset acquisition and
+rough-cut preparation.
+
+## Slice 17 — Human Rough-Cut approval → Visual Spend boundary
+
+After the Human Rough-Cut Gate accepts the current rough cut with unresolved
+gaps, Continue Automatically runs deterministic zero-spend gap planning and
+then stops.
+
+The possible Slice 17 endpoints are:
+
+```text
+HUMAN_ROUGH_CUT_GATE
+        ↓
+Plan Remaining Visual Gaps
+        ↓
+HUMAN_VISUAL_SPEND_GATE
+```
+
+when a high-value unresolved shot qualifies for premium generation, or:
+
+```text
+VISUAL_GAPS_READY_NO_SPEND
+```
+
+when no unresolved shot reaches the premium threshold.
+
+After every premium candidate receives a human decision, Slice 17 stops at
+`VISUAL_SPEND_DECISIONS_COMPLETE`. Generation briefs and edit assembly are
+left to the next slice.
+
+Gap planning is provenance-bound to the exact current rough cut and exact
+rough-cut approval. Old gap plans are removed after rough-cut rework or
+mutation.
+
+The spend gate enforces both the per-shot cap and one workflow-wide USD cap
+across every current branch. Authorizations are serialized so simultaneous
+approvals cannot race past the workflow cap. NaN, Infinity, stale plans and
+invalid spend configuration fail closed.
+
+Choosing **Authorize Generation** records only a maximum permitted spend. It
+does not call a provider, create a generation job, or spend money in Slice 17.
+
+## Slice 18 — Visual Spend decisions → generation briefs / assembly boundary
+
+After Slice 17, Continue Automatically may perform at most two new zero-cost
+steps:
+
+```text
+Completed Human Visual Spend / no-spend decision
+        ↓
+Prepare Premium Visual Generation Briefs   (authorized shots only)
+        ↓
+Build Visual Edit Assembly Plan
+        ↓
+STOP
+```
+
+When there is no authorized premium generation, the brief step is skipped.
+
+The assembly stop state tells the reviewer exactly what remains:
+
+- `VISUAL_ASSEMBLY_READY` — current timeline is ready for the next edit-preview
+  slice;
+- `WAITING_FOR_PREMIUM_VISUAL_ASSETS` — current human-authorized generation
+  briefs exist, but the app has not called a paid provider;
+- `WAITING_FOR_LOCAL_VISUAL_ASSETS` — approved local/editorial files still
+  need to be registered;
+- `WAITING_FOR_VISUAL_ASSETS` — both premium and local assets are missing; or
+- `VISUAL_EXISTING_RETRY_REQUIRED` — a human chose Retry Existing and the
+  requested free/existing search must be performed before edit-preview work.
+
+Generation briefs are provider-neutral handoff artifacts. They preserve the
+human maximum spend but set provider-call and execution authorization to false.
+
+The workflow does not automatically continue into edit-manifest creation or
+FFmpeg preview rendering in Slice 18.
+
+## Slice 19 — current visual assembly → free structural edit preview gate
+
+When Slice 18 reaches a fully edit-ready visual assembly, Continue Automatically
+runs:
+
+```text
+Current Visual Assembly
+        ↓
+Build Edit Preview Manifest
+        ↓
+Render Free Structural Edit Preview (local FFmpeg only)
+        ↓
+HUMAN_EDIT_PREVIEW_GATE
+```
+
+The manifest is provenance-bound to the exact current visual assembly,
+QC-passed narration audio/timing and approved sound-design intent. Any later
+change makes the old manifest and preview stale.
+
+The preview renderer uses only the configured local FFmpeg binary. If FFmpeg is
+not available, the workflow stops at `LOCAL_FFMPEG_REQUIRED`. There is no
+paid/cloud rendering fallback.
+
+The preview may contain approved low-value placeholders, but it is never marked
+publish-ready and does not generate music or SFX.
+
+At the Human Edit Preview Gate, the reviewer can:
+
+- approve the structural edit direction;
+- return visuals for rework;
+- return narration for rework; or
+- return sound for rework.
+
+A return decision requires a specific human note. Slice 19 preserves the
+instruction and stops; routing/rebuild behavior belongs to the next slice.
+
+After approval, Slice 19 stops at `EDIT_PREVIEW_DIRECTION_APPROVED`. It does
+not automatically run final production handoff.

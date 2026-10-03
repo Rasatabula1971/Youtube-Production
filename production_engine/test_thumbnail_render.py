@@ -17,24 +17,55 @@ CAN_RENDER = bool(
 )
 
 
-def approved_package(text="GLOWS ON PURPOSE", package_id="c1-pkg001"):
-    return {
-        "package_id": package_id,
-        "concept_id": "c1",
-        "title": "F1 Brakes Work Backwards: Why Heat Makes Them Stop",
-        "format_intent": "long_form",
-        "thumbnail": {
-            "message": "Race brake glowing on purpose.",
-            "text_overlay": text,
-            "focal_subject": "glowing rotor",
-            "palette": {
-                "background": "near-black",
-                "subject": "orange glow",
-                "accent": "cold blue for the road rotor",
-            },
-        },
-        "packaging_advisories": [],
+VIDEO_ID = "c1-long_form"
+THUMBNAIL_ID = "thumbnail-angle-1"
+RID = f"{VIDEO_ID}--{THUMBNAIL_ID}"
+
+
+def pairing_fixture(
+    text="GLOWS ON PURPOSE",
+    statuses=("PASS", "REWORK", "PASS"),
+    background="near-black with a cold blue rim light",
+):
+    """Slice 26 pair validations plus the Slice 25 concept set they refer to."""
+    validations = [
+        {
+            "package_id": f"package-title-{index}--{THUMBNAIL_ID}",
+            "video_id": VIDEO_ID,
+            "concept_id": "c1",
+            "format": "long_form",
+            "title_id": f"title-{index}",
+            "title_text": f"Why F1 Brakes Work Backwards {index}",
+            "thumbnail_id": THUMBNAIL_ID,
+            "validation_status": status,
+            "selected_title_direction_match": index == 2,
+        }
+        for index, status in enumerate(statuses)
+    ]
+    concepts = {
+        VIDEO_ID: {
+            "video_id": VIDEO_ID,
+            "thumbnail_concepts": [
+                {
+                    "thumbnail_id": THUMBNAIL_ID,
+                    "angle_id": "angle-1",
+                    "text": text,
+                    "hero_subject": "glowing race brake rotor",
+                    "secondary_element": None,
+                    "visual_anomaly": "rotor glowing on purpose",
+                    "visual_action": "rotor glows under braking",
+                    "emotion": "surprise",
+                    "composition": "subject right, text left",
+                    "background": background,
+                    "subject_separation_method": "rim light",
+                    "viewer_visual_question": "Why is it glowing?",
+                    "mobile_legibility_intent": "large rotor, three bold words",
+                    "face_present": False,
+                }
+            ],
+        }
     }
+    return validations, concepts
 
 
 class TemplateTests(unittest.TestCase):
@@ -90,13 +121,13 @@ class PipelineTestCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.packages_file = self.root / "approved_packages.json"
+        self.sources = ([], {})
         self.packaging_config = self.root / "packaging_config.json"
         self.packaging_config.write_text(json.dumps({"channel_niche": None}))
         patches = [
             patch.object(m, "THUMBNAILS_DIR", self.root / "thumbnails"),
             patch.object(m, "APPROVED_THUMBNAILS_DIR", self.root / "approved"),
-            patch.object(m, "APPROVED_PACKAGES_FILE", self.packages_file),
+            patch.object(m, "pairing_sources", lambda: self.sources),
             patch.object(m, "PACKAGING_CONFIG_FILE", self.packaging_config),
             patch.object(m.niche, "STUDY_ROOT", self.root / "niche"),
         ]
@@ -105,13 +136,13 @@ class PipelineTestCase(unittest.TestCase):
             self.addCleanup(item.stop)
         self.addCleanup(self.tmp.cleanup)
 
-    def set_packages(self, *packages):
-        self.packages_file.write_text(json.dumps({"packages": list(packages)}))
+    def set_units(self, **kwargs):
+        self.sources = pairing_fixture(**kwargs)
 
-    def spec_path(self, package_id="c1-pkg001"):
-        return m.package_dir(package_id) / "render_spec.json"
+    def spec_path(self, render_id=RID):
+        return m.unit_dir(render_id) / "render_spec.json"
 
-    def attach_subject(self, package_id="c1-pkg001", **overrides):
+    def attach_subject(self, render_id=RID, **overrides):
         image = self.root / "subject.png"
         if not image.exists():
             subprocess.run(
@@ -123,7 +154,7 @@ class PipelineTestCase(unittest.TestCase):
                 ],
                 check=True,
             )
-        spec = json.loads(self.spec_path(package_id).read_text())
+        spec = json.loads(self.spec_path(render_id).read_text())
         spec["subject_image"] = {
             "path": str(image),
             "source_tier": "OWN_LIBRARY",
@@ -132,16 +163,16 @@ class PipelineTestCase(unittest.TestCase):
             "attribution": "",
             **overrides,
         }
-        self.spec_path(package_id).write_text(json.dumps(spec))
+        self.spec_path(render_id).write_text(json.dumps(spec))
 
-    def accept(self, package_id="c1-pkg001", **criteria_overrides):
+    def accept(self, render_id=RID, **criteria_overrides):
         criteria = {name: True for name in TEMPLATE["review_criteria"]}
         criteria.update(criteria_overrides)
         return m.apply_review(
             {
                 "reviewer": "r1",
                 "decisions": [
-                    {"package_id": package_id, "decision": "ACCEPT", "criteria": criteria}
+                    {"render_id": render_id, "decision": "ACCEPT", "criteria": criteria}
                 ],
             },
             TEMPLATE,
@@ -149,39 +180,71 @@ class PipelineTestCase(unittest.TestCase):
 
 
 class PrepareTests(PipelineTestCase):
-    def test_prepare_binds_package_and_keeps_human_fields(self):
-        self.assertEqual(m.run_prepare()["status"], "WAITING_FOR_APPROVED_PACKAGES")
-        self.set_packages(approved_package())
+    def test_prepare_binds_concept_and_keeps_human_fields(self):
+        self.assertEqual(m.run_prepare()["status"], "WAITING_FOR_VALIDATED_PACKAGES")
+        self.set_units()
         m.run_prepare()
         spec = json.loads(self.spec_path().read_text())
-        self.assertEqual(spec["package"]["text_overlay"], "GLOWS ON PURPOSE")
+        self.assertEqual(spec["unit"]["text_overlay"], "GLOWS ON PURPOSE")
         self.assertEqual(spec["accent_hex"], TEMPLATE["accent_names"]["blue"])
         spec["accent_hex"] = "FF0000"
         spec["subject_image"]["path"] = "keep.png"
         self.spec_path().write_text(json.dumps(spec))
 
-        self.set_packages(approved_package(text="HEAT IS THE POINT"))
+        self.set_units(text="HEAT IS THE POINT")
         m.run_prepare()
         spec = json.loads(self.spec_path().read_text())
-        self.assertEqual(spec["package"]["text_overlay"], "HEAT IS THE POINT")
+        self.assertEqual(spec["unit"]["text_overlay"], "HEAT IS THE POINT")
         self.assertEqual(spec["accent_hex"], "FF0000")
         self.assertEqual(spec["subject_image"]["path"], "keep.png")
+
+
+class RenderUnitTests(PipelineTestCase):
+    def test_units_use_only_renderable_pairs_with_selected_title_first(self):
+        self.set_units(statuses=("PASS", "REWORK", "PASS", "REJECT"))
+        units = m.load_render_units(TEMPLATE)
+        self.assertEqual([unit["render_id"] for unit in units], [RID])
+        unit = units[0]
+        self.assertEqual(
+            [title["title_id"] for title in unit["titles"]], ["title-2", "title-0"]
+        )
+        self.assertEqual(unit["title"], "Why F1 Brakes Work Backwards 2")
+        self.assertEqual(unit["text_overlay"], "GLOWS ON PURPOSE")
+        self.assertEqual(unit["format"], "long_form")
+
+    def test_concept_without_passing_pair_is_not_rendered(self):
+        self.set_units(statuses=("REWORK", "REJECT"))
+        self.assertEqual(m.load_render_units(TEMPLATE), [])
+        self.assertEqual(m.run_prepare()["status"], "WAITING_FOR_VALIDATED_PACKAGES")
+
+    def test_pair_without_current_concept_is_skipped(self):
+        validations, _ = pairing_fixture()
+        self.sources = (validations, {})
+        self.assertEqual(m.load_render_units(TEMPLATE), [])
+
+    def test_source_hash_tracks_titles_and_concept(self):
+        self.set_units()
+        first = m.load_render_units(TEMPLATE)[0]["source_sha256"]
+        self.set_units(statuses=("PASS", "PASS", "PASS"))
+        self.assertNotEqual(m.load_render_units(TEMPLATE)[0]["source_sha256"], first)
+        self.set_units(background="white studio")
+        self.assertNotEqual(m.load_render_units(TEMPLATE)[0]["source_sha256"], first)
 
 
 @unittest.skipUnless(CAN_RENDER, "ffmpeg or a bold font is unavailable")
 class RenderTests(PipelineTestCase):
     def setUp(self):
         super().setUp()
-        self.set_packages(approved_package())
+        self.set_units()
         m.run_prepare()
 
-    def report(self, package_id="c1-pkg001"):
-        return json.loads((m.package_dir(package_id) / "render_report.json").read_text())
+    def report(self, render_id=RID):
+        return json.loads((m.unit_dir(render_id) / "render_report.json").read_text())
 
     def test_waits_for_subject_and_placeholder_cannot_be_accepted(self):
-        self.assertEqual(m.run_render()["results"]["c1-pkg001"], "WAITING_FOR_SUBJECT_IMAGE")
+        self.assertEqual(m.run_render()["results"][RID], "WAITING_FOR_SUBJECT_IMAGE")
         self.assertEqual(
-            m.run_render(placeholder=True)["results"]["c1-pkg001"], "PREVIEW_ONLY"
+            m.run_render(placeholder=True)["results"][RID], "PREVIEW_ONLY"
         )
         rules = {item["rule"] for item in self.report()["render_advisories"]}
         self.assertIn("PLACEHOLDER_SUBJECT", rules)
@@ -190,9 +253,9 @@ class RenderTests(PipelineTestCase):
 
     def test_render_outputs_and_gate(self):
         self.attach_subject()
-        self.assertEqual(m.run_render()["results"]["c1-pkg001"], "RENDERED")
+        self.assertEqual(m.run_render()["results"][RID], "RENDERED")
         report = self.report()
-        directory = m.package_dir("c1-pkg001")
+        directory = m.unit_dir(RID)
         self.assertEqual((report["width"], report["height"]), (1280, 720))
         self.assertLessEqual(report["image_bytes"], TEMPLATE["max_jpeg_bytes"])
         self.assertEqual(" ".join(report["text_layout"]["lines"]), "GLOWS ON PURPOSE")
@@ -205,22 +268,22 @@ class RenderTests(PipelineTestCase):
         with self.assertRaisesRegex(ValueError, "readable_at_phone_size"):
             self.accept(readable_at_phone_size=False)
         self.accept()
-        approved = json.loads((self.root / "approved" / "c1-pkg001.json").read_text())
+        approved = json.loads((self.root / "approved" / f"{RID}.json").read_text())
         self.assertEqual(approved["image_sha256"], report["image_sha256"])
 
         m.apply_review(
             {
                 "reviewer": "r1",
-                "decisions": [{"package_id": "c1-pkg001", "decision": "REJECT", "criteria": {}}],
+                "decisions": [{"render_id": RID, "decision": "REJECT", "criteria": {}}],
             },
             TEMPLATE,
         )
-        self.assertFalse((self.root / "approved" / "c1-pkg001.json").exists())
+        self.assertFalse((self.root / "approved" / f"{RID}.json").exists())
         with self.assertRaisesRegex(ValueError, "REWORK requires a note"):
             m.apply_review(
                 {
                     "reviewer": "r1",
-                    "decisions": [{"package_id": "c1-pkg001", "decision": "REWORK", "criteria": {}}],
+                    "decisions": [{"render_id": RID, "decision": "REWORK", "criteria": {}}],
                 },
                 TEMPLATE,
             )
@@ -228,27 +291,23 @@ class RenderTests(PipelineTestCase):
     def test_stale_render_cannot_be_accepted(self):
         self.attach_subject()
         m.run_render()
-        self.set_packages(approved_package(text="DIFFERENT TEXT NOW"))
-        with self.assertRaisesRegex(ValueError, "approved package changed"):
+        self.set_units(text="DIFFERENT TEXT NOW")
+        with self.assertRaisesRegex(ValueError, "thumbnail concept or its validated titles changed"):
             self.accept()
 
     def test_disallowed_subject_and_overlong_text_are_blocked(self):
         self.attach_subject(source_tier="EDITORIAL_EXCERPT", license="fair use")
-        self.assertEqual(m.run_render()["results"]["c1-pkg001"], "BLOCKED")
-        self.set_packages(
-            approved_package(
-                text="THIS OVERLAY IS FAR TOO LONG FOR ANY SENSIBLE THUMBNAIL LAYOUT AT ALL"
-            )
-        )
+        self.assertEqual(m.run_render()["results"][RID], "BLOCKED")
+        self.set_units(text="THIS OVERLAY IS FAR TOO LONG FOR ANY SENSIBLE THUMBNAIL LAYOUT AT ALL")
         m.run_prepare()
         self.attach_subject()
-        self.assertEqual(m.run_render()["results"]["c1-pkg001"], "BLOCKED")
-        self.assertIn("Rework the package text", self.report()["errors"][0])
+        self.assertEqual(m.run_render()["results"][RID], "BLOCKED")
+        self.assertIn("Rework the thumbnail concept text", self.report()["errors"][0])
 
     def test_missing_font_blocks(self):
         self.attach_subject()
         with patch.object(m, "find_font", return_value=None):
-            self.assertEqual(m.run_render()["results"]["c1-pkg001"], "BLOCKED")
+            self.assertEqual(m.run_render()["results"][RID], "BLOCKED")
 
     def test_feed_includes_niche_breakouts_and_crowded_accent_advisory(self):
         self.packaging_config.write_text(json.dumps({"channel_niche": "automotive_racing"}))
@@ -268,7 +327,7 @@ class RenderTests(PipelineTestCase):
             json.dumps({"color": {"crowded_hue_families": ["blue"], "accent_differentiation_candidates": ["yellow"]}})
         )
         m.run_render()
-        feed = (m.package_dir("c1-pkg001") / "feed.html").read_text()
+        feed = (m.unit_dir(RID) / "feed.html").read_text()
         self.assertIn("abcdefghijk.jpg", feed)
         self.assertIn("Rival &lt;b&gt;video&lt;/b&gt;", feed)
         self.assertIn("2.5M views", feed)

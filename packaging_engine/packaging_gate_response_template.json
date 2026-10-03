@@ -13,8 +13,6 @@
         "channel_fit_preserved": true,
         "concept_aligned": true,
         "title_thumbnail_complementary": true,
-        "thumbnail_single_focal_point": true,
-        "thumbnail_mobile_readable": true,
         "not_misleading": true,
         "viewer_awareness_fit": true,
         "payoff_defined": true,

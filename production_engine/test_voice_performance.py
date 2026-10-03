@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import voice_performance
 
@@ -243,6 +244,115 @@ class VoicePerformanceTests(unittest.TestCase):
                     plan["branches"][0],
                     config(),
                 )
+
+
+    def test_changed_format_handoff_prunes_stale_voice_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approved = root / "approved"
+            requests = root / "requests"
+            responses = root / "responses"
+            specs = root / "specs"
+            model_runs = root / "model_runs"
+            raw = root / "raw"
+            review_requests = root / "review_requests"
+            review_responses = root / "review_responses"
+            approved_voice = root / "approved_voice"
+            for directory in (
+                approved,
+                requests,
+                responses,
+                specs,
+                model_runs,
+                raw,
+                review_requests,
+                review_responses,
+                approved_voice,
+            ):
+                directory.mkdir()
+
+            plan_path = approved / "concept-1.approved_format_plan.json"
+            plan_path.write_text(json.dumps(approved_plan()), encoding="utf-8")
+            old_request = requests / "concept-1.long_form.voice_request.json"
+            old_request.write_text(json.dumps({"old": True}), encoding="utf-8")
+
+            stale = [
+                responses / "concept-1.long_form.json",
+                specs / "concept-1.long_form.voice_performance_spec.json",
+                model_runs / "concept-1.long_form.model_run.json",
+                raw / "concept-1.long_form.txt",
+                review_requests / "concept-1.long_form.voice_review_request.json",
+                review_responses / "concept-1.long_form.voice_review_response.json",
+                approved_voice / "concept-1.long_form.approved_voice_spec.json",
+            ]
+            for path in stale:
+                path.write_text("old", encoding="utf-8")
+
+            model_summary = root / "voice_performance_model_batch_summary.json"
+            gate_summary = root / "voice_performance_gate_summary.json"
+            model_summary.write_text("old", encoding="utf-8")
+            gate_summary.write_text("old", encoding="utf-8")
+
+            with (
+                patch.object(voice_performance, "REQUESTS_DIR", requests),
+                patch.object(voice_performance, "RESPONSES_DIR", responses),
+                patch.object(voice_performance, "SPECS_DIR", specs),
+                patch.object(voice_performance, "MODEL_RUNS_DIR", model_runs),
+                patch.object(voice_performance, "RAW_OUTPUTS_DIR", raw),
+                patch.object(voice_performance, "REVIEW_REQUESTS_DIR", review_requests),
+                patch.object(voice_performance, "REVIEW_RESPONSES_DIR", review_responses),
+                patch.object(voice_performance, "APPROVED_VOICE_SPECS_DIR", approved_voice),
+                patch.object(voice_performance, "MODEL_BATCH_SUMMARY_FILE", model_summary),
+                patch.object(voice_performance, "VOICE_GATE_SUMMARY_FILE", gate_summary),
+                patch.object(voice_performance, "OUTPUT_DIR", root),
+                patch.object(voice_performance, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                result = voice_performance.run_prepare(approved, config())
+
+            self.assertIn(
+                "concept-1.long_form",
+                result["stale_cleanup"]["changed_requests"][
+                    "invalidated_voice_keys"
+                ],
+            )
+            self.assertTrue(all(not path.exists() for path in stale))
+            self.assertFalse(model_summary.exists())
+            self.assertFalse(gate_summary.exists())
+            self.assertTrue(
+                (requests / "concept-1.long_form.voice_request.json").exists()
+            )
+            self.assertTrue(
+                (requests / "concept-1.short.voice_request.json").exists()
+            )
+
+    def test_voice_request_uses_format_specific_selected_title(self) -> None:
+        plan = approved_plan()
+        plan["package"]["selected_titles"] = {
+            "long_form": {
+                "candidate_id": "long-curiosity",
+                "title": "The Locked Title",
+            },
+            "short": {
+                "candidate_id": "short-stakes",
+                "title": "The Fast Locked Title",
+            },
+        }
+        plan["branch_story_packages"]["short"]["title"] = "The Fast Locked Title"
+        branch = next(
+            item for item in plan["branches"] if item["format"] == "short"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "concept.approved_format_plan.json"
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            request = voice_performance.build_request(
+                plan,
+                path,
+                branch,
+                config(),
+            )
+
+        self.assertEqual(request["title"], "The Fast Locked Title")
+
 
 
 if __name__ == "__main__":

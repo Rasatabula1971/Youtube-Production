@@ -57,7 +57,7 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "story_plan_model_batch_summary.json"
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed_claims = list(request.get("accepted_claim_ids", []))
-    approved_title = str(request.get("package", {}).get("title") or "")
+    working_title = str(request.get("package", {}).get("title") or "")
     psychology_contract = request.get("psychology_contract", {})
     opening_line = (
         psychology_contract.get("opening_line", {})
@@ -99,7 +99,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "const": str(request.get("concept_id", "")),
             },
-            "title": {"type": "string", "const": approved_title},
+            "title": {"type": "string", "const": working_title},
             "story_question": {"type": "string", "minLength": 1},
             "opening_hook_intent": {"type": "string", "minLength": 1},
             "viewer_state": {
@@ -236,7 +236,7 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "You are planning the story structure for an original YouTube video. "
         "Do NOT write the final narration. Return JSON only.\n\n"
         "Rules:\n"
-        "1. The approved Packaging title is immutable. Return it exactly.\n"
+        "1. The supplied title is an INTERNAL WORKING TITLE. Return it exactly for artifact identity only; final public title direction is selected after script approval.\n"
         "2. Decide the viewer journey before wording: high-impact hook, setup, escalation/explanation, reveal, payoff, close.\n"
         "3. Model the viewer state explicitly: what they already know, what they expect, and what they want resolved.\n"
         "4. Plan a high-impact FIRST SPOKEN LINE using one allowed opening mechanism. Bold is good; unsupported drama is not.\n"
@@ -247,11 +247,12 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "9. Assign one primary audience-psychology mechanism to every beat and make each beat change the viewer's state.\n"
         "10. Manage cognitive load deliberately. Prefer one primary new idea per beat when the explanation is complex.\n"
         "11. Track open loops with open_loop_id and loop_action. Every OPEN must later receive a PAYOFF; never create a fake unresolved hook.\n"
-        "12. Use tension, novelty and expectation violation only when they serve the verified story and approved promise.\n"
+        "12. Use tension, novelty and expectation violation only when they serve the verified story and accepted viewer promise.\n"
         "13. Use only accepted_claim_ids for factual beats and factual opening claims.\n"
         "14. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
         "15. At least one beat must be PAYOFF.\n"
-        "16. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n\n"
+        "16. Keep this as a structural plan: no polished narration paragraphs and no arbitrary fixed timing rules.\n"
+        "17. CHANNEL VOICE: when channel_voice.apply_to_generation is true, use that approved profile for framing posture, technical-language treatment and style constraints without overriding verified research or the accepted viewer/story contract. When false, do NOT invent a persistent channel personality from niche, working title, source videos or generic creator advice.\n\n"
         "STORY PLAN REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -417,6 +418,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
         "accepted_claims": request.get("accepted_claims", []),
         "accepted_claim_ids": request.get("accepted_claim_ids", []),
         "psychology_contract": request.get("psychology_contract", {}),
+        "channel_voice": request.get("channel_voice", {}),
         "validation": validation,
         "plan_provenance": response["response_provenance"],
     }

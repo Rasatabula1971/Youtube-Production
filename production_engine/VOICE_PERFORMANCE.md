@@ -98,3 +98,31 @@ estimate, then local ffmpeg Audio QC and a timing map.
 Visual acquisition remains cheap-first. A low-cost rough-cut/prototype should be
 used to judge script, narration, pacing and scene sequence before escalating to
 expensive final visual generation.
+
+## Slice 9 — Format handoff provenance and stale-output cleanup
+
+Voice preparation treats the current Human Format Gate approved plan as the
+root of each Voice Performance branch.
+
+When a generated Voice request changes, the matching downstream chain is
+invalidated:
+
+- model response;
+- Voice Performance spec;
+- model-run report;
+- raw FAIR output;
+- Human Performance Gate request;
+- Human Performance Gate decision; and
+- approved Voice spec.
+
+Aggregate model/gate summaries are also removed when their source request set
+changes.
+
+Human Performance Gate preparation independently verifies that each performance
+spec points to the canonical current Voice request and that its recorded
+`request_sha256` matches the request on disk. Stale specs are not exposed for
+human approval, and stale/malformed decisions or approved Voice specs are
+removed.
+
+Unchanged current provenance remains cacheable. The cleanup therefore protects
+against stale approvals without forcing unnecessary model work.

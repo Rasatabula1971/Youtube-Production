@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import niche_thumbnail_study as module
-import packaging_engine
 
 
 def video_row(index, *, niche="automotive_racing", channel=None, **overrides):
@@ -129,7 +128,7 @@ class AnnotationTests(unittest.TestCase):
 class TabulationTests(unittest.TestCase):
     def setUp(self):
         self.config = module.load_config()
-        self.rules = packaging_engine.load_config()["design_advisories"]
+        self.rules = module.comparison_rules("long_form", self.config)
         self.study = {
             "niche": "automotive_racing",
             "format": "long_form",
@@ -186,23 +185,23 @@ class TabulationTests(unittest.TestCase):
         self.assertEqual(result["text"]["text_repeats_title_share"], 1.0)
 
 
-class PackagingIntegrationTests(unittest.TestCase):
-    def test_request_includes_conventions_only_when_niche_configured(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(module, "STUDY_ROOT", Path(tmp)):
-            path = module.tabulation_path("automotive_racing", "long_form")
-            path.parent.mkdir(parents=True)
-            path.write_text(json.dumps({"status": "COMPLETE", "color": {"crowded_hue_families": ["red"]}}))
-            concept = {"concept_id": "c1", "format_intent": "either"}
-            config = {"packages_per_concept": 5, "allowed_format_intents": ["long_form", "short", "either"]}
-
-            without = packaging_engine.build_package_request(concept, config)
-            self.assertEqual(without["niche_thumbnail_conventions"], {})
-
-            config["channel_niche"] = "automotive_racing"
-            request = packaging_engine.build_package_request(concept, config)
-            conventions = request["niche_thumbnail_conventions"]
-            self.assertEqual(list(conventions), ["long_form"])
-            self.assertEqual(conventions["long_form"]["color"]["crowded_hue_families"], ["red"])
+class ComparisonRuleTests(unittest.TestCase):
+    def test_rules_follow_live_packaging_contract(self):
+        config = module.load_config()
+        packaging = json.loads(module.PACKAGING_CONFIG_FILE.read_text(encoding="utf-8"))
+        long_rules = module.comparison_rules("long_form", config)
+        short_rules = module.comparison_rules("short", config)
+        contract = packaging["thumbnail_concepts"]
+        self.assertEqual(long_rules["thumbnail_text_words"]["max"], contract["maximum_text_words"])
+        self.assertEqual(
+            long_rules["thumbnail_max_visual_elements"],
+            contract["maximum_meaningful_visual_elements"],
+        )
+        self.assertEqual(long_rules["title_length_chars"], {"min": 45, "max": 60})
+        self.assertEqual(
+            short_rules["title_length_chars"]["max"],
+            packaging["short_title_contract"]["max_chars"],
+        )
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg not installed")

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
 import re
 import sys
@@ -94,8 +95,39 @@ def safe_attempt(attempt: Any) -> dict[str, Any]:
     return safe
 
 
+def output_floor(settings: dict[str, Any]) -> int:
+    """The smallest cap a route must support to be worth asking.
+
+    FAIR admits a route on this and then asks it for min(max_output_tokens, its own
+    ceiling). Absent, the floor is the whole budget, which is what FAIR assumed
+    before it could be stated separately.
+    """
+    floor = settings.get("min_output_tokens")
+    requested = int(settings.get("max_output_tokens", 4096))
+    if floor is None:
+        return requested
+    return min(int(floor), requested)
+
+
+def solve_supports_floor(fair: Any) -> bool:
+    """Whether the FAIR resolved at fair_repo_path takes an output floor.
+
+    The repository is resolved by path at run time, so it can be older than this
+    bridge. Passing a keyword it does not accept would turn every run into a
+    BRIDGE_ERROR, so the floor is sent only where it is understood.
+    """
+    try:
+        return "min_output_tokens" in inspect.signature(fair.solve).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any]:
     requested_output = int(settings.get("max_output_tokens", 4096))
+    # A floor this FAIR will not be told about cannot widen what it admits, so the
+    # snapshot has to judge routes by the budget that will really gate them.
+    supported = solve_supports_floor(fair)
+    floor = output_floor(settings) if supported else requested_output
     expected_schema = settings.get("expected_schema_present", False)
     routes: list[dict[str, Any]] = []
     structured_ready = False
@@ -106,7 +138,7 @@ def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any
         for model in getattr(provider, "models", []) or []:
             capabilities = set(getattr(model, "capabilities", set()) or set())
             max_output = getattr(model, "max_output_tokens", None)
-            output_ok = max_output is None or requested_output <= int(max_output)
+            output_ok = max_output is None or floor <= int(max_output)
             structured_ok = (not expected_schema) or (
                 "structured_output" in capabilities
             )
@@ -125,6 +157,8 @@ def compatibility_snapshot(fair: Any, settings: dict[str, Any]) -> dict[str, Any
             )
     return {
         "requested_output_tokens": requested_output,
+        "output_floor_tokens": floor,
+        "output_floor_supported": supported,
         "expected_schema": bool(expected_schema),
         "compatible_route_available": structured_ready,
         "routes": routes,
@@ -205,6 +239,10 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             "paid_inference_executed": False,
         }
 
+    floor_kwargs: dict[str, Any] = {}
+    if compatibility.get("output_floor_supported"):
+        floor_kwargs["min_output_tokens"] = output_floor(settings)
+
     solve_dispatched = False
     try:
         solve_dispatched = True
@@ -223,10 +261,12 @@ async def execute(payload: dict[str, Any]) -> dict[str, Any]:
             ),
             priority=str(settings.get("priority", "P2")),
             cache_mode=str(settings.get("cache_mode", "bypass")),
+            **floor_kwargs,
         )
 
         return {
             "status": result.status,
+            "output_floor_applied": floor_kwargs.get("min_output_tokens"),
             "reason_code": result.reason_code,
             "request_id": result.request_id,
             "output": result.output,

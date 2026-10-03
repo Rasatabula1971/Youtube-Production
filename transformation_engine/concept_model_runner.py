@@ -33,7 +33,9 @@ if str(EXP2_DIR) not in sys.path:
 
 from analysis_model_runner import (
     bridge_payload,
+    call_direct_gemini_backup,
     call_fair_bridge,
+    direct_gemini_available,
     inference_cost_authorized,
     load_runner_config,
     parse_model_json,
@@ -64,7 +66,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     mechanism_id = str(request.get("mechanism_id", ""))
     allowed_formats = list(request.get("allowed_format_intents", []))
 
-    concept_schema = {
+    concept_schema: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": [
@@ -186,6 +188,16 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         },
     }
 
+    rework_concept_id = str(
+        request.get("human_rework_concept_id") or ""
+    ).strip()
+    rework_mode = bool(request.get("human_rework_note") and rework_concept_id)
+    if rework_mode:
+        concept_schema["properties"]["concept_id"] = {
+            "type": "string",
+            "const": rework_concept_id,
+        }
+
     return {
         "type": "object",
         "additionalProperties": False,
@@ -198,7 +210,9 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             "concepts": {
                 "type": "array",
                 "minItems": 1,
-                "maxItems": int(request.get("concept_count_requested", 5)),
+                "maxItems": (
+                    1 if rework_mode else int(request.get("concept_count_requested", 5))
+                ),
                 "items": concept_schema,
             },
         },
@@ -244,7 +258,9 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "17. The visual opening plan must SHOW the problem, contradiction, consequence, "
         "transformation, decision, or mystery before asking the viewer to absorb the "
         "technical explanation.\n"
-        "18. Do not rank or score concepts.\n\n"
+        "18. Do not rank or score concepts.\n"
+        "19. If human_rework_note is present, it is an AUTHORITATIVE human instruction for the one concept identified by human_rework_concept_id. Return exactly one revised concept with that same concept_id. Correct the requested issue while preserving unrelated strengths where possible.\n"
+        "20. Human rework never authorizes invented audience evidence, unsupported drama, source copying, or false certainty. If the instruction conflicts with evidence constraints, preserve the constraint and make the safest valid correction.\n\n"
         "CONCEPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -255,6 +271,74 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         )
     return prompt
 
+
+
+def _merge_human_rework_response(
+    request: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    note = str(request.get("human_rework_note") or "").strip()
+    target = str(request.get("human_rework_concept_id") or "").strip()
+    if not note or not target:
+        return response
+
+    generated = response.get("concepts")
+    if not isinstance(generated, list) or len(generated) != 1:
+        raise ValueError("Human concept rework must return exactly one revised concept")
+    replacement = generated[0]
+    if (
+        not isinstance(replacement, dict)
+        or str(replacement.get("concept_id") or "") != target
+    ):
+        raise ValueError("Human concept rework concept_id must remain stable")
+
+    originals = request.get("human_rework_original_concepts")
+    if not isinstance(originals, list) or not originals:
+        raise ValueError("Human concept rework is missing the original concept set")
+
+    merged: list[dict[str, Any]] = []
+    replaced = False
+    for item in originals:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("concept_id") or "") == target:
+            merged.append(replacement)
+            replaced = True
+        else:
+            merged.append(item)
+    if not replaced:
+        raise ValueError("Human concept rework target is missing from original set")
+
+    return {
+        "mechanism_id": response.get("mechanism_id"),
+        "concepts": merged,
+    }
+
+
+def _rejection_error_summary(validation: dict[str, Any]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for item in validation.get("rejected", []):
+        if not isinstance(item, dict):
+            continue
+        for error in item.get("errors", []):
+            text = str(error).strip()
+            if text:
+                counts[text] = counts.get(text, 0) + 1
+    return [
+        {"error": error, "count": count}
+        for error, count in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
+    ]
+
+
+def _repair_prompt(original_prompt: str, validation: dict[str, Any]) -> str:
+    feedback = _rejection_error_summary(validation)
+    return (
+        original_prompt
+        + "\n\nDETERMINISTIC VALIDATOR FEEDBACK FROM THE PREVIOUS RESPONSE:\n"
+        + json.dumps(feedback, ensure_ascii=False, separators=(",", ":"))
+        + "\nRegenerate the ENTIRE response. Fix every listed validator error. "
+        "Do not weaken, reinterpret, or bypass any rule. Return JSON only."
+    )
 
 def run_one(
     request_path: Path,
@@ -390,6 +474,7 @@ def run_one(
 
     try:
         response = parse_model_json(raw_output)
+        response = _merge_human_rework_response(request, response)
         validation = validate_response(
             response,
             request,
@@ -404,6 +489,58 @@ def run_one(
         }
         atomic_write_json(report_path, report)
         return report
+
+    initial_validation_errors = _rejection_error_summary(validation)
+    repair_result: dict[str, Any] | None = None
+    repair_raw_path: Path | None = None
+    if (
+        len(validation["accepted"]) == 0
+        and direct_gemini_available()
+        and bridge_result.get("direct_backup_may_bill") is False
+    ):
+        repair_payload = dict(payload)
+        repair_payload["prompt"] = _repair_prompt(prompt, validation)
+        repair_result = call_direct_gemini_backup(
+            repair_payload,
+            timeout_seconds=float(
+                runner_config["runner"].get("subprocess_timeout_seconds", 300)
+            ),
+            fair_result={
+                "status": "ESCALATION_REQUIRED",
+                "reason_code": "DETERMINISTIC_VALIDATION_REPAIR",
+                "paid_inference_executed": False,
+                "attempts": safe_attempts(bridge_result),
+            },
+        )
+        if repair_result.get("status") == "ACCEPTED" and inference_cost_authorized(repair_result):
+            repaired_raw = str(repair_result.get("output") or "")
+            repair_raw_path = RAW_OUTPUTS_DIR / f"{slug}.repair.txt"
+            atomic_write_text(repair_raw_path, repaired_raw)
+            try:
+                repaired_response = parse_model_json(repaired_raw)
+                repaired_response = _merge_human_rework_response(
+                    request, repaired_response
+                )
+                repaired_validation = validate_response(
+                    repaired_response,
+                    request,
+                    load_config(),
+                )
+                response = repaired_response
+                validation = repaired_validation
+                bridge_result = repair_result
+                base_report = {
+                    **base_report,
+                    "provider_id": repair_result.get("provider_id"),
+                    "model_id": repair_result.get("model_id"),
+                    "fair_reason_code": repair_result.get("reason_code"),
+                    "direct_backup_used": repair_result.get("direct_backup_used", False),
+                    "direct_backup_may_bill": repair_result.get("direct_backup_may_bill", False),
+                    "billing_authorization": repair_result.get("billing_authorization"),
+                    "attempts": safe_attempts(repair_result),
+                }
+            except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                pass
 
     response["response_provenance"] = {
         "request_source": str(request_path),
@@ -428,6 +565,10 @@ def run_one(
         "raw_output": str(raw_path),
         "structurally_accepted": accepted_count,
         "structurally_rejected": rejected_count,
+        "validation_rejection_summary": _rejection_error_summary(validation),
+        "initial_validation_rejection_summary": initial_validation_errors,
+        "validation_repair_attempted": repair_result is not None,
+        "validation_repair_raw_output": str(repair_raw_path) if repair_raw_path else None,
     }
     atomic_write_json(report_path, report)
     return report

@@ -1,8 +1,9 @@
 """Thumbnail rendering from a locked channel template.
 
-Turns each human-approved package into a 1280x720 thumbnail:
+Turns each validated Slice 25 thumbnail concept into a 1280x720 image:
 
-    prepare  write/refresh one render spec per approved package
+    prepare  write/refresh one render spec per thumbnail concept that has at
+             least one title pair passing Slice 26 validation
     render   compose the thumbnail with ffmpeg, write phone-size previews,
              deterministic checks, and a mock feed beside the niche's
              breakout thumbnails
@@ -11,7 +12,9 @@ Turns each human-approved package into a 1280x720 thumbnail:
 About 80% of the design is locked in ``thumbnail_template.json`` (canvas,
 layout, fonts, outline, background treatment, logo position). Each video
 varies the subject image, the accent colour, and the approved text overlay.
-The text overlay comes from the approved package and cannot be edited here.
+The text overlay comes from the thumbnail concept and cannot be edited here.
+Approving an image does not choose a title-thumbnail package; that remains the
+job of the final Packaging Human Gate.
 
 The subject image must carry provenance from a source tier that permits
 thumbnail use. Editorial excerpts and unknown sources are refused.
@@ -47,7 +50,6 @@ from pipeline_integrity import atomic_write_json
 import niche_thumbnail_study as niche
 
 TEMPLATE_FILE = HERE / "thumbnail_template.json"
-APPROVED_PACKAGES_FILE = PACKAGING_DIR / "output" / "approved_packages.json"
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 OUTPUT_DIR = HERE / "output"
 THUMBNAILS_DIR = OUTPUT_DIR / "thumbnails"
@@ -87,8 +89,8 @@ def safe_slug(value: str) -> str:
     return cleaned or "unknown"
 
 
-def package_dir(package_id: str) -> Path:
-    return THUMBNAILS_DIR / safe_slug(package_id)
+def unit_dir(render_id: str) -> Path:
+    return THUMBNAILS_DIR / safe_slug(render_id)
 
 
 # ---------------------------------------------------------------- template
@@ -147,7 +149,7 @@ def find_font(template: dict[str, Any]) -> Path | None:
 
 
 def accent_from_palette(accent_text: str, template: dict[str, Any]) -> str:
-    """Map the package's free-text accent (e.g. 'cold blue') to a template hex."""
+    """Map a free-text colour description (e.g. 'cold blue') to a template hex."""
     lowered = accent_text.lower()
     hex_match = re.search(r"#([0-9a-f]{6})\b", lowered)
     if hex_match:
@@ -173,27 +175,97 @@ def hex_hue_family(hex_value: str) -> str:
 # ----------------------------------------------------------------- prepare
 
 
-def load_approved_packages() -> list[dict[str, Any]]:
-    if not APPROVED_PACKAGES_FILE.exists():
-        return []
-    packages = load_json(APPROVED_PACKAGES_FILE).get("packages", [])
-    return [package for package in packages if isinstance(package, dict)]
+CONCEPT_FIELDS = (
+    "hero_subject",
+    "secondary_element",
+    "visual_anomaly",
+    "visual_action",
+    "emotion",
+    "composition",
+    "background",
+    "subject_separation_method",
+    "viewer_visual_question",
+    "mobile_legibility_intent",
+    "face_present",
+)
 
 
-def package_binding(package: dict[str, Any]) -> dict[str, Any]:
-    thumbnail = package.get("thumbnail") or {}
-    return {
-        "package_id": package["package_id"],
-        "concept_id": package.get("concept_id"),
-        "package_sha256": content_sha256(package),
-        "title": package.get("title", ""),
-        "format_intent": package.get("format_intent"),
-        "text_overlay": str(thumbnail.get("text_overlay") or "").strip(),
-        "thumbnail_message": thumbnail.get("message", ""),
-        "focal_subject": thumbnail.get("focal_subject", ""),
-        "palette": thumbnail.get("palette", {}),
-        "packaging_advisories": package.get("packaging_advisories", []),
-    }
+def pairing_sources() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Current Slice 26 pair validations and Slice 25 concept sets, or nothing yet."""
+    import package_pairing
+
+    try:
+        validations, _ = package_pairing._collect_current()
+        concepts = package_pairing._current_thumbnail_items()
+    except (OSError, ValueError, KeyError, TypeError):
+        return [], {}
+    return validations, concepts
+
+
+def load_render_units(template: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """One render unit per thumbnail concept with at least one renderable pair."""
+    template = template or load_template()
+    statuses = set(template["render_validation_statuses"])
+    validations, concept_sets = pairing_sources()
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for pair in validations:
+        key = (str(pair.get("video_id") or ""), str(pair.get("thumbnail_id") or ""))
+        grouped.setdefault(key, []).append(pair)
+
+    units = []
+    for (video_id, thumbnail_id), pairs in sorted(grouped.items()):
+        titles = sorted(
+            (
+                {
+                    "package_id": pair.get("package_id"),
+                    "title_id": pair.get("title_id"),
+                    "title_text": pair.get("title_text"),
+                    "validation_status": pair.get("validation_status"),
+                    "selected_title_direction_match": bool(
+                        pair.get("selected_title_direction_match")
+                    ),
+                }
+                for pair in pairs
+                if pair.get("validation_status") in statuses
+            ),
+            key=lambda item: (not item["selected_title_direction_match"], str(item["title_id"])),
+        )
+        if not titles:
+            continue
+        concept_set = concept_sets.get(video_id) or {}
+        concept = next(
+            (
+                item
+                for item in concept_set.get("thumbnail_concepts", [])
+                if isinstance(item, dict) and item.get("thumbnail_id") == thumbnail_id
+            ),
+            None,
+        )
+        if concept is None:
+            continue
+        first = pairs[0]
+        unit = {
+            "render_id": f"{video_id}--{thumbnail_id}",
+            "video_id": video_id,
+            "concept_id": first.get("concept_id"),
+            "format": first.get("format"),
+            "thumbnail_id": thumbnail_id,
+            "angle_id": concept.get("angle_id"),
+            "text_overlay": str(concept.get("text") or "").strip(),
+            **{field: concept.get(field) for field in CONCEPT_FIELDS},
+            "titles": titles,
+            "title": titles[0]["title_text"],
+        }
+        unit["source_sha256"] = content_sha256({"concept": concept, "titles": titles})
+        units.append(unit)
+    return units
+
+
+def suggested_accent(unit: dict[str, Any], template: dict[str, Any]) -> str:
+    text = " ".join(
+        str(unit.get(field) or "") for field in ("background", "composition", "emotion")
+    )
+    return accent_from_palette(text, template)
 
 
 def blank_subject() -> dict[str, Any]:
@@ -208,23 +280,20 @@ def blank_subject() -> dict[str, Any]:
 
 def run_prepare() -> dict[str, Any]:
     template = load_template()
-    packages = load_approved_packages()
-    if not packages:
-        return {"status": "WAITING_FOR_APPROVED_PACKAGES", "specs": 0}
+    units = load_render_units(template)
+    if not units:
+        return {"status": "WAITING_FOR_VALIDATED_PACKAGES", "specs": 0}
     written = []
-    for package in packages:
-        binding = package_binding(package)
-        directory = package_dir(binding["package_id"])
+    for binding in units:
+        directory = unit_dir(binding["render_id"])
         directory.mkdir(parents=True, exist_ok=True)
         spec_path = directory / "render_spec.json"
         spec = load_json(spec_path) if spec_path.exists() else {}
-        accent = spec.get("accent_hex") or accent_from_palette(
-            str(binding["palette"].get("accent", "")), template
-        )
+        accent = spec.get("accent_hex") or suggested_accent(binding, template)
         spec.update(
             {
                 "artifact": "thumbnail_render_spec",
-                "package": binding,
+                "unit": binding,
                 "accent_hex": accent,
                 "subject_image": spec.get("subject_image") or blank_subject(),
                 "instructions": [
@@ -232,7 +301,7 @@ def run_prepare() -> dict[str, Any]:
                     "subject_image.path is relative to this file or absolute.",
                     "source_tier must be one of: "
                     + ", ".join(template["subject_allowed_source_tiers"]),
-                    "accent_hex may be changed; package fields are bound to the approved package and are refreshed on prepare.",
+                    "accent_hex may be changed; unit fields are bound to the current thumbnail concept and its validated titles and are refreshed on prepare.",
                 ],
             }
         )
@@ -486,11 +555,11 @@ def encode_jpeg(work_dir: Path, inputs: list[str], graph: str, target: Path, max
     raise ValueError("Thumbnail exceeds the maximum upload size at every quality step")
 
 
-def niche_context(format_intent: str | None) -> tuple[str | None, str, dict[str, Any] | None]:
+def niche_context(video_format_value: str | None) -> tuple[str | None, str, dict[str, Any] | None]:
     niche_name = None
     if PACKAGING_CONFIG_FILE.exists():
         niche_name = load_json(PACKAGING_CONFIG_FILE).get("channel_niche")
-    video_format = "short" if format_intent == "short" else "long_form"
+    video_format = "short" if video_format_value == "short" else "long_form"
     if not niche_name:
         return None, video_format, None
     path = niche.tabulation_path(str(niche_name), video_format)
@@ -569,7 +638,7 @@ def render_advisories(
 
 def feed_html(
     *,
-    package: dict[str, Any],
+    unit: dict[str, Any],
     directory: Path,
     niche_name: str | None,
     video_format: str,
@@ -598,7 +667,7 @@ def feed_html(
                     break
     ours = {
         "image": "thumbnail.jpg",
-        "title": package["title"],
+        "title": unit["title"],
         "channel": "Your channel",
         "views": None,
         "ours": True,
@@ -643,7 +712,7 @@ def feed_html(
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mock feed — {html.escape(package["package_id"])}</title>
+<title>Mock feed — {html.escape(unit["render_id"])}</title>
 <style>
 body{{margin:0;padding:16px;font-family:Roboto,Arial,sans-serif;background:#888}}
 p.note{{color:#fff;max-width:760px}}
@@ -668,18 +737,18 @@ p.note{{color:#fff;max-width:760px}}
 """
 
 
-def render_package(
+def render_unit(
     spec_path: Path, *, template: dict[str, Any], placeholder: bool = False
 ) -> dict[str, Any]:
     directory = spec_path.parent
     spec = load_json(spec_path)
-    package = spec["package"]
+    unit = spec["unit"]
     report_path = directory / "render_report.json"
 
     def blocked(status: str, errors: list[str]) -> dict[str, Any]:
         report = {
             "artifact": "thumbnail_render_report",
-            "package_id": package["package_id"],
+            "render_id": unit["render_id"],
             "status": status,
             "errors": errors,
             "rendered_at": utc_now(),
@@ -709,13 +778,13 @@ def render_package(
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         shutil.copyfile(font, work / "font.ttf")
-        layout = layout_text(package["text_overlay"], template=template, work_dir=work)
+        layout = layout_text(unit["text_overlay"], template=template, work_dir=work)
         if layout and not layout["fits"]:
             return blocked(
                 "BLOCKED",
                 [
                     f"Text overlay needs font size {layout['font_size']} to fit; template minimum "
-                    f"is {template['text']['min_font_size']}. Rework the package text."
+                    f"is {template['text']['min_font_size']}. Rework the thumbnail concept text."
                 ],
             )
         if layout:
@@ -756,10 +825,10 @@ def render_package(
     pixels = niche.ffmpeg_pixels(target, grid_w, grid_h)
     metrics = niche.measure_pixels(pixels, width=grid_w, height=grid_h, config=niche_config)
     zones = zone_luminance(pixels, grid_w=grid_w, grid_h=grid_h, template=template)
-    niche_name, video_format, tabulation = niche_context(package.get("format_intent"))
+    niche_name, video_format, tabulation = niche_context(unit.get("format"))
     (directory / "feed.html").write_text(
         feed_html(
-            package=package,
+            unit=unit,
             directory=directory,
             niche_name=niche_name,
             video_format=video_format,
@@ -769,13 +838,14 @@ def render_package(
     )
     report = {
         "artifact": "thumbnail_render_report",
-        "package_id": package["package_id"],
+        "render_id": unit["render_id"],
         "status": "PREVIEW_ONLY" if subject_path is None else "RENDERED",
         "errors": [],
         "rendered_at": utc_now(),
         "template_id": template["template_id"],
         "template_sha256": content_sha256(template),
-        "package_sha256": package["package_sha256"],
+        "source_sha256": unit["source_sha256"],
+        "titles": unit["titles"],
         "spec_sha256": sha256_file(spec_path),
         "image": "thumbnail.jpg",
         "image_sha256": sha256_file(target),
@@ -804,10 +874,9 @@ def render_package(
             tabulation=tabulation,
             placeholder=subject_path is None,
         ),
-        "packaging_advisories": package.get("packaging_advisories", []),
     }
     atomic_write_json(report_path, report)
-    approved_path = APPROVED_THUMBNAILS_DIR / f"{safe_slug(package['package_id'])}.json"
+    approved_path = APPROVED_THUMBNAILS_DIR / f"{safe_slug(unit['render_id'])}.json"
     if approved_path.exists() and (
         load_json(approved_path).get("image_sha256") != report["image_sha256"]
     ):
@@ -815,35 +884,37 @@ def render_package(
     return report
 
 
-def run_render(package_id: str | None = None, *, placeholder: bool = False) -> dict[str, Any]:
+def run_render(render_id: str | None = None, *, placeholder: bool = False) -> dict[str, Any]:
     template = load_template()
     specs = sorted(THUMBNAILS_DIR.glob("*/render_spec.json")) if THUMBNAILS_DIR.exists() else []
-    if package_id:
-        specs = [path for path in specs if path.parent.name == safe_slug(package_id)]
+    current = {safe_slug(unit["render_id"]) for unit in load_render_units(template)}
+    specs = [path for path in specs if path.parent.name in current]
+    if render_id:
+        specs = [path for path in specs if path.parent.name == safe_slug(render_id)]
     if not specs:
         return {"status": "NO_RENDER_SPECS", "rendered": 0}
     results = {}
     for spec_path in specs:
-        report = render_package(spec_path, template=template, placeholder=placeholder)
-        results[report["package_id"]] = report["status"]
+        report = render_unit(spec_path, template=template, placeholder=placeholder)
+        results[report["render_id"]] = report["status"]
     return {"status": "RENDER_COMPLETE", "results": results}
 
 
 # ------------------------------------------------------------------ review
 
 
-def current_render(package_id: str, template: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    directory = package_dir(package_id)
+def current_render(render_id: str, template: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    directory = unit_dir(render_id)
     report_path = directory / "render_report.json"
     if not report_path.exists():
         return {}, ["no render report"]
     report = load_json(report_path)
     problems = []
-    approved = {package["package_id"]: package for package in load_approved_packages()}
-    if package_id not in approved:
-        problems.append("package is no longer approved")
-    elif content_sha256(approved[package_id]) != report.get("package_sha256"):
-        problems.append("approved package changed after rendering")
+    units = {unit["render_id"]: unit for unit in load_render_units(template)}
+    if render_id not in units:
+        problems.append("thumbnail concept no longer has a validated title pair")
+    elif units[render_id]["source_sha256"] != report.get("source_sha256"):
+        problems.append("thumbnail concept or its validated titles changed after rendering")
     if report.get("template_sha256") != content_sha256(template):
         problems.append("thumbnail template changed after rendering")
     image = directory / str(report.get("image", ""))
@@ -864,26 +935,26 @@ def apply_review(response: dict[str, Any], template: dict[str, Any]) -> dict[str
     required = list(template["review_criteria"])
     outcomes = {}
     for decision in decisions:
-        package_id = str(decision.get("package_id", "")).strip()
+        render_id = str(decision.get("render_id", "")).strip()
         value = str(decision.get("decision", "")).strip().upper()
         if value not in DECISIONS:
-            raise ValueError(f"Invalid decision for {package_id}: {value!r}")
+            raise ValueError(f"Invalid decision for {render_id}: {value!r}")
         criteria = decision.get("criteria") or {}
         normalized = {name: criteria.get(name) is True for name in required}
         note = str(decision.get("note", "") or "").strip()
-        report, problems = current_render(package_id, template)
+        report, problems = current_render(render_id, template)
         if value == "ACCEPT":
             if problems:
-                raise ValueError(f"{package_id}: render is stale or missing: " + "; ".join(problems))
+                raise ValueError(f"{render_id}: render is stale or missing: " + "; ".join(problems))
             if report.get("status") != "RENDERED":
-                raise ValueError(f"{package_id}: only a RENDERED thumbnail can be accepted")
+                raise ValueError(f"{render_id}: only a RENDERED thumbnail can be accepted")
             missing = [name for name, passed in normalized.items() if not passed]
             if missing:
-                raise ValueError(f"{package_id}: ACCEPT requires " + ", ".join(missing))
+                raise ValueError(f"{render_id}: ACCEPT requires " + ", ".join(missing))
         if value == "REWORK" and not note:
-            raise ValueError(f"{package_id}: REWORK requires a note")
+            raise ValueError(f"{render_id}: REWORK requires a note")
         record = {
-            "package_id": package_id,
+            "render_id": render_id,
             "decision": value,
             "criteria": normalized,
             "note": note,
@@ -891,15 +962,15 @@ def apply_review(response: dict[str, Any], template: dict[str, Any]) -> dict[str
             "reviewed_at": utc_now(),
             "image_sha256": report.get("image_sha256"),
         }
-        atomic_write_json(package_dir(package_id) / "review.json", record)
-        approved_path = APPROVED_THUMBNAILS_DIR / f"{safe_slug(package_id)}.json"
+        atomic_write_json(unit_dir(render_id) / "review.json", record)
+        approved_path = APPROVED_THUMBNAILS_DIR / f"{safe_slug(render_id)}.json"
         if value == "ACCEPT":
             atomic_write_json(
                 approved_path,
                 {
                     "artifact": "approved_thumbnail",
-                    "package_id": package_id,
-                    "image": str(package_dir(package_id) / report["image"]),
+                    "render_id": render_id,
+                    "image": str(unit_dir(render_id) / report["image"]),
                     "image_sha256": report["image_sha256"],
                     "width": report["width"],
                     "height": report["height"],
@@ -911,14 +982,14 @@ def apply_review(response: dict[str, Any], template: dict[str, Any]) -> dict[str
             )
         elif approved_path.exists():
             approved_path.unlink()
-        outcomes[package_id] = value
+        outcomes[render_id] = value
     return {"status": "THUMBNAIL_REVIEW_APPLIED", "decisions": outcomes}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Thumbnail rendering")
     parser.add_argument("--mode", choices=("prepare", "render", "review"), required=True)
-    parser.add_argument("--package-id", default=None)
+    parser.add_argument("--render-id", default=None)
     parser.add_argument(
         "--placeholder",
         action="store_true",
@@ -929,7 +1000,7 @@ def main() -> None:
     if args.mode == "prepare":
         result = run_prepare()
     elif args.mode == "render":
-        result = run_render(args.package_id, placeholder=args.placeholder)
+        result = run_render(args.render_id, placeholder=args.placeholder)
     else:
         if args.response is None:
             raise SystemExit("--response is required for review")

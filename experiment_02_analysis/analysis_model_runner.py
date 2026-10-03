@@ -65,6 +65,7 @@ DEFAULT_DIRECT_GEMINI_MODELS = (
 DIRECT_GEMINI_FAIR_FALLBACK_REASONS = {
     "NO_ELIGIBLE_FREE_MODELS",
     "ALL_FREE_MODELS_UNAVAILABLE",
+    "ALL_FREE_MODELS_FAILED_QUALITY",
     "QUALITY_VERIFICATION_UNAVAILABLE",
     "INDEPENDENT_VERIFIER_UNAVAILABLE",
 }
@@ -440,6 +441,12 @@ def safe_attempts(bridge_result: dict[str, Any]) -> list[dict[str, Any]]:
         "candidate_token_count",
         "total_token_count",
         "response_mode",
+        # The bridge already reduces FAIR's quality report to overall_score,
+        # hard_reject, reject_reasons, verification_state and validator_results.
+        # Dropping it here is what left a model run saying only "QUALITY_FAILURE,
+        # score 0.0" with no record of whether the JSON broke the schema, arrived
+        # truncated or came back empty -- the one thing needed to act on it.
+        "quality",
     }
     return [
         {key: value for key, value in attempt.items() if key in allowed_keys}
@@ -482,6 +489,16 @@ def bridge_payload(
                 fair_config.get("cross_check_required", False)
             ),
             "max_output_tokens": int(fair_config.get("max_output_tokens", 4096)),
+            # The least an answer can be complete within. FAIR admits a route on
+            # this and asks it for min(max_output_tokens, its own ceiling), so
+            # raising max_output_tokens buys headroom without dropping the routes
+            # whose ceiling is lower. Omitted, FAIR treats the whole budget as the
+            # floor and those routes go unused.
+            "min_output_tokens": (
+                int(fair_config["min_output_tokens"])
+                if fair_config.get("min_output_tokens") is not None
+                else None
+            ),
             "expected_schema_present": bool(schema is not None or action == "doctor"),
             "application_id": str(
                 fair_config.get("application_id", "youtube-production")
@@ -765,16 +782,27 @@ def call_direct_gemini_backup(
                 "responseMimeType": "application/json",
                 "temperature": 0.2,
             }
+            request_prompt = prompt
             if response_mode == "STRUCTURED_SCHEMA":
                 generation_config["responseJsonSchema"] = gemini_compatible_schema(
                     schema
+                )
+            else:
+                # When Gemini rejects a deep structured-output schema, JSON-only
+                # mode must still receive the exact contract. Otherwise the model
+                # knows only that JSON is required, not the nested object shape.
+                request_prompt = (
+                    prompt
+                    + "\n\nEXPECTED JSON SCHEMA (follow this exact structure):\n"
+                    + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                    + "\nReturn only one JSON object matching this schema."
                 )
 
             body = {
                 "contents": [
                     {
                         "role": "user",
-                        "parts": [{"text": prompt}],
+                        "parts": [{"text": request_prompt}],
                     }
                 ],
                 "generationConfig": generation_config,

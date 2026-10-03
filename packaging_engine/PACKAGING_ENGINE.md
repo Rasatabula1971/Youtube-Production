@@ -139,41 +139,405 @@ This video helps [specific viewer/problem] so they can [specific outcome].
 Gap positioning must not upgrade a `HYPOTHESIS` or `UNASSESSED` gap into a
 proven audience fact.
 
+## Slice 23 architecture migration — post-script title direction
 
-## Thumbnail design contract and design advisories
+Packaging v1.0 changes the active sequencing contract. The legacy Packaging
+Engine in this directory remains available to read historical artifacts and
+resume older runs, but it is no longer an active prerequisite before Research.
 
-Each package also declares the design of the title / thumbnail unit:
+New active sequence:
 
-- `title_keyword` — the main search keyword, placed near the front of the title;
-- `thumbnail.focal_subject` — the single thing the eye lands on first;
-- `thumbnail.visual_elements` — every distinct visual element (focal subject
-  included);
-- `thumbnail.visual_cues` — arrows or circles, if any;
-- `thumbnail.palette` — `background`, `subject` and `accent`;
-- `division_of_labor` — what the thumbnail carries (emotion / curiosity) and
-  what the title carries (context / fact).
+```text
+accepted concept
+→ verified research
+→ approved story/script
+→ 5 Short title directions + 5 Long-form title directions
+→ Human Title Direction Gate
+→ mature Packaging Engine (next slice)
+```
 
-Missing or malformed design fields reject the package structurally.
+### Internal working title versus public title
 
-Generic published guidance is then checked as **non-blocking advisories**
-(`packaging_advisories`, each marked `evidence_status: HYPOTHESIS`). Thresholds
-live in `packaging_config.json` under `design_advisories`:
+Story, Script and Format require a stable internal title for provenance and
+artifact identity. That value is now marked `INTERNAL_WORKING_TITLE` and must
+not be interpreted as the final public YouTube title.
 
-| Advisory | Default starting hypothesis |
-|---|---|
-| `TITLE_LENGTH` | 40-60 characters |
-| `TITLE_KEYWORD_MISSING` / `TITLE_KEYWORD_LATE` | keyword starts within the first 30 characters |
-| `THUMBNAIL_TEXT_WORDS` | 3-5 words when overlay text is used |
-| `THUMBNAIL_TEXT_REPEATS_TITLE` | at most 60% of overlay content words repeated from the title |
-| `THUMBNAIL_ELEMENT_COUNT` | at most 3 distinct visual elements |
-| `THUMBNAIL_CUE_COUNT` | at most 2 arrows / circles |
+Legacy `selected_titles` are ignored when generating current Script/Format
+artifacts. A public title may be rewritten later without invalidating approved
+narration merely because wording changed.
 
-Advisories are shown to the human Packaging Gate and carried into the research
-handoff. They never reject a package and never produce a score. Remove the
-`design_advisories` block to disable them. See D-070.
+### Post-script 5+5 title directions
+
+`title_direction.py` prepares one request per exact current
+`approved_script_bundle`. It carries:
+
+- opening hook and hook mechanism;
+- approved script section outline;
+- story question and payoff intent;
+- approved evidence claims;
+- five configured psychological angles;
+- Short versus Long-form identity;
+- title-length guidance rather than a hard 60-character cutoff.
+
+`title_direction_model_runner.py` uses the existing FAIR free-first routing
+policy. It requests exactly five Short and five Long-form directions and fails
+closed on invented evidence references or malformed stable IDs.
+
+Each candidate stores:
+
+- `title_id`;
+- `format`;
+- `title_text`;
+- `psychological_angle`;
+- `primary_driver`;
+- `secondary_driver`;
+- `core_claim`;
+- `evidence_refs`;
+- `character_count`;
+- `search_intent`.
+
+No viral score, CTR prediction or automatic winner ranking is produced.
+
+### Human Title Direction Gate
+
+`title_direction_review.py` requires one Short and one Long-form selection per
+concept. A selection records a preferred psychological/title direction and is
+explicitly **not** final wording.
+
+The selected artifact uses:
+
+`PREFERRED_TITLE_AND_PSYCHOLOGICAL_DIRECTION_NOT_FINAL_WORDING`
+
+and stores `final_wording_editable_later=true`.
+
+Rework is scoped to `TITLE_DIRECTIONS_ONLY`. It changes the title-direction
+request, invalidates only the title-generation response/candidate aggregate,
+and leaves approved script/evidence untouched.
+
+Historical selections are archived append-only. Current state is bound to the
+candidate-set SHA-256; stale candidate sets reopen the gate.
+
+### Slice 23 boundary
+
+The successful boundary is:
+
+`TITLE_DIRECTION_SELECTED`
+
+Format and Production remain held after that point until Slice 24 builds the
+Packaging Brief and Viewer Promise Contract and begins mature title/thumbnail
+coordination.
+
+## Slice 24 — Packaging Brief + Viewer Promise Contract
+
+Slice 24 starts after the post-script Human Title Direction Gate and builds one
+deterministic brief per concept/format:
+
+```text
+TITLE_DIRECTION_SELECTED
+        ↓
+packaging_brief_prepare
+        ↓
+approved script + opening hook + payoff
++ verified research + selected title direction
++ Human Framing + audience context
+        ↓
+PACKAGING_BRIEF_READY
+        ↓
+STOP
+```
+
+The brief does not use a model. It only projects already-approved upstream
+artifacts, which keeps the truth boundary explicit before psychological angle
+expansion and thumbnail creation.
+
+Each brief contains:
+
+- internal pre-publish `video_id` (`concept_id:format`);
+- format;
+- compact source evidence;
+- approved concept;
+- approved script metadata and exact approved sections;
+- opening hook;
+- central question;
+- payoff;
+- selected title direction and psychology metadata;
+- target audience context;
+- SEARCH/BROWSE/HYBRID intent;
+- approved claims;
+- approved numeric tokens;
+- strongest approved visual opening event;
+- strongest core fact;
+- strongest approved stakes/consequence;
+- strongest desired transformation/resolution;
+- rejected/rework research claims as prohibited/unsupported context;
+- Viewer Promise Contract.
+
+The Viewer Promise Contract explicitly records what a click is supposed to mean:
+
+`viewer_expectation`, `promise_subject`, `promise_question`,
+`promise_stakes`, and `promise_payoff`.
+
+The brief fails closed on missing script/hook/evidence/title direction, evidence
+conflicts, unsupported evidence references and invalid intent classifications.
+
+Saved briefs are rebuild-current. Any upstream byte change that changes the
+derived contract invalidates the brief.
+
+Slice 24 deliberately does not generate thumbnails, pair titles and thumbnails,
+score packages, approve final packaging, or unlock Format/Production. Those are
+later Packaging slices.
+
+## Slice 25 — Psychological Packaging Angles + Thumbnail Concepts
+
+Slice 25 expands the evidence-bound Packaging Brief into deliberate packaging
+hypotheses before any title-thumbnail pairing:
+
+```text
+PACKAGING_BRIEF_READY
+        ↓
+prepare psychological angle requests
+        ↓
+FAIR free-first angle generation
+        ↓
+5 distinct psychological hypotheses per format
+        ↓
+prepare thumbnail concept requests
+        ↓
+FAIR free-first thumbnail concept generation
+        ↓
+1 structured thumbnail concept per angle
+        ↓
+THUMBNAIL_CONCEPTS_READY
+        ↓
+STOP
+```
+
+### Psychological angle contract
+
+Every format receives exactly five hypotheses with:
+
+- `angle_id`;
+- `primary_driver`;
+- `secondary_driver`;
+- `viewer_question`;
+- `emotional_trigger`;
+- `stakes`;
+- `information_given`;
+- `information_withheld`;
+- `expected_click_reason`;
+- `evidence_refs`;
+- `selected_title_direction_alignment`.
+
+Five different primary drivers are mandatory. Exactly one hypothesis is the
+`ANCHOR` to the human-selected title direction; four are deliberate
+`ALTERNATIVE` hypotheses.
+
+SEARCH emphasizes subject/problem/payoff clarity. BROWSE emphasizes attention,
+curiosity, stakes and consequence. HYBRID balances semantic clarity with
+psychological attraction. Shorts prioritize instant comprehension and rapid
+promise confirmation; Long-form can support deeper mystery and open loops.
+
+The model may propose creative framing, but it may not invent facts. Evidence
+refs must come from approved claims. Unapproved numbers and unsupported
+high-risk factual words are rejected.
+
+### Thumbnail concept contract
+
+Every current angle receives one concept containing:
+
+- `thumbnail_id`;
+- `angle_id`;
+- `hero_subject`;
+- `secondary_element`;
+- `visual_anomaly`;
+- `visual_action`;
+- `emotion`;
+- `composition`;
+- `background`;
+- `subject_separation_method`;
+- `text`;
+- `text_word_count`;
+- `viewer_visual_question`;
+- `timestamp_safe`;
+- `mobile_legibility_intent`;
+- `evidence_refs`;
+- `aspect_ratio`;
+- `primary_focal_points`;
+- `meaningful_visual_elements`;
+- `critical_bottom_right_content`;
+- `face_present`.
+
+The validator enforces 16:9, one primary focal point, no more than three
+meaningful visual elements, four thumbnail-text words maximum, exact word-count
+metadata, timestamp safety and no critical bottom-right content.
+
+Thumbnail evidence must be approved and remain connected to the originating
+angle. Unsupported numbers, unsupported high-risk factual wording and obvious
+multi-word repetition of the selected title direction are rejected.
+
+### Cost and retry behavior
+
+Both generation stages use the existing free-first FAIR bridge and the existing
+direct backup policy. Work is split per internal `video_id`, so a provider
+failure does not destroy already validated format outputs. Validated responses
+are skipped on retry when their request hash is unchanged.
+
+### Slice 25 boundary
+
+`THUMBNAIL_CONCEPTS_READY` is not packaging approval. No image is rendered,
+no title-thumbnail pair is selected, no package score is produced, and
+Format/Production remain locked.
+
+Slice 26 can now evaluate cross-candidate title-thumbnail compatibility,
+redundancy, information gain, promise consistency and claim/hook alignment.
+
+## Slice 26 — Title + Thumbnail Pairing and Package Validation
+
+Slice 26 turns the Slice 25 creative hypotheses into a complete compatibility
+matrix:
+
+```text
+THUMBNAIL_CONCEPTS_READY
+        ↓
+5 current titles × 5 current thumbnails
+        ↓
+25 package hypotheses per format
+        ↓
+5 resumable validation chunks per format
+        ↓
+semantic + evidence + promise + hook validation
+        ↓
+PASS / REWORK / REJECT per package
+        ↓
+PACKAGE_VALIDATION_READY
+        ↓
+STOP
+```
+
+### Full cross-pairing
+
+The pairing engine explicitly rejects the assumption:
+
+`Title 1 → Thumbnail 1`
+
+Each title is evaluated against every thumbnail. Stable package IDs bind
+`title_id + thumbnail_id`.
+
+The selected Human Title Direction remains marked in the matrix. If the human
+edited that selected title wording at the Title Direction Gate, the edited
+wording is preserved rather than reverting to the original model text.
+
+### Pairing dimensions
+
+Each package explicitly carries or evaluates:
+
+- semantic redundancy;
+- psychological complementarity;
+- information gain;
+- visual/text redundancy;
+- Viewer Promise consistency;
+- Hook Alignment;
+- title claim validation;
+- thumbnail claim validation.
+
+Lexical overlap is checked deterministically, but zero-redundancy is not a
+simplistic no-shared-words rule. Significant repeated information can trigger
+REWORK while unavoidable shared terminology may remain acceptable.
+
+### Diagnostic dimensions
+
+Each pair stores separate 0–5 diagnostics for:
+
+- `scroll_stop`;
+- `clarity`;
+- `curiosity`;
+- `stakes`;
+- `specificity`;
+- `visual_simplicity`;
+- `title_strength`;
+- `complementarity`;
+- `credibility`;
+- `promise_alignment`;
+- `hook_alignment`.
+
+There is no aggregate viral score and no ranking or automatic winner.
+
+### Hard validation
+
+The configured hard rejection codes are:
+
+- `unsupported_material_claim`;
+- `factually_false_claim`;
+- `thumbnail_misrepresents_video`;
+- `title_misrepresents_video`;
+- `evidence_conflict`;
+- `prohibited_claim`.
+
+Hard truth failures always override psychology scores.
+
+Claim assessments use only approved evidence refs already attached to the paired
+title or thumbnail component. The evaluator cannot borrow an unrelated approved
+claim to justify another component.
+
+Promise states include PASS, UNDERPROMISE, OVERPROMISE, WRONG_PROMISE,
+DELAYED_ACKNOWLEDGEMENT and MISSING_PAYOFF. Overpromise, wrong promise and a
+missing payoff become hard package failures. Underpromise or delayed
+acknowledgement are repairable rework states.
+
+Hook Alignment stores PASS / REWORK / FAIL and a reason. A non-PASS hook
+alignment becomes targeted rework rather than silently changing the approved
+script.
+
+### Title-length policy
+
+The preferred 45–60 character range remains guidance only. Titles beyond that
+range are recorded as outside the preferred range but are not automatically
+rejected.
+
+### Resumability and artifact namespace
+
+Validation is chunked by thumbnail, five title comparisons at a time. Current
+validated chunks survive retries when their exact request hash is unchanged.
+
+Mature artifacts are isolated under:
+
+`packaging_engine/output/mature_packaging/`
+
+This prevents Slice 26 from overwriting the legacy pre-script
+`output/package_candidates.json`.
+
+Primary artifacts include:
+
+- `package_candidates.json`;
+- `package_validation.json`;
+- `promise_alignment.json`;
+- pairing request/response/model-run directories.
+
+### Slice 26 boundary
+
+`PACKAGE_VALIDATION_READY` means every current 25-pair matrix has complete
+PASS / REWORK / REJECT validation.
+
+It does **not** mean a package has been accepted.
+
+Slice 26 does not:
+
+- choose a winner;
+- approve a final title;
+- approve a final thumbnail;
+- render a thumbnail image;
+- create A/B variants;
+- unlock Format/Production.
+
+Slice 27 can now build the compact Final Packaging Human Gate and targeted
+rework workflow from these validated package hypotheses.
 
 ## Niche thumbnail conventions
 
-When `channel_niche` is set in `packaging_config.json` and a niche thumbnail
-tabulation exists, each package request carries `niche_thumbnail_conventions`.
-See `NICHE_THUMBNAIL_STUDY.md` and D-071.
+Set `channel_niche` in `packaging_config.json` and run the niche thumbnail
+study (`NICHE_THUMBNAIL_STUDY.md`) to give Slice 25 thumbnail concept requests
+the niche's breakout-thumbnail conventions. Requests are unchanged while the
+niche is unset or has no study for that format. See D-097.
+
+Validated concepts can then be rendered into images for review; see
+`production_engine/THUMBNAIL_RENDERING.md` and D-098.

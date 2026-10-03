@@ -28,9 +28,6 @@ AUTO_MACHINE_ACTION_ORDER = [
     "concept_generate",
     "concept_triage",
     "concept_gate_prepare",
-    "package_prepare",
-    "package_generate",
-    "package_gate_prepare",
     "research_prepare",
     "research_acquire",
     "research_generate",
@@ -40,13 +37,45 @@ AUTO_MACHINE_ACTION_ORDER = [
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
+    "title_direction_prepare",
+    "title_direction_generate",
+    "title_direction_gate_prepare",
+    "packaging_brief_prepare",
+    "psychological_angle_prepare",
+    "psychological_angle_generate",
+    "thumbnail_concept_prepare",
+    "thumbnail_concept_generate",
+    "package_pairing_prepare",
+    "package_pairing_generate",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
     "voice_prepare",
     "voice_generate",
     "voice_gate_prepare",
+    "pre_render_engagement",
+    "narration_preview_prepare",
+    "prototype_sound_prepare",
+    "narration_preview_render",
+    "sound_design_brief_prepare",
+    "narration_prepare",
+    "narration_spend_gate_prepare",
+    "narration_audio_qc",
     "production_visual_prepare",
+    "storyboard_prepare",
+    "visual_search_prepare",
+    "visual_search_acquire",
+    "visual_asset_acquire",
+    "visual_rough_cut_prepare",
+    "visual_gap_prepare",
+    "visual_generation_handoff_prepare",
+    "visual_assembly_prepare",
+    "edit_manifest_prepare",
+    "edit_preview_render",
+    "final_production_handoff_prepare",
+    "final_sound_plan_prepare",
+    "final_render_manifest_prepare",
+    "final_render_local",
 ]
 
 MAX_STEPS_PER_RUN = 40
@@ -80,9 +109,98 @@ def run_until_human_gate() -> dict[str, Any]:
 
     for _ in range(MAX_STEPS_PER_RUN):
         readiness = control.action_readiness()
+        guidance = control.workflow_guidance(readiness)
+        preview_machine_pending = any(
+            readiness.get(action_id, {}).get("enabled")
+            for action_id in (
+                "pre_render_engagement",
+                "narration_preview_prepare",
+                "prototype_sound_prepare",
+                "narration_preview_render",
+            )
+        )
+        if (
+            guidance.get("state") == "HUMAN_NARRATION_PREVIEW_GATE"
+            and not preview_machine_pending
+        ):
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Listen to the free narration preview before continuing.",
+            }
+
+        narration_boundary_machine_pending = any(
+            readiness.get(action_id, {}).get("enabled")
+            for action_id in (
+                "sound_design_brief_prepare",
+                "narration_prepare",
+                "narration_spend_gate_prepare",
+            )
+        )
+        if guidance.get("state") == "HUMAN_NARRATION_SPEND_GATE":
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Review narration spend before any paid narration call.",
+            }
+        if (
+            guidance.get("state")
+            in {
+                "WAITING_NARRATION_PROVIDER_QUOTE",
+                "NARRATION_PROVIDER_SETUP_REQUIRED",
+            }
+            and not narration_boundary_machine_pending
+        ):
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Narration provider prerequisites are not ready.",
+            }
+
+        if guidance.get("state") in {
+            "WAITING_NARRATION_RENDER_RETURN",
+            "NARRATION_AUDIO_QC_FAILED",
+            "NARRATION_AUDIO_READY",
+            "HUMAN_VISUAL_CANDIDATE_GATE",
+            "HUMAN_VISUAL_RIGHTS_GATE",
+            "HUMAN_ROUGH_CUT_GATE",
+            "HUMAN_VISUAL_SPEND_GATE",
+            "VISUAL_SPEND_INVALID",
+            "VISUAL_EXISTING_RETRY_REQUIRED",
+            "WAITING_FOR_VISUAL_ASSETS",
+            "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+            "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+            "LOCAL_FFMPEG_REQUIRED",
+            "HUMAN_EDIT_PREVIEW_GATE",
+            "EDIT_PREVIEW_REWORK_REQUIRED",
+            "WAITING_FOR_FINAL_VISUAL_ASSETS",
+            "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+            "WAITING_FOR_FINAL_SOUND_ASSETS",
+            "HUMAN_TITLE_DIRECTION_GATE",
+            "TITLE_DIRECTION_REJECTED",
+            "TITLE_DIRECTION_SELECTED",
+            "LOCAL_FINAL_FFMPEG_REQUIRED",
+            "HUMAN_FINAL_EXPORT_GATE",
+            "FINAL_EXPORT_REWORK_REQUIRED",
+            "FINAL_EXPORT_APPROVED",
+            "PACKAGE_VALIDATION_READY",
+        }:
+            return {
+                "status": "STOPPED_AT_BOUNDARY",
+                "completed_actions": completed_actions,
+                "workflow_state": guidance.get("state"),
+                "message": guidance.get("current_title")
+                or "Workflow reached the current production boundary.",
+            }
+
         action_id = next_enabled_action(readiness)
         if action_id is None:
-            guidance = control.workflow_guidance(readiness)
             return {
                 "status": "STOPPED_AT_BOUNDARY",
                 "completed_actions": completed_actions,
@@ -107,6 +225,30 @@ def run_until_human_gate() -> dict[str, Any]:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
                 if code == 2:
+                    message = (
+                        "The zero-cost local narration preview could not be rendered. "
+                        "Install/configure the local Kokoro preview dependencies and "
+                        "retry; paid fallback is forbidden."
+                        if action_id == "narration_preview_render"
+                        else (
+                            "The free local structural edit preview could not "
+                            "be rendered. Check/configure local FFmpeg and current "
+                            "manifest media, then retry; paid/cloud fallback is forbidden."
+                            if action_id == "edit_preview_render"
+                            else (
+                                "The local final candidate could not be rendered. "
+                                "Check/configure local FFmpeg and the current final "
+                                "render manifest media, then retry; cloud/paid "
+                                "render fallback is forbidden."
+                                if action_id == "final_render_local"
+                                else (
+                                    "Current artifacts were preserved, but the active "
+                                    "provider/model did not produce new validated output. "
+                                    "Retry Continue Automatically later."
+                                )
+                            )
+                        )
+                    )
                     return {
                         "status": "PARTIAL",
                         "failed_action": action_id,
@@ -114,11 +256,7 @@ def run_until_human_gate() -> dict[str, Any]:
                         "completed_actions": completed_actions,
                         "before_reason": before_reason,
                         "after_reason": after_reason,
-                        "message": (
-                            "Current artifacts were preserved, but the active "
-                            "provider/model did not produce new validated output. "
-                            "Retry Continue Automatically later."
-                        ),
+                        "message": message,
                     }
                 return {
                     "status": "NO_PROGRESS",

@@ -41,5 +41,14 @@
     "scene_location",
     "text_only",
     "other"
-  ]
+  ],
+  "comparison": {
+    "note": "Niche conventions are compared with the Slice 25 thumbnail contract and D-096 title guidance in packaging_config.json; these two values have no packaging-config equivalent.",
+    "long_form_title_preferred_chars": {
+      "min": 45,
+      "max": 60
+    },
+    "text_title_overlap_max": 0.6,
+    "max_visual_cues": 2
+  }
 }

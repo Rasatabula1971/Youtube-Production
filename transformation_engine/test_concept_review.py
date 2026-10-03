@@ -21,8 +21,14 @@ class ConceptReviewTests(unittest.TestCase):
         handoff = output / "research_handoff.json"
         summary = output / "concept_gate_summary.json"
         saved_ideas = root / ".idea_bank" / "saved_ideas.json"
+        requests_dir = output / "concept_requests"
+        responses_dir = output / "concept_responses"
+        requests_dir.mkdir()
+        responses_dir.mkdir()
 
         stack.enter_context(patch.object(review, "OUTPUT_DIR", output))
+        stack.enter_context(patch.object(review, "REQUESTS_DIR", requests_dir))
+        stack.enter_context(patch.object(review, "RESPONSES_DIR", responses_dir))
         stack.enter_context(patch.object(review, "DEFAULT_CANDIDATES", candidates))
         stack.enter_context(patch.object(review, "STATE_FILE", state))
         stack.enter_context(patch.object(review, "REVIEW_REQUEST_FILE", request))
@@ -174,33 +180,79 @@ class ConceptReviewTests(unittest.TestCase):
         self.assertFalse(snapshot["complete"])
         accepted = snapshot["concepts"][0]
         self.assertEqual(accepted["decision"], "ACCEPT")
-        self.assertEqual(accepted["criteria_decisions"], {})
+        self.assertTrue(all(accepted["criteria_decisions"].values()))
 
-    def test_rework_checkboxes_mean_keep_and_note_is_optional(self):
+    def test_rework_requires_note_and_updates_only_originating_request(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             self.patch_paths(stack, root)
+            payload = self.candidates()
+            request_path = review.REQUESTS_DIR / "curiosity_gap.concept_request.json"
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "mechanism_id": "curiosity_gap",
+                        "concept_count_requested": 5,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            response_path = review.RESPONSES_DIR / "curiosity_gap.json"
+            origin_concepts = [
+                dict(payload["concepts"][0]),
+                {
+                    **dict(payload["concepts"][0]),
+                    "concept_id": "c1-alt",
+                    "working_title": "Untouched sibling",
+                },
+            ]
+            response_path.write_text(
+                json.dumps(
+                    {
+                        "mechanism_id": "curiosity_gap",
+                        "concepts": origin_concepts,
+                        "response_provenance": {
+                            "request_source": str(request_path.resolve())
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            payload["concepts"][0]["response_source"] = str(response_path.resolve())
             review.DEFAULT_CANDIDATES.write_text(
-                json.dumps(self.candidates()),
+                json.dumps(payload),
                 encoding="utf-8",
             )
             review.prepare_state()
 
+            with self.assertRaisesRegex(ValueError, "REWORK requires a note"):
+                review.apply_action(
+                    concept_id="c1",
+                    decision="REWORK",
+                    criteria={},
+                    note="",
+                )
+
             snapshot = review.apply_action(
                 concept_id="c1",
                 decision="REWORK",
-                criteria={
-                    "originality_clear": True,
-                    "source_independent": True,
-                },
-                note="",
+                criteria={},
+                note="Make the framing about what an ordinary race viewer sees first.",
             )
+            updated = json.loads(request_path.read_text(encoding="utf-8"))
 
         item = snapshot["concepts"][0]
         self.assertEqual(item["decision"], "REWORK")
-        self.assertTrue(item["criteria_decisions"]["originality_clear"])
-        self.assertTrue(item["criteria_decisions"]["source_independent"])
-        self.assertFalse(item["criteria_decisions"]["researchable"])
+        self.assertEqual(item["criteria_decisions"], {})
+        self.assertEqual(updated["human_rework_concept_id"], "c1")
+        self.assertEqual(
+            updated["human_rework_note"],
+            "Make the framing about what an ordinary race viewer sees first.",
+        )
+        self.assertEqual(updated["human_rework_mode"], "HUMAN_INSTRUCTION_ONLY")
+        self.assertEqual(len(updated["human_rework_original_concepts"]), 2)
+        self.assertFalse(response_path.exists())
+
 
     def test_handoff_waits_until_every_concept_decided(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -392,6 +444,36 @@ class ConceptReviewTests(unittest.TestCase):
             bank["ideas"][0]["note"],
             "Keep for a future tyre-temperature series.",
         )
+
+    def test_prepare_preserves_unchanged_human_decisions_by_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            payload = self.candidates()
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+            review.prepare_state()
+            review.apply_action(
+                concept_id="c1",
+                decision="ACCEPT",
+                criteria={},
+                note="",
+            )
+
+            changed = self.candidates()
+            changed["concepts"][1]["working_title"] = "Changed sibling"
+            review.DEFAULT_CANDIDATES.write_text(
+                json.dumps(changed),
+                encoding="utf-8",
+            )
+            prepared = review.prepare_state()
+
+        c1 = next(item for item in prepared["concepts"] if item["concept_id"] == "c1")
+        c2 = next(item for item in prepared["concepts"] if item["concept_id"] == "c2")
+        self.assertEqual(c1["decision"], "ACCEPT")
+        self.assertEqual(c2["decision"], "PENDING")
 
     def test_candidate_change_invalidates_old_ui_state(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:

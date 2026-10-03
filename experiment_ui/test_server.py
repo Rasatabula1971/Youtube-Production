@@ -49,6 +49,33 @@ class ExperimentUiTests(unittest.TestCase):
             {"/", "/opportunity", "/analysis", "/tools"},
         )
 
+
+    def test_script_gate_route_starts_automatic_downstream_work(self):
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        post_start = source.index("def do_POST")
+        start = source.index(
+            'if route == "/api/script-gate":',
+            post_start,
+        )
+        end = source.index(
+            'if route == "/api/script-section-review":',
+            start,
+        )
+        block = source[start:end]
+
+        self.assertIn("maybe_start_automatic_workflow()", block)
+        self.assertIn('"automation_job": auto_job', block)
+
+    def test_script_section_review_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/script-section-review",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        self.assertIn('route == "/api/script-section-review"', source)
+        self.assertIn("apply_script_section_review_action", source)
+
+
     def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
@@ -66,9 +93,25 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="packagingReviewPanel"', html)
         self.assertIn('id="packagingCriteria"', html)
         self.assertIn('id="packagingNote"', html)
+        self.assertIn('id="titleDirectionReviewPanel"', html)
+        self.assertIn('id="titleDirectionDetail"', html)
+        self.assertIn('id="titleDirectionAccept"', html)
         self.assertIn('id="researchReviewPanel"', html)
         self.assertIn('id="researchCriteria"', html)
         self.assertIn('id="researchNote"', html)
+        self.assertIn('id="scriptSectionReviewPane"', html)
+        self.assertIn('id="scriptSectionTarget"', html)
+        self.assertIn('id="scriptSectionManualText"', html)
+        self.assertIn('id="scriptSectionSaveManual"', html)
+        self.assertIn('id="scriptSectionReason"', html)
+        self.assertIn('id="scriptSectionGenerate"', html)
+        self.assertIn('id="scriptSectionAlternativeCards"', html)
+        self.assertIn('id="finalSoundImportPanel"', html)
+        self.assertIn('id="finalSoundLicenceReference"', html)
+        self.assertIn('id="finalSoundCommercialUse"', html)
+        self.assertIn('id="finalExportReviewPanel"', html)
+        self.assertIn('id="finalExportVideo"', html)
+        self.assertIn('id="finalExportApprove"', html)
         self.assertIn('data-route="/opportunity"', html)
         self.assertIn('data-route="/analysis"', html)
         self.assertIn('data-route="/tools"', html)
@@ -83,8 +126,97 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("/api/concept-gate", script)
         self.assertIn("renderPackagingReview", script)
         self.assertIn("/api/packaging-gate", script)
+        self.assertIn("renderTitleDirectionReview", script)
+        self.assertIn("/api/title-direction-gate", script)
+        self.assertIn('id="packagingBriefPanel"', html)
+        self.assertIn("renderPackagingBrief", script)
+        self.assertIn("THUMBNAIL_CONCEPTS_READY", script)
+        self.assertIn("PACKAGE_VALIDATION_READY", script)
+        self.assertIn("psychological_angles", script)
+        self.assertIn("thumbnail_concepts", script)
+        self.assertIn("package_validation", script)
         self.assertIn("renderResearchReview", script)
         self.assertIn("/api/research-gate", script)
+        self.assertIn("renderScriptSectionReview", script)
+        self.assertIn("submitScriptSectionAction", script)
+        self.assertIn('"MANUAL_EDIT"', script)
+        self.assertIn("replacement_text", script)
+        self.assertIn("/api/script-section-review", script)
+        self.assertIn("data-script-section-selection", script)
+        self.assertIn("renderFinalSoundImport", script)
+        self.assertIn("/api/final-sound-asset", script)
+        self.assertIn("renderFinalExportReview", script)
+        self.assertIn("/api/final-export-review", script)
+        self.assertIn("/api/final-render-video", script)
+
+    def test_title_direction_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/title-direction-gate",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        for action_id in (
+            "title_direction_prepare",
+            "title_direction_generate",
+            "title_direction_gate_prepare",
+            "packaging_brief_prepare",
+            "psychological_angle_prepare",
+            "psychological_angle_generate",
+            "thumbnail_concept_prepare",
+            "thumbnail_concept_generate",
+            "package_pairing_prepare",
+            "package_pairing_generate",
+        ):
+            self.assertIn(action_id, server.ACTION_DEFS)
+
+        script_index = server.AUTO_MACHINE_ACTION_ORDER.index(
+            "script_gate_prepare"
+        )
+        self.assertEqual(
+            server.AUTO_MACHINE_ACTION_ORDER[
+                script_index + 1 : script_index + 11
+            ],
+            [
+                "title_direction_prepare",
+                "title_direction_generate",
+                "title_direction_gate_prepare",
+                "packaging_brief_prepare",
+                "psychological_angle_prepare",
+                "psychological_angle_generate",
+                "thumbnail_concept_prepare",
+                "thumbnail_concept_generate",
+                "package_pairing_prepare",
+                "package_pairing_generate",
+            ],
+        )
+
+    def test_final_sound_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/final-sound-asset",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        self.assertIn("final_sound_plan_prepare", server.ACTION_DEFS)
+        self.assertIn(
+            "production_engine/final_sound_plan.py",
+            server.ACTION_DEFS["final_sound_plan_prepare"]["command"][1],
+        )
+
+    def test_final_export_route_is_human_gate_guarded(self):
+        self.assertIn(
+            "/api/final-export-review",
+            server.HUMAN_GATE_MUTATION_ROUTES,
+        )
+        self.assertIn("final_render_manifest_prepare", server.ACTION_DEFS)
+        self.assertIn("final_render_local", server.ACTION_DEFS)
+        self.assertIn(
+            "production_engine/final_render_manifest.py",
+            server.ACTION_DEFS[
+                "final_render_manifest_prepare"
+            ]["command"][1],
+        )
+        self.assertIn(
+            "production_engine/final_render.py",
+            server.ACTION_DEFS["final_render_local"]["command"][1],
+        )
 
     def test_action_allowlist_contains_no_shell_strings(self):
         self.assertIn("exp13_discover", server.ACTION_DEFS)
@@ -132,6 +264,55 @@ class ExperimentUiTests(unittest.TestCase):
             server.ACTION_DEFS["auto_continue"]["command"][1],
         )
 
+
+    def test_completed_human_gate_starts_auto_continue_when_machine_work_is_ready(self):
+        with (
+            patch.object(server.JOB_MANAGER, "running", return_value=False),
+            patch.object(
+                server,
+                "action_readiness",
+                return_value={
+                    "auto_continue": {
+                        "enabled": True,
+                        "reason": "Automatic machine work is ready: Prepare Format Requests",
+                    }
+                },
+            ),
+            patch.object(
+                server.JOB_MANAGER,
+                "start",
+                return_value={
+                    "action_id": "auto_continue",
+                    "status": "RUNNING",
+                },
+            ) as start,
+        ):
+            job = server.maybe_start_automatic_workflow()
+
+        start.assert_called_once_with("auto_continue")
+        self.assertEqual(job["action_id"], "auto_continue")
+        self.assertEqual(job["status"], "RUNNING")
+
+    def test_completed_human_gate_does_not_start_job_without_ready_machine_step(self):
+        with (
+            patch.object(server.JOB_MANAGER, "running", return_value=False),
+            patch.object(
+                server,
+                "action_readiness",
+                return_value={
+                    "auto_continue": {
+                        "enabled": False,
+                        "reason": "Waiting at a human gate.",
+                    }
+                },
+            ),
+            patch.object(server.JOB_MANAGER, "start") as start,
+        ):
+            job = server.maybe_start_automatic_workflow()
+
+        start.assert_not_called()
+        self.assertIsNone(job)
+
     def test_experiment_02_evidence_acquisition_is_guided_step(self):
         self.assertIn("exp2_acquire", server.ACTION_DEFS)
         self.assertIn(
@@ -176,23 +357,15 @@ class ExperimentUiTests(unittest.TestCase):
             server.ACTION_DEFS["concept_gate_prepare"]["command"][1],
         )
 
-    def test_packaging_actions_follow_concept_gate(self):
+    def test_legacy_packaging_actions_are_retained_but_not_in_active_order(self):
         for action_id in (
             "package_prepare",
             "package_generate",
             "package_gate_prepare",
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
+            self.assertNotIn(action_id, server.AUTO_MACHINE_ACTION_ORDER)
 
-        concept_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_gate_prepare")
-        self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[concept_index + 1 : concept_index + 4],
-            [
-                "package_prepare",
-                "package_generate",
-                "package_gate_prepare",
-            ],
-        )
         self.assertIn(
             "packaging_engine/packaging_engine.py",
             server.ACTION_DEFS["package_prepare"]["command"][1],
@@ -206,7 +379,7 @@ class ExperimentUiTests(unittest.TestCase):
             server.ACTION_DEFS["package_gate_prepare"]["command"][1],
         )
 
-    def test_research_actions_follow_packaging_gate(self):
+    def test_research_actions_follow_concept_gate_directly(self):
         for action_id in (
             "research_prepare",
             "research_acquire",
@@ -215,9 +388,9 @@ class ExperimentUiTests(unittest.TestCase):
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
-        packaging_index = server.AUTO_MACHINE_ACTION_ORDER.index("package_gate_prepare")
+        concept_index = server.AUTO_MACHINE_ACTION_ORDER.index("concept_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[packaging_index + 1 : packaging_index + 5],
+            server.AUTO_MACHINE_ACTION_ORDER[concept_index + 1 : concept_index + 5],
             [
                 "research_prepare",
                 "research_acquire",
@@ -302,7 +475,7 @@ class ExperimentUiTests(unittest.TestCase):
             "Review Research Claims",
         )
 
-    def test_pending_packaging_gate_becomes_human_workflow_gate(self):
+    def test_legacy_pending_packaging_gate_does_not_block_research(self):
         with (
             patch.object(
                 server,
@@ -319,6 +492,11 @@ class ExperimentUiTests(unittest.TestCase):
                     "awaiting_human_review": False,
                     "complete": True,
                 },
+            ),
+            patch.object(
+                server,
+                "human_analysis_review_snapshot",
+                return_value={"status": "COMPLETE"},
             ),
             patch.object(
                 server,
@@ -344,14 +522,20 @@ class ExperimentUiTests(unittest.TestCase):
                     },
                 },
             ),
+            patch.object(
+                server,
+                "research_artifact_state",
+                return_value={
+                    "drafts_ready": True,
+                    "research_gate": {
+                        "status": "AWAITING_HUMAN_DECISION",
+                    },
+                },
+            ),
         ):
             workflow = server.workflow_guidance({})
 
-        self.assertEqual(workflow["state"], "HUMAN_PACKAGING_GATE")
-        self.assertEqual(
-            workflow["current_title"],
-            "Review Package Candidates",
-        )
+        self.assertEqual(workflow["state"], "HUMAN_RESEARCH_GATE")
 
     def test_pending_concept_gate_becomes_human_workflow_gate(self):
         with (

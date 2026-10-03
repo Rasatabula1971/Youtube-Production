@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -51,6 +50,11 @@ def load_config() -> dict[str, Any]:
         "packages_per_concept",
         "allowed_format_intents",
         "minimum_research_dependencies",
+        "short_title_contract",
+        "long_title_contract",
+        "title_style_contract",
+        "title_variations_per_format",
+        "title_angles",
     }
     missing = sorted(required - set(config))
     if missing:
@@ -84,15 +88,6 @@ def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
         owners[slug] = raw
 
 
-def niche_conventions(niche: Any, format_intent: Any) -> dict[str, Any]:
-    """Attach the niche thumbnail tabulation when the channel niche is configured."""
-    if not niche:
-        return {}
-    from niche_thumbnail_study import packaging_conventions
-
-    return packaging_conventions(str(niche), str(format_intent or ""))
-
-
 def build_package_request(
     concept: dict[str, Any],
     config: dict[str, Any],
@@ -124,19 +119,47 @@ def build_package_request(
             "source_dependency_test": concept.get("source_dependency_test", {}),
             "concept_gate": concept.get("concept_gate", {}),
         },
-        "niche_thumbnail_conventions": niche_conventions(
-            config.get("channel_niche"), concept.get("format_intent")
-        ),
         "package_count_requested": int(config["packages_per_concept"]),
         "allowed_format_intents": list(config["allowed_format_intents"]),
+        "title_variations_per_format": int(config["title_variations_per_format"]),
+        "title_angles": list(config["title_angles"]),
+        "title_contracts": {
+            "short": {
+                **dict(config.get("short_title_contract", {})),
+                "role": "PUBLIC_YOUTUBE_TITLE",
+                "drama_instruction": (
+                    "Lead with a concrete event, tension, contradiction, danger, "
+                    "astonishment, or personal relevance. Hide the explanation."
+                ),
+            },
+            "long_form": {
+                **dict(config.get("long_title_contract", {})),
+                "role": "PUBLIC_YOUTUBE_TITLE",
+                "drama_instruction": (
+                    "Use curiosity and truthful tension, but include enough subject "
+                    "context that an 8-15 minute viewer understands the promise."
+                ),
+            },
+        },
         "instructions": [
             "Create package options before script drafting.",
             "Treat title and thumbnail as one communication unit.",
             "Title and thumbnail should complement rather than repeat each other.",
             "Each package must communicate one main promise and one expected payoff.",
             "Define the intended viewer and their awareness level explicitly.",
+            "Do not invent a specialist persona just to make the viewer definition specific. Broadly relatable concepts may target a broad general audience unless specialist knowledge is essential to the accepted concept.",
             "Preserve the accepted viewer problem, viewer moment, desired outcome, and Human Framing contract.",
-            "Packaging may sharpen wording, but it must preserve the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama intent rather than reverting to a technical topic label.",
+            "Packaging must preserve and amplify the Hook Experience, Viewer Question, Psychological Pull, Explanation Payoff, and truthful drama intent. Do not revert to a technical topic label or classroom framing.",
+            "Generate exactly three meaningfully different package angles, not three paraphrases. Each option should lead with a different truthful human hook such as consequence/stakes, expectation violation/mystery, or personal relevance/astonishment when the concept supports it.",
+            "The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain; reveal the engineering or science as the satisfying answer.",
+            "Generate exactly one shared title set per concept: five Short title candidates and five Long-form title candidates total, not per package.",
+            "Use exactly these five psychological title angles once per format: curiosity, stakes, unexpected, mystery, payoff.",
+            "Generate Short and Long-form titles independently; do not merely lengthen or shorten the same wording.",
+            "The legacy title field is only a compatibility working title until the human Packaging Gate chooses the final Short and Long-form titles.",
+            "Use the title contract for each title set: Shorts target 3-7 words with event/tension first and explanation hidden; long-form targets 5-10 words with curiosity/tension plus enough subject context to make the promise clear.",
+            "Use the strongest truthful dramatic tension the concept can support. Prefer consequence, contradiction, danger, astonishment, mystery, or personal relevance over explanation-first wording.",
+            "Avoid lecture-style title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or ingredient/material lists. Those are payoff language, not title language.",
+            "A non-specialist should understand why the package is interesting before they understand the mechanism.",
             "Use the Visual Opening Plan as the starting psychological intention for the thumbnail/opening frame; do not promise unsupported spectacle.",
             "Write a one-sentence promise in the form: this video helps [viewer/problem] so they can [specific outcome].",
             "Explain how this package addresses the accepted content-gap hypothesis without upgrading a hypothesis into a proven fact.",
@@ -145,40 +168,33 @@ def build_package_request(
             "List factual or evidentiary dependencies that research must verify before the package can be considered fully supported.",
             "Do not rank the package options.",
             "Do not optimize for clickbait that the future video cannot deliver.",
-            "Division of labor: the thumbnail carries emotion and curiosity; the title carries context and fact.",
-            "Name the main search keyword and place it near the front of the title; aim for roughly 40-60 title characters so it survives mobile truncation.",
-            "Design the thumbnail around one focal subject with at most 2-3 distinct visual elements and at most 1-2 arrows or circles.",
-            "The channel is faceless: make the subject itself the focal point (the object, the mechanism, or a before/after contrast).",
-            "Thumbnail text, when used, should be 3-5 bold words that add to the title rather than repeat it.",
-            "Specify a background / subject / accent palette that stays legible at phone size; pick an accent that stands apart from the niche's usual palette.",
-            "These design targets are published starting hypotheses, not proven rules; never trade truthfulness for them.",
-            "When niche_thumbnail_conventions are present, they describe the niche's breakout thumbnails: where the niche diverges from a generic hypothesis, prefer the niche convention, and choose an accent from the differentiation candidates rather than the crowded hue families.",
         ],
         "response_schema": {
             "concept_id": concept_id,
+            "titles": {
+                "short": [
+                    {
+                        "candidate_id": "short-curiosity",
+                        "angle": "curiosity|stakes|unexpected|mystery|payoff",
+                        "title": "short title candidate"
+                    }
+                ],
+                "long_form": [
+                    {
+                        "candidate_id": "long-curiosity",
+                        "angle": "curiosity|stakes|unexpected|mystery|payoff",
+                        "title": "long-form title candidate"
+                    }
+                ]
+            },
             "packages": [
                 {
                     "package_id": "unique stable id",
-                    "title": "candidate title",
-                    "title_keyword": "main search keyword, appearing near the front of the title",
+                    "title": "legacy working title for compatibility",
                     "thumbnail": {
                         "message": "what the thumbnail communicates",
                         "visual_concept": "visual idea",
-                        "text_overlay": "optional 3-5 word overlay or empty string",
-                        "focal_subject": "the single thing the eye lands on first",
-                        "visual_elements": [
-                            "each distinct visual element, focal subject included"
-                        ],
-                        "visual_cues": ["arrow or circle, if any"],
-                        "palette": {
-                            "background": "background tone",
-                            "subject": "subject tone",
-                            "accent": "accent colour and the emotion it signals",
-                        },
-                    },
-                    "division_of_labor": {
-                        "thumbnail_carries": "the emotion / curiosity the thumbnail carries",
-                        "title_carries": "the context / fact the title carries",
+                        "text_overlay": "optional short overlay or empty string",
                     },
                     "opening_frame": {
                         "purpose": "what the first frame should establish",
@@ -218,9 +234,96 @@ def validate_package(
     if not package_id:
         errors.append("package_id is required")
 
+    lecture_patterns = (
+        "the physics of ",
+        "hidden engineering:",
+        "hidden engineering of ",
+    )
+
+    def validate_title_text(value: Any, *, label: str, contract: dict[str, Any]) -> None:
+        title_text = str(value or "").strip()
+        if not title_text:
+            errors.append(f"{label} is required")
+            return
+        title_words = [word for word in title_text.replace("—", " ").split() if word]
+        max_words = int(contract.get("max_words", 10))
+        max_chars = int(contract.get("max_chars", 70))
+        if len(title_words) > max_words:
+            errors.append(f"{label} must be at most {max_words} words")
+        if len(title_text) > max_chars:
+            errors.append(f"{label} must be at most {max_chars} characters")
+        lowered = title_text.lower().strip()
+        if (
+            lowered.endswith(" explained")
+            or any(lowered.startswith(pattern) for pattern in lecture_patterns)
+        ):
+            errors.append(f"{label} uses lecture-style framing")
+
+    title = str(package.get("title", "")).strip()
+    if title:
+        legacy_contract = (
+            config.get("short_title_contract", {})
+            if str(package.get("format_intent", "")).strip() == "short"
+            else config.get("long_title_contract", {})
+        )
+        validate_title_text(title, label="title", contract=legacy_contract)
+
+    titles = package.get("titles")
+    if titles is None:
+        # Legacy package artifacts remain readable/resumable. New model output
+        # is still forced to provide titles by package_model_runner's schema.
+        titles = {}
+    elif not isinstance(titles, dict):
+        errors.append("titles must be an object")
+        titles = {}
+    if titles:
+        required_angles = [str(value) for value in config.get("title_angles", [])]
+        expected_count = int(config.get("title_variations_per_format", 5))
+        for fmt, contract_key in (
+            ("short", "short_title_contract"),
+            ("long_form", "long_title_contract"),
+        ):
+            candidates = titles.get(fmt)
+            if not isinstance(candidates, list):
+                errors.append(f"titles.{fmt} must be a list")
+                continue
+            if len(candidates) != expected_count:
+                errors.append(
+                    f"titles.{fmt} must contain exactly {expected_count} candidates"
+                )
+            seen_candidate_ids: set[str] = set()
+            seen_angles: list[str] = []
+            for index, candidate in enumerate(candidates):
+                if not isinstance(candidate, dict):
+                    errors.append(f"titles.{fmt}[{index}] must be an object")
+                    continue
+                candidate_id = str(candidate.get("candidate_id") or "").strip()
+                angle = str(candidate.get("angle") or "").strip()
+                if not candidate_id:
+                    errors.append(f"titles.{fmt}[{index}].candidate_id is required")
+                elif candidate_id in seen_candidate_ids:
+                    errors.append(f"titles.{fmt} candidate_id values must be unique")
+                else:
+                    seen_candidate_ids.add(candidate_id)
+                if angle not in required_angles:
+                    errors.append(
+                        f"titles.{fmt}[{index}].angle must be one of "
+                        + ", ".join(required_angles)
+                    )
+                else:
+                    seen_angles.append(angle)
+                validate_title_text(
+                    candidate.get("title"),
+                    label=f"titles.{fmt}[{index}].title",
+                    contract=dict(config.get(contract_key, {})),
+                )
+            if sorted(seen_angles) != sorted(required_angles):
+                errors.append(
+                    f"titles.{fmt} must use each configured title angle exactly once"
+                )
+
     for field in (
         "title",
-        "title_keyword",
         "expected_viewer",
         "awareness_level",
         "viewer_problem",
@@ -252,35 +355,6 @@ def validate_package(
             errors.append("thumbnail.message is required")
         if not str(thumbnail.get("visual_concept", "")).strip():
             errors.append("thumbnail.visual_concept is required")
-        if not str(thumbnail.get("focal_subject", "")).strip():
-            errors.append("thumbnail.focal_subject is required")
-        elements = thumbnail.get("visual_elements")
-        if not isinstance(elements, list) or not elements:
-            errors.append("thumbnail.visual_elements must be a non-empty list")
-        elif any(not str(value).strip() for value in elements):
-            errors.append("thumbnail.visual_elements items must be non-empty")
-        cues = thumbnail.get("visual_cues")
-        if not isinstance(cues, list):
-            errors.append("thumbnail.visual_cues must be a list")
-        elif any(not str(value).strip() for value in cues):
-            errors.append(
-                "thumbnail.visual_cues may be empty, but listed items must be non-empty"
-            )
-        palette = thumbnail.get("palette")
-        if not isinstance(palette, dict):
-            errors.append("thumbnail.palette must be an object")
-        else:
-            for key in ("background", "subject", "accent"):
-                if not str(palette.get(key, "")).strip():
-                    errors.append(f"thumbnail.palette.{key} is required")
-
-    division = package.get("division_of_labor")
-    if not isinstance(division, dict):
-        errors.append("division_of_labor must be an object")
-    else:
-        for key in ("thumbnail_carries", "title_carries"):
-            if not str(division.get(key, "")).strip():
-                errors.append(f"division_of_labor.{key} is required")
 
     opening_frame = package.get("opening_frame")
     if not isinstance(opening_frame, dict):
@@ -306,125 +380,6 @@ def validate_package(
         errors.append("package concept_id does not match request")
 
     return errors
-
-
-_ADVISORY_STOPWORDS = frozenset(
-    "a an and are as at be by for from how i in is it my of on or the this "
-    "to was what when why with you your".split()
-)
-
-
-def content_tokens(text: str) -> list[str]:
-    cleaned = re.sub(r"[^0-9a-z\s]", "", text.lower())
-    return [token for token in cleaned.split() if token not in _ADVISORY_STOPWORDS]
-
-
-def design_advisories(
-    package: dict[str, Any],
-    config: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Non-blocking checks of generic title/thumbnail guidance.
-
-    The thresholds are published starting hypotheses (see D-070). They are
-    surfaced to the human Packaging Gate and never reject a package.
-    """
-    rules = config.get("design_advisories")
-    if not isinstance(rules, dict):
-        return []
-    status = str(rules.get("evidence_status", "HYPOTHESIS"))
-    advisories: list[dict[str, Any]] = []
-
-    def add(rule: str, observed: Any, guidance: str) -> None:
-        advisories.append(
-            {
-                "rule": rule,
-                "observed": observed,
-                "guidance": guidance,
-                "evidence_status": status,
-            }
-        )
-
-    title = str(package.get("title", "")).strip()
-    length = rules.get("title_length_chars")
-    if title and isinstance(length, dict):
-        low, high = int(length["min"]), int(length["max"])
-        if not low <= len(title) <= high:
-            add(
-                "TITLE_LENGTH",
-                len(title),
-                f"Title is {len(title)} characters; target {low}-{high} so it "
-                "survives mobile truncation.",
-            )
-
-    keyword = str(package.get("title_keyword", "")).strip()
-    max_start = rules.get("title_keyword_max_start_chars")
-    if title and keyword and max_start is not None:
-        start = title.lower().find(keyword.lower())
-        if start < 0:
-            add(
-                "TITLE_KEYWORD_MISSING",
-                keyword,
-                "The declared keyword does not appear in the title.",
-            )
-        elif start > int(max_start):
-            add(
-                "TITLE_KEYWORD_LATE",
-                start,
-                f"Keyword starts at character {start}; place it within the "
-                f"first {int(max_start)} characters.",
-            )
-
-    thumbnail = package.get("thumbnail")
-    if not isinstance(thumbnail, dict):
-        return advisories
-
-    overlay = str(thumbnail.get("text_overlay", "") or "").strip()
-    words = rules.get("thumbnail_text_words")
-    if overlay and isinstance(words, dict):
-        count = len(overlay.split())
-        low, high = int(words["min"]), int(words["max"])
-        if not low <= count <= high:
-            add(
-                "THUMBNAIL_TEXT_WORDS",
-                count,
-                f"Thumbnail text is {count} words; target {low}-{high} bold words.",
-            )
-
-    overlap_max = rules.get("thumbnail_text_title_overlap_max")
-    overlay_tokens = content_tokens(overlay)
-    if overlay_tokens and title and overlap_max is not None:
-        title_tokens = set(content_tokens(title))
-        shared = sum(token in title_tokens for token in overlay_tokens)
-        ratio = round(shared / len(overlay_tokens), 2)
-        if ratio > float(overlap_max):
-            add(
-                "THUMBNAIL_TEXT_REPEATS_TITLE",
-                ratio,
-                "Thumbnail text mostly repeats the title; it should add to it.",
-            )
-
-    elements = thumbnail.get("visual_elements")
-    max_elements = rules.get("thumbnail_max_visual_elements")
-    if isinstance(elements, list) and max_elements is not None:
-        if len(elements) > int(max_elements):
-            add(
-                "THUMBNAIL_ELEMENT_COUNT",
-                len(elements),
-                f"{len(elements)} distinct visual elements; keep to "
-                f"{int(max_elements)} or fewer around one focal subject.",
-            )
-
-    cues = thumbnail.get("visual_cues")
-    max_cues = rules.get("thumbnail_max_visual_cues")
-    if isinstance(cues, list) and max_cues is not None:
-        if len(cues) > int(max_cues):
-            add(
-                "THUMBNAIL_CUE_COUNT",
-                len(cues),
-                f"{len(cues)} arrows/circles; use at most {int(max_cues)}.",
-            )
-
-    return advisories
 
 
 def validate_response(
@@ -455,8 +410,13 @@ def validate_response(
             )
             continue
 
+        shared_titles = response.get("titles")
+        package_for_validation = dict(package)
+        if shared_titles is not None:
+            package_for_validation["titles"] = shared_titles
+
         errors = validate_package(
-            package,
+            package_for_validation,
             concept_id=concept_id,
             config=config,
         )
@@ -467,12 +427,28 @@ def validate_response(
         if package_id:
             seen_ids.add(package_id)
 
-        normalized = dict(package)
+        normalized = dict(package_for_validation)
         normalized["concept_id"] = concept_id
         normalized["concept_context"] = request["concept"]
+        normalized_title_sets = normalized.get("titles")
+        if not isinstance(normalized_title_sets, dict):
+            normalized_title_sets = {}
         overlap = check_texts(
             [
                 {"field": "title", "text": normalized.get("title", "")},
+                *[
+                    {
+                        "field": f"titles.{fmt}.{candidate.get('angle', index)}",
+                        "text": candidate.get("title", ""),
+                    }
+                    for fmt in ("short", "long_form")
+                    for index, candidate in enumerate(
+                        normalized_title_sets.get(fmt, [])
+                        if isinstance(normalized_title_sets.get(fmt, []), list)
+                        else []
+                    )
+                    if isinstance(candidate, dict)
+                ],
                 {
                     "field": "one_sentence_promise",
                     "text": normalized.get("one_sentence_promise", ""),
@@ -490,7 +466,6 @@ def validate_response(
             ]
         )
         normalized["source_overlap"] = overlap
-        normalized["packaging_advisories"] = design_advisories(normalized, config)
         if overlap.get("blocking"):
             match = overlap.get("matches", [{}])[0]
             errors.append(
@@ -556,6 +531,7 @@ def run_prepare(
         request["request_provenance"] = {
             "concept_handoff_source": str(concept_handoff_path),
             "concept_handoff_sha256": handoff_sha256,
+            "packaging_config_sha256": sha256_file(CONFIG_FILE),
         }
         concept_id = str(request["concept_id"])
         if concept_id in seen_concept_ids:

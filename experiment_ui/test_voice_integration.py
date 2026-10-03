@@ -17,12 +17,20 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             server.AUTO_MACHINE_ACTION_ORDER[
-                format_gate_index + 1 : format_gate_index + 5
+                format_gate_index + 1 : format_gate_index + 13
             ],
             [
                 "voice_prepare",
                 "voice_generate",
                 "voice_gate_prepare",
+                "pre_render_engagement",
+                "narration_preview_prepare",
+                "prototype_sound_prepare",
+                "narration_preview_render",
+                "sound_design_brief_prepare",
+                "narration_prepare",
+                "narration_spend_gate_prepare",
+                "narration_audio_qc",
                 "production_visual_prepare",
             ],
         )
@@ -35,6 +43,76 @@ class VoicePerformanceUiIntegrationTests(unittest.TestCase):
         self.assertIn("HUMAN PERFORMANCE GATE", html)
         self.assertIn("renderPerformanceReview", script)
         self.assertIn("/api/performance-gate", script)
+
+    def test_performance_accept_ui_announces_automatic_free_preview(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            'payload.automation_job.action_id === "auto_continue"',
+            script,
+        )
+        self.assertIn(
+            "Performance Gate complete. Free narration preview started automatically.",
+            script,
+        )
+
+    def test_static_ui_contains_narration_spend_gate(self) -> None:
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="narrationSpendReviewPanel"', html)
+        self.assertIn("HUMAN NARRATION SPEND GATE", html)
+        self.assertIn("renderNarrationSpendReview", script)
+        self.assertIn("/api/narration-spend-gate", script)
+        self.assertIn(
+            "Accept Worst-Case Cost",
+            html,
+        )
+
+    def test_preview_approval_ui_announces_automatic_cost_preparation(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            "Sound brief and narration cost preparation started automatically.",
+            script,
+        )
+
+    def test_static_ui_contains_authorized_narration_return(self) -> None:
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="narrationReturnPanel"', html)
+        self.assertIn("AUTHORIZED NARRATION RETURN", html)
+        self.assertIn("renderNarrationReturn", script)
+        self.assertIn("/api/narration-render-return", script)
+        self.assertIn(
+            "Final narration registered. Local Audio QC started automatically.",
+            script,
+        )
+
+    def test_visual_candidate_ui_announces_rights_route(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            "Visual selected. Rights/context review is required before reuse.",
+            script,
+        )
+        self.assertIn(
+            "Visual selected with verified reuse rights.",
+            script,
+        )
+
+    def test_ui_knows_visual_search_ready_boundary(self) -> None:
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn("VISUAL_SEARCH_READY", script)
+        self.assertIn("Visual search plan ready", script)
+
+    def test_ui_knows_slice19_edit_preview_boundaries(self) -> None:
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="editPreviewReviewPanel"', html)
+        self.assertIn("HUMAN EDIT PREVIEW GATE", html)
+        self.assertIn("LOCAL_FFMPEG_REQUIRED", script)
+        self.assertIn("HUMAN_EDIT_PREVIEW_GATE", script)
+        self.assertIn("EDIT_PREVIEW_REWORK_REQUIRED", script)
+        self.assertIn("EDIT_PREVIEW_DIRECTION_APPROVED", script)
+        self.assertIn("Configure local FFmpeg", script)
+        self.assertIn("Review edit preview", script)
 
     def test_pending_performance_gate_is_human_boundary(self) -> None:
         with (

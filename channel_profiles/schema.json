@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "YouTube Production Channel Voice Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "version",
+    "status",
+    "channel_id",
+    "channel_name",
+    "niche",
+    "audience",
+    "narrator_role",
+    "tone",
+    "technical_language",
+    "sentence_style",
+    "storytelling",
+    "prohibited_style",
+    "evidence_style",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "UNCONFIGURED",
+        "APPROVED"
+      ]
+    },
+    "channel_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "channel_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "niche": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "audience": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "narrator_role": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "tone": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "technical_language": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "sentence_style": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "storytelling": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "prohibited_style": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_style": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_uncertainty",
+        "distinguish_fact_from_hypothesis",
+        "numbers_require_support"
+      ],
+      "properties": {
+        "state_uncertainty": {
+          "type": "boolean"
+        },
+        "distinguish_fact_from_hypothesis": {
+          "type": "boolean"
+        },
+        "numbers_require_support": {
+          "type": "boolean"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created_from",
+        "approved_by",
+        "approved_at"
+      ],
+      "properties": {
+        "created_from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approved_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "approved_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

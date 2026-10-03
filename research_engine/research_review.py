@@ -43,6 +43,136 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def claim_fingerprint(item: dict[str, Any]) -> str:
+    payload = {
+        key: value
+        for key, value in item.items()
+        if key not in {"decision", "criteria_decisions", "note"}
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _preserved_decisions(
+    requests: list[dict[str, Any]],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    prior = previous.get("decisions", {}) if isinstance(previous, dict) else {}
+    if not isinstance(prior, dict):
+        return {}
+    preserved: dict[str, Any] = {}
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        for item in bundle["request"].get("items", []):
+            claim_id = str(item.get("claim_id") or "")
+            key = key_for(concept_id, claim_id)
+            saved = prior.get(key)
+            if not isinstance(saved, dict):
+                continue
+            if str(saved.get("decision") or "").upper() == "REWORK":
+                continue
+            if saved.get("claim_fingerprint") != claim_fingerprint(item):
+                continue
+            preserved[key] = saved
+    return preserved
+
+
+def _apply_rework_feedback(
+    *,
+    concept_id: str,
+    claim_id: str,
+    item: dict[str, Any],
+    note: str,
+) -> None:
+    plans_dir = OUTPUT_DIR / "plans"
+    plan_path = plans_dir / f"{safe_slug(concept_id)}.research_plan.json"
+    if not plan_path.exists():
+        raise ValueError("Research rework cannot find the current research plan")
+
+    plan = load_json(plan_path)
+    if str(plan.get("concept_id") or "") != concept_id:
+        raise ValueError("Research rework plan concept_id mismatch")
+
+    requests = plan.get("human_rework_requests", [])
+    if not isinstance(requests, list):
+        requests = []
+    previous = [
+        value
+        for value in requests
+        if isinstance(value, dict)
+        and str(value.get("claim_id") or "") != claim_id
+    ]
+    iteration = 1 + max(
+        (
+            int(value.get("iteration") or 0)
+            for value in requests
+            if isinstance(value, dict)
+            and str(value.get("claim_id") or "") == claim_id
+        ),
+        default=0,
+    )
+    question_id = f"hrw_{safe_slug(claim_id)}"
+    request = {
+        "claim_id": claim_id,
+        "iteration": iteration,
+        "note": note,
+        "question_id": question_id,
+        "original_claim": {
+            key: value
+            for key, value in item.items()
+            if key not in {
+                "required_accept_criteria",
+                "criteria_descriptions",
+                "criteria_decisions",
+                "decision",
+                "note",
+            }
+        },
+    }
+    previous.append(request)
+    plan["human_rework_requests"] = previous
+    plan["human_rework_mode"] = "HUMAN_INSTRUCTION_ONLY"
+
+    questions = plan.get("research_questions", [])
+    if not isinstance(questions, list):
+        questions = []
+    questions = [
+        question
+        for question in questions
+        if not (
+            isinstance(question, dict)
+            and str(question.get("rework_claim_id") or "") == claim_id
+        )
+    ]
+    questions.append(
+        {
+            "question_id": question_id,
+            "question": note,
+            "origin": "human_rework",
+            "rework_claim_id": claim_id,
+        }
+    )
+    plan["research_questions"] = questions
+
+    instructions = plan.get("instructions", [])
+    if not isinstance(instructions, list):
+        instructions = []
+    directive = (
+        "Human Research Gate rework instructions are authoritative: investigate "
+        "the requested issue again using acquired evidence. The instruction may "
+        "change what must be researched, but it never authorizes invented facts."
+    )
+    if directive not in instructions:
+        instructions.append(directive)
+    plan["instructions"] = instructions
+    write_json(plan_path, plan)
+
+
 def current_drafts() -> list[Path]:
     if not DEFAULT_DRAFTS_DIR.exists():
         return []
@@ -87,12 +217,13 @@ def prepare_state() -> dict[str, Any]:
     if not requests:
         return {"status": "WAITING_FOR_DRAFT_RESEARCH_PACKAGES", "claims": []}
 
+    previous = load_json(STATE_FILE) if STATE_FILE.exists() else {}
     state = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "status": "AWAITING_HUMAN_DECISION",
         "draft_hashes": drafts_hashes(),
         "reviewer": os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER),
-        "decisions": {},
+        "decisions": _preserved_decisions(requests, previous),
     }
     write_json(STATE_FILE, state)
     return snapshot()
@@ -307,13 +438,10 @@ def apply_action(
         raise ValueError("Decision must be ACCEPT, REWORK, or REJECT")
 
     required = list(item.get("required_accept_criteria", []))
-    normalized = normalize_criteria(criteria, required)
     clean_note = str(note or "").strip()
-    if value == "ACCEPT" and not all(normalized.values()):
-        missing = [name for name, passed in normalized.items() if not passed]
-        raise ValueError(
-            "ACCEPT requires every criterion confirmed: " + ", ".join(missing)
-        )
+    # REWORK and REJECT both record every criterion as unconfirmed; the gate's
+    # final validation requires every criterion key on every decision.
+    normalized = {criterion: value == "ACCEPT" for criterion in required}
     if value == "REWORK" and not clean_note:
         raise ValueError("REWORK requires a note explaining what must change")
     if (
@@ -329,7 +457,17 @@ def apply_action(
         "decision": value,
         "criteria": normalized,
         "note": clean_note,
+        "claim_fingerprint": claim_fingerprint(item),
     }
+
+    if value == "REWORK":
+        _apply_rework_feedback(
+            concept_id=concept_id,
+            claim_id=claim_id,
+            item=item,
+            note=clean_note,
+        )
+
     state["status"] = "AWAITING_HUMAN_DECISION"
     finalize_if_complete(state, requests)
     return snapshot()

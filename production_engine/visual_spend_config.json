@@ -1,0 +1,7 @@
+{
+  "currency": "USD",
+  "per_shot_hard_cap_usd": 10.0,
+  "workflow_hard_cap_usd": 10.0,
+  "human_authorization_required": true,
+  "paid_provider_calls_without_authorization": false
+}

@@ -1,8 +1,8 @@
 """Niche thumbnail study.
 
 Tabulates what the top-performing thumbnails in one niche + format actually
-look like, so Packaging can compare the generic D-070 hypotheses with the
-niche's own conventions.
+look like, so Packaging can compare the Slice 25 thumbnail contract and D-096
+title guidance with the niche's own conventions.
 
 Stages (each idempotent, each writes under packaging_engine/output/niche_thumbnails/):
 
@@ -11,7 +11,7 @@ Stages (each idempotent, each writes under packaging_engine/output/niche_thumbna
     measure   offline  deterministic pixel metrics via ffmpeg/ffprobe (no model)
     annotate  offline  write/refresh the human annotation sheet; optional local
                        Ollama drafts that stay DRAFT until a human confirms them
-    tabulate  offline  per-niche distributions + comparison with D-070 hypotheses
+    tabulate  offline  per-niche distributions + comparison with the Slice 25 contract
 
 Tabulated numbers are descriptive and correlational. Selection is by
 channel-relative breakout, and nothing here measures or predicts CTR.
@@ -45,9 +45,9 @@ for _path in (PROJECT_ROOT, PROJECT_ROOT / "experiment_02_analysis"):
 
 from pipeline_integrity import atomic_write_json
 
-from packaging_engine import content_tokens, load_config as load_packaging_config
 
 CONFIG_FILE = HERE / "niche_thumbnail_config.json"
+PACKAGING_CONFIG_FILE = HERE / "packaging_config.json"
 STUDY_ROOT = HERE / "output" / "niche_thumbnails"
 
 FORMATS = {"long_form": "long_form_candidate", "short": "short_candidate"}
@@ -80,6 +80,35 @@ Return strict JSON with these keys:
 
 Do not infer intent, emotion, performance or anything not visible. Do not guess unreadable text.
 """
+
+
+STOPWORDS = frozenset(
+    "a an and are as at be by for from how i in is it my of on or the this "
+    "to was what when why with you your".split()
+)
+
+
+def content_tokens(text: str) -> list[str]:
+    cleaned = re.sub(r"[^0-9a-z\s]", "", text.lower())
+    return [token for token in cleaned.split() if token not in STOPWORDS]
+
+
+def comparison_rules(video_format: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Thresholds the niche is compared against: the live Slice 25 / D-096 contract."""
+    packaging = json.loads(PACKAGING_CONFIG_FILE.read_text(encoding="utf-8"))
+    contract = packaging["thumbnail_concepts"]
+    comparison = config["comparison"]
+    if video_format == "short":
+        title_range = {"min": 1, "max": int(packaging["short_title_contract"]["max_chars"])}
+    else:
+        title_range = dict(comparison["long_form_title_preferred_chars"])
+    return {
+        "title_length_chars": title_range,
+        "thumbnail_text_words": {"min": 1, "max": int(contract["maximum_text_words"])},
+        "thumbnail_text_title_overlap_max": float(comparison["text_title_overlap_max"]),
+        "thumbnail_max_visual_elements": int(contract["maximum_meaningful_visual_elements"]),
+        "thumbnail_max_visual_cues": int(comparison["max_visual_cues"]),
+    }
 
 
 def utc_now() -> str:
@@ -789,7 +818,7 @@ def tabulate(
             "Selection uses channel-relative breakout ratio; no CTR is measured or predicted.",
             "Color metrics come from a downscaled image and approximate perceived color families.",
             "Text, focal-subject, element and cue figures use only human-CONFIRMED annotations.",
-            "Where the niche diverges from a D-070 hypothesis, treat the niche convention as the stronger local evidence, still unvalidated for this channel.",
+            "Where the niche diverges from a Slice 25 / D-096 packaging rule, treat the niche convention as the stronger local evidence, still unvalidated for this channel.",
         ],
     }
 
@@ -833,7 +862,7 @@ def render_report(result: dict[str, Any]) -> str:
         "",
         "## Hypotheses vs this niche",
         "",
-        "| D-070 hypothesis | Niche share conforming | Verdict |",
+        "| Packaging rule | Niche share conforming | Verdict |",
         "|---|---|---|",
     ]
     for item in result["hypothesis_comparison"]:
@@ -882,7 +911,7 @@ def run_tabulate(niche: str, video_format: str) -> dict[str, Any]:
         for item in annotations
         if (errors := validate_annotation(item, config))
     }
-    advisory_rules = load_packaging_config().get("design_advisories", {})
+    advisory_rules = comparison_rules(video_format, config)
     result = tabulate(
         study, measurements, annotations, config=config, advisory_rules=advisory_rules
     )

@@ -39,10 +39,26 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/human-analysis-review",
     "/api/concept-gate",
     "/api/packaging-gate",
+    "/api/title-direction-gate",
     "/api/research-gate",
     "/api/script-gate",
+    "/api/script-section-review",
     "/api/format-gate",
     "/api/performance-gate",
+    "/api/narration-preview-gate",
+    "/api/narration-spend-gate",
+    "/api/narration-render-return",
+    "/api/visual-candidate-review",
+    "/api/visual-rights-review",
+    "/api/visual-rough-cut-review",
+    "/api/visual-spend-review",
+    "/api/generated-visual-asset",
+    "/api/managed-visual-asset",
+    "/api/edit-preview-review",
+    "/api/final-sound-asset",
+    "/api/final-export-review",
+    "/api/storyboard-review",
+    "/api/narration-performance-review",
     "/api/thumbnail-gate",
     "/api/thumbnail-spec",
 }
@@ -138,12 +154,43 @@ from package_review import (
 from package_review import (
     snapshot as packaging_gate_snapshot,
 )
+from title_direction_review import (
+    apply_action as apply_title_direction_gate_action,
+    snapshot as title_direction_gate_snapshot,
+)
+from packaging_brief import snapshot as packaging_brief_snapshot
+from psychological_angles import (
+    request_snapshot as psychological_angle_request_snapshot,
+    snapshot as psychological_angle_snapshot,
+)
+from thumbnail_concepts import (
+    request_snapshot as thumbnail_concept_request_snapshot,
+    snapshot as thumbnail_concept_snapshot,
+)
+from package_pairing import (
+    request_snapshot as package_pairing_request_snapshot,
+    snapshot as package_validation_snapshot,
+)
 
+PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
 PACKAGING_REQUESTS_DIR = PACKAGING_OUTPUT / "package_requests"
 PACKAGING_RESPONSES_DIR = PACKAGING_OUTPUT / "package_responses"
 PACKAGING_CANDIDATES_FILE = PACKAGING_OUTPUT / "package_candidates.json"
 PACKAGING_RESEARCH_HANDOFF = PACKAGING_OUTPUT / "research_handoff.json"
+TITLE_DIRECTION_REQUESTS_DIR = (
+    PACKAGING_OUTPUT / "title_direction_requests"
+)
+TITLE_DIRECTION_RESPONSES_DIR = (
+    PACKAGING_OUTPUT / "title_direction_responses"
+)
+TITLE_DIRECTION_CANDIDATES_FILE = (
+    PACKAGING_OUTPUT / "title_direction_candidates.json"
+)
+TITLE_DIRECTION_SELECTED_FILE = (
+    PACKAGING_OUTPUT / "selected_title_directions.json"
+)
+PACKAGING_BRIEF_DIR = PACKAGING_OUTPUT / "packaging_briefs"
 
 RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 if str(RESEARCH_DIR) not in sys.path:
@@ -172,6 +219,10 @@ from script_review import (
 )
 from script_review import (
     snapshot as script_gate_snapshot,
+)
+from script_section_service import (
+    apply_action as apply_script_section_review_action,
+    snapshot as script_section_review_snapshot,
 )
 from story_plan_engine import (
     validation_contract_sha256 as story_plan_validation_contract_sha256,
@@ -218,6 +269,87 @@ from voice_review import (
 from voice_review import (
     snapshot as performance_gate_snapshot,
 )
+from narration_render import snapshot as narration_render_snapshot
+from narration_render_import import (
+    register as register_narration_render_return,
+    snapshot as narration_render_return_snapshot,
+)
+from narration_audio_qc import snapshot as narration_audio_qc_snapshot
+from pre_render_engagement import snapshot as pre_render_engagement_snapshot
+from narration_preview import snapshot as narration_preview_prepare_snapshot
+from sound_design_brief import snapshot as sound_design_brief_snapshot
+from narration_performance_review import (
+    revise as revise_narration_performance,
+    snapshot as narration_performance_revision_snapshot,
+)
+from narration_preview_review import (
+    apply_action as apply_narration_preview_gate_action,
+    snapshot as narration_preview_gate_snapshot,
+)
+from narration_cost_review import (
+    apply_action as apply_narration_spend_gate_action,
+    snapshot as narration_spend_gate_snapshot,
+)
+from visual_candidate_review import (
+    apply_action as apply_visual_candidate_review_action,
+    snapshot as visual_candidate_review_snapshot,
+)
+from visual_rights_review import (
+    apply_action as apply_visual_rights_review_action,
+    snapshot as visual_rights_review_snapshot,
+)
+from visual_rough_cut_review import (
+    apply_action as apply_visual_rough_cut_review_action,
+    snapshot as visual_rough_cut_review_snapshot,
+)
+from visual_spend_review import (
+    apply_action as apply_visual_spend_review_action,
+    snapshot as visual_spend_review_snapshot,
+)
+from visual_gap_planner import gap_plan_is_current
+from visual_assembly_plan import assembly_plan_is_current
+from edit_manifest import manifest_is_current
+from edit_preview_render import (
+    ffmpeg_available as structural_ffmpeg_available,
+    preview_result_is_current,
+)
+from visual_generated_asset_import import (
+    register as register_generated_visual_asset,
+    snapshot as generated_visual_asset_snapshot,
+)
+from visual_existing_asset_import import (
+    register as register_existing_visual_asset,
+    snapshot as managed_visual_asset_snapshot,
+)
+from edit_preview_review import (
+    apply_action as apply_edit_preview_action,
+    snapshot as edit_preview_review_snapshot,
+)
+from final_production_handoff import handoff_is_current
+from final_sound_plan import plan_is_current as final_sound_plan_is_current
+from final_sound_asset_import import (
+    omit as omit_final_sound_requirement,
+    register as register_final_sound_asset,
+    snapshot as final_sound_asset_snapshot,
+)
+from final_render_manifest import (
+    manifest_is_current as final_render_manifest_is_current,
+)
+from final_render import (
+    ffmpeg_available as final_ffmpeg_available,
+    result_is_current as final_render_result_is_current,
+)
+from final_export_review import (
+    apply_action as apply_final_export_action,
+    snapshot as final_export_review_snapshot,
+)
+from storyboard_review import (
+    revise as revise_storyboard_shot,
+    snapshot as storyboard_review_snapshot,
+)
+from storyboard import snapshot as production_storyboard_snapshot
+from visual_search import snapshot as visual_search_prepare_snapshot
+from visual_search_acquire import snapshot as visual_search_acquire_snapshot
 
 from production_engine.thumbnail_review import (
     apply_action as apply_thumbnail_gate_action,
@@ -238,7 +370,64 @@ from production_engine.thumbnail_review import (
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
 PRODUCTION_VOICE_SPECS_DIR = PRODUCTION_OUTPUT / "voice_performance_specs"
+PRODUCTION_ENGAGEMENT_SUMMARY = PRODUCTION_OUTPUT / "pre_render_engagement_summary.json"
+PRODUCTION_PREVIEW_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_summary.json"
+PRODUCTION_PREVIEW_RENDER_SUMMARY = PRODUCTION_OUTPUT / "narration_preview_render_summary.json"
+PRODUCTION_SOUND_REFERENCE_SUMMARY = PRODUCTION_OUTPUT / "prototype_sound_summary.json"
+PRODUCTION_SOUND_BRIEF_SUMMARY = PRODUCTION_OUTPUT / "sound_design_brief_summary.json"
+PRODUCTION_PREVIEW_AUDIO_DIR = PRODUCTION_OUTPUT / "narration_preview_audio"
+PRODUCTION_NARRATION_RENDER_RESULTS_DIR = PRODUCTION_OUTPUT / "narration_render_results"
+PRODUCTION_NARRATION_QC_SUMMARY = PRODUCTION_OUTPUT / "narration_audio_qc_summary.json"
 PRODUCTION_VISUAL_MANIFESTS_DIR = PRODUCTION_OUTPUT / "visual_manifests"
+PRODUCTION_STORYBOARD_DIR = PRODUCTION_OUTPUT / "storyboards"
+PRODUCTION_VISUAL_SEARCH_RESULT_DIR = PRODUCTION_OUTPUT / "visual_search_results"
+PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_candidate_reviews"
+PRODUCTION_VISUAL_ASSET_ACQUISITION_SUMMARY = (
+    PRODUCTION_OUTPUT / "visual_asset_acquisition_summary.json"
+)
+PRODUCTION_MANAGED_VISUAL_ASSET_DIR = (
+    PRODUCTION_OUTPUT / "managed_visual_assets"
+)
+PRODUCTION_MANAGED_VISUAL_REGISTRY_DIR = (
+    PRODUCTION_OUTPUT / "managed_visual_asset_registry"
+)
+PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rights_reviews"
+PRODUCTION_VISUAL_ROUGH_CUT_DIR = PRODUCTION_OUTPUT / "visual_rough_cuts"
+PRODUCTION_VISUAL_ROUGH_REVIEW_DIR = PRODUCTION_OUTPUT / "visual_rough_cut_reviews"
+PRODUCTION_VISUAL_GAP_PLAN_DIR = PRODUCTION_OUTPUT / "visual_gap_plans"
+PRODUCTION_VISUAL_GENERATION_REQUEST_DIR = (
+    PRODUCTION_OUTPUT / "visual_generation_requests"
+)
+PRODUCTION_VISUAL_GENERATION_HANDOFF_SUMMARY = (
+    PRODUCTION_OUTPUT / "visual_generation_handoff_summary.json"
+)
+PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR = (
+    PRODUCTION_OUTPUT / "visual_assembly_plans"
+)
+PRODUCTION_VISUAL_ASSEMBLY_SUMMARY = (
+    PRODUCTION_OUTPUT / "visual_assembly_plan_summary.json"
+)
+PRODUCTION_EDIT_MANIFEST_DIR = PRODUCTION_OUTPUT / "edit_manifests"
+PRODUCTION_EDIT_MANIFEST_SUMMARY = PRODUCTION_OUTPUT / "edit_manifest_summary.json"
+PRODUCTION_EDIT_PREVIEW_DIR = PRODUCTION_OUTPUT / "edit_previews"
+PRODUCTION_EDIT_PREVIEW_RESULT_DIR = PRODUCTION_OUTPUT / "edit_preview_results"
+PRODUCTION_EDIT_PREVIEW_SUMMARY = (
+    PRODUCTION_OUTPUT / "edit_preview_render_summary.json"
+)
+PRODUCTION_FINAL_HANDOFF_DIR = (
+    PRODUCTION_OUTPUT / "final_production_handoffs"
+)
+PRODUCTION_FINAL_HANDOFF_SUMMARY = (
+    PRODUCTION_OUTPUT / "final_production_handoff_summary.json"
+)
+PRODUCTION_FINAL_SOUND_PLAN_DIR = PRODUCTION_OUTPUT / "final_sound_plans"
+PRODUCTION_FINAL_RENDER_MANIFEST_DIR = (
+    PRODUCTION_OUTPUT / "final_render_manifests"
+)
+PRODUCTION_FINAL_RENDER_RESULT_DIR = (
+    PRODUCTION_OUTPUT / "final_render_results"
+)
+PRODUCTION_FINAL_RENDER_DIR = PRODUCTION_OUTPUT / "final_renders"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -254,9 +443,6 @@ AUTO_MACHINE_ACTION_ORDER = [
     "concept_generate",
     "concept_triage",
     "concept_gate_prepare",
-    "package_prepare",
-    "package_generate",
-    "package_gate_prepare",
     "research_prepare",
     "research_acquire",
     "research_generate",
@@ -266,13 +452,45 @@ AUTO_MACHINE_ACTION_ORDER = [
     "script_prepare",
     "script_generate",
     "script_gate_prepare",
+    "title_direction_prepare",
+    "title_direction_generate",
+    "title_direction_gate_prepare",
+    "packaging_brief_prepare",
+    "psychological_angle_prepare",
+    "psychological_angle_generate",
+    "thumbnail_concept_prepare",
+    "thumbnail_concept_generate",
+    "package_pairing_prepare",
+    "package_pairing_generate",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
     "voice_prepare",
     "voice_generate",
     "voice_gate_prepare",
+    "pre_render_engagement",
+    "narration_preview_prepare",
+    "prototype_sound_prepare",
+    "narration_preview_render",
+    "sound_design_brief_prepare",
+    "narration_prepare",
+    "narration_spend_gate_prepare",
+    "narration_audio_qc",
     "production_visual_prepare",
+    "storyboard_prepare",
+    "visual_search_prepare",
+    "visual_search_acquire",
+    "visual_asset_acquire",
+    "visual_rough_cut_prepare",
+    "visual_gap_prepare",
+    "visual_generation_handoff_prepare",
+    "visual_assembly_prepare",
+    "edit_manifest_prepare",
+    "edit_preview_render",
+    "final_production_handoff_prepare",
+    "final_sound_plan_prepare",
+    "final_render_manifest_prepare",
+    "final_render_local",
 ]
 
 WORKFLOW_ACTION_ORDER = [
@@ -741,7 +959,9 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": (
-            "Turns approved packages into bounded research questions, including package promise dependencies."
+            "Turns human-accepted concepts directly into bounded research questions. "
+            "Pre-script packaging is no longer required; legacy package dependencies "
+            "remain readable on older resumable handoffs."
         ),
     },
     "research_acquire": {
@@ -794,7 +1014,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Builds story-structure requests from verified research and the "
-            "approved title/package before any narration is written."
+            "accepted concept/viewer contract. The carried title is internal only."
         ),
     },
     "story_generate": {
@@ -847,6 +1067,150 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "prepare",
         ],
         "description": ("Prepares the human Script Gate before production."),
+    },
+    "title_direction_prepare": {
+        "label": "Prepare Title Direction Requests",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds post-script title-direction requests from exact current "
+            "human-approved scripts, opening hooks, payoffs and approved evidence."
+        ),
+    },
+    "title_direction_generate": {
+        "label": "Generate 5+5 Title Directions",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses FAIR free-first routing to generate five Short and five Long-form "
+            "title directions with stable IDs and psychology/evidence metadata."
+        ),
+    },
+    "title_direction_gate_prepare": {
+        "label": "Prepare Title Direction Gate",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/title_direction_review.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Prepares the post-script Human Title Direction Gate. Selection records "
+            "a preferred psychological direction; exact wording remains editable."
+        ),
+    },
+    "packaging_brief_prepare": {
+        "label": "Build Packaging Brief + Viewer Promise",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/packaging_brief.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Deterministically binds the current approved script, verified evidence, "
+            "selected title direction, hook, payoff and audience context into one "
+            "format-specific Packaging Brief and Viewer Promise Contract. No model "
+            "call, thumbnail generation, scoring or production action occurs."
+        ),
+    },
+    "psychological_angle_prepare": {
+        "label": "Prepare Psychological Packaging Angles",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/psychological_angles.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds current evidence-bound requests for five meaningfully different "
+            "psychological packaging hypotheses per approved format."
+        ),
+    },
+    "psychological_angle_generate": {
+        "label": "Generate Psychological Packaging Angles",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/psychological_angle_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses the existing free-first FAIR path to generate five diverse angle "
+            "hypotheses. Creative framing may vary; facts remain bound to approved evidence."
+        ),
+    },
+    "thumbnail_concept_prepare": {
+        "label": "Prepare Thumbnail Concept Requests",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/thumbnail_concepts.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Binds each current psychological angle to the evidence-backed Packaging "
+            "Brief before thumbnail concept generation."
+        ),
+    },
+    "thumbnail_concept_generate": {
+        "label": "Generate Thumbnail Concepts",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/thumbnail_concept_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Generates structured 16:9 mobile-legible thumbnail concepts only. "
+            "No image generation, download, paid provider call, pairing or scoring occurs."
+        ),
+    },
+    "package_pairing_prepare": {
+        "label": "Prepare Title + Thumbnail Pairing Matrix",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/package_pairing.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds the full 5-title x 5-thumbnail compatibility matrix per format "
+            "and splits it into resumable five-pair validation requests. No winner "
+            "is selected and no viral score is produced."
+        ),
+    },
+    "package_pairing_generate": {
+        "label": "Validate Packaging Pairs",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/package_pairing_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses the free-first FAIR path to assess complementarity, information "
+            "gain, redundancy, claims, Viewer Promise and Hook Alignment for every "
+            "current title-thumbnail pair. Hard truth failures override diagnostics."
+        ),
     },
     "format_prepare": {
         "label": "Prepare Format Requests",
@@ -931,9 +1295,226 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "narration render can be introduced."
         ),
     },
+    "pre_render_engagement": {
+        "label": "Validate Pre-Render Engagement",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/pre_render_engagement.py", "--mode", "batch"],
+        "description": "Deterministically checks hook, problem/tension, payoff, exposition length and delivery variation before narration spend.",
+    },
+    "narration_preview_prepare": {
+        "label": "Prepare Free Narration Prototype",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_preview.py", "--mode", "prepare"],
+        "description": "Builds a zero-cost narration prototype with delivery plus music/SFX suggestions; no paid provider is allowed.",
+    },
+    "prototype_sound_prepare": {
+        "label": "Prepare Reference Music + SFX",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/prototype_sound.py", "--mode", "prepare"],
+        "description": "Prepares local AudioGen/MusicGen reference prompts only. Generated media is quarantined and forbidden from final export.",
+    },
+    "narration_preview_render": {
+        "label": "Render Free Narration Prototype",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_preview_render.py", "--mode", "batch"],
+        "description": "Renders the listenable prototype locally with Kokoro. Missing local TTS stops fail-closed; there is no paid fallback.",
+    },
+    "sound_design_brief_prepare": {
+        "label": "Build Approved Sound Design Brief",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/sound_design_brief.py", "--mode", "prepare"],
+        "description": "After the free listen gate, transfers descriptive sound intent only; no prototype AudioGen/MusicGen media crosses into final production.",
+    },
+    "narration_prepare": {
+        "label": "Prepare Narration Render + Cost Boundary",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_render.py", "--mode", "prepare"],
+        "description": "Builds immutable narration render requests and quote templates without making a paid provider call.",
+    },
+    "narration_spend_gate_prepare": {
+        "label": "Prepare Narration Spend Gate",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_cost_review.py", "--mode", "prepare"],
+        "description": "Prepares human approval of the current provider quote and worst-case narration cost.",
+    },
+    "narration_audio_qc": {
+        "label": "Run Narration Audio QC + Timing Map",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/narration_audio_qc.py", "--mode", "batch"],
+        "description": "Runs local deterministic audio checks and writes narration timing maps.",
+    },
+    "storyboard_prepare": {
+        "label": "Build Cinematic Storyboard",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/storyboard.py", "--mode", "prepare"],
+        "description": "Turns final narration timing into search-first shot cards with cinematic direction; no paid generation is authorized.",
+    },
+    "visual_search_prepare": {
+        "label": "Prepare Visual Search",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_search.py", "--mode", "prepare"],
+        "description": "Builds rights-aware search requests from storyboard shots.",
+    },
+    "visual_search_acquire": {
+        "label": "Search Free / Existing Visuals",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_search_acquire.py", "--mode", "acquire"],
+        "description": "Searches configured zero-cost stock and creator-discovery adapters, then stops for human candidate review.",
+    },
+    "visual_asset_acquire": {
+        "label": "Acquire Approved Free Visual Assets",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_asset_acquire.py",
+            "--mode",
+            "acquire",
+        ],
+        "description": (
+            "Copies approved local-library assets and downloads only verified "
+            "zero-cost stock media from allow-listed Pexels/Pixabay hosts. "
+            "Creator/editorial footage is never auto-downloaded."
+        ),
+    },
+    "visual_rough_cut_prepare": {
+        "label": "Build Visual Rough Cut",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_rough_cut.py"],
+        "description": (
+            "Builds a storyboard-aware rough-cut manifest only after current "
+            "visual selections and any required rights/context decisions are complete."
+        ),
+    },
+    "visual_gap_prepare": {
+        "label": "Plan Remaining Visual Gaps",
+        "stage": "09",
+        "command": [sys.executable, "production_engine/visual_gap_planner.py"],
+        "description": (
+            "Plans unresolved visual gaps after human rough-cut approval. "
+            "This step never authorizes paid generation."
+        ),
+    },
+    "visual_generation_handoff_prepare": {
+        "label": "Prepare Premium Visual Generation Briefs",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_generation_handoff.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Converts only human-authorized unresolved hero shots into "
+            "provider-neutral generation briefs with cinematic direction and "
+            "hard per-shot cost ceilings. No provider is called and no money is spent."
+        ),
+    },
+    "visual_assembly_prepare": {
+        "label": "Build Visual Edit Assembly Plan",
+        "stage": "09",
+        "command": [
+            sys.executable,
+            "production_engine/visual_assembly_plan.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds a deterministic edit timeline from approved existing assets, "
+            "editorial excerpts, placeholders and premium-generation slots. "
+            "It renders no media and makes no provider calls."
+        ),
+    },
+    "edit_manifest_prepare": {
+        "label": "Build Edit Preview Manifest",
+        "stage": "10",
+        "command": [
+            sys.executable,
+            "production_engine/edit_manifest.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Combines current narration timing, visual assembly and approved "
+            "sound-design intent into a deterministic structural edit manifest. "
+            "Missing visuals remain explicit placeholders."
+        ),
+    },
+    "edit_preview_render": {
+        "label": "Render Free Structural Edit Preview",
+        "stage": "10",
+        "command": [
+            sys.executable,
+            "production_engine/edit_preview_render.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses local FFmpeg to render a non-publishable preview with current "
+            "visual assets/placeholders and QC-passed narration. No paid provider "
+            "or generated music/SFX is used."
+        ),
+    },
+    "final_production_handoff_prepare": {
+        "label": "Prepare Final Production Handoff",
+        "stage": "11",
+        "command": [
+            sys.executable,
+            "production_engine/final_production_handoff.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds a provenance-bound provider-neutral final production package "
+            "from the approved structural edit, current visual assets, narration "
+            "and sound-design intent. It makes no provider call and spends nothing."
+        ),
+    },
+    "final_sound_plan_prepare": {
+        "label": "Prepare Final Sound Requirements",
+        "stage": "11",
+        "command": [
+            sys.executable,
+            "production_engine/final_sound_plan.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Converts the current final-production handoff into exact licensed "
+            "music/SFX requirements. It calls no provider, authorizes no spend, "
+            "renders no final media, and does not publish."
+        ),
+    },
+    "final_render_manifest_prepare": {
+        "label": "Build Final Render Manifest",
+        "stage": "12",
+        "command": [
+            sys.executable,
+            "production_engine/final_render_manifest.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Binds current final visuals, narration and every licensed/omitted "
+            "sound resolution into a rebuild-current local final-render manifest."
+        ),
+    },
+    "final_render_local": {
+        "label": "Render Local Final Candidate",
+        "stage": "12",
+        "command": [
+            sys.executable,
+            "production_engine/final_render.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses local FFmpeg to render the current final candidate, then stops "
+            "for the Human Final Export Gate. It does not upload or publish."
+        ),
+    },
     "thumbnail_render": {
         "label": "Render Thumbnails",
-        "stage": "05",
+        "stage": "08",
         "command": [
             sys.executable,
             "production_engine/thumbnail_render.py",
@@ -941,13 +1522,14 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "render",
         ],
         "description": (
-            "Renders 1280x720 thumbnails from the locked template for approved "
-            "packages that have a subject image, with phone previews."
+            "Renders 1280x720 images from the locked template for validated "
+            "thumbnail concepts that have a subject image, with phone previews. "
+            "It does not choose a title-thumbnail package."
         ),
     },
     "thumbnail_render_preview": {
         "label": "Render Thumbnail Layout Previews",
-        "stage": "05",
+        "stage": "08",
         "command": [
             sys.executable,
             "production_engine/thumbnail_render.py",
@@ -956,8 +1538,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "--placeholder",
         ],
         "description": (
-            "Renders layout previews for approved packages without a subject "
-            "image yet. Previews cannot be accepted."
+            "Renders layout previews for validated thumbnail concepts without a "
+            "subject image yet. Previews cannot be accepted."
         ),
     },
     "production_visual_prepare": {
@@ -1534,8 +2116,13 @@ def packaging_artifact_state() -> dict[str, Any]:
         if upstream.get("research_ready") and TRANSFORM_RESEARCH_HANDOFF.exists()
         else None
     )
+    packaging_config_hash = (
+        sha256_file(PACKAGING_CONFIG_FILE)
+        if PACKAGING_CONFIG_FILE.exists()
+        else None
+    )
     request_hashes: dict[str, str] = {}
-    if handoff_hash and PACKAGING_REQUESTS_DIR.exists():
+    if handoff_hash and packaging_config_hash and PACKAGING_REQUESTS_DIR.exists():
         for path in PACKAGING_REQUESTS_DIR.glob("*.package_request.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict):
@@ -1546,6 +2133,8 @@ def packaging_artifact_state() -> dict[str, Any]:
                 concept_id
                 and isinstance(provenance, dict)
                 and provenance.get("concept_handoff_sha256") == handoff_hash
+                and provenance.get("packaging_config_sha256")
+                == packaging_config_hash
             ):
                 request_hashes[concept_id] = sha256_file(path)
 
@@ -1599,6 +2188,7 @@ def packaging_artifact_state() -> dict[str, Any]:
     )
     return {
         "handoff_sha256": handoff_hash,
+        "packaging_config_sha256": packaging_config_hash,
         "request_concept_ids": sorted(request_hashes),
         "current_response_concept_ids": sorted(current_response_hashes),
         "candidate_provenance_current": candidates_current,
@@ -1613,14 +2203,14 @@ def packaging_artifact_state() -> dict[str, Any]:
 
 
 def research_artifact_state() -> dict[str, Any]:
-    upstream = packaging_artifact_state()
-    packaging_handoff_hash = (
-        sha256_file(PACKAGING_RESEARCH_HANDOFF)
-        if upstream.get("research_ready") and PACKAGING_RESEARCH_HANDOFF.exists()
+    upstream = transformation_artifact_state()
+    research_handoff_hash = (
+        sha256_file(TRANSFORM_RESEARCH_HANDOFF)
+        if upstream.get("research_ready") and TRANSFORM_RESEARCH_HANDOFF.exists()
         else None
     )
     plan_hashes: dict[str, str] = {}
-    if packaging_handoff_hash and RESEARCH_PLANS_DIR.exists():
+    if research_handoff_hash and RESEARCH_PLANS_DIR.exists():
         for path in RESEARCH_PLANS_DIR.glob("*.research_plan.json"):
             payload = safe_load_json(path)
             if not isinstance(payload, dict):
@@ -1630,7 +2220,12 @@ def research_artifact_state() -> dict[str, Any]:
             if (
                 concept_id
                 and isinstance(provenance, dict)
-                and provenance.get("packaging_handoff_sha256") == packaging_handoff_hash
+                and (
+                    provenance.get("research_handoff_sha256")
+                    == research_handoff_hash
+                    or provenance.get("packaging_handoff_sha256")
+                    == research_handoff_hash
+                )
             ):
                 plan_hashes[concept_id] = sha256_file(path)
 
@@ -1709,7 +2304,10 @@ def research_artifact_state() -> dict[str, Any]:
         )
     )
     return {
-        "packaging_handoff_sha256": packaging_handoff_hash,
+        "research_handoff_sha256": research_handoff_hash,
+        "packaging_handoff_sha256": (
+            research_handoff_hash
+        ),
         "plan_concept_ids": sorted(plan_hashes),
         "evidence_concept_ids": sorted(evidence_hashes),
         "response_concept_ids": sorted(response_hashes),
@@ -1884,6 +2482,128 @@ def story_script_artifact_state() -> dict[str, Any]:
         "script_gate": gate,
         "script_gate_complete": bool(gate.get("complete")),
         "production_ready": production_ready,
+    }
+
+
+def title_direction_artifact_state() -> dict[str, Any]:
+    upstream = story_script_artifact_state()
+    approved_hashes: dict[str, str] = {}
+    if upstream.get("production_ready") and SCRIPT_APPROVED_DIR.exists():
+        for path in SCRIPT_APPROVED_DIR.glob("*.approved_script.json"):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            gate_info = payload.get("script_gate", {})
+            concept_id = str(payload.get("concept_id") or "").strip()
+            if (
+                concept_id
+                and isinstance(gate_info, dict)
+                and gate_info.get("status") == "READY_FOR_PRODUCTION"
+            ):
+                approved_hashes[concept_id] = sha256_file(path)
+
+    request_hashes: dict[str, str] = {}
+    if TITLE_DIRECTION_REQUESTS_DIR.exists():
+        for path in TITLE_DIRECTION_REQUESTS_DIR.glob(
+            "*.title_direction_request.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("request_provenance", {})
+            if (
+                concept_id in approved_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("approved_script_sha256")
+                == approved_hashes[concept_id]
+            ):
+                request_hashes[concept_id] = sha256_file(path)
+
+    response_hashes: dict[str, str] = {}
+    if TITLE_DIRECTION_RESPONSES_DIR.exists():
+        for path in TITLE_DIRECTION_RESPONSES_DIR.glob(
+            "*.title_direction_response.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                continue
+            concept_id = str(payload.get("concept_id") or "").strip()
+            provenance = payload.get("response_provenance", {})
+            if (
+                concept_id in request_hashes
+                and isinstance(provenance, dict)
+                and provenance.get("request_sha256")
+                == request_hashes[concept_id]
+            ):
+                response_hashes[concept_id] = sha256_file(path)
+
+    candidates = safe_load_json(TITLE_DIRECTION_CANDIDATES_FILE)
+    candidate_ids: set[str] = set()
+    candidates_current = False
+    if (
+        isinstance(candidates, dict)
+        and candidates.get("artifact") == "title_direction_candidates"
+        and isinstance(candidates.get("concepts"), list)
+    ):
+        current = True
+        for item in candidates.get("concepts", []):
+            if not isinstance(item, dict):
+                current = False
+                break
+            concept_id = str(item.get("concept_id") or "").strip()
+            provenance = item.get("response_provenance", {})
+            if (
+                concept_id not in request_hashes
+                or concept_id not in response_hashes
+                or item.get("request_sha256") != request_hashes[concept_id]
+                or item.get("response_sha256")
+                != response_hashes[concept_id]
+                or not isinstance(provenance, dict)
+                or provenance.get("request_sha256")
+                != request_hashes[concept_id]
+            ):
+                current = False
+                break
+            candidate_ids.add(concept_id)
+        candidates_current = (
+            current
+            and bool(approved_hashes)
+            and set(approved_hashes) == candidate_ids
+        )
+
+    requests_ready = (
+        bool(approved_hashes)
+        and set(approved_hashes).issubset(request_hashes)
+    )
+    responses_complete = (
+        requests_ready
+        and set(request_hashes).issubset(response_hashes)
+    )
+    candidates_ready = responses_complete and candidates_current
+    gate = (
+        title_direction_gate_snapshot()
+        if candidates_ready
+        else {
+            "status": "WAITING_FOR_TITLE_DIRECTION_CANDIDATES",
+            "complete": False,
+            "ready": False,
+            "concepts": [],
+        }
+    )
+    return {
+        "approved_script_concept_ids": sorted(approved_hashes),
+        "request_concept_ids": sorted(request_hashes),
+        "response_concept_ids": sorted(response_hashes),
+        "candidate_concept_ids": sorted(candidate_ids),
+        "requests_ready": requests_ready,
+        "responses_complete": responses_complete,
+        "candidates_ready": candidates_ready,
+        "candidates_current": candidates_current,
+        "gate": gate,
+        "gate_complete": bool(gate.get("complete")),
+        "selected": bool(gate.get("ready")),
+        "status": gate.get("status"),
     }
 
 
@@ -2115,19 +2835,75 @@ def voice_performance_artifact_state() -> dict[str, Any]:
     }
 
 
-def production_visual_artifact_state() -> dict[str, Any]:
-    """Return current cheap-first visual-manifest coverage.
+def narration_artifact_state() -> dict[str, Any]:
+    """Return narration spend, registered provider return and live Audio QC state."""
+    voice = voice_performance_artifact_state()
+    if not voice.get("visual_ready"):
+        return {
+            "render": {
+                "status": "WAITING_FOR_PERFORMANCE_APPROVAL",
+                "prepared": 0,
+                "ready_for_spend_gate": 0,
+                "items": [],
+            },
+            "spend_gate": {
+                "status": "WAITING_FOR_PROVIDER_QUOTE",
+                "complete": False,
+                "items": [],
+            },
+            "render_return": {
+                "status": "WAITING_FOR_SPEND_APPROVAL",
+                "expected": 0,
+                "current": 0,
+                "items": [],
+            },
+            "render_results_present": False,
+            "audio_qc": {
+                "status": "WAITING_FOR_NARRATION_RENDER_RESULTS",
+                "processed": 0,
+                "passed": 0,
+                "failed": 0,
+                "items": [],
+            },
+            "audio_ready": False,
+        }
 
-    A manifest counts only when it is bound to the exact currently accepted
-    format plan for the same concept and format branch.
-    """
+    render = narration_render_snapshot()
+    spend_gate = narration_spend_gate_snapshot()
+    render_return = narration_render_return_snapshot()
+    audio_qc = narration_audio_qc_snapshot()
+    expected_returns = int(render_return.get("expected") or 0)
+    current_returns = int(render_return.get("current") or 0)
+    render_results_present = bool(
+        expected_returns > 0 and current_returns == expected_returns
+    )
+    audio_ready = bool(
+        render_results_present
+        and audio_qc.get("status") == "PASS"
+        and int(audio_qc.get("processed") or 0) == expected_returns
+        and int(audio_qc.get("passed") or 0) == expected_returns
+    )
+    return {
+        "render": render,
+        "spend_gate": spend_gate,
+        "render_return": render_return,
+        "render_results_present": render_results_present,
+        "audio_qc": audio_qc,
+        "audio_ready": audio_ready,
+    }
+
+
+def production_visual_artifact_state() -> dict[str, Any]:
+    """Return visual-manifest coverage bound to current final narration timing."""
     fmt = format_artifact_state()
-    if not fmt.get("production_engine_ready"):
+    narration = narration_artifact_state()
+    if not fmt.get("production_engine_ready") or not narration.get("audio_ready"):
         return {
             "expected_branches": [],
             "current_branches": [],
             "manifests_ready": False,
             "manifest_count": 0,
+            "timing_ready": False,
         }
 
     gate = fmt.get("format_gate", {})
@@ -2160,6 +2936,20 @@ def production_visual_artifact_state() -> dict[str, Any]:
                 if branch_format:
                     expected.add((concept_id, branch_format))
 
+    timing_hashes: dict[tuple[str, str], tuple[str, str]] = {}
+    audio_qc = narration.get("audio_qc", {})
+    for item in audio_qc.get("items", []) if isinstance(audio_qc, dict) else []:
+        if not isinstance(item, dict) or item.get("status") != "PASS":
+            continue
+        concept_id = str(item.get("concept_id") or "").strip()
+        branch_format = str(item.get("format") or "").strip()
+        timing_path = Path(str(item.get("timing_map") or ""))
+        if concept_id and branch_format and timing_path.is_file():
+            timing_hashes[(concept_id, branch_format)] = (
+                str(timing_path.resolve()),
+                sha256_file(timing_path),
+            )
+
     current: set[tuple[str, str]] = set()
     if PRODUCTION_VISUAL_MANIFESTS_DIR.exists():
         for path in PRODUCTION_VISUAL_MANIFESTS_DIR.glob(
@@ -2170,17 +2960,25 @@ def production_visual_artifact_state() -> dict[str, Any]:
                 continue
             concept_id = str(payload.get("concept_id") or "").strip()
             branch_format = str(payload.get("format") or "").strip()
+            key = (concept_id, branch_format)
+            timing = timing_hashes.get(key)
             provenance = payload.get("manifest_provenance", {})
             if (
                 concept_id in plan_hashes
                 and branch_format
+                and timing is not None
                 and isinstance(provenance, dict)
                 and provenance.get("approved_format_plan_sha256")
                 == plan_hashes[concept_id]
+                and provenance.get("narration_timing_map")
+                == timing[0]
+                and provenance.get("narration_timing_map_sha256")
+                == timing[1]
             ):
-                current.add((concept_id, branch_format))
+                current.add(key)
 
-    ready = bool(expected) and expected.issubset(current)
+    timing_ready = bool(expected) and expected.issubset(set(timing_hashes))
+    ready = timing_ready and expected.issubset(current)
     return {
         "expected_branches": [
             {"concept_id": concept_id, "format": branch_format}
@@ -2192,6 +2990,734 @@ def production_visual_artifact_state() -> dict[str, Any]:
         ],
         "manifests_ready": ready,
         "manifest_count": len(current),
+        "timing_ready": timing_ready,
+    }
+
+
+def visual_post_search_artifact_state() -> dict[str, Any]:
+    candidate_gate = visual_candidate_review_snapshot()
+    rights_gate = visual_rights_review_snapshot()
+    managed_assets_state = managed_visual_asset_snapshot()
+    candidate_complete = bool(candidate_gate.get("complete"))
+    rights_complete = bool(rights_gate.get("complete"))
+
+    expected: set[tuple[str, str]] = set()
+    rough_current: set[tuple[str, str]] = set()
+    for packet in candidate_gate.get("packets", []):
+        if not isinstance(packet, dict):
+            continue
+        concept_id = str(packet.get("concept_id") or "")
+        branch_format = str(packet.get("format") or "")
+        result_file = Path(str(packet.get("result_file") or ""))
+        if not concept_id or not branch_format or not result_file.name:
+            continue
+        expected.add((concept_id, branch_format))
+        base = result_file.name.replace(".visual_search_results.json", "")
+        board_path = PRODUCTION_STORYBOARD_DIR / f"{base}.storyboard.json"
+        review_path = (
+            PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR
+            / f"{base}.visual_candidate_review.json"
+        )
+        rights_path = (
+            PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR
+            / f"{base}.visual_rights_review.json"
+        )
+        rough_path = (
+            PRODUCTION_VISUAL_ROUGH_CUT_DIR
+            / f"{base}.visual_rough_cut.json"
+        )
+        if not (
+            board_path.exists()
+            and review_path.exists()
+            and rough_path.exists()
+        ):
+            continue
+        rough = safe_load_json(rough_path)
+        if not isinstance(rough, dict):
+            continue
+        provenance = rough.get("provenance", {})
+        if not isinstance(provenance, dict):
+            continue
+        if (
+            provenance.get("storyboard_sha256") != sha256_file(board_path)
+            or provenance.get("candidate_review_sha256")
+            != sha256_file(review_path)
+        ):
+            continue
+
+        managed_registry = provenance.get("managed_asset_registry", {})
+        if not isinstance(managed_registry, dict):
+            continue
+
+        expected_managed: dict[str, dict[str, Any]] = {}
+        for managed_item in managed_assets_state.get("items", []):
+            if not isinstance(managed_item, dict):
+                continue
+            if (
+                str(managed_item.get("concept_id") or "") != concept_id
+                or str(managed_item.get("format") or "") != branch_format
+            ):
+                continue
+            shot_id = str(managed_item.get("shot_id") or "")
+            registry_file = Path(
+                str(managed_item.get("registry_file") or "")
+            )
+            asset_file = Path(str(managed_item.get("asset_file") or ""))
+            if (
+                not shot_id
+                or not registry_file.exists()
+                or not asset_file.exists()
+            ):
+                continue
+            expected_managed[shot_id] = {
+                "registry_file": str(registry_file.resolve()),
+                "registry_sha256": sha256_file(registry_file),
+                "asset_file": str(asset_file.resolve()),
+                "asset_sha256": sha256_file(asset_file),
+            }
+
+        if set(managed_registry) != set(expected_managed):
+            continue
+        managed_current = True
+        for shot_id, expected_entry in expected_managed.items():
+            entry = managed_registry.get(shot_id)
+            if (
+                not isinstance(entry, dict)
+                or entry.get("registry_file")
+                != expected_entry["registry_file"]
+                or entry.get("registry_sha256")
+                != expected_entry["registry_sha256"]
+                or entry.get("asset_file")
+                != expected_entry["asset_file"]
+                or entry.get("asset_sha256")
+                != expected_entry["asset_sha256"]
+            ):
+                managed_current = False
+                break
+        if not managed_current:
+            continue
+        rights_required = any(
+            isinstance(decision, dict)
+            and decision.get("status")
+            == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+            for decision in packet.get("decisions", {}).values()
+        )
+        if rights_required:
+            if (
+                not rights_path.exists()
+                or provenance.get("rights_review_sha256")
+                != sha256_file(rights_path)
+            ):
+                continue
+        elif provenance.get("rights_review_sha256") not in {None, ""}:
+            continue
+        rough_current.add((concept_id, branch_format))
+
+    rough_cuts_ready = (
+        candidate_complete
+        and rights_complete
+        and bool(expected)
+        and expected.issubset(rough_current)
+    )
+    rough_gate: dict[str, Any] = (
+        visual_rough_cut_review_snapshot()
+        if rough_cuts_ready
+        else {
+            "status": "WAITING_FOR_ROUGH_CUT",
+            "complete": False,
+            "items": [],
+        }
+    )
+
+    gap_current: set[tuple[str, str]] = set()
+    if bool(rough_gate.get("complete")):
+        for item in rough_gate.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            concept_id = str(item.get("concept_id") or "")
+            branch_format = str(item.get("format") or "")
+            rough_path = Path(str(item.get("rough_cut_file") or ""))
+            if not concept_id or not branch_format or not rough_path.exists():
+                continue
+            base = rough_path.name.replace(".visual_rough_cut.json", "")
+            review_path = (
+                PRODUCTION_VISUAL_ROUGH_REVIEW_DIR
+                / f"{base}.visual_rough_cut_review.json"
+            )
+            gap_path = (
+                PRODUCTION_VISUAL_GAP_PLAN_DIR
+                / f"{base}.visual_gap_plan.json"
+            )
+            if not review_path.exists() or not gap_path.exists():
+                continue
+            gap_state = gap_plan_is_current(gap_path)
+            if gap_state is not None:
+                gap = gap_state[0]
+                if (
+                    str(gap.get("concept_id") or "") == concept_id
+                    and str(gap.get("format") or "") == branch_format
+                ):
+                    gap_current.add((concept_id, branch_format))
+
+    gap_plans_ready = (
+        bool(rough_gate.get("complete"))
+        and bool(expected)
+        and expected.issubset(gap_current)
+    )
+    return {
+        "candidate_gate": candidate_gate,
+        "candidate_complete": candidate_complete,
+        "rights_gate": rights_gate,
+        "rights_complete": rights_complete,
+        "expected_branches": sorted(expected),
+        "rough_current_branches": sorted(rough_current),
+        "rough_cuts_ready": rough_cuts_ready,
+        "rough_gate": rough_gate,
+        "rough_gate_complete": bool(rough_gate.get("complete")),
+        "gap_current_branches": sorted(gap_current),
+        "gap_plans_ready": gap_plans_ready,
+    }
+
+
+def visual_asset_acquisition_artifact_state() -> dict[str, Any]:
+    candidate_gate = visual_candidate_review_snapshot()
+    rights_gate = visual_rights_review_snapshot()
+
+    expected_reviews: dict[str, str] = {}
+    expected_rights: dict[str, str] = {}
+    for packet in candidate_gate.get("packets", []):
+        if not isinstance(packet, dict):
+            continue
+        result_path = Path(str(packet.get("result_file") or ""))
+        if not result_path.name:
+            continue
+        base = result_path.name.replace(".visual_search_results.json", "")
+        review_path = (
+            PRODUCTION_VISUAL_CANDIDATE_REVIEW_DIR
+            / f"{base}.visual_candidate_review.json"
+        )
+        if review_path.exists():
+            expected_reviews[review_path.name] = sha256_file(review_path)
+
+        rights_required = any(
+            isinstance(decision, dict)
+            and decision.get("status")
+            == "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+            for decision in packet.get("decisions", {}).values()
+        )
+        if rights_required:
+            rights_path = (
+                PRODUCTION_VISUAL_RIGHTS_REVIEW_DIR
+                / f"{base}.visual_rights_review.json"
+            )
+            if rights_path.exists():
+                expected_rights[rights_path.name] = sha256_file(rights_path)
+
+    payload = safe_load_json(PRODUCTION_VISUAL_ASSET_ACQUISITION_SUMMARY)
+    summary = payload if isinstance(payload, dict) else {}
+    current = bool(
+        candidate_gate.get("complete")
+        and rights_gate.get("complete")
+        and expected_reviews
+        and summary.get("source_review_sha256") == expected_reviews
+        and summary.get("source_rights_sha256") == expected_rights
+        and int(summary.get("failures") or 0) == 0
+    )
+    return {
+        "status": (
+            "CURRENT"
+            if current
+            else "READY_TO_ACQUIRE"
+            if candidate_gate.get("complete") and rights_gate.get("complete")
+            else "WAITING_FOR_VISUAL_REVIEW"
+        ),
+        "current": current,
+        "acquired": int(summary.get("acquired") or 0) if current else 0,
+        "manual_required": int(summary.get("manual_required") or 0)
+        if current else 0,
+        "failures": int(summary.get("failures") or 0) if current else 0,
+        "items": summary.get("items", []) if current else [],
+        "manual_items": summary.get("manual_items", []) if current else [],
+        "failure_items": summary.get("failure_items", []) if current else [],
+    }
+
+
+def visual_generation_handoff_artifact_state() -> dict[str, Any]:
+    spend = visual_spend_review_snapshot()
+    expected: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
+
+    if spend.get("complete") and spend.get("global_cap_valid", True):
+        for item in spend.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            concept_id = str(item.get("concept_id") or "")
+            branch_format = str(item.get("format") or "")
+            gap_path = Path(str(item.get("gap_plan_file") or ""))
+            spend_path = Path(str(item.get("spend_review_file") or ""))
+            decisions = item.get("decisions", {})
+            if not isinstance(decisions, dict):
+                continue
+            for shot_id, decision in decisions.items():
+                if (
+                    isinstance(decision, dict)
+                    and decision.get("paid_generation_authorized") is True
+                    and str(decision.get("decision") or "")
+                    == "AUTHORIZE_GENERATION"
+                ):
+                    decision_hash = hashlib.sha256(
+                        json.dumps(
+                            decision,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    expected[
+                        (concept_id, branch_format, str(shot_id))
+                    ] = {
+                        "max_cost_usd": round(
+                            float(decision.get("max_cost_usd") or 0),
+                            2,
+                        ),
+                        "gap_plan": str(gap_path.resolve())
+                        if gap_path.exists()
+                        else str(gap_path),
+                        "gap_plan_sha256": item.get("gap_plan_sha256"),
+                        "spend_review": str(spend_path.resolve())
+                        if spend_path.exists()
+                        else str(spend_path),
+                        "spend_review_sha256": item.get(
+                            "spend_review_sha256"
+                        ),
+                        "decision_sha256": decision_hash,
+                    }
+
+    current: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
+    current_details: dict[
+        tuple[str, str, str],
+        dict[str, Any],
+    ] = {}
+    stale = 0
+    if PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.exists():
+        for path in PRODUCTION_VISUAL_GENERATION_REQUEST_DIR.glob(
+            "*.visual_generation_request.json"
+        ):
+            payload = safe_load_json(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+                str(payload.get("shot_id") or ""),
+            )
+            wanted = expected.get(key)
+            provenance = payload.get("provenance", {})
+            authorization = payload.get("spend_authorization", {})
+            if (
+                wanted is None
+                or not isinstance(provenance, dict)
+                or not isinstance(authorization, dict)
+            ):
+                stale += 1
+                continue
+
+            gap_path = Path(str(provenance.get("gap_plan") or ""))
+            spend_path = Path(
+                str(provenance.get("visual_spend_review") or "")
+            )
+            max_cost = round(
+                float(authorization.get("max_cost_usd") or 0),
+                2,
+            )
+            valid = bool(
+                gap_path.is_file()
+                and spend_path.is_file()
+                and str(gap_path.resolve()) == wanted["gap_plan"]
+                and str(spend_path.resolve()) == wanted["spend_review"]
+                and provenance.get("gap_plan_sha256")
+                == wanted["gap_plan_sha256"]
+                == sha256_file(gap_path)
+                and provenance.get("visual_spend_review_sha256")
+                == wanted["spend_review_sha256"]
+                == sha256_file(spend_path)
+                and provenance.get("visual_spend_decision_sha256")
+                == wanted["decision_sha256"]
+                and authorization.get("human_authorized") is True
+                and authorization.get("execution_authorized") is False
+                and max_cost == wanted["max_cost_usd"]
+            )
+            if not valid:
+                stale += 1
+                continue
+
+            current[key] = wanted
+            current_details[key] = {
+                "request_file": str(path),
+                "request_sha256": sha256_file(path),
+                "desired_visual": payload.get("desired_visual"),
+                "story_purpose": payload.get("story_purpose"),
+                "generation_brief": payload.get("generation_brief", {}),
+                "provider_handoff": payload.get("provider_handoff", {}),
+            }
+
+    ready = bool(expected) and expected == current and stale == 0
+    return {
+        "status": (
+            "READY_FOR_PROVIDER_HANDOFF"
+            if ready
+            else "STALE_OR_INCOMPLETE"
+            if expected
+            else "NO_PAID_VISUAL_GENERATION_AUTHORIZED"
+        ),
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "authorized_max_total_usd": round(
+            sum(
+                item["max_cost_usd"]
+                for item in expected.values()
+            ),
+            2,
+        ),
+        "provider_calls": 0,
+        "paid_inference_executed": False,
+        "requests": [
+            {
+                "concept_id": key[0],
+                "format": key[1],
+                "shot_id": key[2],
+                "max_cost_usd": value["max_cost_usd"],
+                **current_details.get(key, {}),
+            }
+            for key, value in sorted(current.items())
+        ],
+    }
+
+def visual_assembly_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    waiting_for_premium = 0
+    waiting_for_local = 0
+    waiting_for_retry = 0
+    ready_for_edit = 0
+
+    if PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.exists():
+        for path in PRODUCTION_VISUAL_ASSEMBLY_PLAN_DIR.glob(
+            "*.visual_assembly_plan.json"
+        ):
+            payload = assembly_plan_is_current(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+
+            current.add(key)
+            status = str(payload.get("status") or "")
+            if status == "WAITING_FOR_PREMIUM_GENERATED_ASSETS":
+                waiting_for_premium += 1
+            elif status == "WAITING_FOR_LOCAL_VISUAL_ASSETS":
+                waiting_for_local += 1
+            elif status == "WAITING_FOR_EXISTING_VISUAL_RETRY":
+                waiting_for_retry += 1
+            elif status == "READY_FOR_EDIT_ASSEMBLY":
+                ready_for_edit += 1
+            else:
+                stale += 1
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": (
+            "ASSEMBLY_PLANS_READY"
+            if ready
+            else "STALE_OR_INCOMPLETE"
+            if expected
+            else "WAITING_FOR_VISUAL_GAP_PLANS"
+        ),
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "waiting_for_premium_assets": waiting_for_premium,
+        "waiting_for_local_assets": waiting_for_local,
+        "waiting_for_existing_retry": waiting_for_retry,
+        "ready_for_edit_assembly": ready_for_edit,
+    }
+
+def edit_manifest_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    placeholders = 0
+
+    if PRODUCTION_EDIT_MANIFEST_DIR.exists():
+        for path in PRODUCTION_EDIT_MANIFEST_DIR.glob(
+            "*.edit_manifest.json"
+        ):
+            payload = manifest_is_current(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+            placeholders += int(
+                payload.get("preview_policy", {}).get(
+                    "placeholder_count",
+                    0,
+                )
+            )
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "placeholder_count": placeholders,
+    }
+
+
+def edit_preview_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    placeholders = 0
+
+    if PRODUCTION_EDIT_PREVIEW_RESULT_DIR.exists():
+        for path in PRODUCTION_EDIT_PREVIEW_RESULT_DIR.glob(
+            "*.edit_preview_result.json"
+        ):
+            payload = preview_result_is_current(path)
+            if not isinstance(payload, dict):
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+            placeholders += int(
+                payload.get("placeholder_segments") or 0
+            )
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "placeholder_segments": placeholders,
+    }
+
+def final_production_handoff_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    blocked = 0
+    ready_for_sound = 0
+
+    if PRODUCTION_FINAL_HANDOFF_DIR.exists():
+        for path in PRODUCTION_FINAL_HANDOFF_DIR.glob(
+            "*.final_production_handoff.json"
+        ):
+            payload = handoff_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+
+            current.add(key)
+            if payload.get("status") == "BLOCKED":
+                blocked += 1
+            elif (
+                payload.get("status")
+                == "READY_FOR_FINAL_SOUND_PROVIDER_OR_ASSET_REGISTRATION"
+            ):
+                ready_for_sound += 1
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": (
+            "CURRENT"
+            if ready
+            else "STALE_OR_INCOMPLETE"
+            if expected
+            else "WAITING_FOR_APPROVED_EDIT_DIRECTION"
+        ),
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "blocked": blocked,
+        "ready_for_final_sound": ready_for_sound,
+    }
+
+
+def final_sound_plan_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    requirements = 0
+
+    if PRODUCTION_FINAL_SOUND_PLAN_DIR.exists():
+        for path in PRODUCTION_FINAL_SOUND_PLAN_DIR.glob(
+            "*.final_sound_plan.json"
+        ):
+            payload = final_sound_plan_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+            requirements += int(payload.get("requirements_count") or 0)
+
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+        "requirements": requirements,
+    }
+
+
+def final_render_manifest_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    if PRODUCTION_FINAL_RENDER_MANIFEST_DIR.exists():
+        for path in PRODUCTION_FINAL_RENDER_MANIFEST_DIR.glob(
+            "*.final_render_manifest.json"
+        ):
+            payload = final_render_manifest_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
+    }
+
+
+def final_render_artifact_state(
+    expected_branches: list[list[str]] | list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    expected = {
+        (str(item[0]), str(item[1]))
+        for item in (expected_branches or [])
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    }
+    current: set[tuple[str, str]] = set()
+    stale = 0
+    if PRODUCTION_FINAL_RENDER_RESULT_DIR.exists():
+        for path in PRODUCTION_FINAL_RENDER_RESULT_DIR.glob(
+            "*.final_render_result.json"
+        ):
+            payload = final_render_result_is_current(path)
+            if payload is None:
+                stale += 1
+                continue
+            key = (
+                str(payload.get("concept_id") or ""),
+                str(payload.get("format") or ""),
+            )
+            if expected and key not in expected:
+                stale += 1
+                continue
+            current.add(key)
+    ready = bool(expected) and expected.issubset(current) and stale == 0
+    return {
+        "status": "CURRENT" if ready else "STALE_OR_INCOMPLETE",
+        "ready": ready,
+        "expected": len(expected),
+        "current": len(current),
+        "stale": stale,
     }
 
 
@@ -2445,15 +3971,6 @@ def stage_statuses() -> list[dict[str, Any]]:
     concept_gate_complete = bool(transform["concept_gate_complete"])
     research_ready = bool(transform["research_ready"])
 
-    packaging = packaging_artifact_state()
-    package_requests = bool(packaging["requests_ready"])
-    package_candidates = bool(packaging["candidates_ready"])
-    packaging_gate = packaging["packaging_gate"]
-    packaging_gate_status = str(
-        packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
-    )
-    packaging_gate_complete = bool(packaging["packaging_gate_complete"])
-    packaging_research_ready = bool(packaging["research_ready"])
     research = research_artifact_state()
     research_plans = bool(research["plans_ready"])
     research_evidence = bool(research["evidence_complete"])
@@ -2473,17 +3990,33 @@ def stage_statuses() -> list[dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
+    title_direction = title_direction_artifact_state()
+    title_direction_requests_ready = bool(
+        title_direction.get("requests_ready")
+    )
+    title_direction_candidates_ready = bool(
+        title_direction.get("candidates_ready")
+    )
+    title_direction_gate = title_direction.get("gate", {})
+    title_direction_gate_status = str(
+        title_direction_gate.get("status")
+        or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
+    )
+    title_direction_selected = bool(title_direction.get("selected"))
+    packaging_brief = packaging_brief_snapshot()
+    packaging_brief_ready = bool(packaging_brief.get("ready"))
+    angles = psychological_angle_snapshot()
+    angles_ready = bool(angles.get("ready"))
+    thumbnails = thumbnail_concept_snapshot()
+    thumbnails_ready = bool(thumbnails.get("ready"))
+    package_validation = package_validation_snapshot()
+    package_validation_ready = bool(package_validation.get("ready"))
     fmt = format_artifact_state()
-    format_requests_ready = bool(fmt["requests_ready"])
-    format_plans_ready = bool(fmt["plans_ready"])
-    format_gate = fmt["format_gate"]
-    format_gate_status = str(format_gate.get("status") or "WAITING_FOR_FORMAT_PLANS")
-    format_gate_complete = bool(fmt["format_gate_complete"])
     production_engine_ready = bool(fmt["production_engine_ready"])
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
         transform_tone = "complete"
-        transform_next = "Proceed to Packaging / Research."
+        transform_next = "Proceed to Research."
     elif active_action in {
         "transform_prepare",
         "concept_generate",
@@ -2526,46 +4059,80 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if packaging_research_ready:
-        package_human = "PACKAGE ACCEPTED — STAGE COMPLETE"
+    if package_validation_ready:
+        package_human = "PACKAGE VALIDATION READY — SLICE 26 COMPLETE"
         package_tone = "complete"
-        package_next = "Proceed to Research."
+        package_next = "Prepare the Final Packaging Human Gate in Slice 27."
     elif active_action in {
-        "package_prepare",
-        "package_generate",
-        "package_gate_prepare",
+        "package_pairing_prepare",
+        "package_pairing_generate",
     }:
-        package_human = "PACKAGING WORK RUNNING"
+        package_human = "TITLE + THUMBNAIL VALIDATION RUNNING"
         package_tone = "running"
-        package_next = "Wait for the current Packaging job to finish."
-    elif not research_ready:
-        package_human = "WAITING FOR ACCEPTED CONCEPT"
-        package_tone = "blocked"
-        package_next = "Accept a concept first."
-    elif not package_requests:
-        package_human = "READY TO PREPARE PACKAGES"
+        package_next = "Wait for the current cross-pair validation work to finish."
+    elif thumbnails_ready:
+        package_human = "THUMBNAILS READY — PAIRING NEEDED"
         package_tone = "ready"
-        package_next = "Run Prepare Package Requests."
-    elif not package_candidates:
-        package_human = "PACKAGE GENERATION NEEDED"
+        package_next = "Cross-pair all 5 titles × 5 thumbnails and validate them."
+    elif active_action in {
+        "psychological_angle_prepare",
+        "psychological_angle_generate",
+        "thumbnail_concept_prepare",
+        "thumbnail_concept_generate",
+    }:
+        package_human = "PACKAGING CREATIVE HYPOTHESES RUNNING"
+        package_tone = "running"
+        package_next = "Wait for current angles and thumbnail concepts to finish."
+    elif packaging_brief_ready:
+        package_human = "PACKAGING BRIEF READY — ANGLES NEEDED"
+        package_tone = "ready"
+        package_next = "Generate psychological packaging angles and thumbnail concepts."
+    elif active_action in {
+        "packaging_brief_prepare",
+    }:
+        package_human = "PACKAGING BRIEF BUILD RUNNING"
+        package_tone = "running"
+        package_next = "Wait for current evidence-bound briefs to finish."
+    elif title_direction_selected:
+        package_human = "TITLE DIRECTIONS SELECTED — BRIEF NEEDED"
+        package_tone = "ready"
+        package_next = "Build Packaging Brief + Viewer Promise."
+    elif active_action in {
+        "title_direction_prepare",
+        "title_direction_generate",
+        "title_direction_gate_prepare",
+    }:
+        package_human = "TITLE DIRECTION WORK RUNNING"
+        package_tone = "running"
+        package_next = "Wait for the current title-direction job to finish."
+    elif not production_ready:
+        package_human = "WAITING FOR APPROVED SCRIPT"
+        package_tone = "blocked"
+        package_next = "Approve all required script branches first."
+    elif not title_direction_requests_ready:
+        package_human = "READY TO PREPARE TITLE DIRECTIONS"
+        package_tone = "ready"
+        package_next = "Run Prepare Title Direction Requests."
+    elif not title_direction_candidates_ready:
+        package_human = "5+5 TITLE GENERATION NEEDED"
         package_tone = "action"
-        package_next = "Run Generate Package Candidates."
-    elif packaging_gate_status == "READY_TO_PREPARE":
-        package_human = "PREPARE PACKAGING GATE"
+        package_next = "Generate five Short and five Long-form directions."
+    elif title_direction_gate_status == "READY_TO_PREPARE":
+        package_human = "PREPARE TITLE DIRECTION GATE"
         package_tone = "action"
-        package_next = "Run Prepare Packaging Gate."
-    elif packaging_gate_status == "AWAITING_HUMAN_DECISION":
-        package_human = "HUMAN PACKAGE DECISION NEEDED"
+        package_next = "Prepare the Human Title Direction Gate."
+    elif title_direction_gate_status == "AWAITING_HUMAN_TITLE_DIRECTION":
+        package_human = "HUMAN TITLE DIRECTION DECISION NEEDED"
         package_tone = "action"
-        package_next = "Review package candidates in Analyze & Create."
-    elif packaging_gate_complete:
-        package_human = "NO APPROVED PACKAGE"
+        package_next = "Select one Short and one Long-form direction."
+    elif title_direction_gate_status == "TITLE_DIRECTION_REJECTED":
+        package_human = "TITLE DIRECTION REWORK REQUIRED"
         package_tone = "action"
-        package_next = "Rework or regenerate packages before research."
+        package_next = "Rework or regenerate title directions."
     else:
-        package_human = "PACKAGING NEEDS ATTENTION"
+        package_human = "TITLE DIRECTION NEEDS ATTENTION"
         package_tone = "action"
-        package_next = "Inspect the Packaging Gate state."
+        package_next = "Inspect the Title Direction Gate state."
 
     if story_ready:
         research_human = "RESEARCH APPROVED — STAGE COMPLETE"
@@ -2580,10 +4147,10 @@ def stage_statuses() -> list[dict[str, Any]]:
         research_human = "RESEARCH WORK RUNNING"
         research_tone = "running"
         research_next = "Wait for the current Research job to finish."
-    elif not packaging_research_ready:
-        research_human = "WAITING FOR APPROVED PACKAGE"
+    elif not research_ready:
+        research_human = "WAITING FOR ACCEPTED CONCEPT"
         research_tone = "blocked"
-        research_next = "Approve a package first."
+        research_next = "Accept a concept first."
     elif not research_plans:
         research_human = "READY TO PREPARE RESEARCH"
         research_tone = "ready"
@@ -2616,7 +4183,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     if production_ready:
         script_human = "SCRIPT APPROVED — STAGE COMPLETE"
         script_tone = "complete"
-        script_next = "Proceed to Format."
+        script_next = "Proceed to post-script Title Direction."
     elif active_action in {
         "story_prepare",
         "story_generate",
@@ -2658,7 +4225,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif script_gate_complete:
         script_human = "NO APPROVED SCRIPT"
         script_tone = "action"
-        script_next = "Rework or regenerate scripts before Format."
+        script_next = "Rework or regenerate scripts before Title Direction."
     else:
         script_human = "SCRIPT NEEDS ATTENTION"
         script_tone = "action"
@@ -2668,42 +4235,17 @@ def stage_statuses() -> list[dict[str, Any]]:
         format_human = "FORMAT APPROVED — STAGE COMPLETE"
         format_tone = "complete"
         format_next = "Ready for the Production Engine."
-    elif active_action in {
-        "format_prepare",
-        "format_generate",
-        "format_gate_prepare",
-    }:
-        format_human = "FORMAT WORK RUNNING"
-        format_tone = "running"
-        format_next = "Wait for the current Format job to finish."
-    elif not production_ready:
-        format_human = "WAITING FOR APPROVED SCRIPT"
+    elif not title_direction_selected:
+        format_human = "WAITING FOR TITLE DIRECTION"
         format_tone = "blocked"
-        format_next = "Approve a script first."
-    elif not format_requests_ready:
-        format_human = "READY TO PREPARE FORMATS"
-        format_tone = "ready"
-        format_next = "Run Prepare Format Requests."
-    elif not format_plans_ready:
-        format_human = "FORMAT PLANNING NEEDED"
-        format_tone = "action"
-        format_next = "Run Generate Format Plans."
-    elif format_gate_status == "READY_TO_PREPARE":
-        format_human = "PREPARE FORMAT GATE"
-        format_tone = "action"
-        format_next = "Run Prepare Format Gate."
-    elif format_gate_status == "AWAITING_HUMAN_DECISION":
-        format_human = "HUMAN FORMAT DECISION NEEDED"
-        format_tone = "action"
-        format_next = "Review format plans in Analyze & Create."
-    elif format_gate_complete:
-        format_human = "NO APPROVED FORMAT PLAN"
-        format_tone = "action"
-        format_next = "Rework or regenerate format plans before production."
+        format_next = "Complete the post-script Title Direction Gate first."
     else:
-        format_human = "FORMAT NEEDS ATTENTION"
-        format_tone = "action"
-        format_next = "Inspect the Format Gate state."
+        format_human = "HELD FOR MATURE PACKAGING"
+        format_tone = "blocked"
+        format_next = (
+            "Slice 24 must validate title + thumbnail + hook + Viewer Promise "
+            "before Format/Production resumes."
+        )
 
     return [
         {
@@ -2890,7 +4432,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": concept_gate_complete,
                 },
                 {
-                    "label": "At least one concept accepted for packaging",
+                    "label": "At least one concept accepted for research",
                     "done": research_ready,
                 },
             ],
@@ -2900,56 +4442,20 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
         {
             "id": "05",
-            "title": "Packaging",
-            "state": packaging_gate_status,
-            "human_status": package_human,
-            "tone": package_tone,
-            "detail": (
-                "Builds title, thumbnail and opening-frame options before script "
-                "drafting, then stops for human package selection."
-            ),
-            "next_action": package_next,
-            "criteria": [
-                {
-                    "label": "Accepted concept handoff ready",
-                    "done": research_ready,
-                },
-                {
-                    "label": "Package requests prepared",
-                    "done": package_requests,
-                },
-                {
-                    "label": "Valid package candidates generated",
-                    "done": package_candidates,
-                },
-                {
-                    "label": "Human Packaging Gate complete",
-                    "done": packaging_gate_complete,
-                },
-                {
-                    "label": "At least one package approved for research",
-                    "done": packaging_research_ready,
-                },
-            ],
-            "complete": packaging_research_ready,
-            "ready": research_ready,
-            "current": research_ready and not packaging_research_ready,
-        },
-        {
-            "id": "06",
             "title": "Research",
             "state": research_gate_status,
             "human_status": research_human,
             "tone": research_tone,
             "detail": (
-                "Acquires real web evidence, structures traceable claims, and "
-                "stops for human claim approval before Story / Script."
+                "Starts directly from the accepted Concept Gate handoff, acquires "
+                "real web evidence, structures traceable claims, and stops for "
+                "human claim approval before Story / Script."
             ),
             "next_action": research_next,
             "criteria": [
                 {
-                    "label": "Approved package handoff ready",
-                    "done": packaging_research_ready,
+                    "label": "Accepted concept handoff ready",
+                    "done": research_ready,
                 },
                 {
                     "label": "Research plans prepared",
@@ -2973,11 +4479,11 @@ def stage_statuses() -> list[dict[str, Any]]:
                 },
             ],
             "complete": story_ready,
-            "ready": packaging_research_ready,
-            "current": packaging_research_ready and not story_ready,
+            "ready": research_ready,
+            "current": research_ready and not story_ready,
         },
         {
-            "id": "07",
+            "id": "06",
             "title": "Story / Script",
             "state": script_gate_status if script_drafts_ready else (
                 "READY_TO_PREPARE" if story_ready else "WAITING_FOR_RESEARCH"
@@ -2985,8 +4491,9 @@ def stage_statuses() -> list[dict[str, Any]]:
             "human_status": script_human,
             "tone": script_tone,
             "detail": (
-                "Drafts an original script constrained to human-accepted claims, "
-                "then requires a human Script Gate decision."
+                "Drafts an original script constrained to human-accepted claims "
+                "and carries only an internal working title. Final public title "
+                "direction is selected after script approval."
             ),
             "next_action": script_next,
             "criteria": [
@@ -3007,7 +4514,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": script_gate_complete,
                 },
                 {
-                    "label": "Every script approved for Format",
+                    "label": "Every required script branch approved",
                     "done": production_ready,
                 },
             ],
@@ -3016,43 +4523,122 @@ def stage_statuses() -> list[dict[str, Any]]:
             "current": story_ready and not production_ready,
         },
         {
-            "id": "08",
-            "title": "Format",
-            "state": format_gate_status if format_plans_ready else (
-                "READY_TO_PREPARE" if production_ready else "WAITING_FOR_SCRIPT"
-            ),
-            "human_status": format_human,
-            "tone": format_tone,
+            "id": "07",
+            "title": "Packaging / Title Direction + Brief",
+            "state": title_direction_gate_status,
+            "human_status": package_human,
+            "tone": package_tone,
             "detail": (
-                "Plans long-form and Shorts as separate productions from the "
-                "approved script, then requires a human Format Gate decision."
+                "Generates five Short and five Long-form title directions from the "
+                "approved script, then binds the selected direction to an exact "
+                "evidence-backed Packaging Brief and Viewer Promise Contract for "
+                "each format. Final title wording is still not permanently locked."
             ),
-            "next_action": format_next,
+            "next_action": package_next,
             "criteria": [
                 {
                     "label": "Approved script handoff ready",
                     "done": production_ready,
                 },
                 {
-                    "label": "Format requests prepared",
-                    "done": format_requests_ready,
+                    "label": "Post-script title requests prepared",
+                    "done": title_direction_requests_ready,
                 },
                 {
-                    "label": "Validated format plans generated",
-                    "done": format_plans_ready,
+                    "label": "5 Short + 5 Long title directions current",
+                    "done": title_direction_candidates_ready,
                 },
                 {
-                    "label": "Human Format Gate complete",
-                    "done": format_gate_complete,
+                    "label": "Human Title Direction Gate complete",
+                    "done": bool(title_direction_gate.get("complete")),
                 },
                 {
-                    "label": "Every format plan approved for production",
-                    "done": production_engine_ready,
+                    "label": "Short + Long title directions selected",
+                    "done": title_direction_selected,
+                },
+                {
+                    "label": "Packaging Brief + Viewer Promise current",
+                    "done": packaging_brief_ready,
+                },
+                {
+                    "label": "Five diverse psychological angles per format",
+                    "done": angles_ready,
+                },
+                {
+                    "label": "One thumbnail concept per psychological angle",
+                    "done": thumbnails_ready,
+                },
+                {
+                    "label": "25 title-thumbnail pairs validated per format",
+                    "done": package_validation_ready,
                 },
             ],
-            "complete": production_engine_ready,
+            "complete": package_validation_ready,
             "ready": production_ready,
-            "current": production_ready and not production_engine_ready,
+            "current": production_ready and not package_validation_ready,
+        },
+        {
+            "id": "08",
+            "title": "Format / Production Hold",
+            "state": (
+                "WAITING_FOR_FINAL_PACKAGING_GATE"
+                if package_validation_ready
+                else (
+                    "WAITING_FOR_PACKAGE_VALIDATION"
+                    if thumbnails_ready
+                    else (
+                        "WAITING_FOR_THUMBNAIL_CONCEPTS"
+                        if angles_ready
+                        else (
+                            "WAITING_FOR_PSYCHOLOGICAL_ANGLES"
+                            if packaging_brief_ready
+                            else (
+                                "WAITING_FOR_PACKAGING_BRIEF"
+                                if title_direction_selected
+                                else "WAITING_FOR_TITLE_DIRECTION"
+                            )
+                        )
+                    )
+                )
+            ),
+            "human_status": format_human,
+            "tone": format_tone,
+            "detail": (
+                "Format and Production remain intentionally held after Slice 26. "
+                "Every 5-title x 5-thumbnail combination is validated for redundancy, "
+                "complementarity, claims, Viewer Promise and Hook Alignment, but the "
+                "Final Packaging Human Gate has not accepted a package yet."
+            ),
+            "next_action": format_next,
+            "criteria": [
+                {
+                    "label": "Post-script title direction selected",
+                    "done": title_direction_selected,
+                },
+                {
+                    "label": "Packaging Brief + Viewer Promise ready",
+                    "done": packaging_brief_ready,
+                },
+                {
+                    "label": "Psychological angles + thumbnail concepts ready",
+                    "done": thumbnails_ready,
+                },
+                {
+                    "label": "Cross-pair validation ready",
+                    "done": package_validation_ready,
+                },
+                {
+                    "label": "Final Packaging Human Gate complete",
+                    "done": False,
+                },
+                {
+                    "label": "Format planning re-enabled",
+                    "done": False,
+                },
+            ],
+            "complete": False,
+            "ready": title_direction_selected,
+            "current": title_direction_selected,
         },
     ]
 
@@ -3111,14 +4697,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
     )
     concept_gate_complete = bool(transform["concept_gate_complete"])
-    packaging = packaging_artifact_state()
-    package_requests = bool(packaging["requests_ready"])
-    package_candidates = bool(packaging["candidates_ready"])
-    packaging_gate = packaging["packaging_gate"]
-    packaging_gate_status = str(
-        packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
-    )
-    packaging_gate_complete = bool(packaging["packaging_gate_complete"])
     research = research_artifact_state()
     research_plans = bool(research["plans_ready"])
     research_evidence = bool(research["evidence_complete"])
@@ -3137,6 +4715,30 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     script_gate_status = str(script_gate.get("status") or "WAITING_FOR_SCRIPT_DRAFTS")
     script_gate_complete = bool(story["script_gate_complete"])
     production_ready = bool(story["production_ready"])
+    title_direction = title_direction_artifact_state()
+    title_direction_requests_ready = bool(
+        title_direction.get("requests_ready")
+    )
+    title_direction_candidates_ready = bool(
+        title_direction.get("candidates_ready")
+    )
+    title_direction_gate = title_direction.get("gate", {})
+    title_direction_gate_status = str(
+        title_direction_gate.get("status")
+        or "WAITING_FOR_TITLE_DIRECTION_CANDIDATES"
+    )
+    title_direction_selected = bool(title_direction.get("selected"))
+    packaging_brief = packaging_brief_snapshot()
+    packaging_brief_ready = bool(packaging_brief.get("ready"))
+    angle_requests = psychological_angle_request_snapshot()
+    angles = psychological_angle_snapshot()
+    angles_ready = bool(angles.get("ready"))
+    thumbnail_requests = thumbnail_concept_request_snapshot()
+    thumbnails = thumbnail_concept_snapshot()
+    thumbnails_ready = bool(thumbnails.get("ready"))
+    pairing_requests = package_pairing_request_snapshot()
+    package_validation = package_validation_snapshot()
+    package_validation_ready = bool(package_validation.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -3153,20 +4755,150 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         or "WAITING_FOR_VOICE_PERFORMANCE_SPECS"
     )
     voice_visual_ready = bool(voice["visual_ready"])
+    engagement = pre_render_engagement_snapshot()
+    engagement_passed = bool(
+        engagement.get("status") == "PASS"
+        and int(engagement.get("processed") or 0) > 0
+    )
+    preview_prepare = narration_preview_prepare_snapshot()
+    preview_gate = narration_preview_gate_snapshot()
+    preview_prepared = preview_prepare.get("status") == "READY_FOR_FREE_PREVIEW_RENDER"
+    preview_items = (
+        preview_gate.get("items", [])
+        if isinstance(preview_gate, dict)
+        else []
+    )
+    preview_rendered = bool(preview_items) and all(
+        isinstance(item, dict) and item.get("audio_ready") is True
+        for item in preview_items
+    )
+    sound_reference_payload = safe_load_json(PRODUCTION_SOUND_REFERENCE_SUMMARY)
+    sound_reference = sound_reference_payload if isinstance(sound_reference_payload, dict) else {}
+    sound_reference_prepared = sound_reference.get("status") == "READY_FOR_REFERENCE_SOUND_GENERATION"
+    preview_approved = bool(preview_gate.get("complete"))
+    sound_brief = sound_design_brief_snapshot()
+    sound_brief_ready = (
+        sound_brief.get("status") == "READY_FOR_FINAL_PROVIDER_HANDOFF"
+    )
+    narration = narration_artifact_state()
+    narration_render = narration["render"]
+    narration_spend_gate = narration["spend_gate"]
+    narration_prepared = int(narration_render.get("prepared") or 0) > 0
+    narration_refresh_required = bool(
+        narration_render.get("refresh_required")
+    )
+    narration_ready_for_spend_gate = (
+        narration_render.get("status") == "READY_FOR_SPEND_GATE"
+    )
+    narration_spend_gate_status = str(narration_spend_gate.get("status") or "WAITING_FOR_PROVIDER_QUOTE")
+    narration_spend_complete = bool(narration_spend_gate.get("complete"))
+    narration_spend_accepted = bool(
+        narration_spend_complete
+        and int(narration_spend_gate.get("accepted") or 0) > 0
+        and int(narration_spend_gate.get("pending") or 0) == 0
+        and int(narration_spend_gate.get("rework") or 0) == 0
+        and int(narration_spend_gate.get("rejected") or 0) == 0
+    )
+    narration_render_results_present = bool(
+        narration.get("render_results_present")
+    )
+    narration_audio_qc_state = narration.get("audio_qc", {})
+    narration_audio_qc_status = str(
+        narration_audio_qc_state.get("status")
+        or "WAITING_FOR_NARRATION_RENDER_RESULTS"
+    )
+    narration_audio_ready = bool(narration.get("audio_ready"))
     production_visual = production_visual_artifact_state()
     visual_manifests_ready = bool(production_visual["manifests_ready"])
+    storyboard_state = production_storyboard_snapshot()
+    storyboards_ready = bool(
+        visual_manifests_ready
+        and storyboard_state.get("status") == "READY_FOR_VISUAL_SEARCH"
+        and int(storyboard_state.get("prepared") or 0)
+        == int(production_visual.get("manifest_count") or 0)
+    )
+    visual_search_state = visual_search_prepare_snapshot()
+    visual_search_requests_ready = bool(
+        storyboards_ready
+        and visual_search_state.get("status") == "READY_FOR_SEARCH_ADAPTERS"
+        and int(visual_search_state.get("prepared") or 0)
+        == int(storyboard_state.get("prepared") or 0)
+    )
+    visual_search_acquire_state = visual_search_acquire_snapshot()
+    visual_post = visual_post_search_artifact_state()
+    visual_candidate_complete = bool(visual_post["candidate_complete"])
+    visual_candidate_stale = int(
+        visual_post["candidate_gate"].get("stale_shots") or 0
+    )
+    visual_rights_complete = bool(visual_post["rights_complete"])
+    visual_asset_acquisition = visual_asset_acquisition_artifact_state()
+    visual_asset_acquisition_current = bool(
+        visual_asset_acquisition.get("current")
+    )
+    visual_rough_cuts_ready = bool(visual_post["rough_cuts_ready"])
+    visual_rough_gate_complete = bool(visual_post["rough_gate_complete"])
+    visual_gap_plans_ready = bool(visual_post["gap_plans_ready"])
+    visual_spend = visual_spend_review_snapshot()
+    visual_spend_complete = bool(visual_spend.get("complete"))
+    visual_spend_authorized = int(visual_spend.get("authorized") or 0)
+    visual_generation_handoff = visual_generation_handoff_artifact_state()
+    visual_generation_handoff_ready = bool(
+        visual_generation_handoff.get("ready")
+    )
+    visual_assembly = visual_assembly_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    visual_assembly_ready = bool(visual_assembly.get("ready"))
+    visual_assembly_edit_ready = bool(
+        visual_assembly_ready
+        and int(visual_assembly.get("waiting_for_premium_assets") or 0) == 0
+        and int(visual_assembly.get("waiting_for_local_assets") or 0) == 0
+        and int(visual_assembly.get("waiting_for_existing_retry") or 0) == 0
+        and int(visual_assembly.get("ready_for_edit_assembly") or 0)
+        == int(visual_assembly.get("expected") or 0)
+    )
+    edit_manifest_state = edit_manifest_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    edit_manifest_ready = bool(edit_manifest_state.get("ready"))
+    edit_preview_state = edit_preview_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    edit_preview_ready = bool(edit_preview_state.get("ready"))
+    local_structural_ffmpeg_ready = structural_ffmpeg_available()
+    edit_gate_state = edit_preview_review_snapshot()
+    final_handoff_state = final_production_handoff_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_handoff_ready = bool(final_handoff_state.get("ready"))
+    final_sound_plan_state = final_sound_plan_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_sound_plan_ready = bool(final_sound_plan_state.get("ready"))
+    final_sound_assets = final_sound_asset_snapshot()
+    final_sound_assets_ready = bool(final_sound_assets.get("ready"))
+    final_render_manifest_state = final_render_manifest_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_render_manifest_ready = bool(
+        final_render_manifest_state.get("ready")
+    )
+    final_render_state = final_render_artifact_state(
+        visual_post.get("expected_branches", [])
+    )
+    final_render_ready = bool(final_render_state.get("ready"))
     agent_reach_installed = shutil.which("agent-reach") is not None
     yt_dlp_installed = shutil.which("yt-dlp") is not None
     ffmpeg_installed = shutil.which("ffmpeg") is not None
     visual_available = yt_dlp_installed and ffmpeg_installed
     visual_satisfied = visual_complete or visual_attempted or not visual_available
+    vision_satisfied = (not visual_complete) or vision_complete
     thumbnail_items = thumbnail_gate_state().get("items", [])
-    thumbnail_packages_ready = bool(thumbnail_items)
+    thumbnail_units_ready = bool(thumbnail_items)
     thumbnail_subjects_ready = any(
         str((item.get("subject_image") or {}).get("path") or "").strip()
         for item in thumbnail_items
     )
-    vision_satisfied = (not visual_complete) or vision_complete
 
     result: dict[str, dict[str, Any]] = {
         "opportunity_research": {
@@ -3608,67 +5340,35 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "package_prepare": {
-            "enabled": bool(transform["research_ready"]) and not package_requests,
+            "enabled": False,
             "reason": (
-                "Accepted concepts are ready for packaging requests."
-                if bool(transform["research_ready"]) and not package_requests
-                else (
-                    "Package requests are already current."
-                    if package_requests
-                    else "Accept at least one concept first."
-                )
+                "Legacy pre-script Packaging action retained for resumability only. "
+                "Slice 23 active workflow researches the accepted concept first."
             ),
         },
         "package_generate": {
-            "enabled": package_requests and not package_candidates,
+            "enabled": False,
             "reason": (
-                "Current package requests are ready for FAIR free-only generation."
-                if package_requests and not package_candidates
-                else (
-                    "Valid package candidates already exist."
-                    if package_candidates
-                    else "Prepare current package requests first."
-                )
+                "Legacy pre-script Packaging generation is inactive in Slice 23. "
+                "Use the post-script Title Direction stage instead."
             ),
         },
         "package_gate_prepare": {
-            "enabled": (
-                package_candidates
-                and (
-                    packaging_gate_status == "READY_TO_PREPARE"
-                    or (
-                        packaging_gate_complete
-                        and not bool(packaging["research_ready"])
-                    )
-                )
-            ),
+            "enabled": False,
             "reason": (
-                "Validated package candidates are ready for human review."
-                if package_candidates and packaging_gate_status == "READY_TO_PREPARE"
-                else (
-                    "No package was accepted; reopen the current Packaging Gate."
-                    if (
-                        package_candidates
-                        and packaging_gate_complete
-                        and not bool(packaging["research_ready"])
-                    )
-                    else (
-                        "Packaging Gate is already prepared or complete."
-                        if package_candidates
-                        else "Generate valid package candidates first."
-                    )
-                )
+                "Legacy pre-script Packaging Gate is inactive in Slice 23. Existing "
+                "artifacts remain readable for audit/resume compatibility."
             ),
         },
         "research_prepare": {
-            "enabled": bool(packaging["research_ready"]) and not research_plans,
+            "enabled": bool(transform["research_ready"]) and not research_plans,
             "reason": (
-                "Approved packages are ready to become research plans."
-                if bool(packaging["research_ready"]) and not research_plans
+                "Accepted concepts are ready to become research plans directly."
+                if bool(transform["research_ready"]) and not research_plans
                 else (
                     "Research plans are already current."
                     if research_plans
-                    else "Approve a package first."
+                    else "Accept at least one concept first."
                 )
             ),
         },
@@ -3721,7 +5421,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "story_prepare": {
             "enabled": bool(research["story_ready"]) and not story_requests_ready,
             "reason": (
-                "Verified research and the approved package are ready for Story Plan requests."
+                "Verified research and the accepted concept/viewer contract are ready for Story Plan requests."
                 if bool(research["story_ready"]) and not story_requests_ready
                 else (
                     "Story Plan requests are already current."
@@ -3797,15 +5497,194 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     )
                 )
             ),
-        },        "format_prepare": {
-            "enabled": production_ready and not format_requests_ready,
+        },
+        "title_direction_prepare": {
+            "enabled": (
+                production_ready
+                and not title_direction_requests_ready
+            ),
             "reason": (
-                "All required branch scripts are approved and ready for production-format planning."
-                if production_ready and not format_requests_ready
+                "Human-approved scripts are stable; prepare the post-script 5+5 "
+                "title-direction requests from their hooks, payoff and evidence."
+                if production_ready and not title_direction_requests_ready
                 else (
-                    "Format requests are already current."
-                    if format_requests_ready
+                    "Title direction requests are current."
+                    if title_direction_requests_ready
                     else "Complete the Human Script Gate first."
+                )
+            ),
+        },
+        "title_direction_generate": {
+            "enabled": (
+                title_direction_requests_ready
+                and not title_direction_candidates_ready
+            ),
+            "reason": (
+                "Current post-script title-direction requests are ready for FAIR "
+                "free-first generation."
+                if (
+                    title_direction_requests_ready
+                    and not title_direction_candidates_ready
+                )
+                else (
+                    "Current 5+5 title direction candidates are ready."
+                    if title_direction_candidates_ready
+                    else "Prepare current title direction requests first."
+                )
+            ),
+        },
+        "title_direction_gate_prepare": {
+            "enabled": (
+                title_direction_candidates_ready
+                and title_direction_gate_status == "READY_TO_PREPARE"
+            ),
+            "reason": (
+                "Five Short and five Long-form title directions are ready for "
+                "human selection."
+                if (
+                    title_direction_candidates_ready
+                    and title_direction_gate_status == "READY_TO_PREPARE"
+                )
+                else (
+                    "Title Direction Gate is already prepared or complete."
+                    if title_direction_candidates_ready
+                    else "Generate current title direction candidates first."
+                )
+            ),
+        },
+        "packaging_brief_prepare": {
+            "enabled": title_direction_selected and not packaging_brief_ready,
+            "reason": (
+                "The current Human Title Direction Gate is complete; bind the exact "
+                "approved script, hook, payoff, verified evidence and selected "
+                "direction into format-specific Packaging Briefs and Viewer Promise "
+                "Contracts."
+                if title_direction_selected and not packaging_brief_ready
+                else (
+                    "Current Packaging Briefs and Viewer Promise Contracts are ready."
+                    if packaging_brief_ready
+                    else "Complete the Human Title Direction Gate first."
+                )
+            ),
+        },
+        "psychological_angle_prepare": {
+            "enabled": (
+                packaging_brief_ready
+                and not angles_ready
+                and not bool(angle_requests.get("ready"))
+            ),
+            "reason": (
+                "Current Packaging Briefs are ready; prepare evidence-bound requests "
+                "for five distinct psychological hypotheses per format."
+                if packaging_brief_ready and not angles_ready and not bool(angle_requests.get("ready"))
+                else (
+                    "Psychological angle requests are current."
+                    if bool(angle_requests.get("ready"))
+                    else (
+                        "Psychological angles are already current."
+                        if angles_ready
+                        else "Build current Packaging Briefs first."
+                    )
+                )
+            ),
+        },
+        "psychological_angle_generate": {
+            "enabled": bool(angle_requests.get("ready")) and not angles_ready,
+            "reason": (
+                "Current psychological-angle requests are ready for free-first FAIR generation."
+                if bool(angle_requests.get("ready")) and not angles_ready
+                else (
+                    "Psychological angles are current."
+                    if angles_ready
+                    else "Prepare current psychological-angle requests first."
+                )
+            ),
+        },
+        "thumbnail_concept_prepare": {
+            "enabled": (
+                angles_ready
+                and not thumbnails_ready
+                and not bool(thumbnail_requests.get("ready"))
+            ),
+            "reason": (
+                "Five distinct psychological hypotheses are current; bind each to a "
+                "thumbnail concept request."
+                if angles_ready and not thumbnails_ready and not bool(thumbnail_requests.get("ready"))
+                else (
+                    "Thumbnail concept requests are current."
+                    if bool(thumbnail_requests.get("ready"))
+                    else (
+                        "Thumbnail concepts are already current."
+                        if thumbnails_ready
+                        else "Generate current psychological angles first."
+                    )
+                )
+            ),
+        },
+        "thumbnail_concept_generate": {
+            "enabled": bool(thumbnail_requests.get("ready")) and not thumbnails_ready,
+            "reason": (
+                "Current thumbnail requests are ready for free-first FAIR concept generation."
+                if bool(thumbnail_requests.get("ready")) and not thumbnails_ready
+                else (
+                    "Thumbnail concepts are current."
+                    if thumbnails_ready
+                    else "Prepare current thumbnail concept requests first."
+                )
+            ),
+        },
+        "package_pairing_prepare": {
+            "enabled": (
+                thumbnails_ready
+                and not package_validation_ready
+                and not bool(pairing_requests.get("ready"))
+            ),
+            "reason": (
+                "Five current titles and five current thumbnails are ready per format; "
+                "build the full 25-pair compatibility matrix and resumable validation chunks."
+                if thumbnails_ready and not package_validation_ready and not bool(pairing_requests.get("ready"))
+                else (
+                    "Package pairing requests are current."
+                    if bool(pairing_requests.get("ready"))
+                    else (
+                        "Package validation is already current."
+                        if package_validation_ready
+                        else "Generate current thumbnail concepts first."
+                    )
+                )
+            ),
+        },
+        "package_pairing_generate": {
+            "enabled": bool(pairing_requests.get("ready")) and not package_validation_ready,
+            "reason": (
+                "Current cross-pair requests are ready for free-first semantic validation."
+                if bool(pairing_requests.get("ready")) and not package_validation_ready
+                else (
+                    "All current package pairs are validated."
+                    if package_validation_ready
+                    else "Prepare current package pairing requests first."
+                )
+            ),
+        },
+        "format_prepare": {
+            "enabled": False,
+            "reason": (
+                "Slice 26 intentionally stops after cross-pair validation. The Final "
+                "Packaging Human Gate must accept an exact title + thumbnail + hook + "
+                "Viewer Promise package before Format planning is re-enabled."
+                if package_validation_ready
+                else (
+                    "Finish current title-thumbnail pairing and validation first."
+                    if thumbnails_ready
+                    else (
+                        "Finish current packaging hypotheses first."
+                        if packaging_brief_ready
+                        else (
+                            "Build current Packaging Briefs first."
+                            if title_direction_selected
+                            else "Complete the post-script Title Direction Gate first."
+                        )
+                    )
                 )
             ),
         },
@@ -3885,39 +5764,485 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "pre_render_engagement": {
+            "enabled": voice_visual_ready and not engagement_passed and engagement.get("status") != "BLOCKED",
+            "reason": (
+                "Human-approved performance plans are ready for deterministic engagement validation."
+                if voice_visual_ready and not engagement_passed and engagement.get("status") != "BLOCKED"
+                else ("Pre-render engagement validation passed." if engagement_passed else ("Pre-render engagement validation blocked narration; revise the script/performance plan." if engagement.get("status") == "BLOCKED" else "Complete and accept the Human Performance Gate first."))
+            ),
+        },
+        "narration_preview_prepare": {
+            "enabled": engagement_passed and not preview_prepared,
+            "reason": (
+                "Engagement validation passed; prepare the zero-cost audio prototype."
+                if engagement_passed and not preview_prepared
+                else ("Free prototype manifest is ready." if preview_prepared else "Pre-render engagement validation must pass first.")
+            ),
+        },
+        "prototype_sound_prepare": {
+            "enabled": preview_prepared and not sound_reference_prepared,
+            "reason": (
+                "Prepare AudioGen/MusicGen research-reference prompts for the rough audio experience."
+                if preview_prepared and not sound_reference_prepared
+                else ("Reference sound plan is prepared." if sound_reference_prepared else "Prepare the free narration prototype first.")
+            ),
+        },
+        "narration_preview_render": {
+            "enabled": preview_prepared and not preview_rendered,
+            "reason": (
+                "Render the free local Kokoro prototype for listening."
+                if preview_prepared and not preview_rendered
+                else ("Free prototype audio is ready for human listening." if preview_rendered else "Prepare the free prototype first.")
+            ),
+        },
+        "sound_design_brief_prepare": {
+            "enabled": preview_approved and not sound_brief_ready,
+            "reason": (
+                "Free prototype approved; convert the accepted sound intent into a descriptive final-provider brief."
+                if preview_approved and not sound_brief_ready
+                else ("Sound Design Brief is ready." if sound_brief_ready else "Approve the free audio prototype first.")
+            ),
+        },
+        "narration_prepare": {
+            "enabled": (
+                preview_approved
+                and sound_brief_ready
+                and (not narration_prepared or narration_refresh_required)
+            ),
+            "reason": (
+                "The free prototype and current Sound Design Brief are approved; prepare or refresh the provider-bound narration request and zero-spend quote boundary."
+                if (
+                    preview_approved
+                    and sound_brief_ready
+                    and (not narration_prepared or narration_refresh_required)
+                )
+                else (
+                    "Narration request and cost boundary are current."
+                    if narration_prepared and not narration_refresh_required
+                    else "Listen to and approve the free narration prototype before any provider quote."
+                )
+            ),
+        },
+        "narration_spend_gate_prepare": {
+            "enabled": (
+                narration_prepared
+                and not narration_refresh_required
+                and narration_spend_gate_status == "READY_TO_PREPARE"
+            ),
+            "reason": (
+                "Refresh the Human Narration Spend Gate from the current narration cost state."
+                if (
+                    narration_prepared
+                    and not narration_refresh_required
+                    and narration_spend_gate_status == "READY_TO_PREPARE"
+                )
+                else (
+                    "Narration Spend Gate is already prepared or complete."
+                    if narration_ready_for_spend_gate
+                    else "Narration remains blocked until provider prerequisites and a current quote exist."
+                )
+            ),
+        },
+        "narration_audio_qc": {
+            "enabled": (
+                narration_spend_accepted
+                and narration_render_results_present
+                and narration_audio_qc_status
+                == "WAITING_FOR_NARRATION_RENDER_RESULTS"
+            ),
+            "reason": (
+                "Current spend-authorized provider audio is registered; run local Audio QC and build the narration timing map."
+                if (
+                    narration_spend_accepted
+                    and narration_render_results_present
+                    and narration_audio_qc_status
+                    == "WAITING_FOR_NARRATION_RENDER_RESULTS"
+                )
+                else (
+                    "Narration Audio QC has passed and timing maps are ready."
+                    if narration_audio_ready
+                    else (
+                        "Narration Audio QC failed. Re-import corrected provider audio before retrying."
+                        if narration_audio_qc_status == "FAIL"
+                        else (
+                            "Register the current provider narration return after spend approval."
+                            if narration_spend_accepted
+                            else "Complete the Human Narration Spend Gate first."
+                        )
+                    )
+                )
+            ),
+        },
+        "storyboard_prepare": {
+            "enabled": visual_manifests_ready and not storyboards_ready,
+            "reason": (
+                "Build or refresh the cinematic storyboard from current narration timing and current visual requirements."
+                if visual_manifests_ready and not storyboards_ready
+                else (
+                    "Current narration-bound storyboards are ready."
+                    if storyboards_ready
+                    else "Current narration-bound visual requirements are not ready."
+                )
+            ),
+        },
+        "visual_search_prepare": {
+            "enabled": (
+                storyboards_ready
+                and (
+                    not visual_search_requests_ready
+                    or visual_candidate_stale > 0
+                )
+            ),
+            "reason": (
+                "Storyboard revisions made visual search stale; rebuild only current search requests."
+                if visual_candidate_stale > 0
+                else (
+                    "Prepare rights-aware, existing/free-first visual search requests from the current storyboard."
+                    if storyboards_ready and not visual_search_requests_ready
+                    else "Current visual search requests are ready."
+                )
+            ),
+        },
+        "visual_search_acquire": {
+            "enabled": (
+                visual_search_requests_ready
+                and visual_search_acquire_state.get("status")
+                == "READY_TO_SEARCH"
+            ),
+            "reason": (
+                "Search current zero-cost/existing sources. Results are discovery-only; no media is downloaded and no paid generation is called."
+                if (
+                    visual_search_requests_ready
+                    and visual_search_acquire_state.get("status")
+                    == "READY_TO_SEARCH"
+                )
+                else (
+                    "Current zero-cost visual search results are ready for human review."
+                    if visual_search_acquire_state.get("status")
+                    == "SEARCH_COMPLETE"
+                    else "Prepare current narration-bound visual search requests first."
+                )
+            ),
+        },
+        "visual_asset_acquire": {
+            "enabled": (
+                visual_candidate_complete
+                and visual_rights_complete
+                and not visual_asset_acquisition_current
+            ),
+            "reason": (
+                "Approved current visual selections are ready for safe local "
+                "asset acquisition."
+                if (
+                    visual_candidate_complete
+                    and visual_rights_complete
+                    and not visual_asset_acquisition_current
+                )
+                else (
+                    "Approved visual asset acquisition is current."
+                    if visual_asset_acquisition_current
+                    else "Complete Visual Candidate and Rights/Context review first."
+                )
+            ),
+        },
+        "visual_rough_cut_prepare": {
+            "enabled": (
+                visual_candidate_complete
+                and visual_rights_complete
+                and visual_asset_acquisition_current
+                and not visual_rough_cuts_ready
+            ),
+            "reason": (
+                "Current visual selections, rights/context decisions and safe asset acquisition are ready; build the rough cut."
+                if (
+                    visual_candidate_complete
+                    and visual_rights_complete
+                    and visual_asset_acquisition_current
+                    and not visual_rough_cuts_ready
+                )
+                else (
+                    "Current rough-cut manifests are ready."
+                    if visual_rough_cuts_ready
+                    else "Complete Visual Candidate Review and any required Rights/Context Review first."
+                )
+            ),
+        },
+        "visual_gap_prepare": {
+            "enabled": (
+                visual_rough_gate_complete
+                and not visual_gap_plans_ready
+            ),
+            "reason": (
+                "Human-approved rough cuts are ready for unresolved-gap planning."
+                if visual_rough_gate_complete and not visual_gap_plans_ready
+                else (
+                    "Current visual gap plans are ready."
+                    if visual_gap_plans_ready
+                    else "Complete the Human Rough-Cut Gate first."
+                )
+            ),
+        },
+        "visual_generation_handoff_prepare": {
+            "enabled": (
+                visual_gap_plans_ready
+                and visual_spend_complete
+                and visual_spend_authorized > 0
+                and not visual_generation_handoff_ready
+            ),
+            "reason": (
+                "Human-authorized premium visual gaps are ready for zero-cost "
+                "provider handoff preparation."
+                if (
+                    visual_gap_plans_ready
+                    and visual_spend_complete
+                    and visual_spend_authorized > 0
+                    and not visual_generation_handoff_ready
+                )
+                else (
+                    "Premium visual generation briefs are already current."
+                    if visual_generation_handoff_ready
+                    else (
+                        "No paid visual generation was authorized."
+                        if visual_spend_complete and visual_spend_authorized == 0
+                        else "Complete the Human Visual Spend Gate first."
+                    )
+                )
+            ),
+        },
+        "visual_assembly_prepare": {
+            "enabled": (
+                visual_gap_plans_ready
+                and visual_spend_complete
+                and (
+                    visual_spend_authorized == 0
+                    or visual_generation_handoff_ready
+                )
+                and not visual_assembly_ready
+            ),
+            "reason": (
+                "Current visual decisions are ready for deterministic edit "
+                "assembly planning."
+                if (
+                    visual_gap_plans_ready
+                    and visual_spend_complete
+                    and (
+                        visual_spend_authorized == 0
+                        or visual_generation_handoff_ready
+                    )
+                    and not visual_assembly_ready
+                )
+                else (
+                    "Visual edit assembly plans are already current."
+                    if visual_assembly_ready
+                    else (
+                        "Prepare current premium-generation briefs first."
+                        if visual_spend_authorized > 0
+                        and not visual_generation_handoff_ready
+                        else "Complete visual gap and spend decisions first."
+                    )
+                )
+            ),
+        },
+        "edit_manifest_prepare": {
+            "enabled": (
+                narration_audio_ready
+                and visual_assembly_edit_ready
+                and not edit_manifest_ready
+            ),
+            "reason": (
+                "Current PASS narration timing and final-for-preview visual "
+                "assembly are ready for the structural edit manifest."
+                if (
+                    narration_audio_ready
+                    and visual_assembly_edit_ready
+                    and not edit_manifest_ready
+                )
+                else (
+                    "Edit preview manifests are current."
+                    if edit_manifest_ready
+                    else (
+                        "Narration Audio QC/timing must be current before Slice 19."
+                        if not narration_audio_ready
+                        else (
+                            "Register/retry required visual assets before Slice 19."
+                            if visual_assembly_ready
+                            else "Build the current visual assembly plan first."
+                        )
+                    )
+                )
+            ),
+        },
+        "edit_preview_render": {
+            "enabled": (
+                edit_manifest_ready
+                and local_structural_ffmpeg_ready
+                and not edit_preview_ready
+            ),
+            "reason": (
+                "Current edit manifests are ready for free local FFmpeg preview."
+                if (
+                    edit_manifest_ready
+                    and local_structural_ffmpeg_ready
+                    and not edit_preview_ready
+                )
+                else (
+                    "Structural edit previews are current."
+                    if edit_preview_ready
+                    else (
+                        "Configured local FFmpeg is required for the structural preview."
+                        if edit_manifest_ready
+                        and not local_structural_ffmpeg_ready
+                        else "Build current edit manifests first."
+                    )
+                )
+            ),
+        },
+        "final_production_handoff_prepare": {
+            "enabled": (
+                edit_preview_ready
+                and bool(edit_gate_state.get("complete"))
+                and int(edit_gate_state.get("rework") or 0) == 0
+                and int(
+                    visual_assembly.get("waiting_for_premium_assets") or 0
+                ) == 0
+                and int(
+                    visual_assembly.get("waiting_for_local_assets") or 0
+                ) == 0
+                and not final_handoff_ready
+            ),
+            "reason": (
+                "Approved edit direction and current final visual/audio assets are "
+                "ready for a zero-cost final production handoff."
+                if (
+                    edit_preview_ready
+                    and bool(edit_gate_state.get("complete"))
+                    and int(edit_gate_state.get("rework") or 0) == 0
+                    and int(
+                        visual_assembly.get("waiting_for_premium_assets") or 0
+                    ) == 0
+                    and int(
+                        visual_assembly.get("waiting_for_local_assets") or 0
+                    ) == 0
+                    and not final_handoff_ready
+                )
+                else (
+                    "Final production handoff is current."
+                    if final_handoff_ready
+                    else "Approve the structural edit and register all final visual assets first."
+                )
+            ),
+        },
+        "final_sound_plan_prepare": {
+            "enabled": (
+                final_handoff_ready
+                and int(final_handoff_state.get("blocked") or 0) == 0
+                and int(final_handoff_state.get("ready_for_final_sound") or 0)
+                == int(final_handoff_state.get("expected") or 0)
+                and not final_sound_plan_ready
+            ),
+            "reason": (
+                "Current final-production handoffs are ready to become exact "
+                "licensed music/SFX requirements."
+                if (
+                    final_handoff_ready
+                    and int(final_handoff_state.get("blocked") or 0) == 0
+                    and int(final_handoff_state.get("ready_for_final_sound") or 0)
+                    == int(final_handoff_state.get("expected") or 0)
+                    and not final_sound_plan_ready
+                )
+                else (
+                    "Final sound requirements are current."
+                    if final_sound_plan_ready
+                    else (
+                        "Resolve final-production handoff blockers before final "
+                        "sound planning."
+                        if final_handoff_ready
+                        and int(final_handoff_state.get("blocked") or 0) > 0
+                        else "Prepare the current final-production handoff first."
+                    )
+                )
+            ),
+        },
+        "final_render_manifest_prepare": {
+            "enabled": (
+                final_sound_plan_ready
+                and final_sound_assets_ready
+                and not final_render_manifest_ready
+            ),
+            "reason": (
+                "Every current final sound requirement is resolved; bind final "
+                "visuals, narration and sound into a rebuild-current render manifest."
+                if (
+                    final_sound_plan_ready
+                    and final_sound_assets_ready
+                    and not final_render_manifest_ready
+                )
+                else (
+                    "Final render manifests are current."
+                    if final_render_manifest_ready
+                    else "Resolve every current final sound requirement first."
+                )
+            ),
+        },
+        "final_render_local": {
+            "enabled": (
+                final_render_manifest_ready
+                and final_ffmpeg_available()
+                and not final_render_ready
+            ),
+            "reason": (
+                "Current final render manifests are ready for local FFmpeg."
+                if (
+                    final_render_manifest_ready
+                    and final_ffmpeg_available()
+                    and not final_render_ready
+                )
+                else (
+                    "Local final renders are current."
+                    if final_render_ready
+                    else (
+                        "Configured local FFmpeg is required for final rendering."
+                        if final_render_manifest_ready
+                        and not final_ffmpeg_available()
+                        else "Build current final render manifests first."
+                    )
+                )
+            ),
+        },
         "thumbnail_render": {
             "enabled": ffmpeg_installed and thumbnail_subjects_ready,
             "reason": (
-                "Approved packages with a subject image can be rendered."
+                "Validated thumbnail concepts with a subject image can be rendered."
                 if ffmpeg_installed and thumbnail_subjects_ready
                 else (
                     "Install ffmpeg to render thumbnails."
                     if not ffmpeg_installed
-                    else "Add a subject image to an approved package in the Thumbnail Gate first."
+                    else "Add a subject image to a validated thumbnail concept in the Thumbnail Gate first."
                 )
             ),
         },
         "thumbnail_render_preview": {
-            "enabled": ffmpeg_installed and thumbnail_packages_ready,
+            "enabled": ffmpeg_installed and thumbnail_units_ready,
             "reason": (
-                "Approved packages can be previewed before a subject image exists."
-                if ffmpeg_installed and thumbnail_packages_ready
+                "Validated thumbnail concepts can be previewed before a subject image exists."
+                if ffmpeg_installed and thumbnail_units_ready
                 else (
                     "Install ffmpeg to render thumbnails."
                     if not ffmpeg_installed
-                    else "Approve a package at the Packaging Gate first."
+                    else "Validate title-thumbnail pairs first; a concept needs at least one PASS pair."
                 )
             ),
         },
         "production_visual_prepare": {
-            "enabled": voice_visual_ready and not visual_manifests_ready,
+            "enabled": narration_audio_ready and not visual_manifests_ready,
             "reason": (
-                "Human-approved performance plans unlock cheap-first visual manifests."
-                if voice_visual_ready and not visual_manifests_ready
+                "QC-passed narration timing maps unlock cheap-first visual manifests."
+                if narration_audio_ready and not visual_manifests_ready
                 else (
                     "Visual acquisition manifests are already current."
                     if visual_manifests_ready
-                    else "Complete and accept the Human Performance Gate first."
+                    else "Narration must render and pass local Audio QC first."
                 )
             ),
         },
@@ -4210,24 +6535,6 @@ def workflow_guidance(
                 "criteria. Accept, send for rework, or reject."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Automatic Packaging",
-        }
-
-    packaging = packaging_artifact_state()
-    packaging_gate = packaging.get("packaging_gate", {})
-    if (
-        packaging.get("candidates_ready")
-        and packaging_gate.get("status") == "AWAITING_HUMAN_DECISION"
-    ):
-        return {
-            "state": "HUMAN_PACKAGING_GATE",
-            "current_action_id": None,
-            "current_title": "Review Package Candidates",
-            "current_detail": (
-                "Review title, thumbnail and opening-frame packages. Approve at "
-                "most one package per concept, send it for rework, or reject it."
-            ),
-            "next_action_id": "auto_continue",
             "next_title": "Automatic Research",
         }
 
@@ -4264,7 +6571,210 @@ def workflow_guidance(
                 "and story payoff before production."
             ),
             "next_action_id": "auto_continue",
-            "next_title": "Automatic Format planning",
+            "next_title": "Generate post-script title directions",
+        }
+
+    title_direction = title_direction_artifact_state()
+    title_gate = title_direction.get("gate", {})
+    if (
+        story.get("production_ready")
+        and not title_direction.get("requests_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Prepare Post-Script Title Directions",
+            "current_detail": (
+                "The script, opening hook, payoff and evidence are human-approved. "
+                "Prepare the exact current 5 Short + 5 Long-form title-direction "
+                "request. These are preferred psychological directions, not final "
+                "locked wording."
+            ),
+            "next_action_id": None,
+            "next_title": "Generate 5 Short + 5 Long title directions",
+        }
+
+    if (
+        title_direction.get("requests_ready")
+        and not title_direction.get("candidates_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Generate 5 Short + 5 Long Title Directions",
+            "current_detail": (
+                "Use the configured free-first FAIR path to generate independent "
+                "Short and Long-form title hypotheses from the approved script, "
+                "hook, payoff and evidence. No title is automatically selected."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Title Direction Gate",
+        }
+
+    if (
+        title_direction.get("candidates_ready")
+        and title_gate.get("status") == "READY_TO_PREPARE"
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Prepare Title Direction Gate",
+            "current_detail": (
+                "Current 5+5 title directions are ready. Prepare their hash-bound "
+                "human review state without selecting or ranking a winner."
+            ),
+            "next_action_id": None,
+            "next_title": "Select preferred title directions",
+        }
+
+    if title_gate.get("status") == "AWAITING_HUMAN_TITLE_DIRECTION":
+        return {
+            "state": "HUMAN_TITLE_DIRECTION_GATE",
+            "current_action_id": None,
+            "current_title": "Select Preferred Title Directions",
+            "current_detail": (
+                "Choose one Short and one Long-form title direction. The selection "
+                "records the preferred psychological direction and evidence-backed "
+                "claim; exact title wording remains editable in the mature Packaging "
+                "Engine."
+            ),
+            "next_action_id": None,
+            "next_title": "Accept, rework, or reject the title directions",
+        }
+
+    if title_gate.get("status") == "TITLE_DIRECTION_REJECTED":
+        return {
+            "state": "TITLE_DIRECTION_REJECTED",
+            "current_action_id": None,
+            "current_title": "Title Direction Rejected",
+            "current_detail": (
+                "At least one current concept has no accepted title direction. "
+                "Rework or regenerate the current 5+5 title hypotheses before "
+                "mature packaging can begin."
+            ),
+            "next_action_id": None,
+            "next_title": "Rework title directions",
+        }
+
+    if title_gate.get("status") == "TITLE_DIRECTION_SELECTED":
+        packaging_brief = packaging_brief_snapshot()
+        if not packaging_brief.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Packaging Brief + Viewer Promise",
+                "current_detail": (
+                    "The selected title directions are current. Deterministically "
+                    "bind each Short/Long branch to the exact approved script, "
+                    "opening hook, payoff, verified evidence, audience context and "
+                    "SEARCH/BROWSE/HYBRID intent. Missing evidence fails closed."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare psychological packaging angles",
+            }
+
+        angle_requests = psychological_angle_request_snapshot()
+        angles = psychological_angle_snapshot()
+        if not angles.get("ready"):
+            if not angle_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Psychological Packaging Angles",
+                    "current_detail": (
+                        "Build one current request per approved format from the exact "
+                        "Packaging Brief. Five distinct primary psychological drivers "
+                        "are required and exactly one hypothesis remains anchored to "
+                        "the human-selected title direction."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Generate five diverse packaging hypotheses",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Generate Psychological Packaging Angles",
+                "current_detail": (
+                    "Use the configured free-first FAIR path to create five genuinely "
+                    "different packaging hypotheses per format. Creative framing may "
+                    "vary; facts, numbers and claims remain evidence-bound."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare thumbnail concepts",
+            }
+
+        thumbnail_requests = thumbnail_concept_request_snapshot()
+        thumbnails = thumbnail_concept_snapshot()
+        if not thumbnails.get("ready"):
+            if not thumbnail_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Thumbnail Concepts",
+                    "current_detail": (
+                        "Bind each current psychological angle to the exact Viewer "
+                        "Promise and approved evidence. Concepts must stay 16:9, "
+                        "mobile-legible, timestamp-safe and visually simple."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Generate one thumbnail concept per angle",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Generate Thumbnail Concepts",
+                "current_detail": (
+                    "Generate structured thumbnail concepts only. Each angle gets one "
+                    "visual proposition with one focal point, at most three meaningful "
+                    "elements, evidence-bound text and no image-generation spend."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 25 thumbnail concept boundary",
+            }
+
+        pairing_requests = package_pairing_request_snapshot()
+        validation = package_validation_snapshot()
+        if not validation.get("ready"):
+            if not pairing_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Build Full Title + Thumbnail Pairing Matrix",
+                    "current_detail": (
+                        "Cross-pair all five title directions with all five thumbnail "
+                        "concepts for each format. This creates 25 compatibility "
+                        "hypotheses per format rather than assuming Title 1 belongs to "
+                        "Thumbnail 1."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Validate every package pair",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Validate Title + Thumbnail Packages",
+                "current_detail": (
+                    "Evaluate each pair for semantic/visual redundancy, psychological "
+                    "complementarity, information gain, evidence credibility, Viewer "
+                    "Promise consistency and Hook Alignment. Hard truth failures "
+                    "override all diagnostic scores."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 26 package validation boundary",
+            }
+
+        return {
+            "state": "PACKAGE_VALIDATION_READY",
+            "current_action_id": None,
+            "current_title": "Package Pairing + Validation Ready",
+            "current_detail": (
+                f"{int(validation.get('current_pairs') or 0)} current title-thumbnail "
+                "pairs have PASS / REWORK / REJECT validation with separate 0-5 "
+                "diagnostics. No viral score, automatic winner, package acceptance, "
+                "thumbnail rendering or production action has occurred."
+            ),
+            "next_action_id": None,
+            "next_title": "Slice 27: Final Packaging Human Gate + targeted rework",
         }
 
     fmt = format_artifact_state()
@@ -4303,8 +6813,684 @@ def workflow_guidance(
             "next_title": "Prepare Visual Acquisition",
         }
 
+    preview_gate = narration_preview_gate_snapshot()
+    if (
+        preview_gate.get("items")
+        and not preview_gate.get("complete")
+        and any(item.get("audio_ready") for item in preview_gate.get("items", []))
+    ):
+        return {
+            "state": "HUMAN_NARRATION_PREVIEW_GATE",
+            "current_action_id": None,
+            "current_title": "Listen to Free Audio Prototype",
+            "current_detail": (
+                "Hear the story with draft tone, pacing and pauses before spending. "
+                "Approve final, or send the script, performance, or music/SFX plan back for rework."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Prepare Final Narration Quote",
+        }
+
+    narration_state = narration_artifact_state()
+    narration_render_state = narration_state.get("render", {})
+    narration_spend_state = narration_state.get("spend_gate", {})
+    if (
+        narration_spend_state.get("status") == "AWAITING_HUMAN_DECISION"
+        and narration_spend_state.get("items")
+    ):
+        return {
+            "state": "HUMAN_NARRATION_SPEND_GATE",
+            "current_action_id": None,
+            "current_title": "Review Narration Spend",
+            "current_detail": (
+                "Review the current provider quote and worst-case narration cost. "
+                "No paid narration call has been authorized yet."
+            ),
+            "next_action_id": None,
+            "next_title": "Paid narration remains locked until you accept.",
+        }
+
+    narration_spend_accepted = bool(
+        narration_spend_state.get("complete")
+        and int(narration_spend_state.get("accepted") or 0) > 0
+        and int(narration_spend_state.get("pending") or 0) == 0
+        and int(narration_spend_state.get("rework") or 0) == 0
+        and int(narration_spend_state.get("rejected") or 0) == 0
+    )
+    narration_return_state = narration_state.get("render_return", {})
+    narration_qc_state = narration_state.get("audio_qc", {})
+    if narration_spend_accepted:
+        if narration_return_state.get("status") != "READY_FOR_AUDIO_QC":
+            return {
+                "state": "WAITING_NARRATION_RENDER_RETURN",
+                "current_action_id": None,
+                "current_title": "Register Final Narration Audio",
+                "current_detail": (
+                    "Spend is authorized for the exact current quote. Supply the "
+                    "provider job/reference, actual cumulative cost, and one local "
+                    "audio file for every narration segment. The repository does "
+                    "not call an unverified paid provider."
+                ),
+                "next_action_id": None,
+                "next_title": "Automatic local Audio QC",
+            }
+        if narration_qc_state.get("status") == "FAIL":
+            return {
+                "state": "NARRATION_AUDIO_QC_FAILED",
+                "current_action_id": None,
+                "current_title": "Narration Audio QC Failed",
+                "current_detail": (
+                    "One or more final narration segments failed duration, silence, "
+                    "clipping, file, or attempt-policy checks. Register corrected "
+                    "provider audio before retrying."
+                ),
+                "next_action_id": None,
+                "next_title": "Re-import corrected narration audio",
+            }
+        if not narration_state.get("audio_ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Run Narration Audio QC",
+                "current_detail": (
+                    "Current provider audio is registered against the exact spend "
+                    "authorization. Run deterministic local Audio QC and timing-map generation."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare narration-bound visual plan",
+            }
+
+    narration_items = [
+        item
+        for item in narration_render_state.get("items", [])
+        if isinstance(item, dict)
+    ]
+    narration_blockers = sorted(
+        {
+            str(blocker)
+            for item in narration_items
+            for blocker in item.get("render_blockers", [])
+            if str(blocker)
+        }
+    )
+    if (
+        preview_gate.get("complete")
+        and narration_items
+        and narration_blockers
+    ):
+        return {
+            "state": "NARRATION_PROVIDER_SETUP_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Complete Narration Provider Setup",
+            "current_detail": (
+                "Paid narration is still locked. Current blockers: "
+                + ", ".join(narration_blockers)
+            ),
+            "next_action_id": None,
+            "next_title": "Prepare a verified quote only after setup is complete.",
+        }
+
+    if (
+        preview_gate.get("complete")
+        and narration_items
+        and not narration_blockers
+        and narration_render_state.get("status")
+        == "NARRATION_PREPARED_WITH_BLOCKERS"
+    ):
+        return {
+            "state": "WAITING_NARRATION_PROVIDER_QUOTE",
+            "current_action_id": None,
+            "current_title": "Current Narration Quote Required",
+            "current_detail": (
+                "The provider-bound narration request and quote template are ready. "
+                "Supply a current zero-spend/dry-run or documented provider quote; "
+                "the system will not guess a price."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Narration Spend Gate",
+        }
+
+    search_state = visual_search_prepare_snapshot()
+    search_acquire_state = visual_search_acquire_snapshot()
+    candidate_snapshot = visual_candidate_review_snapshot()
+    if (
+        narration_state.get("audio_ready")
+        and search_state.get("status") == "READY_FOR_SEARCH_ADAPTERS"
+        and int(search_state.get("prepared") or 0) > 0
+        and not candidate_snapshot.get("ready_for_review")
+        and search_acquire_state.get("status") == "READY_TO_SEARCH"
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Search Free / Existing Visuals",
+            "current_detail": (
+                "Run current zero-cost discovery across configured stock and "
+                "creator-discovery sources. Results are normalized and rights-aware; "
+                "no media is downloaded and no paid generation is allowed."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Visual Candidate Gate",
+        }
+
+    visual_post = visual_post_search_artifact_state()
+    candidate_gate = visual_post.get("candidate_gate", {})
+    if (
+        candidate_gate.get(
+            "ready_for_review",
+            bool(candidate_gate.get("packets")),
+        )
+        and candidate_gate.get("packets")
+        and not visual_post.get("candidate_complete")
+    ):
+        return {
+            "state": "HUMAN_VISUAL_CANDIDATE_GATE",
+            "current_action_id": None,
+            "current_title": (
+                "Re-search Revised Visual Shots"
+                if int(candidate_gate.get("stale_shots") or 0) > 0
+                else "Choose Visual Candidates"
+            ),
+            "current_detail": (
+                "One or more storyboard shots changed and their old search "
+                "results are stale. Continue Automatically to re-search them."
+                if int(candidate_gate.get("stale_shots") or 0) > 0
+                else (
+                    "Choose a current visual, reject the available options, or "
+                    "preserve the shot as a visual gap. "
+                    + (
+                        f"{int(candidate_gate.get('provider_errors') or 0)} provider "
+                        "error(s) were isolated; available current candidates remain reviewable."
+                        if int(candidate_gate.get("provider_errors") or 0) > 0
+                        else "All displayed candidates come from the current search request."
+                    )
+                )
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Rights review or safe asset acquisition",
+        }
+
+    rights_gate = visual_post.get("rights_gate", {})
+    if (
+        visual_post.get("candidate_complete")
+        and int(rights_gate.get("required") or 0) > 0
+        and not visual_post.get("rights_complete")
+    ):
+        return {
+            "state": "HUMAN_VISUAL_RIGHTS_GATE",
+            "current_action_id": None,
+            "current_title": "Review Creator Footage Context",
+            "current_detail": (
+                "Creator/editorial footage is never auto-approved. Document "
+                "the intended transformative/editorial purpose or reject its use."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Acquire approved free assets",
+        }
+
+    asset_state = visual_asset_acquisition_artifact_state()
+    if (
+        visual_post.get("candidate_complete")
+        and visual_post.get("rights_complete")
+        and not asset_state.get("current")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Acquire Approved Free Visual Assets",
+            "current_detail": (
+                "Copy approved local assets and download only verified zero-cost "
+                "stock media from allow-listed hosts. Editorial footage is never "
+                "auto-downloaded. Automatic acquisition failures must be resolved "
+                "or retried before the rough cut is built."
+            ),
+            "next_action_id": None,
+            "next_title": "Build Visual Rough Cut",
+        }
+
+    if (
+        visual_post.get("candidate_complete")
+        and visual_post.get("rights_complete")
+        and asset_state.get("current")
+        and not visual_post.get("rough_cuts_ready")
+    ):
+        return {
+            "state": "ACTION_REQUIRED",
+            "current_action_id": "auto_continue",
+            "current_title": "Build Visual Rough Cut",
+            "current_detail": (
+                "Build the rough cut only from current managed local asset files. "
+                "Approved editorial clips that still need manual file supply remain "
+                "explicit placeholders and do not unlock paid generation."
+            ),
+            "next_action_id": None,
+            "next_title": "Human Rough-Cut Gate",
+        }
+
+    if (
+        visual_post.get("rough_cuts_ready")
+        and not visual_post.get("rough_gate_complete")
+    ):
+        return {
+            "state": "HUMAN_ROUGH_CUT_GATE",
+            "current_action_id": None,
+            "current_title": "Review Visual Rough Cut",
+            "current_detail": (
+                "Review the full storyboard-to-visual assignment before gap "
+                "planning. Approving with gaps does not authorize paid generation."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Plan Remaining Visual Gaps",
+        }
+
+    if visual_post.get("gap_plans_ready"):
+        spend_gate = visual_spend_review_snapshot()
+        hero_count = int(spend_gate.get("hero_candidates") or 0)
+
+        if spend_gate.get("status") == "INVALID_VISUAL_SPEND_AUTHORIZATION":
+            return {
+                "state": "VISUAL_SPEND_INVALID",
+                "current_action_id": None,
+                "current_title": "Visual Spend Authorization Is Invalid",
+                "current_detail": (
+                    "The current spend records exceed or violate the configured "
+                    "workflow cost boundary. No generation brief or assembly can "
+                    "continue until the current spend decisions are repaired."
+                ),
+                "next_action_id": None,
+                "next_title": "Repair the Human Visual Spend decisions",
+            }
+
+        if hero_count > 0 and not spend_gate.get("complete"):
+            return {
+                "state": "HUMAN_VISUAL_SPEND_GATE",
+                "current_action_id": None,
+                "current_title": "Decide Whether Any Visual Is Worth Paying For",
+                "current_detail": (
+                    "Existing/free sourcing has already been tried. For each "
+                    "high-value unresolved shot, retry existing sources, keep a "
+                    "placeholder, or authorize a specific maximum spend. The "
+                    "workflow-wide USD hard cap applies across every current branch."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare generation briefs or zero-cost assembly",
+            }
+
+        authorized = int(spend_gate.get("authorized") or 0)
+        if authorized > 0:
+            handoff_state = visual_generation_handoff_artifact_state()
+            if not handoff_state.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Premium Visual Generation Briefs",
+                    "current_detail": (
+                        "The Human Visual Spend Gate is complete. Prepare only "
+                        "provenance-bound provider-neutral briefs for explicitly "
+                        "authorized shots. This step calls no provider and spends nothing."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Build Visual Edit Assembly Plan",
+                }
+
+        assembly_state = visual_assembly_artifact_state(
+            visual_post.get("expected_branches", [])
+        )
+        if not assembly_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Visual Edit Assembly Plan",
+                "current_detail": (
+                    "Build the deterministic zero-cost timeline from current managed "
+                    "assets, approved placeholders and any authorized premium slots. "
+                    "No media is rendered and no provider is called."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 18 assembly boundary",
+            }
+
+        retry_pending = int(
+            assembly_state.get("waiting_for_existing_retry") or 0
+        )
+        premium_pending = int(
+            assembly_state.get("waiting_for_premium_assets") or 0
+        )
+        local_pending = int(
+            assembly_state.get("waiting_for_local_assets") or 0
+        )
+
+        if retry_pending:
+            return {
+                "state": "VISUAL_EXISTING_RETRY_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Retry Existing Visual Search Requested",
+                "current_detail": (
+                    f"{retry_pending} branch(es) contain a human Retry Existing "
+                    "decision. Slice 18 preserves those instructions and stops before "
+                    "edit preview work so the search can be rerun intentionally."
+                ),
+                "next_action_id": None,
+                "next_title": "Rerun the requested existing/free visual search",
+            }
+
+        if premium_pending and local_pending:
+            return {
+                "state": "WAITING_FOR_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Visual Assembly Ready — Final Assets Still Missing",
+                "current_detail": (
+                    f"{premium_pending} branch(es) wait for externally generated "
+                    f"premium assets and {local_pending} branch(es) wait for approved "
+                    "local/editorial files. The app has made no paid provider call."
+                ),
+                "next_action_id": None,
+                "next_title": "Register the missing visual assets",
+            }
+
+        if premium_pending:
+            return {
+                "state": "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Premium Visual Briefs Ready — Awaiting External Assets",
+                "current_detail": (
+                    f"{premium_pending} branch(es) contain current, human-authorized "
+                    "generation briefs. No paid provider call has been made. Provider "
+                    "execution remains external/unbuilt in this slice; register the "
+                    "resulting files only within the authorized cost ceilings."
+                ),
+                "next_action_id": None,
+                "next_title": "Register generated visual assets",
+            }
+
+        if local_pending:
+            return {
+                "state": "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Visual Assembly Ready — Local Assets Required",
+                "current_detail": (
+                    f"{local_pending} branch(es) still need approved local/editorial "
+                    "files. No paid generation is needed for those branches."
+                ),
+                "next_action_id": None,
+                "next_title": "Register approved local visual assets",
+            }
+
+        expected_branches = visual_post.get("expected_branches", [])
+        edit_manifest_state = edit_manifest_artifact_state(
+            expected_branches
+        )
+        if not edit_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Edit Preview Manifest",
+                "current_detail": (
+                    "The current Slice 18 visual assembly is edit-ready. Build a "
+                    "provenance-bound structural preview manifest from that exact "
+                    "assembly and the current PASS narration QC/timing map."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Free Structural Edit Preview",
+            }
+
+        if not structural_ffmpeg_available():
+            return {
+                "state": "LOCAL_FFMPEG_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Local FFmpeg Required for Structural Preview",
+                "current_detail": (
+                    "The edit manifest is current, but the configured local FFmpeg "
+                    "binary is unavailable. Slice 19 will not use a paid/cloud "
+                    "fallback. Install or configure FFmpeg, then continue."
+                ),
+                "next_action_id": None,
+                "next_title": "Render the free local structural preview",
+            }
+
+        edit_preview_state = edit_preview_artifact_state(
+            expected_branches
+        )
+        if not edit_preview_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Free Structural Edit Preview",
+                "current_detail": (
+                    "Render the current manifest locally with FFmpeg using current "
+                    "visual assets, approved low-value placeholders and QC-passed "
+                    "narration. No paid provider, generated music or SFX is used."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Edit Preview Gate",
+            }
+
+        edit_gate = edit_preview_review_snapshot()
+        if not edit_gate.get("complete"):
+            return {
+                "state": "HUMAN_EDIT_PREVIEW_GATE",
+                "current_action_id": None,
+                "current_title": "Review Structural Edit Preview",
+                "current_detail": (
+                    "Judge pacing, narration-to-picture rhythm, visual continuity "
+                    "and story flow from the free local preview. This preview is "
+                    "structural only and is not publish-ready."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve direction or return a creative layer",
+            }
+
+        if int(edit_gate.get("rework") or 0) > 0:
+            return {
+                "state": "EDIT_PREVIEW_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Edit Preview Rework Requested",
+                "current_detail": (
+                    "The Human Edit Preview Gate returned visuals, narration or "
+                    "sound for rework. Slice 19 stops here; the exact instruction "
+                    "is preserved for the next routing slice."
+                ),
+                "next_action_id": None,
+                "next_title": "Route the approved rework instruction",
+            }
+
+        final_handoff_state = final_production_handoff_artifact_state(
+            expected_branches
+        )
+        if not final_handoff_state.get("ready"):
+            handoff_action = readiness.get(
+                "final_production_handoff_prepare",
+                {},
+            )
+            if handoff_action.get("enabled"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Prepare Final Production Handoff",
+                    "current_detail": (
+                        "The structural edit direction is approved. Revalidate the "
+                        "exact current preview, manifest, narration, final visual "
+                        "assets and sound brief, then package a provider-neutral "
+                        "handoff. This step spends nothing and renders nothing."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Final production boundary",
+                }
+            return {
+                "state": "WAITING_FOR_FINAL_VISUAL_ASSETS",
+                "current_action_id": None,
+                "current_title": "Final Visual Assets Still Required",
+                "current_detail": (
+                    str(handoff_action.get("reason") or "")
+                    or "Register all current final visual assets before the final "
+                    "production handoff can be prepared."
+                ),
+                "next_action_id": None,
+                "next_title": "Prepare Final Production Handoff",
+            }
+
+        if int(final_handoff_state.get("blocked") or 0) > 0:
+            return {
+                "state": "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+                "current_action_id": None,
+                "current_title": "Final Production Handoff Blocked",
+                "current_detail": (
+                    "A current handoff exists, but one or more final-production "
+                    "inputs are still blocked. Resolve the recorded blockers; no "
+                    "paid provider or publish action is authorized."
+                ),
+                "next_action_id": None,
+                "next_title": "Resolve final-production blockers",
+            }
+
+        final_sound_plan_state = final_sound_plan_artifact_state(
+            expected_branches
+        )
+        if not final_sound_plan_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Prepare Final Sound Requirements",
+                "current_detail": (
+                    "The current final-production handoff is ready. Convert its "
+                    "approved sound-design intent into exact, fingerprinted music/SFX "
+                    "requirements. This step calls no provider, authorizes no spend, "
+                    "and renders no final media."
+                ),
+                "next_action_id": None,
+                "next_title": "Register licensed final sound assets",
+            }
+
+        final_sound_assets = final_sound_asset_snapshot()
+        if not final_sound_assets.get("ready"):
+            return {
+                "state": "WAITING_FOR_FINAL_SOUND_ASSETS",
+                "current_action_id": None,
+                "current_title": "Register Licensed Final Sound Assets",
+                "current_detail": (
+                    f"{int(final_sound_assets.get('pending') or 0)} final sound "
+                    "requirement(s) still need either a commercial-safe local asset "
+                    "with licence provenance or an explicit human omission. The app "
+                    "does not call or pay a sound provider."
+                ),
+                "next_action_id": None,
+                "next_title": "Complete final sound asset registration",
+            }
+
+        final_render_manifest_state = final_render_manifest_artifact_state(
+            expected_branches
+        )
+        if not final_render_manifest_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Build Final Render Manifest",
+                "current_detail": (
+                    "All final sound requirements are resolved. Bind the exact "
+                    "current visuals, narration, licensed sound assets and explicit "
+                    "omissions into a rebuild-current local final-render manifest."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Local Final Candidate",
+            }
+
+        if not final_ffmpeg_available():
+            return {
+                "state": "LOCAL_FINAL_FFMPEG_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Local FFmpeg Required for Final Render",
+                "current_detail": (
+                    "The final render manifest is current, but local FFmpeg is "
+                    "unavailable. Slice 22 will not use a cloud or paid rendering "
+                    "fallback. Install/configure FFmpeg, then continue."
+                ),
+                "next_action_id": None,
+                "next_title": "Render Local Final Candidate",
+            }
+
+        final_render_state = final_render_artifact_state(
+            expected_branches
+        )
+        if not final_render_state.get("ready"):
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Render Local Final Candidate",
+                "current_detail": (
+                    "Render the rebuild-current final manifest locally with FFmpeg. "
+                    "This produces a publish-quality candidate but does not approve "
+                    "export, upload, or publishing."
+                ),
+                "next_action_id": None,
+                "next_title": "Human Final Export Gate",
+            }
+
+        final_export_gate = final_export_review_snapshot()
+        if not final_export_gate.get("complete"):
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_action_id": None,
+                "current_title": "Review Final Render",
+                "current_detail": (
+                    "Watch the exact local final candidate with final visuals, "
+                    "narration and licensed/omitted sound decisions. Approve export "
+                    "or return visuals, narration or sound for rework."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve export or return a creative layer",
+            }
+
+        if int(final_export_gate.get("rework") or 0) > 0:
+            return {
+                "state": "FINAL_EXPORT_REWORK_REQUIRED",
+                "current_action_id": None,
+                "current_title": "Final Render Rework Requested",
+                "current_detail": (
+                    "The Human Final Export Gate returned a creative layer for "
+                    "rework. The exact final render result and human instruction "
+                    "are preserved. No upload or publishing is authorized."
+                ),
+                "next_action_id": None,
+                "next_title": "Route final-render rework",
+            }
+
+        if (
+            int(final_export_gate.get("approved") or 0)
+            != int(final_export_gate.get("total") or 0)
+            or int(final_export_gate.get("total") or 0) <= 0
+        ):
+            return {
+                "state": "HUMAN_FINAL_EXPORT_GATE",
+                "current_action_id": None,
+                "current_title": "Review Final Render",
+                "current_detail": (
+                    "The saved export approval is missing or stale against the "
+                    "current final-render bytes. Review and approve the exact "
+                    "current render again before export."
+                ),
+                "next_action_id": None,
+                "next_title": "Approve the exact current final render",
+            }
+
+        return {
+            "state": "FINAL_EXPORT_APPROVED",
+            "current_action_id": None,
+            "current_title": "Final Export Approved",
+            "current_detail": (
+                "The exact current local final-render bytes passed the Human Final "
+                "Export Gate. Slice 22 stops here. The video is export-approved, "
+                "but upload and publish remain unauthorized and unperformed."
+            ),
+            "next_action_id": None,
+            "next_title": "Slice 23: publishing package and upload boundary",
+        }
+
     production_visual = production_visual_artifact_state()
-    if voice.get("visual_ready") and production_visual.get("manifests_ready"):
+    if (
+        voice.get("visual_ready")
+        and production_visual.get("manifests_ready")
+        and not readiness.get("auto_continue", {}).get("enabled")
+    ):
         return {
             "state": "VISUAL_ACQUISITION_REQUIRED",
             "current_action_id": None,
@@ -4368,6 +7554,10 @@ def status_payload() -> dict[str, Any]:
     story = story_script_artifact_state()
     fmt = format_artifact_state()
     voice = voice_performance_artifact_state()
+    engagement_payload = safe_load_json(PRODUCTION_ENGAGEMENT_SUMMARY)
+    engagement = engagement_payload if isinstance(engagement_payload, dict) else {}
+    preview_gate = narration_preview_gate_snapshot()
+    narration = narration_artifact_state()
     production_visual = production_visual_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
@@ -4419,11 +7609,61 @@ def status_payload() -> dict[str, Any]:
         "research_gate": research["research_gate"],
         "story_script": story,
         "script_gate": story["script_gate"],
+        "title_direction": title_direction_artifact_state(),
+        "packaging_brief": packaging_brief_snapshot(),
+        "psychological_angle_requests": psychological_angle_request_snapshot(),
+        "psychological_angles": psychological_angle_snapshot(),
+        "thumbnail_concept_requests": thumbnail_concept_request_snapshot(),
+        "thumbnail_concepts": thumbnail_concept_snapshot(),
+        "package_pairing_requests": package_pairing_request_snapshot(),
+        "package_validation": package_validation_snapshot(),
+        "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],
         "voice_performance": voice,
         "performance_gate": voice["performance_gate"],
+        "pre_render_engagement": engagement,
+        "narration_preview_gate": preview_gate,
+        "narration": narration,
+        "narration_spend_gate": narration["spend_gate"],
+        "narration_render_return": narration["render_return"],
         "production_visual": production_visual,
+        "storyboard": production_storyboard_snapshot(),
+        "visual_search_prepare": visual_search_prepare_snapshot(),
+        "visual_search_acquire": visual_search_acquire_snapshot(),
+        "visual_post_search": visual_post_search_artifact_state(),
+        "visual_candidate_gate": visual_candidate_review_snapshot(),
+        "visual_rights_gate": visual_rights_review_snapshot(),
+        "visual_asset_acquisition": visual_asset_acquisition_artifact_state(),
+        "managed_visual_assets": managed_visual_asset_snapshot(),
+        "visual_rough_cut_gate": visual_rough_cut_review_snapshot(),
+        "visual_spend_gate": visual_spend_review_snapshot(),
+        "visual_generation_handoff": visual_generation_handoff_artifact_state(),
+        "generated_visual_assets": generated_visual_asset_snapshot(),
+        "visual_assembly": visual_assembly_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "edit_manifest": edit_manifest_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "edit_preview": edit_preview_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "edit_preview_gate": edit_preview_review_snapshot(),
+        "final_production_handoff": final_production_handoff_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_sound_plan": final_sound_plan_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_sound_assets": final_sound_asset_snapshot(),
+        "final_render_manifest": final_render_manifest_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_render": final_render_artifact_state(
+            visual_post_search_artifact_state().get("expected_branches", [])
+        ),
+        "final_export_gate": final_export_review_snapshot(),
         "thumbnail_gate": thumbnail_gate_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
@@ -4505,11 +7745,31 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/packaging-gate":
             self._send_json(packaging_gate_snapshot())
             return
+        if route == "/api/title-direction-gate":
+            self._send_json(title_direction_gate_snapshot())
+            return
         if route == "/api/research-gate":
             self._send_json(research_gate_snapshot())
             return
         if route == "/api/script-gate":
             self._send_json(script_gate_snapshot())
+            return
+        if route == "/api/script-section-review":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0]).strip()
+            fmt = str((query.get("format") or [""])[0]).strip()
+            if bool(concept_id) != bool(fmt):
+                self._send_json(
+                    {"error": "concept_id and format must be supplied together."},
+                    400,
+                )
+                return
+            self._send_json(
+                script_section_review_snapshot(
+                    concept_id if concept_id else None,
+                    fmt if fmt else None,
+                )
+            )
             return
         if route == "/api/format-gate":
             self._send_json(format_gate_snapshot())
@@ -4517,20 +7777,147 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/performance-gate":
             self._send_json(performance_gate_snapshot())
             return
+        if route == "/api/narration-preview-gate":
+            self._send_json(narration_preview_gate_snapshot())
+            return
+        if route == "/api/narration-preview-audio":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0])
+            fmt = str((query.get("format") or [""])[0])
+            match = next(
+                (
+                    item for item in narration_preview_gate_snapshot().get("items", [])
+                    if str(item.get("concept_id") or "") == concept_id
+                    and str(item.get("format") or "") == fmt
+                    and item.get("audio_ready")
+                ),
+                None,
+            )
+            if not match or not match.get("audio"):
+                self._send_json({"error": "Free preview audio is not ready."}, 404)
+                return
+            audio_path = Path(str(match["audio"])).resolve()
+            if PRODUCTION_PREVIEW_AUDIO_DIR.resolve() not in audio_path.parents:
+                self._send_json({"error": "Invalid preview audio path."}, 403)
+                return
+            self._send_static(audio_path, "audio/wav")
+            return
+        if route == "/api/narration-spend-gate":
+            self._send_json(narration_spend_gate_snapshot())
+            return
+        if route == "/api/narration-render-return":
+            self._send_json(narration_render_return_snapshot())
+            return
+        if route == "/api/visual-candidate-review":
+            self._send_json(visual_candidate_review_snapshot())
+            return
+        if route == "/api/visual-rights-review":
+            self._send_json(visual_rights_review_snapshot())
+            return
+        if route == "/api/visual-rough-cut-review":
+            self._send_json(visual_rough_cut_review_snapshot())
+            return
+        if route == "/api/visual-spend-review":
+            self._send_json(visual_spend_review_snapshot())
+            return
+        if route == "/api/generated-visual-asset":
+            self._send_json(generated_visual_asset_snapshot())
+            return
+        if route == "/api/managed-visual-asset":
+            self._send_json(managed_visual_asset_snapshot())
+            return
+        if route == "/api/edit-preview-review":
+            self._send_json(edit_preview_review_snapshot())
+            return
+        if route == "/api/final-sound-asset":
+            self._send_json(final_sound_asset_snapshot())
+            return
+        if route == "/api/final-export-review":
+            self._send_json(final_export_review_snapshot())
+            return
+        if route == "/api/final-render-video":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0])
+            fmt = str((query.get("format") or [""])[0])
+            match = next(
+                (
+                    item
+                    for item in final_export_review_snapshot().get(
+                        "items", []
+                    )
+                    if str(item.get("concept_id") or "") == concept_id
+                    and str(item.get("format") or "") == fmt
+                ),
+                None,
+            )
+            if not match or not match.get("render_file"):
+                self._send_json(
+                    {"error": "Current final render is not ready."},
+                    404,
+                )
+                return
+            render_path = Path(str(match["render_file"])).resolve()
+            if (
+                render_path.parent.resolve()
+                != PRODUCTION_FINAL_RENDER_DIR.resolve()
+            ):
+                self._send_json(
+                    {"error": "Invalid final render path."},
+                    403,
+                )
+                return
+            self._send_static(render_path, "video/mp4")
+            return
+        if route == "/api/edit-preview-video":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0])
+            fmt = str((query.get("format") or [""])[0])
+            match = next(
+                (
+                    item
+                    for item in edit_preview_review_snapshot().get(
+                        "items", []
+                    )
+                    if str(item.get("concept_id") or "") == concept_id
+                    and str(item.get("format") or "") == fmt
+                ),
+                None,
+            )
+            if not match or not match.get("preview_file"):
+                self._send_json(
+                    {"error": "Current edit preview is not ready."},
+                    404,
+                )
+                return
+            preview_path = Path(str(match["preview_file"])).resolve()
+            if (
+                preview_path.parent.resolve()
+                != PRODUCTION_EDIT_PREVIEW_DIR.resolve()
+            ):
+                self._send_json({"error": "Invalid edit preview path."}, 403)
+                return
+            self._send_static(preview_path, "video/mp4")
+            return
+        if route == "/api/storyboard-review":
+            self._send_json(storyboard_review_snapshot())
+            return
+        if route == "/api/narration-performance-review":
+            self._send_json(narration_performance_revision_snapshot())
+            return
         if route == "/api/thumbnail-gate":
             self._send_json(thumbnail_gate_state())
             return
         if route in {"/api/thumbnail-file", "/api/thumbnail-competitor"}:
             query = parse_qs(urlparse(self.path).query)
-            package_id = str((query.get("package_id") or [""])[0])
+            render_id = str((query.get("render_id") or [""])[0])
             try:
                 if route == "/api/thumbnail-file":
                     path = thumbnail_file_path(
-                        package_id, str((query.get("name") or [""])[0])
+                        render_id, str((query.get("name") or [""])[0])
                     )
                 else:
                     path = thumbnail_competitor_file_path(
-                        package_id, str((query.get("video_id") or [""])[0])
+                        render_id, str((query.get("video_id") or [""])[0])
                     )
             except (ValueError, OSError, KeyError) as exc:
                 self._send_json({"error": str(exc)}, 404)
@@ -4676,6 +8063,20 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
+                    selected_titles=body.get("selected_titles"),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/title-direction-gate":
+                payload = apply_title_direction_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    decision=str(body.get("decision", "")),
+                    selected_titles=body.get("selected_titles"),
+                    note=str(body.get("note") or ""),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
@@ -4711,6 +8112,40 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(payload)
                 return
 
+            if route == "/api/script-section-review":
+                payload = apply_script_section_review_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    fmt=str(body.get("format", "")),
+                    action=str(body.get("action", "")),
+                    target_id=(
+                        str(body["target_id"])
+                        if body.get("target_id") is not None
+                        else None
+                    ),
+                    reason=(
+                        str(body["reason"])
+                        if body.get("reason") is not None
+                        else None
+                    ),
+                    custom_instruction=(
+                        str(body["custom_instruction"])
+                        if body.get("custom_instruction") is not None
+                        else None
+                    ),
+                    selection_id=(
+                        str(body["selection_id"])
+                        if body.get("selection_id") is not None
+                        else None
+                    ),
+                    replacement_text=(
+                        str(body["replacement_text"])
+                        if body.get("replacement_text") is not None
+                        else None
+                    ),
+                )
+                self._send_json(payload)
+                return
+
             if route == "/api/format-gate":
                 payload = apply_format_gate_action(
                     concept_id=str(body.get("concept_id", "")),
@@ -4738,9 +8173,347 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(payload)
                 return
 
+            if route == "/api/narration-preview-gate":
+                payload = apply_narration_preview_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-performance-review":
+                payload = revise_narration_performance(
+                    manifest_file=str(body.get("manifest_file", "")),
+                    segment_id=str(body.get("segment_id", "")),
+                    instruction=str(body.get("instruction") or ""),
+                    delivery_changes=body.get("delivery_changes") if isinstance(body.get("delivery_changes"), dict) else {},
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-spend-review":
+                spend_decision = str(
+                    body.get("decision", "")
+                ).strip().upper()
+                spend_note = str(body.get("note") or "").strip()
+                shot_id = str(body.get("shot_id") or "").strip()
+                payload = apply_visual_spend_review_action(
+                    gap_plan_file=str(body.get("gap_plan_file", "")),
+                    shot_id=shot_id,
+                    decision=spend_decision,
+                    max_cost_usd=float(body.get("max_cost_usd") or 0),
+                    note=spend_note,
+                )
+                routed_to = None
+                if spend_decision == "RETRY_EXISTING":
+                    concept_id = str(payload.get("concept_id") or "")
+                    branch_format = str(payload.get("format") or "")
+                    board = next(
+                        (
+                            item
+                            for item in storyboard_review_snapshot().get(
+                                "items", []
+                            )
+                            if str(item.get("concept_id") or "") == concept_id
+                            and str(item.get("format") or "") == branch_format
+                        ),
+                        None,
+                    )
+                    if not isinstance(board, dict):
+                        raise ValueError(
+                            "Current storyboard for existing-visual retry "
+                            "was not found."
+                        )
+                    revise_storyboard_shot(
+                        storyboard_file=str(board.get("storyboard_file") or ""),
+                        shot_id=shot_id,
+                        instruction=spend_note,
+                        changes={},
+                    )
+                    routed_to = "storyboard_visual_search"
+
+                payload = {**payload, "rework_routed_to": routed_to}
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/generated-visual-asset":
+                payload = register_generated_visual_asset(
+                    request_file=str(body.get("request_file", "")),
+                    asset_file=str(body.get("asset_file", "")),
+                    actual_cost_usd=float(body.get("actual_cost_usd") or 0),
+                    provider=str(body.get("provider") or "higgsfield"),
+                    provider_job_id=str(body.get("provider_job_id") or ""),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                response = {
+                    "registered": payload,
+                    "generated_visual_assets": generated_visual_asset_snapshot(),
+                }
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/managed-visual-asset":
+                payload = register_existing_visual_asset(
+                    candidate_review_file=str(
+                        body.get("candidate_review_file", "")
+                    ),
+                    shot_id=str(body.get("shot_id", "")),
+                    asset_file=str(body.get("asset_file", "")),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                response = {
+                    "registered": payload,
+                    "managed_visual_assets": managed_visual_asset_snapshot(),
+                }
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/edit-preview-review":
+                payload = apply_edit_preview_action(
+                    result_file=str(body.get("result_file", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                response = dict(payload)
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/final-sound-asset":
+                mode = str(body.get("mode") or "register").strip().lower()
+                if mode == "omit":
+                    payload = omit_final_sound_requirement(
+                        plan_file=str(body.get("plan_file", "")),
+                        requirement_id=str(body.get("requirement_id", "")),
+                        note=str(body.get("note") or ""),
+                    )
+                elif mode == "register":
+                    payload = register_final_sound_asset(
+                        plan_file=str(body.get("plan_file", "")),
+                        requirement_id=str(body.get("requirement_id", "")),
+                        asset_file=str(body.get("asset_file", "")),
+                        licence_reference=str(
+                            body.get("licence_reference") or ""
+                        ),
+                        commercial_use_confirmed=(
+                            body.get("commercial_use_confirmed") is True
+                        ),
+                        actual_cost_usd=float(
+                            body.get("actual_cost_usd") or 0
+                        ),
+                        external_purchase_confirmed=(
+                            body.get("external_purchase_confirmed") is True
+                        ),
+                        source_name=str(
+                            body.get("source_name") or "human_supplied"
+                        ),
+                        provider_job_id=str(
+                            body.get("provider_job_id") or ""
+                        ),
+                        attribution_required=(
+                            body.get("attribution_required") is True
+                        ),
+                        attribution_text=str(
+                            body.get("attribution_text") or ""
+                        ),
+                        note=str(body.get("note") or ""),
+                    )
+                else:
+                    raise ValueError("Unsupported final sound asset mode")
+                response = {
+                    "registered": payload,
+                    "final_sound_assets": final_sound_asset_snapshot(),
+                }
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    response["automation_job"] = auto_job
+                self._send_json(response)
+                return
+
+            if route == "/api/final-export-review":
+                payload = apply_final_export_action(
+                    result_file=str(body.get("result_file", "")),
+                    decision=str(body.get("decision", "")),
+                    note=str(body.get("note") or ""),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/storyboard-review":
+                payload = revise_storyboard_shot(
+                    storyboard_file=str(body.get("storyboard_file", "")),
+                    shot_id=str(body.get("shot_id", "")),
+                    instruction=str(body.get("instruction") or ""),
+                    changes=body.get("changes") if isinstance(body.get("changes"), dict) else {},
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-candidate-review":
+                payload = apply_visual_candidate_review_action(
+                    result_file=str(body.get("result_file", "")),
+                    shot_id=str(body.get("shot_id", "")),
+                    action=str(body.get("action", "")),
+                    candidate_id=(str(body["candidate_id"]) if body.get("candidate_id") is not None else None),
+                    note=str(body.get("note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-rights-review":
+                payload = apply_visual_rights_review_action(
+                    candidate_review_file=str(
+                        body.get("candidate_review_file", "")
+                    ),
+                    shot_id=str(body.get("shot_id", "")),
+                    decision=str(body.get("decision", "")),
+                    transformative_purpose=str(
+                        body.get("transformative_purpose") or ""
+                    ),
+                    context_note=str(body.get("context_note") or ""),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-rough-cut-review":
+                rough_decision = str(body.get("decision", "")).strip().upper()
+                rough_note = str(body.get("note") or "").strip()
+                rough_cut_file = str(body.get("rough_cut_file", ""))
+                rough_payload = apply_visual_rough_cut_review_action(
+                    rough_cut_file=rough_cut_file,
+                    decision=rough_decision,
+                    note=rough_note,
+                )
+                routed_to = None
+
+                if rough_decision == "REWORK_VISUAL":
+                    shot_id = str(body.get("shot_id") or "").strip()
+                    if not shot_id:
+                        raise ValueError(
+                            "Visual rough-cut rework requires a storyboard shot."
+                        )
+                    concept_id = str(rough_payload.get("concept_id") or "")
+                    branch_format = str(rough_payload.get("format") or "")
+                    board = next(
+                        (
+                            item
+                            for item in storyboard_review_snapshot().get(
+                                "items", []
+                            )
+                            if str(item.get("concept_id") or "") == concept_id
+                            and str(item.get("format") or "") == branch_format
+                        ),
+                        None,
+                    )
+                    if not isinstance(board, dict):
+                        raise ValueError(
+                            "Current storyboard for rough-cut visual rework "
+                            "was not found."
+                        )
+                    revise_storyboard_shot(
+                        storyboard_file=str(board.get("storyboard_file") or ""),
+                        shot_id=shot_id,
+                        instruction=rough_note,
+                        changes={},
+                    )
+                    routed_to = "storyboard_visual_search"
+
+                elif rough_decision == "REWORK_PACING":
+                    concept_id = str(rough_payload.get("concept_id") or "")
+                    branch_format = str(rough_payload.get("format") or "")
+                    apply_format_gate_action(
+                        concept_id=concept_id,
+                        decision="REWORK",
+                        criteria={},
+                        note=(
+                            f"Rough-cut pacing rework for {branch_format}: "
+                            f"{rough_note}"
+                        ),
+                    )
+                    routed_to = "format_gate"
+
+                elif rough_decision == "REWORK_AUDIO":
+                    concept_id = str(rough_payload.get("concept_id") or "")
+                    branch_format = str(rough_payload.get("format") or "")
+                    apply_performance_gate_action(
+                        concept_id=concept_id,
+                        format=branch_format,
+                        decision="REWORK",
+                        criteria={},
+                        note=(
+                            "Rough-cut audio/delivery rework: "
+                            + rough_note
+                        ),
+                    )
+                    routed_to = "performance_gate"
+
+                payload = {
+                    **rough_payload,
+                    "rework_routed_to": routed_to,
+                }
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-spend-gate":
+                payload = apply_narration_spend_gate_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-render-return":
+                payload = register_narration_render_return(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    provider_job_id=str(body.get("provider_job_id", "")),
+                    actual_cost_usd=body.get("actual_cost_usd"),
+                    segments=(
+                        body.get("segments")
+                        if isinstance(body.get("segments"), list)
+                        else []
+                    ),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
             if route == "/api/thumbnail-gate":
                 payload = apply_thumbnail_gate_action(
-                    package_id=str(body.get("package_id", "")),
+                    render_id=str(body.get("render_id", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
@@ -4750,7 +8523,7 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/thumbnail-spec":
                 payload = update_thumbnail_spec(
-                    package_id=str(body.get("package_id", "")),
+                    render_id=str(body.get("render_id", "")),
                     accent_hex=body.get("accent_hex"),
                     subject_image=body.get("subject_image", {}),
                 )

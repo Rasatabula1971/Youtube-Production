@@ -152,6 +152,14 @@ each required format** before the Human Script Gate. Long-form and Shorts may
 therefore share the same research and story promise while using different
 attention, cognitive-load and payoff strategies. See D-063 through D-065.
 
+Channel personality is supplied through a separate versioned **Channel Voice
+Profile**. Until a channel/niche and target viewer are deliberately chosen, the
+active profile remains `UNCONFIGURED` and must not cause the model to invent a
+persistent channel personality. Once a profile is human-approved, Story
+Planning binds that exact profile version and Script Writing inherits it.
+Channel Voice controls writing/presentation style; Voice Performance remains a
+separate downstream delivery layer. See D-070.
+
 A concept moves past the Human Script Gate only when every required branch is
 accepted. The resulting approved script bundle preserves the narrations
 separately.
@@ -188,9 +196,10 @@ Potential capabilities:
 
 Visuals should support the narration or story rather than exist only to create motion.
 
-Thumbnails are rendered at 1280x720 from a locked channel template, previewed
-at phone size and in a mock niche feed, and approved at a Human Thumbnail Gate
-(D-072).
+Validated Slice 25 thumbnail concepts are rendered at 1280x720 from a locked
+channel template, previewed at phone size and in a mock niche feed, and
+reviewed at a Human Thumbnail Gate (D-098). Image approval does not choose the
+title-thumbnail package.
 
 The Production Engine uses a **cheap-first visual acquisition policy**. During
 pre-monetization testing, it searches project-owned/reusable assets and verified
@@ -671,15 +680,11 @@ The project uses a package-before-script rule:
 The engine creates multiple package candidates but does not rank them or predict
 CTR.
 
-Each package also declares its thumbnail design (focal subject, visual
-elements, cues, palette) and the title/thumbnail division of labor. Generic
-published title/thumbnail guidance is checked as non-blocking HYPOTHESIS
-advisories shown at the gate (D-070).
-
 A niche thumbnail study (`packaging_engine/niche_thumbnail_study.py`)
 tabulates 20-30 breakout thumbnails per niche and format, reports where the
-niche follows or diverges from each D-070 hypothesis, and feeds those
-conventions into package requests when `channel_niche` is configured (D-071).
+niche follows or diverges from the Slice 25 thumbnail contract and D-096 title
+guidance, and feeds those conventions into post-script thumbnail concept
+requests when `channel_niche` is configured (D-097).
 
 ### Packaging Gate
 

@@ -66,15 +66,61 @@ def sha256_file(path: Path) -> str:
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     concept_id = str(request.get("concept_id", ""))
     allowed_formats = list(request.get("allowed_format_intents", []))
-    package_schema = {
+    title_angles = [
+        str(value)
+        for value in request.get(
+            "title_angles",
+            ["curiosity", "stakes", "unexpected", "mystery", "payoff"],
+        )
+        if str(value).strip()
+    ]
+    title_count = int(request.get("title_variations_per_format", 5))
+    title_contracts = request.get("title_contracts") or {}
+
+    def title_candidate_schema(fmt: str) -> dict[str, Any]:
+        contract = title_contracts.get(fmt) or {}
+        return {
+            "type": "array",
+            "minItems": title_count,
+            "maxItems": title_count,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["candidate_id", "angle", "title"],
+                "properties": {
+                    "candidate_id": {"type": "string", "minLength": 1},
+                    "angle": {"type": "string", "enum": title_angles},
+                    "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": int(
+                            contract.get(
+                                "max_chars",
+                                48 if fmt == "short" else 70,
+                            )
+                        ),
+                    },
+                },
+            },
+        }
+
+    title_sets_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["short", "long_form"],
+        "properties": {
+            "short": title_candidate_schema("short"),
+            "long_form": title_candidate_schema("long_form"),
+        },
+    }
+
+    package_schema: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": [
             "package_id",
             "title",
-            "title_keyword",
             "thumbnail",
-            "division_of_labor",
             "opening_frame",
             "expected_viewer",
             "awareness_level",
@@ -93,53 +139,26 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         ],
         "properties": {
             "package_id": {"type": "string", "minLength": 1},
-            "title": {"type": "string", "minLength": 1},
-            "title_keyword": {"type": "string", "minLength": 1},
+            "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": max(
+                    int((title_contracts.get("short") or {}).get("max_chars", 48)),
+                    int(
+                        (title_contracts.get("long_form") or {}).get(
+                            "max_chars", 70
+                        )
+                    ),
+                ),
+            },
             "thumbnail": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": [
-                    "message",
-                    "visual_concept",
-                    "text_overlay",
-                    "focal_subject",
-                    "visual_elements",
-                    "visual_cues",
-                    "palette",
-                ],
+                "required": ["message", "visual_concept", "text_overlay"],
                 "properties": {
                     "message": {"type": "string", "minLength": 1},
                     "visual_concept": {"type": "string", "minLength": 1},
                     "text_overlay": {"type": "string"},
-                    "focal_subject": {"type": "string", "minLength": 1},
-                    "visual_elements": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {"type": "string", "minLength": 1},
-                    },
-                    "visual_cues": {
-                        "type": "array",
-                        "items": {"type": "string", "minLength": 1},
-                    },
-                    "palette": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["background", "subject", "accent"],
-                        "properties": {
-                            "background": {"type": "string", "minLength": 1},
-                            "subject": {"type": "string", "minLength": 1},
-                            "accent": {"type": "string", "minLength": 1},
-                        },
-                    },
-                },
-            },
-            "division_of_labor": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["thumbnail_carries", "title_carries"],
-                "properties": {
-                    "thumbnail_carries": {"type": "string", "minLength": 1},
-                    "title_carries": {"type": "string", "minLength": 1},
                 },
             },
             "opening_frame": {
@@ -170,16 +189,30 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
             },
         },
     }
+
+    rework_package_id = str(request.get("human_rework_package_id") or "").strip()
+    rework_mode = bool(request.get("human_rework_note") and rework_package_id)
+    if rework_mode:
+        package_schema["properties"]["package_id"] = {
+            "type": "string",
+            "const": rework_package_id,
+        }
+
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["concept_id", "packages"],
+        "required": ["concept_id", "titles", "packages"],
         "properties": {
             "concept_id": {"type": "string", "const": concept_id},
+            "titles": title_sets_schema,
             "packages": {
                 "type": "array",
                 "minItems": 1,
-                "maxItems": int(request.get("package_count_requested", 5)),
+                "maxItems": (
+                    1
+                    if rework_mode
+                    else int(request.get("package_count_requested", 5))
+                ),
                 "items": package_schema,
             },
         },
@@ -192,22 +225,25 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "concept. Return JSON only.\n\n"
         "Rules:\n"
         "1. Preserve the accepted concept, viewer problem, viewer moment, and desired outcome.\n"
-        "2. Treat title and thumbnail as one communication unit; they should complement, not repeat.\n"
-        "3. Every package must make one honest promise and define the payoff the video must deliver.\n"
-        "4. Do not invent facts, evidence, urgency, controversy, or certainty.\n"
-        "5. Do not upgrade HYPOTHESIS or UNASSESSED content-gap evidence into a proven fact.\n"
-        "6. Preserve channel fit; do not chase unrelated clicks.\n"
-        "7. Do not predict CTR, views, virality, retention, or recommendation performance.\n"
-        "8. List any factual or evidentiary dependency that Research must verify before scripting.\n"
-        "9. Do not rank or score package options.\n"
-        "10. The future script must be capable of fully delivering the package promise.\n"
-        "11. Thumbnail carries emotion/curiosity; title carries context/fact. Record both in division_of_labor.\n"
-        "12. Put title_keyword near the front of the title; aim for about 40-60 title characters.\n"
-        "13. One focal_subject, at most 2-3 visual_elements, at most 1-2 visual_cues (arrows/circles). "
-        "The channel is faceless, so the subject itself or a before/after is the focal point.\n"
-        "14. text_overlay, when used, is 3-5 bold words that add to the title rather than repeat it.\n"
-        "15. palette must stay legible at phone size: dark/bright contrast plus an accent that stands apart from the niche. "
-        "Rules 12-15 are starting hypotheses; never trade truthfulness for them.\n\n"
+        "2. Do not invent a specialist audience merely to make expected_viewer sound specific. If the concept is broadly relatable, keep the audience broad (for example passengers, drivers, homeowners, or general curious viewers) unless the accepted concept explicitly requires specialist knowledge.\n"
+        "3. Treat title and thumbnail as one communication unit; they should complement, not repeat.\n"
+        "4. Keep the three package options meaningfully different in thumbnail/opening-frame/promise angle rather than paraphrases.\n"
+        "5. The explanation is the payoff, not the pitch. Lead with what a normal person sees, feels, fears, notices, or cannot immediately explain. Do not lead like a lecture, textbook chapter, or engineering lesson.\n"
+        "6. TITLE CONTRACT: generate exactly ONE shared title set for this concept: exactly five Short titles and exactly five Long-form titles total, not per package. Each entry is a proposed PUBLIC YouTube title. Use each angle exactly once in each format: curiosity, stakes, unexpected, mystery, payoff. Generate each format independently; do not merely lengthen or shorten the same title. Shorts: target 3-7 words, event/tension first and explanation hidden. Long-form: target 5-10 words with curiosity/tension plus enough subject context to make the promise clear. Package title fields are compatibility working titles only; the shared titles object is the human choice set.\n"
+        "7. Do not use lecture-title framing such as 'X Explained', 'The Physics of X', 'Hidden Engineering: X', or materials/technology lists. Put those details in the payoff, not the title.\n"
+        "8. Prefer a title that makes a normal viewer think 'wait—what?', 'how is that possible?', or 'that happens to me?' without inventing danger or certainty. Keep technical mechanism/material names out of the title unless the term itself creates the human hook.\n"
+        "9. Every package must make one honest promise and define the payoff the video must deliver.\n"
+        "10. Do not invent facts, evidence, urgency, controversy, or certainty.\n"
+        "11. Do not upgrade HYPOTHESIS or UNASSESSED content-gap evidence into a proven fact.\n"
+        "12. Preserve channel fit; do not chase unrelated clicks.\n"
+        "13. Do not predict CTR, views, virality, retention, or recommendation performance.\n"
+        "14. List any factual or evidentiary dependency that Research must verify before scripting.\n"
+        "15. Do not rank or score package options.\n"
+        "16. The future script must be capable of fully delivering the package promise.\n"
+        "17. If human_rework_note is present, it is an AUTHORITATIVE human directive, not a suggestion. Apply it literally unless it conflicts with factual or safety constraints. Do not silently substitute a narrower, broader, or different audience than the human requested.\n"
+        "18. In human rework mode, return exactly one revised package and keep its package_id exactly equal to human_rework_package_id. The runner will preserve all other package options unchanged.\n"
+        "19. Use human_rework_original_package as the before-version. Criteria listed in human_rework_keep_criteria should stay aligned; criteria listed in human_rework_change_criteria must be corrected. If human_rework_mode is HUMAN_INSTRUCTION_ONLY, the human_rework_note alone defines the requested change; do not invent extra revisions.\n"
+        "20. In human rework mode preserve human_rework_original_titles exactly. Package rework must not regenerate the shared title pool; humans can choose or enter a custom title separately.\n\n"
         "PACKAGE REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -217,6 +253,53 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
             f"is {maximum_chars:,}."
         )
     return prompt
+
+
+def _merge_human_rework_response(
+    request: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, Any]:
+    note = str(request.get("human_rework_note") or "").strip()
+    target = str(request.get("human_rework_package_id") or "").strip()
+    if not note or not target:
+        return response
+
+    generated = response.get("packages")
+    if not isinstance(generated, list) or len(generated) != 1:
+        raise ValueError("Human rework must return exactly one revised package")
+    replacement = generated[0]
+    if (
+        not isinstance(replacement, dict)
+        or str(replacement.get("package_id") or "") != target
+    ):
+        raise ValueError("Human rework package_id must match the reviewed package")
+
+    originals = request.get("human_rework_original_packages")
+    if not isinstance(originals, list) or not originals:
+        raise ValueError("Human rework is missing the original package set")
+
+    merged: list[dict[str, Any]] = []
+    replaced = False
+    for item in originals:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("package_id") or "") == target:
+            merged.append(replacement)
+            replaced = True
+        else:
+            merged.append(item)
+
+    if not replaced:
+        raise ValueError("Human rework target is absent from original package set")
+    return {
+        "concept_id": str(response.get("concept_id") or request.get("concept_id") or ""),
+        "titles": (
+            request.get("human_rework_original_titles", {})
+            if isinstance(request.get("human_rework_original_titles"), dict)
+            else response.get("titles", {})
+        ),
+        "packages": merged,
+    }
 
 
 def run_one(
@@ -344,7 +427,13 @@ def run_one(
 
     try:
         response = parse_model_json(raw_output)
-        validation = validate_response(response, request, load_config())
+        config = load_config()
+        validation = validate_response(response, request, config)
+        if request.get("human_rework_note"):
+            if not validation["accepted"]:
+                raise ValueError("Human rework produced no structurally accepted package")
+            response = _merge_human_rework_response(request, response)
+            validation = validate_response(response, request, config)
     except Exception as exc:
         report = {
             **base_report,

@@ -10,18 +10,18 @@ from production_engine.test_thumbnail_render import (
     CAN_RENDER,
     TEMPLATE,
     PipelineTestCase,
-    approved_package,
+    RID,
 )
 
 m = review.render
 
 
 class ThumbnailReviewSnapshotTests(PipelineTestCase):
-    def test_waiting_without_approved_packages(self):
-        self.assertEqual(review.snapshot()["status"], "WAITING_FOR_APPROVED_PACKAGES")
+    def test_waiting_without_validated_packages(self):
+        self.assertEqual(review.snapshot()["status"], "WAITING_FOR_VALIDATED_PACKAGES")
 
     def test_snapshot_lists_unrendered_package_before_any_spec(self):
-        self.set_packages(approved_package())
+        self.set_units()
         snapshot = review.snapshot()
         item = snapshot["items"][0]
         self.assertEqual(item["render_status"], "NOT_RENDERED")
@@ -32,21 +32,21 @@ class ThumbnailReviewSnapshotTests(PipelineTestCase):
         self.assertEqual(snapshot["allowed_source_tiers"], TEMPLATE["subject_allowed_source_tiers"])
 
     def test_update_spec_creates_spec_and_validates(self):
-        self.set_packages(approved_package())
+        self.set_units()
         image = self.root / "s.png"
         image.write_bytes(b"x")
         with self.assertRaisesRegex(ValueError, "6-digit hex"):
-            review.update_spec(package_id="c1-pkg001", accent_hex="blue", subject_image={})
+            review.update_spec(render_id=RID, accent_hex="blue", subject_image={})
         with self.assertRaisesRegex(ValueError, "not permitted"):
             review.update_spec(
-                package_id="c1-pkg001",
+                render_id=RID,
                 accent_hex="#FF0000",
                 subject_image={"path": str(image), "source_tier": "EDITORIAL_EXCERPT", "license": "x"},
             )
-        with self.assertRaisesRegex(ValueError, "Unknown or unapproved"):
-            review.update_spec(package_id="nope", accent_hex="FF0000", subject_image={})
+        with self.assertRaisesRegex(ValueError, "Unknown or no longer validated"):
+            review.update_spec(render_id="nope", accent_hex="FF0000", subject_image={})
         snapshot = review.update_spec(
-            package_id="c1-pkg001",
+            render_id=RID,
             accent_hex="#ff0000",
             subject_image={"path": str(image), "source_tier": "OWN_LIBRARY", "extra": "ignored"},
         )
@@ -56,22 +56,22 @@ class ThumbnailReviewSnapshotTests(PipelineTestCase):
         self.assertNotIn("extra", item["subject_image"])
 
     def test_file_paths_are_restricted(self):
-        self.set_packages(approved_package())
+        self.set_units()
         with self.assertRaisesRegex(ValueError, "Unknown thumbnail file"):
-            review.thumbnail_file_path("c1-pkg001", "../render_spec.json")
-        with self.assertRaisesRegex(ValueError, "Unknown package_id"):
+            review.thumbnail_file_path(RID, "../render_spec.json")
+        with self.assertRaisesRegex(ValueError, "Unknown or no longer validated"):
             review.thumbnail_file_path("other", "thumbnail.jpg")
         with self.assertRaisesRegex(ValueError, "not rendered"):
-            review.thumbnail_file_path("c1-pkg001", "thumbnail.jpg")
+            review.thumbnail_file_path(RID, "thumbnail.jpg")
         with self.assertRaisesRegex(ValueError, "Invalid video_id"):
-            review.competitor_file_path("c1-pkg001", "../../etc")
+            review.competitor_file_path(RID, "../../etc")
 
 
 @unittest.skipUnless(CAN_RENDER, "ffmpeg or a bold font is unavailable")
 class ThumbnailReviewFlowTests(PipelineTestCase):
     def setUp(self):
         super().setUp()
-        self.set_packages(approved_package())
+        self.set_units()
         m.run_prepare()
         self.attach_subject()
 
@@ -80,14 +80,14 @@ class ThumbnailReviewFlowTests(PipelineTestCase):
         item = review.snapshot()["items"][0]
         self.assertEqual(item["render_status"], "RENDERED")
         query = parse_qs(urlparse(item["image_url"]).query)
-        self.assertEqual(review.thumbnail_file_path(query["package_id"][0], query["name"][0]).name, "thumbnail.jpg")
+        self.assertEqual(review.thumbnail_file_path(query["render_id"][0], query["name"][0]).name, "thumbnail.jpg")
         self.assertEqual(len(item["previews"]), len(TEMPLATE["phone_previews"]))
 
         criteria = {name: True for name in TEMPLATE["review_criteria"]}
-        snapshot = review.apply_action(package_id="c1-pkg001", decision="ACCEPT", criteria=criteria, note="")
+        snapshot = review.apply_action(render_id=RID, decision="ACCEPT", criteria=criteria, note="")
         self.assertEqual(snapshot["items"][0]["decision"], "ACCEPT")
         self.assertTrue(snapshot["complete"])
-        approved = self.root / "approved" / "c1-pkg001.json"
+        approved = self.root / "approved" / f"{RID}.json"
         self.assertTrue(approved.exists())
 
         spec_path = self.spec_path()
@@ -114,13 +114,13 @@ class ThumbnailReviewFlowTests(PipelineTestCase):
         m.run_render()
         competitor = review.snapshot()["items"][0]["competitors"][0]
         query = parse_qs(urlparse(competitor["image_url"]).query)
-        path = review.competitor_file_path(query["package_id"][0], query["video_id"][0])
+        path = review.competitor_file_path(query["render_id"][0], query["video_id"][0])
         self.assertEqual(path.name, "abcdefghijk.jpg")
         (study / "acquisition.json").write_text(
             json.dumps({"items": {"abcdefghijk": {"status": "ACQUIRED", "path": "../../../outside.jpg"}}})
         )
         with self.assertRaisesRegex(ValueError, "not found"):
-            review.competitor_file_path("c1-pkg001", "abcdefghijk")
+            review.competitor_file_path(RID, "abcdefghijk")
 
 
 if __name__ == "__main__":

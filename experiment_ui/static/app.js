@@ -22,8 +22,13 @@ const refreshStatus = document.getElementById("refreshStatus");
 
 const opportunityGate = document.getElementById("opportunityGate");
 const analysisActions = document.getElementById("analysisActions");
+const analysisCurrentPanel = document.getElementById("analysisCurrentPanel");
 const analysisCurrentTitle = document.getElementById("analysisCurrentTitle");
 const analysisCurrentDetail = document.getElementById("analysisCurrentDetail");
+const analysisRunningActivity = document.getElementById("analysisRunningActivity");
+const analysisRunningLabel = document.getElementById("analysisRunningLabel");
+const analysisRunningElapsed = document.getElementById("analysisRunningElapsed");
+const analysisRunningHeartbeat = document.getElementById("analysisRunningHeartbeat");
 const toolActions = document.getElementById("toolActions");
 const stageGrid = document.getElementById("stageGrid");
 const creationTabs = Array.from(document.querySelectorAll(".creation-tab"));
@@ -81,6 +86,7 @@ const packagingNote = document.getElementById("packagingNote");
 const packagingPrev = document.getElementById("packagingPrev");
 const packagingReject = document.getElementById("packagingReject");
 const packagingRework = document.getElementById("packagingRework");
+const packagingSaveIdea = document.getElementById("packagingSaveIdea");
 const packagingAccept = document.getElementById("packagingAccept");
 const packagingNext = document.getElementById("packagingNext");
 
@@ -109,6 +115,45 @@ const scriptReject = document.getElementById("scriptReject");
 const scriptRework = document.getElementById("scriptRework");
 const scriptAccept = document.getElementById("scriptAccept");
 const scriptNext = document.getElementById("scriptNext");
+const scriptSectionReviewPane = document.getElementById("scriptSectionReviewPane");
+const scriptSectionReviewState = document.getElementById("scriptSectionReviewState");
+const scriptSectionTargetStatus = document.getElementById("scriptSectionTargetStatus");
+const scriptSectionProgress = document.getElementById("scriptSectionProgress");
+const scriptSectionPrepare = document.getElementById("scriptSectionPrepare");
+const scriptSectionControls = document.getElementById("scriptSectionControls");
+const scriptSectionTarget = document.getElementById("scriptSectionTarget");
+const scriptSectionNextPending = document.getElementById("scriptSectionNextPending");
+const scriptSectionTargetDetail = document.getElementById("scriptSectionTargetDetail");
+const scriptSectionManualText = document.getElementById("scriptSectionManualText");
+const scriptSectionSaveManual = document.getElementById("scriptSectionSaveManual");
+const scriptSectionReason = document.getElementById("scriptSectionReason");
+const scriptSectionInstruction = document.getElementById("scriptSectionInstruction");
+const scriptSectionAccept = document.getElementById("scriptSectionAccept");
+const scriptSectionLock = document.getElementById("scriptSectionLock");
+const scriptSectionUnlock = document.getElementById("scriptSectionUnlock");
+const scriptSectionRework = document.getElementById("scriptSectionRework");
+const scriptSectionCancelRework = document.getElementById("scriptSectionCancelRework");
+const scriptSectionPrepareRework = document.getElementById("scriptSectionPrepareRework");
+const scriptSectionGenerate = document.getElementById("scriptSectionGenerate");
+const scriptSectionAlternatives = document.getElementById("scriptSectionAlternatives");
+const scriptSectionAlternativeCards = document.getElementById("scriptSectionAlternativeCards");
+
+const titleDirectionReviewPanel = document.getElementById("titleDirectionReviewPanel");
+const titleDirectionReviewTitle = document.getElementById("titleDirectionReviewTitle");
+const titleDirectionReviewSummary = document.getElementById("titleDirectionReviewSummary");
+const titleDirectionReviewStatus = document.getElementById("titleDirectionReviewStatus");
+const titleDirectionDetail = document.getElementById("titleDirectionDetail");
+const titleDirectionNote = document.getElementById("titleDirectionNote");
+const titleDirectionPrev = document.getElementById("titleDirectionPrev");
+const titleDirectionReject = document.getElementById("titleDirectionReject");
+const titleDirectionRework = document.getElementById("titleDirectionRework");
+const titleDirectionAccept = document.getElementById("titleDirectionAccept");
+const titleDirectionNext = document.getElementById("titleDirectionNext");
+
+const packagingBriefPanel = document.getElementById("packagingBriefPanel");
+const packagingBriefSummary = document.getElementById("packagingBriefSummary");
+const packagingBriefStatus = document.getElementById("packagingBriefStatus");
+const packagingBriefDetail = document.getElementById("packagingBriefDetail");
 
 const formatReviewPanel = document.getElementById("formatReviewPanel");
 const formatReviewTitle = document.getElementById("formatReviewTitle");
@@ -157,6 +202,185 @@ const thumbnailReject = document.getElementById("thumbnailReject");
 const thumbnailRework = document.getElementById("thumbnailRework");
 const thumbnailAccept = document.getElementById("thumbnailAccept");
 const thumbnailNext = document.getElementById("thumbnailNext");
+const visualCandidateReviewPanel = document.getElementById("visualCandidateReviewPanel");
+const visualCandidateReviewTitle = document.getElementById("visualCandidateReviewTitle");
+const visualCandidateReviewSummary = document.getElementById("visualCandidateReviewSummary");
+const visualCandidateReviewStatus = document.getElementById("visualCandidateReviewStatus");
+const visualShotDetail = document.getElementById("visualShotDetail");
+const visualCandidateCards = document.getElementById("visualCandidateCards");
+const visualCandidateNote = document.getElementById("visualCandidateNote");
+const visualShotPrev = document.getElementById("visualShotPrev");
+const visualRejectAll = document.getElementById("visualRejectAll");
+const visualNeedsBetter = document.getElementById("visualNeedsBetter");
+const visualShotNext = document.getElementById("visualShotNext");
+const storyboardCreativeInstruction = document.getElementById("storyboardCreativeInstruction");
+const storyboardDesiredVisual = document.getElementById("storyboardDesiredVisual");
+const storyboardSearchTerms = document.getElementById("storyboardSearchTerms");
+const storyboardFraming = document.getElementById("storyboardFraming");
+const storyboardCameraAngle = document.getElementById("storyboardCameraAngle");
+const storyboardCameraMovement = document.getElementById("storyboardCameraMovement");
+const storyboardLens = document.getElementById("storyboardLens");
+const storyboardLighting = document.getElementById("storyboardLighting");
+const storyboardTransition = document.getElementById("storyboardTransition");
+const storyboardSaveRevision = document.getElementById("storyboardSaveRevision");
+
+const visualRightsReviewPanel = document.getElementById("visualRightsReviewPanel");
+const visualRightsReviewTitle = document.getElementById("visualRightsReviewTitle");
+const visualRightsReviewSummary = document.getElementById("visualRightsReviewSummary");
+const visualRightsReviewStatus = document.getElementById("visualRightsReviewStatus");
+const visualRightsDetail = document.getElementById("visualRightsDetail");
+const visualRightsPurpose = document.getElementById("visualRightsPurpose");
+const visualRightsNote = document.getElementById("visualRightsNote");
+const visualRightsPrev = document.getElementById("visualRightsPrev");
+const visualRightsReject = document.getElementById("visualRightsReject");
+const visualRightsApprove = document.getElementById("visualRightsApprove");
+const visualRightsNext = document.getElementById("visualRightsNext");
+
+const managedVisualImportPanel = document.getElementById("managedVisualImportPanel");
+const managedVisualImportTitle = document.getElementById("managedVisualImportTitle");
+const managedVisualImportSummary = document.getElementById("managedVisualImportSummary");
+const managedVisualImportStatus = document.getElementById("managedVisualImportStatus");
+const managedVisualImportDetail = document.getElementById("managedVisualImportDetail");
+const managedVisualAssetPath = document.getElementById("managedVisualAssetPath");
+const managedVisualNote = document.getElementById("managedVisualNote");
+const managedVisualPrev = document.getElementById("managedVisualPrev");
+const managedVisualRegister = document.getElementById("managedVisualRegister");
+const managedVisualNext = document.getElementById("managedVisualNext");
+
+const visualRoughCutReviewPanel = document.getElementById("visualRoughCutReviewPanel");
+const visualRoughCutReviewTitle = document.getElementById("visualRoughCutReviewTitle");
+const visualRoughCutReviewSummary = document.getElementById("visualRoughCutReviewSummary");
+const visualRoughCutReviewStatus = document.getElementById("visualRoughCutReviewStatus");
+const visualRoughCutDetail = document.getElementById("visualRoughCutDetail");
+const visualRoughCutShotSelect = document.getElementById("visualRoughCutShotSelect");
+const visualRoughCutNote = document.getElementById("visualRoughCutNote");
+const visualRoughCutPrev = document.getElementById("visualRoughCutPrev");
+const visualRoughCutVisual = document.getElementById("visualRoughCutVisual");
+const visualRoughCutPacing = document.getElementById("visualRoughCutPacing");
+const visualRoughCutAudio = document.getElementById("visualRoughCutAudio");
+const visualRoughCutApprove = document.getElementById("visualRoughCutApprove");
+const visualRoughCutNext = document.getElementById("visualRoughCutNext");
+
+const visualSpendReviewPanel = document.getElementById("visualSpendReviewPanel");
+const visualSpendReviewTitle = document.getElementById("visualSpendReviewTitle");
+const visualSpendReviewSummary = document.getElementById("visualSpendReviewSummary");
+const visualSpendReviewStatus = document.getElementById("visualSpendReviewStatus");
+const visualSpendDetail = document.getElementById("visualSpendDetail");
+const visualSpendMaxCost = document.getElementById("visualSpendMaxCost");
+const visualSpendNote = document.getElementById("visualSpendNote");
+const visualSpendPrev = document.getElementById("visualSpendPrev");
+const visualSpendRetry = document.getElementById("visualSpendRetry");
+const visualSpendKeep = document.getElementById("visualSpendKeep");
+const visualSpendAuthorize = document.getElementById("visualSpendAuthorize");
+const visualSpendNext = document.getElementById("visualSpendNext");
+
+const generatedVisualImportPanel = document.getElementById("generatedVisualImportPanel");
+const generatedVisualImportTitle = document.getElementById("generatedVisualImportTitle");
+const generatedVisualImportSummary = document.getElementById("generatedVisualImportSummary");
+const generatedVisualImportStatus = document.getElementById("generatedVisualImportStatus");
+const generatedVisualImportDetail = document.getElementById("generatedVisualImportDetail");
+const generatedVisualAssetPath = document.getElementById("generatedVisualAssetPath");
+const generatedVisualActualCost = document.getElementById("generatedVisualActualCost");
+const generatedVisualProvider = document.getElementById("generatedVisualProvider");
+const generatedVisualProviderJobId = document.getElementById("generatedVisualProviderJobId");
+const generatedVisualNote = document.getElementById("generatedVisualNote");
+const generatedVisualPrev = document.getElementById("generatedVisualPrev");
+const generatedVisualRegister = document.getElementById("generatedVisualRegister");
+const generatedVisualNext = document.getElementById("generatedVisualNext");
+
+const editPreviewReviewPanel = document.getElementById("editPreviewReviewPanel");
+const editPreviewReviewTitle = document.getElementById("editPreviewReviewTitle");
+const editPreviewReviewSummary = document.getElementById("editPreviewReviewSummary");
+const editPreviewReviewStatus = document.getElementById("editPreviewReviewStatus");
+const editPreviewVideo = document.getElementById("editPreviewVideo");
+const editPreviewDetail = document.getElementById("editPreviewDetail");
+const editPreviewNote = document.getElementById("editPreviewNote");
+const editPreviewPrev = document.getElementById("editPreviewPrev");
+const editPreviewVisuals = document.getElementById("editPreviewVisuals");
+const editPreviewNarration = document.getElementById("editPreviewNarration");
+const editPreviewSound = document.getElementById("editPreviewSound");
+const editPreviewApprove = document.getElementById("editPreviewApprove");
+const editPreviewNext = document.getElementById("editPreviewNext");
+
+const finalSoundImportPanel = document.getElementById("finalSoundImportPanel");
+const finalSoundImportTitle = document.getElementById("finalSoundImportTitle");
+const finalSoundImportSummary = document.getElementById("finalSoundImportSummary");
+const finalSoundImportStatus = document.getElementById("finalSoundImportStatus");
+const finalSoundImportDetail = document.getElementById("finalSoundImportDetail");
+const finalSoundAssetPath = document.getElementById("finalSoundAssetPath");
+const finalSoundLicenceReference = document.getElementById("finalSoundLicenceReference");
+const finalSoundSourceName = document.getElementById("finalSoundSourceName");
+const finalSoundProviderJobId = document.getElementById("finalSoundProviderJobId");
+const finalSoundActualCost = document.getElementById("finalSoundActualCost");
+const finalSoundCommercialUse = document.getElementById("finalSoundCommercialUse");
+const finalSoundExternalPurchase = document.getElementById("finalSoundExternalPurchase");
+const finalSoundAttributionRequired = document.getElementById("finalSoundAttributionRequired");
+const finalSoundAttributionText = document.getElementById("finalSoundAttributionText");
+const finalSoundNote = document.getElementById("finalSoundNote");
+const finalSoundPrev = document.getElementById("finalSoundPrev");
+const finalSoundOmit = document.getElementById("finalSoundOmit");
+const finalSoundRegister = document.getElementById("finalSoundRegister");
+const finalSoundNext = document.getElementById("finalSoundNext");
+
+const finalExportReviewPanel = document.getElementById("finalExportReviewPanel");
+const finalExportReviewTitle = document.getElementById("finalExportReviewTitle");
+const finalExportReviewSummary = document.getElementById("finalExportReviewSummary");
+const finalExportReviewStatus = document.getElementById("finalExportReviewStatus");
+const finalExportVideo = document.getElementById("finalExportVideo");
+const finalExportDetail = document.getElementById("finalExportDetail");
+const finalExportNote = document.getElementById("finalExportNote");
+const finalExportPrev = document.getElementById("finalExportPrev");
+const finalExportVisuals = document.getElementById("finalExportVisuals");
+const finalExportNarration = document.getElementById("finalExportNarration");
+const finalExportSound = document.getElementById("finalExportSound");
+const finalExportApprove = document.getElementById("finalExportApprove");
+const finalExportNext = document.getElementById("finalExportNext");
+
+const previewReviewPanel = document.getElementById("previewReviewPanel");
+const previewReviewTitle = document.getElementById("previewReviewTitle");
+const previewReviewSummary = document.getElementById("previewReviewSummary");
+const previewReviewStatus = document.getElementById("previewReviewStatus");
+const previewDetail = document.getElementById("previewDetail");
+const previewNote = document.getElementById("previewNote");
+const previewScript = document.getElementById("previewScript");
+const previewPerformance = document.getElementById("previewPerformance");
+const previewSound = document.getElementById("previewSound");
+const previewApprove = document.getElementById("previewApprove");
+const narrationSegmentSelect = document.getElementById("narrationSegmentSelect");
+const narrationLockedWords = document.getElementById("narrationLockedWords");
+const narrationCreativeInstruction = document.getElementById("narrationCreativeInstruction");
+const narrationEmotion = document.getElementById("narrationEmotion");
+const narrationIntensity = document.getElementById("narrationIntensity");
+const narrationSpeed = document.getElementById("narrationSpeed");
+const narrationPauseBefore = document.getElementById("narrationPauseBefore");
+const narrationPauseAfter = document.getElementById("narrationPauseAfter");
+const narrationEmphasis = document.getElementById("narrationEmphasis");
+const narrationSaveRevision = document.getElementById("narrationSaveRevision");
+
+const narrationSpendReviewPanel = document.getElementById("narrationSpendReviewPanel");
+const narrationSpendReviewTitle = document.getElementById("narrationSpendReviewTitle");
+const narrationSpendReviewSummary = document.getElementById("narrationSpendReviewSummary");
+const narrationSpendReviewStatus = document.getElementById("narrationSpendReviewStatus");
+const narrationSpendDetail = document.getElementById("narrationSpendDetail");
+const narrationSpendCriteria = document.getElementById("narrationSpendCriteria");
+const narrationSpendNote = document.getElementById("narrationSpendNote");
+const narrationSpendPrev = document.getElementById("narrationSpendPrev");
+const narrationSpendReject = document.getElementById("narrationSpendReject");
+const narrationSpendRework = document.getElementById("narrationSpendRework");
+const narrationSpendAccept = document.getElementById("narrationSpendAccept");
+const narrationSpendNext = document.getElementById("narrationSpendNext");
+
+const narrationReturnPanel = document.getElementById("narrationReturnPanel");
+const narrationReturnTitle = document.getElementById("narrationReturnTitle");
+const narrationReturnSummary = document.getElementById("narrationReturnSummary");
+const narrationReturnStatus = document.getElementById("narrationReturnStatus");
+const narrationReturnDetail = document.getElementById("narrationReturnDetail");
+const narrationProviderJobId = document.getElementById("narrationProviderJobId");
+const narrationActualCost = document.getElementById("narrationActualCost");
+const narrationReturnSegments = document.getElementById("narrationReturnSegments");
+const narrationReturnPrev = document.getElementById("narrationReturnPrev");
+const narrationReturnRegister = document.getElementById("narrationReturnRegister");
+const narrationReturnNext = document.getElementById("narrationReturnNext");
 
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
@@ -171,6 +395,12 @@ const stopJob = document.getElementById("stopJob");
 const toast = document.getElementById("toast");
 
 let jobTimer = null;
+let runningUiTimer = null;
+let runningJobId = null;
+let runningJobStartedAt = null;
+let runningLastPollAt = null;
+let runningLastOutputAt = null;
+let runningLastLogSignature = "";
 let latestStatus = null;
 let csrfToken = "";
 let renderedPath = null;
@@ -192,6 +422,15 @@ let researchEditing = false;
 let latestScriptSnapshot = null;
 let scriptCursor = 0;
 let scriptEditing = false;
+let latestTitleDirectionSnapshot = null;
+let titleDirectionCursor = 0;
+let titleDirectionEditing = false;
+let latestScriptSectionSnapshot = null;
+let scriptSectionTargetId = null;
+let scriptSectionRenderedTargetId = null;
+let scriptSectionBusy = false;
+let scriptSectionBusyAction = null;
+let scriptSectionLoadToken = 0;
 let latestFormatSnapshot = null;
 let formatCursor = 0;
 let formatEditing = false;
@@ -202,6 +441,33 @@ let thumbnailEditing = false;
 let latestActions = [];
 let performanceCursor = 0;
 let performanceEditing = false;
+let latestEditPreviewSnapshot = null;
+let editPreviewCursor = 0;
+let latestPreviewSnapshot = null;
+let latestNarrationSpendSnapshot = null;
+let narrationSpendCursor = 0;
+let latestNarrationReturnSnapshot = null;
+let narrationReturnCursor = 0;
+let latestNarrationPerformanceSnapshot = null;
+let latestVisualCandidateSnapshot = null;
+let visualShotCursor = 0;
+let latestStoryboardSnapshot = null;
+let latestVisualRightsSnapshot = null;
+let visualRightsCursor = 0;
+let latestManagedVisualAcquisition = null;
+let latestManagedVisualAssets = null;
+let managedVisualCursor = 0;
+let latestVisualRoughCutSnapshot = null;
+let visualRoughCutCursor = 0;
+let latestVisualSpendSnapshot = null;
+let visualSpendCursor = 0;
+let latestGeneratedVisualHandoff = null;
+let latestGeneratedVisualAssets = null;
+let generatedVisualCursor = 0;
+let latestFinalSoundSnapshot = null;
+let finalSoundCursor = 0;
+let latestFinalExportSnapshot = null;
+let finalExportCursor = 0;
 
 const ROUTES = {
   "/": {
@@ -375,7 +641,38 @@ function statusTone(workflow) {
     state === "HUMAN_VISION_GATE" ||
     state === "HUMAN_ANALYSIS_GATE" ||
     state === "HUMAN_CONCEPT_GATE" ||
-    state === "HUMAN_SCRIPT_GATE"
+    state === "HUMAN_PACKAGING_GATE" ||
+    state === "HUMAN_RESEARCH_GATE" ||
+    state === "HUMAN_SCRIPT_GATE" ||
+    state === "HUMAN_TITLE_DIRECTION_GATE" ||
+    state === "TITLE_DIRECTION_REJECTED" ||
+    state === "HUMAN_FORMAT_GATE" ||
+    state === "HUMAN_PERFORMANCE_GATE" ||
+    state === "HUMAN_NARRATION_PREVIEW_GATE" ||
+    state === "HUMAN_NARRATION_SPEND_GATE" ||
+    state === "WAITING_NARRATION_PROVIDER_QUOTE" ||
+    state === "NARRATION_PROVIDER_SETUP_REQUIRED" ||
+    state === "WAITING_NARRATION_RENDER_RETURN" ||
+    state === "NARRATION_AUDIO_QC_FAILED" ||
+    state === "VISUAL_SEARCH_READY" ||
+    state === "HUMAN_VISUAL_CANDIDATE_GATE" ||
+    state === "HUMAN_VISUAL_RIGHTS_GATE" ||
+    state === "HUMAN_ROUGH_CUT_GATE" ||
+    state === "HUMAN_VISUAL_SPEND_GATE" ||
+    state === "VISUAL_SPEND_INVALID" ||
+    state === "VISUAL_EXISTING_RETRY_REQUIRED" ||
+    state === "WAITING_FOR_VISUAL_ASSETS" ||
+    state === "WAITING_FOR_PREMIUM_VISUAL_ASSETS" ||
+    state === "WAITING_FOR_LOCAL_VISUAL_ASSETS" ||
+    state === "LOCAL_FFMPEG_REQUIRED" ||
+    state === "HUMAN_EDIT_PREVIEW_GATE" ||
+    state === "EDIT_PREVIEW_REWORK_REQUIRED" ||
+    state === "WAITING_FOR_FINAL_VISUAL_ASSETS" ||
+    state === "FINAL_PRODUCTION_HANDOFF_BLOCKED" ||
+    state === "WAITING_FOR_FINAL_SOUND_ASSETS" ||
+    state === "LOCAL_FINAL_FFMPEG_REQUIRED" ||
+    state === "HUMAN_FINAL_EXPORT_GATE" ||
+    state === "FINAL_EXPORT_REWORK_REQUIRED"
   ) return "attention";
   if (state === "RUNNING_AUTOMATIC" || state === "WAITING_AUTOMATIC") return "running";
   return "ready";
@@ -407,17 +704,64 @@ function primaryTargetForWorkflow(workflow) {
   if (workflow.state === "HUMAN_ANALYSIS_GATE") {
     return { type: "route", value: "/analysis", label: "Review analysis findings" };
   }
-  if (workflow.state === "HUMAN_SCRIPT_GATE") {
-    return { type: "route", value: "/analysis", label: "Review script" };
-  }
-  if (workflow.state === "HUMAN_CONCEPT_GATE") {
-    return { type: "route", value: "/analysis", label: "Review concepts" };
-  }
-  if (workflow.current_action_id === "opportunity_research") {
-    return { type: "action", value: "opportunity_research", label: "Run now" };
+  const analysisHumanGateLabels = {
+    HUMAN_ANALYSIS_GATE: "Review analysis findings",
+    HUMAN_CONCEPT_GATE: "Review concepts",
+    HUMAN_PACKAGING_GATE: "Review packages",
+    HUMAN_RESEARCH_GATE: "Review research",
+    HUMAN_SCRIPT_GATE: "Review script",
+    HUMAN_TITLE_DIRECTION_GATE: "Select title directions",
+    TITLE_DIRECTION_REJECTED: "Rework title directions",
+    TITLE_DIRECTION_SELECTED: "Title directions selected",
+    PACKAGING_BRIEF_READY: "Packaging brief ready",
+    THUMBNAIL_CONCEPTS_READY: "Thumbnail concepts ready",
+    PACKAGE_VALIDATION_READY: "Package validation ready",
+    HUMAN_FORMAT_GATE: "Review format",
+    HUMAN_PERFORMANCE_GATE: "Review performance",
+    HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
+    HUMAN_NARRATION_SPEND_GATE: "Review narration spend",
+    WAITING_NARRATION_RENDER_RETURN: "Register final narration",
+    NARRATION_AUDIO_QC_FAILED: "Fix narration audio",
+    NARRATION_AUDIO_READY: "Narration audio ready",
+    VISUAL_SEARCH_READY: "Visual search plan ready",
+    HUMAN_VISUAL_CANDIDATE_GATE: "Choose visuals",
+    HUMAN_VISUAL_RIGHTS_GATE: "Review footage context",
+    HUMAN_ROUGH_CUT_GATE: "Review rough cut",
+    HUMAN_VISUAL_SPEND_GATE: "Review visual spend",
+    VISUAL_SPEND_INVALID: "Fix visual spend",
+    VISUAL_EXISTING_RETRY_REQUIRED: "Retry existing visuals",
+    WAITING_FOR_VISUAL_ASSETS: "Register missing visuals",
+    WAITING_FOR_PREMIUM_VISUAL_ASSETS: "Register premium visuals",
+    WAITING_FOR_LOCAL_VISUAL_ASSETS: "Register local visuals",
+    LOCAL_FFMPEG_REQUIRED: "Configure local FFmpeg",
+    HUMAN_EDIT_PREVIEW_GATE: "Review edit preview",
+    EDIT_PREVIEW_REWORK_REQUIRED: "Route edit rework",
+    EDIT_PREVIEW_DIRECTION_APPROVED: "Edit direction approved",
+    WAITING_FOR_FINAL_VISUAL_ASSETS: "Register final visuals",
+    FINAL_PRODUCTION_HANDOFF_BLOCKED: "Resolve final handoff",
+    FINAL_PRODUCTION_HANDOFF_READY: "Final handoff ready",
+    WAITING_FOR_FINAL_SOUND_ASSETS: "Register final sound",
+    FINAL_SOUND_ASSETS_READY: "Final sound ready",
+    LOCAL_FINAL_FFMPEG_REQUIRED: "Configure final FFmpeg",
+    HUMAN_FINAL_EXPORT_GATE: "Review final render",
+    FINAL_EXPORT_REWORK_REQUIRED: "Route final render rework",
+    FINAL_EXPORT_APPROVED: "Final export approved"
+  };
+  if (analysisHumanGateLabels[workflow.state]) {
+    return {
+      type: "route",
+      value: "/analysis",
+      label: analysisHumanGateLabels[workflow.state]
+    };
   }
   if (workflow.current_action_id) {
-    return { type: "route", value: "/analysis", label: "Continue" };
+    return {
+      type: "action",
+      value: workflow.current_action_id,
+      label: workflow.current_action_id === "opportunity_research"
+        ? "Run now"
+        : "Continue Automatically"
+    };
   }
   if (workflow.state === "WAITING_AUTOMATIC" || workflow.state === "RUNNING_AUTOMATIC") {
     return { type: "disabled", value: "", label: "Continuing automatically" };
@@ -1331,22 +1675,7 @@ function renderConceptReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>SOURCE DEPENDENCY TEST</h4><p>' +
       escapeHtml(sourceTest.rationale || "") + '</p></div>';
 
-  const criteriaDescriptions = snapshot.criteria || {};
-  const checked = concept.criteria_decisions || {};
-  const required = concept.required_accept_criteria || Object.keys(criteriaDescriptions);
-  conceptCriteria.innerHTML =
-    '<div class="concept-criteria-help">' +
-      '<strong>Rework only:</strong> check what you want to keep. ' +
-      'Leave unchecked anything you want changed. Accept, Reject and Save Idea ignore these boxes.' +
-    '</div>' +
-    required.map(function (criterion) {
-      const id = "concept-criterion-" + conceptCursor + "-" + criterion;
-      return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-        '<input type="checkbox" id="' + escapeHtml(id) + '" data-concept-criterion="' +
-        escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
-        '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-        escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
-    }).join("");
+  conceptCriteria.innerHTML = "";
 
   conceptNote.value = concept.note || "";
   conceptPrev.disabled = conceptCursor <= 0;
@@ -1423,7 +1752,7 @@ async function submitConceptDecision(decision) {
       body: JSON.stringify({
         concept_id: concept.concept_id,
         decision: decision,
-        criteria: decision === "REWORK" ? collectConceptCriteria() : {},
+        criteria: {},
         note: conceptNote.value
       })
     });
@@ -1443,11 +1772,315 @@ async function submitConceptDecision(decision) {
       false
     );
     await loadStatus();
+    if (payload.complete) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   } catch (error) {
     showToast(error.message, true);
   }
 }
 
+
+function titleDirectionConcepts(snapshot) {
+  return (snapshot && snapshot.concepts) || [];
+}
+
+function titleDirectionCandidateHtml(format, candidate, selected) {
+  const titleId = String(candidate.title_id || candidate.candidate_id || "");
+  const titleText = String(candidate.title_text || candidate.title || "");
+  const selectedId = selected && String(
+    selected.selected_title_id || selected.title_id || ""
+  );
+  const selectedText = selected && String(
+    selected.selected_title_text || selected.title_text || ""
+  );
+  const checked = selectedId === titleId ? " checked" : "";
+  const editValue = selectedId === titleId && selectedText
+    ? selectedText
+    : titleText;
+  const radioName = "title-direction-" + format;
+  const evidence = Array.isArray(candidate.evidence_refs)
+    ? candidate.evidence_refs.join(", ")
+    : "";
+  return (
+    '<div class="concept-detail-card">' +
+      '<label class="criterion-item">' +
+        '<input type="radio" name="' + escapeHtml(radioName) + '" value="' +
+          escapeHtml(titleId) + '"' + checked + '>' +
+        '<span><strong>' + escapeHtml(titleText) + '</strong></span>' +
+      '</label>' +
+      '<div class="concept-meta">' +
+        '<span>' + escapeHtml(humanizeToken(candidate.psychological_angle || candidate.angle || "")) + '</span>' +
+        '<span>' + escapeHtml(humanizeToken(candidate.primary_driver || "")) + '</span>' +
+        '<span>' + Number(candidate.character_count || titleText.length) + ' chars</span>' +
+        '<span>' + escapeHtml(candidate.search_intent || "") + '</span>' +
+      '</div>' +
+      '<p class="muted"><strong>Claim:</strong> ' +
+        escapeHtml(candidate.core_claim || "") +
+        (evidence ? '<br><strong>Evidence:</strong> ' + escapeHtml(evidence) : '') +
+      '</p>' +
+      '<label class="vision-label">Editable wording</label>' +
+      '<input class="text-input title-direction-text" data-title-id="' +
+        escapeHtml(titleId) + '" type="text" maxlength="120" value="' +
+        escapeHtml(editValue) + '">' +
+    '</div>'
+  );
+}
+
+function titleDirectionSetHtml(format, candidates, selected) {
+  const label = format === "short" ? "SHORT — 5 DIRECTIONS" : "LONG-FORM — 5 DIRECTIONS";
+  const list = Array.isArray(candidates) ? candidates : [];
+  return (
+    '<div class="concept-detail-card"><h4>' + label + '</h4>' +
+      '<p class="muted">Select one direction. Exact wording may be adjusted now and remains editable in mature Packaging.</p></div>' +
+    list.map(function (candidate) {
+      return titleDirectionCandidateHtml(format, candidate, selected);
+    }).join("")
+  );
+}
+
+function renderTitleDirectionReview(snapshot, force) {
+  latestTitleDirectionSnapshot = snapshot || {};
+  const items = titleDirectionConcepts(latestTitleDirectionSnapshot);
+
+  if (!items.length) {
+    titleDirectionReviewPanel.hidden = true;
+    return;
+  }
+  if (titleDirectionEditing && !force) return;
+
+  titleDirectionCursor = Math.max(
+    0,
+    Math.min(titleDirectionCursor, items.length - 1)
+  );
+  const item = items[titleDirectionCursor] || {};
+  const selected = item.selected_titles || {};
+  const titles = item.titles || {};
+  const decision = item.decision || "PENDING";
+
+  titleDirectionReviewPanel.hidden = false;
+  titleDirectionReviewTitle.textContent =
+    "Title directions — " + (item.concept_id || "");
+  titleDirectionReviewSummary.textContent =
+    (titleDirectionCursor + 1) + " of " + items.length +
+    " · " + Number(latestTitleDirectionSnapshot.pending || 0) + " pending";
+  titleDirectionReviewStatus.textContent = decision;
+  titleDirectionReviewStatus.className =
+    "status-chip " +
+    (decision === "ACCEPT"
+      ? "success"
+      : decision === "REJECT"
+        ? "failed"
+        : "running");
+
+  titleDirectionDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>DIRECTION CONTRACT</h4>' +
+    '<p>Choose the psychology/title direction that best represents the approved script. This does <strong>not</strong> permanently lock the public title text.</p></div>' +
+    titleDirectionSetHtml("short", titles.short, selected.short) +
+    titleDirectionSetHtml("long_form", titles.long_form, selected.long_form);
+
+  titleDirectionNote.value = item.note || "";
+  titleDirectionPrev.disabled = titleDirectionCursor <= 0;
+  titleDirectionNext.disabled = titleDirectionCursor >= items.length - 1;
+  const decided = decision !== "PENDING";
+  titleDirectionReject.disabled = decided;
+  titleDirectionRework.disabled = decided;
+  titleDirectionAccept.disabled = decided;
+  titleDirectionEditing = false;
+}
+
+function collectTitleDirectionSelections() {
+  const result = {};
+  ["short", "long_form"].forEach(function (format) {
+    const checked = titleDirectionDetail.querySelector(
+      'input[name="title-direction-' + format + '"]:checked'
+    );
+    if (!checked) {
+      throw new Error(
+        format === "short"
+          ? "Choose one Short title direction."
+          : "Choose one Long-form title direction."
+      );
+    }
+    const titleId = String(checked.value || "");
+    const input = titleDirectionDetail.querySelector(
+      '.title-direction-text[data-title-id="' + CSS.escape(titleId) + '"]'
+    );
+    const text = String((input && input.value) || "").trim();
+    if (!text) throw new Error("Selected title wording cannot be blank.");
+    result[format] = {
+      title_id: titleId,
+      title_text: text
+    };
+  });
+  return result;
+}
+
+async function submitTitleDirectionDecision(decision) {
+  const items = titleDirectionConcepts(latestTitleDirectionSnapshot || {});
+  const item = items[titleDirectionCursor];
+  if (!item) return;
+  try {
+    const selectedTitles =
+      decision === "ACCEPT" ? collectTitleDirectionSelections() : null;
+    const payload = await api("/api/title-direction-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        decision: decision,
+        selected_titles: selectedTitles,
+        note: titleDirectionNote.value
+      })
+    });
+    titleDirectionEditing = false;
+    latestTitleDirectionSnapshot = payload || {};
+    const refreshed = titleDirectionConcepts(latestTitleDirectionSnapshot);
+    const nextPending = refreshed.findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (nextPending >= 0) titleDirectionCursor = nextPending;
+    renderTitleDirectionReview(latestTitleDirectionSnapshot, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Title directions accepted. Exact wording remains editable later."
+        : decision === "REWORK"
+          ? "Title directions sent for targeted regeneration."
+          : "Title directions rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot, validationSnapshot) {
+  const value = snapshot || {};
+  const anglesValue = anglesSnapshot || {};
+  const thumbnailValue = thumbnailSnapshot || {};
+  const validationValue = validationSnapshot || {};
+  const briefs = Array.isArray(value.briefs) ? value.briefs : [];
+  const angleItems = Array.isArray(anglesValue.items) ? anglesValue.items : [];
+  const thumbnailItems = Array.isArray(thumbnailValue.items) ? thumbnailValue.items : [];
+  const ready = value.status === "PACKAGING_BRIEF_READY" && value.ready === true;
+  const slice25Ready =
+    thumbnailValue.status === "THUMBNAIL_CONCEPTS_READY" &&
+    thumbnailValue.ready === true;
+  const slice26Ready =
+    validationValue.status === "PACKAGE_VALIDATION_READY" &&
+    validationValue.ready === true;
+  const validatedPackages = Array.isArray(validationValue.packages)
+    ? validationValue.packages
+    : [];
+  packagingBriefPanel.hidden = !briefs.length;
+  if (!briefs.length) return;
+
+  packagingBriefStatus.textContent = slice26Ready
+    ? "SLICE 26 READY"
+    : (slice25Ready ? "SLICE 25 READY" : (ready ? "BRIEF READY" : "STALE"));
+  packagingBriefStatus.className =
+    "status-chip " + ((ready && !value.stale) ? "success" : "failed");
+  packagingBriefSummary.textContent =
+    briefs.length + " current format brief" + (briefs.length === 1 ? "" : "s") +
+    " · " + Number(anglesValue.current || 0) + " angle set(s)" +
+    " · " + Number(thumbnailValue.current || 0) + " thumbnail set(s)" +
+    " · " + Number(validationValue.current_pairs || 0) + " validated pair(s)" +
+    (slice26Ready
+      ? " · PASS " + Number(validationValue.pass || 0) +
+        " / REWORK " + Number(validationValue.rework || 0) +
+        " / REJECT " + Number(validationValue.reject || 0)
+      : "");
+
+  packagingBriefDetail.innerHTML = briefs.map(function (item) {
+    const angleSet = angleItems.find(function (entry) {
+      return entry.video_id === item.video_id;
+    }) || {};
+    const thumbSet = thumbnailItems.find(function (entry) {
+      return entry.video_id === item.video_id;
+    }) || {};
+    const angles = Array.isArray(angleSet.angles) ? angleSet.angles : [];
+    const thumbs = Array.isArray(thumbSet.thumbnail_concepts)
+      ? thumbSet.thumbnail_concepts
+      : [];
+    const packageItems = validatedPackages.filter(function (entry) {
+      return entry.video_id === item.video_id;
+    });
+    const selectedDirectionPackages = packageItems.filter(function (entry) {
+      return entry.selected_title_direction_match === true;
+    });
+    const angleHtml = angles.length
+      ? '<div class="concept-meta">' + angles.map(function (angle) {
+          return '<span>' +
+            escapeHtml(humanizeToken(angle.primary_driver || "")) +
+            (angle.selected_title_direction_alignment === "ANCHOR" ? " · Anchor" : "") +
+            '</span>';
+        }).join("") + '</div>'
+      : '<p class="muted">Psychological angles not generated yet.</p>';
+    const thumbHtml = thumbs.length
+      ? thumbs.map(function (thumb) {
+          return (
+            '<div class="criterion-item">' +
+              '<span><strong>' + escapeHtml(humanizeToken(thumb.angle_id || "")) + '</strong>' +
+              ' — ' + escapeHtml(thumb.hero_subject || "") +
+              (thumb.text ? ' · “' + escapeHtml(thumb.text) + '”' : '') +
+              (thumb.visual_anomaly ? '<br><small>Anomaly: ' + escapeHtml(thumb.visual_anomaly) + '</small>' : '') +
+              '</span>' +
+            '</div>'
+          );
+        }).join("")
+      : '<p class="muted">Thumbnail concepts not generated yet.</p>';
+    const packageCounts = {
+      PASS: packageItems.filter(function (entry) {
+        return entry.validation_status === "PASS";
+      }).length,
+      REWORK: packageItems.filter(function (entry) {
+        return entry.validation_status === "REWORK";
+      }).length,
+      REJECT: packageItems.filter(function (entry) {
+        return entry.validation_status === "REJECT";
+      }).length
+    };
+    const packageHtml = packageItems.length
+      ? (
+          '<p><strong>25-pair validation:</strong> PASS ' +
+          packageCounts.PASS + ' · REWORK ' + packageCounts.REWORK +
+          ' · REJECT ' + packageCounts.REJECT + '</p>' +
+          '<p class="muted">Selected title direction across all five thumbnails:</p>' +
+          selectedDirectionPackages.map(function (pkg) {
+            const d = pkg.diagnostics || {};
+            return (
+              '<div class="criterion-item">' +
+                '<span><strong>' + escapeHtml(pkg.validation_status || "") + '</strong>' +
+                ' — ' + escapeHtml(pkg.thumbnail_hero_subject || "") +
+                (pkg.thumbnail_text ? ' · “' + escapeHtml(pkg.thumbnail_text) + '”' : '') +
+                '<br><small>Complementarity ' +
+                  escapeHtml(String(d.complementarity ?? "—")) +
+                  '/5 · Promise ' + escapeHtml(String(d.promise_alignment ?? "—")) +
+                  '/5 · Hook ' + escapeHtml(String(d.hook_alignment ?? "—")) +
+                  '/5</small>' +
+                '</span>' +
+              '</div>'
+            );
+          }).join("")
+        )
+      : '<p class="muted">Title-thumbnail validation not generated yet.</p>';
+    return (
+      '<div class="concept-detail-card">' +
+        '<h4>' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
+        '<p><strong>Intent:</strong> ' +
+          escapeHtml(item.search_vs_browse_intent || "") +
+        '<br><strong>Viewer promise:</strong> ' +
+          escapeHtml(item.viewer_expectation || "") +
+        '<br><strong>Video ID:</strong> ' +
+          escapeHtml(item.video_id || "") +
+        '</p>' +
+        '<h4>Psychological hypotheses</h4>' + angleHtml +
+        '<h4>Thumbnail concepts</h4>' + thumbHtml +
+        '<h4>Package validation</h4>' + packageHtml +
+      '</div>'
+    );
+  }).join("");
+}
 
 function pendingPackagingIndex(items) {
   return (items || []).findIndex(function (item) {
@@ -1460,6 +2093,76 @@ function currentPackagingItem() {
   if (!items.length) return null;
   packagingCursor = Math.max(0, Math.min(packagingCursor, items.length - 1));
   return { item: items[packagingCursor], items: items };
+}
+
+function packagingTitleChoicesHtml(format, candidates, selected) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const chosenId = selected && selected.candidate_id ? String(selected.candidate_id) : "";
+  const chosenTitle = selected && selected.title ? String(selected.title) : "";
+  const label = format === "short" ? "SHORT TITLE" : "LONG-FORM TITLE";
+  const radioName = "packaging-title-" + format;
+  let html = '<div class="concept-detail-card"><h4>' + label + '</h4>';
+  if (!list.length) {
+    html += '<p>No title candidates available.</p>';
+  } else {
+    list.forEach(function (candidate) {
+      const candidateId = String(candidate.candidate_id || "");
+      const candidateTitle = String(candidate.title || "");
+      const checked = chosenId === candidateId ? " checked" : "";
+      html += '<label class="criterion-item">' +
+        '<input type="radio" name="' + escapeHtml(radioName) + '" value="' +
+        escapeHtml(candidateId) + '" data-title="' + escapeHtml(candidateTitle) + '"' +
+        checked + '>' +
+        '<span><strong>' + escapeHtml(humanizeToken(candidate.angle || "")) +
+        '</strong> — ' + escapeHtml(candidateTitle) + '</span></label>';
+    });
+  }
+  const manualChecked = chosenId === "manual" ? " checked" : "";
+  const manualValue = chosenId === "manual" ? chosenTitle : "";
+  html += '<label class="criterion-item">' +
+    '<input type="radio" name="' + escapeHtml(radioName) + '" value="manual"' +
+    manualChecked + '>' +
+    '<span><strong>Custom</strong> — edit your own title</span></label>' +
+    '<input class="text-input packaging-title-manual" data-format="' +
+    escapeHtml(format) + '" type="text" maxlength="' +
+    (format === "short" ? "48" : "70") + '" value="' +
+    escapeHtml(manualValue) + '" placeholder="Type a custom ' +
+    (format === "short" ? "Short" : "Long-form") + ' title">' +
+    '</div>';
+  return html;
+}
+
+function collectPackagingTitleSelections() {
+  const result = {};
+  ["short", "long_form"].forEach(function (format) {
+    const checked = packagingDetail.querySelector(
+      'input[name="packaging-title-' + format + '"]:checked'
+    );
+    if (!checked) {
+      throw new Error(
+        format === "short"
+          ? "Choose a Short title before accepting."
+          : "Choose a Long-form title before accepting."
+      );
+    }
+    const candidateId = String(checked.value || "");
+    let title = String(checked.dataset.title || "");
+    if (candidateId === "manual") {
+      const manual = packagingDetail.querySelector(
+        '.packaging-title-manual[data-format="' + format + '"]'
+      );
+      title = String((manual && manual.value) || "").trim();
+      if (!title) {
+        throw new Error(
+          format === "short"
+            ? "Enter the custom Short title."
+            : "Enter the custom Long-form title."
+        );
+      }
+    }
+    result[format] = { candidate_id: candidateId, title: title };
+  });
+  return result;
 }
 
 function renderPackagingReview(snapshot, force) {
@@ -1497,6 +2200,7 @@ function renderPackagingReview(snapshot, force) {
     packagingNext.disabled = true;
     packagingReject.disabled = true;
     packagingRework.disabled = true;
+    packagingSaveIdea.disabled = true;
     packagingAccept.disabled = true;
     return;
   }
@@ -1515,12 +2219,8 @@ function renderPackagingReview(snapshot, force) {
   const pkg = items[packagingCursor] || {};
   const thumbnail = pkg.thumbnail || {};
   const opening = pkg.opening_frame || {};
-  const palette = thumbnail.palette || {};
-  const division = pkg.division_of_labor || {};
-  const advisories = (pkg.packaging_advisories || []).map(function (item) {
-    return "<li><strong>" + escapeHtml(humanizeToken(item.rule || "")) + ":</strong> " +
-      escapeHtml(item.guidance || "") + "</li>";
-  }).join("");
+  const titleSets = pkg.titles || {};
+  const selectedTitles = pkg.selected_titles || {};
   const dependencies = (pkg.research_dependencies || []).map(function (item) {
     return "<li>" + escapeHtml(item) + "</li>";
   }).join("");
@@ -1543,34 +2243,20 @@ function renderPackagingReview(snapshot, force) {
 
   packagingDetail.innerHTML =
     '<div class="concept-detail-card">' +
-      '<h4>PACKAGE</h4>' +
-      '<h3>' + escapeHtml(pkg.title || pkg.package_id) + '</h3>' +
+      '<h4>TITLE SELECTION</h4>' +
+      '<p>Choose one Short title and one Long-form title. The two formats are independent; the thumbnail should add information rather than repeat either title.</p>' +
       '<div class="concept-meta">' +
         '<span>' + escapeHtml(humanizeToken(pkg.format_intent)) + '</span>' +
         '<span>Concept ' + escapeHtml(pkg.concept_id || "") + '</span>' +
       '</div>' +
     '</div>' +
+    packagingTitleChoicesHtml("short", titleSets.short, selectedTitles.short) +
+    packagingTitleChoicesHtml("long_form", titleSets.long_form, selectedTitles.long_form) +
     '<div class="concept-detail-card"><h4>THUMBNAIL</h4><p><strong>Message:</strong> ' +
       escapeHtml(thumbnail.message || "") + '<br><strong>Visual:</strong> ' +
       escapeHtml(thumbnail.visual_concept || "") +
       (thumbnail.text_overlay
         ? '<br><strong>Text:</strong> ' + escapeHtml(thumbnail.text_overlay)
-        : "") +
-      (thumbnail.focal_subject
-        ? '<br><strong>Focal subject:</strong> ' + escapeHtml(thumbnail.focal_subject)
-        : "") +
-      (thumbnail.visual_elements
-        ? '<br><strong>Elements (' + thumbnail.visual_elements.length + '):</strong> ' +
-          escapeHtml(thumbnail.visual_elements.join(" · "))
-        : "") +
-      (thumbnail.visual_cues
-        ? '<br><strong>Cues (' + thumbnail.visual_cues.length + '):</strong> ' +
-          escapeHtml(thumbnail.visual_cues.join(" · ") || "none")
-        : "") +
-      (palette.accent
-        ? '<br><strong>Palette:</strong> ' + escapeHtml(palette.background || "") +
-          ' / ' + escapeHtml(palette.subject || "") +
-          ' / accent ' + escapeHtml(palette.accent)
         : "") +
       '</p></div>' +
     '<div class="concept-detail-card"><h4>OPENING FRAME</h4><p><strong>Purpose:</strong> ' +
@@ -1589,19 +2275,7 @@ function renderPackagingReview(snapshot, force) {
       escapeHtml(pkg.curiosity_gap || "") + '<br><strong>Expected payoff:</strong> ' +
       escapeHtml(pkg.expected_payoff || "") + '</p></div>' +
     '<div class="concept-detail-card"><h4>TITLE + THUMBNAIL</h4><p>' +
-      escapeHtml(pkg.title_thumbnail_relationship || "") +
-      (pkg.title_keyword
-        ? '<br><strong>Keyword:</strong> ' + escapeHtml(pkg.title_keyword) +
-          ' · <strong>Title length:</strong> ' + String((pkg.title || "").length)
-        : "") +
-      (division.thumbnail_carries
-        ? '<br><strong>Thumbnail carries:</strong> ' + escapeHtml(division.thumbnail_carries) +
-          '<br><strong>Title carries:</strong> ' + escapeHtml(division.title_carries || "")
-        : "") +
-      '</p></div>' +
-    '<div class="concept-detail-card"><h4>DESIGN ADVISORIES (HYPOTHESIS, NON-BLOCKING)</h4>' +
-      (advisories ? '<ul>' + advisories + '</ul>' : '<p>None.</p>') +
-      '</div>' +
+      escapeHtml(pkg.title_thumbnail_relationship || "") + '</p></div>' +
     '<div class="concept-detail-card"><h4>POSITIONING</h4><p><strong>Gap:</strong> ' +
       escapeHtml(pkg.gap_positioning || "") + '<br><strong>Channel fit:</strong> ' +
       escapeHtml(pkg.channel_fit_alignment || "") + '</p></div>' +
@@ -1609,24 +2283,14 @@ function renderPackagingReview(snapshot, force) {
       (dependencies ? '<ul>' + dependencies + '</ul>' : '<p>None declared.</p>') +
       '</div>';
 
-  const criteriaDescriptions = snapshot.criteria || {};
-  const checked = pkg.criteria_decisions || {};
-  const required = pkg.required_accept_criteria || Object.keys(criteriaDescriptions);
-  packagingCriteria.innerHTML = required.map(function (criterion) {
-    const id = "packaging-criterion-" + packagingCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-packaging-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(criteriaDescriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  packagingCriteria.innerHTML = "";
 
   packagingNote.value = pkg.note || "";
   packagingPrev.disabled = packagingCursor <= 0;
   packagingNext.disabled = packagingCursor >= items.length - 1;
   packagingReject.disabled = false;
   packagingRework.disabled = false;
+  packagingSaveIdea.disabled = false;
   packagingAccept.disabled = false;
   packagingEditing = false;
 }
@@ -1656,13 +2320,16 @@ async function submitPackagingDecision(decision) {
   const pkg = current.item;
 
   try {
+    const selectedTitles =
+      decision === "ACCEPT" ? collectPackagingTitleSelections() : null;
     const payload = await api("/api/packaging-gate", {
       method: "POST",
       body: JSON.stringify({
         package_id: pkg.package_id,
         decision: decision,
-        criteria: collectPackagingCriteria(),
-        note: packagingNote.value
+        criteria: {},
+        note: packagingNote.value,
+        selected_titles: selectedTitles
       })
     });
     packagingEditing = false;
@@ -1675,7 +2342,9 @@ async function submitPackagingDecision(decision) {
         ? "Package accepted."
         : decision === "REWORK"
           ? "Package sent for rework."
-          : "Package rejected.",
+          : decision === "SAVE_IDEA"
+            ? "Package saved for later."
+            : "Package rejected.",
       false
     );
     await loadStatus();
@@ -1802,18 +2471,7 @@ function renderResearchReview(snapshot, force) {
       escapeHtml(questions.join(" | ")) + '</p></div>' +
     evidence;
 
-  const descriptions = claim.criteria_descriptions || {};
-  const checked = claim.criteria_decisions || {};
-  const required = claim.required_accept_criteria || Object.keys(descriptions);
-  researchCriteria.innerHTML = required.map(function (criterion) {
-    const id = "research-criterion-" + researchCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-research-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  researchCriteria.innerHTML = "";
 
   researchNote.value = claim.note || "";
   researchPrev.disabled = researchCursor <= 0;
@@ -1854,7 +2512,7 @@ async function submitResearchDecision(decision) {
         concept_id: claim.concept_id,
         claim_id: claim.claim_id,
         decision: decision,
-        criteria: collectResearchCriteria(),
+        criteria: {},
         note: researchNote.value
       })
     });
@@ -1888,6 +2546,523 @@ function currentScriptItem() {
   if (!items.length) return null;
   scriptCursor = Math.max(0, Math.min(scriptCursor, items.length - 1));
   return { item: items[scriptCursor], items: items };
+}
+
+
+function scriptSectionTargetLabel(target) {
+  const marker = target.locked
+    ? "🔒 "
+    : target.decision === "REWORK_REQUESTED"
+      ? "⚠ "
+      : "";
+  const name = target.section_id ||
+    humanizeToken(target.target_type || target.target_id || "Target");
+  return marker + name + " — " + humanizeToken(target.decision || "PENDING");
+}
+
+function currentScriptSectionTarget() {
+  const targets = (latestScriptSectionSnapshot && latestScriptSectionSnapshot.targets) || [];
+  if (!targets.length) return null;
+  const selected = scriptSectionTargetId ||
+    (scriptSectionTarget && scriptSectionTarget.value) ||
+    targets[0].target_id;
+  return targets.find(function (target) {
+    return target.target_id === selected;
+  }) || targets[0];
+}
+
+function scriptSectionCounts(targets) {
+  const result = {
+    total: (targets || []).length,
+    accepted: 0,
+    rework: 0,
+    pending: 0,
+    locked: 0
+  };
+  (targets || []).forEach(function (target) {
+    if (target.decision === "ACCEPTED") result.accepted += 1;
+    else if (target.decision === "REWORK_REQUESTED") result.rework += 1;
+    else result.pending += 1;
+    if (target.locked) result.locked += 1;
+  });
+  return result;
+}
+
+function scriptSectionStatusTone(target) {
+  if (!target) return "running";
+  if (target.decision === "ACCEPTED") return "success";
+  if (target.decision === "REWORK_REQUESTED") return "failed";
+  return "running";
+}
+
+function unresolvedScriptSectionTargets(targets) {
+  return (targets || []).filter(function (target) {
+    return target.decision !== "ACCEPTED";
+  });
+}
+
+function nextUnresolvedScriptSectionTarget(targets, currentId) {
+  const unresolved = unresolvedScriptSectionTargets(targets);
+  if (!unresolved.length) return null;
+  const currentIndex = unresolved.findIndex(function (target) {
+    return target.target_id === currentId;
+  });
+  if (currentIndex < 0 || currentIndex >= unresolved.length - 1) {
+    return unresolved[0];
+  }
+  return unresolved[currentIndex + 1];
+}
+
+function syncWholeScriptAcceptWithSectionState(snapshot) {
+  if (!latestScriptSnapshot || latestScriptSnapshot.complete) return;
+  const status = String((snapshot && snapshot.status) || "");
+  const targets = (snapshot && snapshot.targets) || [];
+  const prepared = status === "READY_FOR_SECTION_REVIEW";
+  const unresolved = prepared && targets.some(function (target) {
+    return target.decision !== "ACCEPTED" || target.locked !== true;
+  });
+  const stale = status === "STALE_SECTION_STATE";
+  scriptReject.disabled = Boolean(scriptSectionBusy);
+  scriptRework.disabled = Boolean(scriptSectionBusy);
+  scriptAccept.disabled = Boolean(scriptSectionBusy || unresolved || stale);
+  scriptAccept.title = stale
+    ? "Resolve the stale section-review state before whole-script approval."
+    : unresolved
+      ? "Finish the prepared section review before whole-script approval."
+      : scriptSectionBusy
+        ? "Wait for the current section action to finish."
+        : "";
+}
+
+function scriptSectionBusyLabel(action) {
+  const labels = {
+    PREPARE: "Preparing section review…",
+    ACCEPT: "Accepting target…",
+    LOCK: "Locking target…",
+    UNLOCK: "Unlocking target…",
+    REWORK: "Recording rework request…",
+    CANCEL_REWORK: "Cancelling rework…",
+    PREPARE_REWORK_REQUEST: "Preparing bounded request…",
+    GENERATE_ALTERNATIVES: "Generating A / B / C…",
+    SELECT_ALTERNATIVE: "Applying selection…",
+    MANUAL_EDIT: "Saving manual edit…"
+  };
+  return labels[action] || "Updating section review…";
+}
+
+async function refreshScriptGateAfterSectionAction(conceptId, format) {
+  const preservedNote = scriptNote.value;
+  const preserveEditing = scriptEditing;
+  const payload = await api("/api/script-gate");
+  const items = payload.scripts || [];
+  const index = items.findIndex(function (item) {
+    return String(item.concept_id || "") === String(conceptId || "") &&
+      String(item.format || "") === String(format || "");
+  });
+  if (index >= 0) scriptCursor = index;
+  renderScriptReview(payload, true);
+  if (preserveEditing) {
+    scriptNote.value = preservedNote;
+    scriptEditing = true;
+  }
+}
+
+function renderScriptSectionReview(snapshot) {
+  latestScriptSectionSnapshot = snapshot || {};
+  const status = String((snapshot && snapshot.status) || "");
+  const targets = (snapshot && snapshot.targets) || [];
+  const counts = scriptSectionCounts(targets);
+
+  scriptSectionPrepare.hidden = status !== "SECTION_STATE_NOT_PREPARED";
+  scriptSectionControls.hidden = status !== "READY_FOR_SECTION_REVIEW";
+  scriptSectionProgress.innerHTML = targets.length
+    ? '<span class="script-section-stat success">' +
+        counts.accepted + ' accepted</span>' +
+      '<span class="script-section-stat">' +
+        counts.pending + ' pending</span>' +
+      '<span class="script-section-stat attention">' +
+        counts.rework + ' rework</span>' +
+      '<span class="script-section-stat">' +
+        counts.locked + ' locked</span>'
+    : "";
+
+  if (scriptSectionBusy) {
+    scriptSectionReviewState.textContent =
+      scriptSectionBusyLabel(scriptSectionBusyAction);
+  }
+
+  if (status === "SECTION_STATE_NOT_PREPARED") {
+    if (!scriptSectionBusy) {
+      scriptSectionReviewState.textContent =
+        "Prepare section review to enable target-level decisions.";
+    }
+    scriptSectionTargetStatus.textContent = "NOT PREPARED";
+    scriptSectionTargetStatus.className = "status-chip running";
+    scriptSectionAlternativeCards.innerHTML = "";
+    scriptSectionAlternatives.hidden = true;
+    scriptSectionPrepare.disabled = scriptSectionBusy;
+    syncWholeScriptAcceptWithSectionState(snapshot);
+    return;
+  }
+
+  if (status === "STALE_SECTION_STATE") {
+    scriptSectionReviewState.textContent =
+      "Section state is stale because the script draft changed. " +
+      "Resolve/reset the section state before continuing.";
+    scriptSectionTargetStatus.textContent = "STALE";
+    scriptSectionTargetStatus.className = "status-chip failed";
+    scriptSectionControls.hidden = true;
+    scriptSectionPrepare.hidden = true;
+    syncWholeScriptAcceptWithSectionState(snapshot);
+    return;
+  }
+
+  if (status !== "READY_FOR_SECTION_REVIEW") {
+    scriptSectionReviewState.textContent =
+      status === "SCRIPT_DRAFT_NOT_FOUND"
+        ? "The current script draft is not available."
+        : "Selective section review is not ready.";
+    scriptSectionTargetStatus.textContent = humanizeToken(status || "WAITING");
+    scriptSectionTargetStatus.className = "status-chip running";
+    scriptSectionControls.hidden = true;
+    syncWholeScriptAcceptWithSectionState(snapshot);
+    return;
+  }
+
+  if (!targets.length) {
+    scriptSectionReviewState.textContent = "No script targets are available.";
+    scriptSectionTargetStatus.textContent = "EMPTY";
+    scriptSectionTargetStatus.className = "status-chip failed";
+    scriptSectionControls.hidden = true;
+    syncWholeScriptAcceptWithSectionState(snapshot);
+    return;
+  }
+
+  if (!scriptSectionBusy) {
+    scriptSectionReviewState.textContent =
+      "State v" + String(snapshot.state_version || "—") +
+      " · " + counts.accepted + " of " + counts.total +
+      " targets accepted.";
+  }
+
+  const existingTarget = scriptSectionTargetId || scriptSectionTarget.value;
+  let selected = targets.find(function (target) {
+    return target.target_id === existingTarget;
+  });
+  if (!selected) {
+    selected =
+      targets.find(function (target) {
+        return target.decision === "REWORK_REQUESTED";
+      }) ||
+      targets.find(function (target) {
+        return target.decision === "PENDING";
+      }) ||
+      targets[0];
+  }
+  scriptSectionTargetId = selected.target_id;
+
+  scriptSectionTarget.innerHTML = targets.map(function (target) {
+    return '<option value="' + escapeHtml(target.target_id || "") + '">' +
+      escapeHtml(scriptSectionTargetLabel(target)) +
+      '</option>';
+  }).join("");
+  scriptSectionTarget.value = selected.target_id;
+  scriptSectionTarget.disabled = scriptSectionBusy;
+
+  scriptSectionTargetStatus.textContent =
+    humanizeToken(selected.decision || "PENDING") +
+    (selected.locked ? " · LOCKED" : "");
+  scriptSectionTargetStatus.className =
+    "status-chip " + scriptSectionStatusTone(selected);
+
+  const meta = selected.metadata || {};
+  const claimIds = meta.claim_ids || meta.opening_hook_claim_ids || [];
+  const storyBeatIds = meta.source_story_beat_ids || [];
+  const reworkDetail = selected.decision === "REWORK_REQUESTED"
+    ? '<div class="script-section-rework-current"><strong>Requested:</strong> ' +
+      escapeHtml(humanizeToken(selected.rework_reason || "CUSTOM")) +
+      (selected.custom_instruction
+        ? '<br>' + escapeHtml(selected.custom_instruction)
+        : "") +
+      '</div>'
+    : "";
+  scriptSectionTargetDetail.innerHTML =
+    '<div class="script-section-target-copy">' +
+      '<strong>' + escapeHtml(
+        selected.section_id || humanizeToken(selected.target_type || "Target")
+      ) + '</strong>' +
+      '<p>' + escapeHtml(selected.text || "") + '</p>' +
+    '</div>' +
+    '<div class="concept-meta">' +
+      (meta.psychology_mechanism
+        ? '<span>Psychology: ' +
+          escapeHtml(humanizeToken(meta.psychology_mechanism)) + '</span>'
+        : '') +
+      (meta.reward_type
+        ? '<span>Reward: ' + escapeHtml(humanizeToken(meta.reward_type)) + '</span>'
+        : '') +
+      (storyBeatIds.length
+        ? '<span>Story beats: ' + escapeHtml(storyBeatIds.join(", ")) + '</span>'
+        : '') +
+      '<span>Claims: ' + escapeHtml(claimIds.join(", ") || "none") + '</span>' +
+    '</div>' +
+    reworkDetail;
+
+  const reasons = snapshot.rework_reasons || [];
+  const targetChanged = scriptSectionRenderedTargetId !== selected.target_id;
+  const currentReason = targetChanged
+    ? String(selected.rework_reason || "")
+    : String(scriptSectionReason.value || selected.rework_reason || "");
+  scriptSectionReason.innerHTML =
+    '<option value="">Select reason</option>' +
+    reasons.map(function (reason) {
+      return '<option value="' + escapeHtml(reason) + '">' +
+        escapeHtml(humanizeToken(reason)) +
+        '</option>';
+    }).join("");
+  if (reasons.includes(currentReason)) {
+    scriptSectionReason.value = currentReason;
+  }
+  if (targetChanged) {
+    scriptSectionInstruction.value = selected.custom_instruction || "";
+    scriptSectionManualText.value = selected.text || "";
+    scriptSectionRenderedTargetId = selected.target_id;
+  }
+
+  const locked = Boolean(selected.locked);
+  const reworkRequested = selected.decision === "REWORK_REQUESTED";
+  const acceptedLocked = selected.decision === "ACCEPTED" && locked;
+  const nextUnresolved = nextUnresolvedScriptSectionTarget(
+    targets,
+    selected.target_id
+  );
+
+  scriptSectionNextPending.disabled =
+    scriptSectionBusy || !nextUnresolved ||
+    nextUnresolved.target_id === selected.target_id ||
+    (counts.accepted === counts.total);
+  scriptSectionNextPending.textContent = counts.accepted === counts.total
+    ? "All targets resolved"
+    : "Next unresolved →";
+
+  scriptSectionAccept.disabled = scriptSectionBusy || acceptedLocked;
+  scriptSectionLock.disabled = scriptSectionBusy || locked || reworkRequested;
+  scriptSectionUnlock.disabled = scriptSectionBusy || !locked;
+  scriptSectionRework.disabled = scriptSectionBusy || locked || reworkRequested;
+  scriptSectionCancelRework.disabled = scriptSectionBusy || !reworkRequested;
+  scriptSectionCancelRework.hidden = !reworkRequested;
+  scriptSectionPrepareRework.disabled = scriptSectionBusy || !reworkRequested;
+  scriptSectionGenerate.disabled = scriptSectionBusy || !reworkRequested;
+  scriptSectionManualText.disabled = scriptSectionBusy || locked;
+  scriptSectionSaveManual.disabled = scriptSectionBusy || locked;
+  scriptSectionReason.disabled =
+    scriptSectionBusy || locked || reworkRequested;
+  scriptSectionInstruction.disabled =
+    scriptSectionBusy || locked || reworkRequested;
+
+  scriptSectionPrepareRework.textContent =
+    scriptSectionBusy && scriptSectionBusyAction === "PREPARE_REWORK_REQUEST"
+      ? "Preparing…"
+      : "Prepare rework request";
+  scriptSectionGenerate.textContent =
+    scriptSectionBusy && scriptSectionBusyAction === "GENERATE_ALTERNATIVES"
+      ? "Generating…"
+      : "Generate A / B / C";
+
+  const alternatives = selected.alternatives;
+  if (!alternatives) {
+    scriptSectionAlternatives.hidden = true;
+    scriptSectionAlternativeCards.innerHTML = "";
+    syncWholeScriptAcceptWithSectionState(snapshot);
+    return;
+  }
+
+  scriptSectionAlternatives.hidden = false;
+  const selection = alternatives.selection || null;
+  if (selection) {
+    scriptSectionAlternativeCards.innerHTML =
+      '<div class="concept-complete">Selected <strong>' +
+      escapeHtml(selection.selection_id || "") +
+      '</strong> · target is accepted and locked.</div>';
+    syncWholeScriptAcceptWithSectionState(snapshot);
+    return;
+  }
+
+  const original = alternatives.original || {};
+  const originalCard =
+    '<article class="script-section-alternative-card original">' +
+      '<div class="script-section-alternative-label">ORIGINAL</div>' +
+      '<p>' + escapeHtml(original.text || selected.text || "") + '</p>' +
+      '<div class="concept-meta"><span>Claims: ' +
+        escapeHtml(claimIds.join(", ") || "none") +
+      '</span></div>' +
+      '<button class="ghost" type="button" data-script-section-selection="ORIGINAL"' +
+      (scriptSectionBusy ? " disabled" : "") +
+      '>Keep original</button>' +
+    '</article>';
+
+  const optionCards = (alternatives.alternatives || []).map(function (item) {
+    return '<article class="script-section-alternative-card">' +
+      '<div class="script-section-alternative-label">OPTION ' +
+        escapeHtml(item.alternative_id || "") + '</div>' +
+      '<p>' + escapeHtml(item.replacement_text || "") + '</p>' +
+      '<p class="muted">' + escapeHtml(item.change_summary || "") + '</p>' +
+      '<div class="concept-meta"><span>Claims used: ' +
+        escapeHtml((item.claim_ids_used || []).join(", ") || "none") +
+      '</span></div>' +
+      '<button type="button" data-script-section-selection="' +
+        escapeHtml(item.alternative_id || "") + '"' +
+        (scriptSectionBusy ? " disabled" : "") +
+      '>Use ' + escapeHtml(item.alternative_id || "") + '</button>' +
+    '</article>';
+  }).join("");
+
+  scriptSectionAlternativeCards.innerHTML = originalCard + optionCards;
+  syncWholeScriptAcceptWithSectionState(snapshot);
+}
+
+async function loadScriptSectionReviewForCurrent() {
+  const current = currentScriptItem();
+  if (!current) return;
+  const script = current.item || {};
+  const conceptId = String(script.concept_id || "");
+  const format = String(script.format || "");
+  if (!conceptId || !format) return;
+
+  const token = ++scriptSectionLoadToken;
+  try {
+    const payload = await api(
+      "/api/script-section-review?concept_id=" +
+      encodeURIComponent(conceptId) +
+      "&format=" +
+      encodeURIComponent(format)
+    );
+    if (token !== scriptSectionLoadToken) return;
+    const latest = currentScriptItem();
+    if (
+      !latest ||
+      String(latest.item.concept_id || "") !== conceptId ||
+      String(latest.item.format || "") !== format
+    ) {
+      return;
+    }
+    renderScriptSectionReview(payload);
+  } catch (error) {
+    if (token !== scriptSectionLoadToken) return;
+    scriptSectionReviewState.textContent =
+      "Selective review error: " + error.message;
+  }
+}
+
+async function submitScriptSectionAction(action, extra) {
+  const current = currentScriptItem();
+  if (!current || scriptSectionBusy) return;
+  const script = current.item || {};
+  const target = currentScriptSectionTarget();
+  const extras = extra || {};
+  const reason = scriptSectionReason.value || null;
+  const instruction = scriptSectionInstruction.value.trim();
+
+  if (action !== "PREPARE" && !target) {
+    showToast("Choose a script target first.", true);
+    return;
+  }
+  if (action === "REWORK") {
+    if (!reason && !instruction) {
+      showToast("Choose a rework reason or enter a specific instruction.", true);
+      scriptSectionReason.focus();
+      return;
+    }
+    if (reason === "CUSTOM" && !instruction) {
+      showToast("Custom rework requires a specific instruction.", true);
+      scriptSectionInstruction.focus();
+      return;
+    }
+  }
+  if (action === "MANUAL_EDIT") {
+    const replacement = scriptSectionManualText.value.trim();
+    if (!replacement) {
+      showToast("Manual target text cannot be empty.", true);
+      scriptSectionManualText.focus();
+      return;
+    }
+    if (target && replacement === String(target.text || "").trim()) {
+      showToast("Manual edit must change the selected target.", true);
+      scriptSectionManualText.focus();
+      return;
+    }
+  }
+  if (
+    action === "SELECT_ALTERNATIVE" &&
+    !["ORIGINAL", "A", "B", "C"].includes(String(extras.selection_id || "").toUpperCase())
+  ) {
+    showToast("Choose Original, A, B or C.", true);
+    return;
+  }
+
+  scriptSectionBusy = true;
+  scriptSectionBusyAction = action;
+  if (latestScriptSectionSnapshot) {
+    renderScriptSectionReview(latestScriptSectionSnapshot);
+  }
+
+  try {
+    const body = {
+      concept_id: script.concept_id,
+      format: script.format,
+      action: action,
+      target_id: target ? target.target_id : null,
+      reason: reason,
+      custom_instruction: instruction || null,
+      selection_id: extras.selection_id || null,
+      replacement_text: action === "MANUAL_EDIT"
+        ? scriptSectionManualText.value
+        : null
+    };
+    const payload = await api("/api/script-section-review", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    const sectionPayload = payload.section_review || payload;
+    renderScriptSectionReview(sectionPayload);
+
+    if (payload.status === "ALTERNATIVE_GENERATION_FAILED") {
+      const generation = payload.generation || {};
+      showToast(
+        "Alternative generation failed: " +
+        humanizeToken(generation.status || "UNKNOWN"),
+        true
+      );
+    } else {
+      const messages = {
+        PREPARE: "Section review prepared.",
+        ACCEPT: "Target accepted and locked.",
+        LOCK: "Target locked.",
+        UNLOCK: "Target unlocked.",
+        REWORK: "Selective rework requested.",
+        CANCEL_REWORK: "Selective rework cancelled.",
+        PREPARE_REWORK_REQUEST: "Bounded rework request prepared. No model call was made.",
+        GENERATE_ALTERNATIVES: "A / B / C alternatives are ready.",
+        SELECT_ALTERNATIVE: "Selection applied. Review the updated script before whole-script approval.",
+        MANUAL_EDIT: "Manual edit applied and locked. Review the updated script before whole-script approval."
+      };
+      showToast(messages[action] || "Script section updated.", false);
+    }
+
+    await refreshScriptGateAfterSectionAction(
+      script.concept_id,
+      script.format
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    scriptSectionBusy = false;
+    scriptSectionBusyAction = null;
+    if (latestScriptSectionSnapshot) {
+      renderScriptSectionReview(latestScriptSectionSnapshot);
+    }
+  }
 }
 
 function renderScriptReview(snapshot, force) {
@@ -1927,6 +3102,7 @@ function renderScriptReview(snapshot, force) {
     scriptReject.disabled = true;
     scriptRework.disabled = true;
     scriptAccept.disabled = true;
+    loadScriptSectionReviewForCurrent();
     return;
   }
 
@@ -2003,26 +3179,17 @@ function renderScriptReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>CLOSING</h4><p>' +
       escapeHtml(script.closing || "") + '</p></div>';
 
-  const descriptions = script.criteria || {};
-  const checked = script.criteria_decisions || {};
-  const required = script.required_accept_criteria || Object.keys(descriptions);
-  scriptCriteria.innerHTML = required.map(function (criterion) {
-    const id = "script-criterion-" + scriptCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-script-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  scriptCriteria.innerHTML = "";
 
   scriptNote.value = script.note || "";
   scriptPrev.disabled = scriptCursor <= 0;
   scriptNext.disabled = scriptCursor >= items.length - 1;
   scriptReject.disabled = false;
   scriptRework.disabled = false;
-  scriptAccept.disabled = false;
+  scriptAccept.disabled = true;
+  scriptAccept.title = "Checking section-review state…";
   scriptEditing = false;
+  loadScriptSectionReviewForCurrent();
 }
 
 function moveScriptCursor(delta) {
@@ -2030,6 +3197,10 @@ function moveScriptCursor(delta) {
   if (!current) return;
   scriptCursor = Math.max(0, Math.min(current.items.length - 1, scriptCursor + delta));
   scriptEditing = false;
+  scriptSectionTargetId = null;
+  scriptSectionRenderedTargetId = null;
+  latestScriptSectionSnapshot = null;
+  scriptSectionLoadToken += 1;
   renderScriptReview(latestScriptSnapshot, true);
 }
 
@@ -2044,6 +3215,21 @@ function collectScriptCriteria() {
 async function submitScriptDecision(decision) {
   const current = currentScriptItem();
   if (!current) return;
+  if (scriptSectionBusy) {
+    showToast("Wait for the current section action to finish.", true);
+    return;
+  }
+  if (
+    decision === "ACCEPT" &&
+    latestScriptSectionSnapshot &&
+    latestScriptSectionSnapshot.status === "READY_FOR_SECTION_REVIEW" &&
+    (latestScriptSectionSnapshot.targets || []).some(function (target) {
+      return target.decision !== "ACCEPTED" || target.locked !== true;
+    })
+  ) {
+    showToast("Finish the prepared section review before accepting the whole script.", true);
+    return;
+  }
   const script = current.item;
   try {
     const payload = await api("/api/script-gate", {
@@ -2052,7 +3238,7 @@ async function submitScriptDecision(decision) {
         concept_id: script.concept_id,
         format: script.format,
         decision: decision,
-        criteria: collectScriptCriteria(),
+        criteria: {},
         note: scriptNote.value
       })
     });
@@ -2061,12 +3247,19 @@ async function submitScriptDecision(decision) {
     const nextPending = pendingScriptIndex(payload.scripts || []);
     if (nextPending >= 0) scriptCursor = nextPending;
     renderScriptReview(payload, true);
+    const automaticTitleDirectionStarted = Boolean(
+      decision === "ACCEPT" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
     showToast(
-      decision === "ACCEPT"
-        ? humanizeToken(script.format || "Script") + " branch accepted."
-        : decision === "REWORK"
-          ? "Script sent for rework."
-          : "Script rejected.",
+      automaticTitleDirectionStarted
+        ? "Script Gate complete. Title-direction generation started automatically."
+        : decision === "ACCEPT"
+          ? humanizeToken(script.format || "Script") + " branch accepted."
+          : decision === "REWORK"
+            ? "Script sent for rework."
+            : "Script rejected.",
       false
     );
     await loadStatus();
@@ -2201,18 +3394,7 @@ function renderFormatReview(snapshot, force) {
       : '') +
     branches;
 
-  const descriptions = plan.criteria || {};
-  const checked = plan.criteria_decisions || {};
-  const required = plan.required_accept_criteria || Object.keys(descriptions);
-  formatCriteria.innerHTML = required.map(function (criterion) {
-    const id = "format-criterion-" + formatCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-format-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  formatCriteria.innerHTML = "";
 
   formatNote.value = plan.note || "";
   formatPrev.disabled = formatCursor <= 0;
@@ -2249,7 +3431,7 @@ async function submitFormatDecision(decision) {
       body: JSON.stringify({
         concept_id: plan.concept_id,
         decision: decision,
-        criteria: collectFormatCriteria(),
+        criteria: {},
         note: formatNote.value
       })
     });
@@ -2258,12 +3440,19 @@ async function submitFormatDecision(decision) {
     const nextPending = pendingFormatIndex(payload.plans || []);
     if (nextPending >= 0) formatCursor = nextPending;
     renderFormatReview(payload, true);
+    const automaticPerformanceStarted = Boolean(
+      decision === "ACCEPT" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
     showToast(
-      decision === "ACCEPT"
-        ? "Format plan accepted for production."
-        : decision === "REWORK"
-          ? "Format plan sent for rework."
-          : "Format plan rejected.",
+      automaticPerformanceStarted
+        ? "Format Gate complete. Voice Performance planning started automatically."
+        : decision === "ACCEPT"
+          ? "Format plan accepted for production."
+          : decision === "REWORK"
+            ? "Format plan sent for rework."
+            : "Format plan rejected.",
       false
     );
     await loadStatus();
@@ -2380,18 +3569,7 @@ function renderPerformanceReview(snapshot, force) {
       '</p></div>' +
     beats;
 
-  const descriptions = spec.criteria || {};
-  const checked = spec.criteria_decisions || {};
-  const required = spec.required_accept_criteria || Object.keys(descriptions);
-  performanceCriteria.innerHTML = required.map(function (criterion) {
-    const id = "performance-criterion-" + performanceCursor + "-" + criterion;
-    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
-      '<input type="checkbox" id="' + escapeHtml(id) +
-      '" data-performance-criterion="' + escapeHtml(criterion) + '"' +
-      (checked[criterion] ? " checked" : "") + '>' +
-      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
-      escapeHtml(descriptions[criterion] || "") + '</span></label>';
-  }).join("");
+  performanceCriteria.innerHTML = "";
 
   performanceNote.value = spec.note || "";
   performancePrev.disabled = performanceCursor <= 0;
@@ -2434,7 +3612,7 @@ async function submitPerformanceDecision(decision) {
         concept_id: spec.concept_id,
         format: spec.format,
         decision: decision,
-        criteria: collectPerformanceCriteria(),
+        criteria: {},
         note: performanceNote.value
       })
     });
@@ -2443,18 +3621,1511 @@ async function submitPerformanceDecision(decision) {
     const nextPending = pendingPerformanceIndex(payload.specs || []);
     if (nextPending >= 0) performanceCursor = nextPending;
     renderPerformanceReview(payload, true);
+    const automaticPreviewStarted = Boolean(
+      decision === "ACCEPT" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
     showToast(
-      decision === "ACCEPT"
-        ? "Voice performance accepted."
-        : decision === "REWORK"
-          ? "Voice performance sent for rework."
-          : "Voice performance rejected.",
+      automaticPreviewStarted
+        ? "Performance Gate complete. Free narration preview started automatically."
+        : decision === "ACCEPT"
+          ? "Voice performance accepted."
+          : decision === "REWORK"
+            ? "Voice performance sent for rework."
+            : "Voice performance rejected.",
       false
     );
     await loadStatus();
   } catch (error) {
     showToast(error.message, true);
   }
+}
+
+function currentPreviewItem() {
+  const items = (latestPreviewSnapshot && latestPreviewSnapshot.items) || [];
+  return items.find(function (item) { return !item.approved_for_paid_quote; }) || items[0] || null;
+}
+
+function narrationCurrentItem() {
+  const items=(latestNarrationPerformanceSnapshot&&latestNarrationPerformanceSnapshot.items)||[];
+  if(!items.length)return null;
+  const previewItems=(latestPreviewSnapshot&&latestPreviewSnapshot.items)||[];
+  const active=previewItems[0]||{};
+  return items.find(function(x){return x.concept_id===active.concept_id&&x.format===active.format;})||items[0];
+}
+function fillNarrationSegmentEditor() {
+  const item=narrationCurrentItem(); if(!item)return;
+  const segments=item.segments||[];
+  const currentId=narrationSegmentSelect.value||String((segments[0]||{}).segment_id||"");
+  narrationSegmentSelect.innerHTML=segments.map(function(s){return '<option value="'+escapeHtml(s.segment_id)+'">'+escapeHtml(s.segment_id)+' · v'+escapeHtml(s.performance_version||1)+'</option>';}).join("");
+  narrationSegmentSelect.value=segments.some(function(s){return String(s.segment_id)===currentId;})?currentId:String((segments[0]||{}).segment_id||"");
+  const s=segments.find(function(x){return String(x.segment_id)===narrationSegmentSelect.value;});if(!s)return;
+  const d=s.delivery||{};
+  narrationLockedWords.innerHTML='<h4>LOCKED APPROVED WORDS</h4><p>'+escapeHtml(s.immutable_narration||"")+'</p>';
+  narrationCreativeInstruction.value=s.creative_instruction||"";
+  narrationEmotion.value=d.emotion||"";narrationIntensity.value=d.intensity||"";
+  narrationSpeed.value=d.speed||1;narrationPauseBefore.value=d.pause_before_ms||0;narrationPauseAfter.value=d.pause_after_ms||0;
+  narrationEmphasis.value=(d.emphasis_terms||[]).join(", ");
+  narrationSaveRevision.dataset.manifestFile=item.manifest_file||"";narrationSaveRevision.dataset.segmentId=s.segment_id||"";
+}
+async function saveNarrationSegmentRevision(){
+ try{
+  await api("/api/narration-performance-review",{method:"POST",body:JSON.stringify({
+   manifest_file:narrationSaveRevision.dataset.manifestFile,segment_id:narrationSaveRevision.dataset.segmentId,
+   instruction:narrationCreativeInstruction.value,delivery_changes:{emotion:narrationEmotion.value,
+    intensity:Number(narrationIntensity.value),speed:Number(narrationSpeed.value),pause_before_ms:Number(narrationPauseBefore.value),
+    pause_after_ms:Number(narrationPauseAfter.value),emphasis_terms:narrationEmphasis.value.split(",").map(function(x){return x.trim();}).filter(Boolean)}
+  })});
+  latestNarrationPerformanceSnapshot=await api("/api/narration-performance-review");fillNarrationSegmentEditor();
+  showToast("Narration segment revised. Re-render the free preview before approval.",false);
+ }catch(error){showToast(error.message,true);}
+}
+
+function renderPreviewReview(snapshot) {
+  latestPreviewSnapshot = snapshot || {};
+  const items = (snapshot && snapshot.items) || [];
+  if (!items.length) {
+    previewReviewPanel.hidden = true;
+    return;
+  }
+  previewReviewPanel.hidden = false;
+  const item = currentPreviewItem();
+  if (!item) return;
+  previewReviewTitle.textContent = snapshot.complete
+    ? "Free audio prototype approved"
+    : "Listen before spending";
+  previewReviewSummary.textContent =
+    "This is a zero-cost draft for judging story, tone, spacing and sound design. Paid narration remains locked.";
+  previewReviewStatus.textContent = item.decision || "PENDING";
+  previewReviewStatus.className =
+    "status-chip " + (item.approved_for_paid_quote ? "success" : "running");
+  const audio = item.audio_ready
+    ? '<audio controls preload="metadata" style="width:100%" src="/api/narration-preview-audio?concept_id=' +
+      encodeURIComponent(item.concept_id || "") + '&format=' +
+      encodeURIComponent(item.format || "") + '"></audio>'
+    : '<p><strong>Audio not ready.</strong> Run the free local preview renderer first.</p>';
+  previewDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>ZERO-COST PROTOTYPE</h4>' +
+    '<h3>' + escapeHtml(item.concept_id || "Narration preview") + '</h3>' +
+    '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(item.format || "")) + '</p>' +
+    audio +
+    '<p class="muted">Music/SFX are draft editorial cues using local/free-compatible assets. Approval unlocks quote preparation only; it does not spend money.</p></div>';
+  previewApprove.disabled = !item.audio_ready || Boolean(item.approved_for_paid_quote);
+  previewScript.disabled = Boolean(item.approved_for_paid_quote);
+  previewPerformance.disabled = Boolean(item.approved_for_paid_quote);
+  previewSound.disabled = Boolean(item.approved_for_paid_quote);
+  if (snapshot.complete) previewNote.value = "";
+}
+
+async function submitPreviewDecision(decision) {
+  const item = currentPreviewItem();
+  if (!item) return;
+  try {
+    const payload = await api("/api/narration-preview-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        format: item.format,
+        decision: decision,
+        note: previewNote.value
+      })
+    });
+    renderPreviewReview(payload);
+    const automaticQuotePreparation = Boolean(
+      decision === "APPROVE_FINAL" &&
+      payload.automation_job &&
+      payload.automation_job.action_id === "auto_continue"
+    );
+    showToast(
+      automaticQuotePreparation
+        ? "Free prototype approved. Sound brief and narration cost preparation started automatically."
+        : decision === "APPROVE_FINAL"
+          ? "Free prototype approved. Narration quote preparation is unlocked."
+          : "Prototype sent back for " + humanizeToken(decision).toLowerCase() + ".",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function narrationSpendItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function currentNarrationSpendItem() {
+  const items = narrationSpendItems(latestNarrationSpendSnapshot || {});
+  if (!items.length) return null;
+  narrationSpendCursor = Math.max(
+    0,
+    Math.min(narrationSpendCursor, items.length - 1)
+  );
+  const firstPending = items.findIndex(function (item) {
+    return (item.decision || "PENDING") === "PENDING";
+  });
+  if (firstPending >= 0 && (items[narrationSpendCursor].decision || "PENDING") !== "PENDING") {
+    narrationSpendCursor = firstPending;
+  }
+  return items[narrationSpendCursor] || null;
+}
+
+function renderNarrationSpendReview(snapshot) {
+  latestNarrationSpendSnapshot = snapshot || {};
+  const items = narrationSpendItems(snapshot);
+  narrationSpendReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  const item = currentNarrationSpendItem();
+  if (!item) return;
+  const decision = item.decision || "PENDING";
+  narrationSpendReviewTitle.textContent =
+    "Narration spend — " + humanizeToken(item.format || "");
+  narrationSpendReviewSummary.textContent =
+    (narrationSpendCursor + 1) + " of " + items.length +
+    " branch" + (items.length === 1 ? "" : "es") +
+    ". Accept authorizes up to the displayed worst-case cost; it does not itself call the provider.";
+  narrationSpendReviewStatus.textContent = decision;
+  narrationSpendReviewStatus.className =
+    "status-chip " + (decision === "ACCEPT" ? "success" : decision === "PENDING" ? "running" : "failed");
+
+  const currency = item.currency || "USD";
+  const initial = Number(item.initial_estimate_usd);
+  const worst = Number(item.worst_case_estimate_usd);
+  const quote = item.provider_quote || {};
+  narrationSpendDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>CURRENT PROVIDER QUOTE</h4>' +
+    '<h3>' + escapeHtml(item.provider || "Narration provider") + '</h3>' +
+    '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Initial estimate:</strong> ' + escapeHtml(currency) + ' ' +
+      escapeHtml(Number.isFinite(initial) ? initial.toFixed(2) : "—") +
+    '<br><strong>Worst-case authorization:</strong> ' + escapeHtml(currency) + ' ' +
+      escapeHtml(Number.isFinite(worst) ? worst.toFixed(2) : "—") +
+    '<br><strong>Segments:</strong> ' + escapeHtml(item.segment_count || 0) +
+    '<br><strong>Max attempts/segment:</strong> ' + escapeHtml(item.max_attempts_per_segment || 0) +
+    '<br><strong>Quote reference:</strong> ' + escapeHtml(quote.quote_reference || "—") +
+    '</p><p class="muted">The worst-case figure is the ceiling you are authorizing for this current quote. A changed request or quote invalidates this decision.</p></div>';
+
+  const descriptions = item.criteria || {};
+  const selected = item.criteria_decisions || {};
+  narrationSpendCriteria.innerHTML = (item.required_accept_criteria || []).map(function (name) {
+    return '<label class="criterion-row"><input type="checkbox" data-narration-spend-criterion="' +
+      escapeHtml(name) + '"' + (selected[name] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(name)) + '</strong><small>' +
+      escapeHtml(descriptions[name] || "") + '</small></span></label>';
+  }).join("");
+
+  narrationSpendNote.value = item.note || "";
+  narrationSpendPrev.disabled = narrationSpendCursor <= 0;
+  narrationSpendNext.disabled = narrationSpendCursor >= items.length - 1;
+  narrationSpendReject.disabled = decision === "ACCEPT";
+  narrationSpendRework.disabled = decision === "ACCEPT";
+  narrationSpendAccept.disabled = decision === "ACCEPT";
+}
+
+function moveNarrationSpendCursor(delta) {
+  const items = narrationSpendItems(latestNarrationSpendSnapshot || {});
+  if (!items.length) return;
+  narrationSpendCursor = Math.max(
+    0,
+    Math.min(items.length - 1, narrationSpendCursor + delta)
+  );
+  renderNarrationSpendReview(latestNarrationSpendSnapshot);
+}
+
+function collectNarrationSpendCriteria() {
+  const values = {};
+  narrationSpendCriteria
+    .querySelectorAll("[data-narration-spend-criterion]")
+    .forEach(function (input) {
+      values[input.dataset.narrationSpendCriterion] = Boolean(input.checked);
+    });
+  return values;
+}
+
+async function submitNarrationSpendDecision(decision) {
+  const item = currentNarrationSpendItem();
+  if (!item) return;
+  const criteria = collectNarrationSpendCriteria();
+  if (decision === "ACCEPT") {
+    const worst = Number(item.worst_case_estimate_usd);
+    const currency = item.currency || "USD";
+    if (!(item.required_accept_criteria || []).every(function (name) { return criteria[name] === true; })) {
+      showToast("Confirm every spend criterion before accepting.", true);
+      return;
+    }
+    if (!confirm(
+      "Authorize paid narration up to " + currency + " " +
+      (Number.isFinite(worst) ? worst.toFixed(2) : "the displayed worst-case amount") +
+      " for this exact current quote?"
+    )) return;
+  }
+
+  try {
+    const payload = await api("/api/narration-spend-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        format: item.format,
+        decision: decision,
+        criteria: criteria,
+        note: narrationSpendNote.value
+      })
+    });
+    latestNarrationSpendSnapshot = payload;
+    const pendingIndex = narrationSpendItems(payload).findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (pendingIndex >= 0) narrationSpendCursor = pendingIndex;
+    renderNarrationSpendReview(payload);
+    showToast(
+      decision === "ACCEPT"
+        ? "Narration spend authorized for this current quote. Register the provider audio return next; this gate did not call the provider."
+        : decision === "REWORK"
+          ? "Narration quote/setup sent for rework."
+          : "Narration spend rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function narrationReturnItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function currentNarrationReturnItem() {
+  const items = narrationReturnItems(latestNarrationReturnSnapshot || {});
+  if (!items.length) return null;
+  narrationReturnCursor = Math.max(
+    0,
+    Math.min(narrationReturnCursor, items.length - 1)
+  );
+  return items[narrationReturnCursor] || null;
+}
+
+function renderNarrationReturn(snapshot, narrationState, workflow) {
+  latestNarrationReturnSnapshot = snapshot || {};
+  const items = narrationReturnItems(snapshot);
+  const qc = (narrationState && narrationState.audio_qc) || {};
+  const audioReady = Boolean(narrationState && narrationState.audio_ready);
+  narrationReturnPanel.hidden = items.length === 0 || audioReady;
+  if (!items.length || audioReady) return;
+
+  const item = currentNarrationReturnItem();
+  if (!item) return;
+  const qcFailed = qc.status === "FAIL";
+  narrationReturnTitle.textContent =
+    qcFailed ? "Replace narration audio that failed QC" :
+    "Register final narration — " + humanizeToken(item.format || "");
+  narrationReturnSummary.textContent =
+    (narrationReturnCursor + 1) + " of " + items.length +
+    " branch" + (items.length === 1 ? "" : "es") +
+    ". Local Audio QC runs after a complete current return is registered.";
+  narrationReturnStatus.textContent =
+    qcFailed ? "QC FAILED — REIMPORT" :
+    item.current_result ? "REGISTERED" : "RETURN REQUIRED";
+  narrationReturnStatus.className =
+    "status-chip " + (item.current_result && !qcFailed ? "success" : "running");
+
+  const ceiling = Number(item.worst_case_estimate_usd);
+  narrationReturnDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>AUTHORIZED PROVIDER RETURN</h4>' +
+    '<h3>' + escapeHtml(item.provider || "Narration provider") + '</h3>' +
+    '<p><strong>Branch:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Approved ceiling:</strong> ' + escapeHtml(item.currency || "USD") + ' ' +
+    escapeHtml(Number.isFinite(ceiling) ? ceiling.toFixed(2) : "—") +
+    '<br><strong>Render request:</strong> ' + escapeHtml(item.render_request || "—") +
+    '</p><p class="muted">Actual cumulative cost cannot exceed the approved ceiling. Imported files are copied into managed project storage and hash-bound to this authorization.</p></div>';
+
+  narrationProviderJobId.value = item.provider_job_id || "";
+  narrationActualCost.value =
+    item.actual_cost_usd == null ? "" : String(item.actual_cost_usd);
+  narrationReturnSegments.innerHTML = (item.segments || []).map(function (segment, index) {
+    return '<div class="criterion-row" data-narration-return-row data-segment-id="' +
+      escapeHtml(segment.segment_id || "") + '">' +
+      '<span><strong>' + escapeHtml(segment.segment_id || ("Segment " + (index + 1))) +
+      '</strong><small>' + escapeHtml(segment.purpose || "") +
+      ' · target ≈ ' + escapeHtml(segment.expected_duration_seconds == null ? "—" : segment.expected_duration_seconds) +
+      's · max attempts ' + escapeHtml(segment.max_attempts || "—") + '</small></span>' +
+      '<label>Attempt<input data-return-attempt type="number" min="1" max="' +
+      escapeHtml(segment.max_attempts || 1) + '" value="' +
+      escapeHtml(segment.attempt || 1) + '"></label>' +
+      '<label>Local audio path<input data-return-audio type="text" value="' +
+      escapeHtml(segment.audio_file || "") + '" placeholder="C:/path/segment.wav"></label>' +
+      '</div>';
+  }).join("");
+
+  narrationReturnPrev.disabled = narrationReturnCursor <= 0;
+  narrationReturnNext.disabled = narrationReturnCursor >= items.length - 1;
+  narrationReturnRegister.disabled =
+    Boolean(item.current_result) && !qcFailed &&
+    (!workflow || workflow.state !== "WAITING_NARRATION_RENDER_RETURN");
+}
+
+function moveNarrationReturnCursor(delta) {
+  const items = narrationReturnItems(latestNarrationReturnSnapshot || {});
+  if (!items.length) return;
+  narrationReturnCursor = Math.max(
+    0,
+    Math.min(items.length - 1, narrationReturnCursor + delta)
+  );
+  renderNarrationReturn(
+    latestNarrationReturnSnapshot,
+    (latestStatus && latestStatus.narration) || {},
+    (latestStatus && latestStatus.workflow) || {}
+  );
+}
+
+async function submitNarrationReturn() {
+  const item = currentNarrationReturnItem();
+  if (!item) return;
+  if (!narrationProviderJobId.value.trim()) {
+    showToast("Provider job / receipt reference is required.", true);
+    return;
+  }
+  if (!narrationActualCost.value.trim()) {
+    showToast("Enter the actual cumulative narration cost.", true);
+    return;
+  }
+  const rows = narrationReturnSegments.querySelectorAll("[data-narration-return-row]");
+  const segments = Array.from(rows).map(function (row) {
+    return {
+      segment_id: row.dataset.segmentId,
+      attempt: Number(row.querySelector("[data-return-attempt]").value),
+      audio_file: row.querySelector("[data-return-audio]").value
+    };
+  });
+
+  try {
+    const payload = await api("/api/narration-render-return", {
+      method: "POST",
+      body: JSON.stringify({
+        concept_id: item.concept_id,
+        format: item.format,
+        provider_job_id: narrationProviderJobId.value,
+        actual_cost_usd: Number(narrationActualCost.value),
+        segments: segments
+      })
+    });
+    latestNarrationReturnSnapshot = payload.snapshot || {};
+    renderNarrationReturn(
+      latestNarrationReturnSnapshot,
+      (latestStatus && latestStatus.narration) || {},
+      (latestStatus && latestStatus.workflow) || {}
+    );
+    showToast(
+      payload.automation_job && payload.automation_job.action_id === "auto_continue"
+        ? "Final narration registered. Local Audio QC started automatically."
+        : "Final narration registered. Local Audio QC is ready.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function visualReviewItems() {
+  const packets = (latestVisualCandidateSnapshot && latestVisualCandidateSnapshot.packets) || [];
+  const items = [];
+  packets.forEach(function (packet) {
+    (packet.shots || []).forEach(function (shot) { items.push({ packet: packet, shot: shot }); });
+  });
+  return items;
+}
+
+function renderVisualCandidateReview(snapshot) {
+  latestVisualCandidateSnapshot = snapshot || {};
+  const items = visualReviewItems();
+  visualCandidateReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+  visualShotCursor = Math.max(0, Math.min(visualShotCursor, items.length - 1));
+  const current = items[visualShotCursor], shot = current.shot, packet = current.packet;
+  const decision = (packet.decisions || {})[shot.shot_id];
+  visualCandidateReviewTitle.textContent = "Choose visual — " + (shot.shot_id || "");
+  visualCandidateReviewSummary.textContent = (visualShotCursor + 1) + " of " + items.length + " storyboard shots";
+  const staleShot = shot.storyboard_current === false;
+  visualCandidateReviewStatus.textContent = staleShot
+    ? "RE-SEARCH REQUIRED"
+    : (decision ? humanizeToken(decision.status || decision.action) : "PENDING");
+  visualCandidateReviewStatus.className =
+    "status-chip " + (staleShot ? "failed" : (decision ? "success" : "running"));
+  visualShotDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>STORYBOARD TARGET</h4><h3>' + escapeHtml(shot.shot_id || "") + '</h3>' +
+    '<p><strong>Search gap:</strong> ' + (shot.search_gap ? "Yes" : "No") + '</p>' +
+    '<p><strong>Premium candidate:</strong> ' + (shot.premium_generation_candidate ? "Yes — only if existing visuals fail" : "No") + '</p>' +
+    '<p class="muted">Select the visual that best serves the planned shot. Creator excerpts remain subject to the separate rights/context gate.</p></div>';
+  const candidates = shot.candidates || [];
+  visualCandidateCards.innerHTML = staleShot
+    ? '<p class="empty-state"><strong>Storyboard changed.</strong> These candidates are stale. Run Continue Automatically to re-search this shot before making a visual decision.</p>'
+    : candidates.length ? candidates.map(function (candidate) {
+    const thumb = candidate.thumbnail_url
+      ? '<img class="visual-candidate-thumb" src="' + escapeHtml(candidate.thumbnail_url) + '" alt="">'
+      : '<div class="visual-candidate-placeholder">No preview</div>';
+    const review = candidate.state === "HUMAN_REVIEW_REQUIRED"
+      ? '<span class="status-chip running">RIGHTS REVIEW</span>'
+      : candidate.state === "ELIGIBLE"
+        ? '<span class="status-chip success">ELIGIBLE</span>'
+        : '<span class="status-chip failed">BLOCKED</span>';
+    const source = candidate.source_url
+      ? '<a class="external-button" href="' + escapeHtml(candidate.source_url) + '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
+      : '';
+    const choose = candidate.state !== "BLOCKED"
+      ? '<button class="gate-button approve visual-select-candidate" data-candidate-id="' + escapeHtml(candidate.candidate_id) + '">Select</button>'
+      : '';
+    return '<article class="visual-candidate-card">' + thumb + '<div><strong>' + escapeHtml(candidate.title || candidate.candidate_id) +
+      '</strong><p>' + escapeHtml(candidate.creator || "Unknown creator") + ' · ' + escapeHtml(candidate.source_tier || "") +
+      '</p><p>' + escapeHtml(candidate.license || "Licence requires review") + '</p><div class="visual-candidate-actions">' +
+      review + source + choose + '</div></div></article>';
+  }).join("") : '<p class="empty-state">No usable existing visual was found. Keep this as a gap for the next sourcing/generation stage.</p>';
+  visualCandidateCards.querySelectorAll(".visual-select-candidate").forEach(function (button) {
+    button.addEventListener("click", function () { submitVisualCandidateDecision("SELECT", button.dataset.candidateId); });
+  });
+  visualShotPrev.disabled = visualShotCursor === 0;
+  visualShotNext.disabled = visualShotCursor >= items.length - 1;
+  visualRejectAll.disabled = staleShot;
+  visualNeedsBetter.disabled = staleShot;
+  visualCandidateNote.value = decision && decision.note ? decision.note : "";
+  const boards = (latestStoryboardSnapshot && latestStoryboardSnapshot.items) || [];
+  const board = boards.find(function (x) { return x.concept_id === packet.concept_id && x.format === packet.format; });
+  const card = board && (board.cards || []).find(function (x) { return x.shot_id === shot.shot_id; });
+  if (card) {
+    const cine = card.cinematic_direction || {};
+    storyboardCreativeInstruction.value = card.creative_instruction || "";
+    storyboardDesiredVisual.value = card.desired_visual || "";
+    storyboardSearchTerms.value = (card.search_terms || []).join(", ");
+    storyboardFraming.value = cine.framing || "";
+    storyboardCameraAngle.value = cine.camera_angle || "";
+    storyboardCameraMovement.value = cine.camera_movement || "";
+    storyboardLens.value = cine.lens_feel || "";
+    storyboardLighting.value = cine.lighting || "";
+    storyboardTransition.value = cine.transition || "";
+    storyboardSaveRevision.dataset.storyboardFile = board.storyboard_file || "";
+    storyboardSaveRevision.dataset.shotId = shot.shot_id || "";
+  }
+}
+
+async function saveStoryboardRevision() {
+  const file = storyboardSaveRevision.dataset.storyboardFile, shotId = storyboardSaveRevision.dataset.shotId;
+  if (!file || !shotId) return;
+  try {
+    await api("/api/storyboard-review", {method:"POST", body:JSON.stringify({
+      storyboard_file:file, shot_id:shotId, instruction:storyboardCreativeInstruction.value,
+      changes:{
+        desired_visual:storyboardDesiredVisual.value,
+        search_terms:storyboardSearchTerms.value.split(",").map(function(x){return x.trim();}).filter(Boolean),
+        cinematic_direction:{framing:storyboardFraming.value,camera_angle:storyboardCameraAngle.value,
+          camera_movement:storyboardCameraMovement.value,lens_feel:storyboardLens.value,
+          lighting:storyboardLighting.value,transition:storyboardTransition.value}
+      }
+    })});
+    latestStoryboardSnapshot = await api("/api/storyboard-review");
+    showToast("Shot revised. Its old visual approvals are now stale; re-search this shot.", false);
+    renderVisualCandidateReview(latestVisualCandidateSnapshot);
+  } catch(error) { showToast(error.message,true); }
+}
+
+async function submitVisualCandidateDecision(action, candidateId) {
+  const items = visualReviewItems(), current = items[visualShotCursor];
+  if (!current) return;
+  try {
+    const saved = await api("/api/visual-candidate-review", { method:"POST", body:JSON.stringify({
+      result_file: current.packet.result_file, shot_id: current.shot.shot_id,
+      action: action, candidate_id: candidateId || null, note: visualCandidateNote.value
+    })});
+    const refreshed = await api("/api/visual-candidate-review");
+    renderVisualCandidateReview(refreshed);
+    const savedDecision =
+      ((saved && saved.decisions) || {})[current.shot.shot_id] || {};
+    showToast(
+      action === "SELECT"
+        ? savedDecision.status === "SELECTED_PENDING_RIGHTS_CONTEXT_GATE"
+          ? "Visual selected. Rights/context review is required before reuse."
+          : "Visual selected with verified reuse rights."
+        : "Shot preserved as a visual gap.",
+      false
+    );
+    await loadStatus();
+  } catch (error) { showToast(error.message, true); }
+}
+
+function visualRightsItems(snapshot) {
+  const items = [];
+  (snapshot && snapshot.items || []).forEach(function (packet) {
+    (packet.pending || []).forEach(function (entry) {
+      items.push({ packet: packet, entry: entry });
+    });
+  });
+  return items;
+}
+
+function renderVisualRightsReview(snapshot) {
+  latestVisualRightsSnapshot = snapshot || {};
+  const items = visualRightsItems(latestVisualRightsSnapshot);
+  visualRightsReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  visualRightsCursor = Math.max(
+    0,
+    Math.min(visualRightsCursor, items.length - 1)
+  );
+  const current = items[visualRightsCursor];
+  const packet = current.packet;
+  const entry = current.entry || {};
+  const candidate = entry.candidate || {};
+  const decision = entry.decision || null;
+
+  visualRightsReviewTitle.textContent =
+    "Creator footage — " + (entry.shot_id || "");
+  visualRightsReviewSummary.textContent =
+    (visualRightsCursor + 1) + " of " + items.length +
+    " rights/context decisions · " +
+    Number(snapshot.decided || 0) + " decided";
+  visualRightsReviewStatus.textContent = decision
+    ? humanizeToken(decision.decision || "DECIDED")
+    : "PENDING";
+  visualRightsReviewStatus.className =
+    "status-chip " +
+    (decision && decision.approved_for_rough_cut
+      ? "success"
+      : decision
+        ? "failed"
+        : "running");
+
+  const source = candidate.source_url
+    ? '<a class="external-button" href="' +
+      escapeHtml(candidate.source_url) +
+      '" target="_blank" rel="noopener noreferrer">Open source ↗</a>'
+    : "";
+  visualRightsDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>SELECTED CREATOR / EDITORIAL FOOTAGE</h4>' +
+    '<h3>' + escapeHtml(candidate.title || candidate.candidate_id || entry.shot_id || "") + '</h3>' +
+    '<p><strong>Shot:</strong> ' + escapeHtml(entry.shot_id || "") +
+    '<br><strong>Creator:</strong> ' + escapeHtml(candidate.creator || "Unknown") +
+    '<br><strong>Source tier:</strong> ' + escapeHtml(candidate.source_tier || "") +
+    '<br><strong>Licence:</strong> ' + escapeHtml(candidate.license || "Requires human context review") +
+    '</p>' + source +
+    '<p class="muted">Approval records the intended editorial transformation/context. It does not make a legal fair-use determination.</p></div>';
+
+  visualRightsPurpose.value =
+    decision && decision.transformative_purpose
+      ? decision.transformative_purpose
+      : "";
+  visualRightsNote.value =
+    decision && decision.context_note ? decision.context_note : "";
+  visualRightsPrev.disabled = visualRightsCursor === 0;
+  visualRightsNext.disabled = visualRightsCursor >= items.length - 1;
+}
+
+async function submitVisualRightsDecision(decision) {
+  const items = visualRightsItems(latestVisualRightsSnapshot || {});
+  const current = items[visualRightsCursor];
+  if (!current) return;
+  try {
+    await api("/api/visual-rights-review", {
+      method: "POST",
+      body: JSON.stringify({
+        candidate_review_file: current.packet.candidate_review_file,
+        shot_id: current.entry.shot_id,
+        decision: decision,
+        transformative_purpose: visualRightsPurpose.value,
+        context_note: visualRightsNote.value
+      })
+    });
+    const refreshed = await api("/api/visual-rights-review");
+    latestVisualRightsSnapshot = refreshed;
+    const refreshedItems = visualRightsItems(refreshed);
+    const nextPending = refreshedItems.findIndex(function (item) {
+      return !item.entry.decision;
+    });
+    if (nextPending >= 0) visualRightsCursor = nextPending;
+    renderVisualRightsReview(refreshed);
+    showToast(
+      decision === "APPROVE_CONTEXT_USE"
+        ? "Context use approved for this selected footage."
+        : "Creator footage rejected for this shot.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function managedVisualKey(item) {
+  return [
+    String((item && item.concept_id) || ""),
+    String((item && item.format) || ""),
+    String((item && item.shot_id) || "")
+  ].join("::");
+}
+
+function managedVisualPendingItems(acquisition, assets) {
+  const registered = new Set(
+    (((assets && assets.items) || [])).map(managedVisualKey)
+  );
+  return (((acquisition && acquisition.manual_items) || [])).filter(
+    function (item) {
+      return !registered.has(managedVisualKey(item));
+    }
+  );
+}
+
+function renderManagedVisualImport(acquisition, assets) {
+  latestManagedVisualAcquisition = acquisition || {};
+  latestManagedVisualAssets = assets || {};
+  const items = managedVisualPendingItems(
+    latestManagedVisualAcquisition,
+    latestManagedVisualAssets
+  );
+
+  managedVisualImportPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  managedVisualCursor = Math.max(
+    0,
+    Math.min(managedVisualCursor, items.length - 1)
+  );
+  const item = items[managedVisualCursor] || {};
+
+  managedVisualImportTitle.textContent =
+    "Supply approved visual — " + (item.shot_id || "");
+  managedVisualImportSummary.textContent =
+    (managedVisualCursor + 1) + " of " + items.length +
+    " local assets required";
+  managedVisualImportStatus.textContent = "LOCAL FILE REQUIRED";
+  managedVisualImportStatus.className = "status-chip running";
+
+  managedVisualImportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>APPROVED EXISTING VISUAL</h4>' +
+    '<h3>' + escapeHtml(item.shot_id || "") + '</h3>' +
+    '<p><strong>Concept:</strong> ' + escapeHtml(item.concept_id || "") +
+    '<br><strong>Format:</strong> ' +
+    escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Candidate:</strong> ' +
+    escapeHtml(item.candidate_id || "") +
+    '<br><strong>Creator:</strong> ' + escapeHtml(item.creator || "—") +
+    '<br><strong>License/context:</strong> ' +
+    escapeHtml(item.license || "Human context approval required") +
+    '<br><strong>Source:</strong> ' +
+    escapeHtml(item.source_url || "") +
+    '</p><p class="muted">' +
+    escapeHtml(humanizeToken(item.reason || "")) +
+    '</p></div>';
+
+  managedVisualAssetPath.value = "";
+  managedVisualNote.value = "";
+  managedVisualPrev.disabled = managedVisualCursor === 0;
+  managedVisualNext.disabled = managedVisualCursor >= items.length - 1;
+}
+
+async function registerManagedVisualAsset() {
+  const items = managedVisualPendingItems(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+  const item = items[managedVisualCursor];
+  if (!item) return;
+
+  const assetPath = managedVisualAssetPath.value.trim();
+  if (!assetPath) {
+    showToast("Enter the local approved visual file path.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/managed-visual-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        candidate_review_file: item.candidate_review_file,
+        shot_id: item.shot_id,
+        asset_file: assetPath,
+        note: managedVisualNote.value
+      })
+    });
+    latestManagedVisualAssets = payload.managed_visual_assets || {};
+    const remaining = managedVisualPendingItems(
+      latestManagedVisualAcquisition || {},
+      latestManagedVisualAssets
+    );
+    if (managedVisualCursor >= remaining.length) {
+      managedVisualCursor = Math.max(0, remaining.length - 1);
+    }
+    renderManagedVisualImport(
+      latestManagedVisualAcquisition || {},
+      latestManagedVisualAssets
+    );
+    showToast(
+      payload.automation_job && payload.automation_job.action_id === "auto_continue"
+        ? "Approved visual registered. The rough cut is refreshing automatically."
+        : "Approved visual registered. The rough cut can now refresh with the local asset.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function visualRoughCutItems(snapshot) {
+  return (snapshot && snapshot.items || []).filter(function (item) {
+    return item && item.review_current !== false;
+  });
+}
+
+function renderVisualRoughCutReview(snapshot) {
+  latestVisualRoughCutSnapshot = snapshot || {};
+  const items = visualRoughCutItems(latestVisualRoughCutSnapshot);
+  visualRoughCutReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  visualRoughCutCursor = Math.max(
+    0,
+    Math.min(visualRoughCutCursor, items.length - 1)
+  );
+  const item = items[visualRoughCutCursor];
+  const decision = item.decision || null;
+  const summary = item.summary || {};
+  const scenes = item.scenes || [];
+
+  visualRoughCutReviewTitle.textContent =
+    "Rough cut — " + humanizeToken(item.format || "");
+  visualRoughCutReviewSummary.textContent =
+    (visualRoughCutCursor + 1) + " of " + items.length +
+    " branches · " + scenes.length + " scenes · " +
+    Number(summary.placeholders || summary.unresolved_visual_gaps || 0) +
+    " unresolved visual gaps";
+  visualRoughCutReviewStatus.textContent = decision
+    ? humanizeToken(decision.decision || "DECIDED")
+    : "PENDING";
+  visualRoughCutReviewStatus.className =
+    "status-chip " +
+    (decision && decision.approved_for_gap_planning
+      ? "success"
+      : decision
+        ? "running"
+        : "running");
+
+  const sceneHtml = scenes.map(function (scene) {
+    const assignment = scene.visual_assignment || {};
+    return '<div class="concept-detail-card">' +
+      '<h4>' + escapeHtml(scene.shot_id || scene.scene_id || "SHOT") + '</h4>' +
+      '<p><strong>Purpose:</strong> ' + escapeHtml(scene.story_purpose || "") +
+      '<br><strong>Visual:</strong> ' + escapeHtml(scene.desired_visual || "") +
+      '<br><strong>Assignment:</strong> ' + escapeHtml(humanizeToken(assignment.status || "PLACEHOLDER")) +
+      (assignment.reason
+        ? '<br><strong>Reason:</strong> ' + escapeHtml(humanizeToken(assignment.reason))
+        : "") +
+      '</p></div>';
+  }).join("");
+
+  visualRoughCutDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>BRANCH</h4><h3>' +
+    escapeHtml(item.concept_id || "") + ' · ' +
+    escapeHtml(humanizeToken(item.format || "")) +
+    '</h3><p class="muted">This is the structural rough cut. Missing visuals may remain as placeholders; paid generation is still locked.</p></div>' +
+    sceneHtml;
+
+  visualRoughCutShotSelect.innerHTML = scenes.map(function (scene) {
+    const shotId = String(scene.shot_id || scene.scene_id || "");
+    return '<option value="' + escapeHtml(shotId) + '">' +
+      escapeHtml(shotId || "Unnamed shot") + '</option>';
+  }).join("");
+  visualRoughCutShotSelect.disabled = scenes.length === 0;
+
+  visualRoughCutNote.value =
+    decision && decision.note ? decision.note : "";
+  visualRoughCutPrev.disabled = visualRoughCutCursor === 0;
+  visualRoughCutNext.disabled = visualRoughCutCursor >= items.length - 1;
+}
+
+async function submitVisualRoughCutDecision(decision) {
+  const items = visualRoughCutItems(latestVisualRoughCutSnapshot || {});
+  const item = items[visualRoughCutCursor];
+  if (!item) return;
+  try {
+    await api("/api/visual-rough-cut-review", {
+      method: "POST",
+      body: JSON.stringify({
+        rough_cut_file: item.rough_cut_file,
+        shot_id: visualRoughCutShotSelect.value || null,
+        decision: decision,
+        note: visualRoughCutNote.value
+      })
+    });
+    const refreshed = await api("/api/visual-rough-cut-review");
+    latestVisualRoughCutSnapshot = refreshed;
+    const refreshedItems = visualRoughCutItems(refreshed);
+    const nextPending = refreshedItems.findIndex(function (value) {
+      return !value.decision;
+    });
+    if (nextPending >= 0) visualRoughCutCursor = nextPending;
+    renderVisualRoughCutReview(refreshed);
+    showToast(
+      decision === "APPROVE_WITH_GAPS"
+        ? "Rough cut approved. Unresolved gaps can now be planned."
+        : "Rough cut sent back for " +
+          humanizeToken(decision).replace("Rework ", "").toLowerCase() +
+          " rework.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function visualSpendItems(snapshot) {
+  const items = [];
+  (snapshot && snapshot.items || []).forEach(function (packet) {
+    (packet.hero_candidates || []).forEach(function (gap) {
+      items.push({ packet: packet, gap: gap });
+    });
+  });
+  return items;
+}
+
+function renderVisualSpendReview(snapshot) {
+  latestVisualSpendSnapshot = snapshot || {};
+  const items = visualSpendItems(latestVisualSpendSnapshot);
+  visualSpendReviewPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  visualSpendCursor = Math.max(
+    0,
+    Math.min(visualSpendCursor, items.length - 1)
+  );
+  const current = items[visualSpendCursor];
+  const packet = current.packet;
+  const gap = current.gap || {};
+  const decision = (packet.decisions || {})[gap.shot_id] || null;
+  const score = gap.visual_value_score || {};
+
+  visualSpendReviewTitle.textContent =
+    "Premium gap — " + (gap.shot_id || "");
+  visualSpendReviewSummary.textContent =
+    (visualSpendCursor + 1) + " of " + items.length +
+    " premium candidates · authorized max so far $" +
+    Number(snapshot.authorized_max_total_usd || 0).toFixed(2) +
+    " " + String(snapshot.currency || "USD");
+  visualSpendReviewStatus.textContent = decision
+    ? humanizeToken(decision.decision || "DECIDED")
+    : "PENDING";
+  visualSpendReviewStatus.className =
+    "status-chip " +
+    (decision && decision.paid_generation_authorized
+      ? "success"
+      : decision
+        ? "neutral"
+        : "running");
+
+  visualSpendDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>LAST-RESORT GENERATION CANDIDATE</h4>' +
+    "<h3>" + escapeHtml(gap.shot_id || "") + "</h3>" +
+    "<p><strong>Desired visual:</strong> " + escapeHtml(gap.desired_visual || "") +
+    "<br><strong>Story purpose:</strong> " + escapeHtml(gap.story_purpose || "") +
+    "<br><strong>Visual value score:</strong> " + escapeHtml(score.total == null ? "—" : score.total) +
+    "<br><strong>Resolution class:</strong> " + escapeHtml(humanizeToken(gap.resolution_class || "")) +
+    '</p><p class="muted">Per-shot hard cap: $' +
+    Number(snapshot.per_shot_hard_cap_usd || 0).toFixed(2) +
+    " · Workflow hard cap: $" +
+    Number(snapshot.workflow_hard_cap_usd || 0).toFixed(2) +
+    ". Authorizing here sets a ceiling only.</p></div>";
+
+  visualSpendMaxCost.max = String(
+    Number(snapshot.per_shot_hard_cap_usd || 0)
+  );
+  visualSpendMaxCost.value = decision
+    ? Number(decision.max_cost_usd || 0).toFixed(2)
+    : "0";
+  visualSpendNote.value = decision && decision.note ? decision.note : "";
+  visualSpendPrev.disabled = visualSpendCursor === 0;
+  visualSpendNext.disabled = visualSpendCursor >= items.length - 1;
+}
+
+async function submitVisualSpendDecision(decision) {
+  const items = visualSpendItems(latestVisualSpendSnapshot || {});
+  const current = items[visualSpendCursor];
+  if (!current) return;
+  try {
+    await api("/api/visual-spend-review", {
+      method: "POST",
+      body: JSON.stringify({
+        gap_plan_file: current.packet.gap_plan_file,
+        shot_id: current.gap.shot_id,
+        decision: decision,
+        max_cost_usd: Number(visualSpendMaxCost.value || 0),
+        note: visualSpendNote.value
+      })
+    });
+    const refreshed = await api("/api/visual-spend-review");
+    latestVisualSpendSnapshot = refreshed;
+    const refreshedItems = visualSpendItems(refreshed);
+    const nextPending = refreshedItems.findIndex(function (item) {
+      return !(item.packet.decisions || {})[item.gap.shot_id];
+    });
+    if (nextPending >= 0) visualSpendCursor = nextPending;
+    renderVisualSpendReview(refreshed);
+    showToast(
+      decision === "AUTHORIZE_GENERATION"
+        ? "Generation ceiling authorized for this shot. No provider call has been made."
+        : decision === "RETRY_EXISTING"
+          ? "Shot returned to existing-visual search."
+          : "Shot will remain a placeholder.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function editPreviewItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function renderEditPreviewReview(snapshot) {
+  latestEditPreviewSnapshot = snapshot || {};
+  const items = editPreviewItems(latestEditPreviewSnapshot);
+
+  editPreviewReviewPanel.hidden = items.length === 0;
+  if (!items.length) {
+    editPreviewVideo.removeAttribute("src");
+    return;
+  }
+
+  editPreviewCursor = Math.max(
+    0,
+    Math.min(editPreviewCursor, items.length - 1)
+  );
+  const item = items[editPreviewCursor] || {};
+  const decision = item.decision || "PENDING";
+
+  editPreviewReviewTitle.textContent =
+    "Review structural edit — " +
+    humanizeToken(item.format || "") +
+    " · " + (item.concept_id || "");
+  editPreviewReviewSummary.textContent =
+    (editPreviewCursor + 1) + " of " + items.length +
+    " · " + Number(item.duration_seconds || 0).toFixed(1) + " sec" +
+    " · " + Number(item.placeholder_segments || 0) + " placeholder segment(s)";
+  editPreviewReviewStatus.textContent = decision;
+  editPreviewReviewStatus.className =
+    "status-chip " +
+    (decision === "APPROVE_EDIT_DIRECTION"
+      ? "success"
+      : decision === "PENDING"
+        ? "running"
+        : "failed");
+
+  const url =
+    "/api/edit-preview-video?concept_id=" +
+    encodeURIComponent(item.concept_id || "") +
+    "&format=" +
+    encodeURIComponent(item.format || "");
+  if (editPreviewVideo.dataset.previewUrl !== url) {
+    editPreviewVideo.dataset.previewUrl = url;
+    editPreviewVideo.src = url;
+    editPreviewVideo.load();
+  }
+
+  editPreviewDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>STRUCTURAL PREVIEW</h4>' +
+    '<p><strong>Duration:</strong> ' +
+    Number(item.duration_seconds || 0).toFixed(1) + ' sec' +
+    '<br><strong>Placeholders:</strong> ' +
+    Number(item.placeholder_segments || 0) +
+    '<br><strong>Purpose:</strong> Judge pacing, sequence and narration-to-picture rhythm before final visual spending/export.</p>' +
+    (Number(item.placeholder_segments || 0) > 0
+      ? '<p class="muted">Dark placeholder frames are expected. They represent unresolved visual slots, not missing render output.</p>'
+      : '<p class="muted">All preview visual slots currently have local assets.</p>') +
+    '</div>';
+
+  editPreviewNote.value = item.note || "";
+  editPreviewPrev.disabled = editPreviewCursor <= 0;
+  editPreviewNext.disabled = editPreviewCursor >= items.length - 1;
+
+  const decided = decision !== "PENDING";
+  editPreviewVisuals.disabled = decided;
+  editPreviewNarration.disabled = decided;
+  editPreviewSound.disabled = decided;
+  editPreviewApprove.disabled = decided;
+}
+
+async function submitEditPreviewDecision(decision) {
+  const items = editPreviewItems(latestEditPreviewSnapshot || {});
+  const item = items[editPreviewCursor];
+  if (!item) return;
+
+  try {
+    const payload = await api("/api/edit-preview-review", {
+      method: "POST",
+      body: JSON.stringify({
+        result_file: item.result_file,
+        decision: decision,
+        note: editPreviewNote.value
+      })
+    });
+    latestEditPreviewSnapshot = payload;
+    const refreshed = editPreviewItems(payload);
+    const nextPending = refreshed.findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (nextPending >= 0) editPreviewCursor = nextPending;
+    renderEditPreviewReview(payload);
+    showToast(
+      decision === "APPROVE_EDIT_DIRECTION"
+        ? "Edit direction approved."
+        : "Edit preview returned for rework.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function generatedVisualKey(item) {
+  return [
+    String((item && item.concept_id) || ""),
+    String((item && item.format) || ""),
+    String((item && item.shot_id) || "")
+  ].join("::");
+}
+
+function generatedVisualPendingItems(handoff, assets) {
+  const registered = new Set(
+    (((assets && assets.items) || [])).map(generatedVisualKey)
+  );
+  return (((handoff && handoff.requests) || [])).filter(function (item) {
+    return !registered.has(generatedVisualKey(item));
+  });
+}
+
+function renderGeneratedVisualImport(handoff, assets) {
+  latestGeneratedVisualHandoff = handoff || {};
+  latestGeneratedVisualAssets = assets || {};
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff,
+    latestGeneratedVisualAssets
+  );
+
+  generatedVisualImportPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  generatedVisualCursor = Math.max(
+    0,
+    Math.min(generatedVisualCursor, items.length - 1)
+  );
+  const item = items[generatedVisualCursor] || {};
+  const brief = item.generation_brief || {};
+  const provider = item.provider_handoff || {};
+
+  generatedVisualImportTitle.textContent =
+    "Register generated visual — " + (item.shot_id || "");
+  generatedVisualImportSummary.textContent =
+    (generatedVisualCursor + 1) + " of " + items.length +
+    " waiting · max USD " + Number(item.max_cost_usd || 0).toFixed(2);
+  generatedVisualImportStatus.textContent = "WAITING FOR ASSET";
+  generatedVisualImportStatus.className = "status-chip running";
+
+  generatedVisualImportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>AUTHORIZED PREMIUM SHOT</h4>' +
+    '<h3>' + escapeHtml(item.shot_id || "") + '</h3>' +
+    '<p><strong>Concept:</strong> ' + escapeHtml(item.concept_id || "") +
+    '<br><strong>Format:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Story purpose:</strong> ' + escapeHtml(item.story_purpose || "") +
+    '<br><strong>Desired visual:</strong> ' + escapeHtml(item.desired_visual || "") +
+    '<br><strong>Authorized ceiling:</strong> USD ' +
+    Number(item.max_cost_usd || 0).toFixed(2) + '</p></div>' +
+    '<div class="concept-detail-card"><h4>CINEMATIC BRIEF</h4><p>' +
+    '<strong>Subject/action:</strong> ' + escapeHtml(brief.subject_and_action || "") +
+    '<br><strong>Narrative intent:</strong> ' + escapeHtml(brief.narrative_intent || "") +
+    '<br><strong>Camera:</strong> ' +
+    escapeHtml([
+      brief.camera_angle,
+      brief.framing,
+      brief.camera_movement
+    ].filter(Boolean).join(" · ")) +
+    '<br><strong>Lens:</strong> ' + escapeHtml(brief.lens_feel || "") +
+    '<br><strong>Lighting:</strong> ' + escapeHtml(brief.lighting || "") +
+    '<br><strong>Motion:</strong> ' + escapeHtml(brief.motion_speed || "") +
+    '</p><p class="muted">Preferred provider: ' +
+    escapeHtml(provider.preferred_provider || "higgsfield") +
+    '. The app has not called the provider.</p></div>';
+
+  generatedVisualActualCost.max = String(Number(item.max_cost_usd || 0));
+  generatedVisualActualCost.value = "0";
+  generatedVisualProvider.value =
+    provider.preferred_provider || generatedVisualProvider.value || "higgsfield";
+  generatedVisualAssetPath.value = "";
+  generatedVisualProviderJobId.value = "";
+  generatedVisualNote.value = "";
+  generatedVisualPrev.disabled = generatedVisualCursor === 0;
+  generatedVisualNext.disabled = generatedVisualCursor >= items.length - 1;
+}
+
+async function registerGeneratedVisualAsset() {
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+  const item = items[generatedVisualCursor];
+  if (!item) return;
+
+  const assetPath = generatedVisualAssetPath.value.trim();
+  if (!assetPath) {
+    showToast("Enter the local generated file path.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/generated-visual-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        request_file: item.request_file,
+        asset_file: assetPath,
+        actual_cost_usd: Number(generatedVisualActualCost.value || 0),
+        provider: generatedVisualProvider.value || "higgsfield",
+        provider_job_id: generatedVisualProviderJobId.value,
+        note: generatedVisualNote.value
+      })
+    });
+    latestGeneratedVisualAssets = payload.generated_visual_assets || {};
+    const remaining = generatedVisualPendingItems(
+      latestGeneratedVisualHandoff || {},
+      latestGeneratedVisualAssets
+    );
+    if (generatedVisualCursor >= remaining.length) {
+      generatedVisualCursor = Math.max(0, remaining.length - 1);
+    }
+    renderGeneratedVisualImport(
+      latestGeneratedVisualHandoff || {},
+      latestGeneratedVisualAssets
+    );
+    showToast(
+      "Generated visual registered. Assembly plan will rebuild from the current asset.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function finalSoundPendingItems(snapshot) {
+  return (((snapshot && snapshot.items) || [])).filter(function (item) {
+    return item && item.resolved !== true;
+  });
+}
+
+function renderFinalSoundImport(snapshot) {
+  latestFinalSoundSnapshot = snapshot || {};
+  const items = finalSoundPendingItems(latestFinalSoundSnapshot);
+
+  finalSoundImportPanel.hidden = items.length === 0;
+  if (!items.length) return;
+
+  finalSoundCursor = Math.max(
+    0,
+    Math.min(finalSoundCursor, items.length - 1)
+  );
+  const item = items[finalSoundCursor] || {};
+  const requirement = item.requirement || {};
+
+  finalSoundImportTitle.textContent =
+    "Resolve final sound — " +
+    humanizeToken(requirement.kind || "sound") +
+    " · " + (requirement.segment_id || "");
+  finalSoundImportSummary.textContent =
+    (finalSoundCursor + 1) + " of " + items.length +
+    " unresolved · " +
+    Number(latestFinalSoundSnapshot.resolved || 0) +
+    " already resolved";
+  finalSoundImportStatus.textContent = "WAITING FOR ASSET";
+  finalSoundImportStatus.className = "status-chip running";
+
+  finalSoundImportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>APPROVED SOUND REQUIREMENT</h4>' +
+    '<h3>' + escapeHtml(requirement.requirement_id || "") + '</h3>' +
+    '<p><strong>Concept:</strong> ' + escapeHtml(item.concept_id || "") +
+    '<br><strong>Format:</strong> ' + escapeHtml(humanizeToken(item.format || "")) +
+    '<br><strong>Segment:</strong> ' + escapeHtml(requirement.segment_id || "") +
+    '<br><strong>Type:</strong> ' + escapeHtml(humanizeToken(requirement.kind || "")) +
+    '<br><strong>Direction:</strong> ' + escapeHtml(requirement.direction || "") +
+    '<br><strong>Duck under narration:</strong> ' +
+    escapeHtml(requirement.duck_under_narration ? "Yes" : "No") +
+    '</p><p class="muted">Use an already licensed/owned file. If the sound should be intentionally absent, omit it with a human note.</p></div>';
+
+  finalSoundAssetPath.value = "";
+  finalSoundLicenceReference.value = "";
+  finalSoundSourceName.value = "human_supplied";
+  finalSoundProviderJobId.value = "";
+  finalSoundActualCost.value = "0";
+  finalSoundCommercialUse.checked = false;
+  finalSoundExternalPurchase.checked = false;
+  finalSoundAttributionRequired.checked = false;
+  finalSoundAttributionText.value = "";
+  finalSoundNote.value = "";
+  finalSoundPrev.disabled = finalSoundCursor === 0;
+  finalSoundNext.disabled = finalSoundCursor >= items.length - 1;
+}
+
+async function submitFinalSoundResolution(mode) {
+  const items = finalSoundPendingItems(latestFinalSoundSnapshot || {});
+  const item = items[finalSoundCursor];
+  if (!item) return;
+  const requirement = item.requirement || {};
+
+  if (mode === "register") {
+    if (!finalSoundAssetPath.value.trim()) {
+      showToast("Enter the local licensed sound file path.", true);
+      return;
+    }
+    if (!finalSoundLicenceReference.value.trim()) {
+      showToast("Enter the licence or ownership reference.", true);
+      return;
+    }
+    if (!finalSoundCommercialUse.checked) {
+      showToast("Confirm commercial-use permission before registering.", true);
+      return;
+    }
+  } else if (!finalSoundNote.value.trim()) {
+    showToast("Explain why this planned sound should be omitted.", true);
+    return;
+  }
+
+  try {
+    const payload = await api("/api/final-sound-asset", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: mode,
+        plan_file: item.plan_file,
+        requirement_id: requirement.requirement_id,
+        asset_file: finalSoundAssetPath.value.trim(),
+        licence_reference: finalSoundLicenceReference.value.trim(),
+        commercial_use_confirmed: finalSoundCommercialUse.checked,
+        actual_cost_usd: Number(finalSoundActualCost.value || 0),
+        external_purchase_confirmed: finalSoundExternalPurchase.checked,
+        source_name: finalSoundSourceName.value.trim() || "human_supplied",
+        provider_job_id: finalSoundProviderJobId.value.trim(),
+        attribution_required: finalSoundAttributionRequired.checked,
+        attribution_text: finalSoundAttributionText.value.trim(),
+        note: finalSoundNote.value
+      })
+    });
+    latestFinalSoundSnapshot = payload.final_sound_assets || {};
+    const remaining = finalSoundPendingItems(latestFinalSoundSnapshot);
+    if (finalSoundCursor >= remaining.length) {
+      finalSoundCursor = Math.max(0, remaining.length - 1);
+    }
+    renderFinalSoundImport(latestFinalSoundSnapshot);
+    showToast(
+      mode === "omit"
+        ? "Final sound requirement intentionally omitted."
+        : "Licensed final sound asset registered.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function finalExportItems(snapshot) {
+  return (snapshot && snapshot.items) || [];
+}
+
+function renderFinalExportReview(snapshot) {
+  latestFinalExportSnapshot = snapshot || {};
+  const items = finalExportItems(latestFinalExportSnapshot);
+  finalExportReviewPanel.hidden = items.length === 0;
+  if (!items.length) {
+    finalExportVideo.removeAttribute("src");
+    return;
+  }
+
+  finalExportCursor = Math.max(
+    0,
+    Math.min(finalExportCursor, items.length - 1)
+  );
+  const item = items[finalExportCursor] || {};
+  const decision = item.decision || "PENDING";
+
+  finalExportReviewTitle.textContent =
+    "Review final render — " +
+    humanizeToken(item.format || "") +
+    " · " + (item.concept_id || "");
+  finalExportReviewSummary.textContent =
+    (finalExportCursor + 1) + " of " + items.length +
+    " · " + Number(item.duration_seconds || 0).toFixed(1) + " sec" +
+    " · " + Number(item.sound_assets_mixed || 0) + " sound asset(s)" +
+    " · " + Number(item.sound_omissions || 0) + " omission(s)";
+  finalExportReviewStatus.textContent =
+    item.export_approved ? "FINAL EXPORT APPROVED" : decision;
+  finalExportReviewStatus.className =
+    "status-chip " +
+    (item.export_approved
+      ? "success"
+      : decision === "PENDING"
+        ? "running"
+        : "failed");
+
+  const url =
+    "/api/final-render-video?concept_id=" +
+    encodeURIComponent(item.concept_id || "") +
+    "&format=" +
+    encodeURIComponent(item.format || "");
+  if (finalExportVideo.dataset.renderUrl !== url) {
+    finalExportVideo.dataset.renderUrl = url;
+    finalExportVideo.src = url;
+    finalExportVideo.load();
+  }
+
+  finalExportDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>LOCAL FINAL CANDIDATE</h4>' +
+    '<p><strong>Duration:</strong> ' +
+    Number(item.duration_seconds || 0).toFixed(1) + ' sec' +
+    '<br><strong>Sound assets mixed:</strong> ' +
+    Number(item.sound_assets_mixed || 0) +
+    '<br><strong>Explicit sound omissions:</strong> ' +
+    Number(item.sound_omissions || 0) +
+    '<br><strong>Render size:</strong> ' +
+    Number(item.render_bytes || 0).toLocaleString() + ' bytes' +
+    '</p><p class="muted">Approval binds these exact rendered bytes. It does not upload or publish the video.</p></div>';
+
+  finalExportNote.value = item.note || "";
+  finalExportPrev.disabled = finalExportCursor <= 0;
+  finalExportNext.disabled = finalExportCursor >= items.length - 1;
+  const decided = decision !== "PENDING";
+  finalExportVisuals.disabled = decided;
+  finalExportNarration.disabled = decided;
+  finalExportSound.disabled = decided;
+  finalExportApprove.disabled = decided;
+}
+
+async function submitFinalExportDecision(decision) {
+  const items = finalExportItems(latestFinalExportSnapshot || {});
+  const item = items[finalExportCursor];
+  if (!item) return;
+
+  try {
+    const payload = await api("/api/final-export-review", {
+      method: "POST",
+      body: JSON.stringify({
+        result_file: item.result_file,
+        decision: decision,
+        note: finalExportNote.value
+      })
+    });
+    latestFinalExportSnapshot = payload || {};
+    const refreshed = finalExportItems(latestFinalExportSnapshot);
+    const nextPending = refreshed.findIndex(function (entry) {
+      return (entry.decision || "PENDING") === "PENDING";
+    });
+    if (nextPending >= 0) finalExportCursor = nextPending;
+    renderFinalExportReview(latestFinalExportSnapshot);
+    showToast(
+      decision === "APPROVE_EXPORT"
+        ? "Final export approved. Upload and publishing remain locked."
+        : "Final render returned for rework.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function formatElapsed(milliseconds) {
+  const totalSeconds = Math.max(
+    0,
+    Math.floor(Number(milliseconds || 0) / 1000)
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return hours + "h " + minutes + "m " + seconds + "s";
+  if (minutes) return minutes + "m " + seconds + "s";
+  return seconds + "s";
+}
+
+function updateRunningActivity(job) {
+  const running = Boolean(
+    job && (job.status === "RUNNING" || job.status === "STOPPING")
+  );
+
+  analysisCurrentPanel.classList.toggle("is-running", running);
+  analysisRunningActivity.hidden = !running;
+
+  if (!running) {
+    runningJobId = null;
+    runningJobStartedAt = null;
+    runningLastPollAt = null;
+    runningLastOutputAt = null;
+    runningLastLogSignature = "";
+    if (runningUiTimer) {
+      clearInterval(runningUiTimer);
+      runningUiTimer = null;
+    }
+    return;
+  }
+
+  if (runningJobId !== job.id) {
+    runningJobId = job.id || null;
+    const parsed = Date.parse(job.started_at || "");
+    runningJobStartedAt = Number.isFinite(parsed) ? parsed : Date.now();
+    runningLastOutputAt = null;
+    runningLastLogSignature = "";
+  }
+
+  runningLastPollAt = Date.now();
+  analysisRunningLabel.textContent =
+    (job.status === "STOPPING" ? "Stopping: " : "Running: ") +
+    (job.label || job.action_id || "workflow job");
+
+  const paint = function () {
+    const now = Date.now();
+    analysisRunningElapsed.textContent =
+      "Elapsed " + formatElapsed(now - (runningJobStartedAt || now));
+
+    const pollAge = runningLastPollAt == null ? null : now - runningLastPollAt;
+    const outputAge = runningLastOutputAt == null ? null : now - runningLastOutputAt;
+    let message = "Process active";
+    if (outputAge == null) {
+      message = "Process active · waiting for first log output";
+    } else if (outputAge < 15000) {
+      message = "Live · new output " + formatElapsed(outputAge) + " ago";
+    } else {
+      message =
+        "Process still running · no new log output for " +
+        formatElapsed(outputAge);
+    }
+    if (pollAge != null) {
+      message += " · checked " + formatElapsed(pollAge) + " ago";
+    }
+    analysisRunningHeartbeat.textContent = message;
+  };
+
+  paint();
+  if (!runningUiTimer) {
+    runningUiTimer = setInterval(paint, 1000);
+  }
+}
+
+function noteJobLogActivity(job, log) {
+  if (!job || (job.status !== "RUNNING" && job.status !== "STOPPING")) return;
+  if (log === undefined || log === null) return;
+  const value = String(log || "");
+  const signature = value.length + ":" + value.slice(-180);
+  if (value && signature !== runningLastLogSignature) {
+    runningLastOutputAt = Date.now();
+  }
+  runningLastLogSignature = signature;
 }
 
 function formatViews(value) {
@@ -2531,7 +5202,7 @@ function renderThumbnailReview(snapshot, force) {
 
   const item = items[thumbnailCursor] || {};
   const subject = item.subject_image || {};
-  const advisories = (item.render_advisories || []).concat(item.packaging_advisories || []);
+  const advisories = item.render_advisories || [];
   const decided = item.decision && item.decision !== "PENDING";
 
   thumbnailReviewPanel.hidden = false;
@@ -2577,19 +5248,27 @@ function renderThumbnailReview(snapshot, force) {
       '</p></div>';
   }
 
-  const palette = item.palette || {};
   thumbnailDetail.innerHTML =
     visual +
-    '<div class="concept-detail-card"><h4>APPROVED PACKAGE</h4>' +
-      '<h3>' + escapeHtml(item.title || item.package_id) + '</h3>' +
-      '<p><strong>Thumbnail text:</strong> ' + escapeHtml(item.text_overlay || "(none)") +
-      '<br><strong>Message:</strong> ' + escapeHtml(item.thumbnail_message || "") +
-      '<br><strong>Focal subject:</strong> ' + escapeHtml(item.focal_subject || "") +
-      '<br><strong>Palette:</strong> ' + escapeHtml([palette.background, palette.subject, palette.accent].filter(Boolean).join(" / ")) +
-      '</p><div class="concept-meta"><span>Package ' + escapeHtml(item.package_id) + '</span>' +
+    '<div class="concept-detail-card"><h4>THUMBNAIL CONCEPT · ' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
+      '<h3>' + escapeHtml(item.text_overlay || "(no text)") + '</h3>' +
+      '<p><strong>Hero subject:</strong> ' + escapeHtml(item.hero_subject || "") +
+      (item.secondary_element ? '<br><strong>Secondary:</strong> ' + escapeHtml(item.secondary_element) : "") +
+      (item.visual_anomaly ? '<br><strong>Anomaly:</strong> ' + escapeHtml(item.visual_anomaly) : "") +
+      '<br><strong>Emotion:</strong> ' + escapeHtml(item.emotion || "") +
+      '<br><strong>Composition:</strong> ' + escapeHtml(item.composition || "") +
+      '<br><strong>Background:</strong> ' + escapeHtml(item.background || "") +
+      '<br><strong>Viewer question:</strong> ' + escapeHtml(item.viewer_visual_question || "") +
+      '</p><div class="concept-meta"><span>' + escapeHtml(item.render_id || "") + '</span>' +
       (item.text_layout ? '<span>Font ' + escapeHtml(String(item.text_layout.font_size)) + 'px · ' +
         escapeHtml(String((item.text_layout.lines || []).length)) + ' lines</span>' : "") +
       '</div></div>' +
+    '<div class="concept-detail-card"><h4>VALIDATED TITLES (PASS)</h4><ul>' +
+      (item.titles || []).map(function (title) {
+        return "<li>" + escapeHtml(title.title_text || "") +
+          (title.selected_title_direction_match ? " <strong>(selected direction)</strong>" : "") + "</li>";
+      }).join("") +
+      '</ul><p>Approving this image does not choose a package; title + thumbnail selection stays with the final Packaging Gate.</p></div>' +
     '<div class="concept-detail-card"><h4>ADVISORIES (NON-BLOCKING)</h4>' +
       (advisories.length
         ? '<ul>' + advisories.map(function (advisory) {
@@ -2654,7 +5333,7 @@ async function saveThumbnailSubject(event) {
     const payload = await api("/api/thumbnail-spec", {
       method: "POST",
       body: JSON.stringify({
-        package_id: current.item.package_id,
+        render_id: current.item.render_id,
         accent_hex: thumbnailAccent.value,
         subject_image: {
           path: thumbnailSubjectPath.value,
@@ -2685,7 +5364,7 @@ async function submitThumbnailDecision(decision) {
     const payload = await api("/api/thumbnail-gate", {
       method: "POST",
       body: JSON.stringify({
-        package_id: current.item.package_id,
+        render_id: current.item.render_id,
         decision: decision,
         criteria: values,
         note: thumbnailNote.value
@@ -2717,29 +5396,60 @@ function renderAnalysis(data) {
     "HUMAN_PACKAGING_GATE",
     "HUMAN_RESEARCH_GATE",
     "HUMAN_SCRIPT_GATE",
+    "HUMAN_TITLE_DIRECTION_GATE",
+    "TITLE_DIRECTION_REJECTED",
+    "TITLE_DIRECTION_SELECTED",
     "HUMAN_FORMAT_GATE",
-    "HUMAN_PERFORMANCE_GATE"
+    "HUMAN_PERFORMANCE_GATE",
+    "HUMAN_NARRATION_PREVIEW_GATE",
+    "HUMAN_NARRATION_SPEND_GATE",
+    "WAITING_NARRATION_PROVIDER_QUOTE",
+    "NARRATION_PROVIDER_SETUP_REQUIRED",
+    "VISUAL_SEARCH_READY",
+    "HUMAN_VISUAL_CANDIDATE_GATE",
+    "HUMAN_VISUAL_RIGHTS_GATE",
+    "HUMAN_ROUGH_CUT_GATE",
+    "HUMAN_VISUAL_SPEND_GATE",
+    "VISUAL_SPEND_INVALID",
+    "VISUAL_EXISTING_RETRY_REQUIRED",
+    "WAITING_FOR_VISUAL_ASSETS",
+    "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+    "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+    "LOCAL_FFMPEG_REQUIRED",
+    "HUMAN_EDIT_PREVIEW_GATE",
+    "EDIT_PREVIEW_REWORK_REQUIRED",
+    "EDIT_PREVIEW_DIRECTION_APPROVED",
+    "WAITING_FOR_FINAL_VISUAL_ASSETS",
+    "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+    "FINAL_PRODUCTION_HANDOFF_READY",
+    "WAITING_FOR_FINAL_SOUND_ASSETS",
+    "FINAL_SOUND_ASSETS_READY",
+    "LOCAL_FINAL_FFMPEG_REQUIRED",
+    "HUMAN_FINAL_EXPORT_GATE",
+    "FINAL_EXPORT_REWORK_REQUIRED",
+    "FINAL_EXPORT_APPROVED"
   ].includes(workflow.state);
 
+  const opportunityApproved =
+    Boolean(data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02);
+  const hasWorkflowTitle =
+    Boolean(workflow.current_title) &&
+    workflow.current_action_id !== "opportunity_research";
+
   analysisCurrentTitle.textContent =
-    humanCreateGate
+    opportunityApproved && (humanCreateGate || hasWorkflowTitle)
       ? workflow.current_title
-      : (
-        workflow.current_action_id && workflow.current_action_id !== "opportunity_research"
-          ? workflow.current_title
-          : (data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
-            ? "Prepare the approved source evidence"
-            : "Waiting for opportunity approval")
-      );
+      : opportunityApproved
+        ? "Prepare the approved source evidence"
+        : "Waiting for opportunity approval";
 
   analysisCurrentDetail.textContent =
-    humanCreateGate
-      ? workflow.current_detail
-      : (
-        data.opportunity_gate && data.opportunity_gate.ready_for_experiment_02
-          ? (workflow.current_detail || "The next available analysis step is highlighted.")
-          : "Approve an opportunity before Experiment 02 can begin."
-      );
+    opportunityApproved
+      ? (
+        workflow.current_detail ||
+        "The next available analysis step is highlighted."
+      )
+      : "Approve an opportunity before Experiment 02 can begin.";
 
   const actions = (data.actions || []).filter(function (action) {
     return action.surface === "workflow" && action.id !== "opportunity_research";
@@ -2748,13 +5458,56 @@ function renderAnalysis(data) {
   renderVisionReview(data.vision_review || {}, false);
   renderHumanAnalysisReview(data.human_analysis_review || {}, false);
   renderConceptReview(data.concept_gate || {}, false);
-  renderPackagingReview(data.packaging_gate || {}, false);
+  renderPackagingReview({}, false);
   renderResearchReview(data.research_gate || {}, false);
   renderScriptReview(data.script_gate || {}, false);
+  renderTitleDirectionReview(data.title_direction_gate || {}, false);
+  renderPackagingBrief(
+    data.packaging_brief || {},
+    data.psychological_angles || {},
+    data.thumbnail_concepts || {},
+    data.package_validation || {}
+  );
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
   latestActions = data.actions || [];
   renderThumbnailReview(data.thumbnail_gate || {}, false);
+  renderPreviewReview(data.narration_preview_gate || {});
+  renderNarrationSpendReview(data.narration_spend_gate || {});
+  renderNarrationReturn(
+    data.narration_render_return || {},
+    data.narration || {},
+    workflow
+  );
+  renderVisualCandidateReview(data.visual_candidate_gate || {});
+  renderVisualRightsReview(data.visual_rights_gate || {});
+  renderManagedVisualImport(
+    data.visual_asset_acquisition || {},
+    data.managed_visual_assets || {}
+  );
+  renderVisualRoughCutReview(data.visual_rough_cut_gate || {});
+  renderVisualSpendReview(
+    [
+      "HUMAN_VISUAL_SPEND_GATE",
+      "VISUAL_SPEND_INVALID",
+      "WAITING_FOR_VISUAL_ASSETS",
+      "WAITING_FOR_PREMIUM_VISUAL_ASSETS"
+    ].includes(workflow.state)
+      ? (data.visual_spend_gate || {})
+      : {}
+  );
+  renderGeneratedVisualImport(
+    data.visual_generation_handoff || {},
+    data.generated_visual_assets || {}
+  );
+  renderEditPreviewReview(data.edit_preview_gate || {});
+  renderFinalSoundImport(data.final_sound_assets || {});
+  renderFinalExportReview(data.final_export_gate || {});
+  api("/api/narration-performance-review").then(function(x){latestNarrationPerformanceSnapshot=x;fillNarrationSegmentEditor();}).catch(function(){});
+  api("/api/storyboard-review").then(function (value) {
+    latestStoryboardSnapshot = value;
+    renderVisualCandidateReview(latestVisualCandidateSnapshot || {});
+  }).catch(function () {});
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -2766,7 +5519,40 @@ function renderAnalysis(data) {
   const voice = data.voice_performance || {};
 
   if (
-    workflow.state === "HUMAN_PERFORMANCE_GATE" ||
+    [
+      "HUMAN_PERFORMANCE_GATE",
+      "HUMAN_NARRATION_PREVIEW_GATE",
+      "HUMAN_NARRATION_SPEND_GATE",
+      "WAITING_NARRATION_PROVIDER_QUOTE",
+      "NARRATION_PROVIDER_SETUP_REQUIRED",
+      "WAITING_NARRATION_RENDER_RETURN",
+      "NARRATION_AUDIO_QC_FAILED",
+      "NARRATION_AUDIO_READY",
+      "VISUAL_SEARCH_READY",
+      "HUMAN_VISUAL_CANDIDATE_GATE",
+      "HUMAN_VISUAL_RIGHTS_GATE",
+      "HUMAN_ROUGH_CUT_GATE",
+      "HUMAN_VISUAL_SPEND_GATE",
+      "VISUAL_SPEND_INVALID",
+      "VISUAL_EXISTING_RETRY_REQUIRED",
+      "WAITING_FOR_VISUAL_ASSETS",
+      "WAITING_FOR_PREMIUM_VISUAL_ASSETS",
+      "WAITING_FOR_LOCAL_VISUAL_ASSETS",
+      "LOCAL_FFMPEG_REQUIRED",
+      "HUMAN_EDIT_PREVIEW_GATE",
+      "EDIT_PREVIEW_REWORK_REQUIRED",
+      "EDIT_PREVIEW_DIRECTION_APPROVED",
+      "WAITING_FOR_FINAL_VISUAL_ASSETS",
+      "FINAL_PRODUCTION_HANDOFF_BLOCKED",
+      "FINAL_PRODUCTION_HANDOFF_READY",
+      "WAITING_FOR_FINAL_SOUND_ASSETS",
+      "FINAL_SOUND_ASSETS_READY",
+      "LOCAL_FINAL_FFMPEG_REQUIRED",
+      "HUMAN_FINAL_EXPORT_GATE",
+      "FINAL_EXPORT_REWORK_REQUIRED",
+      "FINAL_EXPORT_APPROVED",
+      "FINAL_EDIT_DIRECTION_APPROVED"
+    ].includes(workflow.state) ||
     voice.requests_ready || voice.specs_ready || voice.performance_gate_complete
   ) {
     activeIndex = 7;
@@ -2776,20 +5562,27 @@ function renderAnalysis(data) {
   ) {
     activeIndex = 6;
   } else if (
+    [
+      "HUMAN_TITLE_DIRECTION_GATE",
+      "TITLE_DIRECTION_REJECTED",
+      "TITLE_DIRECTION_SELECTED",
+      "PACKAGING_BRIEF_READY",
+      "THUMBNAIL_CONCEPTS_READY",
+      "PACKAGE_VALIDATION_READY"
+    ].includes(workflow.state) ||
+    Boolean((data.title_direction || {}).requests_ready) ||
+    Boolean((data.title_direction || {}).candidates_ready)
+  ) {
+    activeIndex = 5;
+  } else if (
     workflow.state === "HUMAN_SCRIPT_GATE" ||
     story.requests_ready || story.drafts_ready || story.script_gate_complete
   ) {
-    activeIndex = 5;
+    activeIndex = 4;
   } else if (
     workflow.state === "HUMAN_RESEARCH_GATE" ||
     research.plans_ready || research.evidence_complete ||
     research.drafts_ready || research.research_gate_complete
-  ) {
-    activeIndex = 4;
-  } else if (
-    workflow.state === "HUMAN_PACKAGING_GATE" ||
-    packaging.requests_ready || packaging.candidates_ready ||
-    packaging.packaging_gate_complete
   ) {
     activeIndex = 3;
   } else if (
@@ -2851,7 +5644,10 @@ function renderTools(data) {
 
 function renderJob(job, log) {
   const hasJob = job && Object.keys(job).length;
+  noteJobLogActivity(job, log);
+  updateRunningActivity(job);
   if (!hasJob) {
+    updateRunningActivity(null);
     jobSummaryButton.className = "job-summary neutral";
     jobSummaryStatus.textContent = "IDLE";
     jobSummaryLabel.textContent = "No job running";
@@ -3059,6 +5855,14 @@ document.addEventListener("click", function (event) {
     return;
   }
 
+  const scriptSelectionButton = event.target.closest("[data-script-section-selection]");
+  if (scriptSelectionButton) {
+    submitScriptSectionAction("SELECT_ALTERNATIVE", {
+      selection_id: scriptSelectionButton.dataset.scriptSectionSelection
+    });
+    return;
+  }
+
   const gateButton = event.target.closest("[data-gate-action]");
   if (gateButton) {
     const action = gateButton.dataset.gateAction;
@@ -3124,9 +5928,6 @@ humanAnalysisAccept.addEventListener("click", function () {
 conceptNote.addEventListener("input", function () {
   conceptEditing = true;
 });
-conceptCriteria.addEventListener("change", function () {
-  conceptEditing = true;
-});
 conceptPrev.addEventListener("click", function () {
   moveConceptCursor(-1);
 });
@@ -3148,9 +5949,6 @@ conceptAccept.addEventListener("click", function () {
 packagingNote.addEventListener("input", function () {
   packagingEditing = true;
 });
-packagingCriteria.addEventListener("change", function () {
-  packagingEditing = true;
-});
 packagingPrev.addEventListener("click", function () {
   movePackagingCursor(-1);
 });
@@ -3163,13 +5961,13 @@ packagingReject.addEventListener("click", function () {
 packagingRework.addEventListener("click", function () {
   submitPackagingDecision("REWORK");
 });
+packagingSaveIdea.addEventListener("click", function () {
+  submitPackagingDecision("SAVE_IDEA");
+});
 packagingAccept.addEventListener("click", function () {
   submitPackagingDecision("ACCEPT");
 });
 researchNote.addEventListener("input", function () {
-  researchEditing = true;
-});
-researchCriteria.addEventListener("change", function () {
   researchEditing = true;
 });
 researchPrev.addEventListener("click", function () {
@@ -3190,9 +5988,6 @@ researchAccept.addEventListener("click", function () {
 scriptNote.addEventListener("input", function () {
   scriptEditing = true;
 });
-scriptCriteria.addEventListener("change", function () {
-  scriptEditing = true;
-});
 scriptPrev.addEventListener("click", function () {
   moveScriptCursor(-1);
 });
@@ -3208,10 +6003,52 @@ scriptRework.addEventListener("click", function () {
 scriptAccept.addEventListener("click", function () {
   submitScriptDecision("ACCEPT");
 });
-formatNote.addEventListener("input", function () {
-  formatEditing = true;
+scriptSectionTarget.addEventListener("change", function () {
+  if (scriptSectionBusy) return;
+  scriptSectionTargetId = scriptSectionTarget.value;
+  scriptSectionRenderedTargetId = null;
+  renderScriptSectionReview(latestScriptSectionSnapshot || {});
 });
-formatCriteria.addEventListener("change", function () {
+scriptSectionNextPending.addEventListener("click", function () {
+  if (scriptSectionBusy) return;
+  const targets = (latestScriptSectionSnapshot && latestScriptSectionSnapshot.targets) || [];
+  const nextTarget = nextUnresolvedScriptSectionTarget(
+    targets,
+    scriptSectionTargetId
+  );
+  if (!nextTarget) return;
+  scriptSectionTargetId = nextTarget.target_id;
+  scriptSectionRenderedTargetId = null;
+  renderScriptSectionReview(latestScriptSectionSnapshot || {});
+});
+scriptSectionPrepare.addEventListener("click", function () {
+  submitScriptSectionAction("PREPARE");
+});
+scriptSectionSaveManual.addEventListener("click", function () {
+  submitScriptSectionAction("MANUAL_EDIT");
+});
+scriptSectionAccept.addEventListener("click", function () {
+  submitScriptSectionAction("ACCEPT");
+});
+scriptSectionLock.addEventListener("click", function () {
+  submitScriptSectionAction("LOCK");
+});
+scriptSectionUnlock.addEventListener("click", function () {
+  submitScriptSectionAction("UNLOCK");
+});
+scriptSectionRework.addEventListener("click", function () {
+  submitScriptSectionAction("REWORK");
+});
+scriptSectionCancelRework.addEventListener("click", function () {
+  submitScriptSectionAction("CANCEL_REWORK");
+});
+scriptSectionPrepareRework.addEventListener("click", function () {
+  submitScriptSectionAction("PREPARE_REWORK_REQUEST");
+});
+scriptSectionGenerate.addEventListener("click", function () {
+  submitScriptSectionAction("GENERATE_ALTERNATIVES");
+});
+formatNote.addEventListener("input", function () {
   formatEditing = true;
 });
 formatPrev.addEventListener("click", function () {
@@ -3232,9 +6069,6 @@ formatAccept.addEventListener("click", function () {
 performanceNote.addEventListener("input", function () {
   performanceEditing = true;
 });
-performanceCriteria.addEventListener("change", function () {
-  performanceEditing = true;
-});
 performancePrev.addEventListener("click", function () {
   movePerformanceCursor(-1);
 });
@@ -3249,6 +6083,245 @@ performanceRework.addEventListener("click", function () {
 });
 performanceAccept.addEventListener("click", function () {
   submitPerformanceDecision("ACCEPT");
+});
+previewScript.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_SCRIPT");
+});
+previewPerformance.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_PERFORMANCE");
+});
+previewSound.addEventListener("click", function () {
+  submitPreviewDecision("REWORK_MUSIC_SFX");
+});
+narrationSpendPrev.addEventListener("click", function () {
+  moveNarrationSpendCursor(-1);
+});
+narrationSpendNext.addEventListener("click", function () {
+  moveNarrationSpendCursor(1);
+});
+narrationSpendReject.addEventListener("click", function () {
+  submitNarrationSpendDecision("REJECT");
+});
+narrationSpendRework.addEventListener("click", function () {
+  submitNarrationSpendDecision("REWORK");
+});
+narrationSpendAccept.addEventListener("click", function () {
+  submitNarrationSpendDecision("ACCEPT");
+});
+narrationReturnPrev.addEventListener("click", function () {
+  moveNarrationReturnCursor(-1);
+});
+narrationReturnNext.addEventListener("click", function () {
+  moveNarrationReturnCursor(1);
+});
+narrationReturnRegister.addEventListener("click", submitNarrationReturn);
+storyboardSaveRevision.addEventListener("click", saveStoryboardRevision);
+visualShotPrev.addEventListener("click", function () { visualShotCursor = Math.max(0, visualShotCursor - 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
+visualShotNext.addEventListener("click", function () { visualShotCursor = Math.min(visualReviewItems().length - 1, visualShotCursor + 1); renderVisualCandidateReview(latestVisualCandidateSnapshot); });
+visualRejectAll.addEventListener("click", function () { submitVisualCandidateDecision("REJECT_ALL"); });
+visualNeedsBetter.addEventListener("click", function () { submitVisualCandidateDecision("NEEDS_BETTER_VISUAL"); });
+visualRightsPrev.addEventListener("click", function () {
+  visualRightsCursor = Math.max(0, visualRightsCursor - 1);
+  renderVisualRightsReview(latestVisualRightsSnapshot);
+});
+visualRightsNext.addEventListener("click", function () {
+  visualRightsCursor = Math.min(
+    visualRightsItems(latestVisualRightsSnapshot || {}).length - 1,
+    visualRightsCursor + 1
+  );
+  renderVisualRightsReview(latestVisualRightsSnapshot);
+});
+visualRightsReject.addEventListener("click", function () {
+  submitVisualRightsDecision("REJECT_USE");
+});
+visualRightsApprove.addEventListener("click", function () {
+  submitVisualRightsDecision("APPROVE_CONTEXT_USE");
+});
+managedVisualPrev.addEventListener("click", function () {
+  managedVisualCursor = Math.max(0, managedVisualCursor - 1);
+  renderManagedVisualImport(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+});
+managedVisualNext.addEventListener("click", function () {
+  const items = managedVisualPendingItems(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+  managedVisualCursor = Math.min(
+    Math.max(0, items.length - 1),
+    managedVisualCursor + 1
+  );
+  renderManagedVisualImport(
+    latestManagedVisualAcquisition || {},
+    latestManagedVisualAssets || {}
+  );
+});
+managedVisualRegister.addEventListener("click", registerManagedVisualAsset);
+
+visualRoughCutPrev.addEventListener("click", function () {
+  visualRoughCutCursor = Math.max(0, visualRoughCutCursor - 1);
+  renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
+});
+visualRoughCutNext.addEventListener("click", function () {
+  visualRoughCutCursor = Math.min(
+    visualRoughCutItems(latestVisualRoughCutSnapshot || {}).length - 1,
+    visualRoughCutCursor + 1
+  );
+  renderVisualRoughCutReview(latestVisualRoughCutSnapshot);
+});
+visualRoughCutVisual.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_VISUAL");
+});
+visualRoughCutPacing.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_PACING");
+});
+visualRoughCutAudio.addEventListener("click", function () {
+  submitVisualRoughCutDecision("REWORK_AUDIO");
+});
+visualRoughCutApprove.addEventListener("click", function () {
+  submitVisualRoughCutDecision("APPROVE_WITH_GAPS");
+});
+visualSpendPrev.addEventListener("click", function () {
+  visualSpendCursor = Math.max(0, visualSpendCursor - 1);
+  renderVisualSpendReview(latestVisualSpendSnapshot);
+});
+visualSpendNext.addEventListener("click", function () {
+  visualSpendCursor = Math.min(
+    visualSpendItems(latestVisualSpendSnapshot || {}).length - 1,
+    visualSpendCursor + 1
+  );
+  renderVisualSpendReview(latestVisualSpendSnapshot);
+});
+visualSpendRetry.addEventListener("click", function () {
+  submitVisualSpendDecision("RETRY_EXISTING");
+});
+visualSpendKeep.addEventListener("click", function () {
+  submitVisualSpendDecision("KEEP_PLACEHOLDER");
+});
+visualSpendAuthorize.addEventListener("click", function () {
+  submitVisualSpendDecision("AUTHORIZE_GENERATION");
+});
+
+editPreviewPrev.addEventListener("click", function () {
+  editPreviewCursor = Math.max(0, editPreviewCursor - 1);
+  renderEditPreviewReview(latestEditPreviewSnapshot || {});
+});
+editPreviewNext.addEventListener("click", function () {
+  const items = editPreviewItems(latestEditPreviewSnapshot || {});
+  editPreviewCursor = Math.min(
+    Math.max(0, items.length - 1),
+    editPreviewCursor + 1
+  );
+  renderEditPreviewReview(latestEditPreviewSnapshot || {});
+});
+editPreviewVisuals.addEventListener("click", function () {
+  submitEditPreviewDecision("RETURN_TO_VISUALS");
+});
+editPreviewNarration.addEventListener("click", function () {
+  submitEditPreviewDecision("RETURN_TO_NARRATION");
+});
+editPreviewSound.addEventListener("click", function () {
+  submitEditPreviewDecision("RETURN_TO_SOUND");
+});
+editPreviewApprove.addEventListener("click", function () {
+  submitEditPreviewDecision("APPROVE_EDIT_DIRECTION");
+});
+
+generatedVisualPrev.addEventListener("click", function () {
+  generatedVisualCursor = Math.max(0, generatedVisualCursor - 1);
+  renderGeneratedVisualImport(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+});
+generatedVisualNext.addEventListener("click", function () {
+  const items = generatedVisualPendingItems(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+  generatedVisualCursor = Math.min(
+    Math.max(0, items.length - 1),
+    generatedVisualCursor + 1
+  );
+  renderGeneratedVisualImport(
+    latestGeneratedVisualHandoff || {},
+    latestGeneratedVisualAssets || {}
+  );
+});
+generatedVisualRegister.addEventListener("click", registerGeneratedVisualAsset);
+
+finalSoundPrev.addEventListener("click", function () {
+  finalSoundCursor = Math.max(0, finalSoundCursor - 1);
+  renderFinalSoundImport(latestFinalSoundSnapshot || {});
+});
+finalSoundNext.addEventListener("click", function () {
+  const items = finalSoundPendingItems(latestFinalSoundSnapshot || {});
+  finalSoundCursor = Math.min(
+    Math.max(0, items.length - 1),
+    finalSoundCursor + 1
+  );
+  renderFinalSoundImport(latestFinalSoundSnapshot || {});
+});
+finalSoundRegister.addEventListener("click", function () {
+  submitFinalSoundResolution("register");
+});
+finalSoundOmit.addEventListener("click", function () {
+  submitFinalSoundResolution("omit");
+});
+
+finalExportPrev.addEventListener("click", function () {
+  finalExportCursor = Math.max(0, finalExportCursor - 1);
+  renderFinalExportReview(latestFinalExportSnapshot || {});
+});
+finalExportNext.addEventListener("click", function () {
+  const items = finalExportItems(latestFinalExportSnapshot || {});
+  finalExportCursor = Math.min(
+    Math.max(0, items.length - 1),
+    finalExportCursor + 1
+  );
+  renderFinalExportReview(latestFinalExportSnapshot || {});
+});
+finalExportVisuals.addEventListener("click", function () {
+  submitFinalExportDecision("RETURN_TO_VISUALS");
+});
+finalExportNarration.addEventListener("click", function () {
+  submitFinalExportDecision("RETURN_TO_NARRATION");
+});
+finalExportSound.addEventListener("click", function () {
+  submitFinalExportDecision("RETURN_TO_SOUND");
+});
+finalExportApprove.addEventListener("click", function () {
+  submitFinalExportDecision("APPROVE_EXPORT");
+});
+
+titleDirectionPrev.addEventListener("click", function () {
+  titleDirectionCursor = Math.max(0, titleDirectionCursor - 1);
+  renderTitleDirectionReview(latestTitleDirectionSnapshot || {}, true);
+});
+titleDirectionNext.addEventListener("click", function () {
+  const items = titleDirectionConcepts(latestTitleDirectionSnapshot || {});
+  titleDirectionCursor = Math.min(
+    Math.max(0, items.length - 1),
+    titleDirectionCursor + 1
+  );
+  renderTitleDirectionReview(latestTitleDirectionSnapshot || {}, true);
+});
+titleDirectionReject.addEventListener("click", function () {
+  submitTitleDirectionDecision("REJECT");
+});
+titleDirectionRework.addEventListener("click", function () {
+  submitTitleDirectionDecision("REWORK");
+});
+titleDirectionAccept.addEventListener("click", function () {
+  submitTitleDirectionDecision("ACCEPT");
+});
+
+narrationSegmentSelect.addEventListener("change", fillNarrationSegmentEditor);
+narrationSaveRevision.addEventListener("click", saveNarrationSegmentRevision);
+previewApprove.addEventListener("click", function () {
+  submitPreviewDecision("APPROVE_FINAL");
 });
 
 [

@@ -12,6 +12,7 @@ from analysis_model_runner import (
     call_fair_bridge,
     confirmed_free_providers,
     gemini_compatible_schema,
+    fair_allows_direct_gemini_fallback,
     inference_cost_authorized,
     parse_model_json,
     response_schema,
@@ -434,6 +435,14 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertNotIn("uniqueItems", tags)
         self.assertNotIn("maxLength", tags["items"])
 
+    def test_quality_exhaustion_allows_direct_gemini_fallback(self):
+        result = {
+            "status": "ESCALATION_REQUIRED",
+            "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+            "paid_inference_executed": False,
+        }
+        self.assertTrue(fair_allows_direct_gemini_fallback(result))
+
     def test_direct_gemini_backup_is_free_tier_authorized_and_tracks_usage(self):
         class FakeResponse:
             def __enter__(self):
@@ -667,6 +676,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 )
             self.assertNotIn("responseJsonSchema", generation)
             self.assertEqual(generation["responseMimeType"], "application/json")
+            prompt_text = body["contents"][0]["parts"][0]["text"]
+            self.assertIn("EXPECTED JSON SCHEMA", prompt_text)
+            self.assertIn('"required":["summary"]', prompt_text.replace(" ", ""))
             return FakeResponse()
 
         with (
@@ -823,7 +835,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["provider_id"], "direct_gemini_backup")
         direct_backup.assert_called_once()
 
-    def test_shared_bridge_does_not_backup_fair_quality_failure(self):
+    def test_shared_bridge_uses_direct_backup_after_free_quality_exhaustion(self):
         class Completed:
             returncode = 0
 
@@ -847,6 +859,14 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 )
                 return Completed()
 
+            backup = {
+                "status": "ACCEPTED",
+                "provider_id": "direct_gemini_backup",
+                "paid_inference_executed": None,
+                "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+            }
             with (
                 patch.dict(
                     "os.environ",
@@ -855,7 +875,8 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 ),
                 patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
                 patch(
-                    "analysis_model_runner.call_direct_gemini_backup"
+                    "analysis_model_runner.call_direct_gemini_backup",
+                    return_value=backup,
                 ) as direct_backup,
             ):
                 result = call_fair_bridge(
@@ -867,8 +888,8 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     timeout_seconds=30,
                 )
 
-        self.assertEqual(result["reason_code"], "ALL_FREE_MODELS_FAILED_QUALITY")
-        direct_backup.assert_not_called()
+        self.assertEqual(result["provider_id"], "direct_gemini_backup")
+        direct_backup.assert_called_once()
 
     def test_shared_bridge_does_not_backup_unknown_fair_cost(self):
         class Completed:

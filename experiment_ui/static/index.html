@@ -123,7 +123,7 @@
             <div>
               <p class="section-kicker">ANALYZE &amp; CREATE</p>
               <h2>Turn evidence into an original video</h2>
-              <p class="muted">Work through evidence, analysis, concept, packaging, research, script and format without leaving this workspace.</p>
+              <p class="muted">Work through evidence, analysis, concept, research, script, post-script packaging and format without leaving this workspace.</p>
             </div>
           </div>
 
@@ -131,20 +131,29 @@
             <span class="creation-tab active">Evidence</span>
             <span class="creation-tab">Analysis</span>
             <span class="creation-tab">Concept</span>
-            <span class="creation-tab">Package</span>
             <span class="creation-tab">Research</span>
             <span class="creation-tab">Script</span>
+            <span class="creation-tab">Package</span>
             <span class="creation-tab">Format</span>
             <span class="creation-tab">Produce</span>
           </div>
 
-          <section class="panel">
+          <section class="panel" id="analysisCurrentPanel">
             <div class="panel-head">
               <div>
                 <p class="section-kicker">CURRENT WORK</p>
                 <h2 id="analysisCurrentTitle">Waiting for approval</h2>
                 <p class="muted" id="analysisCurrentDetail"></p>
               </div>
+            </div>
+            <div class="running-activity" id="analysisRunningActivity" hidden aria-live="polite">
+              <div class="running-spinner" aria-hidden="true"></div>
+              <div class="running-activity-copy">
+                <strong id="analysisRunningLabel">Working…</strong>
+                <span id="analysisRunningElapsed">Elapsed 0s</span>
+                <span id="analysisRunningHeartbeat">Process active</span>
+              </div>
+              <div class="running-dots" aria-hidden="true"><span></span><span></span><span></span></div>
             </div>
             <div class="action-groups" id="analysisActions"></div>
           </section>
@@ -228,16 +237,17 @@
                 </details>
               </div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="conceptCriteria"></div>
-                <label class="vision-label" for="conceptNote">Review note</label>
-                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Optional note. For Rework, the checkboxes already show what to keep and what to change."></textarea>
+                <div class="concept-complete">Human decision only. Concept criteria remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="conceptCriteria" hidden></div>
+                <label class="vision-label" for="conceptNote">Human instruction / review note</label>
+                <textarea id="conceptNote" class="vision-observation" rows="4" maxlength="1000" placeholder="For Rework, state exactly what must change. This instruction is authoritative. Optional for Accept, Reject, or Save."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="conceptPrev" type="button">← Previous</button>
                   <button class="danger" id="conceptReject" type="button">Reject</button>
                   <button class="ghost" id="conceptRework" type="button">Rework</button>
                   <button class="ghost" id="conceptSaveIdea" type="button">Save idea</button>
-                  <button id="conceptAccept" type="button">Accept concept</button>
-                  <button class="ghost" id="conceptNext" type="button">Next →</button>
+                  <button id="conceptAccept" type="button">Accept</button>
+                  <button class="ghost" id="conceptNext" type="button">Next idea →</button>
                 </div>
               </div>
             </div>
@@ -256,18 +266,173 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="packagingDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="packagingCriteria"></div>
-                <label class="vision-label" for="packagingNote">Review note</label>
-                <textarea id="packagingNote" class="vision-observation" rows="4" maxlength="1000" placeholder="Required for Rework. Optional for Reject or Accept."></textarea>
+                <div class="concept-complete">Human decision only. System criteria are retained for audit; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="packagingCriteria" hidden></div>
+                <label class="vision-label" for="packagingNote">Human instruction / review note</label>
+                <textarea id="packagingNote" class="vision-observation" rows="4" maxlength="1000" placeholder="For Rework, state exactly what must change. This instruction is authoritative. Optional for Reject or Accept."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="packagingPrev" type="button">← Previous</button>
                   <button class="danger" id="packagingReject" type="button">Reject</button>
                   <button class="ghost" id="packagingRework" type="button">Rework</button>
-                  <button id="packagingAccept" type="button">Accept package</button>
-                  <button class="ghost" id="packagingNext" type="button">Next →</button>
+                  <button class="ghost" id="packagingSaveIdea" type="button">Save</button>
+                  <button id="packagingAccept" type="button">Accept</button>
+                  <button class="ghost" id="packagingNext" type="button">Next idea →</button>
                 </div>
               </div>
             </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="researchReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN RESEARCH GATE</p>
+                <h2 id="researchReviewTitle">Review research claim</h2>
+                <p class="muted" id="researchReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="researchReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="researchDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Human decision only. Evidence checks remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="researchCriteria" hidden></div>
+                <label class="vision-label" for="researchNote">Human instruction / review note</label>
+                <textarea id="researchNote" class="vision-observation" rows="4" maxlength="1200" placeholder="For Rework, state what must be researched or corrected. This instruction is authoritative. A conflicted claim still needs a note if you Accept it."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="researchPrev" type="button">← Previous</button>
+                  <button class="danger" id="researchReject" type="button">Reject</button>
+                  <button class="ghost" id="researchRework" type="button">Rework</button>
+                  <button id="researchAccept" type="button">Accept</button>
+                  <button class="ghost" id="researchNext" type="button">Next claim →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="scriptReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN SCRIPT GATE</p>
+                <h2 id="scriptReviewTitle">Review script draft</h2>
+                <p class="muted" id="scriptReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="scriptReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="scriptDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Human decision only. Script quality criteria remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="scriptCriteria" hidden></div>
+
+                <div class="concept-detail-card script-section-review-pane" id="scriptSectionReviewPane">
+                  <div class="script-section-review-head">
+                    <div>
+                      <h4>SELECTIVE SECTION REVIEW</h4>
+                      <p class="muted" id="scriptSectionReviewState">Choose a script branch to review sections.</p>
+                    </div>
+                    <span class="status-chip running" id="scriptSectionTargetStatus">NOT PREPARED</span>
+                  </div>
+                  <div class="script-section-progress" id="scriptSectionProgress"></div>
+                  <button class="ghost" id="scriptSectionPrepare" type="button">Prepare section review</button>
+
+                  <div id="scriptSectionControls" hidden>
+                    <div class="script-section-target-row">
+                      <div class="script-section-target-select">
+                        <label class="vision-label" for="scriptSectionTarget">Target</label>
+                        <select id="scriptSectionTarget"></select>
+                      </div>
+                      <button class="ghost" id="scriptSectionNextPending" type="button">Next unresolved →</button>
+                    </div>
+
+                    <div class="script-section-target-detail" id="scriptSectionTargetDetail"></div>
+
+                    <div class="script-section-action-strip">
+                      <button id="scriptSectionAccept" type="button">Accept + lock</button>
+                      <button class="ghost" id="scriptSectionLock" type="button">Lock</button>
+                      <button class="ghost" id="scriptSectionUnlock" type="button">Unlock</button>
+                      <button class="ghost" id="scriptSectionRework" type="button">Request rework</button>
+                      <button class="ghost" id="scriptSectionCancelRework" type="button">Cancel rework</button>
+                    </div>
+
+                    <details class="script-section-editor">
+                      <summary>Manual target edit</summary>
+                      <label class="vision-label" for="scriptSectionManualText">Edit selected target only</label>
+                      <textarea id="scriptSectionManualText" class="vision-observation" rows="4" maxlength="5000" placeholder="Edit only this selected target. Locked targets must be unlocked first."></textarea>
+                      <button class="ghost" id="scriptSectionSaveManual" type="button">Save manual edit + lock</button>
+                      <p class="muted">Manual edits use the same full-script validation, versioning and rollback protection as generated alternatives.</p>
+                    </details>
+
+                    <div class="script-section-rework-box">
+                      <label class="vision-label" for="scriptSectionReason">Rework reason</label>
+                      <select id="scriptSectionReason"></select>
+                      <label class="vision-label" for="scriptSectionInstruction">Selective rework instruction</label>
+                      <textarea id="scriptSectionInstruction" class="vision-observation" rows="3" maxlength="1200" placeholder="Optional for preset reasons. Required when reason is Custom. State exactly what should change in this target only."></textarea>
+                      <div class="script-section-generation-actions">
+                        <button class="ghost" id="scriptSectionPrepareRework" type="button">Prepare rework request</button>
+                        <button id="scriptSectionGenerate" type="button">Generate A / B / C</button>
+                      </div>
+                    </div>
+
+                    <div id="scriptSectionAlternatives" class="script-section-alternatives" hidden>
+                      <div class="script-section-alternatives-head">
+                        <h4>ORIGINAL + ALTERNATIVES</h4>
+                        <span class="muted">Choose one. Nothing is applied until you click a choice.</span>
+                      </div>
+                      <div class="script-section-alternative-grid" id="scriptSectionAlternativeCards"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <label class="vision-label" for="scriptNote">Whole-script instruction / review note</label>
+                <textarea id="scriptNote" class="vision-observation" rows="4" maxlength="1400" placeholder="For whole-script Rework, state exactly what this branch must change. The instruction is authoritative. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="scriptPrev" type="button">← Previous</button>
+                  <button class="danger" id="scriptReject" type="button">Reject</button>
+                  <button class="ghost" id="scriptRework" type="button">Rework whole script</button>
+                  <button id="scriptAccept" type="button">Accept whole script</button>
+                  <button class="ghost" id="scriptNext" type="button">Next branch →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="panel concept-review-panel" id="titleDirectionReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">POST-SCRIPT TITLE DIRECTION GATE</p>
+                <h2 id="titleDirectionReviewTitle">Select preferred title directions</h2>
+                <p class="muted" id="titleDirectionReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="titleDirectionReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="titleDirectionDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Choose one Short and one Long-form direction. You may edit the wording, but the chosen candidate preserves its psychological angle, primary driver, claim and evidence provenance. This is not yet the final packaging approval.</div>
+                <label class="vision-label" for="titleDirectionNote">Human instruction / review note</label>
+                <textarea id="titleDirectionNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. State what the title directions should change without changing the approved script or evidence."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="titleDirectionPrev" type="button">← Previous</button>
+                  <button class="danger" id="titleDirectionReject" type="button">Reject directions</button>
+                  <button class="ghost" id="titleDirectionRework" type="button">Rework 5+5</button>
+                  <button id="titleDirectionAccept" type="button">Accept directions</button>
+                  <button class="ghost" id="titleDirectionNext" type="button">Next concept →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="packagingBriefPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">PACKAGING BRIEF + VIEWER PROMISE</p>
+                <h2>Evidence-bound packaging contract</h2>
+                <p class="muted" id="packagingBriefSummary"></p>
+              </div>
+              <span class="status-chip success" id="packagingBriefStatus">READY</span>
+            </div>
+            <div class="concept-detail" id="packagingBriefDetail"></div>
           </section>
 
           <section class="panel concept-review-panel" id="thumbnailReviewPanel" hidden>
@@ -326,59 +491,6 @@
             </div>
           </section>
 
-          <section class="panel concept-review-panel" id="researchReviewPanel" hidden>
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">HUMAN RESEARCH GATE</p>
-                <h2 id="researchReviewTitle">Review research claim</h2>
-                <p class="muted" id="researchReviewSummary"></p>
-              </div>
-              <span class="status-chip running" id="researchReviewStatus">PENDING</span>
-            </div>
-
-            <div class="concept-review-layout">
-              <div class="concept-detail" id="researchDetail"></div>
-              <div class="concept-decision-pane">
-                <div class="concept-criteria" id="researchCriteria"></div>
-                <label class="vision-label" for="researchNote">Review note</label>
-                <textarea id="researchNote" class="vision-observation" rows="4" maxlength="1200" placeholder="Required for Rework and for accepting a conflicted claim."></textarea>
-                <div class="concept-review-actions">
-                  <button class="ghost" id="researchPrev" type="button">← Previous</button>
-                  <button class="danger" id="researchReject" type="button">Reject</button>
-                  <button class="ghost" id="researchRework" type="button">Rework</button>
-                  <button id="researchAccept" type="button">Accept claim</button>
-                  <button class="ghost" id="researchNext" type="button">Next →</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel concept-review-panel" id="scriptReviewPanel" hidden>
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">HUMAN SCRIPT GATE</p>
-                <h2 id="scriptReviewTitle">Review script draft</h2>
-                <p class="muted" id="scriptReviewSummary"></p>
-              </div>
-              <span class="status-chip running" id="scriptReviewStatus">PENDING</span>
-            </div>
-
-            <div class="concept-review-layout">
-              <div class="concept-detail" id="scriptDetail"></div>
-              <div class="concept-decision-pane">
-                <div class="concept-criteria" id="scriptCriteria"></div>
-                <label class="vision-label" for="scriptNote">Review note</label>
-                <textarea id="scriptNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
-                <div class="concept-review-actions">
-                  <button class="ghost" id="scriptPrev" type="button">← Previous</button>
-                  <button class="danger" id="scriptReject" type="button">Reject</button>
-                  <button class="ghost" id="scriptRework" type="button">Rework</button>
-                  <button id="scriptAccept" type="button">Accept script</button>
-                  <button class="ghost" id="scriptNext" type="button">Next →</button>
-                </div>
-              </div>
-            </div>
-          </section>
           <section class="panel concept-review-panel" id="formatReviewPanel" hidden>
             <div class="panel-head">
               <div>
@@ -392,15 +504,16 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="formatDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="formatCriteria"></div>
-                <label class="vision-label" for="formatNote">Review note</label>
-                <textarea id="formatNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-complete">Human decision only. Format checks remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="formatCriteria" hidden></div>
+                <label class="vision-label" for="formatNote">Human instruction / review note</label>
+                <textarea id="formatNote" class="vision-observation" rows="4" maxlength="1400" placeholder="For Rework, state exactly what the production plan must change. The instruction is authoritative. Optional for Accept or Reject."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="formatPrev" type="button">← Previous</button>
                   <button class="danger" id="formatReject" type="button">Reject</button>
                   <button class="ghost" id="formatRework" type="button">Rework</button>
-                  <button id="formatAccept" type="button">Accept format plan</button>
-                  <button class="ghost" id="formatNext" type="button">Next →</button>
+                  <button id="formatAccept" type="button">Accept</button>
+                  <button class="ghost" id="formatNext" type="button">Next plan →</button>
                 </div>
               </div>
             </div>
@@ -419,15 +532,402 @@
             <div class="concept-review-layout">
               <div class="concept-detail" id="performanceDetail"></div>
               <div class="concept-decision-pane">
-                <div class="concept-criteria" id="performanceCriteria"></div>
-                <label class="vision-label" for="performanceNote">Review note</label>
-                <textarea id="performanceNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-complete">Human decision only. Delivery checks remain in the audit trail; you do not need to tick boxes.</div>
+                <div class="concept-criteria" id="performanceCriteria" hidden></div>
+                <label class="vision-label" for="performanceNote">Human instruction / review note</label>
+                <textarea id="performanceNote" class="vision-observation" rows="4" maxlength="1400" placeholder="For Rework, state exactly what the delivery plan must change. The instruction is authoritative. Optional for Accept or Reject."></textarea>
                 <div class="concept-review-actions">
                   <button class="ghost" id="performancePrev" type="button">← Previous</button>
                   <button class="danger" id="performanceReject" type="button">Reject</button>
                   <button class="ghost" id="performanceRework" type="button">Rework</button>
-                  <button id="performanceAccept" type="button">Accept performance</button>
-                  <button class="ghost" id="performanceNext" type="button">Next →</button>
+                  <button id="performanceAccept" type="button">Accept</button>
+                  <button class="ghost" id="performanceNext" type="button">Next branch →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="visualCandidateReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">VISUAL CANDIDATE GATE</p>
+                <h2 id="visualCandidateReviewTitle">Choose the shot</h2>
+                <p class="muted" id="visualCandidateReviewSummary">Compare the storyboard intent with discovered footage before rough cut.</p>
+              </div>
+              <span class="status-chip running" id="visualCandidateReviewStatus">PENDING</span>
+            </div>
+            <div class="visual-candidate-layout">
+              <div class="concept-detail" id="visualShotDetail"></div>
+              <div class="visual-candidate-pane">
+                <details class="technical-details creative-director-editor">
+                  <summary>Edit this storyboard shot</summary>
+                  <div class="technical-body">
+                    <label class="vision-label" for="storyboardCreativeInstruction">Your creative direction</label>
+                    <textarea id="storyboardCreativeInstruction" class="vision-observation" rows="3" maxlength="1200" placeholder="Example: Lower camera, tighter hammer impact, darker workshop, then reveal the craftsman."></textarea>
+                    <div class="creative-grid">
+                      <label>Desired visual<input id="storyboardDesiredVisual" type="text"></label>
+                      <label>Search terms<input id="storyboardSearchTerms" type="text" placeholder="comma, separated, terms"></label>
+                      <label>Framing<input id="storyboardFraming" type="text"></label>
+                      <label>Camera angle<input id="storyboardCameraAngle" type="text"></label>
+                      <label>Camera movement<input id="storyboardCameraMovement" type="text"></label>
+                      <label>Lens feel<input id="storyboardLens" type="text"></label>
+                      <label>Lighting<input id="storyboardLighting" type="text"></label>
+                      <label>Transition<input id="storyboardTransition" type="text"></label>
+                    </div>
+                    <button id="storyboardSaveRevision" type="button">Save shot revision → Re-search this shot</button>
+                    <p class="muted">Narration and timing stay locked. This revision invalidates only this shot's downstream visual approvals.</p>
+                  </div>
+                </details>
+                <div id="visualCandidateCards" class="visual-candidate-cards"></div>
+                <label class="vision-label" for="visualCandidateNote">Review note</label>
+                <textarea id="visualCandidateNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional unless you want to explain what a better visual needs."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualShotPrev" type="button">← Previous shot</button>
+                  <button class="danger" id="visualRejectAll" type="button">Reject all</button>
+                  <button class="ghost" id="visualNeedsBetter" type="button">Needs better visual</button>
+                  <button class="ghost" id="visualShotNext" type="button">Next shot →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="visualRightsReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN RIGHTS / CONTEXT GATE</p>
+                <h2 id="visualRightsReviewTitle">Review creator footage</h2>
+                <p class="muted" id="visualRightsReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="visualRightsReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="visualRightsDetail"></div>
+              <div class="concept-decision-pane">
+                <p class="muted">This records editorial intent; it is not a legal determination of fair use.</p>
+                <label class="vision-label" for="visualRightsPurpose">Transformative / editorial purpose</label>
+                <textarea id="visualRightsPurpose" class="vision-observation" rows="3" maxlength="1200" placeholder="Required to approve. Example: brief excerpt used to show the event being analyzed while narration critiques/explains what is happening."></textarea>
+                <label class="vision-label" for="visualRightsNote">Context note</label>
+                <textarea id="visualRightsNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional context or restriction."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualRightsPrev" type="button">← Previous</button>
+                  <button class="danger" id="visualRightsReject" type="button">Reject use</button>
+                  <button id="visualRightsApprove" type="button">Approve context use</button>
+                  <button class="ghost" id="visualRightsNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="managedVisualImportPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">APPROVED VISUAL ASSET RETURN</p>
+                <h2 id="managedVisualImportTitle">Supply approved local visual</h2>
+                <p class="muted" id="managedVisualImportSummary"></p>
+              </div>
+              <span class="status-chip running" id="managedVisualImportStatus">LOCAL FILE REQUIRED</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="managedVisualImportDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">The app will not automatically download creator/editorial footage. Supply a local file only for the exact visual selection already approved by the Human Rights/Context Gate.</div>
+                <label class="vision-label" for="managedVisualAssetPath">Local approved file path</label>
+                <input id="managedVisualAssetPath" type="text" placeholder="C:\path\to\approved-clip.mp4">
+                <label class="vision-label" for="managedVisualNote">Context / edit note</label>
+                <textarea id="managedVisualNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional note about the supplied excerpt or intended edit."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="managedVisualPrev" type="button">← Previous</button>
+                  <button id="managedVisualRegister" type="button">Register approved asset</button>
+                  <button class="ghost" id="managedVisualNext" type="button">Next →</button>
+                </div>
+                <p class="muted">Registration records provenance and the prior human context decision. It is not a legal determination of fair use.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="visualRoughCutReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN ROUGH-CUT GATE</p>
+                <h2 id="visualRoughCutReviewTitle">Review visual rough cut</h2>
+                <p class="muted" id="visualRoughCutReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="visualRoughCutReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="visualRoughCutDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Approve the current visual structure or send the relevant production layer back for rework. Approval with gaps still authorizes zero paid generation.</div>
+                <label class="vision-label" for="visualRoughCutShotSelect">Shot for visual rework</label>
+                <select id="visualRoughCutShotSelect"></select>
+                <label class="vision-label" for="visualRoughCutNote">Human instruction / review note</label>
+                <textarea id="visualRoughCutNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for rework. State exactly what feels wrong or what must change."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualRoughCutPrev" type="button">← Previous</button>
+                  <button class="ghost" id="visualRoughCutVisual" type="button">Rework visual</button>
+                  <button class="ghost" id="visualRoughCutPacing" type="button">Rework pacing</button>
+                  <button class="ghost" id="visualRoughCutAudio" type="button">Rework audio / delivery</button>
+                  <button id="visualRoughCutApprove" type="button">Approve with gaps</button>
+                  <button class="ghost" id="visualRoughCutNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="visualSpendReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN VISUAL SPEND GATE</p>
+                <h2 id="visualSpendReviewTitle">Decide whether this shot is worth paying for</h2>
+                <p class="muted" id="visualSpendReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="visualSpendReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="visualSpendDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Paid generation is last-resort only. This gate records a maximum authorization; it does not call a paid provider.</div>
+                <label class="vision-label" for="visualSpendMaxCost">Maximum authorized cost for this shot (USD)</label>
+                <input id="visualSpendMaxCost" type="number" min="0" step="0.01" value="0">
+                <label class="vision-label" for="visualSpendNote">Human instruction / note</label>
+                <textarea id="visualSpendNote" class="vision-observation" rows="4" maxlength="1200" placeholder="Required for Retry existing. Optional for Keep placeholder or Authorize generation."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="visualSpendPrev" type="button">← Previous</button>
+                  <button class="ghost" id="visualSpendRetry" type="button">Retry existing</button>
+                  <button class="danger" id="visualSpendKeep" type="button">Keep placeholder</button>
+                  <button id="visualSpendAuthorize" type="button">Authorize generation</button>
+                  <button class="ghost" id="visualSpendNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="generatedVisualImportPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">PREMIUM VISUAL RETURN</p>
+                <h2 id="generatedVisualImportTitle">Register generated visual</h2>
+                <p class="muted" id="generatedVisualImportSummary"></p>
+              </div>
+              <span class="status-chip running" id="generatedVisualImportStatus">WAITING FOR ASSET</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="generatedVisualImportDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Generate this shot externally with the approved brief. This form only registers the finished local file; it does not call Higgsfield or spend money.</div>
+                <label class="vision-label" for="generatedVisualAssetPath">Local generated file path</label>
+                <input id="generatedVisualAssetPath" type="text" placeholder="C:\path\to\generated-shot.mp4">
+                <label class="vision-label" for="generatedVisualActualCost">Actual cost for this shot (USD)</label>
+                <input id="generatedVisualActualCost" type="number" min="0" step="0.01" value="0">
+                <label class="vision-label" for="generatedVisualProvider">Provider</label>
+                <input id="generatedVisualProvider" type="text" value="higgsfield">
+                <label class="vision-label" for="generatedVisualProviderJobId">Provider job ID / reference (optional)</label>
+                <input id="generatedVisualProviderJobId" type="text" placeholder="Optional provider reference">
+                <label class="vision-label" for="generatedVisualNote">Note</label>
+                <textarea id="generatedVisualNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional note about the generated result."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="generatedVisualPrev" type="button">← Previous</button>
+                  <button id="generatedVisualRegister" type="button">Register generated asset</button>
+                  <button class="ghost" id="generatedVisualNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="editPreviewReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN EDIT PREVIEW GATE</p>
+                <h2 id="editPreviewReviewTitle">Review structural edit preview</h2>
+                <p class="muted" id="editPreviewReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="editPreviewReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div>
+                <video id="editPreviewVideo" class="edit-preview-video" controls preload="metadata"></video>
+                <div class="concept-detail" id="editPreviewDetail"></div>
+              </div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Judge story flow, pacing and narration-to-picture rhythm. Dark frames are intentional placeholders for visual assets that are still unresolved. This is not a publish-ready render.</div>
+                <label class="vision-label" for="editPreviewNote">Human direction</label>
+                <textarea id="editPreviewNote" class="vision-observation" rows="5" maxlength="1600" placeholder="Required when returning a layer for rework. Be specific about what feels wrong and what you want changed."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="editPreviewPrev" type="button">← Previous</button>
+                  <button class="ghost" id="editPreviewVisuals" type="button">Return to visuals</button>
+                  <button class="ghost" id="editPreviewNarration" type="button">Return to narration</button>
+                  <button class="ghost" id="editPreviewSound" type="button">Return to sound</button>
+                  <button id="editPreviewApprove" type="button">Approve edit direction</button>
+                  <button class="ghost" id="editPreviewNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="finalSoundImportPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">FINAL SOUND ASSET BOUNDARY</p>
+                <h2 id="finalSoundImportTitle">Register licensed final sound</h2>
+                <p class="muted" id="finalSoundImportSummary"></p>
+              </div>
+              <span class="status-chip running" id="finalSoundImportStatus">WAITING FOR ASSET</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="finalSoundImportDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">This form never calls or pays a sound provider. Register only an already licensed/owned local file, or explicitly omit the sound with a note.</div>
+                <label class="vision-label" for="finalSoundAssetPath">Local sound file path</label>
+                <input id="finalSoundAssetPath" type="text" placeholder="C:\path\to\licensed-sound.wav">
+                <label class="vision-label" for="finalSoundLicenceReference">Licence / ownership reference</label>
+                <input id="finalSoundLicenceReference" type="text" maxlength="500" placeholder="Required for registered assets">
+                <label class="vision-label" for="finalSoundSourceName">Source / library</label>
+                <input id="finalSoundSourceName" type="text" value="human_supplied">
+                <label class="vision-label" for="finalSoundProviderJobId">Provider / receipt reference (optional)</label>
+                <input id="finalSoundProviderJobId" type="text" maxlength="300">
+                <label class="vision-label" for="finalSoundActualCost">Actual external cost (USD)</label>
+                <input id="finalSoundActualCost" type="number" min="0" step="0.01" value="0">
+                <label><input id="finalSoundCommercialUse" type="checkbox"> I confirm commercial use is permitted by the licence/ownership terms.</label>
+                <label><input id="finalSoundExternalPurchase" type="checkbox"> If cost is above $0, I confirm I already made this purchase externally.</label>
+                <label><input id="finalSoundAttributionRequired" type="checkbox"> Attribution is required.</label>
+                <label class="vision-label" for="finalSoundAttributionText">Attribution text</label>
+                <input id="finalSoundAttributionText" type="text" maxlength="700">
+                <label class="vision-label" for="finalSoundNote">Human note</label>
+                <textarea id="finalSoundNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required when omitting a planned sound. Optional when registering an asset."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="finalSoundPrev" type="button">← Previous</button>
+                  <button class="ghost" id="finalSoundOmit" type="button">Omit this sound</button>
+                  <button id="finalSoundRegister" type="button">Register licensed asset</button>
+                  <button class="ghost" id="finalSoundNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="finalExportReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN FINAL EXPORT GATE</p>
+                <h2 id="finalExportReviewTitle">Review final render</h2>
+                <p class="muted" id="finalExportReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="finalExportReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div>
+                <video id="finalExportVideo" class="edit-preview-video" controls preload="metadata"></video>
+                <div class="concept-detail" id="finalExportDetail"></div>
+              </div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">This is the local final candidate with final visuals, narration and licensed/omitted sound decisions. Approval marks these exact bytes export-approved only; it does not upload or publish.</div>
+                <label class="vision-label" for="finalExportNote">Human direction</label>
+                <textarea id="finalExportNote" class="vision-observation" rows="5" maxlength="1600" placeholder="Required when returning visuals, narration or sound for rework."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="finalExportPrev" type="button">← Previous</button>
+                  <button class="ghost" id="finalExportVisuals" type="button">Return to visuals</button>
+                  <button class="ghost" id="finalExportNarration" type="button">Return to narration</button>
+                  <button class="ghost" id="finalExportSound" type="button">Return to sound</button>
+                  <button id="finalExportApprove" type="button">Approve final export</button>
+                  <button class="ghost" id="finalExportNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="previewReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">FREE AUDIO LISTEN GATE</p>
+                <h2 id="previewReviewTitle">Listen before spending</h2>
+                <p class="muted" id="previewReviewSummary">Review story flow, tone, spacing, music and SFX suggestions before any paid narration quote.</p>
+              </div>
+              <span class="status-chip running" id="previewReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="previewDetail"></div>
+              <div class="concept-decision-pane">
+                <details class="technical-details creative-director-editor">
+                  <summary>Edit narration delivery by segment</summary>
+                  <div class="technical-body">
+                    <label class="vision-label" for="narrationSegmentSelect">Segment</label>
+                    <select id="narrationSegmentSelect"></select>
+                    <div id="narrationLockedWords" class="concept-detail-card"></div>
+                    <label class="vision-label" for="narrationCreativeInstruction">Your direction</label>
+                    <textarea id="narrationCreativeInstruction" class="vision-observation" rows="3" maxlength="1000" placeholder="Example: quieter opening, longer pause before the reveal, then increase intensity."></textarea>
+                    <div class="creative-grid">
+                      <label>Emotion<input id="narrationEmotion" type="text"></label>
+                      <label>Intensity<input id="narrationIntensity" type="number" min="1" max="10"></label>
+                      <label>Speed<input id="narrationSpeed" type="number" min="0.5" max="2" step="0.05"></label>
+                      <label>Pause before ms<input id="narrationPauseBefore" type="number" min="0"></label>
+                      <label>Pause after ms<input id="narrationPauseAfter" type="number" min="0"></label>
+                      <label>Emphasis terms<input id="narrationEmphasis" type="text" placeholder="comma, separated"></label>
+                    </div>
+                    <button id="narrationSaveRevision" type="button">Save segment revision → Re-render preview</button>
+                    <p class="muted">The approved words are locked here. Use Rework Script if the wording itself should change.</p>
+                  </div>
+                </details>
+                <label class="vision-label" for="previewNote">What should change?</label>
+                <textarea id="previewNote" class="vision-observation" rows="5" maxlength="1400" placeholder="Required when requesting rework."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="previewScript" type="button">Rework Script</button>
+                  <button class="ghost" id="previewPerformance" type="button">Rework Performance</button>
+                  <button class="ghost" id="previewSound" type="button">Rework Music / SFX</button>
+                  <button id="previewApprove" type="button">Approve Final → Get Paid Quote</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="narrationSpendReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN NARRATION SPEND GATE</p>
+                <h2 id="narrationSpendReviewTitle">Review narration spend</h2>
+                <p class="muted" id="narrationSpendReviewSummary">Verify the current quote and worst-case cost before any paid narration call.</p>
+              </div>
+              <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="narrationSpendDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Nothing is purchased by viewing or preparing this gate. Accept is the explicit spend authorization.</div>
+                <div class="concept-criteria" id="narrationSpendCriteria"></div>
+                <label class="vision-label" for="narrationSpendNote">Spend decision note</label>
+                <textarea id="narrationSpendNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="narrationSpendPrev" type="button">← Previous</button>
+                  <button class="danger" id="narrationSpendReject" type="button">Reject Spend</button>
+                  <button class="ghost" id="narrationSpendRework" type="button">Rework Quote / Setup</button>
+                  <button id="narrationSpendAccept" type="button">Accept Worst-Case Cost</button>
+                  <button class="ghost" id="narrationSpendNext" type="button">Next branch →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel concept-review-panel" id="narrationReturnPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">AUTHORIZED NARRATION RETURN</p>
+                <h2 id="narrationReturnTitle">Register final narration audio</h2>
+                <p class="muted" id="narrationReturnSummary">Register only audio produced under the current approved spend ceiling.</p>
+              </div>
+              <span class="status-chip running" id="narrationReturnStatus">RETURN REQUIRED</span>
+            </div>
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="narrationReturnDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">This step does not call the paid provider. It records the provider return, copies audio into managed storage, and then starts local Audio QC.</div>
+                <label class="vision-label" for="narrationProviderJobId">Provider job / receipt reference</label>
+                <input id="narrationProviderJobId" type="text" maxlength="300" placeholder="Required provider job, transaction, or receipt reference">
+                <label class="vision-label" for="narrationActualCost">Actual cumulative cost (USD)</label>
+                <input id="narrationActualCost" type="number" min="0" step="0.01" placeholder="0.00">
+                <div id="narrationReturnSegments" class="concept-criteria"></div>
+                <p class="muted">Enter local file paths returned by the provider. Every current narration segment is required in exact order. Re-register corrected files after a QC failure.</p>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="narrationReturnPrev" type="button">← Previous</button>
+                  <button id="narrationReturnRegister" type="button">Register Audio → Run Local QC</button>
+                  <button class="ghost" id="narrationReturnNext" type="button">Next branch →</button>
                 </div>
               </div>
             </div>

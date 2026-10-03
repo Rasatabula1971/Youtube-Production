@@ -138,7 +138,7 @@ class ResearchEngineTests(unittest.TestCase):
         )
         self.assertEqual(
             plan["research_questions"][-1]["origin"],
-            "packaging",
+            "legacy_packaging",
         )
         self.assertEqual(
             plan["viewer_problem"],
@@ -149,12 +149,16 @@ class ResearchEngineTests(unittest.TestCase):
             self.concept["packaging"]["one_sentence_promise"],
         )
 
-    def test_plan_requires_approved_packaging_context(self):
+    def test_plan_does_not_require_pre_script_packaging(self):
         concept = dict(self.concept)
         concept.pop("packaging")
+        plan = build_research_plan(concept)
 
-        with self.assertRaises(ValueError):
-            build_research_plan(concept)
+        self.assertEqual(
+            [item["question_id"] for item in plan["research_questions"]],
+            ["rq001", "rq002"],
+        )
+        self.assertEqual(plan["packaging"], {})
 
     def test_single_source_is_not_called_verified(self):
         coverage = claim_coverage_state(self.claim()["evidence_links"])

@@ -168,6 +168,83 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertIn("viewer_need_evidence.status", prompt)
         self.assertIn("OBSERVED", prompt)
 
+    def test_rework_schema_targets_one_stable_concept(self):
+        request = self.request()
+        original = self.valid_concept()
+        request.update(
+            {
+                "human_rework_note": "Make the hook more human and less technical.",
+                "human_rework_concept_id": original["concept_id"],
+                "human_rework_original_concept": original,
+                "human_rework_original_concepts": [
+                    original,
+                    {
+                        **original,
+                        "concept_id": "curiosity_gap-002",
+                        "working_title": "Keep This Sibling",
+                    },
+                ],
+            }
+        )
+        schema = runner.response_schema(request)
+        concepts = schema["properties"]["concepts"]
+        concept_id = concepts["items"]["properties"]["concept_id"]
+
+        self.assertEqual(concepts["maxItems"], 1)
+        self.assertEqual(concept_id["const"], original["concept_id"])
+
+    def test_rework_prompt_marks_human_instruction_authoritative(self):
+        request = self.request()
+        request.update(
+            {
+                "human_rework_note": "Make the hook about what an ordinary viewer notices.",
+                "human_rework_concept_id": self.valid_concept()["concept_id"],
+            }
+        )
+        prompt = runner.build_prompt(request, maximum_chars=95000)
+
+        self.assertIn("AUTHORITATIVE human instruction", prompt)
+        self.assertIn("exactly one revised concept", prompt)
+        self.assertIn("same concept_id", prompt)
+        self.assertIn("ordinary viewer notices", prompt)
+
+    def test_rework_merge_replaces_only_target_concept(self):
+        target = self.valid_concept()
+        sibling = {
+            **self.valid_concept(),
+            "concept_id": "curiosity_gap-002",
+            "working_title": "Keep This Sibling",
+        }
+        request = self.request()
+        request.update(
+            {
+                "human_rework_note": "Raise the human tension.",
+                "human_rework_concept_id": target["concept_id"],
+                "human_rework_original_concepts": [target, sibling],
+            }
+        )
+        replacement = {
+            **target,
+            "working_title": "The Tire Shouldn't Look Like This",
+        }
+        merged = runner._merge_human_rework_response(
+            request,
+            {
+                "mechanism_id": "curiosity_gap",
+                "concepts": [replacement],
+            },
+        )
+
+        self.assertEqual(len(merged["concepts"]), 2)
+        self.assertEqual(
+            merged["concepts"][0]["working_title"],
+            "The Tire Shouldn't Look Like This",
+        )
+        self.assertEqual(
+            merged["concepts"][1]["working_title"],
+            "Keep This Sibling",
+        )
+
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
     def test_valid_free_response_is_written_with_request_hash(
@@ -235,6 +312,84 @@ class ConceptModelRunnerTests(unittest.TestCase):
             response["response_provenance"]["validation_contract_sha256"],
             engine.validation_contract_sha256(),
         )
+
+    @patch("concept_model_runner.call_direct_gemini_backup")
+    @patch("concept_model_runner.direct_gemini_available", return_value=True)
+    @patch("concept_model_runner.resolve_fair_paths")
+    @patch("concept_model_runner.call_fair_bridge")
+    def test_all_rejected_batch_gets_one_free_validation_repair(
+        self,
+        call_bridge,
+        resolve_paths,
+        _direct_available,
+        call_repair,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            request_path = root / "curiosity_gap.concept_request.json"
+            request_path.write_text(json.dumps(self.request()), encoding="utf-8")
+            resolve_paths.return_value = {
+                "repo": root,
+                "env_file": root / ".env",
+                "python": root / "python.exe",
+            }
+            invalid = self.valid_concept()
+            invalid["research_questions"] = []
+            call_bridge.return_value = {
+                "status": "ACCEPTED",
+                "output": json.dumps({
+                    "mechanism_id": "curiosity_gap",
+                    "concepts": [invalid],
+                }),
+                "paid_inference_executed": False,
+                "provider_id": "direct_gemini_backup",
+                "model_id": "gemini-test",
+                "request_id": "req-initial",
+                "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
+                "direct_backup_may_bill": False,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+                "attempts": [],
+            }
+            call_repair.return_value = {
+                "status": "ACCEPTED",
+                "output": json.dumps({
+                    "mechanism_id": "curiosity_gap",
+                    "concepts": [self.valid_concept()],
+                }),
+                "paid_inference_executed": None,
+                "provider_id": "direct_gemini_backup",
+                "model_id": "gemini-test",
+                "request_id": "req-repair",
+                "direct_backup_used": True,
+                "direct_backup_free_tier_only": True,
+                "direct_backup_may_bill": False,
+                "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+                "attempts": [],
+            }
+
+            old_runs = runner.MODEL_RUNS_DIR
+            old_raw = runner.RAW_OUTPUTS_DIR
+            old_responses = runner.RESPONSES_DIR
+            try:
+                runner.MODEL_RUNS_DIR = root / "runs"
+                runner.RAW_OUTPUTS_DIR = root / "raw"
+                runner.RESPONSES_DIR = root / "responses"
+                result = runner.run_one(
+                    request_path,
+                    force=True,
+                    runner_config=self.runner_config(),
+                )
+            finally:
+                runner.MODEL_RUNS_DIR = old_runs
+                runner.RAW_OUTPUTS_DIR = old_raw
+                runner.RESPONSES_DIR = old_responses
+
+        self.assertEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["structurally_accepted"], 1)
+        self.assertTrue(result["validation_repair_attempted"])
+        self.assertTrue(result["initial_validation_rejection_summary"])
+        call_repair.assert_called_once()
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")

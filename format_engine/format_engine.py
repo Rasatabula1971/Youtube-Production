@@ -28,11 +28,24 @@ CONFIG_FILE = HERE / "format_config.json"
 APPROVED_SCRIPTS_DIR = (
     PROJECT_ROOT / "story_script_engine" / "output" / "approved_scripts"
 )
+SCRIPT_SECTION_STATE_DIR = (
+    PROJECT_ROOT / "story_script_engine" / "output" / "script_section_states"
+)
+SCRIPT_DRAFTS_DIR = (
+    PROJECT_ROOT / "story_script_engine" / "output" / "script_drafts"
+)
 OUTPUT_DIR = HERE / "output"
 REQUESTS_DIR = OUTPUT_DIR / "format_requests"
 RESPONSES_DIR = OUTPUT_DIR / "format_responses"
 PLANS_DIR = OUTPUT_DIR / "format_plans"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
+MODEL_RUNS_DIR = OUTPUT_DIR / "format_model_runs"
+RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_format_outputs"
+MODEL_BATCH_SUMMARY_FILE = OUTPUT_DIR / "format_model_batch_summary.json"
+FORMAT_REVIEW_REQUESTS_DIR = OUTPUT_DIR / "format_review_requests"
+FORMAT_REVIEW_RESPONSES_DIR = OUTPUT_DIR / "format_review_responses"
+APPROVED_FORMAT_PLANS_DIR = OUTPUT_DIR / "approved_format_plans"
+FORMAT_GATE_SUMMARY_FILE = OUTPUT_DIR / "format_gate_summary.json"
 
 READY_STATUS = "READY_FOR_PRODUCTION"
 
@@ -54,6 +67,156 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _expected_section_state_path(concept_id: str, fmt: str) -> Path:
+    return (
+        SCRIPT_SECTION_STATE_DIR
+        / (
+            f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+            "section_state.json"
+        )
+    ).resolve()
+
+
+def _expected_script_draft_path(concept_id: str, fmt: str) -> Path:
+    return (
+        SCRIPT_DRAFTS_DIR
+        / (
+            f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
+            "script_draft.json"
+        )
+    ).resolve()
+
+
+def assert_section_review_provenance_current(
+    script: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Fail closed if prepared selective review is no longer current."""
+    concept_id = str(script.get("concept_id") or "").strip()
+    required = script.get("required_branches", [])
+    provenance = script.get("approved_provenance", {})
+    if not concept_id:
+        raise ValueError("Approved script bundle requires concept_id")
+    if not isinstance(required, list) or not required:
+        raise ValueError("Approved script bundle requires required_branches")
+    if not isinstance(provenance, dict):
+        raise ValueError("Approved script bundle requires approved_provenance")
+
+    result: dict[str, dict[str, Any]] = {}
+    for fmt in required:
+        branch = str(fmt or "").strip()
+        record = provenance.get(branch, {})
+        if not isinstance(record, dict):
+            raise ValueError(
+                f"Approved {branch} script is missing review provenance"
+            )
+        prepared = record.get("section_review_prepared") is True
+        if not prepared:
+            result[branch] = {
+                "prepared": False,
+                "section_state_sha256": None,
+                "state_version": None,
+            }
+            continue
+
+        expected_state = _expected_section_state_path(concept_id, branch)
+        recorded_state = Path(
+            str(record.get("section_state") or "")
+        ).resolve()
+        if recorded_state != expected_state:
+            raise ValueError(
+                f"Approved {branch} section-state path is not canonical"
+            )
+        if not expected_state.is_file():
+            raise ValueError(
+                f"Approved {branch} section-state artifact is unavailable"
+            )
+        expected_hash = str(
+            record.get("section_state_sha256") or ""
+        ).strip()
+        if not expected_hash or sha256_file(expected_state) != expected_hash:
+            raise ValueError(
+                f"Approved {branch} section-state provenance is stale"
+            )
+
+        state = load_json(expected_state)
+        if (
+            str(state.get("concept_id") or "") != concept_id
+            or str(state.get("format") or "") != branch
+        ):
+            raise ValueError(
+                f"Approved {branch} section-state identity mismatch"
+            )
+
+        expected_draft = _expected_script_draft_path(concept_id, branch)
+        recorded_draft = Path(
+            str(state.get("source_draft") or "")
+        ).resolve()
+        if recorded_draft != expected_draft:
+            raise ValueError(
+                f"Approved {branch} section state points to non-canonical draft"
+            )
+        if not expected_draft.is_file():
+            raise ValueError(
+                f"Approved {branch} Script Draft is unavailable"
+            )
+        if (
+            str(state.get("source_draft_sha256") or "")
+            != sha256_file(expected_draft)
+        ):
+            raise ValueError(
+                f"Approved {branch} section state is stale against Script Draft"
+            )
+
+        targets = [
+            item
+            for item in state.get("targets", [])
+            if isinstance(item, dict)
+        ]
+        unresolved = [
+            str(item.get("target_id") or "")
+            for item in targets
+            if item.get("decision") != "ACCEPTED"
+            or item.get("locked") is not True
+        ]
+        if unresolved:
+            raise ValueError(
+                f"Approved {branch} section review is incomplete: "
+                + ", ".join(unresolved)
+            )
+
+        state_version = int(state.get("state_version") or 0)
+        if int(record.get("section_state_version") or -1) != state_version:
+            raise ValueError(
+                f"Approved {branch} section-state version changed"
+            )
+        if int(record.get("section_target_count") or -1) != len(targets):
+            raise ValueError(
+                f"Approved {branch} section target count changed"
+            )
+        lineage = [
+            {
+                "target_id": str(item.get("target_id") or ""),
+                "target_sha256": str(item.get("target_sha256") or ""),
+            }
+            for item in sorted(
+                targets,
+                key=lambda item: int(item.get("ordinal") or 0),
+            )
+        ]
+        if record.get("section_targets") != lineage:
+            raise ValueError(
+                f"Approved {branch} section target lineage changed"
+            )
+
+        result[branch] = {
+            "prepared": True,
+            "section_state_sha256": expected_hash,
+            "state_version": state_version,
+            "target_count": len(targets),
+        }
+    return result
+
+
 def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
     owners: dict[str, str] = {}
     for raw in values:
@@ -67,6 +230,214 @@ def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
                 f"{previous!r} and {raw!r} -> {slug!r}"
             )
         owners[slug] = raw
+
+
+def _request_slug_from_path(path: Path) -> str | None:
+    suffix = ".format_request.json"
+    name = path.name
+    if not name.endswith(suffix):
+        return None
+    return name[: -len(suffix)]
+
+
+def _existing_request_hashes(requests_dir: Path) -> dict[str, str]:
+    if not requests_dir.exists():
+        return {}
+    result: dict[str, str] = {}
+    for path in requests_dir.glob("*.format_request.json"):
+        slug = _request_slug_from_path(path)
+        if slug:
+            result[slug] = sha256_file(path)
+    return result
+
+
+def _remove_file(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError(f"Expected file during Format cleanup: {path}")
+    path.unlink()
+    return True
+
+
+def _invalidate_format_slug(slug: str) -> list[str]:
+    """Remove downstream artifacts derived from an invalidated Format request."""
+    removed: list[str] = []
+    paths = [
+        RESPONSES_DIR / f"{slug}.json",
+        PLANS_DIR / f"{slug}.format_plan.json",
+        MODEL_RUNS_DIR / f"{slug}.model_run.json",
+        RAW_OUTPUTS_DIR / f"{slug}.txt",
+        FORMAT_REVIEW_REQUESTS_DIR / f"{slug}.format_review_request.json",
+        FORMAT_REVIEW_RESPONSES_DIR / f"{slug}.format_review_response.json",
+        APPROVED_FORMAT_PLANS_DIR / f"{slug}.approved_format_plan.json",
+    ]
+    for path in paths:
+        if _remove_file(path):
+            removed.append(str(path.resolve()))
+    return removed
+
+
+def _prune_invalidated_format_outputs(
+    previous_hashes: dict[str, str],
+    current_hashes: dict[str, str],
+) -> dict[str, Any]:
+    invalidated = sorted(
+        slug
+        for slug in set(previous_hashes) | set(current_hashes)
+        if previous_hashes.get(slug) != current_hashes.get(slug)
+    )
+    removed: list[str] = []
+    for slug in invalidated:
+        removed.extend(_invalidate_format_slug(slug))
+
+    summaries_removed: list[str] = []
+    if invalidated:
+        for path in (MODEL_BATCH_SUMMARY_FILE, FORMAT_GATE_SUMMARY_FILE):
+            if _remove_file(path):
+                summaries_removed.append(str(path.resolve()))
+
+    return {
+        "invalidated_concept_slugs": invalidated,
+        "removed_artifacts": removed,
+        "removed_summaries": summaries_removed,
+    }
+
+
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _prune_mismatched_active_format_outputs(
+    current_hashes: dict[str, str],
+) -> dict[str, Any]:
+    removed: list[str] = []
+    invalidated_review_slugs: set[str] = set()
+
+    for slug, request_hash in sorted(current_hashes.items()):
+        response_path = RESPONSES_DIR / f"{slug}.json"
+        plan_path = PLANS_DIR / f"{slug}.format_plan.json"
+        run_path = MODEL_RUNS_DIR / f"{slug}.model_run.json"
+        raw_path = RAW_OUTPUTS_DIR / f"{slug}.txt"
+        review_request_path = (
+            FORMAT_REVIEW_REQUESTS_DIR
+            / f"{slug}.format_review_request.json"
+        )
+        review_response_path = (
+            FORMAT_REVIEW_RESPONSES_DIR
+            / f"{slug}.format_review_response.json"
+        )
+        approved_plan_path = (
+            APPROVED_FORMAT_PLANS_DIR
+            / f"{slug}.approved_format_plan.json"
+        )
+
+        response = _load_dict_or_none(response_path)
+        response_provenance = (
+            response.get("response_provenance", {})
+            if isinstance(response, dict)
+            else {}
+        )
+        response_current = bool(
+            response
+            and isinstance(response_provenance, dict)
+            and response_provenance.get("request_sha256") == request_hash
+        )
+        if response_path.exists() and not response_current:
+            if _remove_file(response_path):
+                removed.append(str(response_path.resolve()))
+
+        plan = _load_dict_or_none(plan_path)
+        plan_provenance = (
+            plan.get("plan_provenance", {})
+            if isinstance(plan, dict)
+            else {}
+        )
+        plan_current = bool(
+            plan
+            and isinstance(plan_provenance, dict)
+            and plan_provenance.get("request_sha256") == request_hash
+        )
+        if plan_path.exists() and not plan_current:
+            if _remove_file(plan_path):
+                removed.append(str(plan_path.resolve()))
+            invalidated_review_slugs.add(slug)
+
+        run = _load_dict_or_none(run_path)
+        run_current = bool(
+            run
+            and run.get("status") == "VALIDATED"
+            and run.get("request_sha256") == request_hash
+        )
+        if not run_current:
+            if _remove_file(run_path):
+                removed.append(str(run_path.resolve()))
+            if _remove_file(raw_path):
+                removed.append(str(raw_path.resolve()))
+
+        if not plan_current:
+            invalidated_review_slugs.add(slug)
+            continue
+
+        plan_hash = sha256_file(plan_path)
+        review_request = _load_dict_or_none(review_request_path)
+        review_provenance = (
+            review_request.get("request_provenance", {})
+            if isinstance(review_request, dict)
+            else {}
+        )
+        review_request_current = bool(
+            review_request
+            and isinstance(review_provenance, dict)
+            and review_provenance.get("format_plan")
+            == str(plan_path.resolve())
+            and review_provenance.get("format_plan_sha256") == plan_hash
+        )
+        if review_request_path.exists() and not review_request_current:
+            if _remove_file(review_request_path):
+                removed.append(str(review_request_path.resolve()))
+            invalidated_review_slugs.add(slug)
+
+        review_response = _load_dict_or_none(review_response_path)
+        review_response_current = bool(
+            review_request_current
+            and review_response
+            and review_response.get("format_plan_sha256") == plan_hash
+        )
+        if review_response_path.exists() and not review_response_current:
+            if _remove_file(review_response_path):
+                removed.append(str(review_response_path.resolve()))
+
+        approved = _load_dict_or_none(approved_plan_path)
+        approved_provenance = (
+            approved.get("approved_provenance", {})
+            if isinstance(approved, dict)
+            else {}
+        )
+        approved_current = bool(
+            review_request_current
+            and approved
+            and isinstance(approved_provenance, dict)
+            and approved_provenance.get("format_plan_sha256") == plan_hash
+        )
+        if approved_plan_path.exists() and not approved_current:
+            if _remove_file(approved_plan_path):
+                removed.append(str(approved_plan_path.resolve()))
+
+    if invalidated_review_slugs and _remove_file(FORMAT_GATE_SUMMARY_FILE):
+        removed.append(str(FORMAT_GATE_SUMMARY_FILE.resolve()))
+
+    return {
+        "checked_concept_slugs": sorted(current_hashes),
+        "review_invalidated_concept_slugs": sorted(
+            invalidated_review_slugs
+        ),
+        "removed_artifacts": removed,
+    }
 
 
 def load_config(path: Path = CONFIG_FILE) -> dict[str, Any]:
@@ -123,16 +494,20 @@ def build_format_request(
     if not concept_id:
         raise ValueError("Approved script bundle requires concept_id")
 
+    section_review_provenance = assert_section_review_provenance_current(
+        script
+    )
+
     package = script.get("package", {})
     if not isinstance(package, dict):
         package = {}
-    approved_title = str(package.get("title") or "").strip()
-    if not approved_title:
-        raise ValueError("Approved script bundle requires Packaging title")
-    if str(script.get("title") or "") != approved_title:
-        raise ValueError(
-            "Approved script bundle title does not match the Packaging title contract"
-        )
+    working_title = str(
+        script.get("title")
+        or package.get("title")
+        or ""
+    ).strip()
+    if not working_title:
+        raise ValueError("Approved script bundle requires an internal working title")
 
     required_branches = resolve_branches(
         str(package.get("format_intent") or ""),
@@ -170,8 +545,10 @@ def build_format_request(
             raise ValueError(f"Approved script bundle is missing {fmt} script")
         if str(branch_script.get("format") or "") != fmt:
             raise ValueError(f"Approved {fmt} script has wrong format identity")
-        if str(branch_script.get("title") or "") != approved_title:
-            raise ValueError(f"Approved {fmt} script violates Packaging title")
+        if str(branch_script.get("title") or "") != working_title:
+            raise ValueError(
+                f"Approved {fmt} script does not preserve the internal working-title identity"
+            )
         sections = branch_script.get("sections", [])
         if not isinstance(sections, list) or not sections:
             raise ValueError(f"Approved {fmt} script requires sections")
@@ -216,7 +593,9 @@ def build_format_request(
         "required_branches": required_branches,
         "branch_constraints": constraints,
         "package": {
-            "title": package.get("title"),
+            "title": working_title,
+            "title_role": "INTERNAL_WORKING_TITLE",
+            "selected_titles": {},
             "one_sentence_promise": package.get("one_sentence_promise"),
             "expected_payoff": package.get("expected_payoff"),
             "viewer_problem": package.get("viewer_problem"),
@@ -248,6 +627,7 @@ def build_format_request(
         "request_provenance": {
             "approved_script": str(script_path.resolve()),
             "approved_script_sha256": sha256_file(script_path),
+            "section_review": section_review_provenance,
         },
     }
 
@@ -513,6 +893,7 @@ def run_prepare(
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     config = config or load_config()
+    previous_request_hashes = _existing_request_hashes(REQUESTS_DIR)
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
     paths = (
         sorted(approved_dir.glob("*.approved_script.json"))
@@ -554,6 +935,17 @@ def run_prepare(
     for stale_path in REQUESTS_DIR.glob("*.format_request.json"):
         if stale_path.resolve() not in current_destinations:
             stale_path.unlink()
+
+    current_request_hashes = _existing_request_hashes(REQUESTS_DIR)
+    cleanup = _prune_invalidated_format_outputs(
+        previous_request_hashes,
+        current_request_hashes,
+    )
+    cleanup["active_provenance_cleanup"] = (
+        _prune_mismatched_active_format_outputs(
+            current_request_hashes,
+        )
+    )
     summary = {
         "status": (
             "FORMAT_REQUESTS_READY" if prepared else "WAITING_FOR_APPROVED_SCRIPTS"
@@ -562,6 +954,7 @@ def run_prepare(
         "prepared": len(prepared),
         "failures": failures,
         "requests_dir": str(REQUESTS_DIR),
+        "stale_cleanup": cleanup,
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     SUMMARY_FILE.write_text(

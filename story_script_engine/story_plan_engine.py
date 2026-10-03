@@ -1,8 +1,8 @@
 """Story Plan Engine.
 
 Creates a story-structure layer between verified research and narration writing.
-The Packaging title is immutable: story planning may organize the narrative but
-may not rewrite the approved click promise.
+Slice 23 treats the title carried here as an internal working title only. Final
+public title direction is selected after the script is human-approved.
 """
 
 from __future__ import annotations
@@ -18,6 +18,10 @@ _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
+from channel_profiles.channel_profile import (
+    load_active_profile_binding,
+    normalize_binding,
+)
 from pipeline_integrity import atomic_write_json
 from story_script_engine import (
     RESEARCH_VERIFIED_DIR,
@@ -96,13 +100,17 @@ def _base_from_verified_package(
     if not isinstance(concept, dict):
         raise ValueError("concept must be an object")
 
-    packaging = concept.get("packaging", {})
-    if not isinstance(packaging, dict):
-        packaging = {}
+    legacy_packaging = concept.get("packaging", {})
+    if not isinstance(legacy_packaging, dict):
+        legacy_packaging = {}
 
-    title = str(packaging.get("title") or "").strip()
-    if not title:
-        raise ValueError("Approved package title is required before story planning")
+    working_title = str(
+        concept.get("working_title")
+        or legacy_packaging.get("title")
+        or ""
+    ).strip()
+    if not working_title:
+        raise ValueError("Verified concept requires an internal working_title")
 
     claims = package.get("claims", [])
     if not isinstance(claims, list) or not claims:
@@ -128,26 +136,49 @@ def _base_from_verified_package(
             }
         )
 
+    # Keep the historical key name "package" so older consumers and artifacts
+    # remain readable, but its role is now explicitly pre-packaging story
+    # context. No public title or thumbnail is locked at this stage.
+    story_contract: dict[str, Any] = {
+        "title": working_title,
+        "title_role": "INTERNAL_WORKING_TITLE",
+        "final_public_title_locked": False,
+        "selected_titles": {},
+        "thumbnail": {},
+        "opening_frame": {},
+        "one_sentence_promise": (
+            legacy_packaging.get("one_sentence_promise")
+            or legacy_packaging.get("core_promise")
+            or concept.get("audience_promise")
+        ),
+        "expected_payoff": (
+            legacy_packaging.get("expected_payoff")
+            or concept.get("desired_outcome")
+        ),
+        "viewer_problem": (
+            concept.get("viewer_problem")
+            or legacy_packaging.get("viewer_problem")
+        ),
+        "viewer_moment": (
+            concept.get("viewer_moment")
+            or legacy_packaging.get("viewer_moment")
+        ),
+        "desired_outcome": (
+            concept.get("desired_outcome")
+            or legacy_packaging.get("desired_outcome")
+        ),
+        "format_intent": (
+            concept.get("format_intent")
+            or legacy_packaging.get("format_intent")
+        ),
+        "legacy_package_id": legacy_packaging.get("package_id"),
+    }
+
     return {
         "concept_id": concept_id,
-        "package": {
-            "title": title,
-            "thumbnail": packaging.get("thumbnail", {}),
-            "opening_frame": packaging.get("opening_frame", {}),
-            "one_sentence_promise": packaging.get("one_sentence_promise")
-            or packaging.get("core_promise")
-            or concept.get("audience_promise"),
-            "expected_payoff": packaging.get("expected_payoff"),
-            "viewer_problem": packaging.get("viewer_problem")
-            or concept.get("viewer_problem"),
-            "viewer_moment": packaging.get("viewer_moment")
-            or concept.get("viewer_moment"),
-            "desired_outcome": packaging.get("desired_outcome")
-            or concept.get("desired_outcome"),
-            "format_intent": packaging.get("format_intent")
-            or concept.get("format_intent"),
-        },
+        "package": story_contract,
         "concept": {
+            "working_title": working_title,
             "premise": concept.get("premise"),
             "audience_promise": concept.get("audience_promise"),
             "viewer_problem": concept.get("viewer_problem"),
@@ -156,6 +187,7 @@ def _base_from_verified_package(
             "human_framing": concept.get("human_framing", {}),
             "mechanism_id": concept.get("mechanism_id"),
             "mechanism_label": concept.get("mechanism_label"),
+            "format_intent": concept.get("format_intent"),
         },
         "accepted_claim_ids": sorted(claim_ids),
         "accepted_claims": accepted,
@@ -167,11 +199,32 @@ def _base_from_verified_package(
 def build_story_plan_request(
     package: dict[str, Any],
     package_path: Path,
+    channel_voice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     base = _base_from_verified_package(package, package_path)
+    channel_voice_binding = (
+        normalize_binding(channel_voice)
+        if channel_voice is not None
+        else load_active_profile_binding()
+    )
+    voice_is_active = bool(channel_voice_binding["apply_to_generation"])
+    voice_instruction = (
+        "Apply the approved Channel Voice Profile to framing choices, "
+        "technical-language treatment and narrator posture. It may not "
+        "override verified research, the accepted viewer/story contract or the "
+        "format psychology contract."
+        if voice_is_active
+        else (
+            "No approved Channel Voice Profile exists. Do not infer a "
+            "persistent channel personality from the niche, working title, source "
+            "videos or generic creator advice. Use only the supplied "
+            "research, human framing and psychology constraints."
+        )
+    )
     return {
         "artifact": "story_plan_request",
         **{key: value for key, value in base.items() if not key.startswith("source_")},
+        "channel_voice": channel_voice_binding,
         "psychology_contract": {
             "opening_line": {
                 "required": True,
@@ -205,13 +258,13 @@ def build_story_plan_request(
                 "Tempo is independent of drama and must also change across the story; a slow-motion beat can remain high drama.",
                 "Do not manufacture catastrophe or exaggerate beyond accepted research.",
                 "Every opened loop must be advanced and ultimately paid off.",
-                "The final payoff must satisfy the approved title/thumbnail promise.",
+                "The final payoff must satisfy the accepted viewer/story promise. Final title/thumbnail packaging is selected only after script approval.",
                 "No fixed hook-second or pattern-interrupt timing rule is assumed.",
             ],
         },
         "instructions": [
             "Plan the story before writing narration.",
-            "The approved package title is immutable. Return it exactly as supplied.",
+            "The supplied title is an INTERNAL WORKING TITLE used only for artifact identity. Return it unchanged here; it is not the final public YouTube title.",
             "Do not write final narration or prose paragraphs.",
             "Design a clear viewer journey: high-impact opening, progressive understanding, reveal/payoff, and close.",
             "Make the viewer state explicit: what they know, expect, and want resolved.",
@@ -224,6 +277,7 @@ def build_story_plan_request(
             "Every factual beat may use only accepted claim_ids supplied here.",
             "Framing can be original, but it must not introduce unsupported factual assertions.",
             "Do not copy source-video wording, sequence, personality, or exact execution.",
+            voice_instruction,
             "Make each beat advance the viewer rather than repeat the previous beat.",
         ],
         "request_provenance": {
@@ -241,9 +295,9 @@ def validate_story_plan_response(
     if str(response.get("concept_id", "")) != str(request.get("concept_id", "")):
         errors.append("concept_id mismatch")
 
-    approved_title = str(request.get("package", {}).get("title") or "")
-    if str(response.get("title", "")) != approved_title:
-        errors.append("title must exactly match the approved Packaging title")
+    working_title = str(request.get("package", {}).get("title") or "")
+    if str(response.get("title", "")) != working_title:
+        errors.append("title must exactly match the internal working title")
 
     for field in (
         "story_question",

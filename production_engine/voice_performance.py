@@ -34,6 +34,11 @@ RESPONSES_DIR = OUTPUT_DIR / "voice_performance_responses"
 MODEL_RUNS_DIR = OUTPUT_DIR / "voice_performance_model_runs"
 RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_voice_performance_outputs"
 SUMMARY_FILE = OUTPUT_DIR / "voice_performance_summary.json"
+MODEL_BATCH_SUMMARY_FILE = OUTPUT_DIR / "voice_performance_model_batch_summary.json"
+REVIEW_REQUESTS_DIR = OUTPUT_DIR / "voice_performance_review_requests"
+REVIEW_RESPONSES_DIR = OUTPUT_DIR / "voice_performance_review_responses"
+APPROVED_VOICE_SPECS_DIR = OUTPUT_DIR / "approved_voice_specs"
+VOICE_GATE_SUMMARY_FILE = OUTPUT_DIR / "voice_performance_gate_summary.json"
 
 READY_STATUS = "READY_FOR_PRODUCTION_ENGINE"
 
@@ -163,8 +168,15 @@ def _script_context(
     if not isinstance(branch_story, dict) or not branch_story:
         raise ValueError(f"Approved format plan is missing {fmt} script context")
     title = str(package.get("title") or "").strip()
+    selected_titles = package.get("selected_titles", {})
+    if isinstance(selected_titles, dict):
+        selection = selected_titles.get(fmt, {})
+        if isinstance(selection, dict):
+            title = str(selection.get("title") or "").strip() or title
     if not title or str(branch_story.get("title") or "") != title:
-        raise ValueError("Approved format plan violates immutable Packaging title")
+        raise ValueError(
+            "Approved format plan violates format-specific Packaging title"
+        )
     sections = branch_story.get("sections", [])
     if not isinstance(sections, list) or not sections:
         raise ValueError(f"Approved format plan requires {fmt} script sections")
@@ -437,12 +449,144 @@ def validate_response(
     }
 
 
+def _request_key_from_path(path: Path) -> str | None:
+    suffix = ".voice_request.json"
+    if not path.name.endswith(suffix):
+        return None
+    return path.name[: -len(suffix)]
+
+
+def _existing_request_hashes() -> dict[str, str]:
+    if not REQUESTS_DIR.exists():
+        return {}
+    hashes: dict[str, str] = {}
+    for path in REQUESTS_DIR.glob("*.voice_request.json"):
+        key = _request_key_from_path(path)
+        if key:
+            hashes[key] = sha256_file(path)
+    return hashes
+
+
+def _remove_file(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError(f"Expected Voice Performance file: {path}")
+    path.unlink()
+    return True
+
+
+def _invalidate_voice_key(key: str) -> list[str]:
+    removed: list[str] = []
+    for path in (
+        RESPONSES_DIR / f"{key}.json",
+        SPECS_DIR / f"{key}.voice_performance_spec.json",
+        MODEL_RUNS_DIR / f"{key}.model_run.json",
+        RAW_OUTPUTS_DIR / f"{key}.txt",
+        REVIEW_REQUESTS_DIR / f"{key}.voice_review_request.json",
+        REVIEW_RESPONSES_DIR / f"{key}.voice_review_response.json",
+        APPROVED_VOICE_SPECS_DIR / f"{key}.approved_voice_spec.json",
+    ):
+        if _remove_file(path):
+            removed.append(str(path.resolve()))
+    return removed
+
+
+def _prune_invalidated_voice_outputs(
+    previous_hashes: dict[str, str],
+    current_hashes: dict[str, str],
+) -> dict[str, Any]:
+    invalidated = sorted(
+        key
+        for key in set(previous_hashes) | set(current_hashes)
+        if previous_hashes.get(key) != current_hashes.get(key)
+    )
+    removed: list[str] = []
+    for key in invalidated:
+        removed.extend(_invalidate_voice_key(key))
+
+    removed_summaries: list[str] = []
+    if invalidated:
+        for path in (MODEL_BATCH_SUMMARY_FILE, VOICE_GATE_SUMMARY_FILE):
+            if _remove_file(path):
+                removed_summaries.append(str(path.resolve()))
+
+    return {
+        "invalidated_voice_keys": invalidated,
+        "removed_artifacts": removed,
+        "removed_summaries": removed_summaries,
+    }
+
+
+def _load_dict_or_none(path: Path) -> dict[str, Any] | None:
+    try:
+        value = load_json(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _prune_mismatched_active_voice_outputs(
+    current_hashes: dict[str, str],
+) -> dict[str, Any]:
+    invalidated: list[str] = []
+    removed: list[str] = []
+    for key, request_hash in sorted(current_hashes.items()):
+        report_path = MODEL_RUNS_DIR / f"{key}.model_run.json"
+        spec_path = SPECS_DIR / f"{key}.voice_performance_spec.json"
+        raw_path = RAW_OUTPUTS_DIR / f"{key}.txt"
+
+        report = _load_dict_or_none(report_path) if report_path.exists() else None
+        spec = _load_dict_or_none(spec_path) if spec_path.exists() else None
+        spec_provenance = (
+            spec.get("spec_provenance", {}) if isinstance(spec, dict) else {}
+        )
+
+        report_mismatch = bool(
+            report_path.exists()
+            and (
+                not isinstance(report, dict)
+                or report.get("request_sha256") != request_hash
+                or (
+                    (spec_path.exists() or raw_path.exists())
+                    and report.get("status") != "VALIDATED"
+                )
+            )
+        )
+        spec_mismatch = bool(
+            spec_path.exists()
+            and (
+                not isinstance(spec_provenance, dict)
+                or spec_provenance.get("request_sha256") != request_hash
+            )
+        )
+        orphan_spec = spec_path.exists() and not report_path.exists()
+        orphan_raw = raw_path.exists() and not report_path.exists()
+
+        if report_mismatch or spec_mismatch or orphan_spec or orphan_raw:
+            invalidated.append(key)
+            removed.extend(_invalidate_voice_key(key))
+
+    removed_summaries: list[str] = []
+    if invalidated:
+        for path in (MODEL_BATCH_SUMMARY_FILE, VOICE_GATE_SUMMARY_FILE):
+            if _remove_file(path):
+                removed_summaries.append(str(path.resolve()))
+
+    return {
+        "invalidated_voice_keys": sorted(set(invalidated)),
+        "removed_artifacts": removed,
+        "removed_summaries": removed_summaries,
+    }
+
+
 def run_prepare(
     approved_dir: Path = APPROVED_FORMAT_DIR,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     config = config or load_config()
     REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
+    previous_hashes = _existing_request_hashes()
     paths = (
         sorted(approved_dir.glob("*.approved_format_plan.json"))
         if approved_dir.exists()
@@ -488,6 +632,13 @@ def run_prepare(
         if stale.resolve() not in current:
             stale.unlink()
 
+    current_hashes = _existing_request_hashes()
+    changed_cleanup = _prune_invalidated_voice_outputs(
+        previous_hashes,
+        current_hashes,
+    )
+    active_cleanup = _prune_mismatched_active_voice_outputs(current_hashes)
+
     summary = {
         "status": (
             "VOICE_PERFORMANCE_REQUESTS_READY"
@@ -498,6 +649,10 @@ def run_prepare(
         "prepared": len(prepared),
         "failures": failures,
         "requests_dir": str(REQUESTS_DIR),
+        "stale_cleanup": {
+            "changed_requests": changed_cleanup,
+            "active_provenance": active_cleanup,
+        },
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     atomic_write_json(SUMMARY_FILE, summary)

@@ -1,26 +1,105 @@
 {
-  "packages_per_concept": 5,
+  "packages_per_concept": 3,
   "allowed_format_intents": [
     "long_form",
     "short",
     "either"
   ],
   "minimum_research_dependencies": 0,
+  "title_style_contract": "format_specific_v3",
+  "short_title_contract": {
+    "target_words": "3-7",
+    "max_words": 7,
+    "max_chars": 48,
+    "style": "event_or_tension_first_explanation_hidden"
+  },
+  "long_title_contract": {
+    "target_words": "5-10",
+    "max_words": 10,
+    "max_chars": 70,
+    "style": "curiosity_plus_clear_subject_context"
+  },
+  "title_variations_per_format": 5,
+  "title_angles": [
+    "curiosity",
+    "stakes",
+    "unexpected",
+    "mystery",
+    "payoff"
+  ],
+  "psychological_packaging": {
+    "angles_per_format": 5,
+    "allowed_primary_drivers": [
+      "curiosity_gap",
+      "danger",
+      "loss_aversion",
+      "consequence",
+      "surprise",
+      "awe",
+      "transformation",
+      "comparison",
+      "contradiction",
+      "specificity",
+      "mystery",
+      "challenge",
+      "achievement",
+      "failure",
+      "insider_knowledge",
+      "unexpected_result"
+    ]
+  },
+  "thumbnail_concepts": {
+    "concepts_per_angle": 1,
+    "aspect_ratio": "16:9",
+    "primary_focal_points": 1,
+    "maximum_meaningful_visual_elements": 3,
+    "preferred_text_words": 3,
+    "maximum_text_words": 4,
+    "require_timestamp_safe": true,
+    "require_mobile_legibility_intent": true,
+    "prohibit_critical_bottom_right_content": true
+  },
   "channel_niche": null,
-  "design_advisories": {
-    "evidence_status": "HYPOTHESIS",
-    "note": "Generic published title/thumbnail guidance. Directional only: advisories are shown at the Packaging Gate and never reject a package until channel performance validates or replaces them.",
-    "title_length_chars": {
-      "min": 40,
-      "max": 60
-    },
-    "title_keyword_max_start_chars": 30,
-    "thumbnail_text_words": {
-      "min": 3,
-      "max": 5
-    },
-    "thumbnail_text_title_overlap_max": 0.6,
-    "thumbnail_max_visual_elements": 3,
-    "thumbnail_max_visual_cues": 2
+  "package_pairing_validation": {
+    "pairing_mode": "FULL_CROSS_PRODUCT",
+    "titles_per_format": 5,
+    "thumbnails_per_format": 5,
+    "pairs_per_format": 25,
+    "evaluations_per_request": 5,
+    "diagnostics_scale": [
+      0,
+      5
+    ],
+    "diagnostics": [
+      "scroll_stop",
+      "clarity",
+      "curiosity",
+      "stakes",
+      "specificity",
+      "visual_simplicity",
+      "title_strength",
+      "complementarity",
+      "credibility",
+      "promise_alignment",
+      "hook_alignment"
+    ],
+    "hard_reject_codes": [
+      "unsupported_material_claim",
+      "factually_false_claim",
+      "thumbnail_misrepresents_video",
+      "title_misrepresents_video",
+      "evidence_conflict",
+      "prohibited_claim"
+    ],
+    "rework_codes": [
+      "title_thumbnail_redundancy",
+      "weak_hook_alignment",
+      "promise_not_addressed_early",
+      "thumbnail_too_complex",
+      "thumbnail_text_too_long",
+      "critical_content_in_timestamp_zone",
+      "unclear_primary_subject",
+      "selected_title_no_longer_matches_final_script"
+    ]
   }
 }

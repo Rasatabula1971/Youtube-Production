@@ -83,3 +83,51 @@ python format_engine/format_review.py --mode apply --request <request> --respons
 ```
 
 No score, ranking, predicted retention or automatic branch winner is produced.
+
+## Script section-review provenance
+
+Format treats the approved Script bundle as a provenance-bound input.
+
+If selective section review was never prepared for a branch, Format preserves
+the original one-click Script Gate path.
+
+If selective review was prepared, Format verifies the exact canonical
+section-state before preparing a Format Request. The state path, SHA-256,
+version, target count, target lineage and bound Script Draft must all remain
+current, and every target must still be accepted and locked.
+
+A stale, redirected or incomplete prepared section state blocks the Script →
+Format handoff. The verified section-review summary is carried in
+`request_provenance.section_review`.
+
+## Slice 8 stale-output cleanup
+
+Format preparation treats the current approved Script bundle as the root of the
+Format artifact chain.
+
+For each concept, a changed Format Request invalidates its downstream:
+
+- model response;
+- Format Plan;
+- model-run report;
+- raw FAIR output;
+- Human Format Gate request;
+- Human Format Gate decision; and
+- approved Format Plan.
+
+Aggregate model/gate summaries are also removed when their source request set
+changes.
+
+Even when a request filename/hash remains current, downstream artifacts are
+checked against their own provenance. A response, plan, model run, gate packet,
+gate decision or approved plan whose bound request/plan hash no longer matches
+is removed. An orphan raw FAIR output without a current validated model-run
+report is stale and removed as well.
+
+Valid unchanged provenance is preserved, so successful FAIR work is not
+discarded unnecessarily.
+
+Human Format Gate preparation independently ignores stale plans whose
+`plan_provenance.request_source` and `request_sha256` do not match the
+canonical current Format Request. It also removes stale gate requests,
+decisions and approved plans before exposing the gate to the operator.

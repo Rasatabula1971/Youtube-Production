@@ -56,7 +56,7 @@ BATCH_SUMMARY_FILE = OUTPUT_DIR / "script_model_batch_summary.json"
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     allowed_claims = list(request.get("accepted_claim_ids", []))
-    approved_title = str(request.get("package", {}).get("title") or "")
+    working_title = str(request.get("package", {}).get("title") or "")
     fmt = str(request.get("format") or "")
     story_plan = request.get("story_plan", {})
     beats = story_plan.get("beats", []) if isinstance(story_plan, dict) else []
@@ -155,7 +155,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
                 "const": str(request.get("concept_id", "")),
             },
             "format": {"type": "string", "const": fmt},
-            "title": {"type": "string", "const": approved_title},
+            "title": {"type": "string", "const": working_title},
             "opening_hook": {"type": "string", "minLength": 1},
             "opening_hook_mechanism": {
                 "type": "string",
@@ -181,9 +181,9 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "Return JSON only.\n\n"
         f"TARGET FORMAT: {fmt}\n"
         "Rules:\n"
-        "1. Return the approved Packaging title EXACTLY. Do not rewrite it.\n"
+        "1. Return the INTERNAL WORKING TITLE EXACTLY for artifact identity. It is not the final public YouTube title.\n"
         "2. Return the exact target format supplied in the request.\n"
-        "3. The opening_hook is the FIRST SPOKEN LINE. Make it high-impact, truthful and directly tied to the package promise.\n"
+        "3. The opening_hook is the FIRST SPOKEN LINE. Make it high-impact, truthful and directly tied to the accepted concept/viewer promise.\n"
         "4. Choose an allowed opening_hook_mechanism appropriate to THIS format; do not manufacture drama or overstate verified research.\n"
         "5. Record opening_hook_claim_ids for any verified factual claims the hook relies on.\n"
         "6. Build sections specifically for this format. Each section must cite one or more source_story_beat_ids from the shared Story Plan.\n"
@@ -193,19 +193,23 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "10. Follow the supplied psychology_profile. It overrides generic pacing folklore.\n"
         "11. Do not copy source-video wording, story sequence, personality or exact execution.\n"
         "12. Do not claim virality or guaranteed performance.\n"
+        "13. CHANNEL VOICE: when channel_voice.apply_to_generation is true, follow the approved profile for wording, narrator posture, technical-language treatment and prohibited-style rules. It never overrides verified research, the accepted viewer/story contract or format psychology.\n"
+        "14. CHANNEL VOICE: when channel_voice.apply_to_generation is false, do NOT infer a persistent channel personality from niche, title, source videos or generic creator advice.\n"
+        "15. If human_rework_note is present, it is an AUTHORITATIVE human instruction for THIS format branch. Correct exactly the requested issue while preserving the internal working-title identity, verified claims, Story Plan constraints and format identity. Do not silently rewrite unrelated parts unless required to make the requested correction coherent.\n"
+        "16. Human rework never authorizes invented facts, unsupported drama, or changing the accepted viewer/story promise.\n"
     )
     if fmt == "short":
         prompt += (
-            "13. SHORTS: defend against the swipe immediately. The 3-second hook target is a production hypothesis that will be measured after audio rendering, not guessed from text length.\n"
-            "14. SHORTS: every section must create meaningful progress through PROOF, NOVELTY, REVEAL, EXPECTATION_SHIFT, MICRO_PAYOFF or PROGRESS.\n"
-            "15. SHORTS: aim for a meaningful attention/reward refresh roughly every 4-6 seconds as a testable hypothesis; keep one core idea and low cognitive branching.\n"
-            "16. SHORTS: close loops quickly and finish with a strong payoff.\n"
+            "17. SHORTS: defend against the swipe immediately. The 3-second hook target is a production hypothesis that will be measured after audio rendering, not guessed from text length.\n"
+            "18. SHORTS: every section must create meaningful progress through PROOF, NOVELTY, REVEAL, EXPECTATION_SHIFT, MICRO_PAYOFF or PROGRESS.\n"
+            "19. SHORTS: aim for a meaningful attention/reward refresh roughly every 4-6 seconds as a testable hypothesis; keep one core idea and low cognitive branching.\n"
+            "20. SHORTS: close loops quickly and finish with a strong payoff.\n"
         )
     else:
         prompt += (
-            "13. LONG FORM: prioritize sustained curiosity, comprehension and meaningful delayed payoff over constant interruption.\n"
-            "14. LONG FORM: use setup, examples and breathing room where they reduce cognitive load.\n"
-            "15. LONG FORM: cover the full Story Plan rather than reducing it to a short-form summary.\n"
+            "17. LONG FORM: prioritize sustained curiosity, comprehension and meaningful delayed payoff over constant interruption.\n"
+            "18. LONG FORM: use setup, examples and breathing room where they reduce cognitive load.\n"
+            "19. LONG FORM: cover the full Story Plan rather than reducing it to a short-form summary.\n"
         )
     prompt += (
         "\nPSYCHOLOGY PROFILE:\n"
@@ -384,6 +388,7 @@ def run_one(
         "story_plan": request.get("story_plan", {}),
         "psychology_contract": request.get("psychology_contract", {}),
         "psychology_profile": request.get("psychology_profile", {}),
+        "channel_voice": request.get("channel_voice", {}),
         "validation": validation,
         "draft_provenance": response["response_provenance"],
     }

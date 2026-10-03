@@ -32,6 +32,10 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     "concepts": [{"concept_id": "old_c1"}],
                 },
             )
+            config = write_json(
+                root / "packaging_config.json",
+                {"packages_per_concept": 3},
+            )
             requests = root / "package_requests"
             write_json(
                 requests / "old_c1.package_request.json",
@@ -51,6 +55,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                 )
             )
             stack.enter_context(patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", handoff))
+            stack.enter_context(patch.object(server, "PACKAGING_CONFIG_FILE", config))
             stack.enter_context(patch.object(server, "PACKAGING_REQUESTS_DIR", requests))
             stack.enter_context(
                 patch.object(server, "PACKAGING_RESPONSES_DIR", root / "package_responses")
@@ -263,6 +268,10 @@ class StalePipelineRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             handoff = write_json(root / "handoff.json", {"status": "READY_FOR_RESEARCH"})
+            config = write_json(
+                root / "packaging_config.json",
+                {"packages_per_concept": 3},
+            )
             requests = root / "package_requests"
             responses = root / "package_responses"
             request = write_json(
@@ -271,6 +280,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     "concept_id": "c1",
                     "request_provenance": {
                         "concept_handoff_sha256": sha(handoff),
+                        "packaging_config_sha256": sha(config),
                     },
                 },
             )
@@ -300,6 +310,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                 )
             )
             stack.enter_context(patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", handoff))
+            stack.enter_context(patch.object(server, "PACKAGING_CONFIG_FILE", config))
             stack.enter_context(patch.object(server, "PACKAGING_REQUESTS_DIR", requests))
             stack.enter_context(patch.object(server, "PACKAGING_RESPONSES_DIR", responses))
             stack.enter_context(patch.object(server, "PACKAGING_CANDIDATES_FILE", candidates))
@@ -313,6 +324,202 @@ class StalePipelineRegressionTests(unittest.TestCase):
         self.assertFalse(state["candidate_provenance_current"])
         self.assertFalse(state["candidates_ready"])
 
+
+    def test_changed_packaging_config_invalidates_existing_requests(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            handoff = write_json(
+                root / "handoff.json",
+                {"status": "READY_FOR_RESEARCH"},
+            )
+            old_config = write_json(
+                root / "old_packaging_config.json",
+                {"packages_per_concept": 5},
+            )
+            current_config = write_json(
+                root / "packaging_config.json",
+                {"packages_per_concept": 3},
+            )
+            requests = root / "package_requests"
+            write_json(
+                requests / "c1.package_request.json",
+                {
+                    "concept_id": "c1",
+                    "package_count_requested": 5,
+                    "request_provenance": {
+                        "concept_handoff_sha256": sha(handoff),
+                        "packaging_config_sha256": sha(old_config),
+                    },
+                },
+            )
+
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "transformation_artifact_state",
+                    return_value={"research_ready": True},
+                )
+            )
+            stack.enter_context(
+                patch.object(server, "TRANSFORM_RESEARCH_HANDOFF", handoff)
+            )
+            stack.enter_context(
+                patch.object(server, "PACKAGING_CONFIG_FILE", current_config)
+            )
+            stack.enter_context(
+                patch.object(server, "PACKAGING_REQUESTS_DIR", requests)
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PACKAGING_RESPONSES_DIR",
+                    root / "package_responses",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PACKAGING_CANDIDATES_FILE",
+                    root / "package_candidates.json",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PACKAGING_RESEARCH_HANDOFF",
+                    root / "research_handoff.json",
+                )
+            )
+
+            state = server.packaging_artifact_state()
+
+        self.assertFalse(state["requests_ready"])
+        self.assertFalse(state["candidates_ready"])
+        self.assertFalse(state["research_ready"])
+
+    def test_visual_generation_handoff_requires_current_spend_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            gaps = root / "visual_gap_plans"
+            spend = root / "visual_spend_reviews"
+            requests = root / "visual_generation_requests"
+
+            gap_path = write_json(
+                gaps / "c1.short.visual_gap_plan.json",
+                {
+                    "concept_id": "c1",
+                    "format": "short",
+                    "gaps": [
+                        {
+                            "shot_id": "shot-001",
+                            "premium_generation_recommended": True,
+                        }
+                    ],
+                },
+            )
+            spend_path = write_json(
+                spend / "c1.short.visual_spend_review.json",
+                {
+                    "status": "COMPLETE",
+                    "source_gap_plan": str(gap_path),
+                    "source_gap_plan_sha256": sha(gap_path),
+                    "decisions": {
+                        "shot-001": {
+                            "decision": "AUTHORIZE_GENERATION",
+                            "paid_generation_authorized": True,
+                            "max_cost_usd": 2.5,
+                        }
+                    },
+                },
+            )
+            decision = {
+                "decision": "AUTHORIZE_GENERATION",
+                "paid_generation_authorized": True,
+                "max_cost_usd": 2.5,
+            }
+            decision_sha256 = hashlib.sha256(
+                json.dumps(
+                    decision,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            request_path = write_json(
+                requests / "c1.short.shot-001.visual_generation_request.json",
+                {
+                    "concept_id": "c1",
+                    "format": "short",
+                    "shot_id": "shot-001",
+                    "spend_authorization": {
+                        "human_authorized": True,
+                        "execution_authorized": False,
+                        "max_cost_usd": 2.5,
+                    },
+                    "provenance": {
+                        "gap_plan": str(gap_path),
+                        "gap_plan_sha256": sha(gap_path),
+                        "visual_spend_review": str(spend_path),
+                        "visual_spend_review_sha256": sha(spend_path),
+                        "visual_spend_decision_sha256": decision_sha256,
+                    },
+                },
+            )
+
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "visual_spend_review_snapshot",
+                    return_value={
+                        "complete": True,
+                        "authorized": 1,
+                        "items": [
+                            {
+                                "concept_id": "c1",
+                                "format": "short",
+                                "gap_plan_file": str(gap_path),
+                                "gap_plan_sha256": sha(gap_path),
+                                "spend_review_file": str(spend_path),
+                                "spend_review_sha256": sha(spend_path),
+                                "decisions": {"shot-001": decision},
+                            }
+                        ],
+                    },
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    server,
+                    "PRODUCTION_VISUAL_GENERATION_REQUEST_DIR",
+                    requests,
+                )
+            )
+
+            current = server.visual_generation_handoff_artifact_state()
+            spend_path.write_text(
+                json.dumps(
+                    {
+                        "status": "COMPLETE",
+                        "source_gap_plan": str(gap_path),
+                        "source_gap_plan_sha256": sha(gap_path),
+                        "decisions": {
+                            "shot-001": {
+                                "decision": "AUTHORIZE_GENERATION",
+                                "paid_generation_authorized": True,
+                                "max_cost_usd": 3.0,
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stale = server.visual_generation_handoff_artifact_state()
+
+            self.assertTrue(current["ready"])
+            self.assertEqual(current["current"], 1)
+            self.assertFalse(stale["ready"])
+            self.assertGreaterEqual(stale["stale"], 1)
+            self.assertTrue(request_path.exists())
 
     def test_changed_human_reviews_make_existing_synthesis_rebuildable(self):
         stale_state = {

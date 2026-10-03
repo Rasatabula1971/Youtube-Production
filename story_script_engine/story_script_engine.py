@@ -17,6 +17,7 @@ _OVERLAP_ROOT = Path(__file__).resolve().parent.parent
 if str(_OVERLAP_ROOT) not in sys.path:
     sys.path.insert(0, str(_OVERLAP_ROOT))
 
+from channel_profiles.channel_profile import normalize_binding, unconfigured_binding
 from source_overlap import check_texts
 
 HERE = Path(__file__).resolve().parent
@@ -121,14 +122,15 @@ def build_script_request(
     if not concept_id:
         raise ValueError("Story Plan requires concept_id")
 
-    package = plan.get("package", {})
-    if not isinstance(package, dict):
+    package_value = plan.get("package", {})
+    if not isinstance(package_value, dict):
         raise ValueError("Story Plan package must be an object")
-    title = str(package.get("title") or "").strip()
-    if not title:
-        raise ValueError("Story Plan requires the approved Packaging title")
-    if str(plan.get("title", "")) != title:
-        raise ValueError("Story Plan title must match the approved Packaging title")
+    package = dict(package_value)
+    working_title = str(package.get("title") or "").strip()
+    if not working_title:
+        raise ValueError("Story Plan requires an internal working title")
+    if str(plan.get("title", "")) != working_title:
+        raise ValueError("Story Plan title must match the internal working title")
 
     required_branches = resolve_script_branches(
         str(package.get("format_intent") or ""),
@@ -150,6 +152,14 @@ def build_script_request(
     psychology_contract = plan.get("psychology_contract")
     if not isinstance(psychology_contract, dict) or not psychology_contract:
         raise ValueError("Story Plan requires the audience psychology contract")
+
+    channel_voice_value = plan.get("channel_voice")
+    channel_voice = (
+        normalize_binding(channel_voice_value)
+        if channel_voice_value is not None
+        else unconfigured_binding()
+    )
+    voice_is_active = bool(channel_voice["apply_to_generation"])
 
     viewer_state = plan.get("viewer_state")
     if not isinstance(viewer_state, dict):
@@ -191,12 +201,24 @@ def build_script_request(
 
     instructions = [
         "Write a FORMAT-SPECIFIC narration from the shared approved Story Plan.",
-        "Return the approved Packaging title exactly; do not rewrite or optimize it.",
-        "The opening_hook is the first spoken line and must be high-impact, truthful and tied to the package promise.",
+        "Return the INTERNAL WORKING TITLE exactly for artifact identity; it is not the final public YouTube title.",
+        "The opening_hook is the first spoken line and must be high-impact, truthful and tied to the accepted concept/viewer promise.",
         "The branch may compress, combine or emphasize Story Plan beats differently, but it may not invent facts or abandon the main payoff.",
         "Every script section must cite one or more source_story_beat_ids.",
         "Section claim_ids may use only claims available from those source Story Plan beats.",
         "Use the supplied format psychology profile rather than generic engagement advice.",
+        (
+            "Apply the approved Channel Voice Profile to wording, narrator posture, "
+            "technical-language treatment and prohibited-style rules. Verified "
+            "research, the accepted viewer/story contract and format psychology "
+            "remain higher-priority constraints."
+            if voice_is_active
+            else (
+                "No approved Channel Voice Profile exists. Do not invent a persistent "
+                "channel personality from the niche, title, source videos or generic "
+                "creator advice."
+            )
+        ),
         "Do not copy or closely paraphrase source-video wording.",
         "Do not claim virality, guaranteed performance or unsupported facts.",
     ]
@@ -228,6 +250,7 @@ def build_script_request(
         "concept": concept,
         "psychology_contract": psychology_contract,
         "psychology_profile": dict(profile),
+        "channel_voice": channel_voice,
         "reward_types": reward_types,
         "story_plan": {
             "title": plan.get("title"),
@@ -261,9 +284,9 @@ def validate_script_response(
     if str(response.get("format", "")).strip() != fmt:
         errors.append("format mismatch")
 
-    approved_title = str(request.get("package", {}).get("title") or "")
-    if str(response.get("title", "")) != approved_title:
-        errors.append("title must exactly match the approved Packaging title")
+    working_title = str(request.get("package", {}).get("title") or "")
+    if str(response.get("title", "")) != working_title:
+        errors.append("title must exactly match the internal working title")
 
     if not str(response.get("opening_hook", "")).strip():
         errors.append("opening_hook is required")

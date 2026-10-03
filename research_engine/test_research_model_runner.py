@@ -109,6 +109,27 @@ class ResearchModelRunnerTests(unittest.TestCase):
             prompt,
         )
 
+    def test_prompt_carries_authoritative_human_rework_without_overriding_evidence(self):
+        plan = self.plan()
+        plan["human_rework_mode"] = "HUMAN_INSTRUCTION_ONLY"
+        plan["human_rework_requests"] = [
+            {
+                "claim_id": "clm001",
+                "iteration": 1,
+                "note": "Verify the exact operating limit with a stronger source.",
+            }
+        ]
+        prompt = runner.build_prompt(
+            plan,
+            self.evidence(),
+            maximum_chars=10000,
+        )
+
+        self.assertIn("AUTHORITATIVE research instruction", prompt)
+        self.assertIn("Verify the exact operating limit", prompt)
+        self.assertIn("never permits invented support", prompt)
+        self.assertIn("preserve that limitation", prompt)
+
     def test_source_boundary_rejects_fabricated_quote(self):
         response = {
             "sources": [{"source_id": "web001", "url": "https://example.com/source"}],

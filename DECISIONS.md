@@ -1270,84 +1270,1167 @@ advance to the next configured free Gemini model, and exhaustion preserves
 partial state for a later retry. Paid inference remains prohibited.
 
 
-## D-070 — Title/thumbnail design guidance enters Packaging as hypotheses
+## D-070 — Channel Voice is versioned channel configuration, not a global project voice
 
 **Status:** Accepted
 
-Generic published title/thumbnail guidance is incorporated into the Packaging
-Engine without promoting it to a production rule.
+The YouTube Production system does not have one universal writing voice.
+Different channels may use the same Opportunity, Research, Story/Script, Format
+and Production engines while presenting with different audience assumptions,
+narrator posture, tone, technical-language treatment, sentence style,
+storytelling preferences and prohibited style.
 
-Packages must now declare their design: a title keyword, one thumbnail focal
-subject, the list of distinct visual elements, any arrows/circles, a
-background/subject/accent palette, and the division of labor between thumbnail
-(emotion/curiosity) and title (context/fact). These fields are structural and
-missing values reject the package.
+The repository therefore defines a versioned **Channel Voice Profile** layer.
+A profile becomes generation-active only when its status is `APPROVED`.
+Story Planning binds the exact active profile version and hash into the story
+request, and downstream Script Writing inherits that bound profile rather than
+re-reading whichever profile happens to be active later.
 
-The numeric guidance — 40-60 title characters, keyword near the front, 3-5 word
-thumbnail text that does not repeat the title, at most 3 visual elements and at
-most 2 arrows/circles — is evaluated as non-blocking `packaging_advisories`
-marked `HYPOTHESIS`. The thresholds are configuration. Most published figures
-trace back to vendor blogs that repeat the same unverified studies, so they
-remain directional until the Learning Engine can compare them with the
-channel's own click and retention data, and niche conventions override them.
+Until a channel thesis, niche and target viewer are deliberately chosen, the
+active profile remains `UNCONFIGURED`. In that state the model must not infer
+a persistent channel personality from the niche, title, source videos or
+generic creator advice. Existing research, Human Framing, psychology and format
+rules continue to operate normally.
 
-The human Packaging Gate adds two ACCEPT criteria:
-`thumbnail_single_focal_point` and `thumbnail_mobile_readable`.
+Channel Voice is distinct from Voice Performance. Channel Voice controls how a
+channel writes and presents ideas; Voice Performance controls how an approved
+script is spoken, including emotion, intensity, speed, pauses and emphasis.
 
-The channel is faceless, so packaging asks for the subject itself or a
-before/after contrast as the focal point rather than an expressive face.
+Future profiles are versioned rather than silently overwritten. Published
+retention, comment and performance evidence may justify Voice v2, v3 and later,
+but learning-driven changes remain explicit human-approved channel decisions.
 
-Producing the thumbnail image (1280x720 or larger, locked template) and a
-mock-feed preview remain Production Engine work and are not implemented here.
 
-## D-071 — Niche thumbnail conventions are tabulated, not assumed
+## D-071 — Canonical selective Script Rework state is separate from the Script Draft
 
 **Status:** Accepted
 
-The D-070 hypotheses are generic. Before trusting them for a niche, the
-project tabulates 20-30 of that niche's breakout thumbnails per format.
+Selective Script Rework uses `script_section_state.py` as its single
+per-target state contract. It does not embed mutable review state in the Script
+Draft or create a second competing section-state format.
+
+Stable target IDs are `hook:opening`, `section:<section_id>`, and
+`closing:closing`. Each target has a deterministic `target_sha256`, decision,
+locked flag, ordinal and optional rework metadata. The state records the exact
+source Script Draft path/SHA-256, a monotonically advancing `state_version`,
+timestamps and action history.
+
+State creation fails closed for missing/duplicate section IDs and for target IDs
+that collide after filesystem normalization. Before use, the target set and
+hashes are recomputed from the exact Script Draft; changed draft content or
+tampered state is stale.
+
+Slice 1 is non-destructive: it creates review state but never changes narration.
+
+
+## D-072 — Section decisions and branch approval share one canonical consistency boundary
+
+**Status:** Accepted
+
+Section actions are handled by `script_section_service.py` and
+`script_section_state.py`. Supported target actions are `ACCEPT`, `LOCK`,
+`UNLOCK`, `REWORK`, and `CANCEL_REWORK`.
+
+`ACCEPT` marks a target accepted and locked. `LOCK` may freeze a pending
+target without accepting it. Unlocking an accepted target returns it to
+`PENDING`. A locked target cannot be reworked until explicitly unlocked.
+Rework requires a supported bounded reason or custom instruction; the canonical
+custom reason token is `CUSTOM`.
+
+Every state action is written to history and advances `state_version`. These
+actions never mutate Script Draft text.
+
+The local UI supplies logical concept/format/target identities only; service
+code resolves project-owned artifact paths and validates draft identity.
+`REWORK` and `UNLOCK` invalidate stale branch-level response/bundle artifacts.
+
+Section mutations and whole-branch Human Script Gate decisions use the same
+in-process lock. Whole-branch `ACCEPT` checks the canonical state and fails if
+any target is `REWORK_REQUESTED`. This prevents a threaded branch-accept versus
+section-rework race from leaving contradictory approval state.
+
+
+## D-073 — Slice 3 prepares one bounded, provenance-locked rework request before inference
+
+**Status:** Accepted
+
+A separate `PREPARE_REWORK_REQUEST` action exists before alternative
+generation. It may run only for a canonical target already marked
+`REWORK_REQUESTED`.
+
+Slice 3 request preparation performs no FAIR/model call and cannot change the
+Script Draft. The request contains only the selected target, its immutable
+metadata, immediately adjacent read-only context, locked-target IDs, the human
+rework reason/instruction, target-scoped accepted claims, relevant Story Plan
+beats and shared story intent, psychology constraints, approved package
+constraints, and the exact bound Channel Voice.
+
+The request is bound to SHA-256 provenance for the exact Script Draft, canonical
+section-state file, original Script Request and Human Script Gate review request,
+plus the current `state_version` and selected `target_sha256`.
+
+Before a request can be trusted, `assert_request_current()` checks all bound
+artifacts and rebuilds the expected request from current trusted state. Edited
+request packets, changed source artifacts, cancelled rework, locked targets or
+changed target content fail closed.
+
+Request preparation and current-state validation use the same state lock as
+human section decisions. The FAIR-backed runner also validates again after an
+inference call returns; if the human changes section state while FAIR is
+running, the stale result is discarded and no alternatives artifact is
+accepted.
+
+The repository already contains downstream A/B/C generation, human selection,
+safe single-target replacement, manual edit and UI/service capabilities. Those
+are distinct from Slice 3: preparing the request itself spends no inference and
+changes no narration.
+
+## D-074 — Slice 4 alternatives are strict claim-bound artifacts, not free-form rewrites
+
+**Status:** Accepted
+
+Selective Script Rework Slice 4 generates exactly three non-destructive
+alternatives (A/B/C) from the bounded Slice 3 request.
+
+The FAIR response schema and the local deterministic validator enforce the same
+closed contract. Each alternative must contain only its ID, replacement text,
+change summary and `claim_ids_used`. Extra fields, missing fields, wrong value
+types, reordered/missing A/B/C identities or malformed claim declarations fail
+closed.
+
+Every alternative must declare `claim_ids_used` exactly equal to the accepted
+claim IDs already mapped to the selected target. Alternatives cannot expand the
+target's factual scope by naming unrelated accepted claims. A target with no
+mapped claims must declare an empty claim list.
+
+Because claim IDs alone cannot prove that prose has not invented a quantitative
+fact, Slice 4 also applies a conservative numeric guard. A numeric token may
+appear in a replacement only if it was already present in the original selected
+target or in one of the target's bound accepted-claim statements.
+
+All candidates remain subject to the source-overlap block and must differ from
+both the original target and one another.
+
+Generation revalidates Slice 3 provenance after FAIR returns. If draft/state or
+human review state changes while inference is running, the returned result is
+discarded before a response or alternatives artifact is accepted.
+
+A validated alternatives artifact is bound to the exact rework request,
+validation-contract hash and saved model-response file/hash. Cached artifacts
+are deterministically rebuilt from that response before reuse. A changed cache
+fails closed and does not trigger a hidden replacement model call.
+
+Human selection does not trust the response path written inside the alternatives
+artifact. The expected response path is resolved from repository-owned
+concept/format/target identity and must match artifact provenance. This prevents
+artifact path tampering from redirecting selection to a different response.
+
+Slice 4 itself never mutates the Script Draft or section state. Human application
+of Original/A/B/C remains a separate downstream action.
+
+
+## D-075 — Slice 5 selection is explicit, serialized and fully recoverable
+
+**Status:** Accepted
+
+The system may apply a selective Script Rework only after an explicit human
+choice of `ORIGINAL`, `A`, `B` or `C`. No automatic stage, model result,
+cache hit or retry may choose a replacement.
+
+Selection is serialized with the canonical section-state lock. Concurrent
+choices for the same target cannot both commit, and selection cannot race a
+simultaneous section-state mutation or manual edit inside the same process.
+
+Before mutation, Slice 5 revalidates the exact Slice 4 alternatives artifact,
+its deterministic model-response provenance and the current Slice 3 request.
+The target must still be `REWORK_REQUESTED` and unlocked.
+
+A/B/C replacement must change exactly one target. Non-target hashes are checked
+both before writing and again from the persisted draft. The full Script
+validator must pass before the replacement is accepted. The selected target is
+then rebased as `ACCEPTED` and locked.
+
+Previous script versions are exact byte copies of the parent draft, not JSON
+re-serializations. Their SHA-256 must equal the recorded
+`parent_draft_sha256`. Human revision provenance also records the parent
+section-state hash, selected replacement hash, selected claim IDs, exact rework
+request/model-response hashes and alternatives artifact hash before selection.
+
+Choosing `ORIGINAL` must leave the Script Draft hash unchanged and does not
+increment the human script revision. It only resolves the rework decision by
+accepting/locking the target and recording the human choice.
+
+The Slice 5 transaction snapshots every file selection can modify, including
+Script Draft, section state, alternatives artifact, Human Script Gate request
+and response, approved bundle, and any previous-version destination. Each
+existing file is backed up as exact bytes with a SHA-256; previously absent
+files are recorded as absent.
+
+Rollback validates every required backup before restoring any destination. A
+missing or changed backup fails closed without beginning a partial recovery.
+Rollback restores exact previous bytes and removes files created only by the
+failed transaction.
+
+Recovery of `PREPARED` or `IN_PROGRESS` transactions occurs before the
+one-time-selection check. This is required because an interrupted process may
+have written a temporary selection marker before crashing; that marker must not
+prevent recovery on the next human action.
+
+## D-076 — Slice 6 keeps selective review inside the existing Human Script Gate
+
+**Status:** Accepted
+
+Selective Script Rework does not become a separate page or separate human gate.
+Slice 6 exposes the canonical section-review service inside the existing Human
+Script Gate.
+
+The UI shows target-level state, progress and the next unresolved target while
+retaining the whole branch script alongside it. Per-target actions are
+`Accept + lock`, `Lock`, `Unlock`, `Request rework` and
+`Cancel rework`.
+
+The Slice 3 no-inference boundary is visible as `Prepare rework request`.
+Slice 4 generation remains a separate `Generate A / B / C` action. Generated
+Original/A/B/C choices are shown inline and are not applied until the human
+clicks one choice.
+
+Every section mutation is treated as single-flight in the browser. While one is
+running, target navigation and branch-level decisions are disabled. This is a
+UI safety layer only; canonical backend locking and transaction protection
+remain authoritative.
+
+Whole-script `Accept` is disabled when canonical section state is stale or any
+target remains `REWORK_REQUESTED`.
+
+After a section action, the browser reloads the Human Script Gate snapshot for
+the same concept/format immediately. This prevents stale narration from
+remaining visible after an A/B/C selection or manual edit.
+
+Slice 6 adds no new script-generation behavior, model route, persistence
+contract or destructive backend operation.
+
+## D-077 — Prepared selective review is binding at the Script → Format seam
+
+**Status:** Accepted
+
+Selective section review is optional until its canonical state is prepared. A
+branch that never enters selective review may still use the original
+whole-script Human Script Gate.
+
+Once section state is prepared, every target must be explicitly `ACCEPTED`
+and locked before whole-branch `ACCEPT` may succeed. A pending locked target
+does not count as reviewed.
+
+The approved Script bundle records the exact section-state path, SHA-256,
+version, target count and ordered target ID/hash lineage for each reviewed
+branch.
+
+Production readiness is derived from current provenance, not from approved-file
+existence. If section state changes after branch approval, the concept is no
+longer considered production-ready even if the previous approved bundle remains
+on disk.
+
+Format independently validates the section-state provenance and its bound Script
+Draft before creating any Format Request. This prevents stale or redirected
+selective-review state from bypassing the Human Script Gate through a manual
+Format run.
+
+Backward compatibility is preserved only when no canonical section review was
+ever prepared. An older approved bundle becomes stale as soon as a prepared
+section-state exists without matching provenance.
+
+## D-078 — Script completion automatically advances to the Human Format Gate
+
+**Status:** Accepted
+
+A valid completed Human Script Gate is followed by deterministic Format machine
+work without another routine run-button decision.
+
+The existing automatic workflow runner must execute
+`format_prepare → format_generate → format_gate_prepare` and then stop at the
+Human Format Gate. It must not auto-approve Format or continue into Voice
+Performance before the human Format decision.
+
+The Script Gate POST handler starts `auto_continue` only when downstream
+machine work is actually enabled and no other job is running. The browser shows
+that automatic continuation explicitly.
+
+The Script → Format handoff is also an invalidation boundary. When the approved
+Script input changes, all Format artifacts derived from the previous request are
+stale and are removed. Current filenames alone are insufficient evidence of
+currency; response, plan, model-run and gate provenance must still match the
+current request/plan hashes.
+
+Unchanged provenance remains cacheable. Slice 8 therefore removes stale work
+without forcing unnecessary FAIR calls for valid current work.
+
+The Human Format Gate is the mandatory stopping point after automatic Format
+preparation.
+
+## D-079 — Format completion automatically advances to the Human Performance Gate
+
+**Status:** Accepted
+
+A valid completed Human Format Gate is followed by deterministic Voice
+Performance machine work without another routine run-button decision.
+
+The existing automatic workflow runner executes
+`voice_prepare → voice_generate → voice_gate_prepare` and then stops at the
+Human Performance Gate. It must not auto-approve the performance plan or
+authorize/render paid narration before the human performance decision.
+
+The Format Gate POST handler starts `auto_continue` only when downstream
+machine work is ready and no other job is running. The browser explicitly
+announces the automatic continuation.
+
+The Format → Voice handoff is an invalidation boundary. When the approved
+Format input changes, Voice responses, performance specs, model-run records,
+raw model output, Human Performance Gate packets/decisions, and approved voice
+specs derived from the previous request are stale and removed.
+
+Current filenames alone are not proof of currency. Voice specs and Human
+Performance Gate artifacts must remain bound to the current canonical Voice
+request by hash provenance. Valid unchanged provenance remains cacheable.
+
+The Human Performance Gate is the mandatory stopping point after automatic
+Voice Performance planning. This boundary spends no narration-provider credits.
+
+## D-080 — Performance completion automatically advances to the free Narration Preview Gate
+
+**Status:** Accepted
+
+A completed Human Performance Gate is followed by the zero-cost prototype chain
+without another routine run-button decision.
+
+The automatic workflow executes
+`pre_render_engagement → narration_preview_prepare → prototype_sound_prepare →
+narration_preview_render` and then stops at
+`HUMAN_NARRATION_PREVIEW_GATE`.
+
+No paid narration quote, provider render, or spend authorization may cross this
+boundary before the operator hears and approves the current free preview.
+
+The free preview chain is provenance-bound. A saved engagement PASS is current
+only when its approved Voice Performance spec path and SHA-256 still match.
+Likewise, a preview manifest, local preview render, and preview approval are
+current only when they remain bound to the exact current approved Voice
+Performance spec and exact preview audio hash.
+
+An old preview approval therefore cannot authorize a paid narration quote after
+the upstream performance plan changes.
+
+Kokoro is the current local preview renderer. Missing local dependencies fail
+closed; the workflow must not silently fall through to a paid TTS provider.
+
+The automatic runner treats the current Narration Preview Gate as a hard human
+boundary even if stale downstream quote/spend artifacts happen to exist.
+
+## D-081 — Preview approval advances to a provenance-bound Narration Spend boundary
+
+**Status:** Accepted
+
+A completed Human Narration Preview Gate may automatically continue through
+zero-spend final-audio preparation:
+
+`sound_design_brief_prepare → narration_prepare → narration_spend_gate_prepare`.
+
+The automatic workflow stops before paid narration in one of three states:
+
+1. `HUMAN_NARRATION_SPEND_GATE` when a current provider quote and current
+   worst-case cost exist;
+2. `WAITING_NARRATION_PROVIDER_QUOTE` when the current provider-bound request
+   and quote template are ready but no valid current quote exists; or
+3. `NARRATION_PROVIDER_SETUP_REQUIRED` when voice identity, licence,
+   calibration or verified provider-contract prerequisites are incomplete.
+
+No missing price may be guessed or synthesized. A Human Narration Spend Gate
+exists only for a current quote bound to the exact current narration render
+request.
+
+The Sound Design Brief is part of the provenance chain. It is current only when
+the Human Preview approval, preview manifest, preview audio and approved Voice
+Performance spec hashes still match. Narration render requests record the
+current Sound Design Brief hash.
+
+A stale or malformed provider quote returns the branch to quote-required state
+instead of crashing or inheriting an old cost. A changed cost estimate
+invalidates stale spend-review responses and approved spend authorizations.
+
+The Human Narration Spend Gate displays the initial and worst-case USD quote,
+requires every spend criterion, and requires an explicit human confirmation
+before an ACCEPT can authorize that ceiling. Preparing or viewing the gate
+does not call the paid provider.
+
+## D-082 — Paid narration returns are registered before deterministic Audio QC
+
+**Status:** Accepted
+
+Slice 12 does not add an unverified paid-provider adapter. After the Human
+Narration Spend Gate accepts the exact current worst-case quote, the workflow
+moves to `WAITING_NARRATION_RENDER_RETURN`.
+
+The operator registers the provider return with:
+
+- the current concept/format branch;
+- provider job, transaction, or receipt reference;
+- actual cumulative USD cost;
+- every narration segment in exact request order;
+- the attempt number for each segment; and
+- a local provider-returned audio file for each segment.
+
+Registration is rejected unless the Human Narration Spend approval is current,
+the exact narration render request and estimate are still current, the actual
+cost is at or below the approved worst-case ceiling, every segment is present
+in exact order, and every attempt is within the approved regeneration policy.
+
+Provider audio is copied into managed project storage and hash-bound to the
+current render request and spend approval. Registering corrected audio
+invalidates prior Audio QC and timing-map artifacts.
+
+Duration QC is based on a deterministic target derived from the locked
+narration text and approved delivery speed in the render request. Provider
+metadata cannot supply or override the QC duration baseline.
+
+After a complete current provider return is registered, local deterministic
+Audio QC runs automatically. It checks duration tolerance, unexpected silence,
+clipping, missing files, exact segment coverage, and attempt policy. No
+automatic emotion grading or take selection is allowed.
+
+If any current branch fails QC, the workflow stops at
+`NARRATION_AUDIO_QC_FAILED` for corrected audio to be re-registered. Only
+when every current authorized branch passes does the workflow reach
+`NARRATION_AUDIO_READY`.
+
+Slice 12 hard-stops at `NARRATION_AUDIO_READY`. Automatic visual production
+must not begin in this slice.
+
+## D-083 — QC-passed narration automatically advances to a current visual search plan
+
+**Status:** Accepted
+
+After every current authorized narration branch passes local Audio QC, the
+automatic workflow may run these deterministic, zero-spend steps:
+
+`production_visual_prepare → storyboard_prepare → visual_search_prepare`.
+
+Slice 13 stops at `VISUAL_SEARCH_READY`. The zero-cost/existing-source search
+adapters do not run in this slice.
+
+The visual acquisition manifest is now bound to both:
+
+- the exact current approved Format Plan hash; and
+- the exact current QC-passed narration timing-map path/hash.
+
+A manifest that is not bound to the current narration timing map does not count
+as current production state.
+
+Storyboards require exact one-to-one coverage between narration timing segment
+IDs and visual requirement beat IDs. Missing, extra or mismatched beats fail
+closed instead of receiving a generic fallback visual. Storyboards record the
+current timing-map and visual-manifest hashes and are stale when either changes.
+
+Visual search requests are rebuilt only from current storyboards. The request
+records the exact storyboard hash. Old search requests/results are removed when
+their storyboard is no longer current. Existing raw discovery data may remain
+as a cache, but it cannot become current search results unless every shot
+fingerprint matches the new request.
+
+All visual planning in Slice 13 keeps `paid_generation_calls_allowed: false`.
+Premium generation may be marked only as a future candidate for a high-value
+unfilled gap; it is never authorized or called here.
+
+## D-084 — Current free/existing visual discovery stops at the Human Candidate Gate
+
+**Status:** Accepted
+
+Slice 14 advances the current Slice 13 search plan through configured zero-cost
+discovery only:
+
+`VISUAL_SEARCH_READY → visual_search_acquire → HUMAN_VISUAL_CANDIDATE_GATE`.
+
+Before any external discovery adapter is called, the search request must still
+be current and bound to the current storyboard. The request hash is rechecked
+before each shot so a mid-run upstream edit stops additional provider calls.
+
+Discovery is resumable. Raw results are checkpointed after each shot. On a
+later rerun, an unchanged shot is reused only when its fingerprint still
+matches and its previous provider search completed without provider errors.
+Changed or previously errored shots are searched again.
+
+Each zero-cost provider is isolated. A timeout, malformed response or provider
+failure cannot discard valid candidates returned by other providers. Provider
+errors are preserved in the current candidate packet for human visibility.
+There is no automatic retry storm; a later explicit rerun retries errored shots
+while preserving clean cached shots.
+
+Search results are current only when they are bound to the exact current search
+request and contain the exact current shot IDs/fingerprints. The Human Visual
+Candidate Gate opens only after every current search-required branch has a
+current result.
+
+The candidate gate never treats creator/editorial discovery as reuse
+permission. Those candidates remain behind the separate human rights/context
+gate. Unknown or unsupported rights remain blocked.
+
+Slice 14 downloads no visual media and calls no paid generation provider.
+
+## D-085 — Approved visual selections advance through managed assets to the Human Rough-Cut Gate
+
+**Status:** Accepted
+
+Slice 16 advances a completed Human Visual Candidate Gate, and any required
+Human Rights/Context Gate, through the zero-cost asset/rough-cut path:
+
+`candidate complete → rights complete → visual_asset_acquire → visual_rough_cut_prepare → HUMAN_ROUGH_CUT_GATE`.
+
+Human gates remain hard stops. Automatic workflow must not bypass either the
+Visual Candidate Gate, the Rights/Context Gate, or the Human Rough-Cut Gate.
+
+A selected visual is usable media only when a current managed local asset record
+exists. The managed record must remain bound to the current search result,
+candidate review, optional rights review, selected candidate fingerprint and
+local asset hash.
+
+Verified zero-cost stock may be downloaded only through the existing allow-list
+and size/type checks. Creator/editorial footage is never auto-downloaded. Once
+its rights/context decision is approved, missing editorial media remains an
+explicit rough-cut placeholder until a human supplies the local file.
+
+Automatic acquisition failures are not silently converted into successful
+placeholders. They keep asset acquisition non-current so Continue Automatically
+can retry/fix acquisition before a rough cut is promoted.
+
+Rough-cut provenance records every managed asset registry/file hash actually
+used. Server readiness also compares that set with all current managed assets
+for the branch. Adding or replacing a local asset therefore makes the old rough
+cut stale.
+
+Manual asset registration explicitly invalidates the affected rough cut and
+starts the normal automatic rebuild path. Paid visual generation remains locked
+throughout Slice 16.
+
+## D-086 — Backfill Slice 15 as the Candidate → Rights/Context human boundary
+
+**Status:** Accepted
+
+Slice 15 is the logical boundary between Slice 14 search/candidate review and
+Slice 16 managed-asset acquisition. It was implemented after Slice 16 because
+the numbering was skipped, but its runtime position remains:
+
+`HUMAN_VISUAL_CANDIDATE_GATE → HUMAN_VISUAL_RIGHTS_GATE when required`.
+
+Candidate selection no longer trusts the stored `state` field by itself.
+Automatic reuse is allowed only when the candidate belongs to a recognized
+auto-reuse tier, has verified rights, explicitly allows commercial use, and
+retains source/local provenance.
+
+Recognized creator/editorial tiers always route to the Human Rights/Context
+Gate even if a malformed or tampered result claims the candidate is
+`ELIGIBLE`. Conversely, an unknown/unsupported source cannot become eligible
+merely by claiming `DISCOVERY_ONLY` or `HUMAN_REVIEW_REQUIRED`.
+
+The Rights/Context Gate independently verifies that:
+
+- the candidate review is complete;
+- its exact search-result hash still matches;
+- the search result is still current against the storyboard/request chain;
+- concept/format identity still matches;
+- the selected shot and candidate fingerprints still match; and
+- the candidate still belongs on the recognized human-rights route.
+
+Stale candidate reviews cannot be approved. Historical rights decisions are
+reconciled against the current selection and stale decisions are removed.
+
+Human approval records the intended transformative/editorial context only. It
+does not make a legal fair-use determination and does not authorize download,
+asset acquisition or paid generation by itself.
+
+The automatic workflow hard-stops at the Human Rights/Context Gate. Slice 16
+remains responsible for any later zero-cost asset acquisition and rough-cut
+preparation.
+
+## D-087 — Rough-cut approval advances only to a current, globally capped Visual Spend boundary
+
+**Status:** Accepted
+
+Slice 17 owns the transition from Human Rough-Cut approval into unresolved-gap
+planning and the Human Visual Spend boundary.
+
+The normal flow is:
+
+`HUMAN_ROUGH_CUT_GATE → visual_gap_prepare`
+
+and then one of three stops:
+
+- `HUMAN_VISUAL_SPEND_GATE` when at least one current unresolved hero shot
+  meets the premium-generation threshold;
+- `VISUAL_GAPS_READY_NO_SPEND` when current gap plans contain no premium
+  generation candidate; or
+- `VISUAL_SPEND_DECISIONS_COMPLETE` after every current premium candidate has
+  a human decision.
+
+Slice 17 does not prepare generation briefs, call a provider, build visual
+assembly, or execute paid inference.
+
+Gap plans are valid only while bound to the exact current rough cut and exact
+current `APPROVE_WITH_GAPS` review. Rework, rough-cut mutation, or review
+mutation makes the old gap plan stale. Preparation prunes stale gap-plan files.
+
+The Visual Spend Gate accepts only current gap plans. Historical spend-review
+files for stale/non-current plans are removed.
+
+Spend configuration fails closed unless:
+
+- currency is USD;
+- human authorization is explicitly required;
+- paid provider calls without authorization are explicitly forbidden;
+- per-shot and workflow caps are finite and positive; and
+- the per-shot cap does not exceed the workflow cap.
+
+The workflow cap applies across all current branches, not per spend-review file.
+Spend mutations are serialized in-process so concurrent approvals cannot each
+observe the same remaining budget and jointly exceed the global cap. Non-finite
+costs such as NaN or Infinity are rejected.
+
+All spend decisions remain authorization records only. No visual generation
+request or provider action is created in Slice 17.
+
+## D-088 — Completed visual spend decisions advance only to zero-cost briefs and assembly
+
+**Status:** Accepted
+
+Slice 18 owns the transition after Slice 17's completed spend/no-spend boundary.
+
+The normal machine path is:
+
+`visual_generation_handoff_prepare` (only when paid generation was explicitly
+authorized) → `visual_assembly_prepare`.
+
+If no premium generation is authorized, the generation-handoff step is skipped
+and the workflow builds the assembly plan directly.
+
+Slice 18 never calls a paid provider, never renders media, and never starts the
+structural edit preview. It stops at one of these boundaries:
+
+- `VISUAL_ASSEMBLY_READY`;
+- `WAITING_FOR_PREMIUM_VISUAL_ASSETS`;
+- `WAITING_FOR_LOCAL_VISUAL_ASSETS`;
+- `WAITING_FOR_VISUAL_ASSETS`; or
+- `VISUAL_EXISTING_RETRY_REQUIRED`.
+
+The visual spend review is canonical. Reading the spend snapshot must preserve
+the recorded `COMPLETE` status, summary and authorized ceiling instead of
+silently stripping them. Spend decisions are revalidated against their current
+gap fingerprint and configured per-shot cap before any downstream stage can
+trust them.
+
+Premium generation briefs are derived only from the complete, globally valid
+current spend snapshot. Every brief binds the exact gap-plan hash, spend-review
+hash and exact human spend-decision hash. Preparing a brief authorizes no
+provider call and sets `execution_authorized=false`.
+
+Visual assembly is built only from the exact current rough cut, current
+rough-cut approval, current gap plan and, for hero gaps, a complete current
+spend review.
+
+Slice 18 recognizes the managed asset statuses introduced by Slice 16:
+`MANAGED_EXISTING_ASSET` and `MANAGED_EDITORIAL_ASSET`. A selected URL is
+never treated as usable media unless its managed registry and local file remain
+current.
+
+`RETRY_EXISTING` is a real unresolved state. It blocks edit-preview
+progression rather than being silently converted into a placeholder.
+
+Authorized premium slots remain pending until a current generated asset is
+registered against the exact generation request and within the approved cost
+ceiling. Slice 18 does not implement provider execution.
+
+## D-089 — Current visual assembly advances through a free local structural preview only
+
+**Status:** Accepted
+
+Slice 19 owns the transition from a current Slice 18 visual assembly into the
+Human Edit Preview Gate.
+
+The automatic path is:
+
+`edit_manifest_prepare → edit_preview_render → HUMAN_EDIT_PREVIEW_GATE`
+
+and only runs when every expected visual-assembly branch is current and
+`READY_FOR_EDIT_ASSEMBLY`.
+
+Slice 19 does not execute premium visual generation, final production handoff,
+music/SFX generation, upload, publishing, or any paid/cloud fallback.
+
+The edit manifest is not considered current merely because its source files
+still exist. It must rebuild exactly from:
+
+- the current Slice 18 visual assembly;
+- the current registered narration render return;
+- current PASS narration Audio-QC;
+- the matching current narration timing map;
+- exact local narration audio bytes; and
+- the current approved sound-design brief when one exists.
+
+If a sound brief did not exist when the manifest was built and is approved
+later, the old manifest becomes stale.
+
+The local structural preview renderer calls only the configured local FFmpeg
+binary. A stale manifest is rejected before any subprocess runs. Missing local
+FFmpeg is an explicit workflow boundary; no cloud or paid fallback is allowed.
+
+A preview result is current only while:
+
+- its exact manifest remains current and hash-matched;
+- its preview file exists in the managed preview directory;
+- its preview SHA-256 matches; and
+- its recorded byte count matches the current file.
+
+The Human Edit Preview Gate uses this same current-result contract. Therefore
+assembly, narration, sound, manifest or preview mutation invalidates the old
+human-review target.
+
+The structural preview is explicitly non-publishable. It exists only to judge
+story flow, pacing, narration-to-picture rhythm and visual continuity before
+later final-production work.
+## D-090 — Approved edit direction advances only to a current zero-spend final-production handoff
+
+**Status:** Accepted
+
+Slice 20 owns the transition after the Human Edit Preview Gate approves the
+current structural preview.
+
+The automatic path is:
+
+`EDIT_DIRECTION_APPROVED → final_production_handoff_prepare → FINAL_PRODUCTION_HANDOFF_READY`
+
+The handoff step is deterministic and zero-spend. It does not call Higgsfield or
+another paid provider, generate final music/SFX, perform a final render, upload,
+or publish.
+
+Final-handoff currentness is rebuild-based rather than path-existence based. A
+handoff is current only when the exact Human Edit Preview approval still points
+to a current Slice 19 preview result, the preview still resolves to a current
+edit manifest, final visual/narration bytes still match, and the Sound Design
+Brief is still current against its own upstream preview approval.
+
+The currentness check rebuilds the handoff from those live inputs and requires
+the stored artifact to match exactly. Mutating narration, visuals, the approved
+sound brief, edit manifest, preview result, preview media, or edit approval
+therefore makes the old handoff stale.
+
+Generated-visual cost provenance includes only current generated assets that are
+actually selected in the final visual track. Historical or replaced generated
+asset registry entries are not added to the handoff total.
+
+If final visuals are still missing, automation stops at
+`WAITING_FOR_FINAL_VISUAL_ASSETS`. If a current handoff contains another
+blocking condition, it stops at `FINAL_PRODUCTION_HANDOFF_BLOCKED`.
+
+The successful Slice 20 boundary is `FINAL_PRODUCTION_HANDOFF_READY`. The
+handoff records provider-neutral instructions and explicitly keeps provider
+execution unauthorized. Final licensed music/SFX acquisition/provider execution
+and publish-ready rendering remain later work.
+
+## D-091 — Final sound is resolved by licensed asset registration or explicit omission before rendering
+
+**Status:** Accepted
+
+Slice 21 extends the current Slice 20 final-production handoff only through the
+final sound asset trust boundary.
+
+The automatic path is:
+
+`FINAL_PRODUCTION_HANDOFF_READY → final_sound_plan_prepare → WAITING_FOR_FINAL_SOUND_ASSETS`
+
+The deterministic sound plan derives stable, fingerprinted requirements from
+the exact current final-production handoff. Each approved music direction
+becomes a MUSIC requirement and each approved SFX direction becomes a separate
+SFX requirement.
+
+Slice 21 never calls a music/SFX provider, initiates a purchase, generates final
+sound, renders final video, uploads, or publishes.
+
+A human may resolve each current requirement in one of two ways:
+
+1. register an already owned/licensed local sound file; or
+2. explicitly omit the requirement with a human note.
+
+Registered sound files must use a supported audio extension, be non-empty, have
+explicit commercial-use confirmation, and carry a licence/ownership reference.
+They are copied into managed project storage and hash-bound to the exact current
+sound plan and requirement fingerprint.
+
+If an asset has a non-zero external cost, registration is rejected unless the
+human explicitly confirms that the purchase already occurred outside the app.
+That confirmation is a record of an external action, not app spend
+authorization. The record always states that the app neither authorized spend
+nor executed a provider call.
+
+A stored resolution is current only while the exact sound plan remains current,
+the requirement fingerprint still matches, and any registered managed file
+still matches its recorded SHA-256 and byte count. A plan mutation therefore
+invalidates old registrations automatically.
+
+The successful Slice 21 boundary is `FINAL_SOUND_ASSETS_READY`: every current
+requirement has either a current licensed asset or an explicit human omission.
+Final mixing/rendering remains Slice 22 work.
+
+## D-092 — Final rendering is local, rebuild-current, and requires exact-byte human export approval
+
+**Status:** Accepted
+
+Slice 22 owns the transition from fully resolved final sound to an
+export-approved local final video candidate.
+
+The automatic path is:
+
+`FINAL_SOUND_ASSETS_READY → final_render_manifest_prepare → final_render_local → HUMAN_FINAL_EXPORT_GATE`
+
+The final render manifest is rebuild-current. It binds the exact current
+Slice 20 final-production handoff, current Slice 21 final-sound plan, every
+current licensed sound resolution or explicit human omission, and the exact
+visual/narration media hashes.
+
+The render is local FFmpeg only. Cloud rendering and paid render fallbacks are
+forbidden. Internal visual timeline gaps fail closed. If the approved visual
+timeline ends slightly before the narration timeline, the last approved visual
+is held/looped through the exact render duration rather than introducing a black
+placeholder.
+
+Slice 22 uses a deterministic conservative audio-mix policy for the local final
+candidate: narration remains full-level, music marked to duck under narration is
+attenuated, non-ducked music uses a higher fixed bed, SFX use a fixed level, and
+the final mix is limited before AAC encoding. This is a candidate mix, not an
+implicit creative approval; the Human Final Export Gate may return sound for
+rework.
+
+The final rendered MP4 is not export-approved merely because FFmpeg succeeded.
+The Human Final Export Gate is bound to the exact current render-result JSON and
+rendered file SHA-256. A changed manifest, visual, narration, sound resolution,
+sound asset, or rendered byte invalidates an old approval.
+
+Human review may approve the exact render for export or return visuals,
+narration, or sound for rework. An approval explicitly keeps
+`upload_authorized=false` and `publish_authorized=false`.
+
+The successful Slice 22 boundary is `FINAL_EXPORT_APPROVED`. Upload and
+publishing remain later work.
+
+## D-093 — Packaging moves after approved script; the existing 5+5 gate becomes a title-direction gate
+
+**Status:** Accepted
+
+The earlier pipeline generated and approved title/thumbnail packaging before
+Research and Script. That made the public Packaging title an immutable
+dependency of Story, Script and Format. The Packaging Engine v1.0 contract
+requires the mature title + thumbnail + opening hook + Viewer Promise unit to
+be formed only after the script, hook, payoff and supporting evidence are
+stable.
+
+Slice 23 therefore changes the active order to:
+
+```text
+Concept Gate
+→ Research
+→ Research Gate
+→ Story / Script
+→ Script Section Review / Rework
+→ Human Script Gate
+→ 5 Short + 5 Long-form Title Directions
+→ Human Title Direction Gate
+→ STOP
+```
+
+The old pre-script Packaging Engine and its artifacts remain readable and its
+actions remain registered for audit/resumability, but those actions are removed
+from the automatic workflow and disabled in active readiness.
+
+Research now consumes the existing Concept Gate research handoff directly.
+Older package-bound research handoffs remain readable, and any explicit legacy
+packaging research dependencies are preserved as additional research questions.
+
+Story, Script and Format still carry a stable title field for artifact identity,
+but it is explicitly an `INTERNAL_WORKING_TITLE`. It is not the final public
+YouTube title and legacy selected title variants may not rewrite it.
+
+After all required script branches are human-approved, Slice 23 creates a
+post-script title-direction request bound to the exact approved-script hash.
+The established 5 Short + 5 Long-form behavior is preserved. Each title
+direction carries a stable ID, psychological angle, primary/secondary driver,
+core claim, approved evidence references, character count and SEARCH/BROWSE/
+HYBRID intent.
+
+The Human Title Direction Gate selects one Short and one Long-form direction.
+That selection means preferred title/psychological direction. Exact wording is
+explicitly editable later by the mature Packaging Engine. Rework targets only
+the title-direction request and must not modify approved script/evidence.
+
+Selection history is append-only. Duplicate identical submissions are
+idempotent; conflicting duplicate decisions fail closed.
+
+Format/Production are intentionally held after `TITLE_DIRECTION_SELECTED`
+until the mature Packaging Brief, Viewer Promise, thumbnail, pairing and
+validation stages are implemented.
+
+## D-094 — Packaging Brief is deterministic, format-specific, evidence-bound, and pre-thumbnail
+
+**Status:** Accepted
+
+Slice 24 begins the mature post-script Packaging Engine after the Human Title
+Direction Gate.
+
+The automatic path is:
+
+`TITLE_DIRECTION_SELECTED → packaging_brief_prepare → PACKAGING_BRIEF_READY`
+
+One brief is created per concept + format because Short and Long-form may carry
+different selected title directions, hooks and SEARCH/BROWSE/HYBRID intent.
+
+The brief is a deterministic projection of current human-approved artifacts. It
+does not call an AI model and may not invent missing facts. It binds:
+
+- exact current approved script bundle and branch;
+- exact opening hook and approved script sections;
+- Story Plan central question and payoff;
+- exact current selected title direction;
+- verified Research Gate sources and accepted claims;
+- approved numerical tokens extracted from accepted claims;
+- Human Framing visual opening, stakes and desired resolution;
+- Research Gate rejected/rework claims as prohibited/unsupported context when available;
+- audience context already present in the approved channel/concept artifacts.
+
+A pre-publish internal `video_id` uses `concept_id:format`. It is explicitly
+namespaced `PIPELINE_INTERNAL_PRE_PUBLISH` and is not a YouTube video ID.
+
+The Viewer Promise Contract stores `viewer_expectation`, `promise_subject`,
+`promise_question`, `promise_stakes` and `promise_payoff`.
+
+The selected title direction's SEARCH/BROWSE/HYBRID classification is preserved
+per format. Slice 24 does not optimize or regenerate the title.
+
+Missing approved script, opening hook, evidence, selected title direction,
+invalid intent, evidence conflicts or invented evidence references fail closed.
+
+Brief currentness is rebuild-based: changes to the approved script, selected
+title artifact, verified research, reviewed research or any derived field
+invalidate the saved brief.
+
+Slice 24 performs no thumbnail generation, title/thumbnail pairing, package
+scoring, final packaging approval, Format planning or production work. The
+successful boundary is `PACKAGING_BRIEF_READY`.
+
+## D-095 — Psychological hypotheses and thumbnail concepts remain separate, evidence-bound, and pre-pairing
+
+**Status:** Accepted
+
+Slice 25 extends the mature post-script Packaging Engine after
+`PACKAGING_BRIEF_READY`.
+
+The automatic path is:
+
+`PACKAGING_BRIEF_READY`
+→ `psychological_angle_prepare`
+→ `psychological_angle_generate`
+→ `PSYCHOLOGICAL_ANGLES_READY`
+→ `thumbnail_concept_prepare`
+→ `thumbnail_concept_generate`
+→ `THUMBNAIL_CONCEPTS_READY`
+→ STOP.
+
+Each approved format receives exactly five psychological packaging hypotheses.
+The five hypotheses must use five different primary drivers. Exactly one is
+marked `ANCHOR` and preserves the underlying psychology of the human-selected
+title direction; the other four are `ALTERNATIVE` hypotheses with distinct
+viewer questions and expected click reasons.
+
+Allowed primary drivers are constrained by configuration. SEARCH, BROWSE and
+HYBRID intent is preserved from the Slice 24 Packaging Brief and changes the
+generation priorities. Short and Long-form retain format-specific psychology.
+
+Creative framing may be generated by FAIR, but factual invention is prohibited.
+Every angle must cite approved claim IDs. Invented evidence refs, unapproved
+numbers and unsupported high-risk claim words such as best/first/only/never are
+rejected deterministically.
+
+Thumbnail concepts are generated only after the psychological angle set is
+current. Slice 25 creates exactly one structured thumbnail concept per angle.
+It does not generate an image.
+
+Thumbnail constraints include:
+
+- 16:9;
+- one primary focal point;
+- one visual proposition;
+- no more than three meaningful visual elements;
+- zero to three text words preferred, four maximum;
+- exact text word-count validation;
+- timestamp-safe composition;
+- no critical bottom-right content;
+- explicit mobile-legibility intent;
+- optional face usage;
+- visual anomaly preferred but not mandatory;
+- evidence refs that intersect the source angle's evidence;
+- no unsupported numbers or high-risk factual wording;
+- no obvious multi-word duplication of the selected title direction.
+
+Requests and results are resumable per `video_id` (internal concept+format ID).
+All request/result currentness is dynamic and provenance-bound, so an upstream
+Packaging Brief or angle change invalidates downstream artifacts.
+
+Slice 25 performs no title-thumbnail pairing, diagnostic scoring, final package
+validation, final Packaging Human Gate, image generation, Format planning or
+Production work.
+
+## D-096 — Mature packaging uses full cross-pair validation with hard truth overrides and no winner score
+
+**Status:** Accepted
+
+Slice 26 begins only after current Slice 25 thumbnail concepts exist.
+
+For each approved format, the engine builds the full cross product of:
+
+- five post-script title directions; and
+- five evidence-bound thumbnail concepts.
+
+This produces exactly 25 package hypotheses per format. The engine must not
+assume Title 1 belongs to Thumbnail 1.
+
+The human-selected title direction remains represented in the matrix, and any
+human-edited selected wording is preserved. The other four title directions
+remain available as alternative packaging hypotheses.
+
+Validation is chunked by thumbnail: one request evaluates that thumbnail
+against all five title directions. This keeps FAIR output bounded and makes
+generation resumable without discarding already validated chunks.
+
+Every package receives separate diagnostics on a 0–5 scale for:
+
+- scroll stop;
+- clarity;
+- curiosity;
+- stakes;
+- specificity;
+- visual simplicity;
+- title strength;
+- complementarity;
+- credibility;
+- promise alignment;
+- hook alignment.
+
+These values are decision support only. Slice 26 never computes or exposes a
+viral score, CTR forecast, winner score, predicted views, predicted retention
+or automatic ranking.
+
+Hard truth failures override every diagnostic score. Hard-reject codes are:
+
+- `unsupported_material_claim`;
+- `factually_false_claim`;
+- `thumbnail_misrepresents_video`;
+- `title_misrepresents_video`;
+- `evidence_conflict`;
+- `prohibited_claim`.
+
+Repairable packaging failures are REWORK findings, including redundancy, weak
+hook confirmation, delayed promise acknowledgement, excessive thumbnail
+complexity/text, timestamp-zone risk, unclear primary subject and a stale
+selected-title direction.
+
+The model may semantically assess redundancy, complementarity, information
+gain, Viewer Promise consistency, Hook Alignment and whether paired claims are
+supported. It may not modify titles, thumbnails, hooks, scripts, evidence or
+select a winner.
+
+Deterministic validation then derives only:
+
+- `PASS` — no hard or rework findings;
+- `REWORK` — no hard failures, but at least one repairable packaging issue;
+- `REJECT` — at least one hard truth failure.
+
+A package with all 5/5 diagnostics still REJECTS if its material claim,
+evidence, Viewer Promise or representation is invalid.
+
+Title length remains a soft design guideline. A truthful 64-character title
+does not fail only because it exceeds the preferred 45–60 range.
+
+Slice 26 artifacts live under `output/mature_packaging/` so the legacy
+pre-script `output/package_candidates.json` remains untouched for historical
+resume compatibility.
+
+The successful Slice 26 boundary is `PACKAGE_VALIDATION_READY`. No package is
+human-approved yet and Format/Production remain locked.
+
+## D-097 — Niche thumbnail conventions are tabulated and feed post-script thumbnail concepts
+
+**Status:** Accepted
+
+Generic title/thumbnail guidance is a starting hypothesis. Before trusting it
+for a niche, the project tabulates 20-30 of that niche's breakout thumbnails
+per format with `packaging_engine/niche_thumbnail_study.py`.
 
 Selection reuses Experiment 01 evidence: `ON_INTENT` relevance, ranked by
 outlier-reliability tier and channel-relative outlier ratio rather than raw
 views, with at most two videos per channel so one large channel cannot define
 the convention.
 
-Color, contrast and resolution are measured deterministically from the image
-with ffmpeg. Text, focal subject, element and cue counts require human
-confirmation. A local vision model may draft them, but drafts are never
+Color, contrast and resolution are measured deterministically with ffmpeg.
+Text, focal subject, element and arrow/circle counts require human
+confirmation; a local vision model may draft them, but drafts are never
 tabulated.
 
-Each D-070 hypothesis is reported as `NICHE_FOLLOWS` or `NICHE_DIVERGES`. When
-the channel niche is configured, Packaging receives the tabulation and is told
-to prefer niche conventions where they diverge and to pick an accent outside
-the niche's crowded hue families.
+Each niche is compared with the live packaging rules rather than a separate
+list: the Slice 25 thumbnail contract (meaningful elements, text words), D-096
+title-length guidance, and two study-only limits (text/title overlap,
+arrows/circles). Each comparison is reported as `NICHE_FOLLOWS` or
+`NICHE_DIVERGES`.
 
-The tabulation is descriptive. It records conventions of successful videos,
-not causes of their success, and it does not measure CTR. The Learning Engine
-remains the eventual authority once the channel has its own data.
+When `channel_niche` is set in `packaging_config.json` and a tabulation exists
+for the format, Slice 25 thumbnail concept requests carry the conventions and
+an instruction to follow them only where they do not conflict with the
+contract, and to choose colours outside the niche's crowded hue families.
+Without a configured niche or study the request is byte-identical to before,
+so existing concepts stay current.
 
-## D-072 — Thumbnails render from a locked template and pass a human gate
+The tabulation is descriptive: it records conventions of successful videos,
+not causes of their success, and it does not measure CTR.
+
+This supersedes the pre-script packaging design advisories that were briefly
+merged to `main` as D-070 (PR #122). Those advisories extended the retired
+pre-script Packaging Engine (D-093); the Slice 25 contract already enforces the
+same rules. The numbers D-070 to D-072 refer to the integration branch's
+decisions above, not to PR #122's.
+
+## D-098 — Validated thumbnail concepts render from a locked template and pass a Human Thumbnail Gate
 
 **Status:** Accepted
 
-Thumbnails are produced by `production_engine/thumbnail_render.py` from one
-locked channel template so returning viewers recognise the channel. Layout,
-fonts, outline, background treatment, logo position and a timestamp safe zone
-are fixed. Each video varies only the subject image, the accent colour and the
-approved text overlay.
+Slice 25 produces structured thumbnail concepts and does not generate images.
+`production_engine/thumbnail_render.py` renders them.
 
-The text overlay is copied from the human-approved package and cannot be
-edited at this stage, preserving the package-before-script contract (D-040).
+A render unit is one Slice 25 thumbnail concept for one video format that has
+at least one title pair whose Slice 26 validation status is renderable
+(default `PASS`). One image therefore serves every passing pair for that
+concept. The unit is bound to a hash of the concept and its passing titles, so
+a change upstream makes the render stale.
+
+Thumbnails are rendered from one locked channel template so returning viewers
+recognise the channel. Layout, fonts, outline, background treatment, logo
+position and a timestamp safe zone are fixed. Each concept varies only the
+subject image, the accent colour and the overlay text, which is copied verbatim
+from the concept and cannot be edited at this stage.
 
 Subject images require provenance from a tier that permits thumbnail use.
-Editorial excerpts and unknown sources are refused; the source-dependency rule
-applies to thumbnails as much as to footage.
+Editorial excerpts and unknown sources are refused.
 
 Rendering is deterministic (ffmpeg, no model). Text is measured with the real
 font and laid out at the largest size that fits; text too long for the template
 blocks the render rather than shrinking below a readable size.
 
 Each render produces phone-size previews and a mock feed beside the niche's
-breakout thumbnails (D-071). Contrast, phone text size and crowded-accent checks
+breakout thumbnails (D-097). Contrast, phone text size and crowded-accent checks
 are advisories. A Human Thumbnail Gate with five criteria decides ACCEPT /
-REWORK / REJECT, and ACCEPT is refused for placeholder or stale renders.
+REWORK / REJECT on the image; ACCEPT is refused for placeholder or stale
+renders, and a re-render that changes the image withdraws an earlier approval.
+
+Image approval does not select a title-thumbnail package. That remains the
+final Packaging Human Gate, which is not yet built.

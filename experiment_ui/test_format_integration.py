@@ -14,14 +14,32 @@ class FormatUiIntegrationTests(unittest.TestCase):
 
         script_index = server.AUTO_MACHINE_ACTION_ORDER.index("script_gate_prepare")
         self.assertEqual(
-            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 8],
+            server.AUTO_MACHINE_ACTION_ORDER[script_index + 1 : script_index + 26],
             [
+                "title_direction_prepare",
+                "title_direction_generate",
+                "title_direction_gate_prepare",
+                "packaging_brief_prepare",
+                "psychological_angle_prepare",
+                "psychological_angle_generate",
+                "thumbnail_concept_prepare",
+                "thumbnail_concept_generate",
+                "package_pairing_prepare",
+                "package_pairing_generate",
                 "format_prepare",
                 "format_generate",
                 "format_gate_prepare",
                 "voice_prepare",
                 "voice_generate",
                 "voice_gate_prepare",
+                "pre_render_engagement",
+                "narration_preview_prepare",
+                "prototype_sound_prepare",
+                "narration_preview_render",
+                "sound_design_brief_prepare",
+                "narration_prepare",
+                "narration_spend_gate_prepare",
+                "narration_audio_qc",
                 "production_visual_prepare",
             ],
         )
@@ -43,6 +61,29 @@ class FormatUiIntegrationTests(unittest.TestCase):
         self.assertIn(">Format</span>", html)
         self.assertIn("renderFormatReview", script)
         self.assertIn("/api/format-gate", script)
+
+
+    def test_script_accept_ui_announces_automatic_title_direction_handoff(self):
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            'payload.automation_job.action_id === "auto_continue"',
+            script,
+        )
+        self.assertIn(
+            "Script Gate complete. Title-direction generation started automatically.",
+            script,
+        )
+
+    def test_format_accept_ui_announces_automatic_voice_handoff(self):
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        self.assertIn(
+            'payload.automation_job.action_id === "auto_continue"',
+            script,
+        )
+        self.assertIn(
+            "Format Gate complete. Voice Performance planning started automatically.",
+            script,
+        )
 
     def test_pending_format_gate_is_a_human_boundary(self):
         with (

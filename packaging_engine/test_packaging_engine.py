@@ -16,13 +16,34 @@ from packaging_engine import (
 class PackagingEngineTests(unittest.TestCase):
     def setUp(self):
         self.config = {
-            "packages_per_concept": 5,
+            "packages_per_concept": 3,
             "allowed_format_intents": [
                 "long_form",
                 "short",
                 "either",
             ],
             "minimum_research_dependencies": 0,
+            "short_title_contract": {
+                "target_words": "3-7",
+                "max_words": 7,
+                "max_chars": 48,
+                "style": "event_or_tension_first_explanation_hidden",
+            },
+            "long_title_contract": {
+                "target_words": "5-10",
+                "max_words": 10,
+                "max_chars": 70,
+                "style": "curiosity_plus_clear_subject_context",
+            },
+            "title_style_contract": "format_specific_v3",
+            "title_variations_per_format": 5,
+            "title_angles": [
+                "curiosity",
+                "stakes",
+                "unexpected",
+                "mystery",
+                "payoff",
+            ],
         }
         self.concept = {
             "concept_id": "c1",
@@ -70,24 +91,11 @@ class PackagingEngineTests(unittest.TestCase):
     def valid_package(self):
         return {
             "package_id": "c1-pkg001",
-            "title": "F1 Brakes Work Backwards: Why Heat Makes Them Stop",
-            "title_keyword": "F1 Brakes",
+            "title": "Why F1 Brakes Work Backwards",
             "thumbnail": {
                 "message": "Race brake glowing beside road brake.",
                 "visual_concept": "Split comparison showing different thermal states.",
                 "text_overlay": "",
-                "focal_subject": "Glowing race brake rotor",
-                "visual_elements": ["Glowing race rotor", "Cold road rotor"],
-                "visual_cues": [],
-                "palette": {
-                    "background": "near-black",
-                    "subject": "orange-white glow",
-                    "accent": "cold blue for the road rotor",
-                },
-            },
-            "division_of_labor": {
-                "thumbnail_carries": "Surprise at a brake glowing hot on purpose.",
-                "title_carries": "The F1 context and the why-question.",
             },
             "opening_frame": {
                 "purpose": "Immediately prove the temperature difference matters.",
@@ -120,10 +128,53 @@ class PackagingEngineTests(unittest.TestCase):
         self.assertEqual(request["concept_id"], "c1")
         self.assertEqual(
             request["package_count_requested"],
-            5,
+            3,
         )
         self.assertNotIn("score", request)
         self.assertNotIn("rank", request)
+
+    def test_long_public_title_is_rejected(self):
+        request = build_package_request(self.concept, self.config)
+        package = self.valid_package()
+        package["format_intent"] = "short"
+        package["title"] = "Why This Airplane Tire Somehow Survives Every Violent Runway Impact"
+        result = validate_response(
+            {"concept_id": "c1", "packages": [package]},
+            request,
+            self.config,
+        )
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertIn(
+            "title must be at most 7 words",
+            result["rejected"][0]["errors"],
+        )
+
+    def test_long_form_allows_more_context_than_short(self):
+        request = build_package_request(self.concept, self.config)
+        package = self.valid_package()
+        package["format_intent"] = "long_form"
+        package["title"] = "Why Airplane Wings Bend More Than You Think"
+        result = validate_response(
+            {"concept_id": "c1", "packages": [package]},
+            request,
+            self.config,
+        )
+        self.assertEqual(len(result["accepted"]), 1)
+
+    def test_lecture_style_public_title_is_rejected(self):
+        request = build_package_request(self.concept, self.config)
+        package = self.valid_package()
+        package["title"] = "The Physics of Racing Brakes"
+        result = validate_response(
+            {"concept_id": "c1", "packages": [package]},
+            request,
+            self.config,
+        )
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertIn(
+            "title uses lecture-style framing",
+            result["rejected"][0]["errors"],
+        )
 
     def test_valid_package_passes(self):
         request = build_package_request(
@@ -315,99 +366,6 @@ class PackagingEngineTests(unittest.TestCase):
             if item["package_id"] != "package-1"
         )
         self.assertEqual(renamed["model_package_id"], "package-1")
-
-
-    def advisory_config(self):
-        return {**self.config, **{"design_advisories": module.load_config()["design_advisories"]}}
-
-    def validate_one(self, package, config=None):
-        request = build_package_request(self.concept, self.config)
-        return validate_response(
-            {"concept_id": "c1", "packages": [package]},
-            request,
-            config or self.advisory_config(),
-        )
-
-    def advisory_rules(self, package):
-        result = self.validate_one(package)
-        self.assertEqual(len(result["accepted"]), 1, result["rejected"])
-        return {item["rule"] for item in result["accepted"][0]["packaging_advisories"]}
-
-    def test_well_designed_package_has_no_advisories(self):
-        self.assertEqual(self.advisory_rules(self.valid_package()), set())
-
-    def test_request_carries_design_guidance(self):
-        request = build_package_request(self.concept, self.config)
-        instructions = " ".join(request["instructions"])
-        self.assertIn("focal subject", instructions)
-        self.assertIn("starting hypotheses", instructions)
-        thumbnail_schema = request["response_schema"]["packages"][0]["thumbnail"]
-        for field in ("focal_subject", "visual_elements", "visual_cues", "palette"):
-            self.assertIn(field, thumbnail_schema)
-
-    def test_missing_design_fields_are_rejected(self):
-        package = self.valid_package()
-        del package["title_keyword"]
-        del package["division_of_labor"]
-        del package["thumbnail"]["focal_subject"]
-        package["thumbnail"]["visual_elements"] = []
-        package["thumbnail"]["palette"] = {"background": "dark", "subject": "bright"}
-        result = self.validate_one(package)
-        self.assertEqual(len(result["accepted"]), 0)
-        errors = result["rejected"][0]["errors"]
-        for expected in (
-            "title_keyword is required",
-            "division_of_labor must be an object",
-            "thumbnail.focal_subject is required",
-            "thumbnail.visual_elements must be a non-empty list",
-            "thumbnail.palette.accent is required",
-        ):
-            self.assertIn(expected, errors)
-
-    def test_title_length_and_keyword_position_advise_without_rejecting(self):
-        package = self.valid_package()
-        package["title"] = "Why F1 Brakes Work Backwards"
-        package["title_keyword"] = "Backwards"
-        self.assertEqual(
-            self.advisory_rules(package),
-            {"TITLE_LENGTH"},
-        )
-        package["title"] = "The Surprising Hidden Engineering Reason That F1 Brakes Glow"
-        package["title_keyword"] = "F1 Brakes"
-        self.assertEqual(self.advisory_rules(package), {"TITLE_KEYWORD_LATE"})
-        package["title_keyword"] = "carbon rotors"
-        self.assertEqual(self.advisory_rules(package), {"TITLE_KEYWORD_MISSING"})
-
-    def test_thumbnail_text_that_repeats_title_is_flagged(self):
-        package = self.valid_package()
-        package["title"] = "How I Built a $10,000 Studio in My Spare Bedroom"
-        package["title_keyword"] = "$10,000 Studio"
-        package["thumbnail"]["text_overlay"] = "$10,000 STUDIO"
-        self.assertEqual(
-            self.advisory_rules(package),
-            {"THUMBNAIL_TEXT_WORDS", "THUMBNAIL_TEXT_REPEATS_TITLE"},
-        )
-        package["thumbnail"]["text_overlay"] = "IT GLOWS ON PURPOSE"
-        self.assertEqual(self.advisory_rules(package), set())
-
-    def test_cluttered_thumbnail_is_flagged(self):
-        package = self.valid_package()
-        package["thumbnail"]["visual_elements"] = ["rotor", "caliper", "car", "driver"]
-        package["thumbnail"]["visual_cues"] = ["arrow", "circle", "arrow"]
-        self.assertEqual(
-            self.advisory_rules(package),
-            {"THUMBNAIL_ELEMENT_COUNT", "THUMBNAIL_CUE_COUNT"},
-        )
-
-    def test_advisories_are_hypotheses_and_optional(self):
-        package = self.valid_package()
-        package["title"] = "Short"
-        package["title_keyword"] = "Short"
-        result = self.validate_one(package)
-        advisory = result["accepted"][0]["packaging_advisories"][0]
-        self.assertEqual(advisory["evidence_status"], "HYPOTHESIS")
-        without_rules = self.validate_one(package, config=self.config)
-        self.assertEqual(without_rules["accepted"][0]["packaging_advisories"], [])
 
 
     def test_slug_collision_is_rejected_before_request_writes(self):
