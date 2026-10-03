@@ -284,6 +284,20 @@ def _titles_for(
     )
     if selected_id not in ids:
         raise ValueError("SELECTED_TITLE_NO_LONGER_MATCHES_FINAL_SCRIPT")
+    selected_text = (
+        str(selected.get("title_text") or "").strip()
+        if isinstance(selected, dict)
+        else ""
+    )
+    if not selected_text:
+        raise ValueError("MISSING_SELECTED_TITLE_DIRECTION")
+    for candidate in out:
+        if candidate["title_id"] == selected_id:
+            candidate["title_text"] = selected_text
+            candidate["character_count"] = len(selected_text)
+            candidate["human_selected_wording"] = True
+        else:
+            candidate["human_selected_wording"] = False
     return out
 
 
