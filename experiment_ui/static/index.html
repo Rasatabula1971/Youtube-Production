@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/css/command-center.css">
   <link rel="stylesheet" href="/css/opportunity.css">
   <link rel="stylesheet" href="/css/review.css">
+  <link rel="stylesheet" href="/css/production.css">
 </head>
 <body>
   <div class="app-shell">
@@ -43,7 +44,7 @@
           </div>
         </div>
         <div class="nav-group">
-          <a href="/productions" data-route="/productions" data-also-routes="/analysis" class="nav-item">
+          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production" class="nav-item">
             <span class="nav-icon" aria-hidden="true">▶</span>
             <span>Productions</span>
             <span class="nav-count" id="navProductionCount" hidden></span>
@@ -1119,11 +1120,16 @@
           <div id="radarPage" class="radar-page"></div>
         </section>
 
+        <section class="app-view" data-view="production" id="viewProduction" hidden>
+          <div id="productionWorkspace" class="production-workspace"></div>
+        </section>
+
         <section class="app-view" data-view="productions" id="viewProductions" hidden>
           <p class="muted view-intro">One row per accepted concept. Stage and status are worked out from the files on disk every time this page refreshes; nothing here is stored separately.</p>
           <section class="panel">
             <div class="inbox-head">
               <div class="inbox-tabs" id="productionTabs" role="tablist" aria-label="Production filters"></div>
+              <button type="button" class="ghost compact" data-route="/opportunity" title="New productions start from an accepted opportunity and concept">+ New</button>
             </div>
             <div id="productionsList" class="production-list"></div>
           </section>
@@ -1217,6 +1223,7 @@
   <script src="/js/review-workspace.js"></script>
   <script src="/js/opportunity-review.js"></script>
   <script src="/js/radar.js"></script>
+  <script src="/js/production-workspace.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -3026,3 +3026,48 @@ A gate supplies items, evidence HTML, decisions and a submit function.
 **Evidence drawer (UI-05).** It is unchanged from O14 and opens from every new
 surface. Its "Viewer questions" section stays "not yet evidenced" until
 Experiment 02 answers it, rather than showing invented questions.
+
+
+## D-117 — UI Patch 3: Productions list, Review Queue, Production Workspace
+
+**Status:** Accepted
+
+**The workspace owns the context.** `/production#<concept_id>` shows one video:
+title, premise, stage · status, when its files last changed, and eight tabs
+(Evidence, Analysis, Concept, Research, Script, Package, Format, Produce). The
+user no longer has to work out which concept they are on or where it is.
+- **Real sections.** The tabs are real sections, not headings. Each comes from
+  `productions.detail()`, which reads the same artifact state as the list, so
+  the two cannot disagree.
+- **What is shown.** Concept fields, research progress and per-claim decisions,
+  script branches with per-section decision, lock, rework reason and ready
+  alternatives, packaging and format progress, and per-version
+  voice/narration/render state.
+- **Behaviour.** The current stage opens by default with a "Current step" card.
+  Tabs follow the WAI-ARIA tabs pattern, and the page refetches when the
+  status poll shows the production moved, or every 10 s.
+
+**Decisions still happen in the existing panels.** "Continue review" opens
+Workspace (`/analysis`), where every gate panel still lives. Moving each gate
+onto the shared review workspace (D-116) is UI-09 onward. This patch does not
+duplicate those decision forms, so there is still exactly one place to make
+each decision.
+
+**Updated time from file times.** Engines name per-concept artifacts
+`<slug>.…`. A production's "updated" time is therefore the newest
+modification time among its files, found with one directory scan per stage
+folder and no file reads. It reflects the files, not who changed them.
+
+**Review Queue.** Section 14 of the redesign: one numbered list of every
+decision waiting, covering productions needing review or blocked, and inbox
+ideas needing review. "Start review queue" opens the first one. Opportunity
+entries open Opportunity Review on that idea; production entries open its
+workspace.
+
+**Known limits.**
+- **Global gates.** The Produce tab cannot yet name the narration-spend,
+  visual, rough-cut, edit-preview and final-export decisions per video,
+  because those gates are still global (D-115).
+- **Evidence tab.** It shows the evidence recorded on the concept, not the
+  original opportunity packet, because concepts do not yet record which inbox
+  opportunity they came from.

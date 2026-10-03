@@ -260,10 +260,28 @@ to match the redesign's navigation:
   "Save decision". Keys: ← → move, 1–9 choose, Ctrl+Enter save. Investigate
   (rework) requires a note. A decided item leaves the queue, and a failed
   decision keeps your draft. `#<opportunity_id>` links to one item.
-- `/productions` — **Productions**: one row per accepted concept, filtered as
-  Active, Review Queue or Completed (`/productions#review`, …). "Workspace"
-  (`/analysis`, formerly Analyze & Create) still holds every review panel;
-  Patch 3 replaces it with the per-production workspace.
+- `/productions` — **Productions** (D-117): one row per accepted concept with
+  its stage, status, what it waits on, when its files last changed, and a stage
+  bar. "Open →" goes to the Production Workspace. The tabs are Active, Review
+  Queue and Completed. **Review Queue** lists every decision waiting, across
+  productions and the opportunity inbox, with "Start review queue →". "+ New"
+  goes to Opportunities, because a production starts from an accepted concept.
+- `/production#<concept_id>` — **Production Workspace** (D-117): one video. The
+  header shows title, premise, stage · status and last update. Eight tabs are
+  real sections: Evidence, Analysis, Concept, Research, Script, Package,
+  Format, Produce. Each is marked done, current or not started, and the
+  current stage opens by default.
+  - **Current step.** The current stage starts with a "Current step" card;
+    "Continue review →" opens the existing review panel in Workspace
+    (`/analysis`) until that gate moves onto the shared review workspace.
+  - **What each tab shows.** Evidence, Analysis and Concept show the accepted
+    concept's own fields. Research shows its progress and each claim's
+    decision. Script shows each branch and every section's decision, lock,
+    rework reason and ready alternatives. Package and Format show progress and
+    decisions. Produce shows each version's voice, narration and final render.
+  - **Keys.** Tabs follow the WAI-ARIA pattern: ← → move, Home/End jump.
+- `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
+  reachable under Productions.
 - `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
   outputs, logs and technical status.
 
@@ -295,6 +313,12 @@ Gates that are still global rather than per concept (narration spend, visual
 candidates and rights, rough cut, edit preview, final export) are not yet
 attributed to a single production; they stay on the Command Center hero.
 
+`GET /api/production?concept_id=…` returns one production with its eight
+workspace sections (404 when the concept is no longer accepted). Each
+production's `updated_at` is the newest modification time of its artifacts.
+Every engine names per-concept files `<slug>.…`, so one directory scan per
+stage folder finds them without reading any file.
+
 ### Front-end files
 
 `static/css/tokens.css` holds every design token (surfaces, text, accent, the
@@ -302,7 +326,7 @@ four state colours `--status-human|running|blocked|complete`, spacing, type,
 radius, shadow, motion, z-index) and aliases the old variable names so
 `styles.css` keeps working while later patches move its rules across.
 Split-out files so far: `static/css/shell.css`, `command-center.css`,
-`opportunity.css` and `review.css`; `static/js/command-center.js`,
+`opportunity.css`, `review.css` and `production.css`; `static/js/production-workspace.js`, `static/js/command-center.js`,
 `review-workspace.js` (the shared review workspace), `opportunity-review.js`
 and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
 API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves

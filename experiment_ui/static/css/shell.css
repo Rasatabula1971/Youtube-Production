@@ -113,3 +113,24 @@
   .health-pill #healthLabel { display: none; }
   .health-pill { padding: 0 11px; }
 }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Long page titles must not push the top bar past a phone's width. */
+.page-heading { min-width: 0; }
+.page-heading h1 { overflow-wrap: anywhere; }
+.topbar-right { flex: none; }
+
+@media (max-width: 620px) {
+  .page-heading h1 { font-size: 20px; }
+}

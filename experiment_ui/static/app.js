@@ -524,6 +524,12 @@ const ROUTES = {
     title: "Viral Radar",
     subtitle: "Recent channel-relative outliers, tracked for up to 15 days."
   },
+  "/production": {
+    view: "production",
+    kicker: "PRODUCTION",
+    title: "Production Workspace",
+    subtitle: "One video: where it is, what it is waiting on, and everything decided so far."
+  },
   "/analysis": {
     view: "analysis",
     kicker: "ANALYZE & CREATE",
@@ -659,6 +665,7 @@ function renderRoute(options) {
   if (renderedPath !== path) {
     if (path === "/radar" && window.RadarPage) window.RadarPage.show();
     if (path === "/opportunity/review" && window.OpportunityReview) window.OpportunityReview.render();
+    if (path === "/production" && window.ProductionWorkspace) window.ProductionWorkspace.show();
   }
   closeSidebar();
   if (shouldScroll && renderedPath !== path) {
@@ -708,6 +715,8 @@ function applySubroute(path, subroute) {
     window.CommandCenter.setProductionFilter(subroute);
   } else if (path === "/opportunity/review" && window.OpportunityReview) {
     window.OpportunityReview.focus(decodeURIComponent(subroute));
+  } else if (path === "/production" && window.ProductionWorkspace) {
+    window.ProductionWorkspace.open(decodeURIComponent(subroute));
   }
   if (anchor) {
     anchor.scrollIntoView({ block: "start", behavior: "auto" });
@@ -6945,6 +6954,7 @@ function renderAll(data) {
   renderOpportunityGate(data.opportunity_gate || {});
   renderInbox(data.opportunity_inbox || {});
   if (window.RadarPage) window.RadarPage.render(data);
+  if (window.ProductionWorkspace) window.ProductionWorkspace.refresh(data);
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);

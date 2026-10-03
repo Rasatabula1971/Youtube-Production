@@ -183,5 +183,134 @@ class ProductionsDerivationTests(unittest.TestCase):
         self.assertEqual(result["count"], 0)
 
 
+
+class ProductionDetailTests(unittest.TestCase):
+    def build(self, **overrides):
+        state: dict[str, Any] = {
+            "research": VERIFIED,
+            "story": {
+                **SCRIPTED,
+                "story_plan_concept_ids": [CID],
+                "draft_concept_ids": [CID],
+            },
+            "title_direction": {},
+            "fmt": {},
+            "voice": {},
+        }
+        state.update(overrides)
+        production = only(
+            productions.derive(
+                concept_gate=concept_gate((CID, "ACCEPT")),
+                narration={},
+                **state,
+            )
+        )
+        concept = {
+            "concept_id": CID,
+            "premise": "Why plane tyres don't burst",
+            "mechanism_label": "Hidden mechanism",
+            "viewer_need_evidence": {"level": "OBSERVED", "summary": "question titles"},
+            "research_questions": ["What gas is used?"],
+        }
+        return productions.detail(production, concept=concept, **state)
+
+    def test_eight_sections_in_order_with_stage_states(self) -> None:
+        result = self.build()
+        ids = [s["id"] for s in result["sections"]]
+        self.assertEqual(
+            ids,
+            ["EVIDENCE", "ANALYSIS", "CONCEPT", "RESEARCH", "SCRIPT", "PACKAGE", "FORMAT", "PRODUCE"],
+        )
+        states = {s["id"]: s["state"] for s in result["sections"]}
+        self.assertEqual(states["CONCEPT"], "done")
+        self.assertEqual(states["RESEARCH"], "done")
+        self.assertEqual(states["SCRIPT"], "done")
+        self.assertEqual(states["PACKAGE"], "current")
+        self.assertEqual(states["PRODUCE"], "todo")
+
+    def test_concept_facts_flatten_nested_values(self) -> None:
+        sections = {s["id"]: s for s in self.build()["sections"]}
+        facts = {f["label"]: f["value"] for f in sections["EVIDENCE"]["facts"]}
+        self.assertEqual(facts["Viewer need evidence"], "question titles")
+        concept_facts = {f["label"]: f["value"] for f in sections["CONCEPT"]["facts"]}
+        self.assertEqual(concept_facts["Premise"], "Why plane tyres don't burst")
+        research = {f["label"]: f["value"] for f in sections["RESEARCH"]["facts"]}
+        self.assertEqual(research["Research questions"], "What gas is used?")
+
+    def test_script_sections_show_decisions_locks_and_alternatives(self) -> None:
+        story = {
+            "script_gate": {"scripts": [{"concept_id": CID, "format": "long", "decision": "PENDING"}]},
+        }
+        branch = {
+            "format": "long",
+            "targets": [
+                {"target_type": "OPENING_HOOK", "decision": "ACCEPT", "locked": True},
+                {
+                    "target_type": "SECTION",
+                    "section_id": "s2",
+                    "decision": "REWORK",
+                    "rework_reason": "TOO_TECHNICAL",
+                    "metadata": {"purpose": "Open loop"},
+                    "alternatives": {"alternatives": [{"text": "a"}, {"text": "b"}]},
+                },
+                {"target_type": "CLOSING", "decision": "PENDING"},
+            ],
+        }
+        production = only(
+            productions.derive(
+                concept_gate=concept_gate((CID, "ACCEPT")),
+                research=VERIFIED,
+                story=story,
+                title_direction={},
+                fmt={},
+                voice={},
+                narration={},
+            )
+        )
+        result = productions.detail(
+            production,
+            concept={},
+            research=VERIFIED,
+            story=story,
+            title_direction={},
+            fmt={},
+            voice={},
+            script_sections=[branch],
+        )
+        script = next(s for s in result["sections"] if s["id"] == "SCRIPT")
+        self.assertEqual(script["state"], "current")
+        rows = [(r["label"], r["status"], r["detail"]) for r in script["rows"]]
+        self.assertEqual(
+            rows,
+            [
+                ("long script", "pending", ""),
+                ("long · Opening hook", "locked", ""),
+                ("long · s2: Open loop", "rework", "too technical, 2 alternatives ready"),
+                ("long · Closing", "pending", ""),
+            ],
+        )
+
+    def test_done_production_marks_every_section_done(self) -> None:
+        production = only(
+            productions.derive(
+                concept_gate=concept_gate((CID, "ACCEPT")),
+                research=VERIFIED,
+                story=SCRIPTED,
+                title_direction={},
+                fmt=FORMATTED,
+                voice=BRANCHES,
+                narration={},
+                final_render_keys={(CID, "long"), (CID, "short")},
+            )
+        )
+        result = productions.detail(
+            production, concept={}, research=VERIFIED, story=SCRIPTED,
+            title_direction={}, fmt=FORMATTED, voice=BRANCHES,
+        )
+        self.assertTrue(all(s["state"] == "done" for s in result["sections"]))
+        produce = next(s for s in result["sections"] if s["id"] == "PRODUCE")
+        self.assertEqual([r["status"] for r in produce["rows"]], ["accept", "accept"])
+
+
 if __name__ == "__main__":
     unittest.main()

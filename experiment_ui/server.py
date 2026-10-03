@@ -37,6 +37,7 @@ APP_ROUTES = {
     "/opportunity",
     "/opportunity/review",
     "/radar",
+    "/production",
     "/analysis",
     "/productions",
     "/tools",
@@ -3950,6 +3951,113 @@ def final_render_current_keys() -> set[tuple[str, str]]:
     return keys
 
 
+PRODUCTION_ARTIFACT_DIRS = (
+    RESEARCH_PLANS_DIR,
+    RESEARCH_EVIDENCE_DIR,
+    RESEARCH_RESPONSES_DIR,
+    RESEARCH_DRAFTS_DIR,
+    RESEARCH_VERIFIED_DIR,
+    STORY_PLANS_DIR,
+    SCRIPT_REQUESTS_DIR,
+    SCRIPT_DRAFTS_DIR,
+    SCRIPT_APPROVED_DIR,
+    TITLE_DIRECTION_REQUESTS_DIR,
+    TITLE_DIRECTION_RESPONSES_DIR,
+    FORMAT_REQUESTS_DIR,
+    FORMAT_PLANS_DIR,
+    FORMAT_APPROVED_DIR,
+    PRODUCTION_VOICE_REQUESTS_DIR,
+    PRODUCTION_VOICE_SPECS_DIR,
+    PRODUCTION_NARRATION_RENDER_RESULTS_DIR,
+    PRODUCTION_FINAL_RENDER_RESULT_DIR,
+)
+
+
+def production_updated_at(concept_ids: list[str]) -> dict[str, str]:
+    """Newest modification time of each concept's artifacts (files named <slug>.…)."""
+    prefixes = {transformation_safe_slug(cid) + ".": cid for cid in concept_ids if cid}
+    newest: dict[str, float] = {}
+    for directory in PRODUCTION_ARTIFACT_DIRS:
+        try:
+            entries = list(os.scandir(directory))
+        except OSError:
+            continue
+        for entry in entries:
+            for prefix, cid in prefixes.items():
+                if entry.name.startswith(prefix):
+                    try:
+                        mtime = entry.stat().st_mtime
+                    except OSError:
+                        continue
+                    newest[cid] = max(newest.get(cid, 0.0), mtime)
+    return {
+        cid: datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat()
+        for cid, stamp in newest.items()
+    }
+
+
+def production_detail(concept_id: str) -> dict[str, Any] | None:
+    """One production with its eight workspace sections (UI-08)."""
+    transformation = transformation_artifact_state()
+    research = research_artifact_state()
+    story = story_script_artifact_state()
+    title_direction = title_direction_artifact_state()
+    fmt = format_artifact_state()
+    voice = voice_performance_artifact_state()
+    snapshot = productions_snapshot(
+        transformation=transformation,
+        research=research,
+        story=story,
+        title_direction=title_direction,
+        fmt=fmt,
+        voice=voice,
+    )
+    production = next(
+        (p for p in snapshot["productions"] if p["concept_id"] == concept_id), None
+    )
+    if production is None:
+        return None
+    concept = next(
+        (
+            c
+            for c in transformation.get("concept_gate", {}).get("concepts", [])
+            if isinstance(c, dict) and str(c.get("concept_id")) == concept_id
+        ),
+        {},
+    )
+    formats = sorted(
+        {
+            str(item.get("format") or "")
+            for item in story.get("script_gate", {}).get("scripts", [])
+            if isinstance(item, dict)
+            and str(item.get("concept_id")) == concept_id
+            and item.get("format")
+        }
+    )
+    script_sections = []
+    for branch_format in formats:
+        try:
+            script_sections.append(script_section_review_snapshot(concept_id, branch_format))
+        except (OSError, ValueError):
+            continue
+    plan = safe_load_json(
+        FORMAT_APPROVED_DIR
+        / f"{transformation_safe_slug(concept_id)}.approved_format_plan.json"
+    )
+    branches = plan.get("branches", []) if isinstance(plan, dict) else []
+    return productions_model.detail(
+        production,
+        concept=concept,
+        research=research,
+        story=story,
+        title_direction=title_direction,
+        fmt=fmt,
+        voice=voice,
+        script_sections=script_sections,
+        format_branches=[b for b in branches if isinstance(b, dict)],
+    )
+
+
 def productions_snapshot(
     *,
     transformation: dict[str, Any] | None = None,
@@ -3963,7 +4071,7 @@ def productions_snapshot(
     """Per-concept productions derived from the artifacts on disk (D-115)."""
     if transformation is None:
         transformation = transformation_artifact_state()
-    return productions_model.derive(
+    snapshot = productions_model.derive(
         concept_gate=transformation.get("concept_gate", {}),
         research=research if research is not None else research_artifact_state(),
         story=story if story is not None else story_script_artifact_state(),
@@ -3973,6 +4081,12 @@ def productions_snapshot(
         narration=narration if narration is not None else narration_artifact_state(),
         final_render_keys=final_render_current_keys(),
     )
+    updated = production_updated_at(
+        [p["concept_id"] for p in snapshot["productions"]]
+    )
+    for production in snapshot["productions"]:
+        production["updated_at"] = updated.get(production["concept_id"])
+    return snapshot
 
 
 def stage_statuses() -> list[dict[str, Any]]:
@@ -8076,6 +8190,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/productions":
             self._send_json(productions_snapshot())
+            return
+        if route == "/api/production":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0]).strip()
+            payload = production_detail(concept_id) if concept_id else None
+            if payload is None:
+                self._send_json({"error": "Unknown production."}, 404)
+                return
+            self._send_json(payload)
             return
         if route == "/api/opportunity/inbox":
             self._send_json(opportunity_inbox_snapshot())
