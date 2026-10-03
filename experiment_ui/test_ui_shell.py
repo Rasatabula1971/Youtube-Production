@@ -70,6 +70,41 @@ class StaticAssetPathTests(unittest.TestCase):
         self.assertIsNone(server.static_asset_path("/css/escape.css"))
 
 
+class ProductionUpdatedAtTests(unittest.TestCase):
+    def test_newest_artifact_time_per_concept_by_file_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a", Path(tmp) / "b"
+            a.mkdir()
+            b.mkdir()
+            (a / "c1.research_plan.json").write_text("{}")
+            (b / "c1.long.script_draft.json").write_text("{}")
+            (b / "c10.research_plan.json").write_text("{}")
+            os.utime(a / "c1.research_plan.json", (1_000_000, 1_000_000))
+            os.utime(b / "c1.long.script_draft.json", (2_000_000, 2_000_000))
+            os.utime(b / "c10.research_plan.json", (3_000_000, 3_000_000))
+            with mock.patch.object(server, "PRODUCTION_ARTIFACT_DIRS", (a, b, Path(tmp) / "missing")):
+                updated = server.production_updated_at(["c1", "c10", "c2"])
+        self.assertEqual(updated["c1"], "1970-01-24T03:33:20+00:00")
+        self.assertEqual(updated["c10"], "1970-02-04T17:20:00+00:00")
+        self.assertNotIn("c2", updated)
+
+    def test_unknown_production_detail_is_404(self) -> None:
+        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with mock.patch.object(server, "production_detail", return_value=None):
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(
+                        f"http://127.0.0.1:{httpd.server_address[1]}/api/production?concept_id=nope",
+                        timeout=5,
+                    )
+            self.assertEqual(caught.exception.code, 404)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+
 class ShellHttpTests(unittest.TestCase):
     httpd: server.ThreadingHTTPServer
     base: str

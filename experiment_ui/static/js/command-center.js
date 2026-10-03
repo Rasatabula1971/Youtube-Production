@@ -18,7 +18,7 @@
   ];
   const PRODUCTION_EMPTY = {
     active: "No active productions. Accept a concept at the Concept Gate and it appears here.",
-    review: "Nothing waiting on you in any production.",
+    review: "Nothing waiting on you: no production or opportunity needs a decision.",
     completed: "No production has a current final render yet."
   };
   // The scheduled task wakes every 2 hours by default; three missed wakes
@@ -83,15 +83,18 @@
     return '<article class="production-row">' +
       '<div class="production-main">' +
         '<h3 class="production-title">' + esc(production.title) + "</h3>" +
-        '<p class="production-detail">' + esc(production.detail) + "</p>" +
+        '<p class="production-detail">' + esc(production.detail) +
+          (production.updated_at ? ' <span class="production-updated">· updated ' + esc(relativeTime(production.updated_at, Date.now())) + "</span>" : "") +
+        "</p>" +
       "</div>" +
       '<div class="production-stage">' +
         '<span class="production-stage-label">' + esc(production.stage_label) + "</span>" +
         stageTrack(production) +
       "</div>" +
       '<div class="production-status">' + badge(production.status, production.status_label) + "</div>" +
-      '<button type="button" class="ghost compact" data-route="/analysis" aria-label="Open ' +
-        esc(production.title) + ' in the workspace">Open →</button>' +
+      '<button type="button" class="ghost compact" data-route="/production" data-subroute="' +
+        esc(encodeURIComponent(production.concept_id)) + '" aria-label="Open ' +
+        esc(production.title) + '">Open →</button>' +
     "</article>";
   }
 
@@ -125,7 +128,8 @@
           title: production.title,
           detail: production.detail,
           action: "Continue review",
-          route: "/analysis"
+          route: "/production",
+          subroute: encodeURIComponent(production.concept_id)
         });
       } else if (production.status === "BLOCKED") {
         cards.push({
@@ -134,7 +138,8 @@
           title: production.title,
           detail: production.detail,
           action: "Open production",
-          route: "/analysis"
+          route: "/production",
+          subroute: encodeURIComponent(production.concept_id)
         });
       }
     });
@@ -331,18 +336,66 @@
     });
   }
 
+  // Section 14 of the redesign: every decision waiting, in one list.
+  function reviewQueue(data) {
+    const queue = [];
+    ((data.productions || {}).productions || []).forEach(function (production) {
+      if (production.status !== "HUMAN_REVIEW" && production.status !== "BLOCKED") return;
+      queue.push({
+        title: production.title,
+        kind: production.stage_label + (production.status === "BLOCKED" ? " · blocked" : ""),
+        detail: production.detail,
+        tone: STATUS_TONE[production.status],
+        route: "/production",
+        subroute: encodeURIComponent(production.concept_id)
+      });
+    });
+    inboxItems(data).forEach(function (item) {
+      queue.push({
+        title: item.title || item.opportunity_id,
+        kind: "Opportunity · " + (item.source_label || "idea").toLowerCase(),
+        detail: item.viral ? viralDetail(item) : (item.summary || ""),
+        tone: "running",
+        route: "/opportunity/review",
+        subroute: encodeURIComponent(item.opportunity_id)
+      });
+    });
+    return queue;
+  }
+
+  function reviewQueueHtml(queue) {
+    if (!queue.length) return '<p class="empty-state">' + esc(PRODUCTION_EMPTY.review) + "</p>";
+    return '<div class="queue-head"><p><strong>' + plural(queue.length, "decision") + "</strong> waiting</p>" +
+      '<button type="button" class="primary-cta" data-route="' + esc(queue[0].route) + '" data-subroute="' +
+        esc(queue[0].subroute) + '">Start review queue →</button></div>' +
+      '<ol class="review-queue">' + queue.map(function (entry) {
+        return '<li class="queue-row tone-' + esc(entry.tone) + '">' +
+          '<div class="queue-main"><strong>' + esc(entry.title) + "</strong>" +
+            '<span class="muted">' + esc(entry.detail) + "</span></div>" +
+          '<span class="queue-kind">' + esc(entry.kind) + "</span>" +
+          '<button type="button" class="ghost compact" data-route="' + esc(entry.route) + '" data-subroute="' +
+            esc(entry.subroute) + '">Review →</button>' +
+        "</li>";
+      }).join("") + "</ol>";
+  }
+
   function renderProductionsView() {
     const tabs = $("productionTabs");
     const list = $("productionsList");
     if (!tabs || !list || !latest) return;
     const productions = ((latest.productions || {}).productions || []);
+    const queue = reviewQueue(latest);
     tabs.innerHTML = PRODUCTION_FILTERS.map(function (tab) {
-      const count = filterProductions(productions, tab[0]).length;
+      const count = tab[0] === "review" ? queue.length : filterProductions(productions, tab[0]).length;
       const active = tab[0] === productionFilter;
       return '<button type="button" role="tab" class="inbox-tab' + (active ? " active" : "") +
         '" aria-selected="' + active + '" data-production-filter="' + tab[0] + '">' +
         esc(tab[1]) + ' <span class="tab-count">' + count + "</span></button>";
     }).join("");
+    if (productionFilter === "review") {
+      list.innerHTML = reviewQueueHtml(queue);
+      return;
+    }
     const shown = filterProductions(productions, productionFilter);
     list.innerHTML = shown.length
       ? shown.map(productionRow).join("")
