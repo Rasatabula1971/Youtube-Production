@@ -14,7 +14,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 _OVERLAP_ROOT = Path(__file__).resolve().parent.parent
 if str(_OVERLAP_ROOT) not in sys.path:
@@ -48,6 +48,7 @@ APPROVED_FORMAT_PLANS_DIR = OUTPUT_DIR / "approved_format_plans"
 FORMAT_GATE_SUMMARY_FILE = OUTPUT_DIR / "format_gate_summary.json"
 
 READY_STATUS = "READY_FOR_PRODUCTION"
+PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
 
 
 def load_json(path: Path) -> Any:
@@ -481,10 +482,52 @@ def branch_shape(branch: dict[str, Any]) -> list[str]:
     return [normalize_beat(beat) for beat in beats if isinstance(beat, dict)]
 
 
+def load_final_package(concept_id: str) -> dict[str, Any]:
+    """The current Final Packaging Gate bundle for one concept (Slice 27)."""
+    if str(PACKAGING_DIR) not in sys.path:
+        sys.path.insert(0, str(PACKAGING_DIR))
+    import final_packaging_review
+
+    found = final_packaging_review.approved_bundle(concept_id)
+    if found is None:
+        raise ValueError("WAITING_FOR_FINAL_PACKAGE: accept a package at the Final Packaging Gate")
+    path, bundle, digest = found
+    return {"path": path, "bundle": bundle, "sha256": digest}
+
+
+def _final_package_fields(
+    final_package: dict[str, Any],
+    required_branches: list[str],
+) -> dict[str, dict[str, Any]]:
+    bundle = final_package.get("bundle", {})
+    packages = bundle.get("packages", {}) if isinstance(bundle, dict) else {}
+    missing = [fmt for fmt in required_branches if not isinstance(packages.get(fmt), dict)]
+    if missing:
+        raise ValueError(
+            "Final package bundle is missing an accepted package for: " + ", ".join(missing)
+        )
+    return {
+        fmt: {
+            "package_id": packages[fmt].get("package_id"),
+            "title_text": packages[fmt].get("title_text"),
+            "thumbnail_text": packages[fmt].get("thumbnail_text"),
+            "thumbnail_concept": packages[fmt].get("thumbnail_concept"),
+            "thumbnail_image_sha256": (packages[fmt].get("thumbnail_image") or {}).get(
+                "image_sha256"
+            ),
+            "psychological_angle": packages[fmt].get("psychological_angle"),
+            "opening_hook": packages[fmt].get("opening_hook"),
+            "viewer_promise": packages[fmt].get("viewer_promise"),
+        }
+        for fmt in required_branches
+    }
+
+
 def build_format_request(
     script: dict[str, Any],
     script_path: Path,
     config: dict[str, Any],
+    final_package: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     gate = script.get("script_gate", {})
     if not isinstance(gate, dict) or gate.get("status") != READY_STATUS:
@@ -586,7 +629,7 @@ def build_format_request(
             "Missing branch constraints for: " + ", ".join(missing_constraints)
         )
 
-    return {
+    request = {
         "artifact": "format_request",
         "concept_id": concept_id,
         "format_intent": str(package.get("format_intent", "")).strip(),
@@ -630,6 +673,22 @@ def build_format_request(
             "section_review": section_review_provenance,
         },
     }
+    if final_package is not None:
+        final_fields = _final_package_fields(final_package, required_branches)
+        request["package"]["selected_titles"] = {
+            fmt: fields["title_text"] for fmt, fields in final_fields.items()
+        }
+        request["package"]["final_packages"] = final_fields
+        request["instructions"].append(
+            "package.final_packages holds the human-accepted title, thumbnail and "
+            "Viewer Promise for each branch. Plan each branch so its opening confirms "
+            "that exact click promise and its payoff delivers it."
+        )
+        request["request_provenance"]["final_package"] = str(
+            Path(final_package["path"]).resolve()
+        )
+        request["request_provenance"]["final_package_sha256"] = final_package["sha256"]
+    return request
 
 
 def _validate_branch(
@@ -891,6 +950,7 @@ def validate_format_response(
 def run_prepare(
     approved_dir: Path = APPROVED_SCRIPTS_DIR,
     config: dict[str, Any] | None = None,
+    final_package_loader: Callable[[str], dict[str, Any]] = load_final_package,
 ) -> dict[str, Any]:
     config = config or load_config()
     previous_request_hashes = _existing_request_hashes(REQUESTS_DIR)
@@ -905,10 +965,18 @@ def run_prepare(
     pending: list[tuple[Path, dict[str, Any]]] = []
     for path in paths:
         try:
-            request = build_format_request(load_json(path), path, config)
+            script = load_json(path)
+            request = build_format_request(
+                script,
+                path,
+                config,
+                final_package_loader(str(script.get("concept_id") or "").strip()),
+            )
             pending.append((path, request))
         except Exception as exc:
-            failures.append({"script": str(path), "error_type": type(exc).__name__})
+            failures.append(
+                {"script": str(path), "error_type": type(exc).__name__, "error": str(exc)}
+            )
 
     assert_unique_slug_ids(
         [str(request["concept_id"]) for _, request in pending],

@@ -662,5 +662,6 @@ Slice 25 thumbnail concepts that have at least one title pair passing Slice 26
 validation can be rendered into 1280x720 images from a locked template,
 previewed at phone size and in a mock niche feed, and reviewed at a Human
 Thumbnail Gate. Approving an image does not choose the title-thumbnail
-package; that remains the final Packaging Human Gate. See
-`THUMBNAIL_RENDERING.md` and D-098.
+package; that is the Final Packaging Gate, which by default requires the
+chosen package's image to be approved here. See `THUMBNAIL_RENDERING.md`,
+D-098 and D-099.

@@ -529,8 +529,76 @@ Slice 26 does not:
 - create A/B variants;
 - unlock Format/Production.
 
-Slice 27 can now build the compact Final Packaging Human Gate and targeted
-rework workflow from these validated package hypotheses.
+Slice 27 adds the Final Packaging Gate on top of these validated hypotheses.
+
+## Slice 27 — Final Packaging Gate + targeted rework
+
+```text
+PACKAGE_VALIDATION_READY
+        ↓
+Human Final Packaging Gate (one decision per format)
+        ├─ ACCEPT one PASS package ──→ final package bundle per concept
+        ├─ REWORK → title directions | thumbnail concepts | script branch
+        └─ REJECT (holds Format until a package is accepted)
+        ↓
+FINAL_PACKAGING_APPROVED → Format planning (re-enabled)
+```
+
+`final_packaging_review.py` reads the complete current Slice 26 matrix. For each
+format it lists every pair, PASS first, with its diagnostics, findings, Viewer
+Promise and opening hook.
+
+### Accept
+
+A package can be accepted only when:
+
+- its Slice 26 status is in `acceptable_validation_statuses` (default `PASS`);
+- its thumbnail image is approved and current at the Human Thumbnail Gate
+  (`require_approved_thumbnail_image`, default on; render id
+  `<video_id>--<thumbnail_id>`);
+- the reviewer affirms every criterion in `final_packaging_gate_config.json`:
+  title and thumbnail read as one unit, one clear promise, the opening hook
+  confirms the click, the script delivers the promise, claims stay within
+  approved evidence and, with images required, the approved image is the
+  thumbnail.
+
+The title wording is the validated wording. Changing it means reworking the
+title directions, so every accepted title has passed Slice 26.
+
+### Rework
+
+Rework needs a target and an authoritative note. The note is tagged with the
+format and routed to the layer that is weak:
+
+| Target | Effect |
+|---|---|
+| `TITLE_DIRECTIONS` | Withdraws the accepted title-direction selection for the concept and writes the note into its title request (`reopen_for_rework`), exactly like Rework at the Title Direction Gate. Both formats regenerate. |
+| `THUMBNAIL_CONCEPTS` | Records the note and the previous concepts in `output/thumbnail_concept_rework.json`. Only that format's thumbnail request changes, so only its concepts, pairs and renders regenerate. |
+| `SCRIPT` | Submits Rework for that script branch at the Script Gate with the note. Everything downstream of the script regenerates. |
+
+The automatic workflow then walks back through the regenerated stages to the
+gate.
+
+### Reject
+
+Reject records that no package is acceptable for a format. It holds Format
+planning. It stays in force until the matrix for that format changes or the
+reviewer accepts a package.
+
+### Staleness and the bundle
+
+Every decision is bound to the package's content hash and, for images, the
+approved image hash. A changed pair, matrix or image returns the format to
+PENDING.
+
+When every format of a concept is accepted, a final package bundle is written
+to `output/mature_packaging/final_packages/<concept>.final_package.json`. It
+holds the exact title, thumbnail text and concept, approved image, opening
+hook, Viewer Promise, decision and provenance per format.
+
+Format requests carry the bundle and its content hash, and a changed bundle
+makes the Format request stale. Every decision is also archived under
+`final_packaging_history/`. See D-099.
 
 ## Niche thumbnail conventions
 

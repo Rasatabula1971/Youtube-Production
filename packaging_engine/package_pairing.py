@@ -4,8 +4,8 @@ Builds the full 5-title x 5-thumbnail compatibility matrix per approved format,
 evaluates it in resumable five-pair chunks, and deterministically derives
 PASS / REWORK / REJECT without producing a viral score or automatic winner.
 
-The successful Slice 26 boundary is PACKAGE_VALIDATION_READY. The Final
-Packaging Human Gate remains a later slice.
+The successful Slice 26 boundary is PACKAGE_VALIDATION_READY. The Slice 27
+Final Packaging Gate (final_packaging_review.py) chooses from the PASS pairs.
 """
 
 from __future__ import annotations

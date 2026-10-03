@@ -500,6 +500,41 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="finalPackagingReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">FINAL PACKAGING GATE</p>
+                <h2 id="finalPackagingReviewTitle">Choose the final package</h2>
+                <p class="muted" id="finalPackagingReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="finalPackagingReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="finalPackagingDetail"></div>
+              <div class="concept-decision-pane">
+                <div class="concept-complete">Accept one PASS package for this format. Its thumbnail image must already be approved at the Thumbnail Gate. If no package is good enough, send rework to the layer that is weak.</div>
+                <div class="concept-criteria" id="finalPackagingCriteria"></div>
+                <label class="vision-label" for="finalPackagingReworkTarget">Rework target</label>
+                <select class="thumbnail-input" id="finalPackagingReworkTarget">
+                  <option value="">Choose what to rework…</option>
+                  <option value="TITLE_DIRECTIONS">Title directions (regenerate the 5+5 for this concept)</option>
+                  <option value="THUMBNAIL_CONCEPTS">Thumbnail concepts (this format)</option>
+                  <option value="SCRIPT">Script branch (back to the Script Gate)</option>
+                </select>
+                <label class="vision-label" for="finalPackagingNote">Human instruction / review note</label>
+                <textarea id="finalPackagingNote" class="vision-observation" rows="4" maxlength="1400" placeholder="Required for Rework. State exactly what the chosen layer must change. Optional for Accept or Reject."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="finalPackagingPrev" type="button">← Previous</button>
+                  <button class="danger" id="finalPackagingReject" type="button">Reject</button>
+                  <button class="ghost" id="finalPackagingRework" type="button">Send rework</button>
+                  <button id="finalPackagingAccept" type="button">Accept package</button>
+                  <button class="ghost" id="finalPackagingNext" type="button">Next format →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="formatReviewPanel" hidden>
             <div class="panel-head">
               <div>

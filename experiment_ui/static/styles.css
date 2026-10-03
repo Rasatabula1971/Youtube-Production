@@ -1852,3 +1852,93 @@ button.danger {
   outline: 3px solid #ffd400;
   outline-offset: -3px;
 }
+
+.final-package-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+}
+
+.final-package-card {
+  display: flex;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(13,17,23,.34);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.final-package-card.selected {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 1px var(--accent-2) inset;
+}
+
+.final-package-card.blocked {
+  cursor: default;
+  opacity: .72;
+}
+
+.final-package-card input {
+  margin-top: 4px;
+  flex: none;
+}
+
+.final-package-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.final-package-body h3 {
+  margin: 8px 0 6px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.final-package-body p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.final-package-body ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.final-package-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.final-package-tag {
+  padding: 2px 7px;
+  border: 1px solid var(--accent-2);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.final-package-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: #0d131b;
+}
+
+.final-package-blocked {
+  color: var(--warn) !important;
+}
+
+#finalPackagingReworkTarget {
+  width: 100%;
+}

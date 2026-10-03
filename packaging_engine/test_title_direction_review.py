@@ -186,6 +186,34 @@ class TitleDirectionReviewTests(unittest.TestCase):
         self.assertFalse(paths["response_path"].exists())
         self.assertFalse(paths["candidates_file"].exists())
 
+    def test_reopen_for_rework_withdraws_an_accepted_selection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            patches, paths = self.patched(root)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+                module.prepare_state()
+                module.apply_action(
+                    concept_id="c1",
+                    decision="ACCEPT",
+                    selected_titles=self.selections(),
+                )
+                with self.assertRaisesRegex(ValueError, "note"):
+                    module.reopen_for_rework(concept_id="c1", note=" ")
+                result = module.reopen_for_rework(
+                    concept_id="c1",
+                    note="Final Packaging Gate (short): lead with the temperature.",
+                )
+                request = json.loads(
+                    paths["request_path"].read_text(encoding="utf-8")
+                )
+                approved_exists = paths["approved_file"].exists()
+
+        self.assertEqual(result["status"], "TITLE_DIRECTION_REWORK_REQUESTED")
+        self.assertEqual(request["human_rework_iteration"], 1)
+        self.assertIn("lead with the temperature", request["human_rework_note"])
+        self.assertFalse(approved_exists)
+        self.assertFalse(paths["candidates_file"].exists())
+
     def test_duplicate_accept_is_idempotent_and_conflict_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

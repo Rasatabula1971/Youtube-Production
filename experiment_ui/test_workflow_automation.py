@@ -230,8 +230,8 @@ class WorkflowAutomationTests(unittest.TestCase):
                     "current_title": sequence[state["completed"]],
                 }
             return {
-                "state": "PACKAGE_VALIDATION_READY",
-                "current_title": "Package Pairing + Validation Ready",
+                "state": "HUMAN_FINAL_PACKAGING_GATE",
+                "current_title": "Choose the Final Package",
             }
 
         def fake_run(action_id):
@@ -260,7 +260,7 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(result["completed_actions"], sequence)
-        self.assertEqual(result["workflow_state"], "PACKAGE_VALIDATION_READY")
+        self.assertEqual(result["workflow_state"], "HUMAN_FINAL_PACKAGING_GATE")
 
     def test_format_gate_completion_runs_voice_chain_to_human_performance_gate(self):
         state = {"completed": 0}

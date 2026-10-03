@@ -2434,3 +2434,52 @@ renders, and a re-render that changes the image withdraws an earlier approval.
 
 Image approval does not select a title-thumbnail package. That remains the
 final Packaging Human Gate, which is not yet built.
+
+## D-099 — A Final Packaging Gate accepts one validated package per format and routes targeted rework
+
+**Status:** Accepted
+
+Slice 26 stopped at `PACKAGE_VALIDATION_READY` with no way to choose a package,
+and no route back when every pair was weak. Format planning was hard-disabled
+until a human accepted an exact title + thumbnail + hook + Viewer Promise unit.
+
+Slice 27 adds the Final Packaging Gate (`packaging_engine/final_packaging_review.py`).
+It makes one decision per concept and format.
+
+ACCEPT takes one pair from the current complete Slice 26 matrix. That pair must:
+
+- have an acceptable validation status (default `PASS` only);
+- have its thumbnail image approved and current at the Human Thumbnail Gate
+  (D-098). This is on by default and can be switched off in
+  `final_packaging_gate_config.json`;
+- pass every configured acceptance criterion, affirmed by the reviewer.
+
+The accepted title is the validated wording. It cannot be edited at this gate,
+so no unvalidated title reaches production.
+
+REWORK requires a target and a note, and routes to the layer that is weak:
+
+- **Title directions:** re-opens the Title Direction Gate for the concept with
+  the note.
+- **Thumbnail concepts:** adds the note and the previous concepts to that
+  format's Slice 25 request. Requests without a note stay byte-identical, so
+  nothing else regenerates.
+- **Script branch:** submits Rework at the Script Gate.
+
+Downstream artifacts go stale through the existing hash chain, and the
+automatic workflow regenerates them.
+
+REJECT holds Format planning for the concept until the matrix changes or a
+package is accepted.
+
+Each decision is bound to the package's content hash and the approved image
+hash. Upstream changes return it to PENDING. When every format of a concept is
+accepted, a deterministic final package bundle is written.
+
+Format requests embed the accepted packages and the bundle's content hash. The
+Experiment UI treats a Format request as current only while that hash matches
+the current bundle. `format_prepare` is re-enabled once the gate is approved,
+and the automatic workflow stops at `HUMAN_FINAL_PACKAGING_GATE` /
+`FINAL_PACKAGING_REJECTED`.
+
+All decisions and rework requests are archived append-only.
