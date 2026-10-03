@@ -16,7 +16,9 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Any
+from html.parser import HTMLParser
+from typing import Any, Callable
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 DOCTOR_TIMEOUT_SECONDS = 90
 SEARCH_TIMEOUT_SECONDS = 900
@@ -25,6 +27,12 @@ MAX_WEB_SEARCH_RESULTS = 20
 WEB_SEARCH_TIMEOUT_SECONDS = 120
 WEB_READ_TIMEOUT_SECONDS = 120
 URL_PATTERN = re.compile(r"https?://[^\s\]\[<>{}()\"']+")
+DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/"
+WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
+WIKIPEDIA_ARTICLE_PREFIX = "https://en.wikipedia.org/wiki/"
+FREE_BACKEND_USER_AGENT = (
+    "YoutubeProductionResearch/1.0 (local research pipeline; free fallback search)"
+)
 
 
 class AcquisitionError(RuntimeError):
@@ -478,6 +486,308 @@ def read_web_page(
     }
 
 
+# ---------------------------------------------------------------- free fallbacks
+
+
+def _curl_get(url: str, *, timeout_seconds: int, label: str) -> str:
+    """GET one fixed-host HTTPS URL through curl, matching the Jina Reader path."""
+    executable = curl_path()
+    if not executable:
+        raise AcquisitionError(f"curl is not available on PATH; {label} is unavailable")
+    try:
+        completed = subprocess.run(
+            [
+                executable,
+                "-L",
+                "-sS",
+                "--fail",
+                "--max-time",
+                str(int(timeout_seconds)),
+                "--proto",
+                "=http,https",
+                "--proto-redir",
+                "=http,https",
+                "-A",
+                FREE_BACKEND_USER_AGENT,
+                url,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds + 10,
+            shell=False,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AcquisitionError(f"{label} timed out after {timeout_seconds}s") from exc
+    except OSError as exc:
+        raise AcquisitionError(f"{label} failed to start: {exc}") from exc
+    if completed.returncode != 0:
+        detail = (
+            completed.stderr.strip()
+            or f"HTTP request failed with curl exit {completed.returncode}"
+        )
+        raise AcquisitionError(f"{label}: {detail}"[:1600])
+    return completed.stdout
+
+
+class _DuckDuckGoResults(HTMLParser):
+    """Collect result links from DuckDuckGo's no-JavaScript HTML page."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.urls: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+        values = dict(attrs)
+        classes = str(values.get("class") or "").split()
+        href = str(values.get("href") or "")
+        if "result__a" not in classes or not href:
+            return
+        if href.startswith("//"):
+            href = "https:" + href
+        parsed = urlparse(href)
+        if parsed.netloc.endswith("duckduckgo.com"):
+            target = parse_qs(parsed.query).get("uddg", [""])[0]
+            if not target:
+                return
+            href = target
+        if href.startswith(("http://", "https://")) and "duckduckgo.com/y.js" not in href:
+            self.urls.append(href)
+
+
+def parse_duckduckgo_html(html: str) -> list[str]:
+    parser = _DuckDuckGoResults()
+    parser.feed(html)
+    seen: set[str] = set()
+    urls: list[str] = []
+    for url in parser.urls:
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def search_duckduckgo(
+    query: str,
+    *,
+    limit: int = 5,
+    timeout_seconds: int = WEB_SEARCH_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Free web search through DuckDuckGo's HTML endpoint (no key)."""
+    query = str(query).strip()
+    if not query:
+        raise ValueError("query is required")
+    html = _curl_get(
+        DUCKDUCKGO_HTML_URL + "?" + urlencode({"q": query}),
+        timeout_seconds=timeout_seconds,
+        label="DuckDuckGo search",
+    )
+    return {
+        "status": "COMPLETE",
+        "query": query,
+        "requested_limit": limit,
+        "result_urls": parse_duckduckgo_html(html)[:limit],
+        "backend": "duckduckgo_html",
+    }
+
+
+def search_wikipedia(
+    query: str,
+    *,
+    limit: int = 5,
+    timeout_seconds: int = WEB_SEARCH_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Free encyclopedic search through the public Wikipedia API (no key)."""
+    query = str(query).strip()
+    if not query:
+        raise ValueError("query is required")
+    raw = _curl_get(
+        WIKIPEDIA_API_URL
+        + "?"
+        + urlencode(
+            {
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "srlimit": str(limit),
+                "format": "json",
+            }
+        ),
+        timeout_seconds=timeout_seconds,
+        label="Wikipedia search",
+    )
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise AcquisitionError("Wikipedia search returned invalid JSON") from exc
+    hits = payload.get("query", {}).get("search", []) if isinstance(payload, dict) else []
+    urls = [
+        WIKIPEDIA_ARTICLE_PREFIX + quote(str(hit["title"]).replace(" ", "_"))
+        for hit in hits
+        if isinstance(hit, dict) and hit.get("title")
+    ]
+    return {
+        "status": "COMPLETE",
+        "query": query,
+        "requested_limit": limit,
+        "result_urls": urls[:limit],
+        "backend": "wikipedia_api",
+    }
+
+
+SEARCH_BACKENDS: dict[str, Callable[..., dict[str, Any]]] = {
+    "exa": search_web,
+    "duckduckgo": search_duckduckgo,
+    "wikipedia": search_wikipedia,
+}
+
+
+def search_web_with_fallback(
+    query: str,
+    *,
+    limit: int = 5,
+    backends: tuple[str, ...] | list[str] = ("exa", "duckduckgo", "wikipedia"),
+) -> dict[str, Any]:
+    """Try each search backend in order; the first with results wins."""
+    attempts: list[dict[str, Any]] = []
+    for name in backends:
+        search = SEARCH_BACKENDS.get(name)
+        if search is None:
+            raise ValueError(f"Unknown search backend: {name}")
+        try:
+            result = search(query, limit=limit)
+        except AcquisitionError as exc:
+            attempts.append({"backend": name, "status": "FAILED", "error": str(exc)[:500]})
+            continue
+        urls = list(result.get("result_urls", []))
+        if urls:
+            attempts.append({"backend": name, "status": "COMPLETE", "results": len(urls)})
+            return {**result, "attempts": attempts}
+        attempts.append({"backend": name, "status": "NO_RESULTS"})
+    raise AcquisitionError(
+        "Every web search backend failed: "
+        + "; ".join(
+            f"{item['backend']}: {item.get('error') or 'no results'}" for item in attempts
+        )
+    )
+
+
+class _TextExtractor(HTMLParser):
+    """Visible text of an HTML page, without scripts, styles or navigation."""
+
+    SKIP = {"script", "style", "noscript", "nav", "header", "footer", "svg", "form"}
+    BLOCK = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "br", "section", "article"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.depth = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self.SKIP:
+            self.depth += 1
+        elif tag in self.BLOCK:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.SKIP and self.depth:
+            self.depth -= 1
+        elif tag in self.BLOCK:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self.depth:
+            self.parts.append(data)
+
+
+def html_to_text(html: str) -> str:
+    extractor = _TextExtractor()
+    extractor.feed(html)
+    lines = (" ".join(line.split()) for line in "".join(extractor.parts).splitlines())
+    return "\n".join(line for line in lines if line)
+
+
+def read_web_page_direct(
+    url: str,
+    *,
+    timeout_seconds: int = WEB_READ_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Free page read without Jina: Wikipedia plain-text extract, or fetched HTML as text."""
+    url = str(url).strip()
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("url must be an absolute HTTP(S) URL")
+    if url.startswith(WIKIPEDIA_ARTICLE_PREFIX):
+        title = url[len(WIKIPEDIA_ARTICLE_PREFIX):]
+        raw = _curl_get(
+            WIKIPEDIA_API_URL
+            + "?"
+            + urlencode(
+                {
+                    "action": "query",
+                    "prop": "extracts",
+                    "explaintext": "1",
+                    "redirects": "1",
+                    "titles": title.replace("_", " "),
+                    "format": "json",
+                }
+            ),
+            timeout_seconds=timeout_seconds,
+            label="Wikipedia extract",
+        )
+        try:
+            pages = json.loads(raw).get("query", {}).get("pages", {})
+        except (json.JSONDecodeError, AttributeError) as exc:
+            raise AcquisitionError("Wikipedia extract returned invalid JSON") from exc
+        content = "\n".join(
+            str(page.get("extract") or "") for page in pages.values() if isinstance(page, dict)
+        ).strip()
+        backend = "wikipedia_extract"
+    else:
+        content = html_to_text(_curl_get(url, timeout_seconds=timeout_seconds, label="Direct page read"))
+        backend = "direct_fetch"
+    if not content:
+        raise AcquisitionError(f"{backend} returned no readable text")
+    return {
+        "status": "COMPLETE",
+        "url": url,
+        "backend": backend,
+        "content": content,
+        "content_chars": len(content),
+    }
+
+
+READ_BACKENDS: dict[str, Callable[..., dict[str, Any]]] = {
+    "jina_reader": read_web_page,
+    "direct": read_web_page_direct,
+}
+
+
+def read_web_page_with_fallback(
+    url: str,
+    *,
+    backends: tuple[str, ...] | list[str] = ("jina_reader", "direct"),
+) -> dict[str, Any]:
+    """Try each page reader in order; the first with content wins."""
+    failures: list[str] = []
+    for name in backends:
+        read = READ_BACKENDS.get(name)
+        if read is None:
+            raise ValueError(f"Unknown read backend: {name}")
+        try:
+            result = read(url)
+        except AcquisitionError as exc:
+            failures.append(f"{name}: {str(exc)[:400]}")
+            continue
+        if failures:
+            result["fallback_from"] = failures
+        return result
+    raise AcquisitionError("Every page reader failed: " + "; ".join(failures))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Agent Reach source-acquisition adapter"
@@ -500,8 +810,11 @@ def main() -> None:
         payload = doctor()
         payload["youtube"] = youtube_health(payload)
         payload["web_search"] = {
-            "ready": mcporter_path() is not None,
+            "ready": mcporter_path() is not None or curl_path() is not None,
             "backend": "exa.web_search_exa",
+            "exa_ready": mcporter_path() is not None,
+            "free_fallbacks": ["duckduckgo_html", "wikipedia_api"],
+            "free_fallbacks_ready": curl_path() is not None,
         }
         payload["web_read"] = {
             "ready": curl_path() is not None,
@@ -528,11 +841,11 @@ def main() -> None:
     elif args.mode == "web-search":
         if not args.query:
             raise SystemExit("--query is required for web-search")
-        result = search_web(args.query, limit=args.limit)
+        result = search_web_with_fallback(args.query, limit=args.limit)
     else:
         if not args.query:
             raise SystemExit("--query must contain the URL for web-read")
-        result = read_web_page(args.query)
+        result = read_web_page_with_fallback(args.query)
 
     print(render_console_json(result))
 

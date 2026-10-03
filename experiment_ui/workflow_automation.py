@@ -9,6 +9,7 @@ this runner is the normal workflow path.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import Any
 
@@ -79,6 +80,62 @@ AUTO_MACHINE_ACTION_ORDER = [
 ]
 
 MAX_STEPS_PER_RUN = 40
+
+RESEARCH_ACQUISITION_SUMMARY = (
+    control.PROJECT_ROOT / "research_engine" / "output" / "research_acquisition_summary.json"
+)
+
+PARTIAL_MESSAGES = {
+    "narration_preview_render": (
+        "The zero-cost local narration preview could not be rendered. "
+        "Install/configure the local Kokoro preview dependencies and "
+        "retry; paid fallback is forbidden."
+    ),
+    "edit_preview_render": (
+        "The free local structural edit preview could not "
+        "be rendered. Check/configure local FFmpeg and current "
+        "manifest media, then retry; paid/cloud fallback is forbidden."
+    ),
+    "final_render_local": (
+        "The local final candidate could not be rendered. "
+        "Check/configure local FFmpeg and the current final "
+        "render manifest media, then retry; cloud/paid "
+        "render fallback is forbidden."
+    ),
+}
+
+
+def research_acquisition_message() -> str:
+    """Explain a research evidence failure with the real backend error."""
+    first_error = ""
+    try:
+        summary = json.loads(RESEARCH_ACQUISITION_SUMMARY.read_text(encoding="utf-8"))
+        for item in summary.get("results", []):
+            if isinstance(item, dict) and (item.get("first_error") or item.get("message")):
+                first_error = str(item.get("first_error") or item.get("message"))
+                break
+    except (OSError, ValueError, AttributeError):
+        pass
+    return (
+        "Research web search and page reading returned no usable source pages, so "
+        "there is nothing for the Research Gate yet. This is a network/search "
+        "problem, not an AI model problem."
+        + (f" First error: {first_error[:400]}" if first_error else "")
+        + " Check it with: python source_acquisition/agent_reach_adapter.py "
+        "--mode doctor (and --mode web-search --query \"test\"), fix the search "
+        "backend or network, then retry Continue Automatically."
+    )
+
+
+def partial_message(action_id: str) -> str:
+    if action_id == "research_acquire":
+        return research_acquisition_message()
+    return PARTIAL_MESSAGES.get(
+        action_id,
+        "Current artifacts were preserved, but the active "
+        "provider/model did not produce new validated output. "
+        "Retry Continue Automatically later.",
+    )
 
 
 def next_enabled_action(
@@ -226,30 +283,7 @@ def run_until_human_gate() -> dict[str, Any]:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
                 if code == 2:
-                    message = (
-                        "The zero-cost local narration preview could not be rendered. "
-                        "Install/configure the local Kokoro preview dependencies and "
-                        "retry; paid fallback is forbidden."
-                        if action_id == "narration_preview_render"
-                        else (
-                            "The free local structural edit preview could not "
-                            "be rendered. Check/configure local FFmpeg and current "
-                            "manifest media, then retry; paid/cloud fallback is forbidden."
-                            if action_id == "edit_preview_render"
-                            else (
-                                "The local final candidate could not be rendered. "
-                                "Check/configure local FFmpeg and the current final "
-                                "render manifest media, then retry; cloud/paid "
-                                "render fallback is forbidden."
-                                if action_id == "final_render_local"
-                                else (
-                                    "Current artifacts were preserved, but the active "
-                                    "provider/model did not produce new validated output. "
-                                    "Retry Continue Automatically later."
-                                )
-                            )
-                        )
-                    )
+                    message = partial_message(action_id)
                     return {
                         "status": "PARTIAL",
                         "failed_action": action_id,

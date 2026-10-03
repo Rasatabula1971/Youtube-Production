@@ -1,8 +1,9 @@
 """Acquire real web evidence for prepared Research Engine plans.
 
 This layer only searches and reads sources. It does not decide claim truth.
-Search uses Agent Reach's documented Exa/mcporter path; page reads use its
-documented Jina Reader path.
+Search uses Agent Reach's documented Exa/mcporter path first, then the free
+DuckDuckGo HTML and Wikipedia API backends when Exa is unavailable or finds
+nothing. Page reads use the Jina Reader path first, then a direct fetch.
 """
 
 from __future__ import annotations
@@ -27,8 +28,8 @@ if str(SOURCE_DIR) not in sys.path:
     sys.path.insert(0, str(SOURCE_DIR))
 
 from agent_reach_adapter import (
-    read_web_page,
-    search_web,
+    read_web_page_with_fallback,
+    search_web_with_fallback,
 )
 
 PLANS_DIR = HERE / "output" / "plans"
@@ -52,7 +53,11 @@ def safe_slug(value: str) -> str:
     return cleaned or "unknown"
 
 
-def load_config() -> dict[str, int]:
+DEFAULT_SEARCH_BACKENDS = ["exa", "duckduckgo", "wikipedia"]
+DEFAULT_READ_BACKENDS = ["jina_reader", "direct"]
+
+
+def load_config() -> dict[str, Any]:
     raw = load_json(CONFIG_FILE)
     return {
         "search_results_per_question": int(raw["search_results_per_question"]),
@@ -60,6 +65,12 @@ def load_config() -> dict[str, int]:
         "max_unique_pages_per_concept": int(raw["max_unique_pages_per_concept"]),
         "max_chars_per_page": int(raw["max_chars_per_page"]),
         "max_total_content_chars": int(raw["max_total_content_chars"]),
+        "search_backends": [
+            str(x) for x in raw.get("search_backends", DEFAULT_SEARCH_BACKENDS)
+        ],
+        "read_backends": [
+            str(x) for x in raw.get("read_backends", DEFAULT_READ_BACKENDS)
+        ],
     }
 
 
@@ -105,9 +116,10 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
             continue
 
         try:
-            search = search_web(
+            search = search_web_with_fallback(
                 query,
                 limit=config["search_results_per_question"],
+                backends=config["search_backends"],
             )
             urls = list(search.get("result_urls", []))
             question_searches.append(
@@ -115,6 +127,7 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
                     "question_id": question_id,
                     "query": query,
                     "backend": search.get("backend"),
+                    "attempts": search.get("attempts", []),
                     "result_urls": urls,
                 }
             )
@@ -142,7 +155,9 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
                 break
 
             try:
-                read = read_web_page(clean_url)
+                read = read_web_page_with_fallback(
+                    clean_url, backends=config["read_backends"]
+                )
             except Exception as exc:
                 errors.append(
                     {
@@ -203,8 +218,8 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         "plan_source": str(plan_path),
         "provenance": {
             "plan_sha256": plan_hash,
-            "search_backend": "exa.web_search_exa",
-            "read_backend": "jina_reader",
+            "search_backends": config["search_backends"],
+            "read_backends": config["read_backends"],
         },
         "question_searches": question_searches,
         "pages": pages,
@@ -218,6 +233,9 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         "concept_id": concept_id,
         "pages": len(pages),
         "errors": len(errors),
+        "first_error": (
+            f"{errors[0]['stage']}: {errors[0]['message']}" if errors else None
+        ),
         "evidence": str(destination),
     }
 

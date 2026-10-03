@@ -2483,3 +2483,31 @@ and the automatic workflow stops at `HUMAN_FINAL_PACKAGING_GATE` /
 `FINAL_PACKAGING_REJECTED`.
 
 All decisions and rework requests are archived append-only.
+
+## D-100 — Research acquisition falls back to free search and readers
+
+**Status:** Accepted
+
+Research evidence depended on Exa through `mcporter` and on Jina Reader. On a
+machine without them every question failed. The automatic workflow then
+reported the failure as a provider/model problem.
+
+**Search** now tries backends in order and uses the first that returns results:
+
+- Exa;
+- DuckDuckGo's no-JavaScript HTML results;
+- the public Wikipedia search API.
+
+**Page reads** try Jina Reader, then a direct fetch reduced to visible text.
+Wikipedia articles use the API's plain-text extract instead.
+
+The fallbacks need only `curl` and no account or key. The order is configurable
+in `research_acquisition_config.json`. Every attempt is recorded in the evidence
+artifact, so reviewers can see where each source came from.
+
+The fallbacks widen where candidate sources come from but do not change what
+counts as evidence. The Research Gate still decides that.
+
+When research acquisition still produces no usable pages, the workflow message
+says so plainly and quotes the first real backend error, with the commands to
+diagnose it.

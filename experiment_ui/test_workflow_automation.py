@@ -1338,5 +1338,47 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["failed_action"], "exp2_prepare")
 
 
+class PartialMessageTests(unittest.TestCase):
+    def test_research_acquisition_message_names_real_error_not_model(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            summary.write_text(
+                json.dumps(
+                    {
+                        "status": "FAILED",
+                        "results": [
+                            {
+                                "status": "FAILED",
+                                "first_error": "search: Every web search backend failed: "
+                                "exa: mcporter is not available on PATH",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", summary):
+                message = automation.partial_message("research_acquire")
+        self.assertIn("not an AI model problem", message)
+        self.assertIn("mcporter is not available on PATH", message)
+        self.assertIn("--mode doctor", message)
+
+    def test_research_acquisition_message_without_summary(self):
+        from pathlib import Path
+
+        with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", Path("/nonexistent/x.json")):
+            message = automation.partial_message("research_acquire")
+        self.assertNotIn("First error", message)
+        self.assertIn("web search", message)
+
+    def test_other_actions_keep_their_messages(self):
+        self.assertIn("Kokoro", automation.partial_message("narration_preview_render"))
+        self.assertIn("provider/model", automation.partial_message("concept_generate"))
+
+
 if __name__ == "__main__":
     unittest.main()

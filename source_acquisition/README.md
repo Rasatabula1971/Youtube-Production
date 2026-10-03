@@ -84,14 +84,34 @@ The Research Engine uses Agent Reach only for source acquisition:
 ~~~text
 research question
   ↓
-Exa web search
+Exa web search → DuckDuckGo HTML → Wikipedia API   (first with results wins)
   ↓
 real source URLs
   ↓
-Jina Reader page retrieval
+Jina Reader → direct fetch (Wikipedia plain-text extract for articles)
   ↓
 saved page evidence
 ~~~
+
+Exa needs `mcporter` on PATH and an Exa setup. When Exa is unavailable or finds
+nothing, the free fallbacks run. They need only `curl` and no account or key.
+
+Each question records which backends were tried and why they failed. Each page
+records which reader produced it. Change the order or drop a backend with
+`search_backends` / `read_backends` in
+`research_engine/research_acquisition_config.json`.
+
+Check the chain on your machine:
+
+~~~text
+python source_acquisition/agent_reach_adapter.py --mode doctor
+python source_acquisition/agent_reach_adapter.py --mode web-search --query "aircraft tyre nitrogen"
+python source_acquisition/agent_reach_adapter.py --mode web-read --query "https://en.wikipedia.org/wiki/Aircraft_tire"
+~~~
+
+DuckDuckGo's HTML endpoint is unofficial and may rate-limit or change markup.
+Wikipedia is the stable last resort but only covers encyclopedic topics. Either
+way, the Research Gate still decides what counts as evidence.
 
 Agent Reach does not decide whether a claim is true, safe, or suitable for the
 script. FAIR may later structure claims only from the saved acquired pages, and
