@@ -2707,3 +2707,35 @@ provenance, never affects generation, and cannot be selected as the active
 profile. The Science Inside voice ships as `science_inside_v1.json` in DRAFT;
 approving it (status, approver, timestamp, selector) is a separate human step
 because activating a voice makes existing story plans and scripts stale.
+
+## D-109 — A pasted video can become the study set; Experiment 02 follows the current set only
+
+**Status:** Accepted
+
+Slice O5 adds **Analyze a video**. A pasted link is reduced to a validated
+11-character video id (watch, youtu.be, shorts, embed and live links; never a
+playlist, channel or search), measured with the YouTube Data API with yt-dlp
+metadata as the fallback (never a download), routed by the channel scope, and
+saved as a HUMAN_VIDEO packet. A definitive "private or removed" answer stops
+the lookup; a failed lookup is reported as a failure and nothing is saved.
+
+**Analyze why it worked** records the video as the active study source. The
+Human Opportunity Gate then materialises it as the one approved study set
+(status `APPROVED_HUMAN_VIDEO`), with or without a historical run. Approving a
+historical topic, or *Stop analyzing*, returns the study set to the historical
+gate. The study-set row is frozen at decision time (R8): re-measuring the video
+does not invalidate it; deleting its packet does. An excluded video needs an
+explicit override, and replacing existing Experiment 02 work needs an explicit
+confirmation because everything from Experiment 02 onward restarts.
+
+To make that switch safe, Experiment 02 now follows the current approved study
+set only: prepared profiles count as prepared only when they match it exactly,
+and synthesis ignores analysed or reviewed profiles from a previous set.
+
+**Consequence.** A HUMAN_VIDEO study row carries `gate_status: HUMAN_SEEDED`
+and no historical demand evidence; Experiment 02 treats its performance as
+context only, as it does for historical videos.
+
+Also fixed: the historical adapter now accepts the pipeline's
+`short_candidate` / `long_form_candidate` format labels.
+

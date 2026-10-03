@@ -64,3 +64,25 @@ DECISIONS = ("PENDING", "APPROVE", "REWORK", "WATCH", "SAVE", "REJECT")
 WATCH_SOURCES = frozenset({SOURCE_VIRAL_RADAR})
 
 FORMATS = ("long_form", "short")
+
+# Experiment 01.3 labels formats by a duration heuristic ("*_candidate"); the
+# packet contract stores the plain format name.
+FORMAT_ALIASES = {
+    "long_form": "long_form",
+    "long_form_candidate": "long_form",
+    "short": "short",
+    "short_candidate": "short",
+}
+
+
+def normalize_format(value: object) -> str:
+    """Map a pipeline format label to a packet format, or raise ValueError."""
+    key = str(value or "").strip()
+    if key not in FORMAT_ALIASES:
+        raise ValueError(f"Unknown video format: {value!r}")
+    return FORMAT_ALIASES[key]
+
+
+def format_candidate(value: str) -> str:
+    """Map a packet format back to the study-set label Experiment 02 expects."""
+    return normalize_format(value) + "_candidate"

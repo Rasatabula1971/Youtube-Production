@@ -8,8 +8,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-# Fields that change on every rebuild and must not change a packet's identity.
-VOLATILE_FIELDS = frozenset({"created_at", "packet_sha256"})
+# Fields that change on every rebuild, or record people and runtime rather than
+# evidence, so they must not change a packet's evidence hash.
+VOLATILE_FIELDS = frozenset({"created_at", "packet_sha256", "human_notes", "intake"})
 
 
 def canonical_sha256(value: Any) -> str:

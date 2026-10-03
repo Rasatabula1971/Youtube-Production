@@ -111,6 +111,28 @@
             </div>
             <button class="ghost" data-route="/">Back to Home</button>
           </div>
+          <section class="panel" id="analyzeVideoPanel">
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">YOUR IDEA</p>
+                <h3>Analyze a video</h3>
+                <p class="muted">Paste a YouTube video you think worked. It is measured (no download), checked against the Science Inside scope, and saved here. "Analyze why it worked" sends it through Experiment 02 like an approved topic.</p>
+              </div>
+            </div>
+            <form id="analyzeVideoForm" class="analyze-video-form">
+              <label>YouTube link
+                <input id="analyzeVideoUrl" type="text" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=… or youtu.be/… or /shorts/…" required>
+              </label>
+              <label>Topic (optional)
+                <input id="analyzeVideoTopic" type="text" maxlength="120" placeholder="e.g. hummingbird flight">
+              </label>
+              <label>Why this video? (optional)
+                <input id="analyzeVideoNote" type="text" maxlength="500" placeholder="What caught your eye">
+              </label>
+              <button type="submit" id="analyzeVideoSubmit">Check video</button>
+            </form>
+            <div id="submittedVideos" class="submitted-videos"></div>
+          </section>
           <section class="panel">
             <div id="opportunityGate" class="opportunity-gate">
               <p class="empty-state">Waiting for Opportunity Research to create a study set.</p>
