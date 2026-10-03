@@ -655,3 +655,9 @@ records `upload_authorized=false` and `publish_authorized=false`, performs no
 network upload, and invokes no publishing API.
 
 Slice 22 ends at `FINAL_EXPORT_APPROVED`.
+## Thumbnail rendering
+
+Approved packages can be rendered into 1280x720 thumbnails from a locked
+template, previewed at phone size and in a mock niche feed, and approved at a
+Human Thumbnail Gate. This depends only on the approved package, so it can run
+before the format plan is approved. See `THUMBNAIL_RENDERING.md` and D-072.

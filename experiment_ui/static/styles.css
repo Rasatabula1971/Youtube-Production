@@ -273,7 +273,7 @@ button.danger {
 }
 
 .view-container {
-  width: min(1260px, calc(100vw - var(--sidebar)));
+  width: min(1260px, 100%);
   margin: 0 auto;
   padding: 24px 26px 34px;
 }
@@ -1691,3 +1691,163 @@ button.danger {
 .visual-candidate-actions { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:8px; }
 @media (max-width:980px) { .visual-candidate-layout { grid-template-columns:1fr; } }
 @media (max-width:620px) { .visual-candidate-card { grid-template-columns:1fr; } .visual-candidate-thumb,.visual-candidate-placeholder { width:100%; } }
+/* Human Thumbnail Gate */
+.thumbnail-subject-form {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(13,17,23,.34);
+}
+
+.thumbnail-subject-form .vision-label {
+  margin: 4px 0 0;
+}
+
+.thumbnail-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0d131b;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.thumbnail-input:focus {
+  outline: none;
+  border-color: rgba(47,129,247,.72);
+}
+
+.thumbnail-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 10px;
+}
+
+.thumbnail-accent {
+  display: flex;
+  gap: 6px;
+}
+
+.thumbnail-accent input[type="color"] {
+  width: 38px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0d131b;
+}
+
+.thumbnail-main {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #0d131b;
+}
+
+.thumbnail-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.thumbnail-previews figure {
+  margin: 0;
+}
+
+.thumbnail-previews figcaption {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.thumbnail-previews img {
+  display: block;
+  border-radius: 6px;
+}
+
+/* Mock feed: fixed YouTube-like surfaces, independent of the UI theme. */
+.tfeed-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tfeed {
+  width: 100%;
+  max-width: 300px;
+  padding: 8px 0;
+  border-radius: 12px;
+  font-family: Roboto, Arial, sans-serif;
+}
+
+.tfeed.dark { background: #0f0f0f; color: #f1f1f1; }
+.tfeed.light { background: #ffffff; color: #0f0f0f; }
+
+.tfeed h5 {
+  margin: 4px 10px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: .7;
+}
+
+.tfeed-thumb {
+  position: relative;
+  line-height: 0;
+}
+
+.tfeed-thumb img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.tfeed-dur {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.8);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tfeed-card .tfeed-meta { padding: 7px 10px 12px; }
+
+.tfeed-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px;
+  margin: 0 10px 8px;
+}
+
+.tfeed-row .tfeed-thumb img { border-radius: 6px; }
+
+.tfeed-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.tfeed-sub {
+  margin-top: 3px;
+  font-size: 10px;
+  opacity: .65;
+}
+
+.tfeed-ours .tfeed-thumb {
+  outline: 3px solid #ffd400;
+  outline-offset: -3px;
+}

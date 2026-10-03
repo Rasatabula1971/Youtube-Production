@@ -1,0 +1,54 @@
+{
+  "sources": [
+    "experiment_01_discovery/output/experiment_01_2/raw_results.json",
+    "experiment_01_discovery/output/experiment_01_4/raw_results.json"
+  ],
+  "target_sample": 30,
+  "minimum_sample": 20,
+  "max_per_channel": 2,
+  "allowed_relevance": [
+    "ON_INTENT"
+  ],
+  "outlier_reliability_order": [
+    "TRUSTED",
+    "CAUTION",
+    "UNAVAILABLE"
+  ],
+  "thumbnail_variants": [
+    "maxresdefault.jpg",
+    "hqdefault.jpg"
+  ],
+  "minimum_resolution": {
+    "width": 1280,
+    "height": 720
+  },
+  "measure_grid": {
+    "width": 64,
+    "height": 36
+  },
+  "colorful_min_saturation": 0.35,
+  "colorful_min_value": 0.25,
+  "dark_background_max_luminance": 0.35,
+  "light_background_min_luminance": 0.65,
+  "bright_subject_min_center_lift": 0.12,
+  "convention_share": 0.5,
+  "focal_subject_types": [
+    "face",
+    "person_no_face",
+    "object_product",
+    "before_after",
+    "diagram_graphic",
+    "scene_location",
+    "text_only",
+    "other"
+  ],
+  "comparison": {
+    "note": "Niche conventions are compared with the Slice 25 thumbnail contract and D-096 title guidance in packaging_config.json; these two values have no packaging-config equivalent.",
+    "long_form_title_preferred_chars": {
+      "min": 45,
+      "max": 60
+    },
+    "text_title_overlap_max": 0.6,
+    "max_visual_cues": 2
+  }
+}

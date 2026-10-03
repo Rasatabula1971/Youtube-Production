@@ -116,6 +116,8 @@ class PackageReviewTests(unittest.TestCase):
             "channel_fit_preserved": True,
             "concept_aligned": True,
             "title_thumbnail_complementary": True,
+            "thumbnail_single_focal_point": True,
+            "thumbnail_mobile_readable": True,
             "not_misleading": True,
             "viewer_awareness_fit": True,
             "payoff_defined": True,

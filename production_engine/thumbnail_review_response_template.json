@@ -1,0 +1,17 @@
+{
+  "reviewer": "YOUR_NAME_OR_ID",
+  "decisions": [
+    {
+      "package_id": "PACKAGE_ID",
+      "decision": "ACCEPT",
+      "criteria": {
+        "matches_approved_package": true,
+        "single_focal_point": true,
+        "readable_at_phone_size": true,
+        "stands_out_in_feed": true,
+        "subject_image_rights_verified": true
+      },
+      "note": ""
+    }
+  ]
+}

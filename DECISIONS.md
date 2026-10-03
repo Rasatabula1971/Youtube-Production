@@ -2359,3 +2359,84 @@ resume compatibility.
 
 The successful Slice 26 boundary is `PACKAGE_VALIDATION_READY`. No package is
 human-approved yet and Format/Production remain locked.
+## D-070 — Title/thumbnail design guidance enters Packaging as hypotheses
+
+**Status:** Accepted
+
+Generic published title/thumbnail guidance is incorporated into the Packaging
+Engine without promoting it to a production rule.
+
+Packages must now declare their design: a title keyword, one thumbnail focal
+subject, the list of distinct visual elements, any arrows/circles, a
+background/subject/accent palette, and the division of labor between thumbnail
+(emotion/curiosity) and title (context/fact). These fields are structural and
+missing values reject the package.
+
+The numeric guidance — 40-60 title characters, keyword near the front, 3-5 word
+thumbnail text that does not repeat the title, at most 3 visual elements and at
+most 2 arrows/circles — is evaluated as non-blocking `packaging_advisories`
+marked `HYPOTHESIS`. The thresholds are configuration. Most published figures
+trace back to vendor blogs that repeat the same unverified studies, so they
+remain directional until the Learning Engine can compare them with the
+channel's own click and retention data, and niche conventions override them.
+
+The human Packaging Gate adds two ACCEPT criteria:
+`thumbnail_single_focal_point` and `thumbnail_mobile_readable`.
+
+The channel is faceless, so packaging asks for the subject itself or a
+before/after contrast as the focal point rather than an expressive face.
+
+Producing the thumbnail image (1280x720 or larger, locked template) and a
+mock-feed preview remain Production Engine work and are not implemented here.
+
+## D-071 — Niche thumbnail conventions are tabulated, not assumed
+
+**Status:** Accepted
+
+The D-070 hypotheses are generic. Before trusting them for a niche, the
+project tabulates 20-30 of that niche's breakout thumbnails per format.
+
+Selection reuses Experiment 01 evidence: `ON_INTENT` relevance, ranked by
+outlier-reliability tier and channel-relative outlier ratio rather than raw
+views, with at most two videos per channel so one large channel cannot define
+the convention.
+
+Color, contrast and resolution are measured deterministically from the image
+with ffmpeg. Text, focal subject, element and cue counts require human
+confirmation. A local vision model may draft them, but drafts are never
+tabulated.
+
+Each D-070 hypothesis is reported as `NICHE_FOLLOWS` or `NICHE_DIVERGES`. When
+the channel niche is configured, Packaging receives the tabulation and is told
+to prefer niche conventions where they diverge and to pick an accent outside
+the niche's crowded hue families.
+
+The tabulation is descriptive. It records conventions of successful videos,
+not causes of their success, and it does not measure CTR. The Learning Engine
+remains the eventual authority once the channel has its own data.
+
+## D-072 — Thumbnails render from a locked template and pass a human gate
+
+**Status:** Accepted
+
+Thumbnails are produced by `production_engine/thumbnail_render.py` from one
+locked channel template so returning viewers recognise the channel. Layout,
+fonts, outline, background treatment, logo position and a timestamp safe zone
+are fixed. Each video varies only the subject image, the accent colour and the
+approved text overlay.
+
+The text overlay is copied from the human-approved package and cannot be
+edited at this stage, preserving the package-before-script contract (D-040).
+
+Subject images require provenance from a tier that permits thumbnail use.
+Editorial excerpts and unknown sources are refused; the source-dependency rule
+applies to thumbnails as much as to footage.
+
+Rendering is deterministic (ffmpeg, no model). Text is measured with the real
+font and laid out at the largest size that fits; text too long for the template
+blocks the render rather than shrinking below a readable size.
+
+Each render produces phone-size previews and a mock feed beside the niche's
+breakout thumbnails (D-071). Contrast, phone text size and crowded-accent checks
+are advisories. A Human Thumbnail Gate with five criteria decides ACCEPT /
+REWORK / REJECT, and ACCEPT is refused for placeholder or stale renders.
