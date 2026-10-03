@@ -96,6 +96,23 @@ Each evidence link records:
 The framework is designed to preserve disagreement rather than silently merge
 conflicting sources.
 
+## Quote verification
+
+Every evidence link carries an `evidence_quote` copied from the acquired page.
+Before a model response is saved, each quote is checked against its page's
+saved text:
+
+- **What doesn't count:** case, whitespace, punctuation, curly versus straight
+  quotes, dash styles, Markdown emphasis and link syntax. Page text arrives
+  formatted differently depending on the reader (Jina Markdown, direct fetch,
+  Wikipedia extract).
+- **What does count:** the words and their order. `...` or `…` may join
+  fragments that appear on the page in the same order.
+- **A claim whose quote isn't found is dropped.** The other claims are kept, and
+  the dropped claim is listed in `quote_rejected_claims` with the reason.
+- **The whole response fails** only when no claim survives, or when it cites a
+  source outside the acquired pages.
+
 ## Apply
 
 Place completed research response files under:

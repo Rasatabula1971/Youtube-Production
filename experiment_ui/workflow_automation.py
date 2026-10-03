@@ -85,7 +85,16 @@ RESEARCH_ACQUISITION_SUMMARY = (
     control.PROJECT_ROOT / "research_engine" / "output" / "research_acquisition_summary.json"
 )
 
+RESEARCH_MODEL_SUMMARY = (
+    control.PROJECT_ROOT / "research_engine" / "output" / "research_model_batch_summary.json"
+)
+
 PARTIAL_MESSAGES = {
+    "_default": (
+        "Current artifacts were preserved, but the active "
+        "provider/model did not produce new validated output. "
+        "Retry Continue Automatically later."
+    ),
     "narration_preview_render": (
         "The zero-cost local narration preview could not be rendered. "
         "Install/configure the local Kokoro preview dependencies and "
@@ -127,15 +136,32 @@ def research_acquisition_message() -> str:
     )
 
 
+def research_claims_message() -> str:
+    """Distinguish "no model answered" from "answers failed validation"."""
+    validation_error = ""
+    try:
+        summary = json.loads(RESEARCH_MODEL_SUMMARY.read_text(encoding="utf-8"))
+        for item in summary.get("results", []):
+            if isinstance(item, dict) and item.get("status") == "MODEL_OUTPUT_VALIDATION_ERROR":
+                validation_error = str(item.get("message") or "")
+                break
+    except (OSError, ValueError, AttributeError):
+        pass
+    if not validation_error:
+        return PARTIAL_MESSAGES["_default"]
+    return (
+        "A free model answered, but its research claims failed validation against "
+        f"the acquired source pages: {validation_error[:400]} Nothing unverified was "
+        "saved. Retry Continue Automatically; a fresh model answer usually passes."
+    )
+
+
 def partial_message(action_id: str) -> str:
     if action_id == "research_acquire":
         return research_acquisition_message()
-    return PARTIAL_MESSAGES.get(
-        action_id,
-        "Current artifacts were preserved, but the active "
-        "provider/model did not produce new validated output. "
-        "Retry Continue Automatically later.",
-    )
+    if action_id == "research_generate":
+        return research_claims_message()
+    return PARTIAL_MESSAGES.get(action_id, PARTIAL_MESSAGES["_default"])
 
 
 def next_enabled_action(
