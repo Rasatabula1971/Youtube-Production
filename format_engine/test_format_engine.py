@@ -14,6 +14,20 @@ from format_engine import (
 )
 
 
+def final_package_stub(concept_id):
+    return {
+        "path": Path(f"{concept_id}.final_package.json"),
+        "sha256": "final-package-sha",
+        "bundle": {
+            "concept_id": concept_id,
+            "packages": {
+                fmt: {"package_id": f"package-{fmt}", "title_text": f"{fmt} title"}
+                for fmt in ("long_form", "short")
+            },
+        },
+    }
+
+
 class FormatEngineTests(unittest.TestCase):
     def config(self):
         return load_config()
@@ -122,6 +136,52 @@ class FormatEngineTests(unittest.TestCase):
             path = Path(tmp) / "script.json"
             path.write_text(json.dumps(script), encoding="utf-8")
             return build_format_request(script, path, self.config())
+
+    def test_final_package_is_bound_into_the_request(self):
+        script = self.script("either")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "script.json"
+            path.write_text(json.dumps(script), encoding="utf-8")
+            request = build_format_request(
+                script, path, self.config(), final_package_stub("c1")
+            )
+            with self.assertRaisesRegex(ValueError, "short"):
+                stub = final_package_stub("c1")
+                del stub["bundle"]["packages"]["short"]
+                build_format_request(script, path, self.config(), stub)
+        self.assertEqual(
+            request["package"]["selected_titles"],
+            {"long_form": "long_form title", "short": "short title"},
+        )
+        self.assertEqual(
+            request["package"]["final_packages"]["short"]["package_id"], "package-short"
+        )
+        self.assertEqual(
+            request["request_provenance"]["final_package_sha256"], "final-package-sha"
+        )
+        self.assertTrue(any("final_packages" in line for line in request["instructions"]))
+
+    def test_run_prepare_waits_for_the_final_package(self):
+        script = self.script("either")
+
+        def missing(_concept_id):
+            raise ValueError("WAITING_FOR_FINAL_PACKAGE: accept a package")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approved = root / "approved"
+            approved.mkdir()
+            (approved / "c1.approved_script.json").write_text(
+                json.dumps(script), encoding="utf-8"
+            )
+            with (
+                patch.object(module, "REQUESTS_DIR", root / "requests"),
+                patch.object(module, "OUTPUT_DIR", root),
+                patch.object(module, "SUMMARY_FILE", root / "summary.json"),
+            ):
+                summary = module.run_prepare(approved, self.config(), missing)
+        self.assertEqual(summary["prepared"], 0)
+        self.assertIn("WAITING_FOR_FINAL_PACKAGE", summary["failures"][0]["error"])
 
     def beat(self, beat_id, purpose, treatment, section_id, claim_ids=("clm001",)):
         key = purpose.lower()
@@ -484,6 +544,7 @@ class FormatEngineTests(unittest.TestCase):
                 summary = module.run_prepare(
                     approved_scripts,
                     self.config(),
+                    final_package_stub,
                 )
 
             new_request = requests / "c1.format_request.json"
@@ -560,6 +621,7 @@ class FormatEngineTests(unittest.TestCase):
                 module.run_prepare(
                     approved_scripts,
                     self.config(),
+                    final_package_stub,
                 )
                 request_path = requests / "c1.format_request.json"
                 request_hash = module.sha256_file(request_path)
@@ -635,6 +697,7 @@ class FormatEngineTests(unittest.TestCase):
                 summary = module.run_prepare(
                     approved_scripts,
                     self.config(),
+                    final_package_stub,
                 )
                 preserved = [
                     response_path,

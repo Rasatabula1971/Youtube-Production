@@ -89,6 +89,11 @@ class ThumbnailReviewFlowTests(PipelineTestCase):
         self.assertTrue(snapshot["complete"])
         approved = self.root / "approved" / f"{RID}.json"
         self.assertTrue(approved.exists())
+        current = m.current_approvals()
+        self.assertEqual(list(current), [RID])
+        self.assertEqual(
+            current[RID]["image_sha256"], json.loads(approved.read_text())["image_sha256"]
+        )
 
         spec_path = self.spec_path()
         spec = json.loads(spec_path.read_text())
@@ -97,6 +102,7 @@ class ThumbnailReviewFlowTests(PipelineTestCase):
         stale = review.snapshot()["items"][0]
         self.assertEqual(stale["decision"], "PENDING")
         self.assertIn("render spec changed after rendering", stale["stale_reasons"])
+        self.assertEqual(m.current_approvals(), {})
 
         m.run_render()
         self.assertFalse(approved.exists())

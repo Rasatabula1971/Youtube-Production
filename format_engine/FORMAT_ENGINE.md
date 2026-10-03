@@ -61,6 +61,18 @@ branch. Branch duration bounds, beat minimums and aspect ratios live in
 - FAIR remains free-only through the shared YouTube bridge.
 - A model-validated plan is not producible until the Human Format Gate accepts it.
 
+## Final package binding (Slice 27)
+
+Format planning starts only after the Final Packaging Gate has accepted one
+package per required branch. `run_prepare` loads the concept's final package
+bundle and puts each branch's accepted title, thumbnail, opening hook and
+Viewer Promise into `package.final_packages`, and the titles into
+`package.selected_titles`.
+
+The bundle path and content hash go into `request_provenance`. A concept
+without a current bundle fails with `WAITING_FOR_FINAL_PACKAGE`. A changed
+bundle makes the request, and therefore its plan, stale. See D-099.
+
 ## Artifacts
 
 ```text

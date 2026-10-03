@@ -17,7 +17,7 @@ Thumbnail rendering  ← this stage
         ↓
 Human Thumbnail Gate (image quality, readability, rights)
         ↓
-[future] final Packaging Human Gate (choose the title + thumbnail package)
+Final Packaging Gate, Slice 27 (choose the title + thumbnail package)
 ```
 
 A **render unit** is one Slice 25 thumbnail concept for one video format
@@ -30,7 +30,8 @@ selected title direction first. A render goes stale when the concept or its
 passing titles change.
 
 Approving an image here does **not** choose a package. Choosing the title +
-thumbnail combination remains the job of the final Packaging Human Gate.
+thumbnail combination is the job of the Final Packaging Gate (D-099), which by
+default only accepts a package whose thumbnail image is approved here.
 
 ## Locked template, varied subject
 

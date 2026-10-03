@@ -13,8 +13,8 @@ About 80% of the design is locked in ``thumbnail_template.json`` (canvas,
 layout, fonts, outline, background treatment, logo position). Each video
 varies the subject image, the accent colour, and the approved text overlay.
 The text overlay comes from the thumbnail concept and cannot be edited here.
-Approving an image does not choose a title-thumbnail package; that remains the
-job of the final Packaging Human Gate.
+Approving an image does not choose a title-thumbnail package; that is the job
+of the Final Packaging Gate (packaging_engine/final_packaging_review.py).
 
 The subject image must carry provenance from a source tier that permits
 thumbnail use. Editorial excerpts and unknown sources are refused.
@@ -903,14 +903,19 @@ def run_render(render_id: str | None = None, *, placeholder: bool = False) -> di
 # ------------------------------------------------------------------ review
 
 
-def current_render(render_id: str, template: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def current_render(
+    render_id: str,
+    template: dict[str, Any],
+    units: dict[str, dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     directory = unit_dir(render_id)
     report_path = directory / "render_report.json"
     if not report_path.exists():
         return {}, ["no render report"]
     report = load_json(report_path)
     problems = []
-    units = {unit["render_id"]: unit for unit in load_render_units(template)}
+    if units is None:
+        units = {unit["render_id"]: unit for unit in load_render_units(template)}
     if render_id not in units:
         problems.append("thumbnail concept no longer has a validated title pair")
     elif units[render_id]["source_sha256"] != report.get("source_sha256"):
@@ -923,6 +928,27 @@ def current_render(render_id: str, template: dict[str, Any]) -> tuple[dict[str, 
     if sha256_file(directory / "render_spec.json") != report.get("spec_sha256"):
         problems.append("render spec changed after rendering")
     return report, problems
+
+
+def current_approvals(template: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """Approved thumbnail records whose render is still current, keyed by render_id."""
+    template = template or load_template()
+    units = {unit["render_id"]: unit for unit in load_render_units(template)}
+    out: dict[str, dict[str, Any]] = {}
+    for render_id in units:
+        approved_path = APPROVED_THUMBNAILS_DIR / f"{safe_slug(render_id)}.json"
+        if not approved_path.is_file():
+            continue
+        record = load_json(approved_path)
+        report, problems = current_render(render_id, template, units)
+        if (
+            problems
+            or report.get("status") != "RENDERED"
+            or record.get("image_sha256") != report.get("image_sha256")
+        ):
+            continue
+        out[render_id] = record
+    return out
 
 
 def apply_review(response: dict[str, Any], template: dict[str, Any]) -> dict[str, Any]:

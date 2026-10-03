@@ -1,0 +1,13 @@
+{
+  "acceptable_validation_statuses": ["PASS"],
+  "require_approved_thumbnail_image": true,
+  "required_accept_criteria": [
+    "title_and_thumbnail_read_as_one_unit",
+    "single_clear_promise",
+    "opening_hook_confirms_the_click",
+    "script_delivers_the_promise",
+    "claims_within_approved_evidence"
+  ],
+  "image_criterion": "approved_image_is_the_thumbnail",
+  "rework_targets": ["TITLE_DIRECTIONS", "THUMBNAIL_CONCEPTS", "SCRIPT"]
+}

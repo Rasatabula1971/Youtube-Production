@@ -230,8 +230,8 @@ class WorkflowAutomationTests(unittest.TestCase):
                     "current_title": sequence[state["completed"]],
                 }
             return {
-                "state": "PACKAGE_VALIDATION_READY",
-                "current_title": "Package Pairing + Validation Ready",
+                "state": "HUMAN_FINAL_PACKAGING_GATE",
+                "current_title": "Choose the Final Package",
             }
 
         def fake_run(action_id):
@@ -260,7 +260,7 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(result["completed_actions"], sequence)
-        self.assertEqual(result["workflow_state"], "PACKAGE_VALIDATION_READY")
+        self.assertEqual(result["workflow_state"], "HUMAN_FINAL_PACKAGING_GATE")
 
     def test_format_gate_completion_runs_voice_chain_to_human_performance_gate(self):
         state = {"completed": 0}
@@ -1336,6 +1336,48 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "NO_PROGRESS")
         self.assertEqual(result["failed_action"], "exp2_prepare")
+
+
+class PartialMessageTests(unittest.TestCase):
+    def test_research_acquisition_message_names_real_error_not_model(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            summary.write_text(
+                json.dumps(
+                    {
+                        "status": "FAILED",
+                        "results": [
+                            {
+                                "status": "FAILED",
+                                "first_error": "search: Every web search backend failed: "
+                                "exa: mcporter is not available on PATH",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", summary):
+                message = automation.partial_message("research_acquire")
+        self.assertIn("not an AI model problem", message)
+        self.assertIn("mcporter is not available on PATH", message)
+        self.assertIn("--mode doctor", message)
+
+    def test_research_acquisition_message_without_summary(self):
+        from pathlib import Path
+
+        with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", Path("/nonexistent/x.json")):
+            message = automation.partial_message("research_acquire")
+        self.assertNotIn("First error", message)
+        self.assertIn("web search", message)
+
+    def test_other_actions_keep_their_messages(self):
+        self.assertIn("Kokoro", automation.partial_message("narration_preview_render"))
+        self.assertIn("provider/model", automation.partial_message("concept_generate"))
 
 
 if __name__ == "__main__":

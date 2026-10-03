@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -40,6 +40,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/concept-gate",
     "/api/packaging-gate",
     "/api/title-direction-gate",
+    "/api/final-packaging-gate",
     "/api/research-gate",
     "/api/script-gate",
     "/api/script-section-review",
@@ -170,6 +171,11 @@ from thumbnail_concepts import (
 from package_pairing import (
     request_snapshot as package_pairing_request_snapshot,
     snapshot as package_validation_snapshot,
+)
+from final_packaging_review import (
+    apply_action as apply_final_packaging_gate_action,
+    current_bundle_hashes as final_package_bundle_hashes,
+    public_snapshot as final_packaging_snapshot,
 )
 
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
@@ -1576,6 +1582,32 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def with_final_package_image_urls(payload: dict[str, Any]) -> dict[str, Any]:
+    for item in payload.get("items", []):
+        for package in item.get("packages", []):
+            package["image_url"] = (
+                "/api/thumbnail-file?"
+                + urlencode({"render_id": package["render_id"], "name": "thumbnail.jpg"})
+                if package.get("image_approved")
+                else None
+            )
+    return payload
+
+
+def final_packaging_gate_state() -> dict[str, Any]:
+    """Final Packaging Gate snapshot that degrades to an error status instead of raising."""
+    try:
+        return with_final_package_image_urls(final_packaging_snapshot())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {
+            "status": "ERROR",
+            "error": str(exc),
+            "ready": False,
+            "complete": False,
+            "items": [],
+        }
+
+
 def thumbnail_gate_state() -> dict[str, Any]:
     """Thumbnail Gate snapshot that degrades to an error status instead of raising."""
     try:
@@ -2607,6 +2639,13 @@ def title_direction_artifact_state() -> dict[str, Any]:
     }
 
 
+def current_final_package_hashes() -> dict[str, str]:
+    try:
+        return final_package_bundle_hashes()
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
 def format_artifact_state() -> dict[str, Any]:
     upstream = story_script_artifact_state()
     approved_hashes: dict[str, str] = {}
@@ -2626,6 +2665,7 @@ def format_artifact_state() -> dict[str, Any]:
                 approved_hashes[concept_id] = sha256_file(path)
 
     request_hashes: dict[str, str] = {}
+    final_hashes: dict[str, str] | None = None
     if FORMAT_REQUESTS_DIR.exists():
         for path in FORMAT_REQUESTS_DIR.glob("*.format_request.json"):
             payload = safe_load_json(path)
@@ -2639,7 +2679,14 @@ def format_artifact_state() -> dict[str, Any]:
                 and provenance.get("approved_script_sha256")
                 == approved_hashes[concept_id]
             ):
-                request_hashes[concept_id] = sha256_file(path)
+                if final_hashes is None:
+                    final_hashes = current_final_package_hashes()
+                # Slice 27: a format request is current only while the
+                # accepted final package it was planned around is current.
+                if provenance.get("final_package_sha256") == final_hashes.get(
+                    concept_id
+                ):
+                    request_hashes[concept_id] = sha256_file(path)
 
     plan_ids: set[str] = set()
     if FORMAT_PLANS_DIR.exists():
@@ -4011,6 +4058,13 @@ def stage_statuses() -> list[dict[str, Any]]:
     thumbnails_ready = bool(thumbnails.get("ready"))
     package_validation = package_validation_snapshot()
     package_validation_ready = bool(package_validation.get("ready"))
+    final_packaging = (
+        final_packaging_gate_state()
+        if package_validation_ready
+        else {"status": "WAITING_FOR_PACKAGE_VALIDATION", "ready": False}
+    )
+    final_packaging_status = str(final_packaging.get("status") or "")
+    final_packaging_ready = bool(final_packaging.get("ready"))
     fmt = format_artifact_state()
     production_engine_ready = bool(fmt["production_engine_ready"])
     if research_ready:
@@ -4059,10 +4113,23 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if package_validation_ready:
-        package_human = "PACKAGE VALIDATION READY — SLICE 26 COMPLETE"
+    if final_packaging_ready:
+        package_human = "FINAL PACKAGE ACCEPTED — STAGE COMPLETE"
         package_tone = "complete"
-        package_next = "Prepare the Final Packaging Human Gate in Slice 27."
+        package_next = "Proceed to Format planning."
+    elif final_packaging_status == "FINAL_PACKAGING_REJECTED":
+        package_human = "FINAL PACKAGE REJECTED"
+        package_tone = "action"
+        package_next = (
+            "Accept a validated package or route rework at the Final Packaging Gate."
+        )
+    elif package_validation_ready:
+        package_human = "HUMAN FINAL PACKAGING DECISION NEEDED"
+        package_tone = "action"
+        package_next = (
+            "Choose one validated title + thumbnail package per format, or route "
+            "rework to titles, thumbnail concepts or the script."
+        )
     elif active_action in {
         "package_pairing_prepare",
         "package_pairing_generate",
@@ -4235,16 +4302,23 @@ def stage_statuses() -> list[dict[str, Any]]:
         format_human = "FORMAT APPROVED — STAGE COMPLETE"
         format_tone = "complete"
         format_next = "Ready for the Production Engine."
+    elif final_packaging_ready:
+        format_human = "FORMAT PLANNING"
+        format_tone = "action"
+        format_next = (
+            "Continue automatically to prepare and generate format plans, then "
+            "review them at the Format Gate."
+        )
     elif not title_direction_selected:
         format_human = "WAITING FOR TITLE DIRECTION"
         format_tone = "blocked"
         format_next = "Complete the post-script Title Direction Gate first."
     else:
-        format_human = "HELD FOR MATURE PACKAGING"
+        format_human = "WAITING FOR FINAL PACKAGE"
         format_tone = "blocked"
         format_next = (
-            "Slice 24 must validate title + thumbnail + hook + Viewer Promise "
-            "before Format/Production resumes."
+            "Accept one validated title + thumbnail + hook + Viewer Promise package "
+            "per format at the Final Packaging Gate."
         )
 
     return [
@@ -4524,7 +4598,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         },
         {
             "id": "07",
-            "title": "Packaging / Title Direction + Brief",
+            "title": "Packaging / Title Direction + Final Package",
             "state": title_direction_gate_status,
             "human_status": package_human,
             "tone": package_tone,
@@ -4532,7 +4606,9 @@ def stage_statuses() -> list[dict[str, Any]]:
                 "Generates five Short and five Long-form title directions from the "
                 "approved script, then binds the selected direction to an exact "
                 "evidence-backed Packaging Brief and Viewer Promise Contract for "
-                "each format. Final title wording is still not permanently locked."
+                "each format. Five angles and five thumbnail concepts are cross-paired "
+                "with the titles, validated, and a human accepts one exact package "
+                "per format at the Final Packaging Gate."
             ),
             "next_action": package_next,
             "criteria": [
@@ -4572,73 +4648,56 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "label": "25 title-thumbnail pairs validated per format",
                     "done": package_validation_ready,
                 },
+                {
+                    "label": "Final Packaging Gate accepted one package per format",
+                    "done": final_packaging_ready,
+                },
             ],
-            "complete": package_validation_ready,
+            "complete": final_packaging_ready,
             "ready": production_ready,
-            "current": production_ready and not package_validation_ready,
+            "current": production_ready and not final_packaging_ready,
         },
         {
             "id": "08",
-            "title": "Format / Production Hold",
+            "title": "Format",
             "state": (
-                "WAITING_FOR_FINAL_PACKAGING_GATE"
-                if package_validation_ready
+                "FORMAT_APPROVED"
+                if production_engine_ready
                 else (
-                    "WAITING_FOR_PACKAGE_VALIDATION"
-                    if thumbnails_ready
-                    else (
-                        "WAITING_FOR_THUMBNAIL_CONCEPTS"
-                        if angles_ready
-                        else (
-                            "WAITING_FOR_PSYCHOLOGICAL_ANGLES"
-                            if packaging_brief_ready
-                            else (
-                                "WAITING_FOR_PACKAGING_BRIEF"
-                                if title_direction_selected
-                                else "WAITING_FOR_TITLE_DIRECTION"
-                            )
-                        )
-                    )
+                    str(fmt["format_gate"].get("status") or "WAITING_FOR_FORMAT_PLANS")
+                    if final_packaging_ready
+                    else "WAITING_FOR_FINAL_PACKAGING_GATE"
                 )
             ),
             "human_status": format_human,
             "tone": format_tone,
             "detail": (
-                "Format and Production remain intentionally held after Slice 26. "
-                "Every 5-title x 5-thumbnail combination is validated for redundancy, "
-                "complementarity, claims, Viewer Promise and Hook Alignment, but the "
-                "Final Packaging Human Gate has not accepted a package yet."
+                "Plans production for each approved script branch around the exact "
+                "title, thumbnail, hook and Viewer Promise accepted at the Final "
+                "Packaging Gate. A changed final package makes the format plan stale."
             ),
             "next_action": format_next,
             "criteria": [
                 {
-                    "label": "Post-script title direction selected",
-                    "done": title_direction_selected,
+                    "label": "Final Packaging Gate accepted one package per format",
+                    "done": final_packaging_ready,
                 },
                 {
-                    "label": "Packaging Brief + Viewer Promise ready",
-                    "done": packaging_brief_ready,
+                    "label": "Format requests bound to the final package",
+                    "done": bool(fmt["requests_ready"]),
                 },
                 {
-                    "label": "Psychological angles + thumbnail concepts ready",
-                    "done": thumbnails_ready,
+                    "label": "Format plans current",
+                    "done": bool(fmt["plans_ready"]),
                 },
                 {
-                    "label": "Cross-pair validation ready",
-                    "done": package_validation_ready,
-                },
-                {
-                    "label": "Final Packaging Human Gate complete",
-                    "done": False,
-                },
-                {
-                    "label": "Format planning re-enabled",
-                    "done": False,
+                    "label": "Human Format Gate accepted",
+                    "done": production_engine_ready,
                 },
             ],
-            "complete": False,
-            "ready": title_direction_selected,
-            "current": title_direction_selected,
+            "complete": production_engine_ready,
+            "ready": final_packaging_ready,
+            "current": final_packaging_ready and not production_engine_ready,
         },
     ]
 
@@ -4739,6 +4798,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     pairing_requests = package_pairing_request_snapshot()
     package_validation = package_validation_snapshot()
     package_validation_ready = bool(package_validation.get("ready"))
+    final_packaging = (
+        final_packaging_gate_state()
+        if package_validation_ready
+        else {"status": "WAITING_FOR_PACKAGE_VALIDATION", "ready": False}
+    )
+    final_packaging_ready = bool(final_packaging.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -5667,22 +5732,30 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "format_prepare": {
-            "enabled": False,
+            "enabled": final_packaging_ready and not format_requests_ready,
             "reason": (
-                "Slice 26 intentionally stops after cross-pair validation. The Final "
-                "Packaging Human Gate must accept an exact title + thumbnail + hook + "
-                "Viewer Promise package before Format planning is re-enabled."
-                if package_validation_ready
+                "The Final Packaging Gate accepted a package for every format; "
+                "prepare per-branch format requests bound to it."
+                if final_packaging_ready and not format_requests_ready
                 else (
-                    "Finish current title-thumbnail pairing and validation first."
-                    if thumbnails_ready
+                    "Format requests are already current."
+                    if format_requests_ready
                     else (
-                        "Finish current packaging hypotheses first."
-                        if packaging_brief_ready
+                        "Accept one validated package per format at the Final "
+                        "Packaging Gate first."
+                        if package_validation_ready
                         else (
-                            "Build current Packaging Briefs first."
-                            if title_direction_selected
-                            else "Complete the post-script Title Direction Gate first."
+                            "Finish current title-thumbnail pairing and validation first."
+                            if thumbnails_ready
+                            else (
+                                "Finish current packaging hypotheses first."
+                                if packaging_brief_ready
+                                else (
+                                    "Build current Packaging Briefs first."
+                                    if title_direction_selected
+                                    else "Complete the post-script Title Direction Gate first."
+                                )
+                            )
                         )
                     )
                 )
@@ -6763,19 +6836,36 @@ def workflow_guidance(
                 "next_title": "Slice 26 package validation boundary",
             }
 
-        return {
-            "state": "PACKAGE_VALIDATION_READY",
-            "current_action_id": None,
-            "current_title": "Package Pairing + Validation Ready",
-            "current_detail": (
-                f"{int(validation.get('current_pairs') or 0)} current title-thumbnail "
-                "pairs have PASS / REWORK / REJECT validation with separate 0-5 "
-                "diagnostics. No viral score, automatic winner, package acceptance, "
-                "thumbnail rendering or production action has occurred."
-            ),
-            "next_action_id": None,
-            "next_title": "Slice 27: Final Packaging Human Gate + targeted rework",
-        }
+        final_packaging = final_packaging_gate_state()
+        final_packaging_status = str(final_packaging.get("status") or "")
+        if final_packaging_status == "FINAL_PACKAGING_REJECTED":
+            return {
+                "state": "FINAL_PACKAGING_REJECTED",
+                "current_action_id": None,
+                "current_title": "Final Package Rejected",
+                "current_detail": (
+                    "At least one format has no accepted package. Accept a validated "
+                    "package, or route rework to the title directions, thumbnail "
+                    "concepts or script branch. Format planning stays held."
+                ),
+                "next_action_id": None,
+                "next_title": "Revisit the Final Packaging Gate",
+            }
+        if not final_packaging.get("ready"):
+            return {
+                "state": "HUMAN_FINAL_PACKAGING_GATE",
+                "current_action_id": None,
+                "current_title": "Choose the Final Package",
+                "current_detail": (
+                    f"{int(validation.get('pass') or 0)} of "
+                    f"{int(validation.get('current_pairs') or 0)} title-thumbnail "
+                    "pairs passed validation. For each format, accept one PASS pair "
+                    "whose thumbnail image is approved at the Thumbnail Gate, or "
+                    "route rework to the titles, thumbnail concepts or script."
+                ),
+                "next_action_id": None,
+                "next_title": "Accept one package per format",
+            }
 
     fmt = format_artifact_state()
     format_gate = fmt.get("format_gate", {})
@@ -7617,6 +7707,7 @@ def status_payload() -> dict[str, Any]:
         "thumbnail_concepts": thumbnail_concept_snapshot(),
         "package_pairing_requests": package_pairing_request_snapshot(),
         "package_validation": package_validation_snapshot(),
+        "final_packaging_gate": final_packaging_gate_state(),
         "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],
@@ -7747,6 +7838,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/title-direction-gate":
             self._send_json(title_direction_gate_snapshot())
+            return
+        if route == "/api/final-packaging-gate":
+            self._send_json(final_packaging_gate_state())
             return
         if route == "/api/research-gate":
             self._send_json(research_gate_snapshot())
@@ -8078,6 +8172,25 @@ class Handler(BaseHTTPRequestHandler):
                     selected_titles=body.get("selected_titles"),
                     note=str(body.get("note") or ""),
                 )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/final-packaging-gate":
+                payload = with_final_package_image_urls(apply_final_packaging_gate_action(
+                    video_id=str(body.get("video_id", "")),
+                    decision=str(body.get("decision", "")),
+                    package_id=(
+                        str(body["package_id"]) if body.get("package_id") else None
+                    ),
+                    criteria=body.get("criteria", {}),
+                    note=str(body.get("note") or ""),
+                    rework_target=(
+                        str(body["rework_target"]) if body.get("rework_target") else None
+                    ),
+                ))
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}

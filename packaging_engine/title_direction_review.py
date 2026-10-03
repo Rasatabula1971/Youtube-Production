@@ -365,6 +365,37 @@ def _apply_rework(item: dict[str, Any], note: str) -> None:
         SUMMARY_FILE.unlink()
 
 
+def reopen_for_rework(*, concept_id: str, note: str) -> dict[str, Any]:
+    """Send an accepted concept's title directions back for regeneration.
+
+    Used by later gates (the Final Packaging Gate) that find every package
+    weak because of the titles. The accepted selection is withdrawn and the
+    authoritative note is written into the current request, exactly like a
+    REWORK submitted at this gate.
+    """
+    clean_note = str(note or "").strip()
+    if not clean_note:
+        raise ValueError("Title direction rework requires a note")
+    state = _state()
+    if not state:
+        raise ValueError("Title Direction Gate is not prepared or is stale")
+    payload = _load_candidates()
+    item = next(
+        (
+            x for x in payload.get("concepts", [])
+            if isinstance(x, dict)
+            and str(x.get("concept_id") or "") == str(concept_id or "")
+        ),
+        None,
+    )
+    if not isinstance(item, dict):
+        raise ValueError("Unknown title-direction concept_id")
+    state.setdefault("decisions", {}).pop(str(concept_id), None)
+    atomic_write_json(STATE_FILE, state)
+    _apply_rework(item, clean_note)
+    return {"status": "TITLE_DIRECTION_REWORK_REQUESTED", "concept_id": str(concept_id)}
+
+
 def apply_action(
     *,
     concept_id: str,

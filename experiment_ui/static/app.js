@@ -205,6 +205,19 @@ const thumbnailReject = document.getElementById("thumbnailReject");
 const thumbnailRework = document.getElementById("thumbnailRework");
 const thumbnailAccept = document.getElementById("thumbnailAccept");
 const thumbnailNext = document.getElementById("thumbnailNext");
+const finalPackagingReviewPanel = document.getElementById("finalPackagingReviewPanel");
+const finalPackagingReviewTitle = document.getElementById("finalPackagingReviewTitle");
+const finalPackagingReviewSummary = document.getElementById("finalPackagingReviewSummary");
+const finalPackagingReviewStatus = document.getElementById("finalPackagingReviewStatus");
+const finalPackagingDetail = document.getElementById("finalPackagingDetail");
+const finalPackagingCriteria = document.getElementById("finalPackagingCriteria");
+const finalPackagingReworkTarget = document.getElementById("finalPackagingReworkTarget");
+const finalPackagingNote = document.getElementById("finalPackagingNote");
+const finalPackagingPrev = document.getElementById("finalPackagingPrev");
+const finalPackagingReject = document.getElementById("finalPackagingReject");
+const finalPackagingRework = document.getElementById("finalPackagingRework");
+const finalPackagingAccept = document.getElementById("finalPackagingAccept");
+const finalPackagingNext = document.getElementById("finalPackagingNext");
 const visualCandidateReviewPanel = document.getElementById("visualCandidateReviewPanel");
 const visualCandidateReviewTitle = document.getElementById("visualCandidateReviewTitle");
 const visualCandidateReviewSummary = document.getElementById("visualCandidateReviewSummary");
@@ -441,6 +454,10 @@ let latestPerformanceSnapshot = null;
 let latestThumbnailSnapshot = null;
 let thumbnailCursor = 0;
 let thumbnailEditing = false;
+let latestFinalPackagingSnapshot = null;
+let finalPackagingCursor = 0;
+let finalPackagingEditing = false;
+let finalPackagingSelected = "";
 let latestActions = [];
 let performanceCursor = 0;
 let performanceEditing = false;
@@ -719,6 +736,8 @@ function primaryTargetForWorkflow(workflow) {
     PACKAGING_BRIEF_READY: "Packaging brief ready",
     THUMBNAIL_CONCEPTS_READY: "Thumbnail concepts ready",
     PACKAGE_VALIDATION_READY: "Package validation ready",
+    HUMAN_FINAL_PACKAGING_GATE: "Choose final package",
+    FINAL_PACKAGING_REJECTED: "Revisit final package",
     HUMAN_FORMAT_GATE: "Review format",
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
@@ -5442,6 +5461,223 @@ async function submitThumbnailDecision(decision) {
   }
 }
 
+const FINAL_PACKAGING_CRITERIA = {
+  title_and_thumbnail_read_as_one_unit:
+    "Title and thumbnail add different information and read as one idea.",
+  single_clear_promise: "The package makes one clear promise, not two.",
+  opening_hook_confirms_the_click:
+    "The approved opening confirms why the viewer clicked, early.",
+  script_delivers_the_promise: "The approved script pays the promise off.",
+  claims_within_approved_evidence:
+    "Every claim in the title and thumbnail is backed by accepted research.",
+  approved_image_is_the_thumbnail:
+    "The approved rendered image is the thumbnail you want to publish."
+};
+
+const FINAL_PACKAGING_REWORK_LABELS = {
+  TITLE_DIRECTIONS: "title directions",
+  THUMBNAIL_CONCEPTS: "thumbnail concepts",
+  SCRIPT: "script branch"
+};
+
+function finalPackagingText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && typeof value.text === "string") return value.text;
+  return JSON.stringify(value);
+}
+
+function finalPackageCard(pkg) {
+  const checked = finalPackagingSelected === pkg.package_id;
+  const diagnostics = pkg.diagnostics || {};
+  const findings = (pkg.hard_validation_findings || []).concat(pkg.rework_findings || []);
+  const tone = pkg.validation_status === "PASS"
+    ? "success"
+    : (pkg.validation_status === "REJECT" ? "failed" : "running");
+  return '<label class="final-package-card' + (checked ? " selected" : "") +
+    (pkg.acceptable ? "" : " blocked") + '">' +
+    '<input type="radio" name="finalPackageChoice" value="' + escapeHtml(pkg.package_id || "") + '"' +
+    (checked ? " checked" : "") + (pkg.acceptable ? "" : " disabled") + '>' +
+    '<div class="final-package-body">' +
+      '<div class="final-package-head"><span class="status-chip ' + tone + '">' +
+        escapeHtml(pkg.validation_status || "") + '</span>' +
+        (pkg.selected_title_direction_match ? '<span class="final-package-tag">Selected direction</span>' : "") +
+        '<span class="muted">' + escapeHtml(humanizeToken(pkg.angle_primary_driver || "")) + '</span></div>' +
+      (pkg.image_url
+        ? '<img class="final-package-image" src="' + escapeHtml(pkg.image_url) + '" alt="Approved thumbnail" loading="lazy">'
+        : "") +
+      '<h3>' + escapeHtml(pkg.title_text || "") + '</h3>' +
+      '<p><strong>Thumbnail text:</strong> ' + escapeHtml(pkg.thumbnail_text || "(none)") +
+      '<br><strong>Hero subject:</strong> ' + escapeHtml(pkg.thumbnail_hero_subject || "") +
+      (pkg.thumbnail_viewer_visual_question
+        ? '<br><strong>Viewer question:</strong> ' + escapeHtml(pkg.thumbnail_viewer_visual_question)
+        : "") +
+      '<br><strong>Promise:</strong> ' + escapeHtml(humanizeToken(pkg.promise_consistency || "")) +
+      ' · <strong>Hook:</strong> ' + escapeHtml(humanizeToken(pkg.hook_alignment_status || "")) +
+      ' · ' + escapeHtml(String(pkg.title_character_count || 0)) + ' chars</p>' +
+      '<div class="concept-meta">' + Object.keys(diagnostics).map(function (key) {
+        return '<span>' + escapeHtml(humanizeToken(key)) + ' ' + escapeHtml(String(diagnostics[key])) + '/5</span>';
+      }).join("") + '</div>' +
+      (findings.length
+        ? '<ul>' + findings.map(function (finding) {
+            return '<li><strong>' + escapeHtml(humanizeToken(finding.code || "")) + ':</strong> ' +
+              escapeHtml(finding.reason || "") + '</li>';
+          }).join("") + '</ul>'
+        : "") +
+      ((pkg.blocked_reasons || []).length
+        ? '<p class="final-package-blocked">Cannot accept: ' +
+          escapeHtml(pkg.blocked_reasons.join("; ")) + '.</p>'
+        : "") +
+    '</div></label>';
+}
+
+function currentFinalPackagingItem() {
+  const items = (latestFinalPackagingSnapshot && latestFinalPackagingSnapshot.items) || [];
+  if (!items.length) return null;
+  finalPackagingCursor = Math.max(0, Math.min(finalPackagingCursor, items.length - 1));
+  return { item: items[finalPackagingCursor], items: items };
+}
+
+function renderFinalPackagingReview(snapshot, force) {
+  latestFinalPackagingSnapshot = snapshot || {};
+  const items = latestFinalPackagingSnapshot.items || [];
+  if (!items.length) {
+    finalPackagingReviewPanel.hidden = true;
+    return;
+  }
+  if (finalPackagingEditing && !force) return;
+  if (finalPackagingCursor >= items.length) finalPackagingCursor = items.length - 1;
+  const item = items[finalPackagingCursor] || {};
+  const packages = item.packages || [];
+  if (!packages.some(function (pkg) { return pkg.package_id === finalPackagingSelected && pkg.acceptable; })) {
+    finalPackagingSelected = item.selected_package_id || "";
+  }
+
+  finalPackagingReviewPanel.hidden = false;
+  finalPackagingReviewTitle.textContent =
+    humanizeToken(item.format || "") + " package · " + (finalPackagingCursor + 1) + " of " + items.length;
+  finalPackagingReviewSummary.textContent =
+    (item.pass || 0) + " PASS · " + (item.rework || 0) + " rework · " + (item.reject || 0) +
+    " reject · " + (item.acceptable || 0) + " acceptable now · " +
+    (latestFinalPackagingSnapshot.pending || 0) + " format(s) pending";
+  finalPackagingReviewStatus.textContent = item.decision || "PENDING";
+  finalPackagingReviewStatus.className = "status-chip " + (
+    item.decision === "ACCEPT" ? "success" : (item.decision === "REJECT" ? "failed" : "running")
+  );
+
+  const passing = packages.filter(function (pkg) { return pkg.validation_status === "PASS"; });
+  const others = packages.filter(function (pkg) { return pkg.validation_status !== "PASS"; });
+  const lastRework = item.last_rework;
+  finalPackagingDetail.innerHTML =
+    '<div class="concept-detail-card"><h4>VIEWER PROMISE · ' + escapeHtml(item.concept_id || "") + '</h4>' +
+      '<p>' + escapeHtml(finalPackagingText(item.viewer_promise)) + '</p>' +
+      '<p><strong>Approved opening hook:</strong> ' + escapeHtml(finalPackagingText(item.opening_hook)) + '</p>' +
+      (item.stale_decision
+        ? '<p><strong>Earlier decision is stale</strong> because the package, matrix or thumbnail image changed. Decide again.</p>'
+        : "") +
+      (lastRework
+        ? '<p class="muted">Last rework: ' + escapeHtml(FINAL_PACKAGING_REWORK_LABELS[lastRework.rework_target] || lastRework.rework_target || "") +
+          ' — ' + escapeHtml(lastRework.note || "") + '</p>'
+        : "") +
+      (latestFinalPackagingSnapshot.require_approved_thumbnail_image && !(item.acceptable > 0) && passing.length
+        ? '<p>No PASS package has an approved image yet. Render and approve its thumbnail in the Thumbnail Gate above, then come back.</p>'
+        : "") +
+      (!passing.length
+        ? '<p>No pair passed validation for this format. Send rework to the weakest layer.</p>'
+        : "") +
+    '</div>' +
+    '<div class="final-package-list">' +
+      passing.map(function (pkg) { return finalPackageCard(pkg); }).join("") +
+    '</div>' +
+    (others.length
+      ? '<details class="concept-detail-card"><summary>Rework / reject pairs (' + others.length + ')</summary>' +
+          '<div class="final-package-list">' + others.map(function (pkg) { return finalPackageCard(pkg); }).join("") + '</div>' +
+        '</details>'
+      : "");
+
+  const criteria = latestFinalPackagingSnapshot.required_criteria || [];
+  const checked = item.criteria || {};
+  finalPackagingCriteria.innerHTML = criteria.map(function (criterion) {
+    const id = "final-packaging-criterion-" + finalPackagingCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) + '" data-final-packaging-criterion="' +
+      escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(FINAL_PACKAGING_CRITERIA[criterion] || "") + '</span></label>';
+  }).join("");
+
+  finalPackagingNote.value = item.note || "";
+  finalPackagingReworkTarget.value = "";
+  finalPackagingPrev.disabled = finalPackagingCursor <= 0;
+  finalPackagingNext.disabled = finalPackagingCursor >= items.length - 1;
+  finalPackagingAccept.disabled = !finalPackagingSelected;
+  finalPackagingEditing = false;
+}
+
+function moveFinalPackagingCursor(delta) {
+  const current = currentFinalPackagingItem();
+  if (!current) return;
+  finalPackagingCursor = Math.max(0, Math.min(current.items.length - 1, finalPackagingCursor + delta));
+  finalPackagingSelected = "";
+  finalPackagingEditing = false;
+  renderFinalPackagingReview(latestFinalPackagingSnapshot, true);
+}
+
+async function submitFinalPackagingDecision(decision) {
+  const current = currentFinalPackagingItem();
+  if (!current) return;
+  const values = {};
+  finalPackagingCriteria.querySelectorAll("[data-final-packaging-criterion]").forEach(function (input) {
+    values[input.dataset.finalPackagingCriterion] = Boolean(input.checked);
+  });
+  const target = finalPackagingReworkTarget.value;
+  if (decision === "REWORK") {
+    if (!target) {
+      showToast("Choose what to rework first.", true);
+      return;
+    }
+    if (!finalPackagingNote.value.trim()) {
+      showToast("Rework needs an instruction.", true);
+      return;
+    }
+    if (!window.confirm(
+      "Send rework to the " + FINAL_PACKAGING_REWORK_LABELS[target] +
+      "? Downstream packaging work for this concept will be regenerated."
+    )) return;
+  }
+  try {
+    const payload = await api("/api/final-packaging-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        video_id: current.item.video_id,
+        decision: decision,
+        package_id: decision === "ACCEPT" ? finalPackagingSelected : null,
+        criteria: values,
+        note: finalPackagingNote.value,
+        rework_target: decision === "REWORK" ? target : null
+      })
+    });
+    finalPackagingEditing = false;
+    finalPackagingSelected = "";
+    const nextPending = (payload.items || []).findIndex(function (item) {
+      return item && item.decision === "PENDING";
+    });
+    if (nextPending >= 0) finalPackagingCursor = nextPending;
+    renderFinalPackagingReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Package accepted."
+        : decision === "REWORK"
+          ? "Rework sent to the " + FINAL_PACKAGING_REWORK_LABELS[target] + "."
+          : "Format rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -5453,6 +5689,8 @@ function renderAnalysis(data) {
     "HUMAN_TITLE_DIRECTION_GATE",
     "TITLE_DIRECTION_REJECTED",
     "TITLE_DIRECTION_SELECTED",
+    "HUMAN_FINAL_PACKAGING_GATE",
+    "FINAL_PACKAGING_REJECTED",
     "HUMAN_FORMAT_GATE",
     "HUMAN_PERFORMANCE_GATE",
     "HUMAN_NARRATION_PREVIEW_GATE",
@@ -5526,6 +5764,7 @@ function renderAnalysis(data) {
   renderPerformanceReview(data.performance_gate || {}, false);
   latestActions = data.actions || [];
   renderThumbnailReview(data.thumbnail_gate || {}, false);
+  renderFinalPackagingReview(data.final_packaging_gate || {}, false);
   renderPreviewReview(data.narration_preview_gate || {});
   renderNarrationSpendReview(data.narration_spend_gate || {});
   renderNarrationReturn(
@@ -5622,7 +5861,9 @@ function renderAnalysis(data) {
       "TITLE_DIRECTION_SELECTED",
       "PACKAGING_BRIEF_READY",
       "THUMBNAIL_CONCEPTS_READY",
-      "PACKAGE_VALIDATION_READY"
+      "PACKAGE_VALIDATION_READY",
+      "HUMAN_FINAL_PACKAGING_GATE",
+      "FINAL_PACKAGING_REJECTED"
     ].includes(workflow.state) ||
     Boolean((data.title_direction || {}).requests_ready) ||
     Boolean((data.title_direction || {}).candidates_ready)
@@ -6419,6 +6660,41 @@ thumbnailRework.addEventListener("click", function () {
 });
 thumbnailAccept.addEventListener("click", function () {
   submitThumbnailDecision("ACCEPT");
+});
+
+finalPackagingDetail.addEventListener("change", function (event) {
+  const target = event.target;
+  if (!target || target.name !== "finalPackageChoice") return;
+  finalPackagingSelected = target.value;
+  finalPackagingEditing = true;
+  finalPackagingDetail.querySelectorAll(".final-package-card").forEach(function (card) {
+    const input = card.querySelector("input");
+    card.classList.toggle("selected", Boolean(input && input.checked));
+  });
+  finalPackagingAccept.disabled = !finalPackagingSelected;
+});
+[finalPackagingCriteria, finalPackagingReworkTarget, finalPackagingNote].forEach(function (input) {
+  input.addEventListener("input", function () {
+    finalPackagingEditing = true;
+  });
+  input.addEventListener("change", function () {
+    finalPackagingEditing = true;
+  });
+});
+finalPackagingPrev.addEventListener("click", function () {
+  moveFinalPackagingCursor(-1);
+});
+finalPackagingNext.addEventListener("click", function () {
+  moveFinalPackagingCursor(1);
+});
+finalPackagingReject.addEventListener("click", function () {
+  submitFinalPackagingDecision("REJECT");
+});
+finalPackagingRework.addEventListener("click", function () {
+  submitFinalPackagingDecision("REWORK");
+});
+finalPackagingAccept.addEventListener("click", function () {
+  submitFinalPackagingDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });

@@ -37,6 +37,7 @@ REQUESTS_DIR = OUTPUT_DIR / "thumbnail_concept_requests"
 RESPONSES_DIR = OUTPUT_DIR / "thumbnail_concept_responses"
 CONCEPTS_FILE = OUTPUT_DIR / "thumbnail_concepts.json"
 SUMMARY_FILE = OUTPUT_DIR / "thumbnail_concept_summary.json"
+REWORK_FILE = OUTPUT_DIR / "thumbnail_concept_rework.json"
 
 SCHEMA_VERSION = "1.0"
 PROMPT_VERSION = "thumbnail-concepts-v1.0"
@@ -176,6 +177,17 @@ def build_request(angle_item: dict[str, Any]) -> dict[str, Any]:
             "packaging_brief_sha256": sha256_file(brief_path),
         },
     }
+    rework = rework_for(angle_item.get("video_id"))
+    if rework:
+        # Added only when a human asked for rework so other requests stay
+        # byte-identical and therefore current.
+        request["human_rework"] = rework
+        request["instructions"].append(
+            "human_rework.note is an authoritative human directive from the Final "
+            "Packaging Gate. Apply it to the new thumbnail concepts and do not repeat "
+            "the weaknesses of human_rework.previous_concepts. Every rule above still "
+            "applies."
+        )
     conventions = niche_conventions(angle_item.get("format"))
     if conventions:
         # Added only when present so requests without a niche study stay
@@ -188,6 +200,48 @@ def build_request(angle_item: dict[str, Any]) -> dict[str, Any]:
             "families. Never trade evidence or truthfulness for a convention."
         )
     return request
+
+
+def _rework_notes() -> dict[str, Any]:
+    if not REWORK_FILE.is_file():
+        return {}
+    payload = load_json(REWORK_FILE)
+    items = payload.get("items") if isinstance(payload, dict) else None
+    return items if isinstance(items, dict) else {}
+
+
+def rework_for(video_id: Any) -> dict[str, Any] | None:
+    item = _rework_notes().get(str(video_id or ""))
+    return item if isinstance(item, dict) else None
+
+
+def request_rework(
+    *,
+    video_id: str,
+    note: str,
+    source: str,
+    previous_concepts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Record a human rework note; the next prepare rebuilds this video's request."""
+    clean = str(note or "").strip()
+    if not clean:
+        raise ValueError("Thumbnail concept rework requires a note")
+    items = _rework_notes()
+    previous = items.get(video_id)
+    iteration = (
+        int(previous.get("iteration") or 0) + 1 if isinstance(previous, dict) else 1
+    )
+    items[video_id] = {
+        "iteration": iteration,
+        "note": clean,
+        "source": source,
+        "previous_concepts": previous_concepts,
+    }
+    atomic_write_json(
+        REWORK_FILE,
+        {"artifact": "thumbnail_concept_rework", "schema_version": "1.0", "items": items},
+    )
+    return items[video_id]
 
 
 def niche_conventions(video_format: Any) -> dict[str, Any]:

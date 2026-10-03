@@ -3,5 +3,7 @@
   "pages_per_question": 3,
   "max_unique_pages_per_concept": 10,
   "max_chars_per_page": 12000,
-  "max_total_content_chars": 70000
+  "max_total_content_chars": 70000,
+  "search_backends": ["exa", "duckduckgo", "wikipedia"],
+  "read_backends": ["jina_reader", "direct"]
 }
