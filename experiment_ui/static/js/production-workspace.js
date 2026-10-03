@@ -55,6 +55,10 @@
       action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="' + esc(target) + '">Continue review →</button>';
     } else if (status === "HUMAN_REVIEW" && production.stage === "PACKAGE") {
       action = '<button type="button" class="primary-cta" data-route="/packaging" data-subroute="titles">Continue review →</button>';
+    } else if (status === "HUMAN_REVIEW" && (production.stage === "FORMAT" || production.stage === "PRODUCE")) {
+      // Format plans and voice performances are on the shared review workspace (D-121).
+      action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="' +
+        (production.stage === "FORMAT" ? "format" : "voice") + '">Continue review →</button>';
     } else if (status === "HUMAN_REVIEW" && production.stage === "SCRIPT") {
       // The Script Gate is on the shared review workspace too (D-119).
       action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="script">Continue review →</button>';

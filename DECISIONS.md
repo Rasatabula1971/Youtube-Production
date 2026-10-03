@@ -3216,3 +3216,44 @@ approved but has no preview is labelled as such, never as unapproved.
 - a production's "Continue review" at the Package stage;
 - the classic panels' "Open packaging workspace" buttons;
 - Productions → Packaging in the sidebar.
+
+
+## D-121 — UI Patch 7: Format, Voice and Narration Preview gates on the shared review workspace
+
+**Status:** Accepted
+
+**Three more gates, same requests.** `/review#format`, `#voice` and
+`#preview` post exactly what the classic panels post:
+- `/api/format-gate` `{concept_id, decision, criteria: {}, note}`.
+- `/api/performance-gate` `{concept_id, format, decision, criteria: {}, note}`.
+- `/api/narration-preview-gate` `{concept_id, format, decision, note}`.
+
+Rework needs a note on each. The preview offers exactly the server's four
+decisions (APPROVE_FINAL, REWORK_PERFORMANCE, REWORK_SCRIPT,
+REWORK_MUSIC_SFX), and a test keeps them in step.
+
+**What each review shows.**
+- **Format:** every branch's duration, promise delivery, payoff and beats,
+  the claims each branch uses, unused accepted claims, branch separation and
+  source overlap.
+- **Voice:** each beat's fixed narration beside its delivery direction
+  (emotion, intensity, speed, pauses, stressed words), so the performance is
+  judged against the words it will be spoken over.
+- **Preview:** a player for the free local prototype (the existing audio
+  endpoint).
+
+**Listen before spending.** The preview cannot be approved until its audio
+has rendered, a rule the server also enforces. Approving only unlocks the
+paid narration quote; nothing is spent at this step.
+
+**Entry points.**
+- The Command Center hero for HUMAN_FORMAT_GATE, HUMAN_PERFORMANCE_GATE and
+  HUMAN_NARRATION_PREVIEW_GATE.
+- A production's "Continue review" at the Format and Produce stages.
+- An attention card and Review Queue row for previews that can be heard.
+  Previews are decided per format but are not part of the production status,
+  so they are counted on their own.
+- The classic panels' "Review one at a time" buttons.
+
+**Kept in the classic panel.** Revising one narration segment and
+re-rendering the preview: a targeted edit tool, not a gate decision.

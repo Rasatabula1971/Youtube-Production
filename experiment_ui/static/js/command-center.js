@@ -139,6 +139,17 @@
         detail: "Accepted concepts become productions."
       }
     ];
+    // The free narration preview is decided per format but is not part of the
+    // production status (D-115), so it is listed here once it can be heard.
+    gates.push({
+      id: "preview",
+      label: "Narration Preview",
+      noun: "preview",
+      count: ((data.narration_preview_gate || {}).items || []).filter(function (row) {
+        return row && row.audio_ready && String(row.decision || "PENDING").toUpperCase() === "PENDING";
+      }).length,
+      detail: "Listen to the free prototype before any paid narration."
+    });
     return gates.filter(function (gate) { return gate.count > 0; });
   }
 

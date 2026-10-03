@@ -215,6 +215,9 @@ class ShellMarkupTests(unittest.TestCase):
             "/api/research-gate",
             "/api/script-gate",
             "/api/script-section-review",
+            "/api/format-gate",
+            "/api/performance-gate",
+            "/api/narration-preview-gate",
         ]:
             with self.subTest(endpoint=endpoint):
                 self.assertIn(f'"{endpoint}"', script)
@@ -257,6 +260,17 @@ class ShellMarkupTests(unittest.TestCase):
         for target in config["rework_targets"]:
             with self.subTest(target=target):
                 self.assertIn(target + ":", rework.group(1))
+
+    def test_preview_review_offers_only_server_decisions(self) -> None:
+        import sys as _sys
+
+        _sys.path.insert(0, str(server.PRODUCTION_DIR))
+        from narration_preview_review import DECISIONS
+
+        script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
+        block = script.split("const preview = {", 1)[1].split("const CONFIGS", 1)[0]
+        offered = set(re.findall(r'value: "([A-Z_]+)"', block))
+        self.assertEqual(offered, set(DECISIONS))
 
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
