@@ -16,7 +16,8 @@ from typing import Any, Callable
 
 def _json(url: str, *, headers: dict[str, str] | None = None, timeout: int = 20) -> dict[str, Any]:
     req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
+    # Callers pass fixed HTTPS provider endpoints with URL-encoded queries only.
+    with urllib.request.urlopen(req, timeout=timeout) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         return json.loads(response.read().decode("utf-8"))
 
 

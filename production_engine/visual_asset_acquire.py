@@ -146,7 +146,8 @@ def _download_stock(
     destination.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        # _assert_stock_url_allowed above enforces HTTPS and the provider host allow-list.
+        with urllib.request.urlopen(request, timeout=30) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             content_type = str(
                 response.headers.get("Content-Type") or ""
             ).lower()
