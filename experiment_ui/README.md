@@ -314,6 +314,25 @@ to match the redesign's navigation:
   - **Classic view.** It stays in Workspace with every option, including the
     concept override bank, saved ideas, the bounded rework request without a
     model call, and restoring a saved script version.
+- `/packaging#<tab>` — **Packaging** (D-120): five tabs as in the redesign.
+  - **Title Direction:** one concept at a time. Pick one Short and one
+    Long-form title (editing the wording selects it), then Accept, Rework
+    (note required) or Reject. An accepted selection only changes through
+    Rework.
+  - **Brief & angles:** read-only, the brief and the psychological angles.
+  - **Thumbnail concepts:** read-only.
+  - **Pairing:** read-only, the title × thumbnail validation matrix.
+  - **Final package:** one format at a time.
+    - *Finalists* are cards with the rendered image, title, thumbnail text,
+      concept and the validation, promise, hook and redundancy checks.
+      Non-acceptable packages are folded away.
+    - *Accept* needs a chosen package and every "Accepting confirms" check.
+      *Rework* needs a target (title directions, thumbnail concepts or script
+      branch) and an instruction, with the classic confirmation.
+  - **Same requests.** Both gates post exactly what the classic panels post.
+  - **Image approval.** Approving rendered thumbnail images (subject photo,
+    accent and render) stays in the classic Thumbnail panel, and the Final
+    package tab says when an image still needs approval.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions.
 - `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
@@ -360,7 +379,7 @@ four state colours `--status-human|running|blocked|complete`, spacing, type,
 radius, shadow, motion, z-index) and aliases the old variable names so
 `styles.css` keeps working while later patches move its rules across.
 Split-out files so far: `static/css/shell.css`, `command-center.css`,
-`opportunity.css`, `review.css` and `production.css`; `static/js/production-workspace.js`, `gate-reviews.js`, `static/js/command-center.js`,
+`opportunity.css`, `review.css`, `production.css` and `packaging.css`; `static/js/production-workspace.js`, `gate-reviews.js`, `packaging.js`, `static/js/command-center.js`,
 `review-workspace.js` (the shared review workspace), `opportunity-review.js`
 and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
 API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves

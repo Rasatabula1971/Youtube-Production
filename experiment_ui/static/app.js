@@ -530,6 +530,12 @@ const ROUTES = {
     title: "Gate Reviews",
     subtitle: "Analysis findings, concepts and research claims, one at a time."
   },
+  "/packaging": {
+    view: "packaging",
+    kicker: "PRODUCTIONS",
+    title: "Packaging",
+    subtitle: "Titles, angles, thumbnails, pairing and the final package."
+  },
   "/production": {
     view: "production",
     kicker: "PRODUCTION",
@@ -673,6 +679,7 @@ function renderRoute(options) {
     if (path === "/opportunity/review" && window.OpportunityReview) window.OpportunityReview.render();
     if (path === "/production" && window.ProductionWorkspace) window.ProductionWorkspace.show();
     if (path === "/review" && window.GateReviews) window.GateReviews.show();
+    if (path === "/packaging" && window.Packaging) window.Packaging.show();
   }
   closeSidebar();
   if (shouldScroll && renderedPath !== path) {
@@ -726,6 +733,8 @@ function applySubroute(path, subroute) {
     window.ProductionWorkspace.open(decodeURIComponent(subroute));
   } else if (path === "/review" && window.GateReviews) {
     window.GateReviews.open(subroute);
+  } else if (path === "/packaging" && window.Packaging) {
+    window.Packaging.open(subroute);
   }
   if (anchor) {
     anchor.scrollIntoView({ block: "start", behavior: "auto" });
@@ -830,6 +839,20 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_RESEARCH_GATE: ["research", "Review research"],
     HUMAN_SCRIPT_GATE: ["script", "Review script"]
   };
+  const packagingStates = {
+    HUMAN_TITLE_DIRECTION_GATE: ["titles", "Select title directions"],
+    TITLE_DIRECTION_REJECTED: ["titles", "Rework title directions"],
+    HUMAN_FINAL_PACKAGING_GATE: ["final", "Choose final package"],
+    FINAL_PACKAGING_REJECTED: ["final", "Revisit final package"]
+  };
+  if (packagingStates[workflow.state]) {
+    return {
+      type: "route",
+      value: "/packaging",
+      subroute: packagingStates[workflow.state][0],
+      label: packagingStates[workflow.state][1]
+    };
+  }
   if (gateReviews[workflow.state]) {
     return {
       type: "route",
@@ -6979,6 +7002,7 @@ function renderAll(data) {
   if (window.RadarPage) window.RadarPage.render(data);
   if (window.ProductionWorkspace) window.ProductionWorkspace.refresh(data);
   if (window.GateReviews) window.GateReviews.render();
+  if (window.Packaging) window.Packaging.render();
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);
