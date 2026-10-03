@@ -1325,3 +1325,29 @@ the niche's crowded hue families.
 The tabulation is descriptive. It records conventions of successful videos,
 not causes of their success, and it does not measure CTR. The Learning Engine
 remains the eventual authority once the channel has its own data.
+
+## D-072 — Thumbnails render from a locked template and pass a human gate
+
+**Status:** Accepted
+
+Thumbnails are produced by `production_engine/thumbnail_render.py` from one
+locked channel template so returning viewers recognise the channel. Layout,
+fonts, outline, background treatment, logo position and a timestamp safe zone
+are fixed. Each video varies only the subject image, the accent colour and the
+approved text overlay.
+
+The text overlay is copied from the human-approved package and cannot be
+edited at this stage, preserving the package-before-script contract (D-040).
+
+Subject images require provenance from a tier that permits thumbnail use.
+Editorial excerpts and unknown sources are refused; the source-dependency rule
+applies to thumbnails as much as to footage.
+
+Rendering is deterministic (ffmpeg, no model). Text is measured with the real
+font and laid out at the largest size that fits; text too long for the template
+blocks the render rather than shrinking below a readable size.
+
+Each render produces phone-size previews and a mock feed beside the niche's
+breakout thumbnails (D-071). Contrast, phone text size and crowded-accent checks
+are advisories. A Human Thumbnail Gate with five criteria decides ACCEPT /
+REWORK / REJECT, and ACCEPT is refused for placeholder or stale renders.

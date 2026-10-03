@@ -36,6 +36,7 @@ ignore = ["TRY004"]
 # Fetch is pinned to https://i.ytimg.com/vi/ and Ollama to loopback; ffmpeg/ffprobe
 # run with fixed argv lists.
 "packaging_engine/niche_thumbnail_study.py" = ["S310", "S603", "S607"]
+"production_engine/thumbnail_render.py" = ["S603", "S607"]
 "source_acquisition/agent_reach_adapter.py" = ["S603"]
 "source_acquisition/experiment_02_evidence.py" = ["S603"]
 "source_acquisition/experiment_02_visual.py" = ["S603"]

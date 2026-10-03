@@ -188,6 +188,10 @@ Potential capabilities:
 
 Visuals should support the narration or story rather than exist only to create motion.
 
+Thumbnails are rendered at 1280x720 from a locked channel template, previewed
+at phone size and in a mock niche feed, and approved at a Human Thumbnail Gate
+(D-072).
+
 The Production Engine uses a **cheap-first visual acquisition policy**. During
 pre-monetization testing, it searches project-owned/reusable assets and verified
 free sources before paying for generated footage. A short clip is never treated
