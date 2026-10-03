@@ -25,14 +25,19 @@ if str(_ROOT) not in sys.path:
 
 from pipeline_integrity import atomic_write_json  # noqa: E402
 
-from opportunity_engine import human_topic_search, human_video_intake, models  # noqa: E402
+from opportunity_engine import (  # noqa: E402
+    human_topic_search,
+    human_video_intake,
+    models,
+    viral_radar,
+)
 
 HERE = Path(__file__).resolve().parent
 ACTIVE_FILE = HERE / "output" / "active_study_source.json"
 SCHEMA_VERSION = 1
 
 
-HUMAN_HANDOFF_PREFIXES = ("human_video:", "human_topic:")
+HUMAN_HANDOFF_PREFIXES = ("human_video:", "human_topic:", "viral_radar:")
 
 
 def study_row(
@@ -49,6 +54,10 @@ def study_row(
         handoff_id = f"human_topic:{packet['intake']['topic_key']}:{video_id}"
         basis = "video found for your topic (Analyze these videos)"
         reason = "found by a human-seeded topic search; no historical demand gate applied"
+    elif packet["source_type"] == models.SOURCE_VIRAL_RADAR:
+        handoff_id = f"viral_radar:{video_id}"
+        basis = "viral radar breakout chosen by the human (Analyze why it worked)"
+        reason = "breakout against its own channel; no historical demand gate applied"
     else:
         handoff_id = f"human_video:{video_id}"
         basis = "human-submitted video (Analyze why it worked)"
@@ -95,15 +104,23 @@ def _check_route(packet: dict[str, Any], allow_excluded: bool) -> str | None:
     return route
 
 
-def set_active(video_id: str, *, allow_excluded: bool = False) -> dict[str, Any]:
-    packet = human_video_intake.load_packet(video_id)
+def set_active(
+    video_id: str, *, allow_excluded: bool = False, source_type: str = models.SOURCE_HUMAN_VIDEO
+) -> dict[str, Any]:
+    """A single video (submitted by the human, or a radar breakout) as the study set."""
+    if source_type == models.SOURCE_VIRAL_RADAR:
+        packet = viral_radar.load_packet(video_id)
+        missing = "Run the viral radar first; no saved packet was found for this video."
+    else:
+        packet = human_video_intake.load_packet(video_id)
+        missing = "Submit this video first; no saved packet was found."
     if packet is None:
-        raise ValueError("Submit this video first; no saved packet was found.")
+        raise ValueError(missing)
     route = _check_route(packet, allow_excluded)
     activated_at = datetime.now(timezone.utc).isoformat()
     record = {
         "schema_version": SCHEMA_VERSION,
-        "source_type": models.SOURCE_HUMAN_VIDEO,
+        "source_type": source_type,
         "opportunity_id": packet["opportunity_id"],
         "video_id": video_id,
         "title": packet.get("title"),
@@ -180,11 +197,16 @@ def load_active() -> dict[str, Any] | None:
     ):
         return None
     source = record.get("source_type")
-    if source == models.SOURCE_HUMAN_VIDEO:
+    if source in (models.SOURCE_HUMAN_VIDEO, models.SOURCE_VIRAL_RADAR):
         video_id = str(record.get("video_id") or "")
         if len(rows) != 1 or rows[0].get("video_id") != video_id:
             return None
-        packet = human_video_intake.load_packet(video_id)
+        loader = (
+            viral_radar.load_packet
+            if source == models.SOURCE_VIRAL_RADAR
+            else human_video_intake.load_packet
+        )
+        packet = loader(video_id)
     elif source == models.SOURCE_HUMAN_TOPIC:
         packet = human_topic_search.load_packet(str(record.get("topic_key") or ""))
     else:
