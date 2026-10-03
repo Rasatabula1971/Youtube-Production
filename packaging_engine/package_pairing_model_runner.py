@@ -33,6 +33,7 @@ from analysis_model_runner import (
     safe_attempts,
 )
 from package_pairing import (
+    MATURE_DIR,
     PACKAGE_VALIDATION_FILE,
     PROMPT_VERSION,
     REQUESTS_DIR,
@@ -47,10 +48,9 @@ from package_pairing import (
 )
 
 HERE = Path(__file__).resolve().parent
-OUTPUT_DIR = HERE / "output"
-MODEL_RUNS_DIR = OUTPUT_DIR / "package_pairing_model_runs"
-RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_package_pairing_outputs"
-BATCH_SUMMARY_FILE = OUTPUT_DIR / "package_pairing_model_batch_summary.json"
+MODEL_RUNS_DIR = MATURE_DIR / "package_pairing_model_runs"
+RAW_OUTPUTS_DIR = MATURE_DIR / "raw_package_pairing_outputs"
+BATCH_SUMMARY_FILE = MATURE_DIR / "package_pairing_model_batch_summary.json"
 
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
