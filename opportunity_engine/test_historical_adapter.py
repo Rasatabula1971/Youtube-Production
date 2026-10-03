@@ -43,6 +43,26 @@ class HistoricalAdapterTests(unittest.TestCase):
         self.study_file.write_text(json.dumps(items), encoding="utf-8")
         return historical_adapter.build(self.study_file)
 
+    def test_pipeline_candidate_format_labels_are_normalised(self):
+        result = self.build(
+            [
+                study_item("a1", fmt="long_form_candidate"),
+                study_item("s1", fmt="short_candidate"),
+                study_item("u1", fmt="unknown"),
+            ]
+        )
+        self.assertEqual(
+            [p["opportunity_id"] for p in result["packets"]],
+            [
+                "opp_historical__automotive_racing__tyres_tires__long_form_candidate",
+                "opp_historical__automotive_racing__tyres_tires__short_candidate",
+            ],
+        )
+        self.assertEqual([p["formats"] for p in result["packets"]], [["long_form"], ["short"]])
+        self.assertEqual(result["packets"][1]["candidate_videos"][0]["format"], "short")
+        for packet in result["packets"]:
+            self.assertEqual(validate_packet(packet), [])
+
     def test_missing_study_set_waits(self):
         result = historical_adapter.build(self.root / "missing.json")
         self.assertEqual(result["status"], "WAITING_FOR_01_5")

@@ -21,6 +21,9 @@ const homeActivitySummary = document.getElementById("homeActivitySummary");
 const refreshStatus = document.getElementById("refreshStatus");
 
 const opportunityGate = document.getElementById("opportunityGate");
+const analyzeVideoForm = document.getElementById("analyzeVideoForm");
+const analyzeVideoSubmit = document.getElementById("analyzeVideoSubmit");
+const submittedVideos = document.getElementById("submittedVideos");
 const analysisActions = document.getElementById("analysisActions");
 const analysisCurrentPanel = document.getElementById("analysisCurrentPanel");
 const analysisCurrentTitle = document.getElementById("analysisCurrentTitle");
@@ -918,7 +921,156 @@ function renderHomeActivity(job, research) {
     '<h3>No recent activity</h3><p>Run the next highlighted workflow step when you are ready.</p>';
 }
 
+const ROUTE_LABELS = {
+  ACTIVE_CHANNEL: "Science Inside",
+  FUTURE_CHANNEL: "Future channel",
+  EXCLUDED: "Excluded",
+  UNSCOPED: "Needs a fit check"
+};
+
+function formatCount(value) {
+  return value == null ? "unknown" : Number(value).toLocaleString();
+}
+
+function renderSubmittedVideos(snapshot) {
+  if (!submittedVideos) return;
+  const videos = (snapshot && snapshot.videos) || [];
+  const active = (snapshot && snapshot.active) || null;
+  if (!videos.length) {
+    submittedVideos.innerHTML =
+      '<p class="empty-state">No videos submitted yet.</p>';
+    return;
+  }
+  submittedVideos.innerHTML = videos.map(function (video) {
+    const isActive = Boolean(active && active.video_id === video.video_id);
+    const route = video.route || "UNSCOPED";
+    const routeDetail = route === "FUTURE_CHANNEL"
+      ? " · " + (video.route_channel_id || "")
+      : route === "EXCLUDED"
+        ? " · " + (video.route_rule_id || "")
+        : "";
+    const chipTone = route === "ACTIVE_CHANNEL" ? "success" : route === "EXCLUDED" ? "failed" : "running";
+    const action = isActive
+      ? '<span class="status-chip success">Being analyzed</span>' +
+        '<button class="ghost" data-video-stop>Stop analyzing</button>'
+      : '<button data-video-analyze="' + escapeHtml(video.video_id) + '"' +
+        ' data-video-excluded="' + (route === "EXCLUDED" ? "1" : "") + '">Analyze why it worked</button>';
+    return '<article class="submitted-video' + (isActive ? " active" : "") + '">' +
+      '<div class="submitted-video-copy">' +
+        '<a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer"><strong>' +
+          escapeHtml(video.title || video.video_id) + '</strong></a>' +
+        '<span class="muted">' + escapeHtml(video.channel_title || "Unknown channel") +
+          ' · ' + escapeHtml(formatCount(video.views)) + ' views · ' +
+          escapeHtml((video.format || "").replace("_", "-")) +
+          (video.age_days == null ? "" : " · " + escapeHtml(String(video.age_days)) + " days old") +
+          ' · measured via ' + escapeHtml(video.measurement_source || "unknown") + '</span>' +
+        '<span><span class="status-chip ' + chipTone + '">' +
+          escapeHtml((ROUTE_LABELS[route] || route) + routeDetail) + '</span> ' +
+          '<span class="muted">' + escapeHtml(video.route_reason || "") + '</span></span>' +
+        ((video.notes || []).length
+          ? '<span class="muted">Your note: ' + escapeHtml(video.notes[0]) + '</span>'
+          : "") +
+      '</div>' +
+      '<div class="submitted-video-actions">' + action + '</div>' +
+    '</article>';
+  }).join("");
+}
+
+async function submitVideoForAnalysis(event) {
+  event.preventDefault();
+  const url = document.getElementById("analyzeVideoUrl").value.trim();
+  if (!url) return;
+  analyzeVideoSubmit.disabled = true;
+  analyzeVideoSubmit.textContent = "Checking…";
+  try {
+    const payload = await api("/api/opportunity/video", {
+      method: "POST",
+      body: JSON.stringify({
+        url: url,
+        topic: document.getElementById("analyzeVideoTopic").value.trim(),
+        note: document.getElementById("analyzeVideoNote").value.trim()
+      })
+    });
+    renderSubmittedVideos(payload);
+    analyzeVideoForm.reset();
+    showToast("Video saved. Review it below, then choose Analyze why it worked.", false);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    analyzeVideoSubmit.disabled = false;
+    analyzeVideoSubmit.textContent = "Check video";
+  }
+}
+
+async function analyzeSubmittedVideo(videoId, excluded) {
+  const body = { video_id: videoId };
+  if (excluded) {
+    if (!window.confirm("This video matches an exclusion rule for Science Inside. Analyze it anyway?")) return;
+    body.allow_excluded = true;
+  }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const payload = await api("/api/opportunity/video/analyze", {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      renderSubmittedVideos(payload);
+      showToast("This video is now the study set. Analysis continues automatically.", false);
+      await loadStatus();
+      return;
+    } catch (error) {
+      const message = String(error.message || "");
+      if (attempt === 0 && message.indexOf("CONFIRM_REPLACE: ") === 0) {
+        if (!window.confirm(message.slice("CONFIRM_REPLACE: ".length) + "\n\nContinue?")) return;
+        body.confirm_replace = true;
+        continue;
+      }
+      showToast(message, true);
+      return;
+    }
+  }
+}
+
+async function stopAnalyzingVideo() {
+  if (!window.confirm("Stop analyzing this video? The historical opportunity decision (if any) becomes the study set again.")) return;
+  try {
+    const payload = await api("/api/opportunity/video/stop", { method: "POST", body: "{}" });
+    renderSubmittedVideos(payload);
+    showToast("Stopped analyzing the submitted video.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+if (analyzeVideoForm) {
+  analyzeVideoForm.addEventListener("submit", submitVideoForAnalysis);
+  submittedVideos.addEventListener("click", function (event) {
+    const analyzeButton = event.target.closest("[data-video-analyze]");
+    if (analyzeButton) {
+      analyzeSubmittedVideo(analyzeButton.dataset.videoAnalyze, Boolean(analyzeButton.dataset.videoExcluded));
+      return;
+    }
+    if (event.target.closest("[data-video-stop]")) stopAnalyzingVideo();
+  });
+}
+
+function activeHumanVideoBanner(gate) {
+  const video = gate && gate.active_human_video;
+  if (!video) return "";
+  return '<div class="gate-summary"><div class="gate-summary-copy">' +
+    '<span class="status-chip success">ANALYZING YOUR VIDEO</span><span>' +
+    escapeHtml(video.title || video.video_id) +
+    (video.channel_title ? " — " + escapeHtml(video.channel_title) : "") +
+    '</span><span class="muted">Your submitted video is the active study set. Approving a historical topic below replaces it.</span>' +
+    '</div><button data-route="/analysis">Continue to Analyze →</button></div>';
+}
+
 function renderOpportunityGate(gate) {
+  if (gate && gate.active_human_video && !(gate.opportunities || []).length) {
+    opportunityGate.innerHTML = activeHumanVideoBanner(gate);
+    return;
+  }
   if (!gate || !(gate.opportunities || []).length) {
     opportunityGate.innerHTML =
       '<p class="empty-state">Waiting for Opportunity Research to create a study set.</p>';
@@ -927,7 +1079,7 @@ function renderOpportunityGate(gate) {
 
   const status = escapeHtml(gate.status || "AWAITING_HUMAN_DECISION");
   const vidiq = gate.vidiq || {};
-  let html =
+  let html = activeHumanVideoBanner(gate) +
     '<div class="gate-summary"><div class="gate-summary-copy">' +
     '<span class="status-chip ' +
     (gate.ready_for_experiment_02 ? "success" : "running") + '">' +
@@ -6086,6 +6238,7 @@ function renderAll(data) {
   renderHomeOpportunity(data.opportunity_gate || {});
   renderHomeActivity(data.job || {}, data.opportunity_research || {});
   renderOpportunityGate(data.opportunity_gate || {});
+  renderSubmittedVideos(data.submitted_videos || {});
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});

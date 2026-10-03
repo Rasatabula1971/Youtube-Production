@@ -146,7 +146,8 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
 
 1. **O1 + O2** — packet contract, provenance, channel scope, historical adapter
    (this PR: no UI change).
-2. **O5** — analyze a video from a URL.
+2. **O5** — analyze a video from a URL (built: `human_video_intake.py`,
+   `active_source.py`, *Analyze a video* card on the Opportunity page).
 3. **O4** — explore my topic (reuses the free search fallback and 01.3 query
    variants).
 4. **O3** — workspace and inbox UI.
