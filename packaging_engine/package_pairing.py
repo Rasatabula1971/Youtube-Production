@@ -75,6 +75,9 @@ CLAIM_STATUSES = {
     "UNSUPPORTED",
     "CONFLICTING",
 }
+NUMBER_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:[$£€]?\\d+(?:[.,]\\d+)*(?:\\s?%|\\s?[xX])?)(?![A-Za-z0-9])"
+)
 STOP_WORDS = {
     "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from",
     "how", "in", "is", "it", "of", "on", "or", "the", "this", "to", "what",
@@ -320,6 +323,19 @@ def _hook_id(video_id: str) -> str:
     return f"{safe_slug(video_id)}-approved-opening-hook"
 
 
+def _unsupported_numbers(text: str, brief: dict[str, Any]) -> list[str]:
+    allowed = {
+        str(item.get("value") or "").strip().lower()
+        for item in brief.get("approved_numbers", [])
+        if isinstance(item, dict) and str(item.get("value") or "").strip()
+    }
+    return [
+        value
+        for value in NUMBER_RE.findall(text)
+        if value.strip().lower() not in allowed
+    ]
+
+
 def _pair(
     *,
     brief: dict[str, Any],
@@ -350,6 +366,9 @@ def _pair(
         "title_evidence_refs": list(title.get("evidence_refs", [])),
         "title_character_count": int(title.get("character_count") or 0),
         "title_search_intent": title.get("search_intent"),
+        "unsupported_title_numbers": _unsupported_numbers(
+            str(title.get("title_text") or ""), brief
+        ),
         "thumbnail_id": thumbnail_id,
         "thumbnail_text": thumbnail.get("text"),
         "thumbnail_text_word_count": int(thumbnail.get("text_word_count") or 0),
@@ -763,6 +782,14 @@ def _final_status(
         add_hard(
             "unsupported_material_claim",
             "The title's required core claim has no approved evidence reference.",
+        )
+
+    unsupported_numbers = package.get("unsupported_title_numbers", [])
+    if isinstance(unsupported_numbers, list) and unsupported_numbers:
+        add_hard(
+            "unsupported_material_claim",
+            "The title introduces unapproved numeric material: "
+            + ", ".join(str(x) for x in unsupported_numbers),
         )
 
     for field in ("title_claim_validation", "thumbnail_claim_validation"):
