@@ -120,7 +120,8 @@ class ResearchReviewTests(unittest.TestCase):
     def test_coverage_names_unanswered_question(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             final = self.prepared_with_unanswered_question(stack, Path(tmp))
-        self.assertTrue(final["complete"])
+        self.assertFalse(final["complete"])
+        self.assertEqual(final["status"], "AWAITING_HUMAN_DECISION")
         self.assertEqual(final["verified_packages"][0]["status"], "RESEARCH_INCOMPLETE")
         coverage = final["question_coverage"][0]
         self.assertEqual(coverage["unanswered"], 1)
@@ -182,6 +183,105 @@ class ResearchReviewTests(unittest.TestCase):
             {q["question_id"]: q["status"] for q in changed["question_coverage"][0]["questions"]}["rq002"],
             "UNANSWERED",
         )
+
+    def second_package(self):
+        package = self.package()
+        package["concept_id"] = "c2"
+        package["concept"] = {"working_title": "Second concept"}
+        package["claims"].append(
+            {
+                **package["claims"][0],
+                "claim_id": "clm002",
+                "statement": "A second bounded claim.",
+            }
+        )
+        return package
+
+    def write_drafts(self, *packages):
+        for package in packages:
+            path = review.DEFAULT_DRAFTS_DIR / f"{package['concept_id']}.draft_research_package.json"
+            path.write_text(json.dumps(package), encoding="utf-8")
+
+    def test_ready_concept_goes_ahead_while_another_is_pending(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.write_drafts(self.package(), self.second_package())
+            review.prepare_state()
+            snap = review.apply_action(
+                concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note=""
+            )
+            c1_path = review.VERIFIED_DIR / "c1.verified_research_package.json"
+            c1_bytes = c1_path.read_bytes()
+            c2_exists = (review.VERIFIED_DIR / "c2.verified_research_package.json").exists()
+            review.apply_action(
+                concept_id="c2", claim_id="clm001", decision="ACCEPT", criteria={}, note=""
+            )
+            c1_after_c2_action = c1_path.read_bytes()
+            final = review.apply_action(
+                concept_id="c2", claim_id="clm002", decision="ACCEPT", criteria={}, note=""
+            )
+        self.assertFalse(snap["complete"])
+        self.assertEqual(snap["ready_for_story_script"], 1)
+        self.assertEqual(
+            [item["concept_id"] for item in snap["verified_packages"]], ["c1"]
+        )
+        self.assertFalse(c2_exists)
+        self.assertEqual(c1_bytes, c1_after_c2_action)
+        self.assertTrue(final["complete"])
+        self.assertEqual(final["ready_for_story_script"], 2)
+
+    def test_changing_a_decision_after_completion_reopens_the_concept(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.write_drafts(self.package())
+            review.prepare_state()
+            done = review.apply_action(
+                concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note=""
+            )
+            changed = review.apply_action(
+                concept_id="c1", claim_id="clm001", decision="REJECT", criteria={}, note="No."
+            )
+        self.assertTrue(done["complete"])
+        self.assertFalse(changed["complete"])
+        self.assertEqual(changed["verified_packages"][0]["status"], "RESEARCH_INCOMPLETE")
+
+    def test_rework_carries_accepted_claims_into_the_plan(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            package = self.second_package()
+            package["concept_id"] = "c1"
+            self.write_drafts(package)
+            plan_path = review.OUTPUT_DIR / "plans" / "c1.research_plan.json"
+            plan_path.write_text(
+                json.dumps({"concept_id": "c1", "research_questions": package["research_questions"]}),
+                encoding="utf-8",
+            )
+            review.prepare_state()
+            review.apply_action(
+                concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note=""
+            )
+            review.apply_action(
+                concept_id="c1", claim_id="clm002", decision="REWORK", criteria={}, note="Find a stronger source."
+            )
+            plan = json.loads(plan_path.read_text())
+        carried = plan["carried_claims"]
+        self.assertEqual([entry["claim"]["claim_id"] for entry in carried], ["clm001"])
+        self.assertEqual(carried[0]["sources"][0]["source_id"], "web001")
+
+    def test_carried_claim_is_accepted_automatically_after_regeneration(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            package = self.package()
+            carried = dict(package["claims"][0])
+            carried["claim_id"] = "kept_clm001"
+            carried["carried_from_review"] = {"original_claim_id": "clm001", "reason": "x"}
+            package["claims"] = [carried]
+            self.write_drafts(package)
+            snap = review.prepare_state()
+        claim = snap["claims"][0]
+        self.assertEqual(claim["decision"], "ACCEPT")
+        self.assertIn("carried forward", claim["note"])
+        self.assertTrue(snap["complete"])
 
     def test_accept_completes_ready_for_story_script(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:

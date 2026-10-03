@@ -2576,3 +2576,39 @@ Script, and the script has no accepted claim to state about it.
 Waivers live in the gate state and survive re-preparation only while the
 question's wording is unchanged. Rework-derived questions cannot be waived;
 they never block (D-102).
+
+## D-104 — Research rework keeps accepted claims, and ready concepts proceed independently
+
+**Status:** Accepted
+
+Reworking one claim regenerated every claim of that concept, so claims the
+reviewer had already accepted vanished. The railway concept lost its good taper
+and self-centering claims this way.
+
+The gate also finalized only when every claim of every concept was decided,
+and Story / Script started only when every concept was ready. One stuck concept
+held back the others.
+
+**Carry-over.**
+
+- On REWORK, the concept's other accepted claims and their sources are stored
+  in the research plan as `carried_claims`.
+- When the regenerated response is merged into a draft, they are added
+  unchanged under `kept_`-prefixed claim and source IDs, marked
+  `carried_from_review`.
+- At the gate they are accepted automatically with an explanatory note,
+  because a human already accepted the same wording and evidence. The reviewer
+  can still change the decision.
+
+**Per-concept finalization.**
+
+- A concept's reviewed and verified packages are written as soon as its claims
+  are all decided, and removed if any becomes undecided.
+- They are rewritten only when that concept's decisions, waivers or draft
+  change (a decision fingerprint), so downstream artifacts of an unchanged
+  ready concept stay current.
+- Story / Script starts for each `READY_FOR_STORY_SCRIPT` concept on its own.
+- The gate is `COMPLETE` only when every concept is ready. The automatic
+  reopen of a completed-but-incomplete gate is removed: an incomplete concept
+  simply keeps the gate awaiting a human decision, with the unanswered-question
+  banner (D-103) saying why.

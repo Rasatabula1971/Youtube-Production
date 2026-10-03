@@ -127,3 +127,23 @@ of accepted claims.
 
 Research Gate approval does not authorize copying source prose. Evidence notes
 remain provenance aids, not script text.
+
+### Per-concept progress and rework carry-over
+
+Each concept is finalized on its own as soon as all of its claims are decided.
+A concept whose questions are answered (or waived) becomes
+`READY_FOR_STORY_SCRIPT` and goes on to Story / Script while other concepts are
+still under review.
+
+A concept's verified package is rewritten only when its decisions change, so
+work already built on it stays current. The gate is `COMPLETE` only when every
+concept is ready. A decision can still be changed afterwards, which reopens
+that concept.
+
+Reworking one claim regenerates the concept's claims, but its other accepted
+claims are no longer lost:
+
+- They are saved in the research plan (`carried_claims`) with their sources.
+- They are merged back into the new draft unchanged, under `kept_` IDs.
+- They arrive already accepted, with a note saying so. The reviewer can still
+  change that decision.
