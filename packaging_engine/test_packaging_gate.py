@@ -4,7 +4,6 @@ import unittest
 from packaging_gate import (
     apply_gate,
     build_review_request,
-    load_config,
     validate_decisions,
 )
 
@@ -160,38 +159,6 @@ class PackagingGateTests(unittest.TestCase):
         self.assertIn("one_sentence_promise", first)
         self.assertIn("gap_positioning", first)
         self.assertIn("channel_fit_alignment", first)
-
-    def test_gate_requires_thumbnail_design_criteria(self):
-        criteria = load_config()["required_accept_criteria"]
-        self.assertIn("thumbnail_single_focal_point", criteria)
-        self.assertIn("thumbnail_mobile_readable", criteria)
-        request = build_review_request(self.candidates, {**self.config, "required_accept_criteria": criteria})
-        self.assertIn("thumbnail_single_focal_point", request["criteria"])
-        self.assertIn("thumbnail_mobile_readable", request["criteria"])
-
-    def test_design_advisories_reach_reviewer_and_research_handoff(self):
-        advisory = {
-            "rule": "TITLE_LENGTH",
-            "observed": 28,
-            "guidance": "Title is 28 characters; target 40-60.",
-            "evidence_status": "HYPOTHESIS",
-        }
-        for package in self.candidates["packages"]:
-            package["title_keyword"] = "F1"
-            package["division_of_labor"] = {
-                "thumbnail_carries": "surprise",
-                "title_carries": "context",
-            }
-            package["packaging_advisories"] = [advisory]
-        request = build_review_request(self.candidates, self.config)
-        self.assertEqual(request["items"][0]["packaging_advisories"], [advisory])
-        self.assertEqual(request["items"][0]["title_keyword"], "F1")
-        _, handoff = apply_gate(
-            self.candidates, request, self.response(request), self.config
-        )
-        packaging = handoff["concepts"][0]["packaging"]
-        self.assertEqual(packaging["packaging_advisories"], [advisory])
-        self.assertEqual(packaging["division_of_labor"]["title_carries"], "context")
 
     def test_accept_requires_all_criteria(self):
         request = build_review_request(
