@@ -321,6 +321,22 @@ class ShellMarkupTests(unittest.TestCase):
                 self.assertIn(f'"{endpoint}"', script)
                 self.assertIn(endpoint, server.HUMAN_GATE_MUTATION_ROUTES)
 
+    def test_tools_page_markup_and_endpoints(self) -> None:
+        tools = self.html.split('id="viewTools"', 1)[1].split("</main>", 1)[0]
+        for marker in ['id="toolsHealth"', 'id="toolsJobs"', 'id="toolsRefresh"', 'id="toolActions"', 'id="stageGrid"']:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, tools)
+        # Health and jobs come before the Advanced controls.
+        self.assertLess(tools.index('id="toolsHealth"'), tools.index("Advanced"))
+        self.assertLess(tools.index("Advanced"), tools.index('id="toolActions"'))
+        self.assertIn('<script src="/js/tools.js"></script>', self.html)
+        self.assertIn('href="/css/tools.css"', self.html)
+        script = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
+        self.assertIn('"/api/tools"', script)
+        self.assertIn('"/api/job-log?id="', script)
+        # Diagnostics never post anything except the predefined actions.
+        self.assertNotIn("method:", script)
+
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
         for route in server.APP_ROUTES:

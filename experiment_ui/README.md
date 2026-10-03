@@ -363,8 +363,18 @@ to match the redesign's navigation:
     managed and generated visuals, final sound) and storyboard shot editing.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions.
-- `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
-  outputs, logs and technical status.
+- `/tools` — **Tools & Diagnostics** (D-123), refreshed every 15 seconds and
+  whenever a job changes:
+  - **System Health:** yt-dlp, FFmpeg, the YouTube Data API key (present or
+    not, never its value), Kokoro, agent-reach, the radar scheduler, and the
+    FAIR, Vision and vidIQ Doctors. Each check has a status and a reason.
+    Where an action fixes it, a Run Doctor or Install button runs that
+    predefined action.
+  - **Recent Jobs:** the last 30 jobs with status, times and exit code.
+    *Logs* opens the saved log (the last 60,000 characters).
+  - **Advanced:** raw output shortcuts, then collapsible sections for the
+    manual pipeline controls and scheduler, the pipeline state, and the
+    safeguards.
 
 The Live Job console is global. The top bar shows a health pill (failed job or
 a radar scheduler that has missed three wakes) next to the job indicator,

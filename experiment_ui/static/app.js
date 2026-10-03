@@ -687,6 +687,7 @@ function renderRoute(options) {
     if (path === "/review" && window.GateReviews) window.GateReviews.show();
     if (path === "/packaging" && window.Packaging) window.Packaging.show();
     if (path === "/produce" && window.Produce) window.Produce.show();
+    if (path === "/tools" && window.Tools) window.Tools.show();
   }
   closeSidebar();
   if (shouldScroll && renderedPath !== path) {
@@ -7033,6 +7034,7 @@ function renderAll(data) {
   if (window.GateReviews) window.GateReviews.render();
   if (window.Packaging) window.Packaging.render();
   if (window.Produce) window.Produce.render();
+  if (window.Tools) window.Tools.render();
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);

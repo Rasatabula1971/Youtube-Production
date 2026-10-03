@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import os
 import secrets
 import shutil
@@ -86,6 +87,8 @@ HUMAN_GATE_MUTATION_ROUTES = {
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
 JOB_STATE_FILE = UI_OUTPUT_DIR / "job_state.json"
+JOB_HISTORY_FILE = UI_OUTPUT_DIR / "job_history.jsonl"
+JOB_HISTORY_KEEP = 300
 
 EXP1_OUTPUT = PROJECT_ROOT / "experiment_01_discovery" / "output"
 EXP13_DIR = EXP1_OUTPUT / "experiment_01_3"
@@ -6756,6 +6759,7 @@ class JobManager:
             self._process = None
 
         self._save_state(self.public_job())
+        record_job_history(self.public_job())
 
     def stop(self) -> dict[str, Any]:
         with self._lock:
@@ -6796,6 +6800,168 @@ class JobManager:
     def _save_state(self, payload: dict[str, Any]) -> None:
         UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         atomic_write_json(JOB_STATE_FILE, payload)
+
+
+JOB_LOG_NAME = re.compile(r"^\d{8}_\d{6}_[a-z0-9_]+$")
+
+
+def record_job_history(job: dict[str, Any]) -> None:
+    """Append one finished job to the history log (UI-15, D-123); best effort."""
+    if not job or not job.get("id"):
+        return
+    entry = {
+        key: job.get(key)
+        for key in ("id", "action_id", "label", "status", "started_at", "finished_at", "return_code")
+    }
+    try:
+        UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        lines: list[str] = []
+        if JOB_HISTORY_FILE.exists():
+            lines = JOB_HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+        lines.append(json.dumps(entry, ensure_ascii=False))
+        JOB_HISTORY_FILE.write_text("\n".join(lines[-JOB_HISTORY_KEEP:]) + "\n", encoding="utf-8")
+    except OSError:
+        return
+
+
+def job_history(limit: int = 30) -> list[dict[str, Any]]:
+    """Newest-first finished jobs; logs from before the history file existed are
+    listed from their file names, with an unknown status."""
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    try:
+        lines = JOB_HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in reversed(lines):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("id") and row["id"] not in seen:
+            seen.add(str(row["id"]))
+            rows.append(row)
+    try:
+        logs = sorted(JOB_LOG_DIR.glob("*.log"), key=lambda path: path.name, reverse=True)
+    except OSError:
+        logs = []
+    for path in logs:
+        if len(rows) >= limit:
+            break
+        job_id = path.stem
+        if job_id in seen or not JOB_LOG_NAME.match(job_id):
+            continue
+        seen.add(job_id)
+        action_id = job_id[16:]
+        rows.append(
+            {
+                "id": job_id,
+                "action_id": action_id,
+                "label": ACTION_DEFS.get(action_id, {}).get("label", action_id),
+                "status": "UNKNOWN",
+                "started_at": None,
+                "finished_at": None,
+                "return_code": None,
+            }
+        )
+    rows.sort(key=lambda row: str(row.get("id") or ""), reverse=True)
+    for row in rows:
+        row["has_log"] = (JOB_LOG_DIR / f"{row['id']}.log").is_file()
+    return rows[:limit]
+
+
+def job_log_text(job_id: str, max_chars: int = 60000) -> str:
+    """The log of one job by id; only files named like job logs in JOB_LOG_DIR."""
+    if not JOB_LOG_NAME.match(str(job_id or "")):
+        raise ValueError("Unknown job log.")
+    path = (JOB_LOG_DIR / f"{job_id}.log").resolve()
+    if path.parent != JOB_LOG_DIR.resolve() or not path.is_file():
+        raise ValueError("Unknown job log.")
+    return path.read_text(encoding="utf-8", errors="replace")[-max_chars:]
+
+
+SCHEDULER_STALE_HOURS = 6
+
+
+def system_health() -> list[dict[str, Any]]:
+    """Cheap, local readiness checks for Tools (UI-15). No network, no secrets."""
+    import importlib.util
+
+    def check(check_id: str, label: str, ok: bool | None, ready: str, missing: str, action_id: str | None = None) -> dict[str, Any]:
+        return {
+            "id": check_id,
+            "label": label,
+            "status": "UNKNOWN" if ok is None else "READY" if ok else "MISSING",
+            "detail": ready if ok else missing,
+            "action_id": action_id,
+        }
+
+    checks = [
+        check("yt_dlp", "yt-dlp", shutil.which("yt-dlp") is not None,
+              "Installed: discovery and visual search can run.",
+              "Not installed: topic search, radar discovery and visual search need it."),
+        check("ffmpeg", "FFmpeg", structural_ffmpeg_available(),
+              "The configured binary is available for previews and renders.",
+              "The configured binary is missing: previews and final renders cannot run."),
+        check("youtube_api", "YouTube Data API key", bool(human_video_intake._load_api_key()),
+              "Configured (the key itself is never shown).",
+              "YOUTUBE_API_KEY is not configured: measurement and the radar cannot run."),
+        check("kokoro", "Kokoro preview voice",
+              importlib.util.find_spec("kokoro") is not None and importlib.util.find_spec("soundfile") is not None,
+              "Installed: free narration previews can render locally.",
+              "Not installed: install kokoro, soundfile and espeak-ng for free previews."),
+        check("agent_reach", "agent-reach", shutil.which("agent-reach") is not None,
+              "Installed.", "Not installed: optional research reach is unavailable.", "agent_reach_doctor"),
+    ]
+
+    schedule = radar_scheduler.load_status() or {}
+    checked = schedule.get("checked_at")
+    age = None
+    if checked:
+        try:
+            stamp = datetime.fromisoformat(str(checked).replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - stamp).total_seconds() / 3600
+        except ValueError:
+            age = None
+    checks.append(
+        {
+            "id": "scheduler",
+            "label": "Radar scheduler",
+            "status": "MISSING" if not checked else "WARN" if age is None or age > SCHEDULER_STALE_HOURS else "READY",
+            "detail": (
+                "Not run yet: install Opportunity Automation to run it every 2 hours."
+                if not checked
+                else f"Last tick {checked} ({str(schedule.get('action') or '').lower()})."
+                + (" More than 6 hours ago: the scheduled task may have stopped." if age is None or age > SCHEDULER_STALE_HOURS else "")
+            ),
+            "action_id": None if checked and age is not None and age <= SCHEDULER_STALE_HOURS else "exp13_auto_refresh_install",
+        }
+    )
+
+    history = job_history(limit=200)
+    for doctor_id, label in (("fair_doctor", "FAIR"), ("vision_doctor", "Vision"), ("vidiq_doctor", "vidIQ")):
+        last = next((row for row in history if row.get("action_id") == doctor_id and row.get("status") != "UNKNOWN"), None)
+        status = (last or {}).get("status")
+        checks.append(
+            {
+                "id": doctor_id,
+                "label": label,
+                "status": "READY" if status == "SUCCEEDED" else "WARN" if status in {"FAILED", "PARTIAL", "STOPPED"} else "UNKNOWN",
+                "detail": (
+                    f"Doctor {str(status).lower()} at {last.get('finished_at')}."
+                    if last
+                    else "Not checked yet: run the doctor."
+                ),
+                "action_id": doctor_id,
+            }
+        )
+    return checks
+
+
+def tools_snapshot() -> dict[str, Any]:
+    return {"health": system_health(), "jobs": job_history(), "updated_at": utc_now()}
 
 
 JOB_MANAGER = JobManager()
@@ -8190,6 +8356,17 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/opportunity-gate":
             self._send_json(opportunity_gate_snapshot())
+            return
+        if route == "/api/tools":
+            self._send_json(tools_snapshot())
+            return
+        if route == "/api/job-log":
+            query = parse_qs(urlparse(self.path).query)
+            job_id = str((query.get("id") or [""])[0])
+            try:
+                self._send_json({"id": job_id, "text": job_log_text(job_id)})
+            except (ValueError, OSError):
+                self._send_json({"error": "Unknown job log."}, 404)
             return
         if route == "/api/productions":
             self._send_json(productions_snapshot())
