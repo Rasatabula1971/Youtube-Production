@@ -8225,6 +8225,7 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
+                    accept_open_sections=body.get("accept_open_sections") is True,
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:

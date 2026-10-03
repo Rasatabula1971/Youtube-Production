@@ -451,6 +451,36 @@ class ScriptReviewTests(unittest.TestCase):
 
         self.assertFalse(response_exists)
 
+    def test_whole_script_accept_can_accept_open_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            drafts, requests, responses, approved = self.setup_gate(root)
+            states = root / "section_states"
+            states.mkdir()
+            draft_path = drafts / "c1.short.script_draft.json"
+            section_state.prepare_state(draft_path, state_dir=states)
+            state_path = section_state.state_path_for("c1", "short", states)
+            section_state.apply_target_action(
+                state_path, draft_path, target_id="section:s1",
+                action="REWORK", reviewer="r", reason="TOO_TECHNICAL",
+            )
+            payload = {**self.accept_payload("short"), "accept_open_sections": True}
+            with (
+                patch.object(script_review, "REVIEW_REQUESTS_DIR", requests),
+                patch.object(script_review, "RESPONSES_DIR", responses),
+                patch.object(script_review, "APPROVED_DIR", approved),
+                patch.object(script_review, "SECTION_STATE_DIR", states),
+            ):
+                result = script_review.apply_payload(
+                    requests / "c1.short.script_review_request.json", payload
+                )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["status"], "SCRIPT_BRANCH_ACCEPTED")
+        self.assertTrue(
+            all(t["decision"] == "ACCEPTED" and t["locked"] for t in state["targets"])
+        )
+
     def test_completed_section_review_is_bound_to_bundle_and_stale_state_revokes_readiness(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

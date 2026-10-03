@@ -2612,3 +2612,48 @@ held back the others.
   reopen of a completed-but-incomplete gate is removed: an incomplete concept
   simply keeps the gate awaiting a human decision, with the unanswered-question
   banner (D-103) saying why.
+
+## D-105 — Scripts must tell the human story, may not invent numbers, and can be edited and accepted wholesale
+
+**Status:** Accepted
+
+**The problem.** Generated scripts read like lectures. The opening hook was a
+generic teaser ("You'll never believe…"), and the sections were bare facts with
+no viewer, tension or resolution. The script request already carried the
+concept's human framing (viewer moment, psychological pull, explanation
+payoff), but neither the prompt nor the request asked the model to write from
+it.
+
+Scripts also stated numbers that were in no accepted claim ("a 747 lands at
+170 mph"). The Script Gate could only edit text through a separate "Prepare
+section review" step, after which a whole-script Accept was blocked until every
+section had been accepted one by one.
+
+**What changed.**
+
+- **Storytelling rules.** The script prompt and request instructions now
+  require a story told to one viewer:
+  - open inside the viewer's moment;
+  - state the contradiction or stakes and open the information gap without
+    answering it;
+  - follow the arc moment → expectation → tension → escalation → reveal →
+    resolution;
+  - make every section matter to the viewer;
+  - explain with an everyday analogy, written for the ear.
+- **Two new deterministic rejections.**
+  - Any number not found in an accepted claim.
+  - A generic teaser opener.
+
+  Both apply to generated scripts and to manual edits.
+- **Edit buttons.** The UI puts an Edit button on the hook, each section and
+  the closing. It prepares section editing as needed and opens the manual
+  editor on that part.
+- **Wholesale accept.** Accepting the whole script with sections still open
+  asks for confirmation, then sends `accept_open_sections`. The gate accepts
+  and locks those sections as they stand, cancelling pending section reworks,
+  before the usual complete-review check. Without the flag, the strict rule is
+  unchanged.
+
+**Consequence.** Existing script drafts become stale (the script validation
+contract and request instructions changed) and are regenerated under the new
+rules on the next run.

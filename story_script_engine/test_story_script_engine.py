@@ -266,6 +266,35 @@ class StoryScriptTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertTrue(any("PAYOFF beat" in e for e in result["errors"]))
 
+    def test_numbers_must_come_from_accepted_claims(self):
+        request = self.request("short")
+        request["accepted_claims"][0]["evidence_links"] = [
+            {"evidence_quote": "Pads glow above 800 degrees."}
+        ]
+        response = self.valid_response("short")
+        response["sections"][1]["narration"] = "At 800 degrees the pads glow."
+        self.assertTrue(validate_script_response(response, request)["valid"])
+
+        response["opening_hook"] = "A 747 lands at 170 mph and the brakes take it all."
+        result = validate_script_response(response, request)
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("opening_hook states number(s)" in e and "170" in e and "747" in e for e in result["errors"])
+        )
+
+    def test_generic_teaser_opener_is_rejected(self):
+        response = self.valid_response("short")
+        response["opening_hook"] = "You\u2019ll never believe what keeps racing brakes alive."
+        result = validate_script_response(response, self.request("short"))
+        self.assertTrue(any("generic teaser" in e for e in result["errors"]))
+
+    def test_script_request_carries_storytelling_instructions(self):
+        request = self.request("short")
+        joined = " ".join(request["instructions"])
+        self.assertIn("STORYTELLING", joined)
+        self.assertIn("viewer_moment", joined)
+        self.assertIn("accepted_claims", joined)
+
     def test_valid_long_and_short_scripts_pass(self):
         for fmt in ("long_form", "short"):
             result = validate_script_response(

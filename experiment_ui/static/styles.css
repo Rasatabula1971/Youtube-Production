@@ -1976,3 +1976,10 @@ button.danger {
   padding: 4px 9px;
   font-size: 12px;
 }
+
+.script-edit-target {
+  float: right;
+  margin: -4px 0 4px 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+}

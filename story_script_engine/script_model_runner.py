@@ -197,6 +197,14 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "14. CHANNEL VOICE: when channel_voice.apply_to_generation is false, do NOT infer a persistent channel personality from niche, title, source videos or generic creator advice.\n"
         "15. If human_rework_note is present, it is an AUTHORITATIVE human instruction for THIS format branch. Correct exactly the requested issue while preserving the internal working-title identity, verified claims, Story Plan constraints and format identity. Do not silently rewrite unrelated parts unless required to make the requested correction coherent.\n"
         "16. Human rework never authorizes invented facts, unsupported drama, or changing the accepted viewer/story promise.\n"
+        "STORYTELLING (this is what makes the video watchable):\n"
+        "S1. Tell a story to ONE viewer, not a lecture. Open INSIDE concept.viewer_moment / concept.human_framing.hook_experience: a concrete moment the viewer recognises, in second person and present tense.\n"
+        "S2. The opening_hook names the contradiction or stakes from concept.human_framing.psychological_pull (viewer_expectation vs violation_or_tension) and opens the information_gap WITHOUT answering it. Never start with 'You'll never believe', 'Have you ever wondered', 'Did you know', 'In this video' or 'Welcome'.\n"
+        "S3. Arc: moment -> expectation -> tension (what should go wrong, why it matters to the viewer) -> escalation -> reveal (concept.human_framing.explanation_payoff) -> resolution back in the viewer's own world.\n"
+        "S4. Every section answers 'why should I care right now?' by tying each fact to a consequence, a person or the opening moment. No section may be a bare list of facts.\n"
+        "S5. Explain the mechanism with one concrete everyday image or analogy; analogies illustrate but never add facts.\n"
+        "S6. Write for the ear: short spoken sentences, varied rhythm, no textbook phrasing.\n"
+        "S7. Every number, speed, pressure, measurement or statistic must appear in accepted_claims. If a number is not in an accepted claim, describe scale in words instead. Scripts with unsupported numbers are rejected.\n"
     )
     if fmt == "short":
         prompt += (

@@ -101,6 +101,19 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("renderResearchCoverage", script)
         self.assertIn("Not needed for script", script)
 
+    def test_script_gate_supports_direct_edit_and_wholesale_accept(self):
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        post_start = source.index("def do_POST")
+        start = source.index('if route == "/api/script-gate":', post_start)
+        block = source[start:start + 900]
+        self.assertIn('accept_open_sections=body.get("accept_open_sections") is True', block)
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        self.assertIn("data-edit-target", script)
+        self.assertIn("editScriptTarget", script)
+        self.assertIn("accept_open_sections: acceptOpenSections", script)
+        self.assertIn('id="scriptSectionManualEditor"', html)
+
     def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")

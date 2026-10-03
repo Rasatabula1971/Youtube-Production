@@ -460,3 +460,44 @@ prepared section-review provenance before creating a Format Request:
 The verified section-review summary is copied into the Format Request
 provenance. Therefore a stale or manually redirected section-state cannot cross
 from Script approval into Format planning.
+
+## Storytelling contract and editing at the Script Gate (D-105)
+
+### What the script must do
+
+Script requests and the model prompt carry explicit storytelling rules built
+from the accepted concept's human framing:
+
+- **Open inside the viewer's moment.** Use `viewer_moment` /
+  `hook_experience`, in second person and present tense.
+- **Hook with the contradiction or stakes** from `psychological_pull`, and open
+  the information gap without answering it.
+- **Follow the arc:** moment → expectation → tension → escalation → reveal
+  (`explanation_payoff`) → resolution back in the viewer's world.
+- **Make every section matter to the viewer.** Tie each one to a consequence, a
+  person or the opening moment; a bare list of facts is not acceptable.
+- **Use one everyday analogy** for the mechanism, and write for the ear.
+
+### What the validator rejects
+
+`validate_script_response` now rejects two more things:
+
+- **Unsupported numbers.** Every number in the hook, sections or closing must
+  appear somewhere in the accepted claims (statement, evidence quote or note).
+  Otherwise, describe scale in words.
+- **Generic teaser openers**, such as "You'll never believe", "Have you ever
+  wondered", "Did you know", "In this video" or "Welcome".
+
+Manual edits go through the same validation.
+
+### Editing at the Script Gate
+
+- **Edit any part directly.** The opening hook, each section and the closing
+  have an **Edit** button. It prepares section editing automatically if needed,
+  opens the manual editor on that part, and unlocks it first if it was locked.
+- **Accept the whole script after partial edits.** If section review is
+  prepared but some sections are still open, **Accept whole script** asks for
+  confirmation. It then sends `accept_open_sections`, which accepts and locks
+  those sections as they stand and cancels any pending section rework.
+- **Without confirmation, nothing changes:** the strict rule still applies, and
+  every prepared section must be resolved first.

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -221,6 +222,7 @@ def build_script_request(
         ),
         "Do not copy or closely paraphrase source-video wording.",
         "Do not claim virality, guaranteed performance or unsupported facts.",
+        *STORYTELLING_INSTRUCTIONS,
     ]
     if fmt == "short":
         instructions.extend(
@@ -270,6 +272,57 @@ def build_script_request(
             "story_plan_sha256": sha256_file(plan_path),
         },
     }
+
+
+NUMBER_TOKEN = re.compile(r"\d+(?:[.,]\d+)*")
+GENERIC_OPENERS = (
+    "you'll never believe",
+    "you will never believe",
+    "you won't believe",
+    "have you ever wondered",
+    "did you know",
+    "in this video",
+    "today we",
+    "today, we",
+    "let's dive",
+    "welcome to",
+    "welcome back",
+)
+
+STORYTELLING_INSTRUCTIONS = [
+    "STORYTELLING: this is a story told to one viewer, not a lecture. Use concept.viewer_moment and concept.human_framing.hook_experience to open INSIDE a concrete moment the viewer recognises (second person, present tense).",
+    "STORYTELLING: the opening_hook states the contradiction or stakes from concept.human_framing.psychological_pull (what the viewer expects vs what actually happens) and opens the information_gap without answering it. Never open with generic teasers such as 'You'll never believe', 'Have you ever wondered', 'Did you know' or 'In this video'.",
+    "STORYTELLING: follow an arc - moment -> expectation -> tension (what should go wrong and why it matters to the viewer) -> escalation (raise the stakes or deepen the mystery) -> reveal (concept.human_framing.explanation_payoff, the mechanism) -> resolution back in the viewer's world.",
+    "STORYTELLING: every section must answer 'why should the viewer care right now?' by tying each fact to a consequence, a person or the opening moment. A section that only lists facts is not acceptable.",
+    "STORYTELLING: explain mechanisms with one concrete image or analogy from everyday life. Analogies may illustrate but must not add facts.",
+    "STORYTELLING: write for the ear - short spoken sentences, varied rhythm, no textbook phrasing.",
+    "FACTS: every number, measurement, speed, pressure, date or named statistic must come from accepted_claims. Do not add any number that is not in an accepted claim; describe scale in words instead.",
+]
+
+
+def _claim_numbers(claims: list[dict[str, Any]]) -> set[str]:
+    numbers: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            numbers.update(token.replace(",", "") for token in NUMBER_TOKEN.findall(value))
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(claims)
+    return numbers
+
+
+def unsupported_numbers(text: str, allowed: set[str]) -> list[str]:
+    return [
+        token
+        for token in NUMBER_TOKEN.findall(str(text or ""))
+        if token.replace(",", "") not in allowed
+    ]
 
 
 def validate_script_response(
@@ -450,6 +503,34 @@ def validate_script_response(
     if overlap.get("blocking"):
         match = overlap.get("matches", [{}])[0]
         errors.append("source overlap block: " + str(match.get("overlap_text") or ""))
+
+    hook_start = " ".join(str(response.get("opening_hook", "")).lower().split())
+    hook_start = hook_start.replace("\u2019", "'")
+    for opener in GENERIC_OPENERS:
+        if hook_start.startswith(opener):
+            errors.append(
+                f"opening_hook starts with the generic teaser '{opener}'; open inside "
+                "the viewer's moment with the concrete contradiction or stakes instead"
+            )
+            break
+
+    allowed_numbers = _claim_numbers(request.get("accepted_claims", []))
+    spoken = [
+        ("opening_hook", response.get("opening_hook", "")),
+        *[
+            (f"section {section.get('section_id') or index}", section.get("narration", ""))
+            for index, section in enumerate(sections)
+            if isinstance(section, dict)
+        ],
+        ("closing", response.get("closing", "")),
+    ]
+    for label, text in spoken:
+        invented = unsupported_numbers(text, allowed_numbers)
+        if invented:
+            errors.append(
+                f"{label} states number(s) not found in any accepted claim: "
+                + ", ".join(sorted(set(invented)))
+            )
 
     return {
         "valid": not errors,
