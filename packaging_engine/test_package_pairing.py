@@ -179,6 +179,26 @@ class PackagePairingTests(unittest.TestCase):
             )
         )
 
+    def test_human_edited_selected_title_wording_is_preserved(self):
+        brief = self.brief()
+        brief["selected_title"]["title_text"] = (
+            "Human Edited Cold-Brake Title"
+        )
+        title_item = {
+            "concept_id": "c1",
+            "titles": {"short": self.titles(), "long_form": []},
+        }
+        values = module._titles_for(title_item, "short", brief)
+        selected = next(
+            x for x in values if x["title_id"] == "short-curiosity"
+        )
+
+        self.assertEqual(
+            selected["title_text"],
+            "Human Edited Cold-Brake Title",
+        )
+        self.assertTrue(selected["human_selected_wording"])
+
     def test_lexical_redundancy_detects_significant_duplication(self):
         result = module.lexical_redundancy(
             "How F1 Rain Tyres Work",
