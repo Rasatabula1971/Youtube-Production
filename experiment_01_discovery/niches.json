@@ -243,6 +243,15 @@
         "music history",
         "instrument explained"
       ]
+    },
+    {
+      "name": "everyday_science",
+      "queries": [
+        "science of everyday things",
+        "how does it work everyday science",
+        "why does it happen science explained",
+        "hidden physics of everyday objects"
+      ]
     }
   ]
 }

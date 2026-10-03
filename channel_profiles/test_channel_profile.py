@@ -112,6 +112,39 @@ class ChannelVoiceProfileTests(unittest.TestCase):
                 for item in validation["errors"])
         )
 
+    def test_science_inside_draft_is_complete_but_inactive(self):
+        path = Path(__file__).resolve().parent / "profiles" / "science_inside_v1.json"
+        profile = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(validate_profile(profile), {"valid": True, "errors": []})
+        self.assertEqual(profile["status"], "DRAFT")
+        binding = normalize_binding({"profile": profile, "binding": {}})
+        self.assertFalse(binding["apply_to_generation"])
+
+    def test_draft_cannot_claim_approval_or_be_selected(self):
+        profile = approved_profile()
+        profile["status"] = "DRAFT"
+        validation = validate_profile(profile)
+        self.assertFalse(validation["valid"])
+        self.assertIn("DRAFT profile must not record approval", validation["errors"])
+
+        profile["provenance"] = {
+            "created_from": "test",
+            "approved_by": None,
+            "approved_at": None,
+        }
+        self.assertTrue(validate_profile(profile)["valid"])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "draft.json").write_text(json.dumps(profile), encoding="utf-8")
+            selector = root / "active_profile.json"
+            selector.write_text(
+                json.dumps({"schema_version": 1, "profile_path": "draft.json"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "DRAFT"):
+                load_active_profile_binding(selector)
+
     def test_selector_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             container = Path(tmp)
