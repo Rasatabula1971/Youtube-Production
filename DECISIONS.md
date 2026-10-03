@@ -2536,3 +2536,21 @@ cited source was not acquired.
 The prompt now asks for one continuous 5–30-word excerpt without Markdown. The
 workflow's PARTIAL message distinguishes "a model answered but validation
 failed" from "no model answered".
+
+## D-102 — Research rework notes guide regeneration but never block the Research Gate
+
+**Status:** Accepted
+
+A Research Gate Rework note is added to the plan as a research question with
+origin `human_rework`, so the next claim generation addresses it. The gate then
+required an accepted claim for every question, including those notes.
+
+A note that is not a factual question (for example "the explanation is too
+complex") could never be answered. The concept stayed `RESEARCH_INCOMPLETE`
+and never reached Story / Script.
+
+This contradicted the gate's own contract that only the original research
+questions must be covered. Questions of origin `human_rework` now report
+`HUMAN_REWORK_INSTRUCTION` when unanswered and are excluded from
+`unresolved_question_ids`. Original concept questions still block until
+answered.

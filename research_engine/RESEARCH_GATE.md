@@ -69,6 +69,12 @@ After claim decisions, the gate checks the original concept research questions.
 A question is RESOLVED_FOR_SCRIPT only when at least one accepted claim links to
 that question.
 
+A Rework note becomes a question with origin `human_rework` (`hrw_<claim_id>`),
+so the next claim generation addresses it. Such questions are instructions,
+not research the script depends on. They show as HUMAN_REWORK_INSTRUCTION when
+no accepted claim links to them, and they never make a package incomplete.
+Notes about presentation ("too complex") belong at the Script Gate.
+
 If any question remains uncovered, the final package status is:
 
 ~~~text

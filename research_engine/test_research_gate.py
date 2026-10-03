@@ -228,6 +228,37 @@ class ResearchGateTests(unittest.TestCase):
             verified["unresolved_question_ids"],
         )
 
+    def test_human_rework_question_does_not_block_story_script(self):
+        package = dict(self.package)
+        package["research_questions"] = list(self.package["research_questions"]) + [
+            {
+                "question_id": "hrw_clm002",
+                "question": "The explanation is too complex",
+                "origin": "human_rework",
+                "rework_claim_id": "clm002",
+            }
+        ]
+        request = build_review_request(package, self.config)
+        _, verified = apply_gate(package, request, self.response(request), self.config)
+        self.assertEqual(verified["status"], "READY_FOR_STORY_SCRIPT")
+        self.assertEqual(verified["unresolved_question_ids"], [])
+        status = {item["question_id"]: item["status"] for item in verified["question_status"]}
+        self.assertEqual(status["hrw_clm002"], "HUMAN_REWORK_INSTRUCTION")
+
+    def test_original_question_still_blocks_with_rework_question_present(self):
+        package = dict(self.package)
+        package["research_questions"] = list(self.package["research_questions"]) + [
+            {"question_id": "hrw_clm001", "question": "Stronger source", "origin": "human_rework"}
+        ]
+        request = build_review_request(package, self.config)
+        response = self.response(request)
+        for decision in response["decisions"]:
+            if decision["claim_id"] == "clm001":
+                decision["decision"] = "REJECT"
+        _, verified = apply_gate(package, request, response, self.config)
+        self.assertEqual(verified["status"], "RESEARCH_INCOMPLETE")
+        self.assertEqual(verified["unresolved_question_ids"], ["rq001"])
+
     def test_verified_package_keeps_only_used_sources(self):
         package = dict(self.package)
         package["sources"] = list(self.package["sources"]) + [
