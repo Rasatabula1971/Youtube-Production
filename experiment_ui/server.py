@@ -203,6 +203,7 @@ if str(RESEARCH_DIR) not in sys.path:
     sys.path.insert(0, str(RESEARCH_DIR))
 
 from research_review import (
+    apply_question_waiver as apply_research_question_waiver,
     apply_action as apply_research_gate_action,
 )
 from research_review import (
@@ -8191,6 +8192,22 @@ class Handler(BaseHTTPRequestHandler):
                         str(body["rework_target"]) if body.get("rework_target") else None
                     ),
                 ))
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/research-gate" and body.get("action") in {
+                "WAIVE_QUESTION",
+                "UNWAIVE_QUESTION",
+            }:
+                payload = apply_research_question_waiver(
+                    concept_id=str(body.get("concept_id", "")),
+                    question_id=str(body.get("question_id", "")),
+                    waive=body.get("action") == "WAIVE_QUESTION",
+                    note=str(body.get("note") or ""),
+                )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}

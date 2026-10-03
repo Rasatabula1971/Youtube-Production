@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from pipeline_integrity import atomic_write_json
 
 from research_gate import (
     DEFAULT_DRAFTS_DIR,
+    HUMAN_REWORK_ORIGIN,
     REVIEW_REQUESTS_DIR,
     REVIEWED_DIR,
     SUMMARY_FILE,
@@ -80,6 +82,130 @@ def _preserved_decisions(
                 continue
             preserved[key] = saved
     return preserved
+
+
+def _original_questions(request: dict[str, Any]) -> dict[str, str]:
+    return {
+        str(question.get("question_id")): str(question.get("question") or "")
+        for question in request.get("research_questions", [])
+        if isinstance(question, dict)
+        and question.get("question_id")
+        and question.get("origin") != HUMAN_REWORK_ORIGIN
+    }
+
+
+def _preserved_waivers(
+    requests: list[dict[str, Any]],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep a waiver only while its question still exists with the same wording."""
+    prior = previous.get("waived_questions", {}) if isinstance(previous, dict) else {}
+    if not isinstance(prior, dict):
+        return {}
+    preserved: dict[str, Any] = {}
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        questions = _original_questions(bundle["request"])
+        saved = prior.get(concept_id)
+        if not isinstance(saved, dict):
+            continue
+        kept = {
+            question_id: waiver
+            for question_id, waiver in saved.items()
+            if isinstance(waiver, dict)
+            and questions.get(question_id) == waiver.get("question")
+        }
+        if kept:
+            preserved[concept_id] = kept
+    return preserved
+
+
+def question_coverage(
+    requests: list[dict[str, Any]],
+    state: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Live per-concept answer status of the original research questions."""
+    decisions = state.get("decisions", {})
+    waivers = state.get("waived_questions", {})
+    rows = []
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        request = bundle["request"]
+        accepted: dict[str, list[str]] = {}
+        for item in request.get("items", []):
+            decision = decisions.get(key_for(concept_id, str(item["claim_id"])), {})
+            if decision.get("decision") == "ACCEPT":
+                for question_id in item.get("question_ids", []):
+                    accepted.setdefault(str(question_id), []).append(str(item["claim_id"]))
+        concept_waivers = waivers.get(concept_id, {}) if isinstance(waivers, dict) else {}
+        questions = []
+        for question_id, text in _original_questions(request).items():
+            waiver = concept_waivers.get(question_id) if isinstance(concept_waivers, dict) else None
+            questions.append(
+                {
+                    "question_id": question_id,
+                    "question": text,
+                    "accepted_claim_ids": accepted.get(question_id, []),
+                    "status": (
+                        "ANSWERED"
+                        if accepted.get(question_id)
+                        else "WAIVED"
+                        if isinstance(waiver, dict)
+                        else "UNANSWERED"
+                    ),
+                    "waiver": waiver if isinstance(waiver, dict) else None,
+                }
+            )
+        working_title = (request.get("concept") or {}).get("working_title")
+        rows.append(
+            {
+                "concept_id": concept_id,
+                "working_title": working_title,
+                "questions": questions,
+                "unanswered": sum(q["status"] == "UNANSWERED" for q in questions),
+            }
+        )
+    return rows
+
+
+def apply_question_waiver(
+    *,
+    concept_id: str,
+    question_id: str,
+    waive: bool,
+    note: str | None,
+) -> dict[str, Any]:
+    """Waive (or un-waive) an original research question for one concept."""
+    state = current_state()
+    if not state:
+        raise ValueError("Research Gate is not prepared or is stale")
+    requests = build_requests()
+    bundle = next((item for item in requests if item["concept_id"] == concept_id), None)
+    if bundle is None:
+        raise ValueError("Unknown concept_id")
+    questions = _original_questions(bundle["request"])
+    if question_id not in questions:
+        raise ValueError("Only an original research question of this concept can be waived")
+    waivers = state.setdefault("waived_questions", {})
+    if waive:
+        clean_note = str(note or "").strip()
+        if not clean_note:
+            raise ValueError("Waiving a research question requires a note explaining why")
+        waivers.setdefault(concept_id, {})[question_id] = {
+            "question": questions[question_id],
+            "note": clean_note,
+            "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
+            "waived_at": datetime.now(timezone.utc).isoformat(),
+        }
+    else:
+        concept_waivers = waivers.get(concept_id, {})
+        if isinstance(concept_waivers, dict):
+            concept_waivers.pop(question_id, None)
+            if not concept_waivers:
+                waivers.pop(concept_id, None)
+    state["status"] = "AWAITING_HUMAN_DECISION"
+    finalize_if_complete(state, requests)
+    return snapshot()
 
 
 def _apply_rework_feedback(
@@ -224,6 +350,7 @@ def prepare_state() -> dict[str, Any]:
         "draft_hashes": drafts_hashes(),
         "reviewer": os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER),
         "decisions": _preserved_decisions(requests, previous),
+        "waived_questions": _preserved_waivers(requests, previous),
     }
     write_json(STATE_FILE, state)
     return snapshot()
@@ -312,6 +439,7 @@ def snapshot() -> dict[str, Any]:
         "claims": claims,
         "verified_packages": verified_statuses,
         "ready_for_story_script": ready_count,
+        "question_coverage": question_coverage(requests, state),
     }
 
 
@@ -358,6 +486,7 @@ def finalize_if_complete(
                 state["decisions"][key_for(concept_id, str(item["claim_id"]))]
                 for item in request.get("items", [])
             ],
+            "waived_questions": (state.get("waived_questions") or {}).get(concept_id, {}),
             "overall_note": "",
         }
         reviewed, verified = apply_gate(
