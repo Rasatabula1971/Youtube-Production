@@ -2917,3 +2917,55 @@ sections (§25) instead of an inline expander.
   values without hovering.
 - **Behaviour.** The drawer closes on Esc and returns focus to the card.
 
+
+## D-115 — UI Patch 1: tokens, new shell, Command Center, productions from files
+
+**Status:** Accepted
+
+**Productions are derived, not stored.** The redesign needs a list of
+productions with a stage and a status. The pipeline has no per-video record:
+each engine writes hash-bound artifacts per concept. Rather than add a second
+source of truth that could drift from the files, `experiment_ui/productions.py`
+derives each production on every request from the artifact state the server
+already computes (the `*_artifact_state` functions and their gate snapshots).
+- **What counts.** A production is a concept accepted at the Concept Gate.
+- **Stage.** The stage is the first stage whose output is not current for that
+  concept.
+- **Status.** HUMAN_REVIEW when that stage's gate has a pending decision for it,
+  BLOCKED on rework or reject, READY otherwise, and COMPLETE when every branch
+  has a current final render.
+- **Cost and invalidation.** It reuses the state already built for
+  `/api/status`, so polling costs no extra artifact scans beyond reading the
+  final-render results. Invalidating an artifact moves the production back
+  automatically.
+- **Known limit.** Gates that are still global (narration spend, visual
+  candidates and rights, rough cut, edit preview, final export) are not
+  attributed to one production until the per-production workspace (Patch 3).
+
+**Tokens first.** `css/tokens.css` defines semantic colours, where colour means
+state (human, running, blocked, complete), plus spacing, type, radius, shadow,
+motion and z-index. The previous `:root` variables are now aliases of these
+tokens, so the 2,200-line `styles.css` keeps working unchanged and later patches
+can move it across piece by piece.
+
+**Shell and navigation.** The sidebar follows the redesign's information
+architecture:
+- Command Center.
+- Opportunities: Discover, Viral Radar, Watching, Approved.
+- Productions: Active, Review Queue, Completed, Workspace.
+- Tools & Diagnostics.
+
+Sub-items reuse the existing views (inbox tabs, radar card, `/analysis`) until
+Patches 2 and 3 give them their own pages. The top bar adds a health pill: a
+failed job, a radar scheduler more than 6 hours (three wakes) late, or a failed
+radar run. The sidebar footer shows the workflow and scheduler state.
+
+**Command Center.** It replaces Home. The existing guided-workflow hero is kept
+as "Needs your attention"; below it come the attention queue, active
+productions and "Running automatically".
+
+**Static serving.** The server serves `/css/*.css` and `/js/*.js` with path
+containment: one directory level, an extension allowlist per folder, no
+dotfiles, and a resolved path that must stay inside the folder (which also
+rejects symlink escape). Everything else under those prefixes is a 404. CI now
+syntax-checks every file in `static/js/`.

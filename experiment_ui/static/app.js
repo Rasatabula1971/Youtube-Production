@@ -502,8 +502,8 @@ let finalExportCursor = 0;
 const ROUTES = {
   "/": {
     view: "home",
-    kicker: "WORKFLOW",
-    title: "Home",
+    kicker: "TODAY",
+    title: "Command Center",
     subtitle: "What needs your attention now."
   },
   "/opportunity": {
@@ -517,6 +517,12 @@ const ROUTES = {
     kicker: "ANALYZE & CREATE",
     title: "Analyze & Create",
     subtitle: "Turn approved evidence into an original video."
+  },
+  "/productions": {
+    view: "productions",
+    kicker: "PRODUCTIONS",
+    title: "Productions",
+    subtitle: "Every accepted concept, its stage and what it is waiting on."
   },
   "/tools": {
     view: "tools",
@@ -615,14 +621,26 @@ function renderRoute(options) {
     view.hidden = view.dataset.view !== route.view;
   });
 
+  const subroute = currentSubroute();
   document.querySelectorAll(".nav-item").forEach(function (item) {
-    item.classList.toggle("active", item.dataset.route === path);
+    const active = item.dataset.route === path ||
+      String(item.dataset.alsoRoutes || "").split(" ").indexOf(path) !== -1;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
+  document.querySelectorAll(".nav-subitem").forEach(function (item) {
+    const active = item.dataset.route === path &&
+      (item.dataset.subroute ? item.dataset.subroute === subroute : true);
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "location");
+    else item.removeAttribute("aria-current");
   });
 
   pageKicker.textContent = route.kicker;
   pageTitle.textContent = route.title;
   pageSubtitle.textContent = route.subtitle;
-  document.title = route.title === "Home"
+  document.title = path === "/"
     ? "YouTube Production"
     : route.title + " — YouTube Production";
 
@@ -633,12 +651,51 @@ function renderRoute(options) {
   renderedPath = path;
 }
 
-function navigate(path) {
+function currentSubroute() {
+  return window.location.hash.replace(/^#/, "");
+}
+
+function navigate(path, subroute) {
   const target = Object.prototype.hasOwnProperty.call(ROUTES, path) ? path : "/";
-  if (window.location.pathname !== target) {
-    history.pushState({}, "", target);
+  const url = target + (subroute ? "#" + subroute : "");
+  if (window.location.pathname + window.location.hash !== url) {
+    history.pushState({}, "", url);
   }
-  renderRoute({ scroll: true });
+  renderRoute({ scroll: !subroute });
+  if (subroute) applySubroute(target, subroute);
+}
+
+// Sidebar sub-items (Patch 1): Opportunities sub-items reuse the existing
+// workspace (inbox tab or radar card); Productions sub-items filter the list.
+const OPPORTUNITY_INBOX_SUBROUTES = {
+  review: "NEEDS_REVIEW",
+  watching: "WATCHING",
+  approved: "APPROVED"
+};
+
+function applySubroute(path, subroute) {
+  let anchor = null;
+  if (path === "/opportunity") {
+    if (OPPORTUNITY_INBOX_SUBROUTES[subroute]) {
+      inboxTab = OPPORTUNITY_INBOX_SUBROUTES[subroute];
+      try {
+        window.localStorage.setItem("opportunityInboxTab", inboxTab);
+      } catch (_) {}
+      renderInbox(latestInbox);
+      anchor = document.getElementById("opportunityInboxPanel");
+    } else if (subroute === "radar") {
+      anchor = document.getElementById("viralEntryPanel");
+    } else {
+      anchor = document.getElementById("viewOpportunity");
+    }
+  } else if (path === "/productions" && window.CommandCenter) {
+    window.CommandCenter.setProductionFilter(subroute);
+  }
+  if (anchor) {
+    anchor.scrollIntoView({ block: "start", behavior: "auto" });
+  } else {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
 }
 
 function openSidebar() {
@@ -6749,6 +6806,7 @@ function renderAll(data) {
   latestStatus = data;
   renderSidebarStatus(data.workflow || {});
   renderHomeWorkflow(data);
+  if (window.CommandCenter) window.CommandCenter.render(data);
   renderProgress(data);
   renderHomeOpportunity(data.opportunity_gate || {});
   renderHomeActivity(data.job || {}, data.opportunity_research || {});
@@ -6867,7 +6925,7 @@ document.addEventListener("click", function (event) {
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget) {
     event.preventDefault();
-    navigate(routeTarget.dataset.route);
+    navigate(routeTarget.dataset.route, routeTarget.dataset.subroute || "");
     return;
   }
 
@@ -6943,7 +7001,9 @@ document.addEventListener("click", function (event) {
 });
 
 window.addEventListener("popstate", function () {
-  renderRoute({ scroll: true });
+  const subroute = currentSubroute();
+  renderRoute({ scroll: !subroute });
+  if (subroute) applySubroute(normalizedPath(), subroute);
 });
 refreshStatus.addEventListener("click", loadStatus);
 jobSummaryButton.addEventListener("click", openJobDrawer);

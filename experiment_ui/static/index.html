@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>YouTube Production</title>
+  <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/css/shell.css">
+  <link rel="stylesheet" href="/css/command-center.css">
 </head>
 <body>
   <div class="app-shell">
@@ -19,26 +22,51 @@
 
       <nav class="side-nav" aria-label="Main navigation">
         <a href="/" data-route="/" class="nav-item">
-          <span class="nav-icon">⌂</span>
-          <span>Home</span>
+          <span class="nav-icon" aria-hidden="true">⌂</span>
+          <span>Command Center</span>
+          <span class="nav-count" id="navAttentionCount" hidden></span>
         </a>
-        <a href="/opportunity" data-route="/opportunity" class="nav-item">
-          <span class="nav-icon">◎</span>
-          <span>Opportunity</span>
-        </a>
-        <a href="/analysis" data-route="/analysis" class="nav-item">
-          <span class="nav-icon">◫</span>
-          <span>Analyze &amp; Create</span>
-        </a>
+        <div class="nav-group">
+          <a href="/opportunity" data-route="/opportunity" class="nav-item">
+            <span class="nav-icon" aria-hidden="true">◎</span>
+            <span>Opportunities</span>
+            <span class="nav-count" id="navOpportunityCount" hidden></span>
+          </a>
+          <div class="nav-sub" aria-label="Opportunities">
+            <a href="/opportunity#discover" data-route="/opportunity" data-subroute="discover" class="nav-subitem">Discover</a>
+            <a href="/opportunity#radar" data-route="/opportunity" data-subroute="radar" class="nav-subitem">Viral Radar</a>
+            <a href="/opportunity#watching" data-route="/opportunity" data-subroute="watching" class="nav-subitem">Watching</a>
+            <a href="/opportunity#approved" data-route="/opportunity" data-subroute="approved" class="nav-subitem">Approved</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <a href="/productions" data-route="/productions" data-also-routes="/analysis" class="nav-item">
+            <span class="nav-icon" aria-hidden="true">▶</span>
+            <span>Productions</span>
+            <span class="nav-count" id="navProductionCount" hidden></span>
+          </a>
+          <div class="nav-sub" aria-label="Productions">
+            <a href="/productions#active" data-route="/productions" data-subroute="active" class="nav-subitem">Active</a>
+            <a href="/productions#review" data-route="/productions" data-subroute="review" class="nav-subitem">Review Queue</a>
+            <a href="/productions#completed" data-route="/productions" data-subroute="completed" class="nav-subitem">Completed</a>
+            <a href="/analysis" data-route="/analysis" class="nav-subitem">Workspace</a>
+          </div>
+        </div>
         <a href="/tools" data-route="/tools" class="nav-item">
-          <span class="nav-icon">⚙</span>
+          <span class="nav-icon" aria-hidden="true">⚙</span>
           <span>Tools &amp; Diagnostics</span>
         </a>
       </nav>
 
       <div class="sidebar-foot">
-        <span class="status-dot" id="sidebarStatusDot"></span>
-        <span id="sidebarStatus">Loading…</span>
+        <div class="foot-row">
+          <span class="status-dot" id="sidebarStatusDot"></span>
+          <span id="sidebarStatus">Loading…</span>
+        </div>
+        <div class="foot-row">
+          <span class="status-dot" id="schedulerStatusDot"></span>
+          <span id="schedulerStatus">Scheduler: checking…</span>
+        </div>
       </div>
     </aside>
 
@@ -53,6 +81,11 @@
           </div>
         </div>
 
+        <div class="topbar-right">
+        <div class="health-pill" id="healthPill" role="status">
+          <span class="status-dot" id="healthDot"></span>
+          <span id="healthLabel">Checking…</span>
+        </div>
         <button class="job-summary neutral" id="jobSummaryButton" type="button">
           <span class="job-summary-dot"></span>
           <span class="job-summary-copy">
@@ -61,13 +94,14 @@
           </span>
           <span class="job-summary-arrow">›</span>
         </button>
+        </div>
       </header>
 
       <main class="view-container">
         <section class="app-view" data-view="home" id="viewHome">
           <section class="hero-step" id="homeCurrentStep">
             <div>
-              <p class="section-kicker">CURRENT STEP</p>
+              <p class="section-kicker">NEEDS YOUR ATTENTION <span class="attention-count" id="attentionCount"></span></p>
               <h2 id="homeCurrentTitle">Loading…</h2>
               <p id="homeCurrentDetail" class="muted"></p>
               <div class="hero-actions" id="homePrimaryAction"></div>
@@ -78,6 +112,32 @@
               <p id="homeNextDue"></p>
             </div>
           </section>
+
+          <section class="cc-section" aria-labelledby="attentionQueueTitle">
+            <div class="cc-section-head">
+              <h2 id="attentionQueueTitle">Attention queue</h2>
+              <p class="muted">Everything waiting on a decision from you, across opportunities and productions.</p>
+            </div>
+            <div class="attention-grid" id="attentionQueue"></div>
+          </section>
+
+          <div class="cc-columns">
+            <section class="panel compact-panel" aria-labelledby="activeProductionsTitle">
+              <div class="panel-head">
+                <div>
+                  <p class="section-kicker">PRODUCTIONS</p>
+                  <h2 id="activeProductionsTitle">Active productions</h2>
+                </div>
+                <button class="ghost compact" data-route="/productions">All productions</button>
+              </div>
+              <div id="activeProductions" class="production-list"></div>
+            </section>
+            <section class="panel compact-panel" aria-labelledby="runningTitle">
+              <p class="section-kicker">AUTOMATION</p>
+              <h2 class="cc-panel-title" id="runningTitle">Running automatically</h2>
+              <ul id="runningAutomatically" class="running-list"></ul>
+            </section>
+          </div>
 
           <section class="panel compact-panel">
             <div class="panel-head">
@@ -109,7 +169,7 @@
               <h2>Find the next video</h2>
               <p class="muted">From proven demand, your own idea, or what is breaking out right now. Every idea lands in the inbox below; you decide what goes forward.</p>
             </div>
-            <button class="ghost" data-route="/">Back to Home</button>
+            <button class="ghost" data-route="/">Back to Command Center</button>
           </div>
 
           <div class="entry-grid">
@@ -1050,6 +1110,22 @@
           </section>
         </section>
 
+        <section class="app-view" data-view="productions" id="viewProductions" hidden>
+          <div class="view-head">
+            <div>
+              <p class="section-kicker">DERIVED FROM FILES</p>
+              <h2>Productions</h2>
+              <p class="muted">One row per accepted concept. Stage and status are worked out from the artifacts on disk every time this page refreshes; nothing here is stored separately.</p>
+            </div>
+          </div>
+          <section class="panel">
+            <div class="inbox-head">
+              <div class="inbox-tabs" id="productionTabs" role="tablist" aria-label="Production filters"></div>
+            </div>
+            <div id="productionsList" class="production-list"></div>
+          </section>
+        </section>
+
         <section class="app-view" data-view="tools" id="viewTools" hidden>
           <div class="view-head">
             <div>
@@ -1134,6 +1210,7 @@
   </aside>
 
   <div class="toast" id="toast"></div>
+  <script src="/js/command-center.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

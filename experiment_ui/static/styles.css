@@ -1,19 +1,4 @@
-:root {
-  --bg: #0d1117;
-  --panel: #151b23;
-  --panel-2: #1b222c;
-  --panel-3: #10161e;
-  --border: #2a3441;
-  --text: #eef3f8;
-  --muted: #93a1b2;
-  --accent: #79c0ff;
-  --accent-2: #2f81f7;
-  --good: #3fb950;
-  --warn: #d29922;
-  --bad: #f85149;
-  --sidebar: 238px;
-  --shadow: 0 18px 55px rgba(0, 0, 0, .28);
-}
+/* Tokens live in css/tokens.css (loaded first). */
 
 * { box-sizing: border-box; }
 

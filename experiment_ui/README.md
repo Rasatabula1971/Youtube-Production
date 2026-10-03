@@ -228,23 +228,63 @@ Opportunity Gate still opens on canonical project evidence.
 
 ## UI v3 — multi-view workspace
 
-The working interface is split into four routes so routine work no longer shares
-one vertically long page:
+The working interface is split into five routes so routine work no longer
+shares one vertically long page. UI Patch 1 (D-115) renamed and regrouped them
+to match the redesign's navigation:
 
-- `/` — **Home**: current step, next step, compact progress, opportunity summary
-  and last activity.
-- `/opportunity` — **Opportunity**: human review of the selected topic and source
-  examples.
-- `/analysis` — **Analyze & Create**: Experiment 02 and downstream creative work.
+- `/` — **Command Center**: the current step ("Needs your attention"), an
+  attention queue (productions waiting on a review or blocked, new radar
+  breakouts, inbox ideas, a failed job), active productions, what is running
+  automatically, then the compact progress, opportunity and last-activity
+  panels.
+- `/opportunity` — **Opportunities**, with sidebar sub-items Discover, Viral
+  Radar, Watching and Approved. The sub-items jump to the entry cards, the
+  radar card or the matching inbox tab (`/opportunity#watching`, …).
+- `/productions` — **Productions**: one row per accepted concept, filtered as
+  Active, Review Queue or Completed (`/productions#review`, …). "Workspace"
+  (`/analysis`, formerly Analyze & Create) still holds every review panel;
+  Patch 3 replaces it with the per-production workspace.
 - `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
   outputs, logs and technical status.
 
-The Live Job console is global. The top-bar job indicator opens a slide-out
-drawer from any view, and background polling continues while navigating between
-views.
+The Live Job console is global. The top bar shows a health pill (failed job or
+a radar scheduler that has missed three wakes) next to the job indicator,
+which opens a slide-out drawer from any view; the sidebar footer shows the
+workflow and scheduler state. Background polling continues while navigating.
 
-The local server serves the same application shell at all four routes, so a
+The local server serves the same application shell at all five routes, so a
 view can be refreshed or bookmarked directly without returning a 404.
+
+### Productions derived from files
+
+`GET /api/productions` (also `productions` in `/api/status`) is computed by
+`experiment_ui/productions.py` from the artifact state the server already
+builds; nothing is stored. A production is a concept with an ACCEPT decision at
+the Concept Gate. Its stage is the first of Research → Script → Package →
+Format → Produce whose output is not yet current for that concept, and Done
+when every branch has a current final render. Its status is:
+
+- **Needs your review** — a decision for this concept is pending at that
+  stage's gate (research claims, scripts, title direction, format plan, voice
+  performance).
+- **Blocked** — the gate sent it for rework or rejected it.
+- **Ready to run** — the next automatic step can run.
+- **Complete** — all branches rendered.
+
+Gates that are still global rather than per concept (narration spend, visual
+candidates and rights, rough cut, edit preview, final export) are not yet
+attributed to a single production; they stay on the Command Center hero.
+
+### Front-end files
+
+`static/css/tokens.css` holds every design token (surfaces, text, accent, the
+four state colours `--status-human|running|blocked|complete`, spacing, type,
+radius, shadow, motion, z-index) and aliases the old variable names so
+`styles.css` keeps working while later patches move its rules across.
+`static/css/shell.css`, `static/css/command-center.css` and
+`static/js/command-center.js` are the first split-out files. The server serves
+`/css/*.css` and `/js/*.js` only: one directory level, an allowlisted extension
+per folder, no dotfiles, and a resolved path that must stay inside that folder.
 
 
 ## Experiment 02 evidence step
