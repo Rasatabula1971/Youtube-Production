@@ -59,6 +59,8 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/final-export-review",
     "/api/storyboard-review",
     "/api/narration-performance-review",
+    "/api/thumbnail-gate",
+    "/api/thumbnail-spec",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -348,6 +350,22 @@ from storyboard_review import (
 from storyboard import snapshot as production_storyboard_snapshot
 from visual_search import snapshot as visual_search_prepare_snapshot
 from visual_search_acquire import snapshot as visual_search_acquire_snapshot
+
+from production_engine.thumbnail_review import (
+    apply_action as apply_thumbnail_gate_action,
+)
+from production_engine.thumbnail_review import (
+    competitor_file_path as thumbnail_competitor_file_path,
+)
+from production_engine.thumbnail_review import (
+    snapshot as thumbnail_gate_snapshot,
+)
+from production_engine.thumbnail_review import (
+    thumbnail_file_path,
+)
+from production_engine.thumbnail_review import (
+    update_spec as update_thumbnail_spec,
+)
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
@@ -1494,6 +1512,36 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "for the Human Final Export Gate. It does not upload or publish."
         ),
     },
+    "thumbnail_render": {
+        "label": "Render Thumbnails",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "production_engine/thumbnail_render.py",
+            "--mode",
+            "render",
+        ],
+        "description": (
+            "Renders 1280x720 images from the locked template for validated "
+            "thumbnail concepts that have a subject image, with phone previews. "
+            "It does not choose a title-thumbnail package."
+        ),
+    },
+    "thumbnail_render_preview": {
+        "label": "Render Thumbnail Layout Previews",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "production_engine/thumbnail_render.py",
+            "--mode",
+            "render",
+            "--placeholder",
+        ],
+        "description": (
+            "Renders layout previews for validated thumbnail concepts without a "
+            "subject image yet. Previews cannot be accepted."
+        ),
+    },
     "production_visual_prepare": {
         "label": "Prepare Visual Acquisition Manifest",
         "stage": "09",
@@ -1526,6 +1574,26 @@ OPEN_TARGETS = {
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def thumbnail_gate_state() -> dict[str, Any]:
+    """Thumbnail Gate snapshot that degrades to an error status instead of raising."""
+    try:
+        return thumbnail_gate_snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "items": [], "complete": False}
+
+
+IMAGE_CONTENT_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+def image_content_type(path: Path) -> str:
+    return IMAGE_CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
 
 def safe_load_json(path: Path) -> dict[str, Any] | list[Any] | None:
@@ -4858,6 +4926,12 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     visual_available = yt_dlp_installed and ffmpeg_installed
     visual_satisfied = visual_complete or visual_attempted or not visual_available
     vision_satisfied = (not visual_complete) or vision_complete
+    thumbnail_items = thumbnail_gate_state().get("items", [])
+    thumbnail_units_ready = bool(thumbnail_items)
+    thumbnail_subjects_ready = any(
+        str((item.get("subject_image") or {}).get("path") or "").strip()
+        for item in thumbnail_items
+    )
 
     result: dict[str, dict[str, Any]] = {
         "opportunity_research": {
@@ -6166,6 +6240,30 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                         and not final_ffmpeg_available()
                         else "Build current final render manifests first."
                     )
+                )
+            ),
+        },
+        "thumbnail_render": {
+            "enabled": ffmpeg_installed and thumbnail_subjects_ready,
+            "reason": (
+                "Validated thumbnail concepts with a subject image can be rendered."
+                if ffmpeg_installed and thumbnail_subjects_ready
+                else (
+                    "Install ffmpeg to render thumbnails."
+                    if not ffmpeg_installed
+                    else "Add a subject image to a validated thumbnail concept in the Thumbnail Gate first."
+                )
+            ),
+        },
+        "thumbnail_render_preview": {
+            "enabled": ffmpeg_installed and thumbnail_units_ready,
+            "reason": (
+                "Validated thumbnail concepts can be previewed before a subject image exists."
+                if ffmpeg_installed and thumbnail_units_ready
+                else (
+                    "Install ffmpeg to render thumbnails."
+                    if not ffmpeg_installed
+                    else "Validate title-thumbnail pairs first; a concept needs at least one PASS pair."
                 )
             ),
         },
@@ -7600,6 +7698,7 @@ def status_payload() -> dict[str, Any]:
             visual_post_search_artifact_state().get("expected_branches", [])
         ),
         "final_export_gate": final_export_review_snapshot(),
+        "thumbnail_gate": thumbnail_gate_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -7838,6 +7937,26 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/narration-performance-review":
             self._send_json(narration_performance_revision_snapshot())
+            return
+        if route == "/api/thumbnail-gate":
+            self._send_json(thumbnail_gate_state())
+            return
+        if route in {"/api/thumbnail-file", "/api/thumbnail-competitor"}:
+            query = parse_qs(urlparse(self.path).query)
+            render_id = str((query.get("render_id") or [""])[0])
+            try:
+                if route == "/api/thumbnail-file":
+                    path = thumbnail_file_path(
+                        render_id, str((query.get("name") or [""])[0])
+                    )
+                else:
+                    path = thumbnail_competitor_file_path(
+                        render_id, str((query.get("video_id") or [""])[0])
+                    )
+            except (ValueError, OSError, KeyError) as exc:
+                self._send_json({"error": str(exc)}, 404)
+                return
+            self._send_static(path, image_content_type(path))
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -8423,6 +8542,25 @@ class Handler(BaseHTTPRequestHandler):
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/thumbnail-gate":
+                payload = apply_thumbnail_gate_action(
+                    render_id=str(body.get("render_id", "")),
+                    decision=str(body.get("decision", "")),
+                    criteria=body.get("criteria", {}),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                self._send_json(payload)
+                return
+
+            if route == "/api/thumbnail-spec":
+                payload = update_thumbnail_spec(
+                    render_id=str(body.get("render_id", "")),
+                    accent_hex=body.get("accent_hex"),
+                    subject_image=body.get("subject_image", {}),
+                )
                 self._send_json(payload)
                 return
 

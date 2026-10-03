@@ -1,9 +1,10 @@
 """Experiment UI controller for thumbnail rendering and the Human Thumbnail Gate.
 
-Read side: one item per approved package with its render spec, latest render
-report, previews, mock-feed competitors and current decision.
+Read side: one item per renderable thumbnail concept (a Slice 25 concept with
+at least one title pair passing Slice 26 validation), with its render spec,
+latest render report, previews, mock-feed competitors and current decision.
 
-Write side: save the subject image / accent for a package, and record
+Write side: save the subject image / accent for a concept, and record
 ACCEPT / REWORK / REJECT through ``thumbnail_render.apply_review``.
 """
 
@@ -32,15 +33,15 @@ def reviewer() -> str:
     return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER)
 
 
-def file_url(package_id: str, name: str, version: str | None) -> str:
-    query = {"package_id": package_id, "name": name}
+def file_url(render_id: str, name: str, version: str | None) -> str:
+    query = {"render_id": render_id, "name": name}
     if version:
         query["v"] = version[:12]
     return "/api/thumbnail-file?" + urlencode(query)
 
 
-def competitors(package: dict[str, Any], template: dict[str, Any]) -> list[dict[str, Any]]:
-    niche_name, video_format, _ = render.niche_context(package.get("format_intent"))
+def competitors(unit: dict[str, Any], template: dict[str, Any]) -> list[dict[str, Any]]:
+    niche_name, video_format, _ = render.niche_context(unit.get("format"))
     if not niche_name:
         return []
     study_dir = render.niche.study_dir(niche_name, video_format)
@@ -59,7 +60,7 @@ def competitors(package: dict[str, Any], template: dict[str, Any]) -> list[dict[
                 "channel": video.get("channel_title") or "",
                 "views": video.get("views"),
                 "image_url": "/api/thumbnail-competitor?"
-                + urlencode({"package_id": package["package_id"], "video_id": video["video_id"]}),
+                + urlencode({"render_id": unit["render_id"], "video_id": video["video_id"]}),
             }
         )
         if len(items) >= int(template["feed_competitor_limit"]):
@@ -69,58 +70,63 @@ def competitors(package: dict[str, Any], template: dict[str, Any]) -> list[dict[
 
 def snapshot() -> dict[str, Any]:
     template = render.load_template()
-    packages = render.load_approved_packages()
-    if not packages:
-        return {"status": "WAITING_FOR_APPROVED_PACKAGES", "items": [], "complete": False}
+    units = render.load_render_units(template)
+    if not units:
+        return {"status": "WAITING_FOR_VALIDATED_PACKAGES", "items": [], "complete": False}
 
     criteria = template["review_criteria"]
     items = []
-    for package in packages:
-        package_id = str(package["package_id"])
-        directory = render.package_dir(package_id)
+    for unit in units:
+        render_id = unit["render_id"]
+        directory = render.unit_dir(render_id)
         spec_path = directory / "render_spec.json"
         spec = render.load_json(spec_path) if spec_path.exists() else {}
-        binding = render.package_binding(package)
         report_path = directory / "render_report.json"
         report = render.load_json(report_path) if report_path.exists() else {}
         problems: list[str] = []
         if report.get("image_sha256"):
-            _, problems = render.current_render(package_id, template)
+            _, problems = render.current_render(render_id, template)
         review_path = directory / "review.json"
         review = render.load_json(review_path) if review_path.exists() else {}
-        current_review = bool(review) and review.get("image_sha256") == report.get(
-            "image_sha256"
-        ) and not problems
+        current_review = (
+            bool(review)
+            and review.get("image_sha256") == report.get("image_sha256")
+            and not problems
+        )
         version = report.get("image_sha256")
         previews = {
-            name: file_url(package_id, file_name, version)
+            name: file_url(render_id, file_name, version)
             for name, file_name in (report.get("previews") or {}).items()
         }
         items.append(
             {
-                "package_id": package_id,
-                "concept_id": package.get("concept_id"),
-                "title": binding["title"],
-                "text_overlay": binding["text_overlay"],
-                "thumbnail_message": binding["thumbnail_message"],
-                "focal_subject": binding["focal_subject"],
-                "palette": binding["palette"],
+                **{key: unit.get(key) for key in (
+                    "render_id",
+                    "video_id",
+                    "concept_id",
+                    "format",
+                    "thumbnail_id",
+                    "angle_id",
+                    "text_overlay",
+                    "title",
+                    "titles",
+                    *render.CONCEPT_FIELDS,
+                )},
                 "spec_ready": bool(spec),
-                "spec_current": spec.get("package", {}).get("package_sha256")
-                == binding["package_sha256"],
+                "spec_current": spec.get("unit", {}).get("source_sha256")
+                == unit["source_sha256"],
                 "accent_hex": spec.get("accent_hex")
-                or render.accent_from_palette(str(binding["palette"].get("accent", "")), template),
+                or render.suggested_accent(unit, template),
                 "subject_image": spec.get("subject_image") or render.blank_subject(),
                 "render_status": report.get("status", "NOT_RENDERED"),
                 "render_errors": report.get("errors", []),
                 "stale_reasons": problems,
-                "image_url": file_url(package_id, "thumbnail.jpg", version) if version else None,
+                "image_url": file_url(render_id, "thumbnail.jpg", version) if version else None,
                 "previews": previews,
                 "text_layout": report.get("text_layout"),
                 "zone_luminance": report.get("zone_luminance"),
                 "render_advisories": report.get("render_advisories", []),
-                "packaging_advisories": package.get("packaging_advisories", []),
-                "competitors": competitors(package, template) if version else [],
+                "competitors": competitors(unit, template) if version else [],
                 "decision": review.get("decision", "PENDING") if current_review else "PENDING",
                 "criteria_decisions": review.get("criteria", {}) if current_review else {},
                 "note": review.get("note", "") if current_review else "",
@@ -137,7 +143,7 @@ def snapshot() -> dict[str, Any]:
         "reviewer": reviewer(),
         "criteria": criteria,
         "allowed_source_tiers": list(template["subject_allowed_source_tiers"]),
-        "package_count": len(items),
+        "unit_count": len(items),
         "rendered": sum(item["render_status"] == "RENDERED" for item in items),
         "pending": len(items) - len(decided),
         "accepted": sum(item["decision"] == "ACCEPT" for item in items),
@@ -145,13 +151,22 @@ def snapshot() -> dict[str, Any]:
     }
 
 
-def update_spec(*, package_id: str, accent_hex: Any, subject_image: Any) -> dict[str, Any]:
+def current_unit(render_id: str) -> dict[str, Any]:
+    unit = next(
+        (u for u in render.load_render_units() if u["render_id"] == render_id), None
+    )
+    if unit is None:
+        raise ValueError("Unknown or no longer validated render_id")
+    return unit
+
+
+def update_spec(*, render_id: str, accent_hex: Any, subject_image: Any) -> dict[str, Any]:
     template = render.load_template()
+    current_unit(render_id)
     render.run_prepare()
-    spec_path = render.package_dir(package_id) / "render_spec.json"
-    approved = {str(package["package_id"]) for package in render.load_approved_packages()}
-    if package_id not in approved or not spec_path.exists():
-        raise ValueError("Unknown or unapproved package_id")
+    spec_path = render.unit_dir(render_id) / "render_spec.json"
+    if not spec_path.exists():
+        raise ValueError("Unknown or no longer validated render_id")
 
     accent = str(accent_hex or "").strip().upper().lstrip("#")
     if not re.fullmatch(r"[0-9A-F]{6}", accent):
@@ -171,7 +186,7 @@ def update_spec(*, package_id: str, accent_hex: Any, subject_image: Any) -> dict
 
 
 def apply_action(
-    *, package_id: str, decision: str, criteria: Any, note: str | None
+    *, render_id: str, decision: str, criteria: Any, note: str | None
 ) -> dict[str, Any]:
     template = render.load_template()
     render.apply_review(
@@ -179,7 +194,7 @@ def apply_action(
             "reviewer": reviewer(),
             "decisions": [
                 {
-                    "package_id": package_id,
+                    "render_id": render_id,
                     "decision": decision,
                     "criteria": criteria if isinstance(criteria, dict) else {},
                     "note": note or "",
@@ -191,32 +206,25 @@ def apply_action(
     return snapshot()
 
 
-def thumbnail_file_path(package_id: str, name: str) -> Path:
+def thumbnail_file_path(render_id: str, name: str) -> Path:
     template = render.load_template()
     allowed = {"thumbnail.jpg"} | {
         f"{preview['name']}.png" for preview in template["phone_previews"]
     }
     if name not in allowed:
         raise ValueError("Unknown thumbnail file")
-    approved = {str(package["package_id"]) for package in render.load_approved_packages()}
-    if package_id not in approved:
-        raise ValueError("Unknown package_id")
-    path = render.package_dir(package_id) / name
+    current_unit(render_id)
+    path = render.unit_dir(render_id) / name
     if not path.is_file():
         raise ValueError("Thumbnail file not rendered yet")
     return path
 
 
-def competitor_file_path(package_id: str, video_id: str) -> Path:
+def competitor_file_path(render_id: str, video_id: str) -> Path:
     if not VIDEO_ID_PATTERN.match(video_id):
         raise ValueError("Invalid video_id")
-    package = next(
-        (p for p in render.load_approved_packages() if str(p["package_id"]) == package_id),
-        None,
-    )
-    if package is None:
-        raise ValueError("Unknown package_id")
-    niche_name, video_format, _ = render.niche_context(package.get("format_intent"))
+    unit = current_unit(render_id)
+    niche_name, video_format, _ = render.niche_context(unit.get("format"))
     if not niche_name:
         raise ValueError("No channel niche configured")
     study_dir = render.niche.study_dir(niche_name, video_format)
