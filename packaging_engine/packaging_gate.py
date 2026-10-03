@@ -82,7 +82,9 @@ def build_review_request(
                 "package_id": package_id,
                 "concept_id": concept_id,
                 "title": package.get("title"),
+                "title_keyword": package.get("title_keyword"),
                 "thumbnail": package.get("thumbnail"),
+                "division_of_labor": package.get("division_of_labor"),
                 "opening_frame": package.get("opening_frame"),
                 "expected_viewer": package.get("expected_viewer"),
                 "awareness_level": package.get("awareness_level"),
@@ -102,6 +104,7 @@ def build_review_request(
                 "research_dependencies": package.get("research_dependencies", []),
                 "concept_context": package.get("concept_context", {}),
                 "source_overlap": package.get("source_overlap", {}),
+                "packaging_advisories": package.get("packaging_advisories", []),
                 "required_accept_criteria": list(config["required_accept_criteria"]),
             }
         )
@@ -132,7 +135,13 @@ def build_review_request(
                 "The package accurately represents the accepted concept."
             ),
             "title_thumbnail_complementary": (
-                "Title and thumbnail add complementary information rather than merely repeating each other."
+                "Title and thumbnail add complementary information rather than merely repeating each other: the thumbnail carries emotion/curiosity, the title carries context/fact."
+            ),
+            "thumbnail_single_focal_point": (
+                "The thumbnail has one focal subject with no more than 2-3 distinct visual elements and at most 1-2 arrows or circles."
+            ),
+            "thumbnail_mobile_readable": (
+                "At phone size the focal subject, contrast and any bold 3-5 word text are still readable; design advisories have been considered."
             ),
             "not_misleading": (
                 "The package does not promise evidence, certainty, or drama the planned video cannot support."
@@ -170,6 +179,7 @@ def build_review_request(
             "Every package candidate requires a decision.",
             "At most one package may be ACCEPTED per concept.",
             "No clickability score or CTR prediction is calculated.",
+            "packaging_advisories are non-blocking HYPOTHESIS checks of generic title/thumbnail guidance.",
             "Accepted package research dependencies become mandatory research questions.",
         ],
     }
@@ -340,7 +350,9 @@ def apply_gate(
             for key in (
                 "package_id",
                 "title",
+                "title_keyword",
                 "thumbnail",
+                "division_of_labor",
                 "opening_frame",
                 "expected_viewer",
                 "awareness_level",
@@ -356,6 +368,7 @@ def apply_gate(
                 "format_intent",
                 "title_thumbnail_relationship",
                 "research_dependencies",
+                "packaging_advisories",
                 "packaging_gate",
             )
         }

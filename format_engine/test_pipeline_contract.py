@@ -142,10 +142,23 @@ def package_candidate() -> dict:
     return {
         "package_id": "c1-pkg001",
         "title": "Why F1 Brakes Work Backwards",
+        "title_keyword": "F1 Brakes",
         "thumbnail": {
             "message": "Race brake glowing beside road brake.",
             "visual_concept": "Split comparison showing different thermal states.",
             "text_overlay": "",
+            "focal_subject": "Glowing race brake rotor",
+            "visual_elements": ["Glowing race rotor", "Cold road rotor"],
+            "visual_cues": [],
+            "palette": {
+                "background": "near-black",
+                "subject": "orange-white glow",
+                "accent": "cold blue for the road rotor",
+            },
+        },
+        "division_of_labor": {
+            "thumbnail_carries": "Surprise at a brake glowing hot on purpose.",
+            "title_carries": "The F1 context and the why-question.",
         },
         "opening_frame": {
             "purpose": "Immediately prove the temperature difference matters.",

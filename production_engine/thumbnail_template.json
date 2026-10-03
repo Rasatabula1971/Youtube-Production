@@ -1,0 +1,130 @@
+{
+  "template_id": "channel-default",
+  "template_version": "1.0",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "max_jpeg_bytes": 2000000,
+  "background": {
+    "mode": "blurred_subject",
+    "color": "0x0E0E12",
+    "blur_radius": 24,
+    "brightness": -0.5,
+    "saturation": 0.5
+  },
+  "subject_box": {
+    "x": 540,
+    "y": 0,
+    "w": 740,
+    "h": 720
+  },
+  "text": {
+    "box": {
+      "x": 56,
+      "y": 96,
+      "w": 600,
+      "h": 528
+    },
+    "uppercase": true,
+    "max_lines": 3,
+    "max_font_size": 150,
+    "min_font_size": 72,
+    "line_spacing": 1.04,
+    "color": "white",
+    "accent_line": "last",
+    "border_width": 10,
+    "border_color": "black",
+    "shadow_offset": 6,
+    "shadow_color": "black@0.6"
+  },
+  "accent_bar": {
+    "height": 14,
+    "gap": 18
+  },
+  "logo": {
+    "path": null,
+    "x": 56,
+    "y": 36,
+    "w": 88
+  },
+  "timestamp_safe_zone": {
+    "x": 1080,
+    "y": 620,
+    "w": 200,
+    "h": 100
+  },
+  "font_candidates": [
+    "C:/Windows/Fonts/impact.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "/Library/Fonts/Impact.ttf",
+    "/System/Library/Fonts/Supplemental/Impact.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+  ],
+  "default_accent_hex": "FFD400",
+  "accent_names": {
+    "red": "E62117",
+    "orange": "FF7A00",
+    "yellow": "FFD400",
+    "gold": "FFC400",
+    "green": "2BD957",
+    "lime": "9BEF2A",
+    "cyan": "00D5FF",
+    "teal": "00C2A8",
+    "blue": "2F80FF",
+    "purple": "9B5CFF",
+    "violet": "9B5CFF",
+    "pink": "FF3D9A",
+    "magenta": "FF2BD0",
+    "white": "FFFFFF"
+  },
+  "phone_previews": [
+    {
+      "name": "phone_home_360",
+      "width": 360,
+      "height": 202
+    },
+    {
+      "name": "phone_suggested_168",
+      "width": 168,
+      "height": 94
+    }
+  ],
+  "min_phone_text_px": 12,
+  "feed_competitor_limit": 8,
+  "subject_allowed_source_tiers": [
+    "OWN_LIBRARY",
+    "FREE_COMMERCIAL_LICENSE",
+    "PUBLIC_DOMAIN",
+    "CREATIVE_COMMONS_ALLOWED",
+    "MOTION_GRAPHIC",
+    "CHEAP_AI",
+    "HIGGSFIELD_PREMIUM"
+  ],
+  "subject_source_url_required_tiers": [
+    "FREE_COMMERCIAL_LICENSE",
+    "PUBLIC_DOMAIN",
+    "CREATIVE_COMMONS_ALLOWED"
+  ],
+  "review_criteria": {
+    "matches_approved_package": "The image communicates the approved package's thumbnail message and promises nothing the video cannot deliver.",
+    "single_focal_point": "One focal subject; no more than 2-3 distinct visual elements and at most 1-2 arrows or circles.",
+    "readable_at_phone_size": "In the 360px and 168px previews the subject and any text are still readable.",
+    "stands_out_in_feed": "In the mock feed the thumbnail is distinguishable from the niche's thumbnails without misleading.",
+    "subject_image_rights_verified": "The subject image's source tier, licence and attribution are correct for thumbnail use."
+  },
+  "text_scrim": {
+    "x": 0,
+    "y": 0,
+    "w": 540,
+    "h": 720,
+    "color": "black@0.4"
+  },
+  "contrast": {
+    "max_background_luminance": 0.35,
+    "min_subject_lift": 0.12
+  }
+}

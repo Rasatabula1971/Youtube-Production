@@ -77,3 +77,20 @@ The Packaging Gate now confirms that:
 
 Packaging may sharpen the communication, but it must not broaden the idea into
 a different audience merely to chase clicks.
+
+
+## Thumbnail design checks
+
+Two further ACCEPT criteria cover the thumbnail as an image:
+
+- `thumbnail_single_focal_point` — one focal subject, no more than 2-3 distinct
+  visual elements, at most 1-2 arrows or circles;
+- `thumbnail_mobile_readable` — at phone size the focal subject, contrast and
+  any bold 3-5 word text remain readable, and the design advisories have been
+  considered.
+
+`title_thumbnail_complementary` now also confirms the division of labor: the
+thumbnail carries emotion / curiosity and the title carries context / fact.
+
+Design advisories are displayed beside each package. They inform the human
+decision; they do not block ACCEPT. See D-070.
