@@ -358,7 +358,7 @@ def _text(value: Any) -> str:
     if isinstance(value, (list, tuple)):
         return "; ".join(_text(item) for item in value if _text(item))
     if isinstance(value, dict):
-        for key in ("summary", "label", "text", "statement", "level", "status"):
+        for key in ("summary", "rationale", "label", "text", "statement", "level", "status"):
             if value.get(key):
                 return _text(value.get(key))
         return ""

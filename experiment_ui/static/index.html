@@ -44,7 +44,7 @@
           </div>
         </div>
         <div class="nav-group">
-          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production" class="nav-item">
+          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production /review" class="nav-item">
             <span class="nav-icon" aria-hidden="true">▶</span>
             <span>Productions</span>
             <span class="nav-count" id="navProductionCount" hidden></span>
@@ -52,6 +52,7 @@
           <div class="nav-sub" aria-label="Productions">
             <a href="/productions#active" data-route="/productions" data-subroute="active" class="nav-subitem">Active</a>
             <a href="/productions#review" data-route="/productions" data-subroute="review" class="nav-subitem">Review Queue</a>
+            <a href="/review" data-route="/review" class="nav-subitem">Gate reviews</a>
             <a href="/productions#completed" data-route="/productions" data-subroute="completed" class="nav-subitem">Completed</a>
             <a href="/analysis" data-route="/analysis" class="nav-subitem">Workspace</a>
           </div>
@@ -328,7 +329,10 @@
                 <h2 id="humanAnalysisReviewTitle">Review analysis finding</h2>
                 <p class="muted" id="humanAnalysisReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="humanAnalysisReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="analysis">Review one at a time →</button>
+                <span class="status-chip running" id="humanAnalysisReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="concept-review-layout">
@@ -353,7 +357,10 @@
                 <h2 id="conceptReviewTitle">Review concept candidate</h2>
                 <p class="muted" id="conceptReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="conceptReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="concept">Review one at a time →</button>
+                <span class="status-chip running" id="conceptReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="concept-review-layout">
@@ -421,7 +428,10 @@
                 <h2 id="researchReviewTitle">Review research claim</h2>
                 <p class="muted" id="researchReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="researchReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="research">Review one at a time →</button>
+                <span class="status-chip running" id="researchReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="research-coverage" id="researchCoverage" hidden></div>
@@ -1120,6 +1130,13 @@
           <div id="radarPage" class="radar-page"></div>
         </section>
 
+        <section class="app-view" data-view="gate-review" id="viewGateReview" hidden>
+          <div class="gate-switcher" id="gateReviewSwitcher"></div>
+          <div class="review-workspace" id="gateReview-analysis"></div>
+          <div class="review-workspace" id="gateReview-concept" hidden></div>
+          <div class="review-workspace" id="gateReview-research" hidden></div>
+        </section>
+
         <section class="app-view" data-view="production" id="viewProduction" hidden>
           <div id="productionWorkspace" class="production-workspace"></div>
         </section>
@@ -1224,6 +1241,7 @@
   <script src="/js/opportunity-review.js"></script>
   <script src="/js/radar.js"></script>
   <script src="/js/production-workspace.js"></script>
+  <script src="/js/gate-reviews.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

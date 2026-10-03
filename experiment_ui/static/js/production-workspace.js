@@ -46,7 +46,14 @@
   function currentStep(production) {
     const status = production.status;
     let action = "";
-    if (status === "HUMAN_REVIEW" || status === "BLOCKED") {
+    if (status === "HUMAN_REVIEW" && production.stage === "RESEARCH") {
+      // Research claims have moved to the shared review workspace (D-118).
+      const claims = (((yp().status() || {}).research_gate || {}).claims || []).filter(function (claim) {
+        return claim.concept_id === production.concept_id && String(claim.decision || "PENDING").toUpperCase() === "PENDING";
+      });
+      const target = "research" + (claims.length ? "/" + encodeURIComponent(claims[0].concept_id + "::" + claims[0].claim_id) : "");
+      action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="' + esc(target) + '">Continue review →</button>';
+    } else if (status === "HUMAN_REVIEW" || status === "BLOCKED") {
       action = '<button type="button" class="primary-cta" data-route="/analysis">' +
         (status === "BLOCKED" ? "Open in workspace →" : "Continue review →") + "</button>";
     } else if (status === "READY") {
