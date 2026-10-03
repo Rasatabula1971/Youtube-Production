@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -772,6 +774,372 @@ def _apply_manual_edit_unlocked(
     }
 
 
+def _version_id_number(version_id: str) -> int:
+    value = str(version_id or "").strip()
+    if not re.fullmatch(r"revision_\d{4}", value):
+        raise ValueError("version_id must match revision_NNNN")
+    return int(value.split("_", 1)[1])
+
+
+def _saved_version_path(
+    concept_id: str,
+    fmt: str,
+    version_id: str,
+    *,
+    versions_dir: Path,
+) -> Path:
+    _version_id_number(version_id)
+    return (
+        versions_dir
+        / _branch_key(concept_id, fmt)
+        / f"{version_id}.script_draft.json"
+    )
+
+
+def list_saved_versions(
+    current_draft: dict[str, Any],
+    *,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+) -> list[dict[str, Any]]:
+    """List branch-owned saved versions without exposing filesystem paths."""
+    concept_id = str(current_draft.get("concept_id") or "").strip()
+    fmt = str(current_draft.get("format") or "").strip()
+    if not concept_id or not fmt:
+        raise ValueError("Script draft identity is incomplete")
+
+    current_provenance = current_draft.get("draft_provenance")
+    current_request_hash = (
+        str(current_provenance.get("request_sha256") or "")
+        if isinstance(current_provenance, dict)
+        else ""
+    )
+    current_request_source = (
+        str(Path(str(current_provenance.get("request_source") or "")).resolve())
+        if isinstance(current_provenance, dict)
+        and str(current_provenance.get("request_source") or "").strip()
+        else ""
+    )
+
+    branch_dir = versions_dir / _branch_key(concept_id, fmt)
+    if not branch_dir.exists():
+        return []
+
+    versions: list[dict[str, Any]] = []
+    for path in sorted(
+        branch_dir.glob("revision_????.script_draft.json"),
+        reverse=True,
+    ):
+        version_id = path.name.removesuffix(".script_draft.json")
+        try:
+            revision = _version_id_number(version_id)
+            saved = load_json(path)
+        except (ValueError, OSError, json.JSONDecodeError):
+            continue
+
+        saved_provenance = saved.get("draft_provenance")
+        saved_request_hash = (
+            str(saved_provenance.get("request_sha256") or "")
+            if isinstance(saved_provenance, dict)
+            else ""
+        )
+        saved_request_source = (
+            str(Path(str(saved_provenance.get("request_source") or "")).resolve())
+            if isinstance(saved_provenance, dict)
+            and str(saved_provenance.get("request_source") or "").strip()
+            else ""
+        )
+        compatible = bool(
+            str(saved.get("concept_id") or "") == concept_id
+            and str(saved.get("format") or "") == fmt
+            and current_request_hash
+            and saved_request_hash == current_request_hash
+            and current_request_source
+            and saved_request_source == current_request_source
+        )
+        human_revision = saved.get("human_revision")
+        edit_type = (
+            str(human_revision.get("edit_type") or "")
+            if isinstance(human_revision, dict)
+            else ""
+        )
+        versions.append(
+            {
+                "version_id": version_id,
+                "revision": revision,
+                "sha256": sha256_file(path),
+                "compatible": compatible,
+                "edit_type": edit_type or "MODEL_DRAFT",
+                "opening_hook": saved.get("opening_hook"),
+                "closing": saved.get("closing"),
+            }
+        )
+    return versions
+
+
+def _restore_transaction_paths(
+    *,
+    concept_id: str,
+    fmt: str,
+    state_version: int,
+    version_id: str,
+    transactions_dir: Path,
+) -> tuple[Path, Path]:
+    stem = (
+        f"{_branch_key(concept_id, fmt)}."
+        f"v{state_version}.{safe_slug(version_id)}"
+    )
+    transaction = transactions_dir / f"{stem}.restore_version_transaction.json"
+    backups = transactions_dir / "backups" / f"{stem}.restore_version"
+    return transaction, backups
+
+
+def _reset_state_for_restored_draft(
+    old_state: dict[str, Any],
+    restored_draft: dict[str, Any],
+    draft_path: Path,
+    *,
+    reviewer: str,
+    version_id: str,
+) -> dict[str, Any]:
+    validation = validate_state(old_state)
+    if not validation["valid"]:
+        raise ValueError("Invalid section state: " + "; ".join(validation["errors"]))
+
+    now = _utc_now()
+    history = list(old_state.get("history", []))
+    new_version = int(old_state.get("state_version") or 0) + 1
+    history.append(
+        {
+            "state_version": new_version,
+            "reviewed_at": now,
+            "reviewer": reviewer,
+            "action": "RESTORE_VERSION",
+            "version_id": version_id,
+            "decisions_reset": True,
+        }
+    )
+    return {
+        "artifact": "script_section_state",
+        "schema_version": 1,
+        "status": "READY_FOR_SECTION_REVIEW",
+        "concept_id": restored_draft.get("concept_id"),
+        "format": restored_draft.get("format"),
+        "source_draft": str(draft_path.resolve()),
+        "source_draft_sha256": sha256_file(draft_path),
+        "state_version": new_version,
+        "created_at": old_state.get("created_at") or now,
+        "updated_at": now,
+        "targets": build_targets(restored_draft),
+        "history": history,
+    }
+
+
+def _restore_saved_version_unlocked(
+    draft_path: Path,
+    state_path: Path,
+    *,
+    version_id: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+) -> dict[str, Any]:
+    """Restore one compatible saved branch as a new monotonic revision."""
+    draft_path = draft_path.resolve()
+    state_path = state_path.resolve()
+    if not draft_path.is_file():
+        raise FileNotFoundError(draft_path)
+    if not state_path.is_file():
+        raise FileNotFoundError(state_path)
+
+    reviewer_value = str(reviewer or "").strip()
+    if not reviewer_value:
+        raise ValueError("reviewer is required")
+    version_value = str(version_id or "").strip()
+    _version_id_number(version_value)
+
+    initial_draft = load_json(draft_path)
+    concept_id = str(initial_draft.get("concept_id") or "").strip()
+    fmt = str(initial_draft.get("format") or "").strip()
+    if not concept_id or not fmt:
+        raise ValueError("Script draft identity is incomplete")
+
+    recover_incomplete_transactions(
+        concept_id,
+        fmt,
+        transactions_dir=transactions_dir,
+    )
+
+    current_draft = load_json(draft_path)
+    old_state = load_json(state_path)
+    assert_state_matches_draft(old_state, draft_path)
+
+    script_request_path, script_request = _bound_script_request_from_draft(
+        current_draft
+    )
+    saved_path = _saved_version_path(
+        concept_id,
+        fmt,
+        version_value,
+        versions_dir=versions_dir,
+    )
+    if not saved_path.is_file():
+        raise ValueError("Saved script version not found")
+    saved_draft = load_json(saved_path)
+
+    if str(saved_draft.get("concept_id") or "") != concept_id:
+        raise ValueError("Saved version concept_id mismatch")
+    if str(saved_draft.get("format") or "") != fmt:
+        raise ValueError("Saved version format mismatch")
+
+    saved_provenance = saved_draft.get("draft_provenance")
+    current_provenance = current_draft.get("draft_provenance")
+    if not isinstance(saved_provenance, dict) or not isinstance(
+        current_provenance, dict
+    ):
+        raise ValueError("Saved/current draft provenance is missing")
+    if str(saved_provenance.get("request_sha256") or "") != str(
+        current_provenance.get("request_sha256") or ""
+    ):
+        raise ValueError("Saved version belongs to a different script request")
+    saved_request_source = Path(
+        str(saved_provenance.get("request_source") or "")
+    ).resolve()
+    if saved_request_source != script_request_path:
+        raise ValueError("Saved version belongs to a different script request")
+
+    validation = _validate_revised_script(
+        saved_draft,
+        script_request,
+        operation_label="Saved version",
+    )
+
+    current_targets = _target_map(build_targets(current_draft))
+    saved_targets = _target_map(build_targets(saved_draft))
+    if set(current_targets) == set(saved_targets) and all(
+        str(current_targets[target_id].get("target_sha256") or "")
+        == str(saved_targets[target_id].get("target_sha256") or "")
+        for target_id in current_targets
+    ):
+        raise ValueError("Selected saved version matches the current script")
+
+    prior_revision = (
+        int(current_draft.get("human_revision", {}).get("revision", 0))
+        if isinstance(current_draft.get("human_revision"), dict)
+        else 0
+    )
+    new_revision = prior_revision + 1
+
+    transaction_path, backup_dir = _restore_transaction_paths(
+        concept_id=concept_id,
+        fmt=fmt,
+        state_version=int(old_state.get("state_version") or 0),
+        version_id=version_value,
+        transactions_dir=transactions_dir,
+    )
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_draft = backup_dir / "draft.json"
+    backup_state = backup_dir / "state.json"
+    atomic_write_json(backup_draft, current_draft)
+    atomic_write_json(backup_state, old_state)
+
+    transaction: dict[str, Any] = {
+        "artifact": "script_version_restore_transaction",
+        "status": "PREPARED",
+        "concept_id": concept_id,
+        "format": fmt,
+        "version_id": version_value,
+        "reviewer": reviewer_value,
+        "prepared_at": _utc_now(),
+        "backups": {
+            "draft": str(backup_draft.resolve()),
+            "state": str(backup_state.resolve()),
+        },
+        "destinations": {
+            "draft": str(draft_path),
+            "state": str(state_path),
+        },
+    }
+    transaction_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(transaction_path, transaction)
+
+    try:
+        transaction["status"] = "IN_PROGRESS"
+        transaction["started_at"] = _utc_now()
+        atomic_write_json(transaction_path, transaction)
+
+        pre_restore_version = _save_previous_version(
+            current_draft,
+            draft_path,
+            concept_id=concept_id,
+            fmt=fmt,
+            revision=new_revision,
+            versions_dir=versions_dir,
+        )
+
+        parent_hash = sha256_file(draft_path)
+        restored_draft = copy.deepcopy(saved_draft)
+        restored_draft["draft_provenance"] = copy.deepcopy(
+            current_draft.get("draft_provenance", {})
+        )
+        restored_draft["validation"] = validation
+        restored_draft["human_revision"] = {
+            "revision": new_revision,
+            "parent_draft_sha256": parent_hash,
+            "edit_type": "RESTORE_VERSION",
+            "restored_version_id": version_value,
+            "restored_version_sha256": sha256_file(saved_path),
+            "restored_by": reviewer_value,
+            "restored_at": _utc_now(),
+            "pre_restore_version": str(pre_restore_version.resolve()),
+            "script_request": str(script_request_path),
+            "script_request_sha256": sha256_file(script_request_path),
+        }
+        atomic_write_json(draft_path, restored_draft)
+
+        reset_state = _reset_state_for_restored_draft(
+            old_state,
+            restored_draft,
+            draft_path,
+            reviewer=reviewer_value,
+            version_id=version_value,
+        )
+        atomic_write_json(state_path, reset_state)
+
+        _invalidate_and_refresh_script_gate(
+            restored_draft,
+            draft_path,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
+
+        transaction["status"] = "COMMITTED"
+        transaction["committed_at"] = _utc_now()
+        transaction["resulting_draft_sha256"] = sha256_file(draft_path)
+        transaction["resulting_state_sha256"] = sha256_file(state_path)
+        transaction["new_revision"] = new_revision
+        atomic_write_json(transaction_path, transaction)
+
+    except Exception:
+        recover_prepared_transaction(transaction_path)
+        raise
+
+    return {
+        "status": "VERSION_RESTORED",
+        "concept_id": concept_id,
+        "format": fmt,
+        "version_id": version_value,
+        "revision": new_revision,
+        "script_draft": str(draft_path),
+        "section_state": str(state_path),
+        "pre_restore_version": str(pre_restore_version),
+        "transaction": str(transaction_path),
+    }
+
+
 def _apply_selection_unlocked(
     alternatives_path: Path,
     *,
@@ -1246,3 +1614,30 @@ def apply_selection(
             rework_responses_dir=rework_responses_dir,
         )
 
+
+
+def restore_saved_version(
+    draft_path: Path,
+    state_path: Path,
+    *,
+    version_id: str,
+    reviewer: str,
+    versions_dir: Path = SCRIPT_VERSIONS_DIR,
+    transactions_dir: Path = SELECTION_TRANSACTIONS_DIR,
+    review_requests_dir: Path = SCRIPT_REVIEW_REQUESTS_DIR,
+    review_responses_dir: Path = SCRIPT_REVIEW_RESPONSES_DIR,
+    approved_dir: Path = APPROVED_DIR,
+) -> dict[str, Any]:
+    """Serialize a saved-version restore with all section-state mutations."""
+    with SECTION_STATE_ACTION_LOCK:
+        return _restore_saved_version_unlocked(
+            draft_path,
+            state_path,
+            version_id=version_id,
+            reviewer=reviewer,
+            versions_dir=versions_dir,
+            transactions_dir=transactions_dir,
+            review_requests_dir=review_requests_dir,
+            review_responses_dir=review_responses_dir,
+            approved_dir=approved_dir,
+        )
