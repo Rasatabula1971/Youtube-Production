@@ -338,5 +338,117 @@
         "{core} #shorts"
       ]
     }
+  },
+  "viral_radar": {
+    "_note": "Thresholds are hypotheses (D-009 style); day-15 outcomes are recorded to calibrate them (R7).",
+    "active_window_days": 15,
+    "watchlist_handles": [
+      "@veritasium",
+      "@SteveMould",
+      "@RealEngineering",
+      "@PracticalEngineeringChannel",
+      "@BranchEducation",
+      "@smartereveryday",
+      "@MustardChannel",
+      "@Driver61",
+      "@EngineeringExplained"
+    ],
+    "max_watchlist_channels": 150,
+    "uploads_per_channel": 20,
+    "short_max_seconds": 180,
+    "shorts_baseline_after": "2025-03-31T00:00:00+00:00",
+    "baseline_min_age_days": 15,
+    "baseline_min_sample": 3,
+    "baseline_max_sample": 15,
+    "bucket_queries": [
+      "how it works engineering",
+      "science explained",
+      "why does it happen physics",
+      "hidden mechanism explained",
+      "car science explained",
+      "aviation engineering explained",
+      "animal physics",
+      "everyday physics",
+      "manufacturing how it's made",
+      "materials science explained",
+      "weather science explained",
+      "sound physics explained"
+    ],
+    "bucket_queries_per_run": 4,
+    "bucket_results_per_query": 15,
+    "bucket_search_sp": "EgIIAw%253D%253D",
+    "search_timeout_seconds": 60,
+    "throttle_backoff_hours": 6,
+    "snapshot_cadence_hours": [
+      [
+        48,
+        6
+      ],
+      [
+        168,
+        12
+      ],
+      [
+        360,
+        24
+      ]
+    ],
+    "minimum_snapshot_interval_hours": 1,
+    "track_strengths": [
+      "EARLY_SIGNAL",
+      "BREAKOUT_CANDIDATE",
+      "BREAKOUT"
+    ],
+    "strength_rules": [
+      {
+        "rule_id": "VS-BREAKOUT",
+        "strength": "BREAKOUT",
+        "min_age_hours": 24,
+        "min_lifetime_ratio": 5.0,
+        "description": "At least a day old and 5x the channel's mature-upload median views."
+      },
+      {
+        "rule_id": "VS-BREAKOUT-FAST",
+        "strength": "BREAKOUT",
+        "min_age_hours": 24,
+        "max_age_hours": 72,
+        "min_lifetime_ratio": 3.0,
+        "min_vph_ratio": 10.0,
+        "description": "1-3 days old, 3x median views and 10x the channel's median lifetime views/hour."
+      },
+      {
+        "rule_id": "VS-CANDIDATE",
+        "strength": "BREAKOUT_CANDIDATE",
+        "min_age_hours": 24,
+        "min_lifetime_ratio": 2.0,
+        "description": "At least a day old and 2x median views."
+      },
+      {
+        "rule_id": "VS-CANDIDATE-VPH",
+        "strength": "BREAKOUT_CANDIDATE",
+        "min_age_hours": 24,
+        "min_vph_ratio": 5.0,
+        "min_lifetime_ratio": 1.0,
+        "description": "At least a day old, at the median already, and 5x median lifetime views/hour."
+      },
+      {
+        "rule_id": "VS-EARLY",
+        "strength": "EARLY_SIGNAL",
+        "max_age_hours": 24,
+        "min_vph_ratio": 10.0,
+        "min_lifetime_ratio": 0.5,
+        "description": "Under a day old, half the median already and 10x median views/hour; both bases required (R4)."
+      }
+    ],
+    "trajectory": {
+      "accelerating_ratio": 1.15,
+      "decelerating_ratio": 0.6,
+      "stable_high_vph_multiple": 3.0
+    },
+    "breakout_evidence": {
+      "BREAKOUT": "STRONG",
+      "BREAKOUT_CANDIDATE": "MODERATE",
+      "EARLY_SIGNAL": "WEAK"
+    }
   }
 }

@@ -10,6 +10,7 @@ from opportunity_engine import human_topic_search as hts
 from opportunity_engine import historical_adapter
 from opportunity_engine import human_video_intake as hvi
 from opportunity_engine import inbox
+from opportunity_engine import viral_radar as vr
 
 VID = "dQw4w9WgXcQ"
 
@@ -48,6 +49,10 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             patch.object(hvi, "PACKETS_DIR", self.root / "human_video"),
             patch.object(hts, "PACKETS_DIR", self.root / "human_topic"),
             patch.object(inbox, "STATE_FILE", self.root / "inbox_state.json"),
+            patch.object(vr, "STATE_FILE", self.root / "viral" / "state.json"),
+            patch.object(vr, "SUMMARY_FILE", self.root / "viral" / "last_run.json"),
+            patch.object(vr, "SNAPSHOT_FILE", self.root / "viral" / "snapshots.jsonl"),
+            patch.object(vr, "PACKETS_DIR", self.root / "viral_packets"),
             patch.object(historical_adapter, "STUDY_SET_FILE", self.root / "no_study_set.json"),
             patch.object(server, "EXP2_PREPARED_DIR", self.prepared),
             patch.object(server, "EXP15_DIR", self.exp15),
@@ -61,6 +66,7 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
         self.assertIn("/api/opportunity/video/stop", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertNotIn("/api/opportunity/video", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertIn("/api/opportunity/topic/analyze", server.HUMAN_GATE_MUTATION_ROUTES)
+        self.assertIn("/api/opportunity/viral/analyze", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertNotIn("/api/opportunity/topic", server.HUMAN_GATE_MUTATION_ROUTES)
 
     def test_static_ui_is_a_workspace_with_an_inbox(self):
@@ -72,6 +78,7 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             "exploreTopicForm",
             "analyzeVideoForm",
             "viralEntryPanel",
+            "runViralRadar",
             "opportunityInboxTabs",
             "opportunityInbox",
             "historicalReviewPanel",
@@ -86,6 +93,9 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             "CONFIRM_REPLACE: ",
             "renderInbox(data.opportunity_inbox",
             'runAction("opportunity_research")',
+            'runAction("viral_radar")',
+            "/api/opportunity/viral/analyze",
+            "renderViralEntry(data)",
         ):
             self.assertIn(needle, script)
 
@@ -152,6 +162,29 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
         save_packet()
         with self.assertRaisesRegex(ValueError, "^CONFIRM_REPLACE: "):
             server.analyze_submitted_video(video_id=VID, confirm_replace=False, allow_excluded=False)
+
+    def test_viral_radar_action_and_analyze(self):
+        self.assertIn("viral_radar", server.ACTION_DEFS)
+        self.assertEqual(server.ACTION_DEFS["viral_radar"]["command"][1:], ["opportunity_engine/viral_radar.py", "run"])
+        self.assertNotIn("viral_radar", server.AUTO_MACHINE_ACTION_ORDER)
+        self.assertTrue(server.action_readiness()["viral_radar"]["enabled"])
+        from opportunity_engine import channel_scope
+        from opportunity_engine.test_viral_radar import MATURE, NOW, FakeApi, item
+
+        config = json.loads(json.dumps(channel_scope.load_config()))
+        config["viral_radar"]["watchlist_handles"] = ["@brakelab"]
+        vr.run(
+            api=FakeApi(MATURE + [item(10, 48, 80_000)], handles={"@brakelab": "UC" + "a" * 22}),
+            searcher=lambda u, l, t: [],
+            config=config,
+            now=NOW,
+        )
+        self.assertEqual(vr.status_snapshot()["tracked_count"], 1)
+        (self.prepared / "oldvideo001.json").write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "^CONFIRM_REPLACE: Analyzing this breakout"):
+            server.analyze_viral_candidate(video_id="video000010", confirm_replace=False, allow_excluded=False)
+        payload = server.analyze_viral_candidate(video_id="video000010", confirm_replace=True, allow_excluded=False)
+        self.assertEqual(payload["active"]["source_type"], "VIRAL_RADAR")
 
     def test_prepared_profiles_for_another_study_set_are_stale(self):
         (self.exp15 / "approved_study_set.json").write_text(

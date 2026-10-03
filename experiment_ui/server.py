@@ -38,6 +38,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/opportunity/video/analyze",
     "/api/opportunity/video/stop",
     "/api/opportunity/topic/analyze",
+    "/api/opportunity/viral/analyze",
     "/api/vision-review",
     "/api/human-analysis-review",
     "/api/concept-gate",
@@ -94,6 +95,8 @@ from opportunity_gate import (
 from opportunity_engine import active_source as opportunity_active_source
 from opportunity_engine import human_topic_search, human_video_intake
 from opportunity_engine import inbox as opportunity_inbox
+from opportunity_engine import models as opportunity_models
+from opportunity_engine import viral_radar
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -537,6 +540,20 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Runs every currently ready deterministic machine step in order and "
             "stops automatically at the next human gate, prerequisite wait, or error."
+        ),
+    },
+    "viral_radar": {
+        "label": "Run Viral Radar",
+        "stage": "OPPORTUNITY",
+        "command": [
+            sys.executable,
+            "opportunity_engine/viral_radar.py",
+            "run",
+        ],
+        "description": (
+            "Crawls the channel watchlist (about 1 API unit per channel, no "
+            "search quota), widens it with yt-dlp 'this week' searches, measures "
+            "recent uploads against each channel's normal and snapshots breakouts."
         ),
     },
     "vidiq_doctor": {
@@ -1925,6 +1942,22 @@ def analyze_submitted_video(
         return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this video")
     opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    return opportunity_inbox_snapshot()
+
+
+def analyze_viral_candidate(
+    *, video_id: str, confirm_replace: bool, allow_excluded: bool
+) -> dict[str, Any]:
+    """Make a radar breakout the active study set (Analyze why it worked)."""
+    active = opportunity_active_source.load_active()
+    if active and active.get("video_id") == video_id:
+        return opportunity_inbox_snapshot()
+    _confirm_replacing_study_set(confirm_replace, "this breakout")
+    opportunity_active_source.set_active(
+        video_id,
+        allow_excluded=allow_excluded,
+        source_type=opportunity_models.SOURCE_VIRAL_RADAR,
+    )
     return opportunity_inbox_snapshot()
 
 
@@ -5042,6 +5075,13 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "viral_radar": {
+            "enabled": True,
+            "reason": (
+                "Topicless breakout search: watchlist crawl plus this-week bucket "
+                "searches; tracks breakouts for up to 15 days."
+            ),
+        },
         "vidiq_doctor": {
             "enabled": True,
             "reason": "Safe configuration check; no paid vidIQ research call is made.",
@@ -7745,6 +7785,7 @@ def status_payload() -> dict[str, Any]:
         },
         "opportunity_gate": opportunity_gate,
         "opportunity_inbox": opportunity_inbox_snapshot(opportunity_gate),
+        "viral_radar": viral_radar.status_snapshot(),
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
@@ -8181,6 +8222,18 @@ class Handler(BaseHTTPRequestHandler):
                     note=str(body.get("note", "")),
                 )
                 self._send_json(opportunity_inbox_snapshot())
+                return
+
+            if route == "/api/opportunity/viral/analyze":
+                payload = analyze_viral_candidate(
+                    video_id=str(body.get("video_id", "")),
+                    confirm_replace=body.get("confirm_replace") is True,
+                    allow_excluded=body.get("allow_excluded") is True,
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
                 return
 
             if route == "/api/opportunity/topic/analyze":

@@ -27,6 +27,8 @@ const opportunityInbox = document.getElementById("opportunityInbox");
 const opportunityInboxTabs = document.getElementById("opportunityInboxTabs");
 const historicalEntryStatus = document.getElementById("historicalEntryStatus");
 const runHistoricalSearch = document.getElementById("runHistoricalSearch");
+const viralEntryStatus = document.getElementById("viralEntryStatus");
+const runViralRadar = document.getElementById("runViralRadar");
 const exploreTopicForm = document.getElementById("exploreTopicForm");
 const exploreTopicSubmit = document.getElementById("exploreTopicSubmit");
 const analysisActions = document.getElementById("analysisActions");
@@ -942,7 +944,7 @@ const INBOX_TABS = [
 ];
 const INBOX_EMPTY = {
   NEEDS_REVIEW: "Nothing waiting. Explore a topic, check a video or run the historical search.",
-  WATCHING: "Viral candidates you choose to keep tracking will appear here once the radar is built.",
+  WATCHING: "Radar breakouts you choose to watch appear here. Run the viral radar, then press Watch on a candidate.",
   APPROVED: "Nothing approved yet.",
   SAVED: "No saved ideas. Ideas for future channels are parked here automatically.",
   REJECTED: "Nothing rejected."
@@ -980,8 +982,9 @@ function inboxActionButtons(item) {
   return (item.actions || []).map(function (action) {
     if (action === "ANALYZE") {
       const isTopic = item.source_type === "HUMAN_TOPIC";
+      const kind = isTopic ? "topic" : item.source_type === "VIRAL_RADAR" ? "viral" : "video";
       return '<button data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
-        ' data-inbox-kind="' + (isTopic ? "topic" : "video") + '" data-inbox-excluded="' + excluded + '">' +
+        ' data-inbox-kind="' + kind + '" data-inbox-excluded="' + excluded + '">' +
         (isTopic ? "Analyze these videos" : "Analyze why it worked") + '</button>';
     }
     if (action === "STOP") {
@@ -990,10 +993,56 @@ function inboxActionButtons(item) {
     if (action === "REVIEW_BELOW") {
       return '<button class="ghost" data-inbox-review>Review below</button>';
     }
-    const labels = { SAVE: "Save", REJECT: "Reject", RESTORE: "Back to review" };
+    const labels = { SAVE: "Save", REJECT: "Reject", WATCH: "Watch", RESTORE: "Back to review" };
     return '<button class="ghost" data-inbox-action="' + action + '" data-inbox-id="' +
       escapeHtml(item.opportunity_id) + '">' + labels[action] + '</button>';
   }).join("");
+}
+
+function formatRate(value) {
+  if (value == null) return "—";
+  const number = Number(value);
+  return number >= 1000 ? (number / 1000).toFixed(1) + "K" : number.toFixed(number < 10 ? 1 : 0);
+}
+
+function viralChips(viral) {
+  if (!viral) return "";
+  const strengthTone = viral.strength === "BREAKOUT" ? "success" : viral.strength === "NORMAL" ? "neutral" : "running";
+  const trajectoryTone = viral.trajectory === "ACCELERATING" ? "success" : viral.trajectory === "DECELERATING" ? "failed" : "neutral";
+  return '<span class="status-chip ' + strengthTone + '" title="' + escapeHtml(viral.strength_rule_id || "") + '">' +
+      escapeHtml((viral.strength || "").replace(/_/g, " ")) + '</span>' +
+    '<span class="status-chip ' + trajectoryTone + '">' + escapeHtml((viral.trajectory || "").replace(/_/g, " ")) + '</span>' +
+    (viral.lifetime_ratio == null ? "" : '<span class="status-chip neutral" title="' +
+      escapeHtml("basis: " + (viral.ratio_basis || []).join(", ")) + '">' +
+      escapeHtml(viral.lifetime_ratio + "× channel") + '</span>') +
+    (viral.tracking_status && viral.tracking_status !== "TRACKING"
+      ? '<span class="status-chip neutral">' + escapeHtml(viral.tracking_status.replace(/_/g, " ")) + '</span>'
+      : "");
+}
+
+function viralDetails(viral) {
+  if (!viral) return "";
+  const rows = [
+    ["Age", viral.age_hours == null ? "—" : (viral.age_hours / 24).toFixed(1) + " days"],
+    ["Views", formatCount(viral.views)],
+    ["Channel normal (median)", formatCount(viral.baseline_median_views) + " from " + (viral.baseline_sample_size || 0) + " mature uploads"],
+    ["Channel outlier", viral.lifetime_ratio == null ? "—" : viral.lifetime_ratio + "× (lifetime vs lifetime)"],
+    ["Views/hour vs normal", viral.vph_ratio == null ? "—" : viral.vph_ratio + "× (" + formatRate(viral.lifetime_vph) + " VPH)"],
+    ["Views per follower", viral.views_per_follower == null ? "hidden or unknown" : String(viral.views_per_follower)],
+    ["Historical demand", (viral.historical_alignment || "").replace(/_/g, " ")],
+    ["Replication across channels", "assessed by theme clustering (next slice)"]
+  ];
+  const intervals = (viral.intervals || []).map(function (interval) {
+    return "<li>" + escapeHtml(String(interval.from).slice(5, 16).replace("T", " ") + " → " +
+      String(interval.to).slice(5, 16).replace("T", " ") + ": " + formatRate(interval.vph) + " VPH") + "</li>";
+  }).join("");
+  return '<dl class="viral-facts">' + rows.map(function (row) {
+      return '<dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(row[1]) + '</dd>';
+    }).join("") + '</dl>' +
+    (intervals
+      ? '<p class="muted">Snapshot velocity</p><ul class="inbox-evidence">' + intervals + '</ul>'
+      : '<p class="muted">' + (viral.trajectory_history_available ? "" : "No earlier snapshots yet: past views are never reconstructed, only measured from now on.") + '</p>') +
+    '<p class="muted">CTR, retention and viewed-vs-swiped are not publicly observable and are never estimated.</p>';
 }
 
 function inboxDetails(item) {
@@ -1014,6 +1063,7 @@ function inboxDetails(item) {
   }).join("");
   return '<details class="inbox-details"><summary>Evidence and videos</summary>' +
     (item.summary ? '<p class="muted">' + escapeHtml(item.summary) + '</p>' : "") +
+    viralDetails(item.viral) +
     (evidence ? '<ul class="inbox-evidence">' + evidence + '</ul>' : '<p class="muted">No rule-backed evidence yet; viewer need, mechanism and content gap are hypotheses until analysed.</p>') +
     (videos ? '<ol class="topic-videos">' + videos + '</ol>' : "") +
     (facts.length ? '<p class="muted">' + escapeHtml(facts.join(" · ")) + '</p>' : "") +
@@ -1048,7 +1098,7 @@ function renderInbox(inbox) {
       '<div class="inbox-item-main">' +
         '<div class="inbox-item-chips"><span class="source-chip">' + escapeHtml(item.source_label || "") + '</span>' +
           (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
-          routeChip(item) + evidence + '</div>' +
+          routeChip(item) + viralChips(item.viral) + (item.viral ? "" : evidence) + '</div>' +
         '<strong class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</strong>' +
         (item.status_reason ? '<span class="muted">' + escapeHtml(item.status_reason) + '</span>' : "") +
         inboxDetails(item) +
@@ -1073,6 +1123,27 @@ function renderHistoricalEntry(data) {
   runHistoricalSearch.title = action.reason || "";
 }
 
+function renderViralEntry(data) {
+  if (!viralEntryStatus) return;
+  const radar = data.viral_radar || {};
+  const last = radar.last_run;
+  const action = (data.actions || []).find(function (item) { return item.id === "viral_radar"; }) || {};
+  let status = "Not run yet.";
+  if (last) {
+    const counts = last.classified || {};
+    status = "Last run " + String(last.run_at || "").slice(0, 16).replace("T", " ") + " UTC: " + last.status +
+      " · " + (radar.watchlist_size || 0) + " channels watched · " + (radar.tracked_count || 0) + " tracked" +
+      ((counts.BREAKOUT || counts.BREAKOUT_CANDIDATE || counts.EARLY_SIGNAL)
+        ? " · " + (counts.BREAKOUT || 0) + " breakout, " + (counts.BREAKOUT_CANDIDATE || 0) + " candidate, " + (counts.EARLY_SIGNAL || 0) + " early"
+        : "") +
+      ((last.errors || []).length ? " · " + last.errors[0] : "");
+  }
+  if (radar.throttled_until) status += " · YouTube search backing off until " + String(radar.throttled_until).slice(0, 16).replace("T", " ");
+  viralEntryStatus.textContent = status;
+  runViralRadar.disabled = !action.enabled;
+  runViralRadar.title = action.reason || "";
+}
+
 async function submitInboxAction(opportunityId, action) {
   try {
     const payload = await api("/api/opportunity/inbox", {
@@ -1080,7 +1151,8 @@ async function submitInboxAction(opportunityId, action) {
       body: JSON.stringify({ opportunity_id: opportunityId, action: action })
     });
     renderInbox(payload);
-    showToast(action === "RESTORE" ? "Moved back to Needs review." : action === "SAVE" ? "Saved." : "Rejected.", false);
+    const messages = { RESTORE: "Moved back to Needs review.", SAVE: "Saved.", REJECT: "Rejected.", WATCH: "Watching. The radar keeps tracking it." };
+    showToast(messages[action] || "Updated.", false);
   } catch (error) {
     showToast(error.message, true);
   }
@@ -1204,6 +1276,9 @@ if (opportunityInbox) {
   runHistoricalSearch.addEventListener("click", function () {
     runAction("opportunity_research");
   });
+  runViralRadar.addEventListener("click", function () {
+    runAction("viral_radar");
+  });
   opportunityInboxTabs.addEventListener("click", function (event) {
     const tab = event.target.closest("[data-inbox-tab]");
     if (!tab) return;
@@ -1219,6 +1294,13 @@ if (opportunityInbox) {
       const excluded = Boolean(analyzeButton.dataset.inboxExcluded);
       if (analyzeButton.dataset.inboxKind === "topic") {
         analyzeExploredTopic(analyzeButton.dataset.inboxAnalyze, excluded);
+      } else if (analyzeButton.dataset.inboxKind === "viral") {
+        analyzeHumanSource(
+          "/api/opportunity/viral/analyze",
+          { video_id: analyzeButton.dataset.inboxAnalyze },
+          excluded,
+          "This breakout is now the study set. Analysis continues automatically."
+        );
       } else {
         analyzeSubmittedVideo(analyzeButton.dataset.inboxAnalyze, excluded);
       }
@@ -6425,6 +6507,7 @@ function renderAll(data) {
   renderOpportunityGate(data.opportunity_gate || {});
   renderInbox(data.opportunity_inbox || {});
   renderHistoricalEntry(data);
+  renderViralEntry(data);
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});

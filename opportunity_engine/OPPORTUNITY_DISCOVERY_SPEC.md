@@ -153,7 +153,9 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
 4. **O3** — workspace and inbox UI (built: four entry cards, `inbox.py`,
    Opportunity Inbox tabs; the evidence drawer is an inline expander until
    O14).
-5. **O6–O9** — watchlist radar, API snapshots, four-axis classifier.
+5. **O6–O9** — watchlist radar, API snapshots, four-axis classifier (built:
+   `viral_radar.py`, *Run viral radar*, VIRAL inbox cards and the Watching
+   tab; breadth stays UNASSESSED until O10).
 6. **O10**, then **O11 + O12**.
 7. **O13 + O14** — extend the scheduler; trajectory charts.
 

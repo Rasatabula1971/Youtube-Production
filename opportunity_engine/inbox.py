@@ -6,7 +6,7 @@ stores the human's inbox choices (save / reject / restore) for human-seeded
 ideas in a separate state file, outside every evidence hash.
 
 Statuses follow the spec tabs: NEEDS_REVIEW, WATCHING, APPROVED, SAVED,
-REJECTED. WATCHING is reserved for the viral radar (R11).
+REJECTED. WATCHING is for viral-radar candidates only (R11).
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from opportunity_engine import (  # noqa: E402
     human_topic_search,
     human_video_intake,
     models,
+    viral_radar,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -42,7 +43,7 @@ SAVED = "SAVED"
 REJECTED = "REJECTED"
 STATUSES = (NEEDS_REVIEW, WATCHING, APPROVED, SAVED, REJECTED)
 
-INBOX_ACTIONS = {"SAVE": SAVED, "REJECT": REJECTED, "RESTORE": None}
+INBOX_ACTIONS = {"SAVE": SAVED, "REJECT": REJECTED, "WATCH": WATCHING, "RESTORE": None}
 HISTORICAL_DECISIONS = {
     "APPROVE": APPROVED,
     "REJECT": REJECTED,
@@ -152,11 +153,14 @@ def _human_item(
 ) -> dict[str, Any]:
     item = _base_item(packet)
     source = packet.get("source_type")
-    if source == models.SOURCE_HUMAN_VIDEO:
+    is_viral = source == models.SOURCE_VIRAL_RADAR
+    if source in (models.SOURCE_HUMAN_VIDEO, models.SOURCE_VIRAL_RADAR):
         key = {"video_id": (packet.get("candidate_videos") or [{}])[0].get("video_id")}
     else:
         key = {"topic_key": (packet.get("intake") or {}).get("topic_key")}
     item.update(key)
+    if is_viral:
+        item["viral"] = _viral_summary(packet)
     if active and active.get("opportunity_id") == packet.get("opportunity_id"):
         item.update(
             status=APPROVED,
@@ -167,7 +171,14 @@ def _human_item(
         return item
     saved = state_items.get(str(packet.get("opportunity_id"))) or {}
     analyze = "ANALYZE" if item["video_count"] else None
-    if saved.get("status") in (SAVED, REJECTED):
+    watch = "WATCH" if is_viral else None
+    if saved.get("status") == WATCHING and is_viral:
+        item.update(
+            status=WATCHING,
+            status_reason=saved.get("note") or "You are watching this breakout; the radar keeps tracking it.",
+            actions=[a for a in (analyze, "SAVE", "REJECT", "RESTORE") if a],
+        )
+    elif saved.get("status") in (SAVED, REJECTED):
         item.update(
             status=saved["status"],
             status_reason=saved.get("note") or "",
@@ -180,8 +191,34 @@ def _human_item(
             actions=[a for a in (analyze, "REJECT") if a],
         )
     else:
-        item.update(actions=[a for a in (analyze, "SAVE", "REJECT") if a])
+        item.update(actions=[a for a in (analyze, watch, "SAVE", "REJECT") if a])
     return item
+
+
+def _viral_summary(packet: dict[str, Any]) -> dict[str, Any]:
+    viral = packet.get("viral_evidence") or {}
+    metrics = viral.get("metrics") or {}
+    baseline = viral.get("baseline") or {}
+    return {
+        "strength": viral.get("strength"),
+        "strength_rule_id": viral.get("strength_rule_id"),
+        "trajectory": viral.get("trajectory"),
+        "breadth": viral.get("breadth"),
+        "historical_alignment": viral.get("historical_alignment"),
+        "tracking_status": viral.get("tracking_status"),
+        "age_hours": metrics.get("age_hours"),
+        "views": metrics.get("views"),
+        "lifetime_ratio": metrics.get("lifetime_ratio"),
+        "vph_ratio": metrics.get("vph_ratio"),
+        "lifetime_vph": metrics.get("lifetime_vph"),
+        "ratio_basis": metrics.get("ratio_basis") or [],
+        "views_per_follower": metrics.get("views_per_follower"),
+        "baseline_median_views": baseline.get("median_views"),
+        "baseline_sample_size": baseline.get("sample_size"),
+        "intervals": viral.get("intervals") or [],
+        "trajectory_history_available": viral.get("trajectory_history_available"),
+        "outcome": viral.get("outcome"),
+    }
 
 
 def _historical_items(
@@ -237,7 +274,11 @@ def build_inbox(
     )
     human = [
         _human_item(packet, state_items, active)
-        for packet in (*human_video_intake.list_packets(), *human_topic_search.list_packets())
+        for packet in (
+            *human_video_intake.list_packets(),
+            *human_topic_search.list_packets(),
+            *viral_radar.list_packets(),
+        )
     ]
     # The active idea is pinned to the top; everything else is newest first.
     everything = historical + human
@@ -255,14 +296,18 @@ def build_inbox(
 
 
 def _find_human_packet(opportunity_id: str) -> dict[str, Any] | None:
-    for packet in (*human_video_intake.list_packets(), *human_topic_search.list_packets()):
+    for packet in (
+        *human_video_intake.list_packets(),
+        *human_topic_search.list_packets(),
+        *viral_radar.list_packets(),
+    ):
         if packet.get("opportunity_id") == opportunity_id:
             return packet
     return None
 
 
 def apply_action(opportunity_id: str, action: str, note: str = "") -> None:
-    """Save, reject or restore a human-seeded idea."""
+    """Save, reject, watch (radar only) or restore an idea."""
     if action not in INBOX_ACTIONS:
         raise ValueError(f"Unsupported inbox action: {action}")
     if str(opportunity_id).startswith("opp_historical__"):
@@ -270,6 +315,8 @@ def apply_action(opportunity_id: str, action: str, note: str = "") -> None:
     packet = _find_human_packet(opportunity_id)
     if packet is None:
         raise ValueError("Unknown opportunity.")
+    if action == "WATCH" and packet.get("source_type") != models.SOURCE_VIRAL_RADAR:
+        raise ValueError("Only viral-radar candidates can be watched.")
     active = active_source.load_active()
     if active and active.get("opportunity_id") == opportunity_id:
         raise ValueError("This idea is being analysed. Stop analysing it first.")
