@@ -1,0 +1,411 @@
+/* Command Center, productions list and shell health (UI Patch 1, D-115).
+   Reads only the /api/status payload that app.js already polls; app.js calls
+   window.CommandCenter.render(data) on every refresh. */
+(function () {
+  "use strict";
+
+  const STATUS_TONE = {
+    HUMAN_REVIEW: "human",
+    BLOCKED: "blocked",
+    READY: "ready",
+    COMPLETE: "complete",
+    RUNNING: "running"
+  };
+  const PRODUCTION_FILTERS = [
+    ["active", "Active"],
+    ["review", "Review Queue"],
+    ["completed", "Completed"]
+  ];
+  const PRODUCTION_EMPTY = {
+    active: "No active productions. Accept a concept at the Concept Gate and it appears here.",
+    review: "Nothing waiting on you in any production.",
+    completed: "No production has a current final render yet."
+  };
+  // The scheduled task wakes every 2 hours by default; three missed wakes
+  // means it is probably not installed or not running.
+  const SCHEDULER_STALE_HOURS = 6;
+  const MAX_VIRAL_CARDS = 3;
+
+  let productionFilter = "active";
+  let latest = null;
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(value) {
+    return String(value == null ? "" : value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function plural(count, word) {
+    return count + " " + word + (count === 1 ? "" : "s");
+  }
+
+  function hoursSince(iso, now) {
+    const time = Date.parse(iso || "");
+    if (!Number.isFinite(time)) return null;
+    return (now - time) / 3600000;
+  }
+
+  function relativeTime(iso, now) {
+    const time = Date.parse(iso || "");
+    if (!Number.isFinite(time)) return "unknown";
+    const minutes = Math.round((time - now) / 60000);
+    const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+    if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
+    const hours = Math.round(minutes / 60);
+    if (Math.abs(hours) < 48) return format.format(hours, "hour");
+    return format.format(Math.round(hours / 24), "day");
+  }
+
+  function badge(status, label) {
+    const tone = STATUS_TONE[status] || "ready";
+    return '<span class="status-badge status-' + tone + '">' + esc(label) + "</span>";
+  }
+
+  function stageTrack(production) {
+    const stages = production.stages || [];
+    const index = stages.findIndex(function (stage) { return stage.state === "current"; });
+    const label = production.stage === "DONE"
+      ? "All stages done"
+      : "Stage " + (index + 1) + " of " + stages.length + ": " + production.stage_label;
+    return '<ol class="stage-track" role="img" aria-label="' + esc(label) + '">' +
+      stages.map(function (stage) {
+        return '<li class="stage-step ' + esc(stage.state) + '" title="' +
+          esc(stage.label) + '"></li>';
+      }).join("") + "</ol>";
+  }
+
+  function productionRow(production) {
+    return '<article class="production-row">' +
+      '<div class="production-main">' +
+        '<h3 class="production-title">' + esc(production.title) + "</h3>" +
+        '<p class="production-detail">' + esc(production.detail) + "</p>" +
+      "</div>" +
+      '<div class="production-stage">' +
+        '<span class="production-stage-label">' + esc(production.stage_label) + "</span>" +
+        stageTrack(production) +
+      "</div>" +
+      '<div class="production-status">' + badge(production.status, production.status_label) + "</div>" +
+      '<button type="button" class="ghost compact" data-route="/analysis" aria-label="Open ' +
+        esc(production.title) + ' in the workspace">Open →</button>' +
+    "</article>";
+  }
+
+  function inboxItems(data) {
+    const inbox = data.opportunity_inbox || {};
+    return (inbox.items || []).filter(function (item) {
+      return item && item.status === "NEEDS_REVIEW";
+    });
+  }
+
+  function viralDetail(item) {
+    const viral = item.viral || {};
+    const parts = [];
+    if (viral.breadth) parts.push(String(viral.breadth).toLowerCase().replaceAll("_", " "));
+    const ratio = Number(viral.lifetime_ratio);
+    if (Number.isFinite(ratio) && ratio > 0) {
+      parts.push(ratio.toFixed(1) + "× channel normal");
+    }
+    if (viral.strength) parts.push(String(viral.strength).toLowerCase().replaceAll("_", " "));
+    return parts.join(" · ") || "New breakout from the radar";
+  }
+
+  function attentionItems(data) {
+    const productions = ((data.productions || {}).productions || []);
+    const cards = [];
+    productions.forEach(function (production) {
+      if (production.status === "HUMAN_REVIEW") {
+        cards.push({
+          tone: "human",
+          kicker: "Human review · " + production.stage_label,
+          title: production.title,
+          detail: production.detail,
+          action: "Continue review",
+          route: "/analysis"
+        });
+      } else if (production.status === "BLOCKED") {
+        cards.push({
+          tone: "blocked",
+          kicker: "Blocked · " + production.stage_label,
+          title: production.title,
+          detail: production.detail,
+          action: "Open production",
+          route: "/analysis"
+        });
+      }
+    });
+
+    const waiting = inboxItems(data);
+    const viral = waiting.filter(function (item) { return item.source_type === "VIRAL_RADAR"; });
+    viral.slice(0, MAX_VIRAL_CARDS).forEach(function (item) {
+      cards.push({
+        tone: "running",
+        kicker: "Viral breakout",
+        title: item.title || "Untitled breakout",
+        detail: viralDetail(item),
+        action: "View opportunity",
+        route: "/opportunity",
+        subroute: "review"
+      });
+    });
+    const otherCount = waiting.length - Math.min(viral.length, MAX_VIRAL_CARDS);
+    if (otherCount > 0) {
+      cards.push({
+        tone: "human",
+        kicker: "Opportunities",
+        title: plural(otherCount, "idea") + " to review",
+        detail: viral.length > MAX_VIRAL_CARDS
+          ? "Includes " + plural(viral.length - MAX_VIRAL_CARDS, "more breakout") + "."
+          : "Approve, watch, save or reject each one in the inbox.",
+        action: "Open inbox",
+        route: "/opportunity",
+        subroute: "review"
+      });
+    }
+
+    const job = data.job || {};
+    if (job.status === "FAILED") {
+      cards.push({
+        tone: "blocked",
+        kicker: "Last job failed",
+        title: job.label || job.action_id || "Job",
+        detail: "Exit code " + (job.return_code == null ? "unknown" : job.return_code) +
+          ". Open the log to see why.",
+        action: "Open log",
+        drawer: true
+      });
+    }
+    const productionCount = productions.filter(function (production) {
+      return production.status === "HUMAN_REVIEW" || production.status === "BLOCKED";
+    }).length;
+    const total = productionCount + waiting.length + (job.status === "FAILED" ? 1 : 0);
+    return { cards: cards, total: total };
+  }
+
+  function attentionCard(card) {
+    const button = card.drawer
+      ? '<button type="button" class="ghost compact" data-job-drawer>' + esc(card.action) + "</button>"
+      : '<button type="button" class="ghost compact" data-route="' + esc(card.route) + '"' +
+        (card.subroute ? ' data-subroute="' + esc(card.subroute) + '"' : "") + ">" +
+        esc(card.action) + " →</button>";
+    return '<article class="attention-card tone-' + esc(card.tone) + '">' +
+      '<p class="attention-kicker">' + esc(card.kicker) + "</p>" +
+      '<h3 class="attention-title">' + esc(card.title) + "</h3>" +
+      '<p class="attention-detail">' + esc(card.detail) + "</p>" +
+      button +
+    "</article>";
+  }
+
+  function schedulerState(data, now) {
+    const schedule = (data.viral_radar || {}).schedule;
+    if (!schedule || !schedule.checked_at) {
+      return {
+        tone: "ready",
+        short: "Scheduler: not run yet",
+        text: "The radar scheduler has not run yet. Install automation from Tools to run it every 2 hours.",
+        problem: null
+      };
+    }
+    const age = hoursSince(schedule.checked_at, now);
+    const result = schedule.result || {};
+    if (age !== null && age > SCHEDULER_STALE_HOURS) {
+      return {
+        tone: "blocked",
+        short: "Scheduler: stale",
+        text: "Last scheduler tick " + relativeTime(schedule.checked_at, now) +
+          ". The scheduled task may have stopped.",
+        problem: "Radar scheduler has not run for " + Math.round(age) + " hours"
+      };
+    }
+    if (result.status && result.status !== "COMPLETE" && result.status !== "PARTIAL") {
+      return {
+        tone: "blocked",
+        short: "Scheduler: last run failed",
+        text: "Last radar run " + relativeTime(schedule.checked_at, now) + " ended " +
+          String(result.status).toLowerCase() + ".",
+        problem: "Last radar run ended " + String(result.status).toLowerCase()
+      };
+    }
+    return {
+      tone: "complete",
+      short: "Scheduler OK",
+      text: "Last tick " + relativeTime(schedule.checked_at, now) + " (" +
+        String(schedule.action || "").toLowerCase().replaceAll("_", " ") + ").",
+      problem: null
+    };
+  }
+
+  function runningItems(data, scheduler, now) {
+    const items = [];
+    const job = data.job || {};
+    if (job.status === "RUNNING" || job.status === "STOPPING") {
+      items.push({
+        tone: "running",
+        title: "Running now: " + (job.label || job.action_id),
+        detail: "Started " + relativeTime(job.started_at, now) + ".",
+        drawer: true
+      });
+    }
+    items.push({ tone: scheduler.tone, title: "Viral radar scheduler", detail: scheduler.text });
+    const schedule = (data.viral_radar || {}).schedule || {};
+    const radar = data.viral_radar || {};
+    if (schedule.next_snapshot_due || schedule.next_discovery_due) {
+      const parts = [];
+      if (schedule.next_snapshot_due) parts.push("snapshots " + relativeTime(schedule.next_snapshot_due, now));
+      if (schedule.next_discovery_due) parts.push("discovery " + relativeTime(schedule.next_discovery_due, now));
+      items.push({
+        tone: "ready",
+        title: "Next radar work",
+        detail: parts.join(", ") + "; " + plural(Number(radar.tracked_count || 0), "video") + " tracked."
+      });
+    }
+    const workflow = data.workflow || {};
+    if (workflow.next_title) {
+      items.push({
+        tone: workflow.state === "RUNNING_AUTOMATIC" ? "running" : "ready",
+        title: "Next pipeline step",
+        detail: workflow.next_title +
+          (workflow.next_due_at ? " (due " + relativeTime(workflow.next_due_at, now) + ")" : "")
+      });
+    }
+    return items;
+  }
+
+  function renderRunning(items) {
+    const list = $("runningAutomatically");
+    if (!list) return;
+    list.innerHTML = items.map(function (item) {
+      return '<li class="running-item">' +
+        '<span class="status-dot tone-' + esc(item.tone) + '" aria-hidden="true"></span>' +
+        "<div><strong>" + esc(item.title) + "</strong>" +
+        '<p class="muted">' + esc(item.detail) + "</p></div>" +
+        (item.drawer ? '<button type="button" class="ghost compact" data-job-drawer>Log</button>' : "") +
+      "</li>";
+    }).join("");
+  }
+
+  function setCount(id, count) {
+    const node = $(id);
+    if (!node) return;
+    node.hidden = !count;
+    node.textContent = count ? String(count) : "";
+  }
+
+  function renderHealth(data, scheduler) {
+    const problems = [];
+    const job = data.job || {};
+    if (job.status === "FAILED") problems.push("Last job failed: " + (job.label || job.action_id));
+    if (scheduler.problem) problems.push(scheduler.problem);
+    const pill = $("healthPill");
+    const dot = $("healthDot");
+    const label = $("healthLabel");
+    if (!pill || !dot || !label) return;
+    const running = job.status === "RUNNING" || job.status === "STOPPING";
+    const tone = problems.length ? "blocked" : running ? "running" : "complete";
+    pill.className = "health-pill tone-" + tone;
+    dot.className = "status-dot tone-" + tone;
+    label.textContent = problems.length
+      ? plural(problems.length, "issue") + " need attention"
+      : running ? "Working" : "System healthy";
+    pill.title = problems.length ? problems.join("\n") : "No failed jobs; scheduler on time.";
+
+    const schedulerDot = $("schedulerStatusDot");
+    const schedulerText = $("schedulerStatus");
+    if (schedulerDot) schedulerDot.className = "status-dot tone-" + scheduler.tone;
+    if (schedulerText) {
+      schedulerText.textContent = scheduler.short;
+      schedulerText.title = scheduler.text;
+    }
+  }
+
+  function filterProductions(productions, filter) {
+    return productions.filter(function (production) {
+      if (filter === "review") {
+        return production.status === "HUMAN_REVIEW" || production.status === "BLOCKED";
+      }
+      if (filter === "completed") return production.status === "COMPLETE";
+      return production.status !== "COMPLETE";
+    });
+  }
+
+  function renderProductionsView() {
+    const tabs = $("productionTabs");
+    const list = $("productionsList");
+    if (!tabs || !list || !latest) return;
+    const productions = ((latest.productions || {}).productions || []);
+    tabs.innerHTML = PRODUCTION_FILTERS.map(function (tab) {
+      const count = filterProductions(productions, tab[0]).length;
+      const active = tab[0] === productionFilter;
+      return '<button type="button" role="tab" class="inbox-tab' + (active ? " active" : "") +
+        '" aria-selected="' + active + '" data-production-filter="' + tab[0] + '">' +
+        esc(tab[1]) + ' <span class="tab-count">' + count + "</span></button>";
+    }).join("");
+    const shown = filterProductions(productions, productionFilter);
+    list.innerHTML = shown.length
+      ? shown.map(productionRow).join("")
+      : '<p class="empty-state">' + esc(PRODUCTION_EMPTY[productionFilter]) + "</p>";
+  }
+
+  function render(data) {
+    latest = data;
+    const now = Date.now();
+    const attention = attentionItems(data);
+    const queue = $("attentionQueue");
+    if (queue) {
+      queue.innerHTML = attention.cards.length
+        ? attention.cards.map(attentionCard).join("")
+        : '<p class="empty-state">Nothing is waiting on you. New breakouts and review steps will appear here.</p>';
+    }
+    const count = $("attentionCount");
+    if (count) count.textContent = attention.total ? "· " + attention.total + " remaining" : "· all clear";
+
+    const productions = data.productions || {};
+    const active = $("activeProductions");
+    if (active) {
+      const rows = filterProductions(productions.productions || [], "active");
+      active.innerHTML = rows.length
+        ? rows.map(productionRow).join("")
+        : '<p class="empty-state">' + esc(PRODUCTION_EMPTY.active) + "</p>";
+    }
+
+    const scheduler = schedulerState(data, now);
+    renderRunning(runningItems(data, scheduler, now));
+    renderHealth(data, scheduler);
+    setCount("navAttentionCount", attention.total);
+    setCount("navOpportunityCount", inboxItems(data).length);
+    setCount("navProductionCount", Number(productions.active_count || 0));
+    renderProductionsView();
+  }
+
+  function setProductionFilter(filter) {
+    productionFilter = PRODUCTION_FILTERS.some(function (tab) { return tab[0] === filter; })
+      ? filter
+      : "active";
+    renderProductionsView();
+  }
+
+  document.addEventListener("click", function (event) {
+    const tab = event.target.closest("[data-production-filter]");
+    if (!tab) return;
+    setProductionFilter(tab.dataset.productionFilter);
+    history.replaceState({}, "", "/productions#" + productionFilter);
+    document.querySelectorAll(".nav-subitem").forEach(function (item) {
+      const on = item.dataset.route === "/productions" && item.dataset.subroute === productionFilter;
+      item.classList.toggle("active", on);
+    });
+  });
+
+  if (window.location.pathname === "/productions") {
+    setProductionFilter(window.location.hash.replace(/^#/, ""));
+  }
+
+  window.CommandCenter = {
+    render: render,
+    setProductionFilter: setProductionFilter,
+    _test: { attentionItems: attentionItems, schedulerState: schedulerState, filterProductions: filterProductions }
+  };
+})();

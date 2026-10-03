@@ -29,8 +29,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from pipeline_integrity import atomic_write_json
 
+import productions as productions_model
+
 STATIC_DIR = HERE / "static"
-APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
+APP_ROUTES = {"/", "/opportunity", "/analysis", "/productions", "/tools"}
 IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
 HUMAN_GATE_MUTATION_ROUTES = {
@@ -3927,6 +3929,44 @@ def current_action_id() -> str | None:
     return str(value) if value else None
 
 
+def final_render_current_keys() -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    if not PRODUCTION_FINAL_RENDER_RESULT_DIR.exists():
+        return keys
+    for path in PRODUCTION_FINAL_RENDER_RESULT_DIR.glob("*.final_render_result.json"):
+        payload = final_render_result_is_current(path)
+        if payload is not None:
+            keys.add(
+                (str(payload.get("concept_id") or ""), str(payload.get("format") or ""))
+            )
+    return keys
+
+
+def productions_snapshot(
+    *,
+    transformation: dict[str, Any] | None = None,
+    research: dict[str, Any] | None = None,
+    story: dict[str, Any] | None = None,
+    title_direction: dict[str, Any] | None = None,
+    fmt: dict[str, Any] | None = None,
+    voice: dict[str, Any] | None = None,
+    narration: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Per-concept productions derived from the artifacts on disk (D-115)."""
+    if transformation is None:
+        transformation = transformation_artifact_state()
+    return productions_model.derive(
+        concept_gate=transformation.get("concept_gate", {}),
+        research=research if research is not None else research_artifact_state(),
+        story=story if story is not None else story_script_artifact_state(),
+        title_direction=title_direction if title_direction is not None else title_direction_artifact_state(),
+        fmt=fmt if fmt is not None else format_artifact_state(),
+        voice=voice if voice is not None else voice_performance_artifact_state(),
+        narration=narration if narration is not None else narration_artifact_state(),
+        final_render_keys=final_render_current_keys(),
+    )
+
+
 def stage_statuses() -> list[dict[str, Any]]:
     exp13_manifest = EXP13_DIR / "cohort_manifest.json"
     exp13_summary = EXP13_DIR / "summary.json"
@@ -7794,6 +7834,7 @@ def status_payload() -> dict[str, Any]:
     preview_gate = narration_preview_gate_snapshot()
     narration = narration_artifact_state()
     production_visual = production_visual_artifact_state()
+    title_direction = title_direction_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -7850,7 +7891,16 @@ def status_payload() -> dict[str, Any]:
         "research_gate": research["research_gate"],
         "story_script": story,
         "script_gate": story["script_gate"],
-        "title_direction": title_direction_artifact_state(),
+        "title_direction": title_direction,
+        "productions": productions_snapshot(
+            transformation=transformation,
+            research=research,
+            story=story,
+            title_direction=title_direction,
+            fmt=fmt,
+            voice=voice,
+            narration=narration,
+        ),
         "packaging_brief": packaging_brief_snapshot(),
         "psychological_angle_requests": psychological_angle_request_snapshot(),
         "psychological_angles": psychological_angle_snapshot(),
@@ -7916,6 +7966,40 @@ def status_payload() -> dict[str, Any]:
     }
 
 
+STATIC_ASSET_DIRS = {"css": ".css", "js": ".js"}
+STATIC_ASSET_TYPES = {
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+}
+
+
+def static_asset_path(route: str) -> Path | None:
+    """Resolve /css/<name>.css or /js/<name>.js inside STATIC_DIR, else None.
+
+    Only one flat directory level, an allowlisted extension per directory, and
+    a resolved path that stays inside that directory (no traversal, no
+    symlink escape, no dotfiles).
+    """
+    parts = route.strip("/").split("/")
+    if len(parts) != 2:
+        return None
+    folder, name = parts
+    suffix = STATIC_ASSET_DIRS.get(folder)
+    if (
+        suffix is None
+        or not name
+        or name.startswith(".")
+        or "\\" in name
+        or not name.endswith(suffix)
+    ):
+        return None
+    base = (STATIC_DIR / folder).resolve()
+    candidate = (base / name).resolve()
+    if candidate.parent != base or not candidate.is_file():
+        return None
+    return candidate
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ExperimentControlUI/1.0"
 
@@ -7961,6 +8045,13 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/styles.css":
             self._send_static(STATIC_DIR / "styles.css", "text/css; charset=utf-8")
             return
+        if route.startswith(("/css/", "/js/")):
+            asset = static_asset_path(route)
+            if asset is None:
+                self.send_error(404)
+                return
+            self._send_static(asset, STATIC_ASSET_TYPES[asset.suffix])
+            return
         if route == "/api/status":
             self._send_json(status_payload())
             return
@@ -7974,6 +8065,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/opportunity-gate":
             self._send_json(opportunity_gate_snapshot())
+            return
+        if route == "/api/productions":
+            self._send_json(productions_snapshot())
             return
         if route == "/api/opportunity/inbox":
             self._send_json(opportunity_inbox_snapshot())
