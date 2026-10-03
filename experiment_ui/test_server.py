@@ -75,6 +75,15 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('route == "/api/script-section-review"', source)
         self.assertIn("apply_script_section_review_action", source)
 
+    def test_script_section_review_route_forwards_restore_version_id(self):
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        post_start = source.index("def do_POST")
+        start = source.index('if route == "/api/script-section-review":', post_start)
+        end = source.index('if route == "/api/format-gate":', start)
+        block = source[start:end]
+        self.assertIn('version_id=(', block)
+        self.assertIn('body["version_id"]', block)
+
 
     def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")

@@ -465,6 +465,78 @@ class ScriptSectionServiceTests(unittest.TestCase):
             )
 
 
+    def test_restore_version_routes_resolved_paths_and_clears_stale_rework(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dirs = self.dirs(root)
+            draft_path = self.write_draft(dirs)
+            service.apply_action(
+                concept_id="c1",
+                fmt="long_form",
+                action="PREPARE",
+                **dirs,
+            )
+            state_path = dirs["state_dir"] / "c1.long_form.section_state.json"
+            alternatives = (
+                dirs["alternatives_dir"]
+                / "c1.long_form.section_explanation_02.alternatives.json"
+            )
+            alternatives.write_text("{}", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "requires version_id"):
+                service.apply_action(
+                    concept_id="c1",
+                    fmt="long_form",
+                    action="RESTORE_VERSION",
+                    reviewer="r",
+                    **dirs,
+                )
+            with patch.object(
+                service,
+                "restore_saved_version",
+                return_value={"status": "VERSION_RESTORED"},
+            ) as mocked:
+                snapshot = service.apply_action(
+                    concept_id="c1",
+                    fmt="long_form",
+                    action="RESTORE_VERSION",
+                    version_id="revision_0000",
+                    reviewer="r",
+                    **dirs,
+                )
+
+            self.assertEqual(mocked.call_args.args[0], draft_path)
+            self.assertEqual(mocked.call_args.args[1], state_path)
+            self.assertEqual(mocked.call_args.kwargs["version_id"], "revision_0000")
+            self.assertEqual(mocked.call_args.kwargs["versions_dir"], dirs["versions_dir"])
+            self.assertFalse(alternatives.exists())
+            self.assertEqual(snapshot["versions"], [])
+            self.assertEqual(snapshot["current_revision"], 0)
+
+    def test_snapshot_lists_saved_versions_for_branch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dirs = self.dirs(root)
+            self.write_draft(dirs)
+            branch = dirs["versions_dir"] / "c1.long_form"
+            branch.mkdir()
+            (branch / "revision_0000.script_draft.json").write_text(
+                json.dumps(self.draft()), encoding="utf-8"
+            )
+            snapshot = service.snapshot(
+                concept_id="c1",
+                fmt="long_form",
+                drafts_dir=dirs["drafts_dir"],
+                state_dir=dirs["state_dir"],
+                alternatives_dir=dirs["alternatives_dir"],
+                versions_dir=dirs["versions_dir"],
+            )
+
+            self.assertEqual(
+                [item["version_id"] for item in snapshot["versions"]],
+                ["revision_0000"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

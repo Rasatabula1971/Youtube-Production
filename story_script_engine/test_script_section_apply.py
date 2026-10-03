@@ -992,6 +992,129 @@ class ScriptSectionApplyTests(unittest.TestCase):
                 rework_runner.sha256_file(paths["draft"]),
             )
 
+    def _edit_then_versions(self, root):
+        paths = self.setup_artifacts(root)
+        dirs = self.apply_dirs(root)
+        original = rework_runner.load_json(paths["draft"])
+        section_apply.apply_manual_edit(
+            paths["draft"],
+            paths["state"],
+            target_id="section:explanation_02",
+            replacement_text=(
+                "Picture the force entering the joint, then changing route "
+                "as the joint moves."
+            ),
+            reviewer="ricky",
+            **dirs,
+        )
+        return paths, dirs, original
+
+    def test_saved_versions_are_listed_with_compatibility(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, dirs, _ = self._edit_then_versions(Path(tmp))
+            current = rework_runner.load_json(paths["draft"])
+            versions = section_apply.list_saved_versions(
+                current,
+                versions_dir=dirs["versions_dir"],
+            )
+
+        self.assertEqual([v["version_id"] for v in versions], ["revision_0000"])
+        self.assertEqual(versions[0]["revision"], 0)
+        self.assertTrue(versions[0]["compatible"])
+        self.assertEqual(versions[0]["edit_type"], "MODEL_DRAFT")
+        self.assertNotIn("path", versions[0])
+
+    def test_restore_saved_version_creates_new_revision_and_resets_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, dirs, original = self._edit_then_versions(Path(tmp))
+            edited = rework_runner.load_json(paths["draft"])
+            response_file = (
+                dirs["review_responses_dir"]
+                / "c1.long_form.script_review_response.json"
+            )
+            approved_file = dirs["approved_dir"] / "c1.approved_script.json"
+            response_file.write_text("{}", encoding="utf-8")
+            approved_file.write_text("{}", encoding="utf-8")
+
+            result = section_apply.restore_saved_version(
+                paths["draft"],
+                paths["state"],
+                version_id="revision_0000",
+                reviewer="ricky",
+                **dirs,
+            )
+            restored = rework_runner.load_json(paths["draft"])
+            state = section_state.load_json(paths["state"])
+            pre_restore = rework_runner.load_json(
+                dirs["versions_dir"] / "c1.long_form" / "revision_0001.script_draft.json"
+            )
+            versions = section_apply.list_saved_versions(
+                restored,
+                versions_dir=dirs["versions_dir"],
+            )
+
+            self.assertEqual(result["status"], "VERSION_RESTORED")
+            self.assertEqual(result["revision"], 2)
+            self.assertEqual(restored["sections"], original["sections"])
+            self.assertEqual(restored["opening_hook"], original["opening_hook"])
+            self.assertEqual(restored["human_revision"]["revision"], 2)
+            self.assertEqual(restored["human_revision"]["edit_type"], "RESTORE_VERSION")
+            self.assertEqual(restored["human_revision"]["restored_version_id"], "revision_0000")
+            self.assertEqual(pre_restore, edited)
+            self.assertEqual(state["history"][-1]["action"], "RESTORE_VERSION")
+            self.assertTrue(state["history"][-1]["decisions_reset"])
+            self.assertFalse(response_file.exists())
+            self.assertFalse(approved_file.exists())
+            self.assertEqual(
+                [v["version_id"] for v in versions],
+                ["revision_0001", "revision_0000"],
+            )
+
+    def test_restore_rejects_bad_unknown_and_identical_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, dirs, _ = self._edit_then_versions(Path(tmp))
+            restore = lambda version_id: section_apply.restore_saved_version(  # noqa: E731
+                paths["draft"],
+                paths["state"],
+                version_id=version_id,
+                reviewer="ricky",
+                **dirs,
+            )
+            with self.assertRaisesRegex(ValueError, "revision_NNNN"):
+                restore("../revision_0000")
+            with self.assertRaisesRegex(ValueError, "not found"):
+                restore("revision_0009")
+
+            restore("revision_0000")
+            before = paths["draft"].read_bytes()
+            with self.assertRaisesRegex(ValueError, "matches the current script"):
+                restore("revision_0000")
+            self.assertEqual(paths["draft"].read_bytes(), before)
+
+    def test_restore_rejects_version_from_different_script_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, dirs, _ = self._edit_then_versions(Path(tmp))
+            saved_path = dirs["versions_dir"] / "c1.long_form" / "revision_0000.script_draft.json"
+            saved = rework_runner.load_json(saved_path)
+            saved["draft_provenance"]["request_sha256"] = "0" * 64
+            saved_path.write_text(json.dumps(saved), encoding="utf-8")
+            before = paths["draft"].read_bytes()
+
+            versions = section_apply.list_saved_versions(
+                rework_runner.load_json(paths["draft"]),
+                versions_dir=dirs["versions_dir"],
+            )
+            self.assertFalse(versions[0]["compatible"])
+            with self.assertRaisesRegex(ValueError, "different script request"):
+                section_apply.restore_saved_version(
+                    paths["draft"],
+                    paths["state"],
+                    version_id="revision_0000",
+                    reviewer="ricky",
+                    **dirs,
+                )
+            self.assertEqual(paths["draft"].read_bytes(), before)
+
     def test_manual_edit_rejects_locked_target_until_unlocked(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -364,6 +364,15 @@
                       <p class="muted">Manual edits use the same full-script validation, versioning and rollback protection as generated alternatives.</p>
                     </details>
 
+                    <details class="script-section-editor" id="scriptSectionVersions">
+                      <summary>Saved versions</summary>
+                      <p class="muted" id="scriptSectionVersionInfo"></p>
+                      <label class="vision-label" for="scriptSectionVersion">Restore the whole script to</label>
+                      <select id="scriptSectionVersion"></select>
+                      <button class="ghost" id="scriptSectionRestore" type="button">Restore version</button>
+                      <p class="muted">Restoring saves the current script first, creates a new revision, restarts section review and withdraws any Script Gate approval. Versions from a different script request cannot be restored.</p>
+                    </details>
+
                     <div class="script-section-rework-box">
                       <label class="vision-label" for="scriptSectionReason">Rework reason</label>
                       <select id="scriptSectionReason"></select>
