@@ -4299,7 +4299,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         if vision_review.get("awaiting_human_review"):
             exp2_human = "VISUAL REVIEW NEEDED"
             exp2_tone = "action"
-            exp2_next = "Review the retained visual frames in Analyze & Create."
+            exp2_next = "Review the retained visual frames in the Workspace."
         else:
             exp2_human = "PREPARE VISUAL REVIEW"
             exp2_tone = "action"
@@ -4417,7 +4417,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif concept_gate_status == "AWAITING_HUMAN_DECISION":
         transform_human = "HUMAN CONCEPT DECISION NEEDED"
         transform_tone = "action"
-        transform_next = "Review concept candidates in Analyze & Create."
+        transform_next = "Review concept candidates in Gate reviews."
     elif concept_gate_complete:
         transform_human = "NO ACCEPTED CONCEPT"
         transform_tone = "action"
@@ -4551,7 +4551,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif research_gate_status == "AWAITING_HUMAN_DECISION":
         research_human = "HUMAN RESEARCH DECISION NEEDED"
         research_tone = "action"
-        research_next = "Review claims in Analyze & Create."
+        research_next = "Review claims in Gate reviews."
     elif research_gate_complete:
         research_human = "RESEARCH INCOMPLETE"
         research_tone = "action"
@@ -4602,7 +4602,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif script_gate_status == "AWAITING_HUMAN_DECISION":
         script_human = "HUMAN SCRIPT DECISION NEEDED"
         script_tone = "action"
-        script_next = "Review script drafts in Analyze & Create."
+        script_next = "Review script drafts in Gate reviews."
     elif script_gate_complete:
         script_human = "NO APPROVED SCRIPT"
         script_tone = "action"

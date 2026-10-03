@@ -199,4 +199,4 @@
   .attention-grid { grid-template-columns: 1fr; }
 }
 
-#productionTabs { margin-bottom: var(--space-3); }
+#viewProductions .inbox-head { margin-bottom: var(--space-3); }

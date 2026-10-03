@@ -23,6 +23,7 @@
 }
 .th-list > li:first-child { border-top: 0; }
 .th-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.th-main strong { font-size: var(--text-md); }
 .th-main .muted { font-size: var(--text-sm); overflow-wrap: anywhere; }
 .th-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .tj-log {

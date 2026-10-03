@@ -134,3 +134,15 @@
 @media (max-width: 620px) {
   .page-heading h1 { font-size: 20px; }
 }
+
+/* Craft pass (UI-17). */
+.hero-step .primary-cta { font-size: var(--text-md); }
+.app-view > .panel + .panel { margin-top: var(--space-4); }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+.tab-count,
+.attention-count,
+.radar-facts dd,
+.tj-row .muted,
+.metric-value,
+.opportunity-counts strong { font-variant-numeric: tabular-nums; }

@@ -3380,3 +3380,46 @@ closes it.
 
 **Out of scope.** Behaviour and payloads are unchanged. Tests pin the drawer
 semantics, the skip link, the script order and the fill contrast ratio.
+
+## D-125 — UI Patch 11: craft pass
+
+**Status:** Accepted
+
+**Method.** I screenshotted every route at 1280 px and phone width, listed
+each place where the same thing looked different, and fixed the cause
+rather than the symptom.
+- **Button sizes.** Buttons had no base font size, so any button without a
+  size class fell back to the browser's 16px. That accounted for the
+  oversized empty-state actions, the radar scan button and others. Buttons
+  now default to `--text-sm`, and only the Command Center's main action is
+  set larger.
+- **Empty states.** There were two styles. `.empty-state` now uses the small
+  text size, the subtle border and the large radius, and spans the full
+  grid. Before, the Command Center's attention queue showed it squeezed into
+  one card-width column.
+- **Tabs.** A tab bar means "steps of one gate group", so Gate reviews now
+  uses the same underline bar and switcher row as Packaging and Produce.
+  Pills stay for filters. Tab padding is reduced so Produce's seven tabs fit
+  at 1280 px.
+- **Alignment and rhythm.**
+  - Entry-card actions sit on a common baseline.
+  - Adjacent panels get a consistent gap (the inbox and historical review
+    used to touch).
+  - The radar's explanatory note is spaced from its filters.
+  - The Productions "+ New" button lines up with its tabs.
+- **Names and titles.**
+  - `/analysis` is called "Workspace" everywhere. The top bar no longer
+    says "Analyze & Create", and the four server next-step messages that
+    sent users to it now name Gate reviews or the Workspace.
+  - Workspace and Tools no longer repeat their title and subtitle inside
+    the page; the in-page heading is kept for screen readers only.
+- **Stage strip.** The Workspace stage strip looked like buttons but did
+  nothing. It is now a stepper.
+- **Type details.** Headings use `text-wrap: balance` and paragraphs
+  `pretty`; counts use tabular numbers.
+
+**Unchanged.** Behaviour, payloads and the D-124 accessibility results are
+unchanged: axe still reports no violations at 320, 640, 768 and 1280 px, and
+the tab-bar arrow keys still work on every gate page. A test pins the
+shared tab style, the base button and empty-state sizes, and the retired
+page name.

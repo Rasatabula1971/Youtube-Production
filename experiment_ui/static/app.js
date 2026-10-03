@@ -550,9 +550,9 @@ const ROUTES = {
   },
   "/analysis": {
     view: "analysis",
-    kicker: "ANALYZE & CREATE",
-    title: "Analyze & Create",
-    subtitle: "Turn approved evidence into an original video."
+    kicker: "PRODUCTIONS",
+    title: "Workspace",
+    subtitle: "Every original panel, for anything the focused pages do not cover."
   },
   "/productions": {
     view: "productions",
@@ -564,7 +564,7 @@ const ROUTES = {
     view: "tools",
     kicker: "MAINTENANCE",
     title: "Tools & Diagnostics",
-    subtitle: "Manual controls, Doctors, logs and technical state."
+    subtitle: "Is everything installed and healthy, what ran recently, and the manual controls."
   }
 };
 

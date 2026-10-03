@@ -362,7 +362,8 @@ to match the redesign's navigation:
   - **Kept in the classic view:** asset registration (final narration audio,
     managed and generated visuals, final sound) and storyboard shot editing.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
-  reachable under Productions.
+  reachable under Productions. Its stage strip is a progress indicator, not
+  navigation.
 - `/tools` — **Tools & Diagnostics** (D-123), refreshed every 15 seconds and
   whenever a job changes:
   - **System Health:** yt-dlp, FFmpeg, the YouTube Data API key (present or
@@ -383,6 +384,19 @@ workflow and scheduler state. Background polling continues while navigating.
 
 The local server serves the same application shell at every route, so a
 view can be refreshed or bookmarked directly without returning a 404.
+
+### Visual consistency (D-125)
+
+- **One style per element.**
+  - Buttons default to the small text size; only the Command Center's main
+    action is larger.
+  - Empty states share one quiet, full-width style.
+  - Gate reviews, Packaging and Produce share the same underline tab bar.
+  - Filters (inbox, productions, radar formats) keep the pill style.
+- **No repeated titles.** A page's title and subtitle appear once, in the
+  top bar.
+- **Tidy text.** Headings are balanced across lines, and counts use
+  fixed-width digits so they don't shift as they change.
 
 ### Keyboard, screen readers and small screens (D-124)
 
