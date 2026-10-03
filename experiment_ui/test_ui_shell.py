@@ -337,6 +337,49 @@ class ShellMarkupTests(unittest.TestCase):
         # Diagnostics never post anything except the predefined actions.
         self.assertNotIn("method:", script)
 
+    def test_shell_accessibility_contract(self) -> None:
+        # Skip link first, pointing at the focusable main landmark.
+        body = self.html.split("<body>", 1)[1]
+        self.assertTrue(body.lstrip().startswith('<a class="skip-link" href="#mainContent">'))
+        self.assertIn('<main class="view-container" id="mainContent" tabindex="-1">', self.html)
+        self.assertIn('<h1 id="pageTitle" tabindex="-1">', self.html)
+        self.assertIn('aria-controls="sidebar" aria-expanded="false"', self.html)
+        # Drawers are modal dialogs and inert while closed (never aria-hidden
+        # around focusable controls).
+        for drawer in ["jobDrawer", "evidenceDrawer"]:
+            with self.subTest(drawer=drawer):
+                tag = re.search(r'<aside[^>]*id="' + drawer + r'"[^>]*>', self.html)
+                assert tag is not None
+                self.assertIn('role="dialog"', tag.group(0))
+                self.assertIn('aria-modal="true"', tag.group(0))
+                self.assertIn(" inert", tag.group(0))
+                self.assertNotIn("aria-hidden", tag.group(0))
+        self.assertIn('<div class="toast" id="toast" role="status" aria-live="polite"', self.html)
+        scripts = re.findall(r'<script src="([^"]+)"', self.html)
+        self.assertEqual(scripts[0], "/js/a11y.js")
+        self.assertIn('href="/css/a11y.css"', self.html)
+
+    def test_primary_button_fill_meets_text_contrast(self) -> None:
+        def luminance(hex_color: str) -> float:
+            channels = [int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+            linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        css = (STATIC / "css" / "a11y.css").read_text(encoding="utf-8")
+        tokens = (STATIC / "css" / "tokens.css").read_text(encoding="utf-8")
+        fill = re.search(r"--accent-fill: (#[0-9a-fA-F]{6});", css)
+        text = re.search(r"--text-primary: (#[0-9a-fA-F]{6});", tokens)
+        assert fill is not None and text is not None
+        light, dark = sorted([luminance(text.group(1)), luminance(fill.group(1))], reverse=True)
+        self.assertGreaterEqual((light + 0.05) / (dark + 0.05), 4.5)
+        self.assertIn("button { background: var(--accent-fill); }", css)
+        self.assertIn("prefers-reduced-motion: reduce", css)
+
+    def test_app_does_not_hide_focusable_drawers_with_aria_hidden(self) -> None:
+        script = (STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn('Drawer.setAttribute("aria-hidden"', script)
+        self.assertNotIn('behavior: "smooth"', script)
+
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
         for route in server.APP_ROUTES:

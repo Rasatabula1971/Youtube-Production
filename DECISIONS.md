@@ -3341,3 +3341,42 @@ The manual action list, pipeline state and safeguards move under Advanced.
 before this patch appear with status *unknown*. Log ids are checked against
 the job-id pattern and must resolve inside the job log directory, so a
 crafted id cannot read other files.
+
+## D-124 — UI Patch 10: responsive, keyboard and accessibility pass
+
+**Status:** Accepted
+
+**Measured, not eyeballed.** An axe-core audit covered all 11 routes at 320,
+640, 768 and 1280 px; 640 px is a 1280 px screen at 200% zoom. It found five
+problems on every route, all now fixed:
+- **Focusable controls inside closed drawers.** The drawers were hidden with
+  `aria-hidden` but their controls could still take focus. Closed drawers
+  are now `inert` dialogs.
+- **Job indicator with no accessible name on phones.** It now has a label
+  that follows the job's status.
+- **Primary button contrast of 3.35:1.** A new `--accent-fill` (#1960d0)
+  gives 5.2:1. The bright accent stays for dots, borders and focus.
+- **A skipped heading level** on Opportunities.
+- **A scroll strip the keyboard could not reach.**
+
+**Keyboard-only use.**
+- **Skip link and title focus.** A skip link is the first Tab stop. After a
+  navigation, focus goes to the page title so it is not lost on a hidden
+  control.
+- **Overlays.** The two drawers and the phone menu take focus, keep Tab
+  inside, close with Escape and return focus to whatever opened them.
+- **Tab bars.** Every tab bar now follows the Production Workspace pattern:
+  arrow keys, Home and End, with activation following focus. This lives in
+  one shared module, `js/a11y.js`.
+
+**Phone sidebar no longer closes on its own.** Status polls re-render the
+route, and that used to close an open phone menu. Now only a navigation
+closes it.
+
+**Motion and contrast modes.**
+- Reduced motion turns off all animations, transitions and smooth scrolls,
+  including the two scripted smooth scrolls.
+- Forced-colors mode keeps a visible focus ring and outlines status badges.
+
+**Out of scope.** Behaviour and payloads are unchanged. Tests pin the drawer
+semantics, the skip link, the script order and the fill contrast ratio.

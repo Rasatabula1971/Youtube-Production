@@ -13,8 +13,10 @@
   <link rel="stylesheet" href="/css/production.css">
   <link rel="stylesheet" href="/css/packaging.css">
   <link rel="stylesheet" href="/css/tools.css">
+  <link rel="stylesheet" href="/css/a11y.css">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">Skip to content</a>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
@@ -82,10 +84,10 @@
     <div class="app-main">
       <header class="app-topbar">
         <div class="page-heading">
-          <button class="mobile-menu" id="mobileMenu" aria-label="Open navigation">☰</button>
+          <button class="mobile-menu" id="mobileMenu" type="button" aria-label="Navigation menu" aria-controls="sidebar" aria-expanded="false">☰</button>
           <div>
             <p class="section-kicker" id="pageKicker">WORKFLOW</p>
-            <h1 id="pageTitle">Home</h1>
+            <h1 id="pageTitle" tabindex="-1">Home</h1>
             <p class="page-subtitle" id="pageSubtitle">What needs your attention now.</p>
           </div>
         </div>
@@ -95,7 +97,7 @@
           <span class="status-dot" id="healthDot"></span>
           <span id="healthLabel">Checking…</span>
         </div>
-        <button class="job-summary neutral" id="jobSummaryButton" type="button">
+        <button class="job-summary neutral" id="jobSummaryButton" type="button" aria-label="Live job: idle" aria-controls="jobDrawer">
           <span class="job-summary-dot"></span>
           <span class="job-summary-copy">
             <strong id="jobSummaryStatus">IDLE</strong>
@@ -106,7 +108,7 @@
         </div>
       </header>
 
-      <main class="view-container">
+      <main class="view-container" id="mainContent" tabindex="-1">
         <section class="app-view" data-view="home" id="viewHome">
           <section class="hero-step" id="homeCurrentStep">
             <div>
@@ -172,6 +174,7 @@
         </section>
 
         <section class="app-view" data-view="opportunity" id="viewOpportunity" hidden>
+          <h2 class="visually-hidden">Ways in</h2>
           <p class="muted view-intro">Four ways in. Every idea lands in the inbox below, and you decide what goes forward.</p>
 
           <div class="entry-grid">
@@ -264,7 +267,7 @@
             </div>
           </div>
 
-          <div class="creation-tabs" id="creationTabs">
+          <div class="creation-tabs" id="creationTabs" role="group" aria-label="Workflow stages" tabindex="0">
             <span class="creation-tab active">Evidence</span>
             <span class="creation-tab">Analysis</span>
             <span class="creation-tab">Concept</span>
@@ -1290,7 +1293,7 @@
   <div class="sidebar-scrim" id="sidebarScrim"></div>
 
   <div class="drawer-scrim" id="drawerScrim"></div>
-  <aside class="job-drawer" id="jobDrawer" aria-hidden="true">
+  <aside class="job-drawer" id="jobDrawer" role="dialog" aria-modal="true" aria-labelledby="jobTitle" inert>
     <div class="drawer-head">
       <div>
         <p class="section-kicker">LIVE JOB</p>
@@ -1313,7 +1316,7 @@
   </aside>
 
   <div class="drawer-scrim" id="evidenceScrim"></div>
-  <aside class="job-drawer evidence-drawer" id="evidenceDrawer" role="dialog" aria-modal="true" aria-labelledby="evidenceDrawerTitle" aria-hidden="true">
+  <aside class="job-drawer evidence-drawer" id="evidenceDrawer" role="dialog" aria-modal="true" aria-labelledby="evidenceDrawerTitle" inert>
     <div class="drawer-head">
       <div>
         <p class="section-kicker" id="evidenceDrawerKicker">EVIDENCE</p>
@@ -1324,7 +1327,8 @@
     <div class="evidence-drawer-body" id="evidenceDrawerBody"></div>
   </aside>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script src="/js/a11y.js"></script>
   <script src="/js/command-center.js"></script>
   <script src="/js/review-workspace.js"></script>
   <script src="/js/opportunity-review.js"></script>

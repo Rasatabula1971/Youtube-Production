@@ -1,0 +1,53 @@
+/* Accessibility and responsive guarantees (UI-16, D-124). */
+
+/* Primary fill with text contrast of at least 4.5:1 (was 3.35:1). The bright
+   --accent-strong stays for dots, borders and focus accents. */
+:root { --accent-fill: #1960d0; }
+button { background: var(--accent-fill); }
+.run-button.do_now { background: var(--accent-fill); }
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-fill);
+  color: #fff;
+  font-weight: var(--weight-heavy);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus { transform: none; }
+
+/* Programmatic focus targets (page title, main) do not need a ring. */
+#pageTitle:focus,
+#mainContent:focus { outline: none; box-shadow: none; }
+
+/* Small screens: comfortable touch targets for icon-only controls. */
+@media (max-width: 860px) {
+  .icon-button,
+  .mobile-menu { min-width: 44px; min-height: 44px; }
+}
+
+/* Reduced motion: no transitions, animations or smooth scrolling anywhere. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  button:hover:not(:disabled) { transform: none; }
+}
+
+/* Windows High Contrast / forced colors: keep focus and selection visible. */
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+  .status-badge,
+  .status-chip { border: 1px solid CanvasText; }
+}

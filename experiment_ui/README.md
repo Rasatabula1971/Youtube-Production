@@ -384,6 +384,33 @@ workflow and scheduler state. Background polling continues while navigating.
 The local server serves the same application shell at every route, so a
 view can be refreshed or bookmarked directly without returning a 404.
 
+### Keyboard, screen readers and small screens (D-124)
+
+Every route is checked with axe-core at 320, 640 (1280 at 200% zoom), 768
+and 1280 px, with no violations and no horizontal scrolling.
+- **Moving around.**
+  - *Skip to content* is the first Tab stop.
+  - After a navigation, focus moves to the page title.
+  - In every tab bar, ← and → switch tabs, and Home and End jump to the
+    first or last.
+- **Overlays.** The live job drawer, the evidence drawer and the phone menu:
+  - take focus when they open;
+  - keep Tab inside;
+  - close with Escape and return focus to the control that opened them.
+
+  While closed they are `inert`, so off-screen controls never take focus.
+- **Screen readers.**
+  - Toasts are announced; errors interrupt, other messages wait their turn.
+  - The job indicator announces the job's status and name, even on phones
+    where its text is hidden.
+- **Visuals.**
+  - Primary buttons use a darker blue fill, giving 5.2:1 text contrast
+    (previously 3.4:1).
+  - With *reduce motion* set, animations, transitions and smooth scrolling
+    are turned off.
+  - In forced-colors (Windows high contrast) mode, the focus ring and status
+    badges stay visible.
+
 ### Productions derived from files
 
 `GET /api/productions` (also `productions` in `/api/status`) is computed by
