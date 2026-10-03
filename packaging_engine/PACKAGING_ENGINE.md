@@ -390,3 +390,144 @@ Format/Production remain locked.
 
 Slice 26 can now evaluate cross-candidate title-thumbnail compatibility,
 redundancy, information gain, promise consistency and claim/hook alignment.
+
+## Slice 26 — Title + Thumbnail Pairing and Package Validation
+
+Slice 26 turns the Slice 25 creative hypotheses into a complete compatibility
+matrix:
+
+```text
+THUMBNAIL_CONCEPTS_READY
+        ↓
+5 current titles × 5 current thumbnails
+        ↓
+25 package hypotheses per format
+        ↓
+5 resumable validation chunks per format
+        ↓
+semantic + evidence + promise + hook validation
+        ↓
+PASS / REWORK / REJECT per package
+        ↓
+PACKAGE_VALIDATION_READY
+        ↓
+STOP
+```
+
+### Full cross-pairing
+
+The pairing engine explicitly rejects the assumption:
+
+`Title 1 → Thumbnail 1`
+
+Each title is evaluated against every thumbnail. Stable package IDs bind
+`title_id + thumbnail_id`.
+
+The selected Human Title Direction remains marked in the matrix. If the human
+edited that selected title wording at the Title Direction Gate, the edited
+wording is preserved rather than reverting to the original model text.
+
+### Pairing dimensions
+
+Each package explicitly carries or evaluates:
+
+- semantic redundancy;
+- psychological complementarity;
+- information gain;
+- visual/text redundancy;
+- Viewer Promise consistency;
+- Hook Alignment;
+- title claim validation;
+- thumbnail claim validation.
+
+Lexical overlap is checked deterministically, but zero-redundancy is not a
+simplistic no-shared-words rule. Significant repeated information can trigger
+REWORK while unavoidable shared terminology may remain acceptable.
+
+### Diagnostic dimensions
+
+Each pair stores separate 0–5 diagnostics for:
+
+- `scroll_stop`;
+- `clarity`;
+- `curiosity`;
+- `stakes`;
+- `specificity`;
+- `visual_simplicity`;
+- `title_strength`;
+- `complementarity`;
+- `credibility`;
+- `promise_alignment`;
+- `hook_alignment`.
+
+There is no aggregate viral score and no ranking or automatic winner.
+
+### Hard validation
+
+The configured hard rejection codes are:
+
+- `unsupported_material_claim`;
+- `factually_false_claim`;
+- `thumbnail_misrepresents_video`;
+- `title_misrepresents_video`;
+- `evidence_conflict`;
+- `prohibited_claim`.
+
+Hard truth failures always override psychology scores.
+
+Claim assessments use only approved evidence refs already attached to the paired
+title or thumbnail component. The evaluator cannot borrow an unrelated approved
+claim to justify another component.
+
+Promise states include PASS, UNDERPROMISE, OVERPROMISE, WRONG_PROMISE,
+DELAYED_ACKNOWLEDGEMENT and MISSING_PAYOFF. Overpromise, wrong promise and a
+missing payoff become hard package failures. Underpromise or delayed
+acknowledgement are repairable rework states.
+
+Hook Alignment stores PASS / REWORK / FAIL and a reason. A non-PASS hook
+alignment becomes targeted rework rather than silently changing the approved
+script.
+
+### Title-length policy
+
+The preferred 45–60 character range remains guidance only. Titles beyond that
+range are recorded as outside the preferred range but are not automatically
+rejected.
+
+### Resumability and artifact namespace
+
+Validation is chunked by thumbnail, five title comparisons at a time. Current
+validated chunks survive retries when their exact request hash is unchanged.
+
+Mature artifacts are isolated under:
+
+`packaging_engine/output/mature_packaging/`
+
+This prevents Slice 26 from overwriting the legacy pre-script
+`output/package_candidates.json`.
+
+Primary artifacts include:
+
+- `package_candidates.json`;
+- `package_validation.json`;
+- `promise_alignment.json`;
+- pairing request/response/model-run directories.
+
+### Slice 26 boundary
+
+`PACKAGE_VALIDATION_READY` means every current 25-pair matrix has complete
+PASS / REWORK / REJECT validation.
+
+It does **not** mean a package has been accepted.
+
+Slice 26 does not:
+
+- choose a winner;
+- approve a final title;
+- approve a final thumbnail;
+- render a thumbnail image;
+- create A/B variants;
+- unlock Format/Production.
+
+Slice 27 can now build the compact Final Packaging Human Gate and targeted
+rework workflow from these validated package hypotheses.
