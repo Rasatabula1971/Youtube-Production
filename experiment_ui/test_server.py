@@ -1419,6 +1419,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 manager.start("test_action")
                 deadline = time.time() + 5
@@ -1489,6 +1490,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 manager.start("test_utf8")
                 deadline = time.time() + 5
@@ -1535,6 +1537,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 job = manager.start("test_action")
                 self.assertEqual(job["status"], "RUNNING")
@@ -1582,6 +1585,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 manager.start("test_action")
                 current = manager.current()

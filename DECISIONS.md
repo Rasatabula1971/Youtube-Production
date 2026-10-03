@@ -3313,3 +3313,31 @@ classic panels link to each other.
   pending production decision, which opens the first gate with work.
 - The classic panels' "Open produce workspace" buttons.
 - Productions → Produce in the sidebar.
+
+## D-123 — UI Patch 9: Tools & Diagnostics
+
+**Status:** Accepted
+
+**Health first.** `/tools` now opens with System Health, then Recent Jobs.
+The manual action list, pipeline state and safeguards move under Advanced.
+- `GET /api/tools` returns `{health, jobs, updated_at}`.
+- `GET /api/job-log?id=` returns one saved log.
+- Both are read-only. Fix buttons run existing predefined actions through
+  `/api/run`, so the one-job-at-a-time rule and the action gating still
+  apply. The buttons are disabled while a job runs.
+
+**What each health check means.**
+- **Checked locally, nothing run or contacted:** binaries (yt-dlp,
+  agent-reach), the configured FFmpeg, and the Kokoro and soundfile imports.
+- **YouTube API key:** reported as present or missing only. Its value is
+  never returned.
+- **Radar scheduler:** *missing* if it has never run, *warn* if its last
+  wake is older than 6 hours, with an Install Opportunity Automation button.
+- **FAIR, Vision and vidIQ:** taken from the last run of each Doctor
+  (*unknown* until one has run), with a Run Doctor button.
+
+**Job history.** Each finished job appends one line to
+`.experiment_ui/job_history.jsonl`, which keeps the last 300. Logs from
+before this patch appear with status *unknown*. Log ids are checked against
+the job-id pattern and must resolve inside the job log directory, so a
+crafted id cannot read other files.

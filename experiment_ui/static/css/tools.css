@@ -1,0 +1,45 @@
+/* Tools & Diagnostics (UI-15, D-123). */
+.tools-panel { margin-bottom: 16px; }
+.tools-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.tools-panel-head h3 { margin: 0; font-size: var(--text-md); }
+.tools-panel-head #toolsUpdated { margin-left: auto; font-size: var(--text-xs); }
+.th-list { list-style: none; margin: 0; padding: 0; }
+.th-row,
+.tj-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.th-row,
+.tj-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.th-list > li:first-child { border-top: 0; }
+.th-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.th-main .muted { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.th-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.tj-log {
+  margin: 10px 0 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tools-advanced-title { margin: 24px 0 2px; font-size: var(--text-md); }
+
+@media (max-width: 640px) {
+  .th-row,
+  .tj-head { flex-direction: column; align-items: flex-start; }
+}

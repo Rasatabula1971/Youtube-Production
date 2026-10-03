@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/css/review.css">
   <link rel="stylesheet" href="/css/production.css">
   <link rel="stylesheet" href="/css/packaging.css">
+  <link rel="stylesheet" href="/css/tools.css">
 </head>
 <body>
   <div class="app-shell">
@@ -1223,9 +1224,28 @@
             <div>
               <p class="section-kicker">MAINTENANCE</p>
               <h2>Tools &amp; Diagnostics</h2>
-              <p class="muted">Manual experiment controls, Doctors, logs and raw outputs live here.</p>
+              <p class="muted">Is everything installed and healthy, what ran recently, and the manual controls.</p>
             </div>
           </div>
+
+          <section class="panel tools-panel" aria-labelledby="toolsHealthTitle">
+            <div class="tools-panel-head">
+              <h3 id="toolsHealthTitle">System Health</h3>
+              <span class="muted" id="toolsUpdated"></span>
+              <button class="ghost compact" id="toolsRefresh">Re-check</button>
+            </div>
+            <ul class="th-list" id="toolsHealth"></ul>
+          </section>
+
+          <section class="panel tools-panel" aria-labelledby="toolsJobsTitle">
+            <div class="tools-panel-head">
+              <h3 id="toolsJobsTitle">Recent Jobs</h3>
+            </div>
+            <ul class="th-list" id="toolsJobs"></ul>
+          </section>
+
+          <h3 class="tools-advanced-title">Advanced</h3>
+          <p class="muted">Raw outputs, manual pipeline controls and the scheduler.</p>
 
           <div class="tool-shortcuts">
             <button class="ghost" data-open="source_acquisition_output">Acquisition Output</button>
@@ -1239,12 +1259,15 @@
             <button class="ghost" data-open="ui_jobs">Job Logs</button>
           </div>
 
-          <section class="panel">
-            <div class="action-groups tools-grid" id="toolActions"></div>
-          </section>
+          <details class="technical-details">
+            <summary>Manual pipeline controls &amp; scheduler</summary>
+            <div class="technical-body">
+              <div class="action-groups tools-grid" id="toolActions"></div>
+            </div>
+          </details>
 
           <details class="technical-details">
-            <summary>Technical experiment status</summary>
+            <summary>Pipeline state</summary>
             <div class="technical-body">
               <div class="stage-grid compact-stage-grid" id="stageGrid"></div>
             </div>
@@ -1310,6 +1333,7 @@
   <script src="/js/gate-reviews.js"></script>
   <script src="/js/packaging.js"></script>
   <script src="/js/produce.js"></script>
+  <script src="/js/tools.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
