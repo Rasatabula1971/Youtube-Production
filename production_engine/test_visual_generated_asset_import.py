@@ -65,17 +65,17 @@ class VisualGeneratedAssetImportTests(unittest.TestCase):
                 )
                 snap = importer.snapshot()
 
-        self.assertEqual(result["status"], "REGISTERED_CURRENT")
-        self.assertEqual(result["actual_cost_usd"], 1.75)
-        self.assertEqual(result["authorized_max_cost_usd"], 2.5)
-        self.assertFalse(result["app_provider_call_executed"])
-        self.assertEqual(
-            result["execution_origin"],
-            "EXTERNAL_HUMAN_PROVIDER_ACTION",
-        )
-        self.assertTrue(Path(result["asset_file"]).exists())
-        self.assertEqual(snap["current"], 1)
-        self.assertEqual(snap["actual_cost_total_usd"], 1.75)
+            self.assertEqual(result["status"], "REGISTERED_CURRENT")
+            self.assertEqual(result["actual_cost_usd"], 1.75)
+            self.assertEqual(result["authorized_max_cost_usd"], 2.5)
+            self.assertFalse(result["app_provider_call_executed"])
+            self.assertEqual(
+                result["execution_origin"],
+                "EXTERNAL_HUMAN_PROVIDER_ACTION",
+            )
+            self.assertTrue(Path(result["asset_file"]).exists())
+            self.assertEqual(snap["current"], 1)
+            self.assertEqual(snap["actual_cost_total_usd"], 1.75)
 
     def test_cost_above_human_ceiling_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

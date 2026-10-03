@@ -439,13 +439,9 @@ def apply_action(
 
     required = list(item.get("required_accept_criteria", []))
     clean_note = str(note or "").strip()
-    normalized = (
-        {criterion: True for criterion in required}
-        if value == "ACCEPT"
-        else {criterion: False for criterion in required}
-        if value == "REJECT"
-        else {}
-    )
+    # REWORK and REJECT both record every criterion as unconfirmed; the gate's
+    # final validation requires every criterion key on every decision.
+    normalized = {criterion: value == "ACCEPT" for criterion in required}
     if value == "REWORK" and not clean_note:
         raise ValueError("REWORK requires a note explaining what must change")
     if (

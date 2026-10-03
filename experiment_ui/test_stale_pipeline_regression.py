@@ -432,6 +432,19 @@ class StalePipelineRegressionTests(unittest.TestCase):
                     },
                 },
             )
+            decision = {
+                "decision": "AUTHORIZE_GENERATION",
+                "paid_generation_authorized": True,
+                "max_cost_usd": 2.5,
+            }
+            decision_sha256 = hashlib.sha256(
+                json.dumps(
+                    decision,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()
             request_path = write_json(
                 requests / "c1.short.shot-001.visual_generation_request.json",
                 {
@@ -448,6 +461,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
                         "gap_plan_sha256": sha(gap_path),
                         "visual_spend_review": str(spend_path),
                         "visual_spend_review_sha256": sha(spend_path),
+                        "visual_spend_decision_sha256": decision_sha256,
                     },
                 },
             )
@@ -463,13 +477,11 @@ class StalePipelineRegressionTests(unittest.TestCase):
                             {
                                 "concept_id": "c1",
                                 "format": "short",
-                                "decisions": {
-                                    "shot-001": {
-                                        "decision": "AUTHORIZE_GENERATION",
-                                        "paid_generation_authorized": True,
-                                        "max_cost_usd": 2.5,
-                                    }
-                                },
+                                "gap_plan_file": str(gap_path),
+                                "gap_plan_sha256": sha(gap_path),
+                                "spend_review_file": str(spend_path),
+                                "spend_review_sha256": sha(spend_path),
+                                "decisions": {"shot-001": decision},
                             }
                         ],
                     },
@@ -503,11 +515,11 @@ class StalePipelineRegressionTests(unittest.TestCase):
             )
             stale = server.visual_generation_handoff_artifact_state()
 
-        self.assertTrue(current["ready"])
-        self.assertEqual(current["current"], 1)
-        self.assertFalse(stale["ready"])
-        self.assertGreaterEqual(stale["stale"], 1)
-        self.assertTrue(request_path.exists())
+            self.assertTrue(current["ready"])
+            self.assertEqual(current["current"], 1)
+            self.assertFalse(stale["ready"])
+            self.assertGreaterEqual(stale["stale"], 1)
+            self.assertTrue(request_path.exists())
 
     def test_changed_human_reviews_make_existing_synthesis_rebuildable(self):
         stale_state = {

@@ -131,17 +131,17 @@ class VisualExistingAssetImportTests(unittest.TestCase):
                 )
                 snap = importer.snapshot()
 
-        self.assertEqual(
-            record["acquisition_method"],
-            "MANUAL_HUMAN_SUPPLIED_FILE",
-        )
-        self.assertEqual(record["actual_cost_usd"] if "actual_cost_usd" in record else 0, 0)
-        self.assertFalse(record["paid_provider_call_executed"])
-        self.assertIn("rights_review", record["provenance"])
-        self.assertTrue(Path(record["asset_file"]).exists())
-        self.assertFalse(assembly.exists())
-        self.assertEqual(snap["current"], 1)
-        self.assertEqual(snap["manual"], 1)
+            self.assertEqual(
+                record["acquisition_method"],
+                "MANUAL_HUMAN_SUPPLIED_FILE",
+            )
+            self.assertEqual(record["actual_cost_usd"] if "actual_cost_usd" in record else 0, 0)
+            self.assertFalse(record["paid_provider_call_executed"])
+            self.assertIn("rights_review", record["provenance"])
+            self.assertTrue(Path(record["asset_file"]).exists())
+            self.assertFalse(assembly.exists())
+            self.assertEqual(snap["current"], 1)
+            self.assertEqual(snap["manual"], 1)
 
     def test_manual_asset_registration_invalidates_placeholder_rough_cut(self):
         with tempfile.TemporaryDirectory() as tmp:

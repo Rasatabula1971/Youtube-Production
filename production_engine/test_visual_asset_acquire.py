@@ -74,7 +74,7 @@ class VisualAssetAcquireTests(unittest.TestCase):
                 }],
             },
         )
-        review_path = write_json(
+        write_json(
             review_dir / "c1.short.visual_candidate_review.json",
             {
                 "status": "READY_FOR_ROUGH_CUT",
@@ -134,16 +134,16 @@ class VisualAssetAcquireTests(unittest.TestCase):
             ):
                 result = acquire.acquire()
 
-        self.assertEqual(result["acquired"], 1)
-        self.assertEqual(result["manual_required"], 0)
-        self.assertEqual(result["failures"], 0)
-        record = result["items"][0]
-        self.assertEqual(
-            record["acquisition_method"],
-            "VERIFIED_STOCK_DIRECT_DOWNLOAD",
-        )
-        self.assertFalse(record["paid_provider_call_executed"])
-        self.assertTrue(Path(record["asset_file"]).exists())
+            self.assertEqual(result["acquired"], 1)
+            self.assertEqual(result["manual_required"], 0)
+            self.assertEqual(result["failures"], 0)
+            record = result["items"][0]
+            self.assertEqual(
+                record["acquisition_method"],
+                "VERIFIED_STOCK_DIRECT_DOWNLOAD",
+            )
+            self.assertFalse(record["paid_provider_call_executed"])
+            self.assertTrue(Path(record["asset_file"]).exists())
 
     def test_editorial_selection_is_never_auto_downloaded(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -517,7 +517,21 @@ def apply_action(
     }
 
     if value == "REWORK":
-        _apply_rework_feedback(item, note=clean_note)
+        # Gate review items omit response_source, so take it from the
+        # originating candidate to locate the model response being reworked.
+        candidate = next(
+            (
+                concept
+                for concept in candidates.get("concepts", [])
+                if isinstance(concept, dict)
+                and str(concept.get("concept_id")) == concept_id
+            ),
+            {},
+        )
+        _apply_rework_feedback(
+            {**item, "response_source": candidate.get("response_source")},
+            note=clean_note,
+        )
     state["status"] = "AWAITING_HUMAN_DECISION"
     finalize_if_complete(state, request)
     return snapshot()
