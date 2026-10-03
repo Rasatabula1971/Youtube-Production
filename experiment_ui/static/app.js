@@ -689,6 +689,7 @@ function primaryTargetForWorkflow(workflow) {
     TITLE_DIRECTION_SELECTED: "Title directions selected",
     PACKAGING_BRIEF_READY: "Packaging brief ready",
     THUMBNAIL_CONCEPTS_READY: "Thumbnail concepts ready",
+    PACKAGE_VALIDATION_READY: "Package validation ready",
     HUMAN_FORMAT_GATE: "Review format",
     HUMAN_PERFORMANCE_GATE: "Review performance",
     HUMAN_NARRATION_PREVIEW_GATE: "Listen to prototype",
@@ -1927,10 +1928,11 @@ async function submitTitleDirectionDecision(decision) {
   }
 }
 
-function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot) {
+function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot, validationSnapshot) {
   const value = snapshot || {};
   const anglesValue = anglesSnapshot || {};
   const thumbnailValue = thumbnailSnapshot || {};
+  const validationValue = validationSnapshot || {};
   const briefs = Array.isArray(value.briefs) ? value.briefs : [];
   const angleItems = Array.isArray(anglesValue.items) ? anglesValue.items : [];
   const thumbnailItems = Array.isArray(thumbnailValue.items) ? thumbnailValue.items : [];
@@ -1938,16 +1940,30 @@ function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot) {
   const slice25Ready =
     thumbnailValue.status === "THUMBNAIL_CONCEPTS_READY" &&
     thumbnailValue.ready === true;
+  const slice26Ready =
+    validationValue.status === "PACKAGE_VALIDATION_READY" &&
+    validationValue.ready === true;
+  const validatedPackages = Array.isArray(validationValue.packages)
+    ? validationValue.packages
+    : [];
   packagingBriefPanel.hidden = !briefs.length;
   if (!briefs.length) return;
 
-  packagingBriefStatus.textContent = slice25Ready ? "SLICE 25 READY" : (ready ? "BRIEF READY" : "STALE");
+  packagingBriefStatus.textContent = slice26Ready
+    ? "SLICE 26 READY"
+    : (slice25Ready ? "SLICE 25 READY" : (ready ? "BRIEF READY" : "STALE"));
   packagingBriefStatus.className =
     "status-chip " + ((ready && !value.stale) ? "success" : "failed");
   packagingBriefSummary.textContent =
     briefs.length + " current format brief" + (briefs.length === 1 ? "" : "s") +
     " · " + Number(anglesValue.current || 0) + " angle set(s)" +
-    " · " + Number(thumbnailValue.current || 0) + " thumbnail set(s)";
+    " · " + Number(thumbnailValue.current || 0) + " thumbnail set(s)" +
+    " · " + Number(validationValue.current_pairs || 0) + " validated pair(s)" +
+    (slice26Ready
+      ? " · PASS " + Number(validationValue.pass || 0) +
+        " / REWORK " + Number(validationValue.rework || 0) +
+        " / REJECT " + Number(validationValue.reject || 0)
+      : "");
 
   packagingBriefDetail.innerHTML = briefs.map(function (item) {
     const angleSet = angleItems.find(function (entry) {
@@ -1960,6 +1976,12 @@ function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot) {
     const thumbs = Array.isArray(thumbSet.thumbnail_concepts)
       ? thumbSet.thumbnail_concepts
       : [];
+    const packageItems = validatedPackages.filter(function (entry) {
+      return entry.video_id === item.video_id;
+    });
+    const selectedDirectionPackages = packageItems.filter(function (entry) {
+      return entry.selected_title_direction_match === true;
+    });
     const angleHtml = angles.length
       ? '<div class="concept-meta">' + angles.map(function (angle) {
           return '<span>' +
@@ -1981,6 +2003,41 @@ function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot) {
           );
         }).join("")
       : '<p class="muted">Thumbnail concepts not generated yet.</p>';
+    const packageCounts = {
+      PASS: packageItems.filter(function (entry) {
+        return entry.validation_status === "PASS";
+      }).length,
+      REWORK: packageItems.filter(function (entry) {
+        return entry.validation_status === "REWORK";
+      }).length,
+      REJECT: packageItems.filter(function (entry) {
+        return entry.validation_status === "REJECT";
+      }).length
+    };
+    const packageHtml = packageItems.length
+      ? (
+          '<p><strong>25-pair validation:</strong> PASS ' +
+          packageCounts.PASS + ' · REWORK ' + packageCounts.REWORK +
+          ' · REJECT ' + packageCounts.REJECT + '</p>' +
+          '<p class="muted">Selected title direction across all five thumbnails:</p>' +
+          selectedDirectionPackages.map(function (pkg) {
+            const d = pkg.diagnostics || {};
+            return (
+              '<div class="criterion-item">' +
+                '<span><strong>' + escapeHtml(pkg.validation_status || "") + '</strong>' +
+                ' — ' + escapeHtml(pkg.thumbnail_hero_subject || "") +
+                (pkg.thumbnail_text ? ' · “' + escapeHtml(pkg.thumbnail_text) + '”' : '') +
+                '<br><small>Complementarity ' +
+                  escapeHtml(String(d.complementarity ?? "—")) +
+                  '/5 · Promise ' + escapeHtml(String(d.promise_alignment ?? "—")) +
+                  '/5 · Hook ' + escapeHtml(String(d.hook_alignment ?? "—")) +
+                  '/5</small>' +
+                '</span>' +
+              '</div>'
+            );
+          }).join("")
+        )
+      : '<p class="muted">Title-thumbnail validation not generated yet.</p>';
     return (
       '<div class="concept-detail-card">' +
         '<h4>' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
@@ -1993,6 +2050,7 @@ function renderPackagingBrief(snapshot, anglesSnapshot, thumbnailSnapshot) {
         '</p>' +
         '<h4>Psychological hypotheses</h4>' + angleHtml +
         '<h4>Thumbnail concepts</h4>' + thumbHtml +
+        '<h4>Package validation</h4>' + packageHtml +
       '</div>'
     );
   }).join("");
@@ -5121,7 +5179,8 @@ function renderAnalysis(data) {
   renderPackagingBrief(
     data.packaging_brief || {},
     data.psychological_angles || {},
-    data.thumbnail_concepts || {}
+    data.thumbnail_concepts || {},
+    data.package_validation || {}
   );
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
@@ -5220,7 +5279,8 @@ function renderAnalysis(data) {
       "TITLE_DIRECTION_REJECTED",
       "TITLE_DIRECTION_SELECTED",
       "PACKAGING_BRIEF_READY",
-      "THUMBNAIL_CONCEPTS_READY"
+      "THUMBNAIL_CONCEPTS_READY",
+      "PACKAGE_VALIDATION_READY"
     ].includes(workflow.state) ||
     Boolean((data.title_direction || {}).requests_ready) ||
     Boolean((data.title_direction || {}).candidates_ready)
