@@ -150,7 +150,9 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
    `active_source.py`, *Analyze a video* card on the Opportunity page).
 3. **O4** — explore my topic (built: `human_topic_search.py`, *Explore my
    topic* card; yt-dlp flat search + one batched API measurement).
-4. **O3** — workspace and inbox UI.
+4. **O3** — workspace and inbox UI (built: four entry cards, `inbox.py`,
+   Opportunity Inbox tabs; the evidence drawer is an inline expander until
+   O14).
 5. **O6–O9** — watchlist radar, API snapshots, four-axis classifier.
 6. **O10**, then **O11 + O12**.
 7. **O13 + O14** — extend the scheduler; trajectory charts.

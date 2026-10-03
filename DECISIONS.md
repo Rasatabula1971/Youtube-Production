@@ -2764,3 +2764,30 @@ historical thresholds.
 videos, at most four and one per channel, become the frozen approved study set
 (gate status `APPROVED_HUMAN_TOPIC`).
 
+## D-111 — One Opportunity Inbox shows every lane; decisions stay where they belong
+
+**Status:** Accepted
+
+The Opportunity page becomes a workspace (slice O3): four entry cards
+(Discover proven demand, Explore my topic, Analyze a video, Find viral /
+breakout videos, the last disabled until the radar exists) above a single
+**Opportunity Inbox** with the spec's tabs: Needs review, Watching, Approved,
+Saved, Rejected.
+
+The inbox is a view, not a new source of truth:
+
+- historical items come from the canonical packets of the 01.5 study set and
+  mirror the existing gate's decision (APPROVE → Approved, HOLD → Saved,
+  REJECT → Rejected, PENDING → Needs review); they are still decided in
+  Historical review;
+- human-seeded ideas can be saved, rejected or restored from their card; those
+  choices are stored in `opportunity_engine/output/inbox_state.json` and never
+  change a packet or its evidence hash;
+- future-channel ideas are parked in Saved automatically (R10);
+- the active study set is pinned to the top of Approved and marked ACTIVE, and
+  cannot be saved or rejected until analysis of it is stopped;
+- Watching stays empty until the viral radar adds candidates (R11).
+
+Historical packets now take their timestamp from the study-set file so
+rebuilding them on every refresh does not reorder the inbox.
+

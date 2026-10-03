@@ -105,54 +105,83 @@
         <section class="app-view" data-view="opportunity" id="viewOpportunity" hidden>
           <div class="view-head">
             <div>
-              <p class="section-kicker">HUMAN GATE</p>
-              <h2>Opportunity Review</h2>
-              <p class="muted">The machine finds evidence. You decide whether the direction is worth pursuing.</p>
+              <p class="section-kicker">OPPORTUNITY DISCOVERY</p>
+              <h2>Find the next video</h2>
+              <p class="muted">From proven demand, your own idea, or what is breaking out right now. Every idea lands in the inbox below; you decide what goes forward.</p>
             </div>
             <button class="ghost" data-route="/">Back to Home</button>
           </div>
-          <section class="panel" id="exploreTopicPanel">
+
+          <div class="entry-grid">
+            <section class="panel entry-card" id="historicalEntryPanel">
+              <p class="section-kicker">PROVEN DEMAND</p>
+              <h3>Discover proven demand</h3>
+              <p class="muted">The historical engine (01.3–01.5): age-matched velocity, depth expansion and replication across channels.</p>
+              <p id="historicalEntryStatus" class="entry-status muted"></p>
+              <button type="button" id="runHistoricalSearch">Run historical search</button>
+            </section>
+
+            <section class="panel entry-card" id="exploreTopicPanel">
+              <p class="section-kicker">YOUR IDEA</p>
+              <h3>Explore my topic</h3>
+              <p class="muted">Any topic or viewer question, in or out of a niche list. YouTube is searched a few ways (no quota, nothing downloaded) and the evidence shows the rule behind each level.</p>
+              <form id="exploreTopicForm" class="entry-form">
+                <label>Topic or question
+                  <input id="exploreTopicText" type="text" maxlength="160" autocomplete="off" placeholder="e.g. Why are aircraft windows round?" required>
+                </label>
+                <label>Why this idea? (optional)
+                  <input id="exploreTopicNote" type="text" maxlength="500" placeholder="What made you think of it">
+                </label>
+                <button type="submit" id="exploreTopicSubmit">Explore topic</button>
+              </form>
+            </section>
+
+            <section class="panel entry-card" id="analyzeVideoPanel">
+              <p class="section-kicker">YOUR VIDEO</p>
+              <h3>Analyze a video</h3>
+              <p class="muted">Paste a YouTube video you think worked. It is measured (no download) and checked against the Science Inside scope.</p>
+              <form id="analyzeVideoForm" class="entry-form">
+                <label>YouTube link
+                  <input id="analyzeVideoUrl" type="text" inputmode="url" autocomplete="off" placeholder="youtube.com/watch?v=… · youtu.be/… · /shorts/…" required>
+                </label>
+                <label>Topic (optional)
+                  <input id="analyzeVideoTopic" type="text" maxlength="120" placeholder="e.g. hummingbird flight">
+                </label>
+                <label>Why this video? (optional)
+                  <input id="analyzeVideoNote" type="text" maxlength="500" placeholder="What caught your eye">
+                </label>
+                <button type="submit" id="analyzeVideoSubmit">Check video</button>
+              </form>
+            </section>
+
+            <section class="panel entry-card" id="viralEntryPanel">
+              <p class="section-kicker">NO TOPIC REQUIRED</p>
+              <h3>Find viral / breakout videos</h3>
+              <p class="muted">The viral radar finds videos breaking out against their own channel's normal, tracks them for up to 15 days, and flags replicated themes.</p>
+              <p class="entry-status muted">Coming in the radar slices (O6–O9).</p>
+              <button type="button" disabled>Run viral radar</button>
+            </section>
+          </div>
+
+          <section class="panel" id="opportunityInboxPanel">
+            <div class="inbox-head">
+              <div>
+                <p class="section-kicker">EVERY SOURCE</p>
+                <h3>Opportunity Inbox</h3>
+              </div>
+              <div class="inbox-tabs" id="opportunityInboxTabs" role="tablist"></div>
+            </div>
+            <div id="opportunityInbox" class="inbox-list"></div>
+          </section>
+
+          <section class="panel" id="historicalReviewPanel">
             <div class="panel-head">
               <div>
-                <p class="section-kicker">YOUR IDEA</p>
-                <h3>Explore my topic</h3>
-                <p class="muted">Type a topic or a viewer question. It does not need to be in any niche list. YouTube is searched a few ways (no quota, nothing downloaded), the results are measured, and the evidence is shown with the rule behind each level. "Analyze these videos" sends the strongest ones (one per channel) through Experiment 02.</p>
+                <p class="section-kicker">HUMAN GATE</p>
+                <h3>Historical review</h3>
+                <p class="muted">Keep or replace the examples the historical engine chose, then approve, hold or reject each topic.</p>
               </div>
             </div>
-            <form id="exploreTopicForm" class="analyze-video-form explore-topic-form">
-              <label>Topic or question
-                <input id="exploreTopicText" type="text" maxlength="160" autocomplete="off" placeholder="e.g. Why are aircraft windows round?" required>
-              </label>
-              <label>Why this idea? (optional)
-                <input id="exploreTopicNote" type="text" maxlength="500" placeholder="What made you think of it">
-              </label>
-              <button type="submit" id="exploreTopicSubmit">Explore topic</button>
-            </form>
-            <div id="exploredTopics" class="submitted-videos"></div>
-          </section>
-          <section class="panel" id="analyzeVideoPanel">
-            <div class="panel-head">
-              <div>
-                <p class="section-kicker">YOUR VIDEO</p>
-                <h3>Analyze a video</h3>
-                <p class="muted">Paste a YouTube video you think worked. It is measured (no download), checked against the Science Inside scope, and saved here. "Analyze why it worked" sends it through Experiment 02 like an approved topic.</p>
-              </div>
-            </div>
-            <form id="analyzeVideoForm" class="analyze-video-form">
-              <label>YouTube link
-                <input id="analyzeVideoUrl" type="text" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=… or youtu.be/… or /shorts/…" required>
-              </label>
-              <label>Topic (optional)
-                <input id="analyzeVideoTopic" type="text" maxlength="120" placeholder="e.g. hummingbird flight">
-              </label>
-              <label>Why this video? (optional)
-                <input id="analyzeVideoNote" type="text" maxlength="500" placeholder="What caught your eye">
-              </label>
-              <button type="submit" id="analyzeVideoSubmit">Check video</button>
-            </form>
-            <div id="submittedVideos" class="submitted-videos"></div>
-          </section>
-          <section class="panel">
             <div id="opportunityGate" class="opportunity-gate">
               <p class="empty-state">Waiting for Opportunity Research to create a study set.</p>
             </div>

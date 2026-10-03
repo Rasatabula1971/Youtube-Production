@@ -93,6 +93,7 @@ from opportunity_gate import (
 
 from opportunity_engine import active_source as opportunity_active_source
 from opportunity_engine import human_topic_search, human_video_intake
+from opportunity_engine import inbox as opportunity_inbox
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -1896,83 +1897,11 @@ def approved_study_video_ids() -> set[str]:
     }
 
 
-def submitted_video_summary(packet: dict[str, Any]) -> dict[str, Any]:
-    video = (packet.get("candidate_videos") or [{}])[0]
-    channel = packet.get("channel") or {}
-    return {
-        "opportunity_id": packet.get("opportunity_id"),
-        "video_id": video.get("video_id"),
-        "title": video.get("title"),
-        "youtube_url": video.get("youtube_url"),
-        "channel_title": video.get("channel_title"),
-        "views": video.get("views"),
-        "likes": video.get("likes"),
-        "format": video.get("format"),
-        "age_days": video.get("age_days"),
-        "measurement_source": video.get("measurement_source"),
-        "route": channel.get("route"),
-        "route_channel_id": channel.get("channel_id"),
-        "route_rule_id": channel.get("rule_id"),
-        "route_reason": channel.get("reason"),
-        "notes": packet.get("human_notes") or [],
-        "created_at": packet.get("created_at"),
-    }
-
-
-def explored_topic_summary(packet: dict[str, Any]) -> dict[str, Any]:
-    channel = packet.get("channel") or {}
-    intake = packet.get("intake") or {}
-    state = packet.get("evidence_state") or {}
-    videos = packet.get("candidate_videos") or []
-    return {
-        "opportunity_id": packet.get("opportunity_id"),
-        "topic_key": intake.get("topic_key"),
-        "title": packet.get("title"),
-        "seed_kind": intake.get("seed_kind"),
-        "summary": packet.get("summary"),
-        "variants": intake.get("variants") or [],
-        "failed_searches": sum(
-            1 for entry in intake.get("search_log") or [] if entry.get("status") != "COMPLETE"
-        ),
-        "measurement_source": (intake.get("measurement") or {}).get("source"),
-        "measurement_error": (intake.get("measurement") or {}).get("error"),
-        "excluded_count": len(intake.get("excluded_videos") or []),
-        "demand": state.get("historical_demand") or {},
-        "replication": state.get("cross_channel_replication") or {},
-        "video_count": len(videos),
-        "top_videos": [
-            {
-                "video_id": video.get("video_id"),
-                "title": video.get("title"),
-                "youtube_url": video.get("youtube_url"),
-                "channel_title": video.get("channel_title"),
-                "views": video.get("views"),
-                "format": video.get("format"),
-            }
-            for video in videos[:3]
-        ],
-        "route": channel.get("route"),
-        "route_channel_id": channel.get("channel_id"),
-        "route_rule_id": channel.get("rule_id"),
-        "route_reason": channel.get("reason"),
-        "notes": packet.get("human_notes") or [],
-        "created_at": packet.get("created_at"),
-    }
-
-
-def submitted_videos_snapshot() -> dict[str, Any]:
-    active = opportunity_active_source.load_active()
-    return {
-        "videos": [
-            submitted_video_summary(packet)
-            for packet in human_video_intake.list_packets()
-        ],
-        "topics": [
-            explored_topic_summary(packet)
-            for packet in human_topic_search.list_packets()
-        ],
-        "active": opportunity_active_source.summary(active),
-    }
+def opportunity_inbox_snapshot(gate: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Every idea from every lane, with the historical gate's decisions."""
+    return opportunity_inbox.build_inbox(
+        gate if gate is not None else opportunity_gate_snapshot()
+    )
 
 
 def _confirm_replacing_study_set(confirm_replace: bool, what: str) -> None:
@@ -1993,11 +1922,10 @@ def analyze_submitted_video(
     """Make a submitted video the active study set (Analyze why it worked)."""
     active = opportunity_active_source.load_active()
     if active and active.get("video_id") == video_id:
-        return submitted_videos_snapshot()
+        return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this video")
     opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
-    opportunity_gate_snapshot()
-    return submitted_videos_snapshot()
+    return opportunity_inbox_snapshot()
 
 
 def analyze_explored_topic(
@@ -2006,11 +1934,10 @@ def analyze_explored_topic(
     """Make an explored topic's top videos the active study set."""
     active = opportunity_active_source.load_active()
     if active and active.get("topic_key") == topic_key:
-        return submitted_videos_snapshot()
+        return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this topic's videos")
     opportunity_active_source.set_active_topic(topic_key, allow_excluded=allow_excluded)
-    opportunity_gate_snapshot()
-    return submitted_videos_snapshot()
+    return opportunity_inbox_snapshot()
 
 
 def exp2_artifact_state() -> dict[str, Any]:
@@ -7805,6 +7732,7 @@ def status_payload() -> dict[str, Any]:
             }
         )
 
+    opportunity_gate = opportunity_gate_snapshot()
     return {
         "csrf_token": CSRF_TOKEN,
         "project_root": str(PROJECT_ROOT),
@@ -7815,8 +7743,8 @@ def status_payload() -> dict[str, Any]:
             "exists": EXP13_CHECKPOINT.exists(),
             "status": checkpoint_status(),
         },
-        "opportunity_gate": opportunity_gate_snapshot(),
-        "submitted_videos": submitted_videos_snapshot(),
+        "opportunity_gate": opportunity_gate,
+        "opportunity_inbox": opportunity_inbox_snapshot(opportunity_gate),
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
@@ -7955,8 +7883,8 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/opportunity-gate":
             self._send_json(opportunity_gate_snapshot())
             return
-        if route == "/api/opportunity/videos":
-            self._send_json(submitted_videos_snapshot())
+        if route == "/api/opportunity/inbox":
+            self._send_json(opportunity_inbox_snapshot())
             return
         if route == "/api/vision-review":
             self._send_json(vision_review_snapshot())
@@ -8244,7 +8172,7 @@ class Handler(BaseHTTPRequestHandler):
                     note=str(body.get("note", "")),
                     topic=str(body.get("topic", "")),
                 )
-                self._send_json(submitted_videos_snapshot())
+                self._send_json(opportunity_inbox_snapshot())
                 return
 
             if route == "/api/opportunity/topic":
@@ -8252,7 +8180,7 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("text", "")),
                     note=str(body.get("note", "")),
                 )
-                self._send_json(submitted_videos_snapshot())
+                self._send_json(opportunity_inbox_snapshot())
                 return
 
             if route == "/api/opportunity/topic/analyze":
@@ -8281,8 +8209,16 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/opportunity/video/stop":
                 opportunity_active_source.clear_active()
-                opportunity_gate_snapshot()
-                self._send_json(submitted_videos_snapshot())
+                self._send_json(opportunity_inbox_snapshot())
+                return
+
+            if route == "/api/opportunity/inbox":
+                opportunity_inbox.apply_action(
+                    str(body.get("opportunity_id", "")),
+                    str(body.get("action", "")),
+                    note=str(body.get("note", "")),
+                )
+                self._send_json(opportunity_inbox_snapshot())
                 return
 
             if route == "/api/vision-review":
