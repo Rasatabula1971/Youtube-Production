@@ -807,6 +807,11 @@ def render_package(
         "packaging_advisories": package.get("packaging_advisories", []),
     }
     atomic_write_json(report_path, report)
+    approved_path = APPROVED_THUMBNAILS_DIR / f"{safe_slug(package['package_id'])}.json"
+    if approved_path.exists() and (
+        load_json(approved_path).get("image_sha256") != report["image_sha256"]
+    ):
+        approved_path.unlink()
     return report
 
 

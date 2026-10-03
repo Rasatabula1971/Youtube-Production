@@ -30,6 +30,27 @@ Per video, only three things vary:
 - the **text overlay**, taken verbatim from the approved package. It cannot
   be edited here; changing it means reworking the package.
 
+## Experiment UI
+
+Once a package is approved at the Packaging Gate, **Analyze & Create** shows the
+Human Thumbnail Gate panel for each approved package:
+
+- enter the subject image path, source tier, licence, source URL, attribution
+  and accent, then **Save subject** (this creates or refreshes the render spec);
+- **Render** runs the `thumbnail_render` job; **Layout preview** runs
+  `thumbnail_render_preview` for packages without a subject image;
+- review the full-size render, the 360px and 168px previews, a dark/light mock
+  feed beside the niche study's breakout thumbnails, the approved package and
+  the advisories;
+- tick the five criteria and Accept, Rework (note required) or Reject.
+
+Accept is disabled for placeholder previews and stale renders. Changing the
+subject or accent after a decision returns the package to PENDING until it is
+re-rendered and reviewed; a re-render that changes the image withdraws an
+earlier approval. Gate edits are locked while a pipeline job is running, like
+the other human gates. Thumbnail work is not part of the automatic machine
+workflow because it needs a human-supplied subject image.
+
 ## Commands
 
 ~~~powershell

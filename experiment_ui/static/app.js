@@ -135,6 +135,28 @@ const performanceReject = document.getElementById("performanceReject");
 const performanceRework = document.getElementById("performanceRework");
 const performanceAccept = document.getElementById("performanceAccept");
 const performanceNext = document.getElementById("performanceNext");
+const thumbnailReviewPanel = document.getElementById("thumbnailReviewPanel");
+const thumbnailReviewTitle = document.getElementById("thumbnailReviewTitle");
+const thumbnailReviewSummary = document.getElementById("thumbnailReviewSummary");
+const thumbnailReviewStatus = document.getElementById("thumbnailReviewStatus");
+const thumbnailDetail = document.getElementById("thumbnailDetail");
+const thumbnailSubjectForm = document.getElementById("thumbnailSubjectForm");
+const thumbnailSubjectPath = document.getElementById("thumbnailSubjectPath");
+const thumbnailSubjectTier = document.getElementById("thumbnailSubjectTier");
+const thumbnailSubjectLicense = document.getElementById("thumbnailSubjectLicense");
+const thumbnailSubjectUrl = document.getElementById("thumbnailSubjectUrl");
+const thumbnailSubjectAttribution = document.getElementById("thumbnailSubjectAttribution");
+const thumbnailAccent = document.getElementById("thumbnailAccent");
+const thumbnailAccentPicker = document.getElementById("thumbnailAccentPicker");
+const thumbnailRender = document.getElementById("thumbnailRender");
+const thumbnailPreview = document.getElementById("thumbnailPreview");
+const thumbnailCriteria = document.getElementById("thumbnailCriteria");
+const thumbnailNote = document.getElementById("thumbnailNote");
+const thumbnailPrev = document.getElementById("thumbnailPrev");
+const thumbnailReject = document.getElementById("thumbnailReject");
+const thumbnailRework = document.getElementById("thumbnailRework");
+const thumbnailAccept = document.getElementById("thumbnailAccept");
+const thumbnailNext = document.getElementById("thumbnailNext");
 
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
@@ -174,6 +196,10 @@ let latestFormatSnapshot = null;
 let formatCursor = 0;
 let formatEditing = false;
 let latestPerformanceSnapshot = null;
+let latestThumbnailSnapshot = null;
+let thumbnailCursor = 0;
+let thumbnailEditing = false;
+let latestActions = [];
 let performanceCursor = 0;
 let performanceEditing = false;
 
@@ -2431,6 +2457,258 @@ async function submitPerformanceDecision(decision) {
   }
 }
 
+function formatViews(value) {
+  const number = Number(value || 0);
+  if (!number) return "new";
+  const units = [["B", 1e9], ["M", 1e6], ["K", 1e3]];
+  for (let i = 0; i < units.length; i += 1) {
+    if (number >= units[i][1]) {
+      return String(Math.round((number / units[i][1]) * 10) / 10) + units[i][0] + " views";
+    }
+  }
+  return number + " views";
+}
+
+function thumbnailFeedHtml(item) {
+  const competitors = item.competitors || [];
+  const ours = {
+    image_url: item.image_url,
+    title: item.title,
+    channel: "Your channel",
+    views: null,
+    ours: true
+  };
+  const entries = competitors.slice(0, 1).concat([ours], competitors.slice(1));
+  function entry(value, small) {
+    return '<div class="' + (small ? "tfeed-row" : "tfeed-card") +
+      (value.ours ? " tfeed-ours" : "") + '"><div class="tfeed-thumb"><img src="' +
+      escapeHtml(value.image_url || "") + '" alt="" loading="lazy">' +
+      '<span class="tfeed-dur">12:34</span></div><div class="tfeed-meta">' +
+      '<div class="tfeed-title">' + escapeHtml(value.title || "") + '</div>' +
+      '<div class="tfeed-sub">' + escapeHtml(value.channel || "") + " · " +
+      escapeHtml(formatViews(value.views)) + '</div></div></div>';
+  }
+  function phone(theme) {
+    return '<div class="tfeed ' + theme + '"><h5>' + theme.toUpperCase() + ' · HOME</h5>' +
+      entries.slice(0, 3).map(function (value) { return entry(value, false); }).join("") +
+      '<h5>SUGGESTED</h5>' +
+      entries.slice(0, 5).map(function (value) { return entry(value, true); }).join("") +
+      '</div>';
+  }
+  return '<div class="tfeed-wrap">' + phone("dark") + phone("light") + '</div>' +
+    (competitors.length
+      ? ""
+      : '<p class="muted">No niche study thumbnails yet. Set channel_niche and run the niche thumbnail study to compare against real competitors.</p>');
+}
+
+function pendingThumbnailIndex(items) {
+  return (items || []).findIndex(function (item) {
+    return item && item.decision === "PENDING";
+  });
+}
+
+function currentThumbnailItem() {
+  const items = (latestThumbnailSnapshot && latestThumbnailSnapshot.items) || [];
+  if (!items.length) return null;
+  thumbnailCursor = Math.max(0, Math.min(thumbnailCursor, items.length - 1));
+  return { item: items[thumbnailCursor], items: items };
+}
+
+function actionEnabled(actionId) {
+  const action = latestActions.find(function (value) { return value.id === actionId; });
+  return Boolean(action && action.enabled);
+}
+
+function renderThumbnailReview(snapshot, force) {
+  latestThumbnailSnapshot = snapshot || {};
+  const items = latestThumbnailSnapshot.items || [];
+  if (!items.length) {
+    thumbnailReviewPanel.hidden = true;
+    return;
+  }
+  if (thumbnailEditing && !force) return;
+  if (thumbnailCursor >= items.length) thumbnailCursor = items.length - 1;
+
+  const item = items[thumbnailCursor] || {};
+  const subject = item.subject_image || {};
+  const advisories = (item.render_advisories || []).concat(item.packaging_advisories || []);
+  const decided = item.decision && item.decision !== "PENDING";
+
+  thumbnailReviewPanel.hidden = false;
+  thumbnailReviewTitle.textContent = "Thumbnail " + (thumbnailCursor + 1) + " of " + items.length;
+  thumbnailReviewSummary.textContent =
+    (latestThumbnailSnapshot.pending || 0) + " pending · " +
+    (latestThumbnailSnapshot.rendered || 0) + " rendered · reviewer " +
+    (latestThumbnailSnapshot.reviewer || "local-operator");
+  thumbnailReviewStatus.textContent = decided ? item.decision : item.render_status;
+  thumbnailReviewStatus.className = "status-chip " + (
+    item.decision === "ACCEPT"
+      ? "success"
+      : (item.decision === "REJECT" || item.render_status === "BLOCKED" ? "failed" : "running")
+  );
+
+  let visual;
+  if (item.image_url) {
+    const previews = item.previews || {};
+    visual =
+      '<div class="concept-detail-card"><h4>RENDER · 1280×720</h4>' +
+        '<img class="thumbnail-main" src="' + escapeHtml(item.image_url) + '" alt="Rendered thumbnail">' +
+        (item.stale_reasons && item.stale_reasons.length
+          ? '<p><strong>Stale:</strong> ' + escapeHtml(item.stale_reasons.join("; ")) + '. Re-render before accepting.</p>'
+          : "") +
+      '</div>' +
+      '<div class="concept-detail-card"><h4>PHONE SIZE</h4><div class="thumbnail-previews">' +
+        Object.keys(previews).map(function (name) {
+          const width = name.indexOf("168") >= 0 ? 168 : 360;
+          return '<figure><img src="' + escapeHtml(previews[name]) + '" width="' + width +
+            '" style="max-width:100%" alt=""><figcaption>' + width + 'px</figcaption></figure>';
+        }).join("") +
+      '</div></div>' +
+      '<div class="concept-detail-card"><h4>MOCK FEED</h4>' + thumbnailFeedHtml(item) + '</div>';
+  } else {
+    visual =
+      '<div class="concept-detail-card"><h4>RENDER</h4><p>' +
+        escapeHtml(humanizeToken(item.render_status || "NOT_RENDERED")) +
+        ((item.render_errors || []).length
+          ? '</p><ul>' + item.render_errors.map(function (error) {
+              return "<li>" + escapeHtml(error) + "</li>";
+            }).join("") + '</ul><p>'
+          : ". Save a subject image, then Render. Layout preview works without one.") +
+      '</p></div>';
+  }
+
+  const palette = item.palette || {};
+  thumbnailDetail.innerHTML =
+    visual +
+    '<div class="concept-detail-card"><h4>APPROVED PACKAGE</h4>' +
+      '<h3>' + escapeHtml(item.title || item.package_id) + '</h3>' +
+      '<p><strong>Thumbnail text:</strong> ' + escapeHtml(item.text_overlay || "(none)") +
+      '<br><strong>Message:</strong> ' + escapeHtml(item.thumbnail_message || "") +
+      '<br><strong>Focal subject:</strong> ' + escapeHtml(item.focal_subject || "") +
+      '<br><strong>Palette:</strong> ' + escapeHtml([palette.background, palette.subject, palette.accent].filter(Boolean).join(" / ")) +
+      '</p><div class="concept-meta"><span>Package ' + escapeHtml(item.package_id) + '</span>' +
+      (item.text_layout ? '<span>Font ' + escapeHtml(String(item.text_layout.font_size)) + 'px · ' +
+        escapeHtml(String((item.text_layout.lines || []).length)) + ' lines</span>' : "") +
+      '</div></div>' +
+    '<div class="concept-detail-card"><h4>ADVISORIES (NON-BLOCKING)</h4>' +
+      (advisories.length
+        ? '<ul>' + advisories.map(function (advisory) {
+            return "<li><strong>" + escapeHtml(humanizeToken(advisory.rule || "")) + ":</strong> " +
+              escapeHtml(advisory.guidance || "") + "</li>";
+          }).join("") + '</ul>'
+        : '<p>None.</p>') +
+    '</div>';
+
+  const tiers = latestThumbnailSnapshot.allowed_source_tiers || [];
+  thumbnailSubjectTier.innerHTML = '<option value="">Choose a source tier…</option>' +
+    tiers.map(function (tier) {
+      return '<option value="' + escapeHtml(tier) + '"' +
+        (subject.source_tier === tier ? " selected" : "") + '>' +
+        escapeHtml(humanizeToken(tier)) + '</option>';
+    }).join("");
+  thumbnailSubjectPath.value = subject.path || "";
+  thumbnailSubjectLicense.value = subject.license || "";
+  thumbnailSubjectUrl.value = subject.source_url || "";
+  thumbnailSubjectAttribution.value = subject.attribution || "";
+  const accent = String(item.accent_hex || "FFD400").replace("#", "").toUpperCase();
+  thumbnailAccent.value = "#" + accent;
+  thumbnailAccentPicker.value = "#" + accent.toLowerCase();
+
+  const descriptions = latestThumbnailSnapshot.criteria || {};
+  const checked = item.criteria_decisions || {};
+  thumbnailCriteria.innerHTML = (item.required_accept_criteria || []).map(function (criterion) {
+    const id = "thumbnail-criterion-" + thumbnailCursor + "-" + criterion;
+    return '<label class="concept-criterion" for="' + escapeHtml(id) + '">' +
+      '<input type="checkbox" id="' + escapeHtml(id) + '" data-thumbnail-criterion="' +
+      escapeHtml(criterion) + '"' + (checked[criterion] ? " checked" : "") + '>' +
+      '<span><strong>' + escapeHtml(humanizeToken(criterion)) + '</strong>' +
+      escapeHtml(descriptions[criterion] || "") + '</span></label>';
+  }).join("");
+
+  thumbnailNote.value = item.note || "";
+  thumbnailPrev.disabled = thumbnailCursor <= 0;
+  thumbnailNext.disabled = thumbnailCursor >= items.length - 1;
+  thumbnailRender.disabled = !actionEnabled("thumbnail_render");
+  thumbnailPreview.disabled = !actionEnabled("thumbnail_render_preview");
+  const reviewable = item.render_status === "RENDERED" || item.render_status === "PREVIEW_ONLY";
+  thumbnailReject.disabled = !reviewable;
+  thumbnailRework.disabled = !reviewable;
+  thumbnailAccept.disabled = item.render_status !== "RENDERED" ||
+    Boolean(item.stale_reasons && item.stale_reasons.length);
+  thumbnailEditing = false;
+}
+
+function moveThumbnailCursor(delta) {
+  const current = currentThumbnailItem();
+  if (!current) return;
+  thumbnailCursor = Math.max(0, Math.min(current.items.length - 1, thumbnailCursor + delta));
+  thumbnailEditing = false;
+  renderThumbnailReview(latestThumbnailSnapshot, true);
+}
+
+async function saveThumbnailSubject(event) {
+  event.preventDefault();
+  const current = currentThumbnailItem();
+  if (!current) return;
+  try {
+    const payload = await api("/api/thumbnail-spec", {
+      method: "POST",
+      body: JSON.stringify({
+        package_id: current.item.package_id,
+        accent_hex: thumbnailAccent.value,
+        subject_image: {
+          path: thumbnailSubjectPath.value,
+          source_tier: thumbnailSubjectTier.value,
+          license: thumbnailSubjectLicense.value,
+          source_url: thumbnailSubjectUrl.value,
+          attribution: thumbnailSubjectAttribution.value
+        }
+      })
+    });
+    thumbnailEditing = false;
+    showToast("Subject saved. Render to update the thumbnail.", false);
+    await loadStatus();
+    renderThumbnailReview(payload, true);
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function submitThumbnailDecision(decision) {
+  const current = currentThumbnailItem();
+  if (!current) return;
+  const values = {};
+  thumbnailCriteria.querySelectorAll("[data-thumbnail-criterion]").forEach(function (input) {
+    values[input.dataset.thumbnailCriterion] = Boolean(input.checked);
+  });
+  try {
+    const payload = await api("/api/thumbnail-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        package_id: current.item.package_id,
+        decision: decision,
+        criteria: values,
+        note: thumbnailNote.value
+      })
+    });
+    thumbnailEditing = false;
+    const nextPending = pendingThumbnailIndex(payload.items || []);
+    if (nextPending >= 0) thumbnailCursor = nextPending;
+    renderThumbnailReview(payload, true);
+    showToast(
+      decision === "ACCEPT"
+        ? "Thumbnail accepted."
+        : decision === "REWORK"
+          ? "Thumbnail sent for rework."
+          : "Thumbnail rejected.",
+      false
+    );
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderAnalysis(data) {
   const workflow = data.workflow || {};
   const humanCreateGate = [
@@ -2475,6 +2753,8 @@ function renderAnalysis(data) {
   renderScriptReview(data.script_gate || {}, false);
   renderFormatReview(data.format_gate || {}, false);
   renderPerformanceReview(data.performance_gate || {}, false);
+  latestActions = data.actions || [];
+  renderThumbnailReview(data.thumbnail_gate || {}, false);
 
   let activeIndex = 0;
   const exp2 = data.experiment_02_artifacts || {};
@@ -2969,6 +3249,44 @@ performanceRework.addEventListener("click", function () {
 });
 performanceAccept.addEventListener("click", function () {
   submitPerformanceDecision("ACCEPT");
+});
+
+[
+  thumbnailSubjectPath, thumbnailSubjectTier, thumbnailSubjectLicense,
+  thumbnailSubjectUrl, thumbnailSubjectAttribution, thumbnailAccent, thumbnailNote
+].forEach(function (input) {
+  input.addEventListener("input", function () {
+    thumbnailEditing = true;
+  });
+});
+thumbnailAccentPicker.addEventListener("input", function () {
+  thumbnailEditing = true;
+  thumbnailAccent.value = thumbnailAccentPicker.value.toUpperCase();
+});
+thumbnailCriteria.addEventListener("change", function () {
+  thumbnailEditing = true;
+});
+thumbnailSubjectForm.addEventListener("submit", saveThumbnailSubject);
+thumbnailRender.addEventListener("click", function () {
+  runAction("thumbnail_render");
+});
+thumbnailPreview.addEventListener("click", function () {
+  runAction("thumbnail_render_preview");
+});
+thumbnailPrev.addEventListener("click", function () {
+  moveThumbnailCursor(-1);
+});
+thumbnailNext.addEventListener("click", function () {
+  moveThumbnailCursor(1);
+});
+thumbnailReject.addEventListener("click", function () {
+  submitThumbnailDecision("REJECT");
+});
+thumbnailRework.addEventListener("click", function () {
+  submitThumbnailDecision("REWORK");
+});
+thumbnailAccept.addEventListener("click", function () {
+  submitThumbnailDecision("ACCEPT");
 });
 
 renderRoute({ scroll: true });

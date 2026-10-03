@@ -270,6 +270,62 @@
             </div>
           </section>
 
+          <section class="panel concept-review-panel" id="thumbnailReviewPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="section-kicker">HUMAN THUMBNAIL GATE</p>
+                <h2 id="thumbnailReviewTitle">Review thumbnail</h2>
+                <p class="muted" id="thumbnailReviewSummary"></p>
+              </div>
+              <span class="status-chip running" id="thumbnailReviewStatus">PENDING</span>
+            </div>
+
+            <div class="concept-review-layout">
+              <div class="concept-detail" id="thumbnailDetail"></div>
+              <div class="concept-decision-pane">
+                <form class="thumbnail-subject-form" id="thumbnailSubjectForm">
+                  <p class="section-kicker">SUBJECT IMAGE &amp; ACCENT</p>
+                  <label class="vision-label" for="thumbnailSubjectPath">Image path (absolute, or relative to the render spec)</label>
+                  <input class="thumbnail-input" id="thumbnailSubjectPath" type="text" autocomplete="off" placeholder="C:\path\to\subject.png">
+                  <label class="vision-label" for="thumbnailSubjectTier">Source tier</label>
+                  <select class="thumbnail-input" id="thumbnailSubjectTier"></select>
+                  <div class="thumbnail-field-row">
+                    <div>
+                      <label class="vision-label" for="thumbnailSubjectLicense">Licence</label>
+                      <input class="thumbnail-input" id="thumbnailSubjectLicense" type="text" autocomplete="off" placeholder="Not needed for own library">
+                    </div>
+                    <div>
+                      <label class="vision-label" for="thumbnailAccent">Accent</label>
+                      <div class="thumbnail-accent">
+                        <input id="thumbnailAccentPicker" type="color" aria-label="Accent colour picker">
+                        <input class="thumbnail-input" id="thumbnailAccent" type="text" maxlength="7" autocomplete="off">
+                      </div>
+                    </div>
+                  </div>
+                  <label class="vision-label" for="thumbnailSubjectUrl">Source URL</label>
+                  <input class="thumbnail-input" id="thumbnailSubjectUrl" type="text" autocomplete="off" placeholder="Required for licensed web sources">
+                  <label class="vision-label" for="thumbnailSubjectAttribution">Attribution</label>
+                  <input class="thumbnail-input" id="thumbnailSubjectAttribution" type="text" autocomplete="off">
+                  <div class="concept-review-actions">
+                    <button class="ghost" id="thumbnailSave" type="submit">Save subject</button>
+                    <button class="ghost" id="thumbnailRender" type="button">Render</button>
+                    <button class="ghost" id="thumbnailPreview" type="button">Layout preview</button>
+                  </div>
+                </form>
+                <div class="concept-criteria" id="thumbnailCriteria"></div>
+                <label class="vision-label" for="thumbnailNote">Review note</label>
+                <textarea id="thumbnailNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Required for Rework. Optional for Reject or Accept."></textarea>
+                <div class="concept-review-actions">
+                  <button class="ghost" id="thumbnailPrev" type="button">← Previous</button>
+                  <button class="danger" id="thumbnailReject" type="button">Reject</button>
+                  <button class="ghost" id="thumbnailRework" type="button">Rework</button>
+                  <button id="thumbnailAccept" type="button">Accept thumbnail</button>
+                  <button class="ghost" id="thumbnailNext" type="button">Next →</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel concept-review-panel" id="researchReviewPanel" hidden>
             <div class="panel-head">
               <div>
