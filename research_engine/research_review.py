@@ -75,6 +75,23 @@ def _preserved_decisions(
             key = key_for(concept_id, claim_id)
             saved = prior.get(key)
             if not isinstance(saved, dict):
+                carried = item.get("carried_from_review")
+                if isinstance(carried, dict):
+                    # Unchanged claim a human already accepted before a rework.
+                    preserved[key] = {
+                        "claim_id": claim_id,
+                        "decision": "ACCEPT",
+                        "criteria": {
+                            criterion: True
+                            for criterion in item.get("required_accept_criteria", [])
+                        },
+                        "note": (
+                            "Accepted before rework as "
+                            f"{carried.get('original_claim_id')}; carried forward unchanged."
+                        ),
+                        "claim_fingerprint": claim_fingerprint(item),
+                        "carried_forward": True,
+                    }
                 continue
             if str(saved.get("decision") or "").upper() == "REWORK":
                 continue
@@ -208,12 +225,62 @@ def apply_question_waiver(
     return snapshot()
 
 
+CARRIED_PREFIX = "kept_"
+
+
+def accepted_claims_to_carry(
+    bundle: dict[str, Any],
+    state: dict[str, Any],
+    *,
+    exclude_claim_id: str,
+) -> list[dict[str, Any]]:
+    """Accepted claims of a concept, with their sources, to survive a rework."""
+    concept_id = bundle["concept_id"]
+    decisions = state.get("decisions", {})
+    package = load_json(Path(bundle["draft_path"]))
+    sources = {
+        str(source.get("source_id")): source
+        for source in package.get("sources", [])
+        if isinstance(source, dict)
+    }
+    carried = []
+    for claim in package.get("claims", []):
+        claim_id = str(claim.get("claim_id") or "")
+        if claim_id == exclude_claim_id:
+            continue
+        decision = decisions.get(key_for(concept_id, claim_id), {})
+        if decision.get("decision") != "ACCEPT":
+            continue
+        used = [
+            sources[str(link.get("source_id"))]
+            for link in claim.get("evidence_links", [])
+            if str(link.get("source_id")) in sources
+        ]
+        carried.append({"claim": claim, "sources": used})
+    return carried
+
+
+def _carried_key(entry: dict[str, Any]) -> str:
+    claim = entry.get("claim", {})
+    return json.dumps(
+        {
+            "statement": claim.get("statement"),
+            "quotes": [
+                link.get("evidence_quote") for link in claim.get("evidence_links", [])
+            ],
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+
+
 def _apply_rework_feedback(
     *,
     concept_id: str,
     claim_id: str,
     item: dict[str, Any],
     note: str,
+    carried: list[dict[str, Any]] | None = None,
 ) -> None:
     plans_dir = OUTPUT_DIR / "plans"
     plan_path = plans_dir / f"{safe_slug(concept_id)}.research_plan.json"
@@ -263,6 +330,23 @@ def _apply_rework_feedback(
     previous.append(request)
     plan["human_rework_requests"] = previous
     plan["human_rework_mode"] = "HUMAN_INSTRUCTION_ONLY"
+
+    # Accepted claims of this concept survive the regeneration: they are merged
+    # back into the next draft unchanged and stay accepted (see D-104).
+    existing = plan.get("carried_claims", [])
+    reworked_ids = {claim_id, claim_id.removeprefix(CARRIED_PREFIX)}
+    merged = {
+        _carried_key(entry): entry
+        for entry in (existing if isinstance(existing, list) else [])
+        if isinstance(entry, dict)
+        and str(entry.get("claim", {}).get("claim_id") or "") not in reworked_ids
+    }
+    for entry in carried or []:
+        merged.setdefault(_carried_key(entry), entry)
+    if merged:
+        plan["carried_claims"] = list(merged.values())
+    else:
+        plan.pop("carried_claims", None)
 
     questions = plan.get("research_questions", [])
     if not isinstance(questions, list):
@@ -352,7 +436,7 @@ def prepare_state() -> dict[str, Any]:
         "decisions": _preserved_decisions(requests, previous),
         "waived_questions": _preserved_waivers(requests, previous),
     }
-    write_json(STATE_FILE, state)
+    finalize_if_complete(state, requests)
     return snapshot()
 
 
@@ -412,7 +496,7 @@ def snapshot() -> dict[str, Any]:
     pending = sum(item["decision"] == "PENDING" for item in claims)
     verified_statuses = []
     current_concept_ids = {bundle["concept_id"] for bundle in requests}
-    if state.get("status") == "COMPLETE" and VERIFIED_DIR.exists():
+    if VERIFIED_DIR.exists():
         for path in sorted(VERIFIED_DIR.glob("*.verified_research_package.json")):
             payload = load_json(path)
             if str(payload.get("concept_id", "")) not in current_concept_ids:
@@ -449,19 +533,42 @@ def normalize_criteria(criteria: Any, required: list[str]) -> dict[str, bool]:
     return {criterion: criteria.get(criterion) is True for criterion in required}
 
 
+def _decision_fingerprint(
+    bundle: dict[str, Any],
+    decisions: dict[str, Any],
+    waivers: dict[str, Any],
+) -> str:
+    concept_id = bundle["concept_id"]
+    payload = {
+        "draft_sha256": sha256_file(Path(bundle["draft_path"])),
+        "decisions": [
+            {
+                key: decisions[key_for(concept_id, str(item["claim_id"]))].get(key)
+                for key in ("claim_id", "decision", "criteria", "note")
+            }
+            for item in bundle["request"].get("items", [])
+        ],
+        "waivers": waivers,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+
+
 def finalize_if_complete(
     state: dict[str, Any],
     requests: list[dict[str, Any]],
 ) -> None:
-    expected = {
-        key_for(bundle["concept_id"], str(item["claim_id"]))
-        for bundle in requests
-        for item in bundle["request"].get("items", [])
-    }
-    if expected != set(state.get("decisions", {})):
-        write_json(STATE_FILE, state)
-        return
+    """Write verified research for every concept whose claims are all decided.
 
+    Each concept is finalized on its own so a ready concept can go on to
+    Story / Script while another is still under review (D-104). A concept's
+    files are rewritten only when its decisions change, so downstream work
+    built on an unchanged verified package stays current. The gate is COMPLETE
+    only when every concept is decided and ready.
+    """
+    decisions = state.get("decisions", {})
+    all_waivers = state.get("waived_questions") or {}
     REVIEWED_DIR.mkdir(parents=True, exist_ok=True)
     VERIFIED_DIR.mkdir(parents=True, exist_ok=True)
     current_concept_ids = {bundle["concept_id"] for bundle in requests}
@@ -477,56 +584,65 @@ def finalize_if_complete(
     summaries = []
     for bundle in requests:
         concept_id = bundle["concept_id"]
-        package = load_json(Path(bundle["draft_path"]))
         request = bundle["request"]
-        response = {
-            "concept_id": concept_id,
-            "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
-            "decisions": [
-                state["decisions"][key_for(concept_id, str(item["claim_id"]))]
-                for item in request.get("items", [])
-            ],
-            "waived_questions": (state.get("waived_questions") or {}).get(concept_id, {}),
-            "overall_note": "",
-        }
-        reviewed, verified = apply_gate(
-            package,
-            request,
-            response,
-            load_config(),
-        )
         slug = safe_slug(concept_id)
         reviewed_path = REVIEWED_DIR / f"{slug}.research_gate_reviewed.json"
         verified_path = VERIFIED_DIR / f"{slug}.verified_research_package.json"
-        write_json(reviewed_path, reviewed)
-        write_json(verified_path, verified)
+        keys = [key_for(concept_id, str(item["claim_id"])) for item in request.get("items", [])]
+        if not keys or any(key not in decisions for key in keys):
+            for path in (reviewed_path, verified_path):
+                if path.exists():
+                    path.unlink()
+            summaries.append({"concept_id": concept_id, "status": "AWAITING_HUMAN_DECISION"})
+            continue
+
+        waivers = all_waivers.get(concept_id, {}) if isinstance(all_waivers, dict) else {}
+        fingerprint = _decision_fingerprint(bundle, decisions, waivers)
+        existing = load_json(verified_path) if verified_path.exists() else None
+        if (
+            isinstance(existing, dict)
+            and reviewed_path.exists()
+            and existing.get("research_gate", {}).get("decision_fingerprint") == fingerprint
+        ):
+            verified = existing
+            reviewed_counts = load_json(reviewed_path).get("counts", {})
+        else:
+            package = load_json(Path(bundle["draft_path"]))
+            response = {
+                "concept_id": concept_id,
+                "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
+                "decisions": [decisions[key] for key in keys],
+                "waived_questions": waivers,
+                "overall_note": "",
+            }
+            reviewed, verified = apply_gate(package, request, response, load_config())
+            verified["research_gate"]["decision_fingerprint"] = fingerprint
+            write_json(reviewed_path, reviewed)
+            write_json(verified_path, verified)
+            reviewed_counts = reviewed["counts"]
         summaries.append(
             {
                 "concept_id": concept_id,
                 "status": verified["status"],
-                "accepted": reviewed["counts"]["accepted"],
-                "rework": reviewed["counts"]["rework"],
-                "rejected": reviewed["counts"]["rejected"],
-                "unresolved_questions": len(verified["unresolved_question_ids"]),
+                "accepted": reviewed_counts.get("accepted", 0),
+                "rework": reviewed_counts.get("rework", 0),
+                "rejected": reviewed_counts.get("rejected", 0),
+                "unresolved_questions": len(verified.get("unresolved_question_ids", [])),
                 "verified_package": str(verified_path),
             }
         )
 
+    all_ready = bool(summaries) and all(
+        item["status"] == "READY_FOR_STORY_SCRIPT" for item in summaries
+    )
     write_json(
         SUMMARY_FILE,
         {
-            "status": (
-                "READY_FOR_STORY_SCRIPT"
-                if summaries
-                and all(
-                    item["status"] == "READY_FOR_STORY_SCRIPT" for item in summaries
-                )
-                else "RESEARCH_INCOMPLETE"
-            ),
+            "status": "READY_FOR_STORY_SCRIPT" if all_ready else "RESEARCH_INCOMPLETE",
             "packages": summaries,
         },
     )
-    state["status"] = "COMPLETE"
+    state["status"] = "COMPLETE" if all_ready else "AWAITING_HUMAN_DECISION"
     write_json(STATE_FILE, state)
 
 
@@ -541,8 +657,6 @@ def apply_action(
     state = current_state()
     if not state:
         raise ValueError("Research Gate is not prepared or is stale")
-    if state.get("status") == "COMPLETE":
-        raise ValueError("Research Gate is already complete")
 
     requests = build_requests()
     bundle = next(
@@ -595,6 +709,7 @@ def apply_action(
             claim_id=claim_id,
             item=item,
             note=clean_note,
+            carried=accepted_claims_to_carry(bundle, state, exclude_claim_id=claim_id),
         )
 
     state["status"] = "AWAITING_HUMAN_DECISION"

@@ -232,6 +232,43 @@ class ResearchEngineTests(unittest.TestCase):
             "CONFLICTED",
         )
 
+    def test_carried_claims_are_merged_with_prefixed_ids(self):
+        plan = build_research_plan(self.concept)
+        plan["carried_claims"] = [
+            {"claim": self.claim(), "sources": [self.source("src001", "FIA")]}
+        ]
+        response = {
+            "concept_id": "c1",
+            "sources": [self.source("src001", "Other publisher")],
+            "claims": [self.claim()],
+        }
+        merged = module.merge_carried_claims(response, plan)
+        package = validate_research_response(merged, plan, self.config)
+        ids = [claim["claim_id"] for claim in package["claims"]]
+        self.assertEqual(ids, ["clm001", "kept_clm001"])
+        kept = package["claims"][1]
+        self.assertEqual(kept["evidence_links"][0]["source_id"], "kept_src001")
+        self.assertEqual(kept["carried_from_review"]["original_claim_id"], "clm001")
+        self.assertIn(
+            "kept_src001", [source["source_id"] for source in package["sources"]]
+        )
+        self.assertEqual(package.get("rejected_claims", []), [])
+
+    def test_recarried_claim_keeps_a_single_prefix(self):
+        plan = build_research_plan(self.concept)
+        claim = {**self.claim(), "claim_id": "kept_clm001"}
+        claim["evidence_links"] = [{**claim["evidence_links"][0], "source_id": "kept_src001"}]
+        plan["carried_claims"] = [
+            {"claim": claim, "sources": [self.source("kept_src001")]}
+        ]
+        merged = module.merge_carried_claims({"concept_id": "c1", "sources": [], "claims": []}, plan)
+        self.assertEqual(merged["claims"][0]["claim_id"], "kept_clm001")
+        self.assertEqual(merged["sources"][0]["source_id"], "kept_src001")
+
+    def test_no_carried_claims_leaves_response_unchanged(self):
+        response = {"concept_id": "c1", "sources": [], "claims": []}
+        self.assertIs(module.merge_carried_claims(response, {}), response)
+
     def test_unknown_source_rejects_claim(self):
         plan = build_research_plan(self.concept)
         claim = self.claim()

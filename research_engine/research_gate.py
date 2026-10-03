@@ -122,17 +122,20 @@ def build_review_request(
                 }
             )
 
-        items.append(
-            {
-                "claim_id": claim_id,
-                "statement": claim.get("statement"),
-                "role": claim.get("role"),
-                "question_ids": list(claim.get("question_ids", [])),
-                "coverage": claim.get("coverage", {}),
-                "evidence": evidence,
-                "required_accept_criteria": list(config["required_accept_criteria"]),
-            }
-        )
+        item = {
+            "claim_id": claim_id,
+            "statement": claim.get("statement"),
+            "role": claim.get("role"),
+            "question_ids": list(claim.get("question_ids", [])),
+            "coverage": claim.get("coverage", {}),
+            "evidence": evidence,
+            "required_accept_criteria": list(config["required_accept_criteria"]),
+        }
+        if isinstance(claim.get("carried_from_review"), dict):
+            # Only present on carried claims, so other items' fingerprints
+            # (and their saved decisions) are unchanged.
+            item["carried_from_review"] = claim["carried_from_review"]
+        items.append(item)
 
     return {
         "request_type": "human_research_gate",

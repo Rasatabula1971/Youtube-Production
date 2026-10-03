@@ -343,6 +343,62 @@ def validate_claim(
     return errors
 
 
+CARRIED_PREFIX = "kept_"
+
+
+def merge_carried_claims(response: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    """Add claims accepted before a rework back into the regenerated response.
+
+    Carried claims keep their wording, evidence and sources unchanged. IDs are
+    prefixed with "kept_" so they never collide with newly generated claims.
+    """
+    carried = plan.get("carried_claims")
+    if not isinstance(carried, list) or not carried:
+        return response
+    merged = dict(response)
+    sources = list(response.get("sources", []) or [])
+    claims = list(response.get("claims", []) or [])
+    source_ids = {str(source.get("source_id")) for source in sources if isinstance(source, dict)}
+    claim_ids = {str(claim.get("claim_id")) for claim in claims if isinstance(claim, dict)}
+    for entry in carried:
+        if not isinstance(entry, dict) or not isinstance(entry.get("claim"), dict):
+            continue
+        id_map: dict[str, str] = {}
+        for source in entry.get("sources", []) or []:
+            if not isinstance(source, dict):
+                continue
+            original = str(source.get("source_id") or "")
+            new_id = CARRIED_PREFIX + original.removeprefix(CARRIED_PREFIX)
+            id_map[original] = new_id
+            if new_id not in source_ids:
+                sources.append({**source, "source_id": new_id})
+                source_ids.add(new_id)
+        claim = dict(entry["claim"])
+        original_claim_id = str(claim.get("claim_id") or "")
+        base_id = CARRIED_PREFIX + original_claim_id.removeprefix(CARRIED_PREFIX)
+        new_claim_id = base_id
+        suffix = 2
+        while new_claim_id in claim_ids:
+            new_claim_id = f"{base_id}_{suffix}"
+            suffix += 1
+        claim_ids.add(new_claim_id)
+        claim["claim_id"] = new_claim_id
+        claim["evidence_links"] = [
+            {**link, "source_id": id_map.get(str(link.get("source_id")), link.get("source_id"))}
+            for link in claim.get("evidence_links", [])
+            if isinstance(link, dict)
+        ]
+        claim["carried_from_review"] = {
+            "original_claim_id": original_claim_id.removeprefix(CARRIED_PREFIX),
+            "reason": "Accepted at the Research Gate before a rework of this concept.",
+        }
+        claim.pop("coverage", None)
+        claims.append(claim)
+    merged["sources"] = sources
+    merged["claims"] = claims
+    return merged
+
+
 def validate_research_response(
     response: dict[str, Any],
     plan: dict[str, Any],
@@ -624,7 +680,7 @@ def run_apply() -> dict[str, Any]:
             continue
         try:
             draft = validate_research_response(
-                response,
+                merge_carried_claims(response, plan),
                 plan,
                 config,
             )

@@ -2328,13 +2328,11 @@ def research_artifact_state() -> dict[str, Any]:
     )
     verified_value = gate.get("verified_packages", []) if isinstance(gate, dict) else []
     verified = verified_value if isinstance(verified_value, list) else []
-    story_ready = (
-        bool(gate.get("complete"))
-        and bool(verified)
-        and all(
-            isinstance(item, dict) and item.get("status") == "READY_FOR_STORY_SCRIPT"
-            for item in verified
-        )
+    # Each concept goes on to Story / Script as soon as its own research is
+    # verified; concepts still under review wait without holding others (D-104).
+    story_ready = any(
+        isinstance(item, dict) and item.get("status") == "READY_FOR_STORY_SCRIPT"
+        for item in verified
     )
     return {
         "research_handoff_sha256": research_handoff_hash,
@@ -4765,7 +4763,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     research_gate_status = str(
         research_gate.get("status") or "WAITING_FOR_DRAFT_RESEARCH_PACKAGES"
     )
-    research_gate_complete = bool(research["research_gate_complete"])
     story = story_script_artifact_state()
     story_requests_ready = bool(story.get("story_requests_ready", False))
     story_plans_ready = bool(story.get("story_plans_ready", False))
@@ -5465,22 +5462,15 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "research_gate_prepare": {
             "enabled": (
                 research_drafts
-                and (
-                    research_gate_status == "READY_TO_PREPARE"
-                    or (research_gate_complete and not bool(research["story_ready"]))
-                )
+                and research_gate_status == "READY_TO_PREPARE"
             ),
             "reason": (
                 "Draft research claims are ready for human review."
                 if research_drafts and research_gate_status == "READY_TO_PREPARE"
                 else (
-                    "Research remains incomplete; reopen the Research Gate."
-                    if research_drafts and research_gate_complete
-                    else (
-                        "Research Gate is already prepared or complete."
-                        if research_drafts
-                        else "Structure current research claims first."
-                    )
+                    "Research Gate is already prepared or complete."
+                    if research_drafts
+                    else "Structure current research claims first."
                 )
             ),
         },
