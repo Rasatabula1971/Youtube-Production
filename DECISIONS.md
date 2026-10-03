@@ -2554,3 +2554,25 @@ questions must be covered. Questions of origin `human_rework` now report
 `HUMAN_REWORK_INSTRUCTION` when unanswered and are excluded from
 `unresolved_question_ids`. Original concept questions still block until
 answered.
+
+## D-103 — The Research Gate names unanswered questions and lets the reviewer waive them
+
+**Status:** Accepted
+
+When the last claim was decided and an original research question still had no
+accepted claim, the gate completed as `RESEARCH_INCOMPLETE`. The automatic
+workflow then re-prepared it at once and returned the reviewer to the same
+claim, without saying which question was missing.
+
+Accepting claims again repeated the loop. When the web held no reliable source
+for a question, there was no way forward at all.
+
+The gate snapshot now carries live `question_coverage` per concept, and the UI
+shows a banner of unanswered original questions. The reviewer can answer one by
+reworking a claim, or waive it with a required note. A waived question is
+`WAIVED_NOT_FOR_SCRIPT` in the verified package. It no longer blocks Story /
+Script, and the script has no accepted claim to state about it.
+
+Waivers live in the gate state and survive re-preparation only while the
+question's wording is unchanged. Rework-derived questions cannot be waived;
+they never block (D-102).

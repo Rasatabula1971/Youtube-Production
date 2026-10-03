@@ -7,6 +7,8 @@ ACCEPT requires all configured criteria. Conflicted claims require an explicit
 resolution note. The final package remains RESEARCH_INCOMPLETE when any original
 research question lacks an accepted claim. Questions created from human rework
 notes (origin "human_rework") are instructions for regeneration and never block.
+A reviewer may waive an original question the evidence cannot answer, with a
+note; it is recorded as WAIVED_NOT_FOR_SCRIPT and the script may not state it.
 """
 
 from __future__ import annotations
@@ -332,6 +334,8 @@ def apply_gate(
             buckets["rejected"].append(claim)
 
     accepted_claim_ids = {str(claim["claim_id"]) for claim in buckets["accepted"]}
+    waivers_value = response.get("waived_questions", {})
+    waivers = waivers_value if isinstance(waivers_value, dict) else {}
 
     question_status = []
     unresolved = []
@@ -347,22 +351,28 @@ def apply_gate(
         # it is an instruction, not research the script depends on. Only the
         # original research questions must be answered by an accepted claim.
         instruction = question.get("origin") == HUMAN_REWORK_ORIGIN
-        if not resolved and not instruction:
+        # A reviewer may waive an original question the evidence cannot answer.
+        # The script then has no accepted claim for it and may not state it.
+        waiver = waivers.get(question_id) if not resolved and not instruction else None
+        if not resolved and not instruction and not isinstance(waiver, dict):
             unresolved.append(question_id)
-        question_status.append(
-            {
-                "question_id": question_id,
-                "question": question.get("question"),
-                "status": (
-                    "RESOLVED_FOR_SCRIPT"
-                    if resolved
-                    else "HUMAN_REWORK_INSTRUCTION"
-                    if instruction
-                    else "UNRESOLVED"
-                ),
-                "accepted_claim_ids": [claim["claim_id"] for claim in linked],
-            }
-        )
+        entry = {
+            "question_id": question_id,
+            "question": question.get("question"),
+            "status": (
+                "RESOLVED_FOR_SCRIPT"
+                if resolved
+                else "HUMAN_REWORK_INSTRUCTION"
+                if instruction
+                else "WAIVED_NOT_FOR_SCRIPT"
+                if isinstance(waiver, dict)
+                else "UNRESOLVED"
+            ),
+            "accepted_claim_ids": [claim["claim_id"] for claim in linked],
+        }
+        if isinstance(waiver, dict):
+            entry["waiver"] = waiver
+        question_status.append(entry)
 
     used_source_ids = {
         str(link.get("source_id"))
@@ -401,6 +411,11 @@ def apply_gate(
         "research_questions": package.get("research_questions", []),
         "question_status": question_status,
         "unresolved_question_ids": unresolved,
+        "waived_question_ids": [
+            item["question_id"]
+            for item in question_status
+            if item["status"] == "WAIVED_NOT_FOR_SCRIPT"
+        ],
         "sources": verified_sources,
         "claims": buckets["accepted"],
         "research_gate": {
@@ -412,6 +427,7 @@ def apply_gate(
             "Verified means human-approved for this project's script use, not universal truth.",
             "Only sources referenced by accepted claims are retained.",
             "The Story / Script Engine must stay within accepted claim wording and evidence scope.",
+            "Waived research questions have no verified answer; the script must not state facts about them.",
         ],
     }
 

@@ -2376,6 +2376,83 @@ async function submitPackagingDecision(decision) {
 }
 
 
+const researchCoverage = document.getElementById("researchCoverage");
+
+function renderResearchCoverage(snapshot) {
+  const rows = ((snapshot && snapshot.question_coverage) || []).filter(function (row) {
+    return (row.questions || []).some(function (q) { return q.status !== "ANSWERED"; });
+  });
+  if (!rows.length) {
+    researchCoverage.hidden = true;
+    researchCoverage.innerHTML = "";
+    return;
+  }
+  const unanswered = rows.reduce(function (total, row) { return total + (row.unanswered || 0); }, 0);
+  researchCoverage.hidden = false;
+  researchCoverage.innerHTML =
+    '<h4>' + (unanswered
+      ? unanswered + " research question(s) have no accepted claim"
+      : "Waived research questions") + '</h4>' +
+    (unanswered
+      ? '<p class="muted">A concept goes on to Story / Script only when each of its original questions is answered by an accepted claim or waived. Accepting other claims will not help: Rework a claim with a note asking for evidence on the question, or mark it Not needed for script.</p>'
+      : "") +
+    rows.map(function (row) {
+      return '<div class="research-coverage-concept"><strong>' +
+        escapeHtml(row.working_title || row.concept_id) + '</strong><ul>' +
+        (row.questions || []).filter(function (q) { return q.status !== "ANSWERED"; }).map(function (q) {
+          const waived = q.status === "WAIVED";
+          return '<li><span class="status-chip ' + (waived ? "success" : "failed") + '">' +
+            (waived ? "WAIVED" : "UNANSWERED") + '</span> ' +
+            escapeHtml(q.question_id + " — " + (q.question || "")) +
+            (waived && q.waiver ? ' <span class="muted">(' + escapeHtml(q.waiver.note || "") + ')</span>' : "") +
+            ' <button class="ghost" type="button" data-waive-action="' +
+            (waived ? "UNWAIVE_QUESTION" : "WAIVE_QUESTION") +
+            '" data-concept-id="' + escapeHtml(row.concept_id) +
+            '" data-question-id="' + escapeHtml(q.question_id) + '">' +
+            (waived ? "Undo waive" : "Not needed for script") + '</button></li>';
+        }).join("") +
+        '</ul></div>';
+    }).join("");
+}
+
+async function submitQuestionWaiver(button) {
+  const action = button.dataset.waiveAction;
+  let note = "";
+  if (action === "WAIVE_QUESTION") {
+    note = window.prompt(
+      "Why is this question not needed for the script? The script will not be allowed to state anything about it.",
+      ""
+    );
+    if (note === null) return;
+    if (!note.trim()) {
+      showToast("A waiver needs a note.", true);
+      return;
+    }
+  }
+  try {
+    const payload = await api("/api/research-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        action: action,
+        concept_id: button.dataset.conceptId,
+        question_id: button.dataset.questionId,
+        note: note
+      })
+    });
+    researchEditing = false;
+    renderResearchReview(payload, true);
+    showToast(action === "WAIVE_QUESTION" ? "Question waived." : "Waiver removed.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+researchCoverage.addEventListener("click", function (event) {
+  const button = event.target.closest("[data-waive-action]");
+  if (button) submitQuestionWaiver(button);
+});
+
 function pendingResearchIndex(items) {
   return (items || []).findIndex(function (item) {
     return item && item.decision === "PENDING";
@@ -2400,6 +2477,7 @@ function renderResearchReview(snapshot, force) {
     researchReviewPanel.hidden = true;
     return;
   }
+  renderResearchCoverage(snapshot);
 
   if (snapshot.complete) {
     researchReviewPanel.hidden = false;

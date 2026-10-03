@@ -75,6 +75,23 @@ not research the script depends on. They show as HUMAN_REWORK_INSTRUCTION when
 no accepted claim links to them, and they never make a package incomplete.
 Notes about presentation ("too complex") belong at the Script Gate.
 
+### Unanswered questions and waivers
+
+The gate shows a live banner for each concept, listing the original questions
+that no accepted claim answers yet. Accepting other claims does not help: a
+completed gate with an unanswered question is reopened automatically.
+
+There are two ways to resolve an unanswered question:
+
+- **Rework a claim** with a note asking for evidence on that question.
+- **Mark it Not needed for script** with a required note. The question is
+  recorded as `WAIVED_NOT_FOR_SCRIPT` in the verified package
+  (`waived_question_ids`, with the note). The script has no accepted claim for
+  it and may not state anything about it. Undo removes the waiver.
+
+Only original questions can be waived. A waiver survives re-preparation while
+the question's wording is unchanged.
+
 If any question remains uncovered, the final package status is:
 
 ~~~text

@@ -85,6 +85,22 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('body["version_id"]', block)
 
 
+    def test_research_gate_route_dispatches_question_waivers(self):
+        source = (server.HERE / "server.py").read_text(encoding="utf-8")
+        post_start = source.index("def do_POST")
+        start = source.index('if route == "/api/research-gate" and body.get("action")', post_start)
+        end = source.index('if route == "/api/research-gate":', start)
+        block = source[start:end]
+        self.assertIn('"WAIVE_QUESTION"', block)
+        self.assertIn("apply_research_question_waiver(", block)
+        self.assertIn('question_id=str(body.get("question_id", ""))', block)
+        self.assertIn("maybe_start_automatic_workflow()", block)
+        script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="researchCoverage"', html)
+        self.assertIn("renderResearchCoverage", script)
+        self.assertIn("Not needed for script", script)
+
     def test_ui_v3_static_shell_has_four_views_and_job_drawer(self):
         html = (server.STATIC_DIR / "index.html").read_text(encoding="utf-8")
         script = (server.STATIC_DIR / "app.js").read_text(encoding="utf-8")
