@@ -163,6 +163,8 @@ def normalize_binding(value: Any) -> dict[str, Any]:
             "Invalid bound Channel Voice Profile: "
             + "; ".join(validation["errors"])
         )
+    if not isinstance(profile, dict):
+        raise ValueError("Channel Voice profile must be an object")
     binding = value.get("binding")
     if binding is None:
         binding = {}

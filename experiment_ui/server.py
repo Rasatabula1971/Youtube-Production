@@ -3119,7 +3119,7 @@ def visual_post_search_artifact_state() -> dict[str, Any]:
         and bool(expected)
         and expected.issubset(rough_current)
     )
-    rough_gate = (
+    rough_gate: dict[str, Any] = (
         visual_rough_cut_review_snapshot()
         if rough_cuts_ready
         else {
@@ -3971,15 +3971,6 @@ def stage_statuses() -> list[dict[str, Any]]:
     concept_gate_complete = bool(transform["concept_gate_complete"])
     research_ready = bool(transform["research_ready"])
 
-    packaging = packaging_artifact_state()
-    package_requests = bool(packaging["requests_ready"])
-    package_candidates = bool(packaging["candidates_ready"])
-    packaging_gate = packaging["packaging_gate"]
-    packaging_gate_status = str(
-        packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
-    )
-    packaging_gate_complete = bool(packaging["packaging_gate_complete"])
-    packaging_research_ready = bool(packaging["research_ready"])
     research = research_artifact_state()
     research_plans = bool(research["plans_ready"])
     research_evidence = bool(research["evidence_complete"])
@@ -4014,21 +4005,13 @@ def stage_statuses() -> list[dict[str, Any]]:
     title_direction_selected = bool(title_direction.get("selected"))
     packaging_brief = packaging_brief_snapshot()
     packaging_brief_ready = bool(packaging_brief.get("ready"))
-    angle_requests = psychological_angle_request_snapshot()
     angles = psychological_angle_snapshot()
     angles_ready = bool(angles.get("ready"))
-    thumbnail_requests = thumbnail_concept_request_snapshot()
     thumbnails = thumbnail_concept_snapshot()
     thumbnails_ready = bool(thumbnails.get("ready"))
-    pairing_requests = package_pairing_request_snapshot()
     package_validation = package_validation_snapshot()
     package_validation_ready = bool(package_validation.get("ready"))
     fmt = format_artifact_state()
-    format_requests_ready = bool(fmt["requests_ready"])
-    format_plans_ready = bool(fmt["plans_ready"])
-    format_gate = fmt["format_gate"]
-    format_gate_status = str(format_gate.get("status") or "WAITING_FOR_FORMAT_PLANS")
-    format_gate_complete = bool(fmt["format_gate_complete"])
     production_engine_ready = bool(fmt["production_engine_ready"])
     if research_ready:
         transform_human = "CONCEPT ACCEPTED — STAGE COMPLETE"
@@ -4714,14 +4697,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         concept_gate.get("status") or "WAITING_FOR_CONCEPT_CANDIDATES"
     )
     concept_gate_complete = bool(transform["concept_gate_complete"])
-    packaging = packaging_artifact_state()
-    package_requests = bool(packaging["requests_ready"])
-    package_candidates = bool(packaging["candidates_ready"])
-    packaging_gate = packaging["packaging_gate"]
-    packaging_gate_status = str(
-        packaging_gate.get("status") or "WAITING_FOR_PACKAGE_CANDIDATES"
-    )
-    packaging_gate_complete = bool(packaging["packaging_gate_complete"])
     research = research_artifact_state()
     research_plans = bool(research["plans_ready"])
     research_evidence = bool(research["evidence_complete"])
@@ -4786,10 +4761,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         and int(engagement.get("processed") or 0) > 0
     )
     preview_prepare = narration_preview_prepare_snapshot()
-    preview_render_payload = safe_load_json(PRODUCTION_PREVIEW_RENDER_SUMMARY)
-    preview_render = preview_render_payload if isinstance(preview_render_payload, dict) else {
-        "status": "WAITING_FOR_PREVIEW_MANIFESTS", "rendered": 0
-    }
     preview_gate = narration_preview_gate_snapshot()
     preview_prepared = preview_prepare.get("status") == "READY_FOR_FREE_PREVIEW_RENDER"
     preview_items = (
@@ -4827,10 +4798,6 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         and int(narration_spend_gate.get("pending") or 0) == 0
         and int(narration_spend_gate.get("rework") or 0) == 0
         and int(narration_spend_gate.get("rejected") or 0) == 0
-    )
-    narration_return = narration.get("render_return", {})
-    narration_return_status = str(
-        narration_return.get("status") or "WAITING_FOR_SPEND_APPROVAL"
     )
     narration_render_results_present = bool(
         narration.get("render_results_present")
@@ -7100,7 +7067,6 @@ def workflow_guidance(
             "next_title": "Human Rough-Cut Gate",
         }
 
-    rough_gate = visual_post.get("rough_gate", {})
     if (
         visual_post.get("rough_cuts_ready")
         and not visual_post.get("rough_gate_complete")

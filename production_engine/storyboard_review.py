@@ -5,7 +5,7 @@ invalidate only downstream artifacts for the edited shot. Narration/timing is
 locked unless a separate upstream rework is requested.
 """
 from __future__ import annotations
-import copy,json
+import copy
 from pathlib import Path
 from typing import Any
 from pipeline_integrity import atomic_write_json

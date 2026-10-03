@@ -88,9 +88,8 @@ def current_authorization(
     request = _load_dict(request_path)
     estimate = _load_dict(estimate_path)
     spend = _load_dict(spend_path)
-    if not all(isinstance(value, dict) for value in (request, estimate, spend)):
+    if request is None or estimate is None or spend is None:
         return None
-    assert request is not None and estimate is not None and spend is not None
 
     request_hash = sha256_file(request_path)
     estimate_hash = sha256_file(estimate_path)

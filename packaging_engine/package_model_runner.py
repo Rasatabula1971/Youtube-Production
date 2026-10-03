@@ -114,7 +114,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         },
     }
 
-    package_schema = {
+    package_schema: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": [

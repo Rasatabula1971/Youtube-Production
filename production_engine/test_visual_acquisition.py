@@ -127,7 +127,7 @@ class VisualAcquisitionTests(unittest.TestCase):
             approved.mkdir()
             timings.mkdir()
             manifests.mkdir()
-            plan_path = write_plan(approved, plan)
+            write_plan(approved, plan)
             timing_path = (
                 timings
                 / "concept-1.long_form.narration_timing_map.json"

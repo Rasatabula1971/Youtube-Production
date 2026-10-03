@@ -281,7 +281,7 @@ class ScriptReviewTests(unittest.TestCase):
             states = root / "section_states"
             states.mkdir()
             draft_path = drafts / "c1.short.script_draft.json"
-            state = section_state.prepare_state(
+            section_state.prepare_state(
                 draft_path,
                 state_dir=states,
             )

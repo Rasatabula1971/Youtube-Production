@@ -1109,7 +1109,8 @@ def run_apply() -> dict[str, Any]:
     try:
         inputs = build_inputs()
         expected = len(inputs) * 25
-    except Exception:
+    except (OSError, ValueError, KeyError, TypeError):
+        # Upstream inputs are missing or stale: no complete matrix is expected.
         expected = 0
     status = (
         "PACKAGE_VALIDATION_READY"

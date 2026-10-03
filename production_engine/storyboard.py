@@ -92,7 +92,7 @@ def build_storyboard(timing: dict[str, Any], visual: dict[str, Any], timing_path
         raise ValueError(
             "Narration timing segments must exactly match visual requirement beat IDs"
         )
-    cards = []
+    cards: list[dict[str, Any]] = []
     for index, segment in enumerate(segments):
         beat_id = str(segment.get("segment_id") or "")
         req = reqs.get(beat_id, {})

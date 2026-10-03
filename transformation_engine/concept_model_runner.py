@@ -66,7 +66,7 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     mechanism_id = str(request.get("mechanism_id", ""))
     allowed_formats = list(request.get("allowed_format_intents", []))
 
-    concept_schema = {
+    concept_schema: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": [

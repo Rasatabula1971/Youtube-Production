@@ -23,6 +23,22 @@ ignore = ["TRY004"]
 "story_script_engine/story_script_engine.py" = ["BLE001"]
 "transformation_engine/concept_model_runner.py" = ["BLE001"]
 "transformation_engine/concept_triage.py" = ["BLE001"]
+# Slice 7-26 boundaries: each broad except records the error as a structured
+# failure, rejection or runner report instead of letting it escape.
+"packaging_engine/package_pairing.py" = ["BLE001"]
+"packaging_engine/package_pairing_model_runner.py" = ["BLE001"]
+"packaging_engine/packaging_brief.py" = ["BLE001"]
+"packaging_engine/psychological_angle_model_runner.py" = ["BLE001"]
+"packaging_engine/psychological_angles.py" = ["BLE001"]
+"packaging_engine/thumbnail_concept_model_runner.py" = ["BLE001"]
+"packaging_engine/thumbnail_concepts.py" = ["BLE001"]
+"packaging_engine/title_direction.py" = ["BLE001"]
+"packaging_engine/title_direction_model_runner.py" = ["BLE001"]
+"production_engine/final_production_handoff.py" = ["BLE001"]
+"production_engine/final_render_manifest.py" = ["BLE001"]
+"production_engine/final_sound_plan.py" = ["BLE001"]
+"production_engine/visual_search_acquire.py" = ["BLE001"]
+"story_script_engine/script_section_rework_runner.py" = ["BLE001"]
 
 # Reviewed subprocess boundaries use argv lists with shell=False and executables
 # resolved from trusted project configuration/PATH. Security behavior is covered
@@ -37,6 +53,17 @@ ignore = ["TRY004"]
 # run with fixed argv lists.
 "packaging_engine/niche_thumbnail_study.py" = ["S310", "S603", "S607"]
 "production_engine/thumbnail_render.py" = ["S603", "S607"]
+# Local ffmpeg boundaries: argv lists without a shell, binary from config/PATH;
+# failures are recorded per manifest.
+"production_engine/edit_preview_render.py" = ["BLE001", "S603"]
+"production_engine/final_render.py" = ["BLE001", "S603"]
+"production_engine/narration_audio_qc.py" = ["S603"]
+# Stock download requires HTTPS and a per-provider host allow-list; failures are
+# recorded per shot.
+"production_engine/visual_asset_acquire.py" = ["BLE001", "S310"]
+# Fixed HTTPS provider endpoints (Pexels, Pixabay, YouTube Data API) with
+# URL-encoded query parameters; provider errors are returned as records.
+"production_engine/visual_search_adapters.py" = ["BLE001", "S310"]
 "source_acquisition/agent_reach_adapter.py" = ["S603"]
 "source_acquisition/experiment_02_evidence.py" = ["S603"]
 "source_acquisition/experiment_02_visual.py" = ["S603"]

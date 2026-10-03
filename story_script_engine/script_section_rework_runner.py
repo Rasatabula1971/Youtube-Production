@@ -492,7 +492,7 @@ def _assert_request_current_unlocked(request: dict[str, Any]) -> None:
     if str(draft.get("format") or "") != str(request.get("format") or ""):
         raise ValueError("STALE_REWORK_REQUEST: format changed")
 
-    expected = build_rework_request(
+    expected_request = build_rework_request(
         state,
         state_path,
         draft,
@@ -500,7 +500,7 @@ def _assert_request_current_unlocked(request: dict[str, Any]) -> None:
         target_id=str(request.get("target_id") or ""),
         review_request_path=review_request_path,
     )
-    if request != expected:
+    if request != expected_request:
         raise ValueError(
             "STALE_REWORK_REQUEST: prepared request content changed"
         )

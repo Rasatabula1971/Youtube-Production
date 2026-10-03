@@ -277,7 +277,7 @@ def snapshot() -> dict[str, Any]:
         request_path = RESULT_DIR / f"{key}.visual_search_request.json"
         state = search_request_is_current(request_path)
         is_current = state is not None
-        if is_current:
+        if state is not None:
             current_requests += 1
             request = state[0]
             if request.get("status") == "SEARCH_REQUIRED":
@@ -395,7 +395,7 @@ def prepare() -> dict[str, Any]:
                 request,
                 raw,
             )
-            if raw_current:
+            if raw_current and isinstance(raw, dict):
                 result = compile_results(request, request_path, raw)
                 atomic_write_json(result_path, result)
                 current_result_paths.add(result_path.resolve())

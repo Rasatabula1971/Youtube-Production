@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 import os
 import sys
 import tempfile
@@ -912,13 +911,16 @@ def _apply_selection_unlocked(
 
     old_draft = load_json(draft_path)
     old_state = load_json(state_path)
-    old_artifact = load_json(alternatives_path)
 
+    # _alternative_by_id returns None exactly when the selection is ORIGINAL.
     selected = _alternative_by_id(artifact, selection)
     replacement_text = (
         str(artifact.get("original", {}).get("text") or "")
-        if selection == "ORIGINAL"
+        if selected is None
         else str(selected.get("replacement_text") or "")
+    )
+    selected_claim_ids: list[Any] = (
+        [] if selected is None else list(selected.get("claim_ids_used", []))
     )
     if not replacement_text.strip():
         raise ValueError("Selected replacement text is empty")
@@ -1082,9 +1084,7 @@ def _apply_selection_unlocked(
                 "selected_by": reviewer_value,
                 "selected_at": _utc_now(),
                 "selected_replacement_sha256": _sha256_text(replacement_text),
-                "selected_claim_ids_used": list(
-                    selected.get("claim_ids_used", [])
-                ),
+                "selected_claim_ids_used": list(selected_claim_ids),
                 "rework_request": str(request_path),
                 "rework_request_sha256": sha256_file(request_path),
                 "model_response": str(response_path),
@@ -1118,11 +1118,7 @@ def _apply_selection_unlocked(
             "selection_id": selection,
             "replacement_text": replacement_text,
             "replacement_text_sha256": _sha256_text(replacement_text),
-            "claim_ids_used": (
-                []
-                if selection == "ORIGINAL"
-                else list(selected.get("claim_ids_used", []))
-            ),
+            "claim_ids_used": list(selected_claim_ids),
             "reviewer": reviewer_value,
             "selected_at": _utc_now(),
             "parent_draft_sha256": parent_draft_sha256,

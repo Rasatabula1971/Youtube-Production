@@ -139,7 +139,7 @@ def _base_from_verified_package(
     # Keep the historical key name "package" so older consumers and artifacts
     # remain readable, but its role is now explicitly pre-packaging story
     # context. No public title or thumbnail is locked at this stage.
-    story_contract = {
+    story_contract: dict[str, Any] = {
         "title": working_title,
         "title_role": "INTERNAL_WORKING_TITLE",
         "final_public_title_locked": False,
