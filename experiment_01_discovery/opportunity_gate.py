@@ -317,10 +317,12 @@ def _human_video_override() -> dict[str, Any] | None:
     except (OSError, ValueError):
         current = None
     if active is None:
-        # A human-video study set left behind after the video stopped being
-        # active must not keep feeding Experiment 02.
+        # A human-seeded study set left behind after it stopped being active
+        # must not keep feeding Experiment 02.
         if isinstance(current, list) and any(
-            str((row or {}).get("handoff_id", "")).startswith("human_video:")
+            str((row or {}).get("handoff_id", "")).startswith(
+                active_source.HUMAN_HANDOFF_PREFIXES
+            )
             for row in current
             if isinstance(row, dict)
         ):
@@ -334,7 +336,7 @@ def _human_video_override() -> dict[str, Any] | None:
 
 def _human_video_only_snapshot(active: dict[str, Any]) -> dict[str, Any]:
     return {
-        "status": "APPROVED_HUMAN_VIDEO",
+        "status": "APPROVED_" + str(active.get("source_type") or "HUMAN_VIDEO"),
         "ready_for_experiment_02": True,
         "gate_complete": True,
         "approved_video_count": len(active["study_set"]),
@@ -459,7 +461,7 @@ def gate_snapshot() -> dict[str, Any]:
     )
 
     if human_video:
-        status = "APPROVED_HUMAN_VIDEO"
+        status = "APPROVED_" + str(human_video.get("source_type") or "HUMAN_VIDEO")
     elif ready:
         status = "APPROVED"
     elif gate_complete:

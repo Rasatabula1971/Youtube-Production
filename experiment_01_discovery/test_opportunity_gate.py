@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import opportunity_gate as gate
 from opportunity_engine import active_source
+from opportunity_engine import human_topic_search as hts
 from opportunity_engine import human_video_intake as hvi
 
 VID = "dQw4w9WgXcQ"
@@ -19,6 +20,7 @@ class OpportunityGateTests(unittest.TestCase):
         for item in (
             patch.object(active_source, "ACTIVE_FILE", self.isolated / "active.json"),
             patch.object(hvi, "PACKETS_DIR", self.isolated / "human_video"),
+            patch.object(hts, "PACKETS_DIR", self.isolated / "human_topic"),
         ):
             item.start()
             self.addCleanup(item.stop)
@@ -144,6 +146,30 @@ class OpportunityGateTests(unittest.TestCase):
             active_source.clear_active()
             snapshot = gate.gate_snapshot()
             self.assertFalse(snapshot["ready_for_experiment_02"])
+            self.assertFalse(approved.exists())
+
+    def test_human_topic_videos_become_the_study_set_and_are_cleaned_up(self):
+        hts.explore(
+            "Turbo lag",
+            searcher=lambda q, l, t: [
+                {"video_id": "turbolag001", "title": "Turbo lag explained", "channel_id": "c1", "channel_title": "C1", "duration_seconds": 500, "views": 1},
+                {"video_id": "turbolag002", "title": "Why turbo lag happens", "channel_id": "c2", "channel_title": "C2", "duration_seconds": 500, "views": 2},
+            ],
+            measurer=lambda ids: {},
+        )
+        approved = self.isolated / "approved_study_set.json"
+        with (
+            patch.object(gate, "STUDY_SET_FILE", self.isolated / "missing_study_set.json"),
+            patch.object(gate, "APPROVED_STUDY_SET_FILE", approved),
+        ):
+            active_source.set_active_topic("turbo_lag")
+            snapshot = gate.gate_snapshot()
+            self.assertEqual(snapshot["status"], "APPROVED_HUMAN_TOPIC")
+            self.assertEqual(snapshot["active_human_video"]["source_type"], "HUMAN_TOPIC")
+            rows = json.loads(approved.read_text(encoding="utf-8"))
+            self.assertEqual([row["video_id"] for row in rows], ["turbolag002", "turbolag001"])
+            active_source.clear_active()
+            gate.gate_snapshot()
             self.assertFalse(approved.exists())
 
     def test_historical_approval_replaces_an_active_human_video(self):

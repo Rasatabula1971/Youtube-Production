@@ -148,8 +148,8 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
    (this PR: no UI change).
 2. **O5** — analyze a video from a URL (built: `human_video_intake.py`,
    `active_source.py`, *Analyze a video* card on the Opportunity page).
-3. **O4** — explore my topic (reuses the free search fallback and 01.3 query
-   variants).
+3. **O4** — explore my topic (built: `human_topic_search.py`, *Explore my
+   topic* card; yt-dlp flat search + one batched API measurement).
 4. **O3** — workspace and inbox UI.
 5. **O6–O9** — watchlist radar, API snapshots, four-axis classifier.
 6. **O10**, then **O11 + O12**.
