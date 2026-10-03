@@ -1218,7 +1218,8 @@ button.danger {
 }
 
 .script-section-target-select select,
-.script-section-rework-box select {
+.script-section-rework-box select,
+#scriptSectionVersions select {
   width: 100%;
   min-height: 38px;
   padding: 8px 10px;

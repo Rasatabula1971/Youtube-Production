@@ -343,8 +343,10 @@ reviewer list those saved versions and restore one.
 - The restore runs under the same section-state lock and recoverable
   transaction backups as selection and manual edit; any failure rolls back.
 
-There is no restore button in the Experiment UI yet; the action is available
-through the section service and API.
+In the Experiment UI, the Script Gate's section review has a **Saved versions**
+panel: it shows the current revision, lists saved versions (versions from a
+different script request are shown but disabled), and restores the chosen one
+after a confirmation dialog.
 
 ### Existing downstream selective-rework capabilities
 

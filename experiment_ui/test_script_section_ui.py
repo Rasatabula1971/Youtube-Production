@@ -147,5 +147,36 @@ class ScriptSectionUiSlice6Tests(unittest.TestCase):
         )
 
 
+    def test_saved_version_restore_controls_exist(self):
+        for control_id in (
+            "scriptSectionVersions",
+            "scriptSectionVersionInfo",
+            "scriptSectionVersion",
+            "scriptSectionRestore",
+        ):
+            self.assertIn(f'id="{control_id}"', self.html)
+        self.assertIn("Saved versions", self.html)
+
+    def test_restore_posts_version_id_without_a_target_and_confirms(self):
+        self.assertIn('submitScriptSectionAction("RESTORE_VERSION", {', self.script)
+        self.assertIn(
+            'version_id: action === "RESTORE_VERSION" ? extras.version_id : null',
+            self.script,
+        )
+        self.assertIn(
+            'target_id: target && action !== "RESTORE_VERSION" ? target.target_id : null',
+            self.script,
+        )
+        self.assertIn('action !== "RESTORE_VERSION" && !target', self.script)
+        self.assertIn("window.confirm(", self.script)
+
+    def test_incompatible_versions_cannot_be_chosen(self):
+        self.assertIn('(version.compatible ? "" : " disabled")', self.script)
+        self.assertIn(
+            "scriptSectionRestore.disabled = scriptSectionBusy || !compatible.length;",
+            self.script,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

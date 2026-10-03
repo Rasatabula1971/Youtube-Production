@@ -126,6 +126,9 @@ const scriptSectionNextPending = document.getElementById("scriptSectionNextPendi
 const scriptSectionTargetDetail = document.getElementById("scriptSectionTargetDetail");
 const scriptSectionManualText = document.getElementById("scriptSectionManualText");
 const scriptSectionSaveManual = document.getElementById("scriptSectionSaveManual");
+const scriptSectionVersionInfo = document.getElementById("scriptSectionVersionInfo");
+const scriptSectionVersion = document.getElementById("scriptSectionVersion");
+const scriptSectionRestore = document.getElementById("scriptSectionRestore");
 const scriptSectionReason = document.getElementById("scriptSectionReason");
 const scriptSectionInstruction = document.getElementById("scriptSectionInstruction");
 const scriptSectionAccept = document.getElementById("scriptSectionAccept");
@@ -2645,9 +2648,45 @@ function scriptSectionBusyLabel(action) {
     PREPARE_REWORK_REQUEST: "Preparing bounded request…",
     GENERATE_ALTERNATIVES: "Generating A / B / C…",
     SELECT_ALTERNATIVE: "Applying selection…",
-    MANUAL_EDIT: "Saving manual edit…"
+    MANUAL_EDIT: "Saving manual edit…",
+    RESTORE_VERSION: "Restoring saved version…"
   };
   return labels[action] || "Updating section review…";
+}
+
+function scriptSectionVersionLabel(version) {
+  return humanizeToken(version.version_id || "") +
+    " · " + humanizeToken(version.edit_type || "MODEL_DRAFT") +
+    (version.compatible ? "" : " · different script request");
+}
+
+function renderScriptSectionVersions(snapshot) {
+  const versions = (snapshot && snapshot.versions) || [];
+  const revision = Number((snapshot && snapshot.current_revision) || 0);
+  const previous = scriptSectionVersion.value;
+  scriptSectionVersionInfo.textContent =
+    "Current script is revision " + revision + ". " +
+    (versions.length
+      ? versions.length + " saved version" + (versions.length === 1 ? "" : "s") + "."
+      : "No saved versions yet; one is kept each time a target is replaced or edited.");
+  scriptSectionVersion.innerHTML = versions.length
+    ? versions.map(function (version) {
+        return '<option value="' + escapeHtml(version.version_id || "") + '"' +
+          (version.compatible ? "" : " disabled") + '>' +
+          escapeHtml(scriptSectionVersionLabel(version)) + '</option>';
+      }).join("")
+    : '<option value="">No saved versions</option>';
+  const compatible = versions.filter(function (version) {
+    return version.compatible;
+  });
+  const keep = compatible.some(function (version) {
+    return version.version_id === previous;
+  });
+  scriptSectionVersion.value = keep
+    ? previous
+    : (compatible.length ? compatible[0].version_id : "");
+  scriptSectionVersion.disabled = scriptSectionBusy || !compatible.length;
+  scriptSectionRestore.disabled = scriptSectionBusy || !compatible.length;
 }
 
 async function refreshScriptGateAfterSectionAction(conceptId, format) {
@@ -2675,6 +2714,7 @@ function renderScriptSectionReview(snapshot) {
 
   scriptSectionPrepare.hidden = status !== "SECTION_STATE_NOT_PREPARED";
   scriptSectionControls.hidden = status !== "READY_FOR_SECTION_REVIEW";
+  renderScriptSectionVersions(snapshot);
   scriptSectionProgress.innerHTML = targets.length
     ? '<span class="script-section-stat success">' +
         counts.accepted + ' accepted</span>' +
@@ -2963,7 +3003,7 @@ async function submitScriptSectionAction(action, extra) {
   const reason = scriptSectionReason.value || null;
   const instruction = scriptSectionInstruction.value.trim();
 
-  if (action !== "PREPARE" && !target) {
+  if (action !== "PREPARE" && action !== "RESTORE_VERSION" && !target) {
     showToast("Choose a script target first.", true);
     return;
   }
@@ -2992,6 +3032,18 @@ async function submitScriptSectionAction(action, extra) {
       return;
     }
   }
+  if (action === "RESTORE_VERSION") {
+    if (!extras.version_id) {
+      showToast("Choose a saved version to restore.", true);
+      return;
+    }
+    if (!window.confirm(
+      "Restore " + humanizeToken(extras.version_id) + "? The current script is saved " +
+      "first, section review restarts and any Script Gate approval is withdrawn."
+    )) {
+      return;
+    }
+  }
   if (
     action === "SELECT_ALTERNATIVE" &&
     !["ORIGINAL", "A", "B", "C"].includes(String(extras.selection_id || "").toUpperCase())
@@ -3011,13 +3063,14 @@ async function submitScriptSectionAction(action, extra) {
       concept_id: script.concept_id,
       format: script.format,
       action: action,
-      target_id: target ? target.target_id : null,
+      target_id: target && action !== "RESTORE_VERSION" ? target.target_id : null,
       reason: reason,
       custom_instruction: instruction || null,
       selection_id: extras.selection_id || null,
       replacement_text: action === "MANUAL_EDIT"
         ? scriptSectionManualText.value
-        : null
+        : null,
+      version_id: action === "RESTORE_VERSION" ? extras.version_id : null
     };
     const payload = await api("/api/script-section-review", {
       method: "POST",
@@ -3044,7 +3097,8 @@ async function submitScriptSectionAction(action, extra) {
         PREPARE_REWORK_REQUEST: "Bounded rework request prepared. No model call was made.",
         GENERATE_ALTERNATIVES: "A / B / C alternatives are ready.",
         SELECT_ALTERNATIVE: "Selection applied. Review the updated script before whole-script approval.",
-        MANUAL_EDIT: "Manual edit applied and locked. Review the updated script before whole-script approval."
+        MANUAL_EDIT: "Manual edit applied and locked. Review the updated script before whole-script approval.",
+        RESTORE_VERSION: "Saved version restored as a new revision. Section review starts again."
       };
       showToast(messages[action] || "Script section updated.", false);
     }
@@ -6026,6 +6080,11 @@ scriptSectionPrepare.addEventListener("click", function () {
 });
 scriptSectionSaveManual.addEventListener("click", function () {
   submitScriptSectionAction("MANUAL_EDIT");
+});
+scriptSectionRestore.addEventListener("click", function () {
+  submitScriptSectionAction("RESTORE_VERSION", {
+    version_id: scriptSectionVersion.value
+  });
 });
 scriptSectionAccept.addEventListener("click", function () {
   submitScriptSectionAction("ACCEPT");
