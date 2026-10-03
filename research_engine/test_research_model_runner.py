@@ -149,6 +149,72 @@ class ResearchModelRunnerTests(unittest.TestCase):
             runner.validate_acquired_source_boundary(response, self.evidence())
 
 
+    def response_with_quotes(self, *quotes):
+        return {
+            "sources": [{"source_id": "web001", "url": "https://example.com/source"}],
+            "claims": [
+                {
+                    "claim_id": f"clm{index:03d}",
+                    "statement": f"Claim {index}",
+                    "evidence_links": [{"source_id": "web001", "evidence_quote": quote}],
+                }
+                for index, quote in enumerate(quotes, start=1)
+            ],
+        }
+
+    def markdown_evidence(self):
+        evidence = self.evidence()
+        evidence["pages"][0]["content"] = (
+            "## Why nitrogen?\n\nAircraft tyres are **inflated with dry nitrogen** "
+            "because it doesn\u2019t support combustion \u2014 see the "
+            "[FAA advisory](https://www.faa.gov/ac) for details. Pressure is checked "
+            "daily before the first flight."
+        )
+        return evidence
+
+    def test_quote_matching_ignores_formatting_but_not_words(self):
+        self.assertTrue(
+            runner.quote_in_page(
+                "inflated with dry nitrogen because it doesn't support combustion - see the FAA advisory",
+                self.markdown_evidence()["pages"][0]["content"],
+            )
+        )
+        self.assertTrue(
+            runner.quote_in_page(
+                "\u201cAircraft tyres are inflated\u201d \u2026 checked daily before the first flight",
+                self.markdown_evidence()["pages"][0]["content"],
+            )
+        )
+        self.assertFalse(
+            runner.quote_in_page(
+                "inflated with nitrogen because",
+                self.markdown_evidence()["pages"][0]["content"],
+            )
+        )
+        self.assertFalse(
+            runner.quote_in_page(
+                "checked daily ... Aircraft tyres are inflated",
+                self.markdown_evidence()["pages"][0]["content"],
+            )
+        )
+        self.assertFalse(runner.quote_in_page("...", "anything"))
+
+    def test_unverifiable_claims_are_dropped_individually(self):
+        response = self.response_with_quotes(
+            "inflated with dry nitrogen",
+            "Nitrogen makes tyres twice as strong",
+        )
+        rejected = runner.validate_acquired_source_boundary(response, self.markdown_evidence())
+        self.assertEqual([c["claim_id"] for c in response["claims"]], ["clm001"])
+        self.assertEqual(rejected[0]["claim_id"], "clm002")
+        self.assertIn("not present", rejected[0]["reason"])
+        self.assertEqual(response["quote_rejected_claims"], rejected)
+
+    def test_all_claims_unverifiable_still_fails(self):
+        response = self.response_with_quotes("Nitrogen makes tyres twice as strong", "")
+        with self.assertRaisesRegex(ValueError, "No claim survived quote verification"):
+            runner.validate_acquired_source_boundary(response, self.markdown_evidence())
+
     def test_prompt_marks_source_text_untrusted_and_rejects_embedded_instructions(self):
         evidence = self.evidence()
         evidence["pages"][0]["content"] = (

@@ -1375,6 +1375,34 @@ class PartialMessageTests(unittest.TestCase):
         self.assertNotIn("First error", message)
         self.assertIn("web search", message)
 
+    def test_research_claims_message_names_validation_failure(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            summary.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "status": "MODEL_OUTPUT_VALIDATION_ERROR",
+                                "message": "No claim survived quote verification",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(automation, "RESEARCH_MODEL_SUMMARY", summary):
+                message = automation.partial_message("research_generate")
+            with patch.object(automation, "RESEARCH_MODEL_SUMMARY", Path(tmp) / "missing.json"):
+                fallback = automation.partial_message("research_generate")
+        self.assertIn("A free model answered", message)
+        self.assertIn("No claim survived quote verification", message)
+        self.assertIn("provider/model", fallback)
+
     def test_other_actions_keep_their_messages(self):
         self.assertIn("Kokoro", automation.partial_message("narration_preview_render"))
         self.assertIn("provider/model", automation.partial_message("concept_generate"))

@@ -2511,3 +2511,28 @@ counts as evidence. The Research Gate still decides that.
 When research acquisition still produces no usable pages, the workflow message
 says so plainly and quotes the first real backend error, with the commands to
 diagnose it.
+
+## D-101 — Research quotes are matched by words, and unverifiable claims are dropped one at a time
+
+**Status:** Accepted
+
+Claim structuring required each `evidence_quote` to appear in its page
+character for character, ignoring only case and whitespace. With pages from
+different readers (Jina Markdown, direct fetch, Wikipedia extract), valid
+quotes failed on formatting: curly quotes, dashes, Markdown link syntax, and
+`…` between fragments.
+
+One failing quote also rejected the whole response, discarding every good
+claim with it.
+
+Quotes are now compared as word sequences with formatting removed. Ellipses
+may separate fragments that appear in order. The wording itself must still be
+verbatim.
+
+A claim whose quote cannot be found is dropped and recorded in
+`quote_rejected_claims`. The response fails only when no claim survives or a
+cited source was not acquired.
+
+The prompt now asks for one continuous 5–30-word excerpt without Markdown. The
+workflow's PARTIAL message distinguishes "a model answered but validation
+failed" from "no model answered".
