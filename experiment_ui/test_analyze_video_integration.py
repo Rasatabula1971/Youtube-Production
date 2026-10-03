@@ -85,6 +85,8 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             "opportunityInboxTabs",
             "opportunityInbox",
             "historicalReviewPanel",
+            "evidenceDrawer",
+            "closeEvidenceDrawer",
             "opportunityGate",
         ):
             self.assertIn(f'id="{element_id}"', html)
@@ -103,6 +105,9 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             "evidenceMatrix(item)",
             "Evidence has moved since your decision",
             "What evidence is missing?",
+            "openEvidenceDrawer(",
+            "/api/opportunity/viral/snapshots?video_id=",
+            "renderTrajectory(chart",
         ):
             self.assertIn(needle, script)
 
