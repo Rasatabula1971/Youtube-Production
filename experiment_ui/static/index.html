@@ -337,7 +337,7 @@
                     <span class="status-chip running" id="scriptSectionTargetStatus">NOT PREPARED</span>
                   </div>
                   <div class="script-section-progress" id="scriptSectionProgress"></div>
-                  <button class="ghost" id="scriptSectionPrepare" type="button">Prepare section review</button>
+                  <button class="ghost" id="scriptSectionPrepare" type="button">Edit script by section</button>
 
                   <div id="scriptSectionControls" hidden>
                     <div class="script-section-target-row">
@@ -358,7 +358,7 @@
                       <button class="ghost" id="scriptSectionCancelRework" type="button">Cancel rework</button>
                     </div>
 
-                    <details class="script-section-editor">
+                    <details class="script-section-editor" id="scriptSectionManualEditor">
                       <summary>Manual target edit</summary>
                       <label class="vision-label" for="scriptSectionManualText">Edit selected target only</label>
                       <textarea id="scriptSectionManualText" class="vision-observation" rows="4" maxlength="5000" placeholder="Edit only this selected target. Locked targets must be unlocked first."></textarea>

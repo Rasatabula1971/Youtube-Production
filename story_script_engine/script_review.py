@@ -18,6 +18,7 @@ from pipeline_integrity import atomic_write_json
 from script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     SECTION_STATE_DIR,
+    apply_target_action,
     assert_state_matches_draft,
     state_path_for,
 )
@@ -581,10 +582,48 @@ def _apply_rework_feedback(
     atomic_write_json(request_source, request)
 
 
+def _accept_open_sections(req: dict[str, Any], source: Path, reviewer: str) -> int:
+    """Accept, as they stand, every prepared section target not yet accepted.
+
+    Used when the reviewer explicitly accepts the whole script after editing
+    only some sections. A pending selective rework is cancelled first, because
+    accepting the whole script accepts the current text.
+    """
+    concept_id = str(req.get("concept_id") or "").strip()
+    fmt = str(req.get("format") or "").strip()
+    state_path = state_path_for(concept_id, fmt, SECTION_STATE_DIR)
+    if not state_path.is_file():
+        return 0
+    state = load_json(state_path)
+    changed = 0
+    for target in state.get("targets", []):
+        if not isinstance(target, dict):
+            continue
+        target_id = str(target.get("target_id") or "")
+        decision = target.get("decision")
+        if decision == "ACCEPTED" and target.get("locked") is True:
+            continue
+        if decision == "REWORK_REQUESTED":
+            apply_target_action(
+                state_path, source, target_id=target_id,
+                action="CANCEL_REWORK", reviewer=reviewer,
+            )
+            decision = "PENDING"
+        apply_target_action(
+            state_path, source, target_id=target_id,
+            action="ACCEPT" if decision != "ACCEPTED" else "LOCK",
+            reviewer=reviewer,
+        )
+        changed += 1
+    return changed
+
+
 def _apply_payload_unlocked(request_path: Path, response: dict[str, Any]) -> dict[str, Any]:
     req = load_json(request_path)
     normalized = validate_response(req, response)
     source = assert_current_draft(req)
+    if normalized["decision"] == "ACCEPT" and response.get("accept_open_sections") is True:
+        _accept_open_sections(req, source, normalized["reviewer"])
     if normalized["decision"] == "ACCEPT":
         _section_review_provenance(
             req,
@@ -704,6 +743,7 @@ def apply_action(
     decision: str,
     criteria: dict[str, Any],
     note: str | None = None,
+    accept_open_sections: bool = False,
 ) -> dict[str, Any]:
     fmt = str(format).strip()
     request_path = REVIEW_REQUESTS_DIR / (
@@ -720,6 +760,7 @@ def apply_action(
         "decision": value,
         "criteria": {},
         "note": str(note or ""),
+        "accept_open_sections": bool(accept_open_sections),
     }
     apply_payload(request_path, payload)
     return snapshot()

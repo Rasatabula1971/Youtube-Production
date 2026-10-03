@@ -74,7 +74,9 @@ class ScriptSectionUiSlice6Tests(unittest.TestCase):
             self.script,
         )
 
-    def test_whole_script_accept_waits_for_completed_prepared_section_review(self):
+    def test_whole_script_accept_confirms_and_accepts_open_sections(self):
+        # D-105: accepting the whole script after partial section review asks for
+        # confirmation, then accepts the remaining sections as they stand.
         self.assertIn(
             "syncWholeScriptAcceptWithSectionState",
             self.script,
@@ -87,7 +89,9 @@ class ScriptSectionUiSlice6Tests(unittest.TestCase):
             'target.decision !== "ACCEPTED" || target.locked !== true',
             self.script,
         )
-        self.assertIn(
+        self.assertIn("Accept the whole script as it stands?", self.script)
+        self.assertIn("accept_open_sections: acceptOpenSections", self.script)
+        self.assertNotIn(
             "Finish the prepared section review before accepting the whole script.",
             self.script,
         )

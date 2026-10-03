@@ -2724,11 +2724,11 @@ function syncWholeScriptAcceptWithSectionState(snapshot) {
   const stale = status === "STALE_SECTION_STATE";
   scriptReject.disabled = Boolean(scriptSectionBusy);
   scriptRework.disabled = Boolean(scriptSectionBusy);
-  scriptAccept.disabled = Boolean(scriptSectionBusy || unresolved || stale);
+  scriptAccept.disabled = Boolean(scriptSectionBusy || stale);
   scriptAccept.title = stale
     ? "Resolve the stale section-review state before whole-script approval."
     : unresolved
-      ? "Finish the prepared section review before whole-script approval."
+      ? "Accepting the whole script also accepts the sections you have not edited or accepted."
       : scriptSectionBusy
         ? "Wait for the current section action to finish."
         : "";
@@ -3185,7 +3185,7 @@ async function submitScriptSectionAction(action, extra) {
       );
     } else {
       const messages = {
-        PREPARE: "Section review prepared.",
+        PREPARE: "Section editing is ready. Choose a part, edit it, then save.",
         ACCEPT: "Target accepted and locked.",
         LOCK: "Target locked.",
         UNLOCK: "Target unlocked.",
@@ -3265,8 +3265,13 @@ function renderScriptReview(snapshot, force) {
   const script = items[scriptCursor] || {};
   const pkg = script.package || {};
   const scriptOverlap = script.source_overlap || {};
+  const editButton = function (targetId) {
+    return '<button class="ghost script-edit-target" type="button" data-edit-target="' +
+      escapeHtml(targetId) + '">✏ Edit</button>';
+  };
   const sections = (script.sections || []).map(function (section) {
     return '<div class="concept-detail-card">' +
+      editButton("section:" + (section.section_id || "")) +
       '<h4>' + escapeHtml(section.section_id || "SECTION") + ' · ' +
       escapeHtml(section.purpose || "") + '</h4>' +
       '<p>' + escapeHtml(section.narration || "") + '</p>' +
@@ -3322,12 +3327,12 @@ function renderScriptReview(snapshot, force) {
           return escapeHtml((match.blocking ? "BLOCK " : "WARN ") + match.word_count + " words: " + match.overlap_text);
         }).join("<br>") + '</p></div>'
       : '') +
-    '<div class="concept-detail-card"><h4>OPENING HOOK · ' +
+    '<div class="concept-detail-card">' + editButton("hook:opening") + '<h4>OPENING HOOK · ' +
       escapeHtml(humanizeToken(script.opening_hook_mechanism || "")) +
       '</h4><p>' +
       escapeHtml(script.opening_hook || "") + '</p></div>' +
     sections +
-    '<div class="concept-detail-card"><h4>CLOSING</h4><p>' +
+    '<div class="concept-detail-card">' + editButton("closing:closing") + '<h4>CLOSING</h4><p>' +
       escapeHtml(script.closing || "") + '</p></div>';
 
   scriptCriteria.innerHTML = "";
@@ -3370,16 +3375,24 @@ async function submitScriptDecision(decision) {
     showToast("Wait for the current section action to finish.", true);
     return;
   }
+  let acceptOpenSections = false;
   if (
     decision === "ACCEPT" &&
     latestScriptSectionSnapshot &&
-    latestScriptSectionSnapshot.status === "READY_FOR_SECTION_REVIEW" &&
-    (latestScriptSectionSnapshot.targets || []).some(function (target) {
-      return target.decision !== "ACCEPTED" || target.locked !== true;
-    })
+    latestScriptSectionSnapshot.status === "READY_FOR_SECTION_REVIEW"
   ) {
-    showToast("Finish the prepared section review before accepting the whole script.", true);
-    return;
+    const open = (latestScriptSectionSnapshot.targets || []).filter(function (target) {
+      return target.decision !== "ACCEPTED" || target.locked !== true;
+    });
+    if (open.length) {
+      if (!window.confirm(
+        "Accept the whole script as it stands? " + open.length +
+        " section(s) you have not edited or accepted will be accepted too" +
+        (open.some(function (t) { return t.decision === "REWORK_REQUESTED"; })
+          ? ", and pending section reworks will be cancelled." : ".")
+      )) return;
+      acceptOpenSections = true;
+    }
   }
   const script = current.item;
   try {
@@ -3390,7 +3403,8 @@ async function submitScriptDecision(decision) {
         format: script.format,
         decision: decision,
         criteria: {},
-        note: scriptNote.value
+        note: scriptNote.value,
+        accept_open_sections: acceptOpenSections
       })
     });
     scriptEditing = false;
@@ -6394,6 +6408,42 @@ scriptSectionNextPending.addEventListener("click", function () {
   scriptSectionRenderedTargetId = null;
   renderScriptSectionReview(latestScriptSectionSnapshot || {});
 });
+async function editScriptTarget(targetId) {
+  if (scriptSectionBusy) {
+    showToast("Wait for the current section action to finish.", true);
+    return;
+  }
+  const status = String((latestScriptSectionSnapshot && latestScriptSectionSnapshot.status) || "");
+  if (status === "STALE_SECTION_STATE") {
+    showToast("Section state is stale; resolve it before editing.", true);
+    return;
+  }
+  if (status !== "READY_FOR_SECTION_REVIEW") {
+    await submitScriptSectionAction("PREPARE");
+  }
+  const targets = (latestScriptSectionSnapshot && latestScriptSectionSnapshot.targets) || [];
+  const target = targets.find(function (item) { return item.target_id === targetId; });
+  if (!target) {
+    showToast("That part of the script is not editable yet.", true);
+    return;
+  }
+  scriptSectionTargetId = targetId;
+  scriptSectionRenderedTargetId = null;
+  if (target.locked) {
+    await submitScriptSectionAction("UNLOCK");
+  }
+  renderScriptSectionReview(latestScriptSectionSnapshot || {});
+  const manualEditor = document.getElementById("scriptSectionManualEditor");
+  if (manualEditor) manualEditor.open = true;
+  scriptSectionManualText.scrollIntoView({ behavior: "smooth", block: "center" });
+  scriptSectionManualText.focus();
+}
+
+scriptDetail.addEventListener("click", function (event) {
+  const button = event.target.closest("[data-edit-target]");
+  if (button) editScriptTarget(button.dataset.editTarget);
+});
+
 scriptSectionPrepare.addEventListener("click", function () {
   submitScriptSectionAction("PREPARE");
 });
