@@ -2,10 +2,11 @@
 
 ## Purpose
 
-Generic title/thumbnail guidance (D-070) is a starting hypothesis. Niche
+Generic title/thumbnail guidance is a starting hypothesis. Niche
 conventions are stronger local evidence. This study tabulates what the
 breakout thumbnails in one niche + format actually look like, compares them
-with each D-070 hypothesis, and feeds the result into Packaging requests.
+with the Slice 25 thumbnail contract and D-096 title guidance, and feeds the
+result into Slice 25 thumbnail concept requests.
 
 It is descriptive and correlational. It does not measure or predict CTR.
 
@@ -41,8 +42,12 @@ python .\packaging_engine\niche_thumbnail_study.py --mode tabulate --niche autom
   buckets (0 / 1-2 / 3-5 / 6+), share of text that repeats the title, focal
   subject types, face share, median element and cue counts.
 - **Titles**: median title length.
-- **Hypothesis comparison**: for each D-070 rule, the share of the niche that
-  conforms. At least 50% (`convention_share`) is `NICHE_FOLLOWS`, otherwise
+- **Rule comparison**: for each packaging rule, the share of the niche that
+  conforms. Thresholds come from the live `packaging_config.json`: at most
+  `maximum_meaningful_visual_elements` elements and `maximum_text_words` words
+  (Slice 25), long-form titles of 45-60 characters (D-096), Shorts titles within
+  `short_title_contract.max_chars`. The overlap and arrow/circle limits live
+  under `comparison` in `niche_thumbnail_config.json`. At least 50% (`convention_share`) is `NICHE_FOLLOWS`, otherwise
   `NICHE_DIVERGES`.
 
 The study is `COMPLETE` when at least 20 thumbnails are measured and 20
@@ -51,18 +56,22 @@ annotations are confirmed; otherwise `PARTIAL`.
 ## Packaging integration
 
 Set `channel_niche` in `packaging_config.json` (for example
-`"automotive_racing"`). Package requests then carry
-`niche_thumbnail_conventions` for the concept's format (`either` carries both
-long-form and Shorts tabulations when present). The model is told to prefer
-the niche convention where it diverges from a generic hypothesis and to choose
-an accent from the differentiation candidates.
+`"automotive_racing"`). Slice 25 thumbnail concept requests for a format whose
+tabulation exists then carry `niche_thumbnail_conventions` and an instruction to
+follow a convention only where it does not conflict with the thumbnail
+contract, and to choose colours outside the crowded hue families.
 
-With `channel_niche` left `null`, requests are unchanged apart from an empty
-`niche_thumbnail_conventions` object.
+With `channel_niche` left `null`, or with no study for that format, requests
+are byte-identical to before, so existing concepts stay current. Setting the
+niche, or re-tabulating with different results, makes affected concept
+requests stale so they are regenerated.
+
+The thumbnail renderer also reads `channel_niche` to place real niche
+thumbnails in its mock feed and to flag an accent in a crowded hue family.
 
 ## Boundaries
 
 - DRAFT model annotations are never tabulated.
 - Thumbnail images are stored only under ignored `output/`.
 - The study describes the niche's breakout videos. It does not show that any
-  feature caused a video's performance. See D-071.
+  feature caused a video's performance. See D-097.

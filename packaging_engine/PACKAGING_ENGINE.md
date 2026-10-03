@@ -531,3 +531,13 @@ Slice 26 does not:
 
 Slice 27 can now build the compact Final Packaging Human Gate and targeted
 rework workflow from these validated package hypotheses.
+
+## Niche thumbnail conventions
+
+Set `channel_niche` in `packaging_config.json` and run the niche thumbnail
+study (`NICHE_THUMBNAIL_STUDY.md`) to give Slice 25 thumbnail concept requests
+the niche's breakout-thumbnail conventions. Requests are unchanged while the
+niche is unset or has no study for that format. See D-097.
+
+Validated concepts can then be rendered into images for review; see
+`production_engine/THUMBNAIL_RENDERING.md` and D-098.

@@ -2,10 +2,10 @@
   "reviewer": "YOUR_NAME_OR_ID",
   "decisions": [
     {
-      "package_id": "PACKAGE_ID",
+      "render_id": "VIDEO_ID--THUMBNAIL_ID",
       "decision": "ACCEPT",
       "criteria": {
-        "matches_approved_package": true,
+        "matches_thumbnail_concept": true,
         "single_focal_point": true,
         "readable_at_phone_size": true,
         "stands_out_in_feed": true,

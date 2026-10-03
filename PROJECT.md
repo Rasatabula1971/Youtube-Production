@@ -196,9 +196,10 @@ Potential capabilities:
 
 Visuals should support the narration or story rather than exist only to create motion.
 
-Thumbnails are rendered at 1280x720 from a locked channel template, previewed
-at phone size and in a mock niche feed, and approved at a Human Thumbnail Gate
-(D-072).
+Validated Slice 25 thumbnail concepts are rendered at 1280x720 from a locked
+channel template, previewed at phone size and in a mock niche feed, and
+reviewed at a Human Thumbnail Gate (D-098). Image approval does not choose the
+title-thumbnail package.
 
 The Production Engine uses a **cheap-first visual acquisition policy**. During
 pre-monetization testing, it searches project-owned/reusable assets and verified
@@ -679,15 +680,11 @@ The project uses a package-before-script rule:
 The engine creates multiple package candidates but does not rank them or predict
 CTR.
 
-Each package also declares its thumbnail design (focal subject, visual
-elements, cues, palette) and the title/thumbnail division of labor. Generic
-published title/thumbnail guidance is checked as non-blocking HYPOTHESIS
-advisories shown at the gate (D-070).
-
 A niche thumbnail study (`packaging_engine/niche_thumbnail_study.py`)
 tabulates 20-30 breakout thumbnails per niche and format, reports where the
-niche follows or diverges from each D-070 hypothesis, and feeds those
-conventions into package requests when `channel_niche` is configured (D-071).
+niche follows or diverges from the Slice 25 thumbnail contract and D-096 title
+guidance, and feeds those conventions into post-script thumbnail concept
+requests when `channel_niche` is configured (D-097).
 
 ### Packaging Gate
 
