@@ -607,6 +607,7 @@ function safeYoutubeUrl(value) {
 }
 
 function showToast(message, error) {
+  toast.setAttribute("aria-live", error ? "assertive" : "polite");
   toast.textContent = message;
   toast.classList.toggle("error", Boolean(error));
   toast.classList.add("show");
@@ -689,7 +690,8 @@ function renderRoute(options) {
     if (path === "/produce" && window.Produce) window.Produce.show();
     if (path === "/tools" && window.Tools) window.Tools.show();
   }
-  closeSidebar();
+  // Status polls re-render the route; only a navigation closes the phone menu.
+  if (!(options && options.poll)) closeSidebar();
   if (shouldScroll && renderedPath !== path) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }
@@ -708,6 +710,19 @@ function navigate(path, subroute) {
   }
   renderRoute({ scroll: !subroute });
   if (subroute) applySubroute(target, subroute);
+  focusViewAfterNavigation();
+}
+
+// After a navigation the old control is usually hidden, which would drop
+// keyboard focus to <body>. Move it to the page title unless the new view
+// already placed focus (for example on the first review item).
+function focusViewAfterNavigation() {
+  window.requestAnimationFrame(function () {
+    const active = document.activeElement;
+    const view = document.querySelector(".app-view:not([hidden])");
+    if (active && active !== document.body && active.offsetParent !== null && view && view.contains(active)) return;
+    pageTitle.focus({ preventScroll: true });
+  });
 }
 
 // Sidebar sub-items (Patch 1): Opportunities sub-items reuse the existing
@@ -753,26 +768,57 @@ function applySubroute(path, subroute) {
   }
 }
 
+// Phone layout (UI-16): the off-canvas sidebar is inert while closed so Tab
+// never lands on links that are off screen.
+const phoneLayout = window.matchMedia("(max-width: 860px)");
+
+function syncSidebar() {
+  const open = sidebar.classList.contains("open");
+  sidebar.inert = phoneLayout.matches && !open;
+  mobileMenu.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
 function openSidebar() {
   sidebar.classList.add("open");
   sidebarScrim.classList.add("open");
+  syncSidebar();
+  const current = sidebar.querySelector('[aria-current="page"]') || sidebar.querySelector("a[href]");
+  if (current) current.focus();
 }
 
 function closeSidebar() {
+  const wasOpen = sidebar.classList.contains("open");
+  const hadFocus = sidebar.contains(document.activeElement);
   sidebar.classList.remove("open");
   sidebarScrim.classList.remove("open");
+  syncSidebar();
+  if (wasOpen && hadFocus && phoneLayout.matches) mobileMenu.focus();
 }
 
+if (phoneLayout.addEventListener) phoneLayout.addEventListener("change", syncSidebar);
+
+let jobDrawerReturnFocus = null;
+
 function openJobDrawer() {
+  if (!jobDrawer.classList.contains("open")) {
+    jobDrawerReturnFocus = document.activeElement;
+  }
   jobDrawer.classList.add("open");
-  jobDrawer.setAttribute("aria-hidden", "false");
+  jobDrawer.inert = false;
   drawerScrim.classList.add("open");
+  closeJobDrawer.focus();
 }
 
 function closeJob() {
+  if (!jobDrawer.classList.contains("open")) return;
+  const hadFocus = jobDrawer.contains(document.activeElement);
   jobDrawer.classList.remove("open");
-  jobDrawer.setAttribute("aria-hidden", "true");
+  jobDrawer.inert = true;
   drawerScrim.classList.remove("open");
+  const target = jobDrawerReturnFocus && document.body.contains(jobDrawerReturnFocus) &&
+    jobDrawerReturnFocus.offsetParent !== null ? jobDrawerReturnFocus : jobSummaryButton;
+  if (hadFocus) target.focus();
+  jobDrawerReturnFocus = null;
 }
 
 function statusTone(workflow) {
@@ -1381,7 +1427,7 @@ async function openEvidenceDrawer(opportunityId, trigger) {
   document.getElementById("evidenceDrawerTitle").textContent = item.title || item.opportunity_id;
   evidenceDrawerBody.innerHTML = evidenceDrawerHtml(item);
   evidenceDrawer.classList.add("open");
-  evidenceDrawer.setAttribute("aria-hidden", "false");
+  evidenceDrawer.inert = false;
   evidenceScrim.classList.add("open");
   document.getElementById("closeEvidenceDrawer").focus();
   const chart = evidenceDrawerBody.querySelector("[data-trajectory-for]");
@@ -1400,15 +1446,20 @@ async function openEvidenceDrawer(opportunityId, trigger) {
 function closeEvidenceDrawer() {
   if (!evidenceDrawer.classList.contains("open")) return;
   evidenceDrawer.classList.remove("open");
-  evidenceDrawer.setAttribute("aria-hidden", "true");
+  evidenceDrawer.inert = true;
   evidenceScrim.classList.remove("open");
   if (evidenceDrawerReturnFocus && document.body.contains(evidenceDrawerReturnFocus)) evidenceDrawerReturnFocus.focus();
 }
 
 document.getElementById("closeEvidenceDrawer").addEventListener("click", closeEvidenceDrawer);
 evidenceScrim.addEventListener("click", closeEvidenceDrawer);
+// Escape closes the topmost overlay: evidence drawer, live job, then the
+// phone sidebar.
 document.addEventListener("keydown", function (event) {
-  if (event.key === "Escape") closeEvidenceDrawer();
+  if (event.key !== "Escape") return;
+  if (evidenceDrawer.classList.contains("open")) closeEvidenceDrawer();
+  else if (jobDrawer.classList.contains("open")) closeJob();
+  else if (sidebar.classList.contains("open")) closeSidebar();
 });
 
 const OPPORTUNITY_COUNTS = [
@@ -2736,7 +2787,7 @@ async function submitConceptDecision(decision) {
     );
     await loadStatus();
     if (payload.complete) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: window.YPA11y && window.YPA11y.reducedMotion() ? "auto" : "smooth" });
     }
   } catch (error) {
     showToast(error.message, true);
@@ -6977,6 +7028,7 @@ function renderJob(job, log) {
   if (!hasJob) {
     updateRunningActivity(null);
     jobSummaryButton.className = "job-summary neutral";
+    jobSummaryButton.setAttribute("aria-label", "Live job: idle");
     jobSummaryStatus.textContent = "IDLE";
     jobSummaryLabel.textContent = "No job running";
     jobTitle.textContent = "No job running";
@@ -6997,6 +7049,10 @@ function renderJob(job, log) {
   else if (running) statusClass = "running";
 
   jobSummaryButton.className = "job-summary " + statusClass;
+  jobSummaryButton.setAttribute(
+    "aria-label",
+    "Live job: " + String(job.status || "unknown").toLowerCase() + ", " + (job.label || job.action_id || "job")
+  );
   jobSummaryStatus.textContent = job.status || "UNKNOWN";
   jobSummaryLabel.textContent = job.label || job.action_id || "Job";
 
@@ -7040,7 +7096,7 @@ function renderAll(data) {
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});
-  renderRoute({ scroll: false });
+  renderRoute({ scroll: false, poll: true });
 }
 
 async function loadStatus() {
@@ -7233,7 +7289,11 @@ jobSummaryButton.addEventListener("click", openJobDrawer);
 closeJobDrawer.addEventListener("click", closeJob);
 drawerScrim.addEventListener("click", closeJob);
 stopJob.addEventListener("click", stopCurrentJob);
-mobileMenu.addEventListener("click", openSidebar);
+mobileMenu.addEventListener("click", function () {
+  if (sidebar.classList.contains("open")) closeSidebar();
+  else openSidebar();
+});
+syncSidebar();
 sidebarScrim.addEventListener("click", closeSidebar);
 visionObservation.addEventListener("input", function () {
   visionEditing = true;
@@ -7388,7 +7448,10 @@ async function editScriptTarget(targetId) {
   renderScriptSectionReview(latestScriptSectionSnapshot || {});
   const manualEditor = document.getElementById("scriptSectionManualEditor");
   if (manualEditor) manualEditor.open = true;
-  scriptSectionManualText.scrollIntoView({ behavior: "smooth", block: "center" });
+  scriptSectionManualText.scrollIntoView({
+    behavior: window.YPA11y && window.YPA11y.reducedMotion() ? "auto" : "smooth",
+    block: "center"
+  });
   scriptSectionManualText.focus();
 }
 
