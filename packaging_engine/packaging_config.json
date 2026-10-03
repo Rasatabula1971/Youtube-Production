@@ -59,6 +59,7 @@
     "require_mobile_legibility_intent": true,
     "prohibit_critical_bottom_right_content": true
   },
+  "channel_niche": null,
   "package_pairing_validation": {
     "pairing_mode": "FULL_CROSS_PRODUCT",
     "titles_per_format": 5,

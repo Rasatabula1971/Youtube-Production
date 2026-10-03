@@ -108,7 +108,7 @@ def build_request(angle_item: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(angles, list) or not angles:
         raise ValueError("INVALID_PSYCHOLOGICAL_ANGLES")
 
-    return {
+    request = {
         "artifact": "thumbnail_concept_request",
         "schema_version": SCHEMA_VERSION,
         "prompt_version": PROMPT_VERSION,
@@ -176,6 +176,28 @@ def build_request(angle_item: dict[str, Any]) -> dict[str, Any]:
             "packaging_brief_sha256": sha256_file(brief_path),
         },
     }
+    conventions = niche_conventions(angle_item.get("format"))
+    if conventions:
+        # Added only when present so requests without a niche study stay
+        # byte-identical and therefore current.
+        request["niche_thumbnail_conventions"] = conventions
+        request["instructions"].append(
+            "niche_thumbnail_conventions describe this niche's breakout thumbnails. "
+            "Follow a convention only where it does not conflict with the rules above, "
+            "and choose a background and accent colour outside the crowded hue "
+            "families. Never trade evidence or truthfulness for a convention."
+        )
+    return request
+
+
+def niche_conventions(video_format: Any) -> dict[str, Any]:
+    """Niche thumbnail tabulation for the configured channel niche, or {}."""
+    niche = load_config().get("channel_niche")
+    if not niche or video_format not in {"short", "long_form"}:
+        return {}
+    from niche_thumbnail_study import packaging_conventions
+
+    return packaging_conventions(str(niche), str(video_format)).get(str(video_format), {})
 
 
 def _allowed_numbers(request: dict[str, Any]) -> set[str]:
