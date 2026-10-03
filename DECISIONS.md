@@ -3257,3 +3257,59 @@ paid narration quote; nothing is spent at this step.
 
 **Kept in the classic panel.** Revising one narration segment and
 re-rendering the preview: a targeted edit tool, not a gate decision.
+
+
+## D-122 — UI Patch 8: the Produce workspace
+
+**Status:** Accepted
+
+**One page for the production gates.** `/produce` follows the redesign's
+Produce page, with one tab per human gate between narration and export:
+- Narration spend;
+- Choose visuals;
+- Footage rights;
+- Rough cut;
+- Visual spend;
+- Edit preview;
+- Final export.
+
+They run on the shared review workspace rather than `/review`, so production
+decisions sit together and the gate-review tab bar stays readable.
+
+**Same requests, same rules.** Every tab posts exactly the classic panel's
+body to the same endpoint, and the server's decision sets are mirrored and
+pinned by a test. The page adds guidance, never a rule the server lacks:
+- **Narration spend:** accept needs every spend check and confirms the
+  worst-case amount.
+- **Choose visuals:** a candidate must be chosen to use it, and blocked
+  candidates cannot be picked.
+- **Footage rights:** approval needs the editorial purpose.
+- **Rough cut:** a visual rework needs a shot, and every rework needs a note.
+- **Visual spend:** authorizing needs a ceiling above zero and within the
+  per-shot hard cap, and confirms the amount.
+- **Edit preview and final export:** returns need a note.
+
+The server still routes rough-cut and spend reworks (to the storyboard, the
+Format Gate or the Voice Performance Gate) and reports where they went.
+
+**Spending stays explicit.**
+- Both paid steps state their ceiling and ask for confirmation.
+- "Authorize" sets a ceiling only; nothing is generated or charged on this
+  page.
+- Final export approval binds the rendered bytes and publishes nothing.
+
+**Not waiting on you.** A shot whose storyboard changed must be re-searched by
+the workflow before anyone can choose for it, so it is not counted as pending.
+It shows as stale when you include decided items.
+
+**Kept in the classic view.** Registering asset files (final narration audio,
+managed and generated visuals, final sound) and editing a storyboard shot.
+These are data entry and editing, not decisions. The Produce page and the
+classic panels link to each other.
+
+**Entry points.**
+- The Command Center hero for each production gate state.
+- One combined Command Center card and Review Queue row counting every
+  pending production decision, which opens the first gate with work.
+- The classic panels' "Open produce workspace" buttons.
+- Productions → Produce in the sidebar.

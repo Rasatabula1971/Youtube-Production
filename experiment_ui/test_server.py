@@ -54,6 +54,7 @@ class ExperimentUiTests(unittest.TestCase):
                 "/production",
                 "/review",
                 "/packaging",
+                "/produce",
                 "/analysis",
                 "/productions",
                 "/tools",

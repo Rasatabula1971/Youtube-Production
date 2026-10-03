@@ -536,6 +536,12 @@ const ROUTES = {
     title: "Packaging",
     subtitle: "Titles, angles, thumbnails, pairing and the final package."
   },
+  "/produce": {
+    view: "produce",
+    kicker: "PRODUCTIONS",
+    title: "Produce",
+    subtitle: "Narration spend, visuals, rough cut, edit preview and final export."
+  },
   "/production": {
     view: "production",
     kicker: "PRODUCTION",
@@ -680,6 +686,7 @@ function renderRoute(options) {
     if (path === "/production" && window.ProductionWorkspace) window.ProductionWorkspace.show();
     if (path === "/review" && window.GateReviews) window.GateReviews.show();
     if (path === "/packaging" && window.Packaging) window.Packaging.show();
+    if (path === "/produce" && window.Produce) window.Produce.show();
   }
   closeSidebar();
   if (shouldScroll && renderedPath !== path) {
@@ -735,6 +742,8 @@ function applySubroute(path, subroute) {
     window.GateReviews.open(subroute);
   } else if (path === "/packaging" && window.Packaging) {
     window.Packaging.open(subroute);
+  } else if (path === "/produce" && window.Produce) {
+    window.Produce.open(subroute);
   }
   if (anchor) {
     anchor.scrollIntoView({ block: "start", behavior: "auto" });
@@ -848,6 +857,23 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_FINAL_PACKAGING_GATE: ["final", "Choose final package"],
     FINAL_PACKAGING_REJECTED: ["final", "Revisit final package"]
   };
+  const produceStates = {
+    HUMAN_NARRATION_SPEND_GATE: ["narration", "Review narration spend"],
+    HUMAN_VISUAL_CANDIDATE_GATE: ["visuals", "Choose visuals"],
+    HUMAN_VISUAL_RIGHTS_GATE: ["rights", "Review footage context"],
+    HUMAN_ROUGH_CUT_GATE: ["roughcut", "Review rough cut"],
+    HUMAN_VISUAL_SPEND_GATE: ["spend", "Review visual spend"],
+    HUMAN_EDIT_PREVIEW_GATE: ["edit", "Review edit preview"],
+    HUMAN_FINAL_EXPORT_GATE: ["export", "Review final render"]
+  };
+  if (produceStates[workflow.state]) {
+    return {
+      type: "route",
+      value: "/produce",
+      subroute: produceStates[workflow.state][0],
+      label: produceStates[workflow.state][1]
+    };
+  }
   if (packagingStates[workflow.state]) {
     return {
       type: "route",
@@ -7006,6 +7032,7 @@ function renderAll(data) {
   if (window.ProductionWorkspace) window.ProductionWorkspace.refresh(data);
   if (window.GateReviews) window.GateReviews.render();
   if (window.Packaging) window.Packaging.render();
+  if (window.Produce) window.Produce.render();
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);

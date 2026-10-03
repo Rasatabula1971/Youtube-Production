@@ -45,7 +45,7 @@
           </div>
         </div>
         <div class="nav-group">
-          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production /review /packaging" class="nav-item">
+          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production /review /packaging /produce" class="nav-item">
             <span class="nav-icon" aria-hidden="true">▶</span>
             <span>Productions</span>
             <span class="nav-count" id="navProductionCount" hidden></span>
@@ -55,6 +55,7 @@
             <a href="/productions#review" data-route="/productions" data-subroute="review" class="nav-subitem">Review Queue</a>
             <a href="/review" data-route="/review" class="nav-subitem">Gate reviews</a>
             <a href="/packaging" data-route="/packaging" class="nav-subitem">Packaging</a>
+            <a href="/produce" data-route="/produce" class="nav-subitem">Produce</a>
             <a href="/productions#completed" data-route="/productions" data-subroute="completed" class="nav-subitem">Completed</a>
             <a href="/analysis" data-route="/analysis" class="nav-subitem">Workspace</a>
           </div>
@@ -759,7 +760,10 @@
                 <h2 id="visualCandidateReviewTitle">Choose the shot</h2>
                 <p class="muted" id="visualCandidateReviewSummary">Compare the storyboard intent with discovered footage before rough cut.</p>
               </div>
-              <span class="status-chip running" id="visualCandidateReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="visuals">Open produce workspace →</button>
+                <span class="status-chip running" id="visualCandidateReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="visual-candidate-layout">
               <div class="concept-detail" id="visualShotDetail"></div>
@@ -803,7 +807,10 @@
                 <h2 id="visualRightsReviewTitle">Review creator footage</h2>
                 <p class="muted" id="visualRightsReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="visualRightsReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="rights">Open produce workspace →</button>
+                <span class="status-chip running" id="visualRightsReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="visualRightsDetail"></div>
@@ -857,7 +864,10 @@
                 <h2 id="visualRoughCutReviewTitle">Review visual rough cut</h2>
                 <p class="muted" id="visualRoughCutReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="visualRoughCutReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="roughcut">Open produce workspace →</button>
+                <span class="status-chip running" id="visualRoughCutReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="visualRoughCutDetail"></div>
@@ -886,7 +896,10 @@
                 <h2 id="visualSpendReviewTitle">Decide whether this shot is worth paying for</h2>
                 <p class="muted" id="visualSpendReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="visualSpendReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="spend">Open produce workspace →</button>
+                <span class="status-chip running" id="visualSpendReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="visualSpendDetail"></div>
@@ -946,7 +959,10 @@
                 <h2 id="editPreviewReviewTitle">Review structural edit preview</h2>
                 <p class="muted" id="editPreviewReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="editPreviewReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="edit">Open produce workspace →</button>
+                <span class="status-chip running" id="editPreviewReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div>
@@ -1016,7 +1032,10 @@
                 <h2 id="finalExportReviewTitle">Review final render</h2>
                 <p class="muted" id="finalExportReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="finalExportReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="export">Open produce workspace →</button>
+                <span class="status-chip running" id="finalExportReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div>
@@ -1093,7 +1112,10 @@
                 <h2 id="narrationSpendReviewTitle">Review narration spend</h2>
                 <p class="muted" id="narrationSpendReviewSummary">Verify the current quote and worst-case cost before any paid narration call.</p>
               </div>
-              <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/produce" data-subroute="narration">Open produce workspace →</button>
+                <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="narrationSpendDetail"></div>
@@ -1168,6 +1190,17 @@
           <div class="pk-panel" id="packaging-thumbnails" hidden></div>
           <div class="pk-panel" id="packaging-pairing" hidden></div>
           <div class="review-workspace pk-panel" id="packaging-final" hidden></div>
+        </section>
+
+        <section class="app-view" data-view="produce" id="viewProduce" hidden>
+          <div id="produceTabs"></div>
+          <div class="review-workspace" id="produce-narration"></div>
+          <div class="review-workspace" id="produce-visuals" hidden></div>
+          <div class="review-workspace" id="produce-rights" hidden></div>
+          <div class="review-workspace" id="produce-roughcut" hidden></div>
+          <div class="review-workspace" id="produce-spend" hidden></div>
+          <div class="review-workspace" id="produce-edit" hidden></div>
+          <div class="review-workspace" id="produce-export" hidden></div>
         </section>
 
         <section class="app-view" data-view="production" id="viewProduction" hidden>
@@ -1276,6 +1309,7 @@
   <script src="/js/production-workspace.js"></script>
   <script src="/js/gate-reviews.js"></script>
   <script src="/js/packaging.js"></script>
+  <script src="/js/produce.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

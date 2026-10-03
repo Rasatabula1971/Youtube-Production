@@ -272,6 +272,55 @@ class ShellMarkupTests(unittest.TestCase):
         offered = set(re.findall(r'value: "([A-Z_]+)"', block))
         self.assertEqual(offered, set(DECISIONS))
 
+    def test_produce_page_decisions_match_the_server(self) -> None:
+        import sys as _sys
+
+        _sys.path.insert(0, str(server.PRODUCTION_DIR))
+        import edit_preview_review
+        import final_export_review
+
+        script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
+        tabs = re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("let activeTab")[0])
+        self.assertEqual(len(tabs), 7)
+        for tab in tabs:
+            with self.subTest(tab=tab):
+                self.assertIn(f'id="produce-{tab}"', self.html)
+                self.assertIn(f'data-subroute="{tab}"', self.html)
+
+        def values(start: str, end: str) -> set[str]:
+            block = script.split(start, 1)[1].split(end, 1)[0]
+            found = re.findall(r'value: "([A-Z_]+)"|noteRework\("([A-Z_]+)"', block)
+            return {a or b for a, b in found}
+
+        # Server-side decision sets, copied from each gate module's validation.
+        self.assertEqual(values("const narration = {", "const visuals = {"), {"ACCEPT", "REWORK", "REJECT"})
+        self.assertEqual(values("const visuals = {", "const rights = {"), {"SELECT", "NEEDS_BETTER_VISUAL", "REJECT_ALL"})
+        self.assertEqual(values("const rights = {", "const roughcut = {"), {"APPROVE_CONTEXT_USE", "REJECT_USE"})
+        self.assertEqual(
+            values("const roughcut = {", "const spend = {"),
+            {"APPROVE_WITH_GAPS", "REWORK_VISUAL", "REWORK_PACING", "REWORK_AUDIO"},
+        )
+        self.assertEqual(
+            values("const spend = {", "function videoGate"),
+            {"AUTHORIZE_GENERATION", "KEEP_PLACEHOLDER", "RETRY_EXISTING"},
+        )
+        returns = {"RETURN_TO_VISUALS", "RETURN_TO_NARRATION", "RETURN_TO_SOUND"}
+        self.assertEqual(returns | {"APPROVE_EDIT_DIRECTION"}, set(edit_preview_review.DECISIONS))
+        self.assertEqual(returns | {"APPROVE_EXPORT"}, set(final_export_review.DECISIONS))
+        self.assertEqual(values("function videoGate", "const edit = "), returns)
+        for endpoint in [
+            "/api/narration-spend-gate",
+            "/api/visual-candidate-review",
+            "/api/visual-rights-review",
+            "/api/visual-rough-cut-review",
+            "/api/visual-spend-review",
+            "/api/edit-preview-review",
+            "/api/final-export-review",
+        ]:
+            with self.subTest(endpoint=endpoint):
+                self.assertIn(f'"{endpoint}"', script)
+                self.assertIn(endpoint, server.HUMAN_GATE_MUTATION_ROUTES)
+
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
         for route in server.APP_ROUTES:

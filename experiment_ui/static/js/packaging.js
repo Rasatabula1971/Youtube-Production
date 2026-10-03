@@ -438,6 +438,17 @@
     return workspaces[tab];
   }
 
+  // Keep the active tab visible in the scrolling strip on narrow screens.
+  function revealActiveTab(container) {
+    const active = container && container.querySelector(".pw-tab.active");
+    const strip = active && active.parentElement;
+    if (!strip) return;
+    const left = active.offsetLeft; // the strip is position: relative
+    if (left < strip.scrollLeft || left + active.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+      strip.scrollLeft = Math.max(0, left - 16);
+    }
+  }
+
   function renderTabs() {
     const bar = document.getElementById("packagingTabs");
     if (!bar) return;
@@ -450,6 +461,7 @@
     if (painted.tabs === html) return;
     painted.tabs = html;
     bar.innerHTML = html;
+    revealActiveTab(bar);
   }
 
   function render() {
