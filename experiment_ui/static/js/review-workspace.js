@@ -47,10 +47,12 @@
     function readDraft() {
       const checked = root.querySelector('input[name="' + uid + '-decision"]:checked');
       const note = root.querySelector("[data-rw-note]");
+      const select = root.querySelector("[data-rw-select]");
       return {
         key: renderedKey,
         value: checked ? checked.value : "",
-        note: note ? note.value : ""
+        note: note ? note.value : "",
+        select: select ? select.value : ""
       };
     }
 
@@ -73,13 +75,26 @@
       }).join("");
       const noteOff = selected && selected.takesNote === false;
       const noteRequired = Boolean(selected && selected.needsNote);
+      // Optional per-decision extras: a choice list (e.g. a rework reason),
+      // a different note label/size, and a pre-filled note (e.g. text to edit).
+      const select = selected && selected.select;
+      const selectHtml = select
+        ? '<label class="rw-note-label" for="' + uid + '-select">' + esc(select.label) + "</label>" +
+          '<select id="' + uid + '-select" data-rw-select class="rw-select">' +
+            select.options.map(function (option) {
+              return '<option value="' + esc(option[0]) + '"' + (option[0] === draft.select ? " selected" : "") + ">" + esc(option[1]) + "</option>";
+            }).join("") + "</select>"
+        : "";
+      const noteValue = draft.note || (selected && selected.notePrefill ? String(selected.notePrefill(item) || "") : "");
       return '<fieldset class="rw-decisions"><legend>Decision</legend>' + radios + "</fieldset>" +
-        '<label class="rw-note-label" for="' + uid + '-note">Note' +
+        selectHtml +
+        '<label class="rw-note-label" for="' + uid + '-note">' + esc((selected && selected.noteLabel) || "Note") +
           (noteRequired ? ' <span class="rw-required">required</span>' : "") + "</label>" +
-        '<textarea id="' + uid + '-note" data-rw-note rows="4" maxlength="500"' +
+        '<textarea id="' + uid + '-note" data-rw-note rows="' + ((selected && selected.noteRows) || 4) +
+          '" maxlength="' + ((selected && selected.noteMaxLength) || 500) + '"' +
           (noteOff ? " disabled" : "") + ' placeholder="' +
           esc(noteOff ? (options.noteOffHint || "This decision does not record a note.") : (selected && selected.notePlaceholder) || "Why you decided this (optional)") +
-          '">' + esc(noteOff ? "" : draft.note) + "</textarea>" +
+          '">' + esc(noteOff ? "" : noteValue) + "</textarea>" +
         '<button type="button" class="primary-cta rw-submit" data-rw-submit' + (busy ? " disabled" : "") + ">" +
           (busy ? "Saving…" : "Save decision") + "</button>" +
         '<p class="rw-status muted" role="status" aria-live="polite" data-rw-status></p>' +
@@ -174,11 +189,34 @@
         if (note) note.focus();
         return;
       }
+      const problem = decision.validate ? decision.validate(item, draft) : "";
+      if (problem) {
+        setStatus(problem);
+        return;
+      }
+      const question = decision.confirm ? decision.confirm(item, draft) : "";
+      if (question && !window.confirm(question)) return;
       busy = true;
       render(true);
       try {
-        await options.decide(item, decision.value, decision.takesNote === false ? "" : draft.note.trim());
-        if (!list().some(function (entry) { return options.key(entry) === draft.key; })) delete drafts[draft.key];
+        await options.decide(
+          item,
+          decision.value,
+          decision.takesNote === false ? "" : draft.note.trim(),
+          { select: draft.select }
+        );
+        const still = list().find(function (entry) { return options.key(entry) === draft.key; });
+        const stillOffered = still && (options.decisions(still) || []).some(function (d) { return d.value === draft.value; });
+        if (!still || !stillOffered) {
+          // The item left the queue, or its choices changed (e.g. a rework is
+          // now pending): the old draft no longer applies.
+          delete drafts[draft.key];
+          root.querySelectorAll('input[name="' + uid + '-decision"]').forEach(function (radio) { radio.checked = false; });
+          const note = root.querySelector("[data-rw-note]");
+          if (note) note.value = "";
+          const select = root.querySelector("[data-rw-select]");
+          if (select) select.value = "";
+        }
       } finally {
         // A decided item leaves the queue and its draft goes with it; a failed
         // decision keeps the item and the draft so nothing typed is lost.
@@ -200,6 +238,16 @@
         // Re-render the panel so the note requirement follows the choice.
         if (event.target.name === uid + "-decision") {
           const value = event.target.value;
+          // A decision that edits text starts from that text, not from a note
+          // typed for a different choice.
+          const items = list();
+          const item = items[locate(items)];
+          const chosen = item && (options.decisions(item) || []).find(function (d) { return d.value === value; });
+          const note = root.querySelector("[data-rw-note]");
+          const prefilled = note && item && (options.decisions(item) || []).some(function (d) {
+            return d.notePrefill && note.value === String(d.notePrefill(item) || "");
+          });
+          if (note && ((chosen && chosen.notePrefill) || prefilled)) note.value = "";
           render(true);
           const radio = root.querySelector('input[name="' + uid + '-decision"][value="' + CSS.escape(value) + '"]');
           if (radio) radio.focus();

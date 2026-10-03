@@ -280,8 +280,8 @@ to match the redesign's navigation:
     rework reason and ready alternatives. Package and Format show progress and
     decisions. Produce shows each version's voice, narration and final render.
   - **Keys.** Tabs follow the WAI-ARIA pattern: ← → move, Home/End jump.
-- `/review#<gate>` — **Gate Reviews** (D-118): the Analysis, Concept and
-  Research gates on the shared review workspace, one item at a time, with a
+- `/review#<gate>` — **Gate Reviews** (D-118, D-119): the Analysis, Concept,
+  Research and Script gates on the shared review workspace, one item at a time, with a
   gate switcher showing pending counts and "Include decided items" for
   revisiting.
   - **Same requests.** Each decision posts exactly what the classic panel
@@ -299,8 +299,21 @@ to match the redesign's navigation:
     Command Center hero, its attention cards, the Review Queue, a production's
     "Continue review" (research) and a "Review one at a time" button on each
     classic panel all open it.
+  - **Script (D-119).** A script branch is reviewed part by part (opening
+    hook, each section, closing), then as a whole.
+    - *Each part* shows its text, why it exists (purpose, psychology,
+      reward) and the claims it uses.
+    - *Part decisions:* Accept and lock; Rework (reason plus instruction),
+      then "Generate A / B / C", which calls the model once, and pick an
+      option or keep the original; Edit by hand (starts from the current
+      text); Unlock; Cancel rework.
+    - *Whole script:* accept, rework or reject. Accepting with parts still
+      open asks first, then accepts them too.
+    - *Requests:* the same as the classic panel, and section editing is
+      prepared automatically before the first part action.
   - **Classic view.** It stays in Workspace with every option, including the
-    concept override bank and saved ideas.
+    concept override bank, saved ideas, the bounded rework request without a
+    model call, and restoring a saved script version.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions.
 - `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw

@@ -209,11 +209,29 @@ class ShellMarkupTests(unittest.TestCase):
     def test_gate_reviews_post_the_classic_payloads(self) -> None:
         script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
         app = (STATIC / "app.js").read_text(encoding="utf-8")
-        for endpoint in ["/api/human-analysis-review", "/api/concept-gate", "/api/research-gate"]:
+        for endpoint in [
+            "/api/human-analysis-review",
+            "/api/concept-gate",
+            "/api/research-gate",
+            "/api/script-gate",
+            "/api/script-section-review",
+        ]:
             with self.subTest(endpoint=endpoint):
                 self.assertIn(f'"{endpoint}"', script)
                 self.assertIn(f'"{endpoint}"', app)
                 self.assertIn(endpoint, server.HUMAN_GATE_MUTATION_ROUTES)
+
+    def test_script_review_offers_only_server_rework_reasons(self) -> None:
+        import sys as _sys
+
+        _sys.path.insert(0, str(server.STORY_DIR))
+        from script_section_state import ALLOWED_REWORK_REASONS
+
+        script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
+        block = re.search(r"const REWORK_REASONS = \[(.*?)\n  \];", script, re.S)
+        assert block is not None
+        offered = set(re.findall(r'\["([A-Z_]+)", ', block.group(1)))
+        self.assertEqual(offered, set(ALLOWED_REWORK_REASONS))
 
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")

@@ -461,7 +461,10 @@
                 <h2 id="scriptReviewTitle">Review script draft</h2>
                 <p class="muted" id="scriptReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="scriptReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="script">Review one at a time →</button>
+                <span class="status-chip running" id="scriptReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="concept-review-layout">
@@ -1135,6 +1138,7 @@
           <div class="review-workspace" id="gateReview-analysis"></div>
           <div class="review-workspace" id="gateReview-concept" hidden></div>
           <div class="review-workspace" id="gateReview-research" hidden></div>
+          <div class="review-workspace" id="gateReview-script" hidden></div>
         </section>
 
         <section class="app-view" data-view="production" id="viewProduction" hidden>

@@ -53,6 +53,9 @@
       });
       const target = "research" + (claims.length ? "/" + encodeURIComponent(claims[0].concept_id + "::" + claims[0].claim_id) : "");
       action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="' + esc(target) + '">Continue review →</button>';
+    } else if (status === "HUMAN_REVIEW" && production.stage === "SCRIPT") {
+      // The Script Gate is on the shared review workspace too (D-119).
+      action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="script">Continue review →</button>';
     } else if (status === "HUMAN_REVIEW" || status === "BLOCKED") {
       action = '<button type="button" class="primary-cta" data-route="/analysis">' +
         (status === "BLOCKED" ? "Open in workspace →" : "Continue review →") + "</button>";

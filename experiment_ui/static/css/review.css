@@ -241,3 +241,49 @@
 
 .rw-evidence a { color: var(--accent); }
 .rw-evidence a:visited { color: #b4d7ff; }
+
+/* Script review (UI-11, D-119). */
+.rw-script-text {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-sunken);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rw-select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font: 13px var(--font-sans);
+}
+
+.rw-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
+.rw-actions button { font-size: 13px; padding: 7px 12px; }
+
+.rw-alternatives {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.rw-alternative {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.rw-alternative .rw-script-text { font-size: 13.5px; padding: var(--space-2) var(--space-3); }
+.rw-alternative p { margin: 0; }
+.rw-alternative button { justify-self: start; font-size: 13px; padding: 6px 11px; }
