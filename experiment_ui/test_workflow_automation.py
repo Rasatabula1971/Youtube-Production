@@ -200,7 +200,7 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["workflow_state"], "HUMAN_TITLE_DIRECTION_GATE")
         self.assertEqual(result["message"], "Select Preferred Title Directions")
 
-    def test_title_direction_selection_runs_slice25_packaging_chain_then_stops(self):
+    def test_title_direction_selection_runs_slice26_packaging_chain_then_stops(self):
         state = {"completed": 0}
         sequence = [
             "packaging_brief_prepare",
@@ -208,6 +208,8 @@ class WorkflowAutomationTests(unittest.TestCase):
             "psychological_angle_generate",
             "thumbnail_concept_prepare",
             "thumbnail_concept_generate",
+            "package_pairing_prepare",
+            "package_pairing_generate",
         ]
 
         def readiness():
@@ -228,8 +230,8 @@ class WorkflowAutomationTests(unittest.TestCase):
                     "current_title": sequence[state["completed"]],
                 }
             return {
-                "state": "THUMBNAIL_CONCEPTS_READY",
-                "current_title": "Psychological Angles + Thumbnail Concepts Ready",
+                "state": "PACKAGE_VALIDATION_READY",
+                "current_title": "Package Pairing + Validation Ready",
             }
 
         def fake_run(action_id):
@@ -258,7 +260,7 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
         self.assertEqual(result["completed_actions"], sequence)
-        self.assertEqual(result["workflow_state"], "THUMBNAIL_CONCEPTS_READY")
+        self.assertEqual(result["workflow_state"], "PACKAGE_VALIDATION_READY")
 
     def test_format_gate_completion_runs_voice_chain_to_human_performance_gate(self):
         state = {"completed": 0}
