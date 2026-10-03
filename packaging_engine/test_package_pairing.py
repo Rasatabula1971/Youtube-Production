@@ -393,6 +393,21 @@ class PackagePairingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside the paired component"):
             module.validate_response(response, request)
 
+    def test_unapproved_numeric_title_claim_is_hard_rejected(self):
+        request, response = self.response()
+        request["pair_candidates"][0]["title_text"] = "900 C Brake Secret"
+        request["pair_candidates"][0]["unsupported_title_numbers"] = ["900"]
+        values = module.validate_response(response, request)
+
+        self.assertEqual(values[0]["validation_status"], "REJECT")
+        self.assertIn(
+            "unsupported_material_claim",
+            {
+                item["code"]
+                for item in values[0]["hard_validation_findings"]
+            },
+        )
+
     def test_64_character_title_is_guidance_not_hard_rejection(self):
         brief = self.brief()
         title = self.titles()[0]
