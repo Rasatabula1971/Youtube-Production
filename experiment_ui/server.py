@@ -37,6 +37,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/opportunity-gate",
     "/api/opportunity/video/analyze",
     "/api/opportunity/video/stop",
+    "/api/opportunity/topic/analyze",
     "/api/vision-review",
     "/api/human-analysis-review",
     "/api/concept-gate",
@@ -91,7 +92,7 @@ from opportunity_gate import (
 )
 
 from opportunity_engine import active_source as opportunity_active_source
-from opportunity_engine import human_video_intake
+from opportunity_engine import human_topic_search, human_video_intake
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -1918,6 +1919,47 @@ def submitted_video_summary(packet: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def explored_topic_summary(packet: dict[str, Any]) -> dict[str, Any]:
+    channel = packet.get("channel") or {}
+    intake = packet.get("intake") or {}
+    state = packet.get("evidence_state") or {}
+    videos = packet.get("candidate_videos") or []
+    return {
+        "opportunity_id": packet.get("opportunity_id"),
+        "topic_key": intake.get("topic_key"),
+        "title": packet.get("title"),
+        "seed_kind": intake.get("seed_kind"),
+        "summary": packet.get("summary"),
+        "variants": intake.get("variants") or [],
+        "failed_searches": sum(
+            1 for entry in intake.get("search_log") or [] if entry.get("status") != "COMPLETE"
+        ),
+        "measurement_source": (intake.get("measurement") or {}).get("source"),
+        "measurement_error": (intake.get("measurement") or {}).get("error"),
+        "excluded_count": len(intake.get("excluded_videos") or []),
+        "demand": state.get("historical_demand") or {},
+        "replication": state.get("cross_channel_replication") or {},
+        "video_count": len(videos),
+        "top_videos": [
+            {
+                "video_id": video.get("video_id"),
+                "title": video.get("title"),
+                "youtube_url": video.get("youtube_url"),
+                "channel_title": video.get("channel_title"),
+                "views": video.get("views"),
+                "format": video.get("format"),
+            }
+            for video in videos[:3]
+        ],
+        "route": channel.get("route"),
+        "route_channel_id": channel.get("channel_id"),
+        "route_rule_id": channel.get("rule_id"),
+        "route_reason": channel.get("reason"),
+        "notes": packet.get("human_notes") or [],
+        "created_at": packet.get("created_at"),
+    }
+
+
 def submitted_videos_snapshot() -> dict[str, Any]:
     active = opportunity_active_source.load_active()
     return {
@@ -1925,8 +1967,24 @@ def submitted_videos_snapshot() -> dict[str, Any]:
             submitted_video_summary(packet)
             for packet in human_video_intake.list_packets()
         ],
+        "topics": [
+            explored_topic_summary(packet)
+            for packet in human_topic_search.list_packets()
+        ],
         "active": opportunity_active_source.summary(active),
     }
+
+
+def _confirm_replacing_study_set(confirm_replace: bool, what: str) -> None:
+    existing_work = bool(json_stems(EXP2_PREPARED_DIR)) or bool(
+        approved_study_video_ids()
+    )
+    if existing_work and not confirm_replace:
+        raise ValueError(
+            f"CONFIRM_REPLACE: Analyzing {what} replaces the active study set. "
+            "Experiment 02 and everything after it (concepts, research, scripts) "
+            "restart, and current work there becomes stale."
+        )
 
 
 def analyze_submitted_video(
@@ -1936,16 +1994,21 @@ def analyze_submitted_video(
     active = opportunity_active_source.load_active()
     if active and active.get("video_id") == video_id:
         return submitted_videos_snapshot()
-    existing_work = bool(json_stems(EXP2_PREPARED_DIR)) or bool(
-        approved_study_video_ids()
-    )
-    if existing_work and not confirm_replace:
-        raise ValueError(
-            "CONFIRM_REPLACE: Analyzing this video replaces the active study set. "
-            "Experiment 02 and everything after it (concepts, research, scripts) "
-            "restart for this video, and current work there becomes stale."
-        )
+    _confirm_replacing_study_set(confirm_replace, "this video")
     opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    opportunity_gate_snapshot()
+    return submitted_videos_snapshot()
+
+
+def analyze_explored_topic(
+    *, topic_key: str, confirm_replace: bool, allow_excluded: bool
+) -> dict[str, Any]:
+    """Make an explored topic's top videos the active study set."""
+    active = opportunity_active_source.load_active()
+    if active and active.get("topic_key") == topic_key:
+        return submitted_videos_snapshot()
+    _confirm_replacing_study_set(confirm_replace, "this topic's videos")
+    opportunity_active_source.set_active_topic(topic_key, allow_excluded=allow_excluded)
     opportunity_gate_snapshot()
     return submitted_videos_snapshot()
 
@@ -8182,6 +8245,26 @@ class Handler(BaseHTTPRequestHandler):
                     topic=str(body.get("topic", "")),
                 )
                 self._send_json(submitted_videos_snapshot())
+                return
+
+            if route == "/api/opportunity/topic":
+                human_topic_search.explore(
+                    str(body.get("text", "")),
+                    note=str(body.get("note", "")),
+                )
+                self._send_json(submitted_videos_snapshot())
+                return
+
+            if route == "/api/opportunity/topic/analyze":
+                payload = analyze_explored_topic(
+                    topic_key=str(body.get("topic_key", "")),
+                    confirm_replace=body.get("confirm_replace") is True,
+                    allow_excluded=body.get("allow_excluded") is True,
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
                 return
 
             if route == "/api/opportunity/video/analyze":

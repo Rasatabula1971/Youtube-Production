@@ -259,6 +259,84 @@
         "minimum_unique_channels": 1,
         "description": "Fewer than 3 independent channels."
       }
+    ],
+    "human_topic_demand": [
+      {
+        "rule_id": "HT-DEMAND-STRONG",
+        "level": "STRONG",
+        "minimum_channels": 3,
+        "minimum_views": 500000,
+        "description": "At least 3 independent channels have a relevant search result with 500K+ views (search sample, not the age-matched 01.3 engine)."
+      },
+      {
+        "rule_id": "HT-DEMAND-MODERATE",
+        "level": "MODERATE",
+        "minimum_channels": 1,
+        "minimum_views": 500000,
+        "description": "At least one relevant search result has 500K+ views."
+      },
+      {
+        "rule_id": "HT-DEMAND-WEAK",
+        "level": "WEAK",
+        "minimum_channels": 1,
+        "minimum_views": 0,
+        "description": "Relevant videos exist but none has reached 500K views."
+      }
+    ],
+    "human_topic_replication": [
+      {
+        "rule_id": "HT-CCR-STRONG",
+        "level": "STRONG",
+        "minimum_channels": 6,
+        "minimum_views": 100000,
+        "description": "At least 6 independent channels have a relevant video with 100K+ views."
+      },
+      {
+        "rule_id": "HT-CCR-MODERATE",
+        "level": "MODERATE",
+        "minimum_channels": 3,
+        "minimum_views": 100000,
+        "description": "At least 3 independent channels have a relevant video with 100K+ views."
+      },
+      {
+        "rule_id": "HT-CCR-LOW",
+        "level": "LOW",
+        "minimum_channels": 1,
+        "minimum_views": 100000,
+        "description": "One or two independent channels have a relevant video with 100K+ views."
+      },
+      {
+        "rule_id": "HT-CCR-NONE",
+        "level": "NONE",
+        "minimum_channels": 0,
+        "minimum_views": 100000,
+        "description": "No relevant video with 100K+ views was found."
+      }
     ]
+  },
+  "human_topic": {
+    "max_seed_chars": 160,
+    "max_variants": 5,
+    "results_per_variant": 10,
+    "search_timeout_seconds": 30,
+    "max_candidate_videos": 12,
+    "max_study_videos": 4,
+    "max_study_videos_per_channel": 1,
+    "variant_templates": {
+      "TOPIC": [
+        "{core}",
+        "{core} explained",
+        "how {core} works",
+        "science of {core}",
+        "{core} #shorts"
+      ],
+      "QUESTION": [
+        "{question}",
+        "{core} explained",
+        "{core}",
+        "{core} science",
+        "{core} #shorts"
+      ]
+    }
   }
 }

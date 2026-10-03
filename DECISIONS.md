@@ -2739,3 +2739,28 @@ context only, as it does for historical videos.
 Also fixed: the historical adapter now accepts the pipeline's
 `short_candidate` / `long_form_candidate` format labels.
 
+## D-110 — Explore My Topic searches a sample and labels it as one
+
+**Status:** Accepted
+
+Slice O4 lets the human enter any topic or viewer question, whether or not it
+exists in `niches.json`. The seed is normalised (topic or question, keywords,
+stable key) and expanded into at most five deterministic search variants. Each
+variant is one yt-dlp flat search (no YouTube quota, nothing downloaded); the
+results are measured in one batched `videos.list` call (1 unit per 50 videos),
+falling back to the search metadata when the API is unavailable. A variant
+that fails is recorded and the others continue; if every variant fails,
+nothing is saved.
+
+Only results whose titles match at least two seed keywords (one for a
+one-keyword seed) and that pass the scope exclusions count as evidence.
+Demand (`HT-DEMAND-*`) and replication (`HT-CCR-*`) are set from written rules
+on independent channels and view counts; viewer need, mechanism and content
+gap stay hypotheses. The packet states that this is a search sample, not the
+age-matched 01.3 engine, so a human idea is never rejected merely for missing
+historical thresholds.
+
+*Analyze these videos* reuses the D-109 handoff: the most-viewed relevant
+videos, at most four and one per channel, become the frozen approved study set
+(gate status `APPROVED_HUMAN_TOPIC`).
+
