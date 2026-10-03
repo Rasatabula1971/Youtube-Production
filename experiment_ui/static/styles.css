@@ -2066,9 +2066,9 @@ button.danger {
 }
 .inbox-item {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, .08);
   border-radius: 10px;
@@ -2079,6 +2079,8 @@ button.danger {
   gap: 5px;
   min-width: 0;
 }
+.inbox-item { min-width: 0; }
+.inbox-details { min-width: 0; overflow-wrap: anywhere; }
 .inbox-item-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2120,13 +2122,35 @@ button.danger {
   display: flex;
   gap: 8px;
   align-items: center;
-  flex-shrink: 0;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+}
+.evidence-matrix {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+.evidence-matrix th { width: 7.5em; }
+.evidence-matrix td:nth-child(2) { width: 7.5em; }
+.evidence-matrix td { overflow-wrap: anywhere; }
+.evidence-matrix th,
+.evidence-matrix td {
+  text-align: left;
+  padding: 3px 8px 3px 0;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.evidence-matrix th { font-weight: 600; white-space: nowrap; }
+.evidence-matrix .matrix-open td:first-of-type { color: var(--muted); }
+.evidence-moved {
+  font-size: 12px;
+  color: #f2cc8f;
 }
 .viral-facts {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 11em) minmax(0, 1fr);
   gap: 3px 12px;
   margin: 8px 0 0;
   font-size: 12px;

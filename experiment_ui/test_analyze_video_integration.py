@@ -52,6 +52,7 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             patch.object(vr, "STATE_FILE", self.root / "viral" / "state.json"),
             patch.object(vr, "SUMMARY_FILE", self.root / "viral" / "last_run.json"),
             patch.object(vr, "SNAPSHOT_FILE", self.root / "viral" / "snapshots.jsonl"),
+            patch.object(vr, "CLUSTERS_FILE", self.root / "viral" / "clusters.json"),
             patch.object(vr, "PACKETS_DIR", self.root / "viral_packets"),
             patch.object(historical_adapter, "STUDY_SET_FILE", self.root / "no_study_set.json"),
             patch.object(server, "EXP2_PREPARED_DIR", self.prepared),
@@ -67,6 +68,8 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
         self.assertNotIn("/api/opportunity/video", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertIn("/api/opportunity/topic/analyze", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertIn("/api/opportunity/viral/analyze", server.HUMAN_GATE_MUTATION_ROUTES)
+        # Inbox decisions can change the historical gate, so they wait for running jobs.
+        self.assertIn("/api/opportunity/inbox", server.HUMAN_GATE_MUTATION_ROUTES)
         self.assertNotIn("/api/opportunity/topic", server.HUMAN_GATE_MUTATION_ROUTES)
 
     def test_static_ui_is_a_workspace_with_an_inbox(self):
@@ -96,6 +99,10 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             'runAction("viral_radar")',
             "/api/opportunity/viral/analyze",
             "renderViralEntry(data)",
+            "data-inbox-theme",
+            "evidenceMatrix(item)",
+            "Evidence has moved since your decision",
+            "What evidence is missing?",
         ):
             self.assertIn(needle, script)
 
@@ -185,6 +192,30 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
             server.analyze_viral_candidate(video_id="video000010", confirm_replace=False, allow_excluded=False)
         payload = server.analyze_viral_candidate(video_id="video000010", confirm_replace=True, allow_excluded=False)
         self.assertEqual(payload["active"]["source_type"], "VIRAL_RADAR")
+
+    def test_unified_gate_routes_historical_saves_and_rejects_to_the_gate(self):
+        historical = {
+            "opportunity_id": "opp_historical__automotive_racing__brakes__long_form_candidate",
+            "gate_opportunity_id": "automotive_racing:brakes:long_form_candidate",
+        }
+        with (
+            patch.object(server, "opportunity_inbox_snapshot", return_value={"items": [historical]}),
+            patch.object(server, "apply_gate_action") as gate_action,
+        ):
+            server.apply_inbox_decision(opportunity_id=historical["opportunity_id"], action="SAVE", note="")
+            gate_action.assert_called_once_with(
+                action="HOLD_TOPIC", opportunity_key="automotive_racing:brakes:long_form_candidate"
+            )
+            server.apply_inbox_decision(opportunity_id=historical["opportunity_id"], action="REJECT", note="")
+            self.assertEqual(gate_action.call_args.kwargs["action"], "REJECT_TOPIC")
+            with self.assertRaisesRegex(ValueError, "Historical review"):
+                server.apply_inbox_decision(opportunity_id=historical["opportunity_id"], action="APPROVE", note="")
+
+    def test_approval_through_analyze_is_in_the_decision_history(self):
+        save_packet()
+        server.analyze_submitted_video(video_id=VID, confirm_replace=False, allow_excluded=False)
+        item = server.opportunity_inbox_snapshot()["items"][0]
+        self.assertEqual([h["action"] for h in item["decision_history"]], ["APPROVE"])
 
     def test_prepared_profiles_for_another_study_set_are_stale(self):
         (self.exp15 / "approved_study_set.json").write_text(

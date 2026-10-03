@@ -979,24 +979,51 @@ function routeChip(item) {
 
 function inboxActionButtons(item) {
   const excluded = item.route === "EXCLUDED" ? "1" : "";
+  const viral = item.viral || {};
   return (item.actions || []).map(function (action) {
-    if (action === "ANALYZE") {
+    if (action === "APPROVE") {
       const isTopic = item.source_type === "HUMAN_TOPIC";
       const kind = isTopic ? "topic" : item.source_type === "VIRAL_RADAR" ? "viral" : "video";
       return '<button data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
-        ' data-inbox-kind="' + kind + '" data-inbox-excluded="' + excluded + '">' +
-        (isTopic ? "Analyze these videos" : "Analyze why it worked") + '</button>';
+        ' data-inbox-kind="' + kind + '" data-inbox-excluded="' + excluded + '"' +
+        ' title="Approve: this becomes the study set for Experiment 02">' +
+        (isTopic ? "Approve these videos" : "Approve") + '</button>';
+    }
+    if (action === "APPROVE_THEME") {
+      const cluster = (viral.cluster || {});
+      return '<button data-inbox-theme="' + escapeHtml(cluster.cluster_id || "") + '"' +
+        ' title="Approve the whole theme: one video per independent channel">' +
+        'Approve theme (' + escapeHtml(String(cluster.independent_channel_count || "?")) + ' channels)</button>';
     }
     if (action === "STOP") {
       return '<button class="ghost" data-video-stop>Stop analyzing</button>';
     }
     if (action === "REVIEW_BELOW") {
-      return '<button class="ghost" data-inbox-review>Review below</button>';
+      return '<button class="ghost" data-inbox-review>Approve in review below</button>';
     }
-    const labels = { SAVE: "Save", REJECT: "Reject", WATCH: "Watch", RESTORE: "Back to review" };
+    const labels = { SAVE: "Save", REJECT: "Reject", WATCH: "Watch", RESTORE: "Back to review", REWORK: "Rework…" };
     return '<button class="ghost" data-inbox-action="' + action + '" data-inbox-id="' +
       escapeHtml(item.opportunity_id) + '">' + labels[action] + '</button>';
   }).join("");
+}
+
+function evidenceMatrix(item) {
+  const rows = (item.matrix || []).map(function (row) {
+    const assessed = row.level !== "UNASSESSED" && row.level !== "HYPOTHESIS";
+    return '<tr class="' + (assessed ? "" : "matrix-open") + '"><th>' + escapeHtml(row.label) + '</th><td>' +
+      escapeHtml(row.level) + '</td><td class="muted">' +
+      escapeHtml(assessed ? (row.rule_id || "") + (row.basis.length ? " — " + row.basis.join("; ") : "") : "not yet evidenced") +
+      '</td></tr>';
+  }).join("");
+  return rows ? '<table class="evidence-matrix"><tbody>' + rows + '</tbody></table>' : "";
+}
+
+function decisionHistory(item) {
+  const history = item.decision_history || [];
+  if (!history.length) return "";
+  return '<p class="muted">Decisions: ' + escapeHtml(history.slice(-5).map(function (entry) {
+    return entry.action + " " + String(entry.at || "").slice(0, 16).replace("T", " ") + (entry.note ? " (" + entry.note + ")" : "");
+  }).join(" · ")) + '</p>';
 }
 
 function formatRate(value) {
@@ -1015,6 +1042,10 @@ function viralChips(viral) {
     (viral.lifetime_ratio == null ? "" : '<span class="status-chip neutral" title="' +
       escapeHtml("basis: " + (viral.ratio_basis || []).join(", ")) + '">' +
       escapeHtml(viral.lifetime_ratio + "× channel") + '</span>') +
+    (viral.breadth === "REPLICATED" && viral.cluster
+      ? '<span class="status-chip success" title="' + escapeHtml(viral.cluster.replication_rule_id || "") + '">' +
+        escapeHtml("Replicated · " + viral.cluster.independent_channel_count + " channels") + '</span>'
+      : "") +
     (viral.tracking_status && viral.tracking_status !== "TRACKING"
       ? '<span class="status-chip neutral">' + escapeHtml(viral.tracking_status.replace(/_/g, " ")) + '</span>'
       : "");
@@ -1030,7 +1061,10 @@ function viralDetails(viral) {
     ["Views/hour vs normal", viral.vph_ratio == null ? "—" : viral.vph_ratio + "× (" + formatRate(viral.lifetime_vph) + " VPH)"],
     ["Views per follower", viral.views_per_follower == null ? "hidden or unknown" : String(viral.views_per_follower)],
     ["Historical demand", (viral.historical_alignment || "").replace(/_/g, " ")],
-    ["Replication across channels", "assessed by theme clustering (next slice)"]
+    ["Theme", viral.cluster
+      ? viral.cluster.label + " · " + String(viral.cluster.kind || "").replace(/_/g, " ").toLowerCase() +
+        " · " + viral.cluster.independent_channel_count + " independent channel(s)"
+      : "no shared theme yet"]
   ];
   const intervals = (viral.intervals || []).map(function (interval) {
     return "<li>" + escapeHtml(String(interval.from).slice(5, 16).replace("T", " ") + " → " +
@@ -1051,10 +1085,6 @@ function inboxDetails(item) {
   if (item.measurement_error) facts.push("API unavailable: " + item.measurement_error);
   if (item.failed_searches) facts.push(item.failed_searches + " of " + item.search_count + " searches failed");
   if (item.excluded_result_count) facts.push(item.excluded_result_count + " result(s) excluded by scope rules");
-  const evidence = (item.evidence || []).map(function (chip) {
-    return '<li><strong>' + escapeHtml(chip.label + ": " + chip.level) + '</strong> <span class="muted">(' +
-      escapeHtml(chip.rule_id || "no rule") + ') ' + escapeHtml((chip.basis || []).join("; ")) + '</span></li>';
-  }).join("");
   const videos = (item.videos || []).map(function (video) {
     return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
       escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' +
@@ -1063,8 +1093,9 @@ function inboxDetails(item) {
   }).join("");
   return '<details class="inbox-details"><summary>Evidence and videos</summary>' +
     (item.summary ? '<p class="muted">' + escapeHtml(item.summary) + '</p>' : "") +
+    evidenceMatrix(item) +
     viralDetails(item.viral) +
-    (evidence ? '<ul class="inbox-evidence">' + evidence + '</ul>' : '<p class="muted">No rule-backed evidence yet; viewer need, mechanism and content gap are hypotheses until analysed.</p>') +
+    decisionHistory(item) +
     (videos ? '<ol class="topic-videos">' + videos + '</ol>' : "") +
     (facts.length ? '<p class="muted">' + escapeHtml(facts.join(" · ")) + '</p>' : "") +
     ((item.notes || []).length ? '<p class="muted">Your note: ' + escapeHtml(item.notes[0]) + '</p>' : "") +
@@ -1100,6 +1131,7 @@ function renderInbox(inbox) {
           (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
           routeChip(item) + viralChips(item.viral) + (item.viral ? "" : evidence) + '</div>' +
         '<strong class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</strong>' +
+        (item.evidence_moved ? '<span class="evidence-moved">Evidence has moved since your decision — the decision stands; review it if you like.</span>' : "") +
         (item.status_reason ? '<span class="muted">' + escapeHtml(item.status_reason) + '</span>' : "") +
         inboxDetails(item) +
       '</div>' +
@@ -1144,14 +1176,21 @@ function renderViralEntry(data) {
   runViralRadar.title = action.reason || "";
 }
 
-async function submitInboxAction(opportunityId, action) {
+async function submitInboxAction(opportunityId, action, note) {
+  if (action === "REWORK") showToast("Gathering fresh evidence…", false);
   try {
     const payload = await api("/api/opportunity/inbox", {
       method: "POST",
-      body: JSON.stringify({ opportunity_id: opportunityId, action: action })
+      body: JSON.stringify({ opportunity_id: opportunityId, action: action, note: note || "" })
     });
     renderInbox(payload);
-    const messages = { RESTORE: "Moved back to Needs review.", SAVE: "Saved.", REJECT: "Rejected.", WATCH: "Watching. The radar keeps tracking it." };
+    const messages = {
+      RESTORE: "Moved back to Needs review.",
+      SAVE: "Saved.",
+      REJECT: "Rejected.",
+      WATCH: "Watching. The radar keeps tracking it.",
+      REWORK: "Reworked with fresh evidence."
+    };
     showToast(messages[action] || "Updated.", false);
   } catch (error) {
     showToast(error.message, true);
@@ -1314,8 +1353,25 @@ if (opportunityInbox) {
       document.getElementById("historicalReviewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
+    const themeButton = event.target.closest("[data-inbox-theme]");
+    if (themeButton) {
+      analyzeHumanSource(
+        "/api/opportunity/viral/analyze",
+        { cluster_id: themeButton.dataset.inboxTheme },
+        false,
+        "This theme's videos are now the study set. Analysis continues automatically."
+      );
+      return;
+    }
     const actionButton = event.target.closest("[data-inbox-action]");
-    if (actionButton) submitInboxAction(actionButton.dataset.inboxId, actionButton.dataset.inboxAction);
+    if (actionButton) {
+      let note = "";
+      if (actionButton.dataset.inboxAction === "REWORK") {
+        note = window.prompt("What evidence is missing? (required)") || "";
+        if (!note.trim()) return;
+      }
+      submitInboxAction(actionButton.dataset.inboxId, actionButton.dataset.inboxAction, note);
+    }
   });
 }
 
