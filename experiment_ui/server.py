@@ -165,6 +165,10 @@ from thumbnail_concepts import (
     request_snapshot as thumbnail_concept_request_snapshot,
     snapshot as thumbnail_concept_snapshot,
 )
+from package_pairing import (
+    request_snapshot as package_pairing_request_snapshot,
+    snapshot as package_validation_snapshot,
+)
 
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
 PACKAGING_OUTPUT = PACKAGING_DIR / "output"
@@ -438,6 +442,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "psychological_angle_generate",
     "thumbnail_concept_prepare",
     "thumbnail_concept_generate",
+    "package_pairing_prepare",
+    "package_pairing_generate",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -1156,6 +1162,36 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": (
             "Generates structured 16:9 mobile-legible thumbnail concepts only. "
             "No image generation, download, paid provider call, pairing or scoring occurs."
+        ),
+    },
+    "package_pairing_prepare": {
+        "label": "Prepare Title + Thumbnail Pairing Matrix",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/package_pairing.py",
+            "--mode",
+            "prepare",
+        ],
+        "description": (
+            "Builds the full 5-title x 5-thumbnail compatibility matrix per format "
+            "and splits it into resumable five-pair validation requests. No winner "
+            "is selected and no viral score is produced."
+        ),
+    },
+    "package_pairing_generate": {
+        "label": "Validate Packaging Pairs",
+        "stage": "08",
+        "command": [
+            sys.executable,
+            "packaging_engine/package_pairing_model_runner.py",
+            "--mode",
+            "batch",
+        ],
+        "description": (
+            "Uses the free-first FAIR path to assess complementarity, information "
+            "gain, redundancy, claims, Viewer Promise and Hook Alignment for every "
+            "current title-thumbnail pair. Hard truth failures override diagnostics."
         ),
     },
     "format_prepare": {
@@ -3916,6 +3952,9 @@ def stage_statuses() -> list[dict[str, Any]]:
     thumbnail_requests = thumbnail_concept_request_snapshot()
     thumbnails = thumbnail_concept_snapshot()
     thumbnails_ready = bool(thumbnails.get("ready"))
+    pairing_requests = package_pairing_request_snapshot()
+    package_validation = package_validation_snapshot()
+    package_validation_ready = bool(package_validation.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -3969,10 +4008,21 @@ def stage_statuses() -> list[dict[str, Any]]:
         transform_tone = "action"
         transform_next = "Inspect the Concept Gate state."
 
-    if thumbnails_ready:
-        package_human = "THUMBNAIL CONCEPTS READY — SLICE 25 COMPLETE"
+    if package_validation_ready:
+        package_human = "PACKAGE VALIDATION READY — SLICE 26 COMPLETE"
         package_tone = "complete"
-        package_next = "Pair titles + thumbnails and validate package complementarity in Slice 26."
+        package_next = "Prepare the Final Packaging Human Gate in Slice 27."
+    elif active_action in {
+        "package_pairing_prepare",
+        "package_pairing_generate",
+    }:
+        package_human = "TITLE + THUMBNAIL VALIDATION RUNNING"
+        package_tone = "running"
+        package_next = "Wait for the current cross-pair validation work to finish."
+    elif thumbnails_ready:
+        package_human = "THUMBNAILS READY — PAIRING NEEDED"
+        package_tone = "ready"
+        package_next = "Cross-pair all 5 titles × 5 thumbnails and validate them."
     elif active_action in {
         "psychological_angle_prepare",
         "psychological_angle_generate",
@@ -4467,27 +4517,35 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "label": "One thumbnail concept per psychological angle",
                     "done": thumbnails_ready,
                 },
+                {
+                    "label": "25 title-thumbnail pairs validated per format",
+                    "done": package_validation_ready,
+                },
             ],
-            "complete": thumbnails_ready,
+            "complete": package_validation_ready,
             "ready": production_ready,
-            "current": production_ready and not thumbnails_ready,
+            "current": production_ready and not package_validation_ready,
         },
         {
             "id": "08",
             "title": "Format / Production Hold",
             "state": (
-                "WAITING_FOR_MATURE_PACKAGING"
-                if thumbnails_ready
+                "WAITING_FOR_FINAL_PACKAGING_GATE"
+                if package_validation_ready
                 else (
-                    "WAITING_FOR_THUMBNAIL_CONCEPTS"
-                    if angles_ready
+                    "WAITING_FOR_PACKAGE_VALIDATION"
+                    if thumbnails_ready
                     else (
-                        "WAITING_FOR_PSYCHOLOGICAL_ANGLES"
-                        if packaging_brief_ready
+                        "WAITING_FOR_THUMBNAIL_CONCEPTS"
+                        if angles_ready
                         else (
-                            "WAITING_FOR_PACKAGING_BRIEF"
-                            if title_direction_selected
-                            else "WAITING_FOR_TITLE_DIRECTION"
+                            "WAITING_FOR_PSYCHOLOGICAL_ANGLES"
+                            if packaging_brief_ready
+                            else (
+                                "WAITING_FOR_PACKAGING_BRIEF"
+                                if title_direction_selected
+                                else "WAITING_FOR_TITLE_DIRECTION"
+                            )
                         )
                     )
                 )
@@ -4495,10 +4553,10 @@ def stage_statuses() -> list[dict[str, Any]]:
             "human_status": format_human,
             "tone": format_tone,
             "detail": (
-                "Format and Production remain intentionally held after Slice 25. "
-                "Packaging Briefs, diverse psychological hypotheses and thumbnail "
-                "concepts are current, but title-thumbnail pairing, redundancy, claim, "
-                "promise and hook validation plus the final Packaging Human Gate remain."
+                "Format and Production remain intentionally held after Slice 26. "
+                "Every 5-title x 5-thumbnail combination is validated for redundancy, "
+                "complementarity, claims, Viewer Promise and Hook Alignment, but the "
+                "Final Packaging Human Gate has not accepted a package yet."
             ),
             "next_action": format_next,
             "criteria": [
@@ -4515,7 +4573,11 @@ def stage_statuses() -> list[dict[str, Any]]:
                     "done": thumbnails_ready,
                 },
                 {
-                    "label": "Mature Packaging Engine validation complete",
+                    "label": "Cross-pair validation ready",
+                    "done": package_validation_ready,
+                },
+                {
+                    "label": "Final Packaging Human Gate complete",
                     "done": False,
                 },
                 {
@@ -4631,6 +4693,9 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     thumbnail_requests = thumbnail_concept_request_snapshot()
     thumbnails = thumbnail_concept_snapshot()
     thumbnails_ready = bool(thumbnails.get("ready"))
+    pairing_requests = package_pairing_request_snapshot()
+    package_validation = package_validation_snapshot()
+    package_validation_ready = bool(package_validation.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
     format_plans_ready = bool(fmt["plans_ready"])
@@ -5527,21 +5592,57 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 )
             ),
         },
+        "package_pairing_prepare": {
+            "enabled": (
+                thumbnails_ready
+                and not package_validation_ready
+                and not bool(pairing_requests.get("ready"))
+            ),
+            "reason": (
+                "Five current titles and five current thumbnails are ready per format; "
+                "build the full 25-pair compatibility matrix and resumable validation chunks."
+                if thumbnails_ready and not package_validation_ready and not bool(pairing_requests.get("ready"))
+                else (
+                    "Package pairing requests are current."
+                    if bool(pairing_requests.get("ready"))
+                    else (
+                        "Package validation is already current."
+                        if package_validation_ready
+                        else "Generate current thumbnail concepts first."
+                    )
+                )
+            ),
+        },
+        "package_pairing_generate": {
+            "enabled": bool(pairing_requests.get("ready")) and not package_validation_ready,
+            "reason": (
+                "Current cross-pair requests are ready for free-first semantic validation."
+                if bool(pairing_requests.get("ready")) and not package_validation_ready
+                else (
+                    "All current package pairs are validated."
+                    if package_validation_ready
+                    else "Prepare current package pairing requests first."
+                )
+            ),
+        },
         "format_prepare": {
             "enabled": False,
             "reason": (
-                "Slice 25 intentionally stops after diverse psychological hypotheses "
-                "and thumbnail concepts. Title-thumbnail pairing, redundancy checks, "
-                "claim/promise/hook validation and the final Packaging Human Gate must "
-                "be built before Format planning is re-enabled."
-                if thumbnails_ready
+                "Slice 26 intentionally stops after cross-pair validation. The Final "
+                "Packaging Human Gate must accept an exact title + thumbnail + hook + "
+                "Viewer Promise package before Format planning is re-enabled."
+                if package_validation_ready
                 else (
-                    "Finish current Slice 25 packaging hypotheses first."
-                    if packaging_brief_ready
+                    "Finish current title-thumbnail pairing and validation first."
+                    if thumbnails_ready
                     else (
-                        "Build current Packaging Briefs first."
-                        if title_direction_selected
-                        else "Complete the post-script Title Direction Gate first."
+                        "Finish current packaging hypotheses first."
+                        if packaging_brief_ready
+                        else (
+                            "Build current Packaging Briefs first."
+                            if title_direction_selected
+                            else "Complete the post-script Title Direction Gate first."
+                        )
                     )
                 )
             ),
@@ -6566,18 +6667,49 @@ def workflow_guidance(
                 "next_title": "Slice 25 thumbnail concept boundary",
             }
 
+        pairing_requests = package_pairing_request_snapshot()
+        validation = package_validation_snapshot()
+        if not validation.get("ready"):
+            if not pairing_requests.get("ready"):
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Build Full Title + Thumbnail Pairing Matrix",
+                    "current_detail": (
+                        "Cross-pair all five title directions with all five thumbnail "
+                        "concepts for each format. This creates 25 compatibility "
+                        "hypotheses per format rather than assuming Title 1 belongs to "
+                        "Thumbnail 1."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Validate every package pair",
+                }
+            return {
+                "state": "ACTION_REQUIRED",
+                "current_action_id": "auto_continue",
+                "current_title": "Validate Title + Thumbnail Packages",
+                "current_detail": (
+                    "Evaluate each pair for semantic/visual redundancy, psychological "
+                    "complementarity, information gain, evidence credibility, Viewer "
+                    "Promise consistency and Hook Alignment. Hard truth failures "
+                    "override all diagnostic scores."
+                ),
+                "next_action_id": None,
+                "next_title": "Slice 26 package validation boundary",
+            }
+
         return {
-            "state": "THUMBNAIL_CONCEPTS_READY",
+            "state": "PACKAGE_VALIDATION_READY",
             "current_action_id": None,
-            "current_title": "Psychological Angles + Thumbnail Concepts Ready",
+            "current_title": "Package Pairing + Validation Ready",
             "current_detail": (
-                "Every current format has five distinct psychological hypotheses and "
-                "one evidence-bound thumbnail concept per angle. Slice 25 stops here. "
-                "Titles and thumbnails have not been paired, scored or approved, and "
-                "no thumbnail image has been generated."
+                f"{int(validation.get('current_pairs') or 0)} current title-thumbnail "
+                "pairs have PASS / REWORK / REJECT validation with separate 0-5 "
+                "diagnostics. No viral score, automatic winner, package acceptance, "
+                "thumbnail rendering or production action has occurred."
             ),
             "next_action_id": None,
-            "next_title": "Slice 26: title-thumbnail pairing + validation",
+            "next_title": "Slice 27: Final Packaging Human Gate + targeted rework",
         }
 
     fmt = format_artifact_state()
@@ -7419,6 +7551,8 @@ def status_payload() -> dict[str, Any]:
         "psychological_angles": psychological_angle_snapshot(),
         "thumbnail_concept_requests": thumbnail_concept_request_snapshot(),
         "thumbnail_concepts": thumbnail_concept_snapshot(),
+        "package_pairing_requests": package_pairing_request_snapshot(),
+        "package_validation": package_validation_snapshot(),
         "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],

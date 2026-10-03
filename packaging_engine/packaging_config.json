@@ -58,5 +58,47 @@
     "require_timestamp_safe": true,
     "require_mobile_legibility_intent": true,
     "prohibit_critical_bottom_right_content": true
+  },
+  "package_pairing_validation": {
+    "pairing_mode": "FULL_CROSS_PRODUCT",
+    "titles_per_format": 5,
+    "thumbnails_per_format": 5,
+    "pairs_per_format": 25,
+    "evaluations_per_request": 5,
+    "diagnostics_scale": [
+      0,
+      5
+    ],
+    "diagnostics": [
+      "scroll_stop",
+      "clarity",
+      "curiosity",
+      "stakes",
+      "specificity",
+      "visual_simplicity",
+      "title_strength",
+      "complementarity",
+      "credibility",
+      "promise_alignment",
+      "hook_alignment"
+    ],
+    "hard_reject_codes": [
+      "unsupported_material_claim",
+      "factually_false_claim",
+      "thumbnail_misrepresents_video",
+      "title_misrepresents_video",
+      "evidence_conflict",
+      "prohibited_claim"
+    ],
+    "rework_codes": [
+      "title_thumbnail_redundancy",
+      "weak_hook_alignment",
+      "promise_not_addressed_early",
+      "thumbnail_too_complex",
+      "thumbnail_text_too_long",
+      "critical_content_in_timestamp_zone",
+      "unclear_primary_subject",
+      "selected_title_no_longer_matches_final_script"
+    ]
   }
 }

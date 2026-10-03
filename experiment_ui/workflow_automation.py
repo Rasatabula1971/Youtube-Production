@@ -45,6 +45,8 @@ AUTO_MACHINE_ACTION_ORDER = [
     "psychological_angle_generate",
     "thumbnail_concept_prepare",
     "thumbnail_concept_generate",
+    "package_pairing_prepare",
+    "package_pairing_generate",
     "format_prepare",
     "format_generate",
     "format_gate_prepare",
@@ -187,7 +189,7 @@ def run_until_human_gate() -> dict[str, Any]:
             "HUMAN_FINAL_EXPORT_GATE",
             "FINAL_EXPORT_REWORK_REQUIRED",
             "FINAL_EXPORT_APPROVED",
-            "THUMBNAIL_CONCEPTS_READY",
+            "PACKAGE_VALIDATION_READY",
         }:
             return {
                 "status": "STOPPED_AT_BOUNDARY",

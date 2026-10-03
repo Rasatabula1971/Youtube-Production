@@ -2281,3 +2281,81 @@ Packaging Brief or angle change invalidates downstream artifacts.
 Slice 25 performs no title-thumbnail pairing, diagnostic scoring, final package
 validation, final Packaging Human Gate, image generation, Format planning or
 Production work.
+
+## D-096 — Mature packaging uses full cross-pair validation with hard truth overrides and no winner score
+
+**Status:** Accepted
+
+Slice 26 begins only after current Slice 25 thumbnail concepts exist.
+
+For each approved format, the engine builds the full cross product of:
+
+- five post-script title directions; and
+- five evidence-bound thumbnail concepts.
+
+This produces exactly 25 package hypotheses per format. The engine must not
+assume Title 1 belongs to Thumbnail 1.
+
+The human-selected title direction remains represented in the matrix, and any
+human-edited selected wording is preserved. The other four title directions
+remain available as alternative packaging hypotheses.
+
+Validation is chunked by thumbnail: one request evaluates that thumbnail
+against all five title directions. This keeps FAIR output bounded and makes
+generation resumable without discarding already validated chunks.
+
+Every package receives separate diagnostics on a 0–5 scale for:
+
+- scroll stop;
+- clarity;
+- curiosity;
+- stakes;
+- specificity;
+- visual simplicity;
+- title strength;
+- complementarity;
+- credibility;
+- promise alignment;
+- hook alignment.
+
+These values are decision support only. Slice 26 never computes or exposes a
+viral score, CTR forecast, winner score, predicted views, predicted retention
+or automatic ranking.
+
+Hard truth failures override every diagnostic score. Hard-reject codes are:
+
+- `unsupported_material_claim`;
+- `factually_false_claim`;
+- `thumbnail_misrepresents_video`;
+- `title_misrepresents_video`;
+- `evidence_conflict`;
+- `prohibited_claim`.
+
+Repairable packaging failures are REWORK findings, including redundancy, weak
+hook confirmation, delayed promise acknowledgement, excessive thumbnail
+complexity/text, timestamp-zone risk, unclear primary subject and a stale
+selected-title direction.
+
+The model may semantically assess redundancy, complementarity, information
+gain, Viewer Promise consistency, Hook Alignment and whether paired claims are
+supported. It may not modify titles, thumbnails, hooks, scripts, evidence or
+select a winner.
+
+Deterministic validation then derives only:
+
+- `PASS` — no hard or rework findings;
+- `REWORK` — no hard failures, but at least one repairable packaging issue;
+- `REJECT` — at least one hard truth failure.
+
+A package with all 5/5 diagnostics still REJECTS if its material claim,
+evidence, Viewer Promise or representation is invalid.
+
+Title length remains a soft design guideline. A truthful 64-character title
+does not fail only because it exceeds the preferred 45–60 range.
+
+Slice 26 artifacts live under `output/mature_packaging/` so the legacy
+pre-script `output/package_candidates.json` remains untouched for historical
+resume compatibility.
+
+The successful Slice 26 boundary is `PACKAGE_VALIDATION_READY`. No package is
+human-approved yet and Format/Production remain locked.
