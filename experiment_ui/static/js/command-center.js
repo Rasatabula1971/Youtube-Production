@@ -147,9 +147,9 @@
         kicker: "Viral breakout",
         title: item.title || "Untitled breakout",
         detail: viralDetail(item),
-        action: "View opportunity",
-        route: "/opportunity",
-        subroute: "review"
+        action: "Review opportunity",
+        route: "/opportunity/review",
+        subroute: encodeURIComponent(item.opportunity_id || "")
       });
     });
     const otherCount = waiting.length - Math.min(viral.length, MAX_VIRAL_CARDS);
@@ -161,9 +161,8 @@
         detail: viral.length > MAX_VIRAL_CARDS
           ? "Includes " + plural(viral.length - MAX_VIRAL_CARDS, "more breakout") + "."
           : "Approve, watch, save or reject each one in the inbox.",
-        action: "Open inbox",
-        route: "/opportunity",
-        subroute: "review"
+        action: "Review ideas",
+        route: "/opportunity/review"
       });
     }
 

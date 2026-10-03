@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/css/shell.css">
   <link rel="stylesheet" href="/css/command-center.css">
+  <link rel="stylesheet" href="/css/opportunity.css">
+  <link rel="stylesheet" href="/css/review.css">
 </head>
 <body>
   <div class="app-shell">
@@ -27,14 +29,15 @@
           <span class="nav-count" id="navAttentionCount" hidden></span>
         </a>
         <div class="nav-group">
-          <a href="/opportunity" data-route="/opportunity" class="nav-item">
+          <a href="/opportunity" data-route="/opportunity" data-also-routes="/radar /opportunity/review" class="nav-item">
             <span class="nav-icon" aria-hidden="true">◎</span>
             <span>Opportunities</span>
             <span class="nav-count" id="navOpportunityCount" hidden></span>
           </a>
           <div class="nav-sub" aria-label="Opportunities">
             <a href="/opportunity#discover" data-route="/opportunity" data-subroute="discover" class="nav-subitem">Discover</a>
-            <a href="/opportunity#radar" data-route="/opportunity" data-subroute="radar" class="nav-subitem">Viral Radar</a>
+            <a href="/radar" data-route="/radar" class="nav-subitem">Viral Radar</a>
+            <a href="/opportunity/review" data-route="/opportunity/review" class="nav-subitem">Review</a>
             <a href="/opportunity#watching" data-route="/opportunity" data-subroute="watching" class="nav-subitem">Watching</a>
             <a href="/opportunity#approved" data-route="/opportunity" data-subroute="approved" class="nav-subitem">Approved</a>
           </div>
@@ -163,14 +166,7 @@
         </section>
 
         <section class="app-view" data-view="opportunity" id="viewOpportunity" hidden>
-          <div class="view-head">
-            <div>
-              <p class="section-kicker">OPPORTUNITY DISCOVERY</p>
-              <h2>Find the next video</h2>
-              <p class="muted">From proven demand, your own idea, or what is breaking out right now. Every idea lands in the inbox below; you decide what goes forward.</p>
-            </div>
-            <button class="ghost" data-route="/">Back to Command Center</button>
-          </div>
+          <p class="muted view-intro">Four ways in. Every idea lands in the inbox below, and you decide what goes forward.</p>
 
           <div class="entry-grid">
             <section class="panel entry-card" id="historicalEntryPanel">
@@ -215,13 +211,18 @@
             </section>
 
             <section class="panel entry-card" id="viralEntryPanel">
-              <p class="section-kicker">NO TOPIC REQUIRED</p>
+              <p class="section-kicker">VIRAL RADAR</p>
               <h3>Find viral / breakout videos</h3>
-              <p class="muted">Finds recent uploads doing far better than their own channel's normal, classifies them on first sight, and keeps snapshotting them for up to 15 days. About 1 API unit per watched channel; no search quota.</p>
+              <p class="muted">No topic needed. Recent uploads doing far better than their own channel's normal, tracked for up to 15 days. About 1 API unit per watched channel.</p>
               <p id="viralEntryStatus" class="entry-status muted"></p>
-              <button type="button" id="runViralRadar">Run viral radar</button>
+              <div class="entry-actions">
+                <button type="button" data-route="/radar">Open radar →</button>
+                <button type="button" class="ghost" id="runViralRadar">Run scan now</button>
+              </div>
             </section>
           </div>
+
+          <div class="opportunity-counts" id="opportunityCounts" aria-label="Inbox summary"></div>
 
           <section class="panel" id="opportunityInboxPanel">
             <div class="inbox-head">
@@ -1110,14 +1111,16 @@
           </section>
         </section>
 
+        <section class="app-view" data-view="opportunity-review" id="viewOpportunityReview" hidden>
+          <div class="review-workspace" id="opportunityReview"></div>
+        </section>
+
+        <section class="app-view" data-view="radar" id="viewRadar" hidden>
+          <div id="radarPage" class="radar-page"></div>
+        </section>
+
         <section class="app-view" data-view="productions" id="viewProductions" hidden>
-          <div class="view-head">
-            <div>
-              <p class="section-kicker">DERIVED FROM FILES</p>
-              <h2>Productions</h2>
-              <p class="muted">One row per accepted concept. Stage and status are worked out from the artifacts on disk every time this page refreshes; nothing here is stored separately.</p>
-            </div>
-          </div>
+          <p class="muted view-intro">One row per accepted concept. Stage and status are worked out from the files on disk every time this page refreshes; nothing here is stored separately.</p>
           <section class="panel">
             <div class="inbox-head">
               <div class="inbox-tabs" id="productionTabs" role="tablist" aria-label="Production filters"></div>
@@ -1211,6 +1214,9 @@
 
   <div class="toast" id="toast"></div>
   <script src="/js/command-center.js"></script>
+  <script src="/js/review-workspace.js"></script>
+  <script src="/js/opportunity-review.js"></script>
+  <script src="/js/radar.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -2969,3 +2969,60 @@ containment: one directory level, an extension allowlist per folder, no
 dotfiles, and a resolved path that must stay inside the folder (which also
 rejects symlink escape). Everything else under those prefixes is a 404. CI now
 syntax-checks every file in `static/js/`.
+
+
+## D-116 — UI Patch 2: Viral Radar page, Opportunity Review workspace, Opportunities restyle
+
+**Status:** Accepted
+
+**Viral Radar page (UI-04).** `viral_radar.radar_overview()` serves
+`GET /api/opportunity/viral/overview`. It reads only the radar's own files:
+themes from the last clustering pass, tracked videos from the radar state, and
+sparkline points from the append-only snapshot log. A video's series is
+downsampled to at most 24 points, and nothing is re-measured or reconstructed.
+- **Themes.** Each theme carries strongest and median outlier, the direction
+  and historical alignment of its strongest video, when it was first detected,
+  and that video's views series as "momentum".
+- **Tracked videos.** Each carries its day within the 15-day window.
+- **Page.** It polls the overview only while open (on a new scan, or every
+  30 s) and repaints only when the content changes, so open panels and focus
+  survive the 5-second status poll.
+- **Filters.** The spec's topic and region filters are not shown because the
+  radar has neither (it scans its watchlist and rotating queries). The page
+  says so instead of offering controls that would do nothing. The format
+  filter only filters what is displayed.
+
+**Shared review workspace (UI-06).** `js/review-workspace.js` owns what every
+human gate will share:
+- the header and "N of M";
+- previous/next;
+- keyboard behaviour (← →, 1–9, Ctrl+Enter, active anywhere on the page
+  except in text fields and drawers);
+- the decision panel, notes and status.
+
+A gate supplies items, evidence HTML, decisions and a submit function.
+
+**The Opportunity Gate is its first user.**
+- **Decisions.** It offers exactly the actions the inbox already allows for
+  each item.
+- **One dispatcher.** All decisions go through one dispatcher in `app.js`
+  (`performInboxDecision`), which the inbox cards and the radar page also use,
+  so every surface makes the same API calls.
+- **Notes.** Investigate requires a note. Approve records none, since it
+  starts analysis rather than writing a decision note, and the panel says so.
+- **Drafts.** A failed decision keeps the draft.
+- **Historical topics.** They still route to Historical review, because their
+  examples must be kept or replaced first.
+
+**Opportunities restyle (UI-03).**
+- The entry cards sit in one row.
+- A counts strip leads into the review workspace.
+- Inbox cards follow the spec: kicker, title, meta line, outlier figure, the
+  six evidence levels, and one primary action ("Review opportunity"); the
+  other decisions are secondary.
+- The Command Center's breakout and inbox cards now open Opportunity Review on
+  the exact item.
+
+**Evidence drawer (UI-05).** It is unchanged from O14 and opens from every new
+surface. Its "Viewer questions" section stays "not yet evidenced" until
+Experiment 02 answers it, rather than showing invented questions.

@@ -107,6 +107,20 @@ class ShellHttpTests(unittest.TestCase):
                     self.get(path)
                 self.assertEqual(caught.exception.code, 404)
 
+    def test_radar_overview_api(self) -> None:
+        fake = {"themes": [], "tracked": [], "window_days": 15}
+        with mock.patch.object(server.viral_radar, "radar_overview", return_value=fake):
+            status, _, body = self.get("/api/opportunity/viral/overview")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), fake)
+
+    def test_new_pages_serve_the_app(self) -> None:
+        for path in ["/radar", "/opportunity/review"]:
+            with self.subTest(path=path):
+                status, ctype, _ = self.get(path)
+                self.assertEqual(status, 200)
+                self.assertTrue(ctype.startswith("text/html"))
+
     def test_productions_route_serves_the_app(self) -> None:
         status, ctype, body = self.get("/productions")
         self.assertEqual(status, 200)
@@ -135,13 +149,35 @@ class ShellMarkupTests(unittest.TestCase):
                 if ref.startswith(("/css/", "/js/")):
                     self.assertIsNotNone(server.static_asset_path(ref))
 
-    def test_command_center_targets_exist(self) -> None:
-        script = (STATIC / "js" / "command-center.js").read_text(encoding="utf-8")
-        ids = set(re.findall(r'\$\("([A-Za-z]+)"\)', script))
-        self.assertTrue(ids)
-        for element_id in ids:
-            with self.subTest(id=element_id):
-                self.assertIn(f'id="{element_id}"', self.html)
+    def test_module_targets_exist(self) -> None:
+        for name in ["command-center.js", "radar.js"]:
+            script = (STATIC / "js" / name).read_text(encoding="utf-8")
+            ids = set(re.findall(r'\$\("([A-Za-z]+)"\)', script))
+            self.assertTrue(ids, name)
+            for element_id in ids:
+                with self.subTest(module=name, id=element_id):
+                    self.assertIn(f'id="{element_id}"', self.html)
+        review = (STATIC / "js" / "opportunity-review.js").read_text(encoding="utf-8")
+        self.assertIn('getElementById("opportunityReview")', review)
+        self.assertIn('id="opportunityReview"', self.html)
+
+    def test_every_app_route_has_a_view(self) -> None:
+        script = (STATIC / "app.js").read_text(encoding="utf-8")
+        for route in server.APP_ROUTES:
+            with self.subTest(route=route):
+                match = re.search(r'"' + re.escape(route) + r'": \{\s*view: "([a-z-]+)"', script)
+                self.assertIsNotNone(match, route)
+                assert match is not None
+                self.assertIn(f'data-view="{match.group(1)}"', self.html)
+
+    def test_modules_load_before_app_js(self) -> None:
+        scripts = re.findall(r'<script src="([^"]+)"', self.html)
+        self.assertEqual(scripts[-1], "/app.js")
+        for module in ["/js/review-workspace.js", "/js/opportunity-review.js", "/js/radar.js"]:
+            self.assertIn(module, scripts)
+        self.assertLess(
+            scripts.index("/js/review-workspace.js"), scripts.index("/js/opportunity-review.js")
+        )
 
     def test_nav_routes_are_app_routes(self) -> None:
         for route in set(re.findall(r'data-route="([^"]+)"', self.html)):

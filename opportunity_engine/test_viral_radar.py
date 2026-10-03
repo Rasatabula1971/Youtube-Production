@@ -252,6 +252,85 @@ class RunTests(RadarTestCase):
         self.assertIsNone(vr.load_packet(vid(10)))
 
 
+class OverviewTests(RadarTestCase):
+    """UI-04: the radar page reads themes, tracked videos and sparklines from files."""
+
+    def write_fixture(self):
+        def record(n, ratio, trajectory, hours_old, channel=CH):
+            return {
+                "first_seen_at": at(hours_old - 2),
+                "video": {
+                    "video_id": vid(n),
+                    "title": f"Brake cooling {n}",
+                    "channel_id": channel,
+                    "channel_title": "Lab",
+                    "published_at": at(hours_old),
+                },
+                "format": "long",
+                "metrics": {"lifetime_ratio": ratio, "views": 1000 * n},
+                "strength": "BREAKOUT",
+                "trajectory": trajectory,
+                "breadth": "REPLICATED",
+                "historical_alignment": "ALIGNED",
+                "cluster": {"cluster_id": "cl_x"},
+            }
+
+        state = vr.empty_state()
+        state["tracked"] = {
+            vid(1): record(1, 8.0, "STABLE_HIGH", 30),
+            vid(2): record(2, 14.0, "ACCELERATING", 60, channel=CH2),
+            vid(3): record(3, 3.0, "DECELERATING", 400),
+        }
+        vr.save_state(state)
+        vr.CLUSTERS_FILE.write_text(json.dumps({"clusters": [
+            {"cluster_id": "cl_solo", "label": "solo", "breadth": "ONE_OFF", "members": [
+                {"video_id": vid(3), "lifetime_ratio": 3.0}]},
+            {"cluster_id": "cl_x", "label": "brake cooling", "breadth": "REPLICATED",
+             "independent_channel_count": 2, "member_count": 2, "replication_rule_id": "CL-REPLICATED",
+             "members": [{"video_id": vid(1), "lifetime_ratio": 8.0}, {"video_id": vid(2), "lifetime_ratio": 14.0}]},
+        ]}))
+        rows = [{"video_id": vid(2), "views": v, "video_age_hours": h} for h, v in ((24, 5000), (6, 1000), (12, 2500))]
+        rows += [{"video_id": vid(1), "views": 10, "video_age_hours": 3}, {"video_id": "other", "views": 1, "video_age_hours": 1}]
+        vr.SNAPSHOT_FILE.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n")
+
+    def test_overview_ranks_replicated_themes_and_sorts_series(self):
+        self.write_fixture()
+        overview = vr.radar_overview(now=NOW)
+        self.assertEqual(overview["window_days"], 15)
+        self.assertEqual([t["cluster_id"] for t in overview["themes"]], ["cl_x", "cl_solo"])
+        theme = overview["themes"][0]
+        self.assertEqual(theme["strongest_ratio"], 14.0)
+        self.assertEqual(theme["median_ratio"], 11.0)
+        self.assertEqual(theme["direction"], "ACCELERATING")
+        self.assertEqual(theme["top_video_id"], vid(2))
+        self.assertEqual(theme["momentum"], [[6.0, 1000.0], [12.0, 2500.0], [24.0, 5000.0]])
+        self.assertEqual(theme["first_detected_at"], at(58))
+        self.assertEqual([v["video_id"] for v in theme["videos"]], [vid(2), vid(1)])
+
+    def test_overview_tracked_rows_carry_day_in_window_and_inbox_id(self):
+        self.write_fixture()
+        tracked = vr.radar_overview(now=NOW)["tracked"]
+        self.assertEqual([row["video_id"] for row in tracked], [vid(2), vid(1), vid(3)])
+        by_id = {row["video_id"]: row for row in tracked}
+        self.assertEqual(by_id[vid(1)]["day"], 2)
+        self.assertEqual(by_id[vid(2)]["day"], 3)
+        self.assertEqual(by_id[vid(3)]["day"], 15)  # capped at the window
+        self.assertEqual(by_id[vid(1)]["opportunity_id"], "opp_viral_radar__" + vid(1))
+        self.assertEqual(by_id[vid(3)]["series"], [])
+
+    def test_overview_without_files_is_empty(self):
+        overview = vr.radar_overview(now=NOW)
+        self.assertEqual((overview["themes"], overview["tracked"]), ([], []))
+
+    def test_sparkline_series_is_downsampled(self):
+        vr.RADAR_DIR.mkdir(parents=True, exist_ok=True)
+        rows = [{"video_id": vid(1), "views": i, "video_age_hours": i} for i in range(100)]
+        vr.SNAPSHOT_FILE.write_text("\n".join(json.dumps(r) for r in rows))
+        points = vr._snapshot_series({vid(1)})[vid(1)]
+        self.assertEqual(len(points), vr.SPARKLINE_MAX_POINTS)
+        self.assertEqual((points[0], points[-1]), ([0.0, 0.0], [99.0, 99.0]))
+
+
 class UnitTests(unittest.TestCase):
     settings = channel_scope.load_config()["viral_radar"]
 

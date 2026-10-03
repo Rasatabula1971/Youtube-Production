@@ -46,7 +46,15 @@ class ExperimentUiTests(unittest.TestCase):
     def test_ui_v3_routes_are_registered(self):
         self.assertEqual(
             server.APP_ROUTES,
-            {"/", "/opportunity", "/analysis", "/productions", "/tools"},
+            {
+                "/",
+                "/opportunity",
+                "/opportunity/review",
+                "/radar",
+                "/analysis",
+                "/productions",
+                "/tools",
+            },
         )
 
 

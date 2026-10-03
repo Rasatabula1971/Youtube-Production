@@ -32,7 +32,15 @@ from pipeline_integrity import atomic_write_json
 import productions as productions_model
 
 STATIC_DIR = HERE / "static"
-APP_ROUTES = {"/", "/opportunity", "/analysis", "/productions", "/tools"}
+APP_ROUTES = {
+    "/",
+    "/opportunity",
+    "/opportunity/review",
+    "/radar",
+    "/analysis",
+    "/productions",
+    "/tools",
+}
 IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
 HUMAN_GATE_MUTATION_ROUTES = {
@@ -8071,6 +8079,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/opportunity/inbox":
             self._send_json(opportunity_inbox_snapshot())
+            return
+        if route == "/api/opportunity/viral/overview":
+            self._send_json(viral_radar.radar_overview())
             return
         if route == "/api/opportunity/viral/snapshots":
             query = parse_qs(urlparse(self.path).query)
