@@ -697,7 +697,10 @@
                 <h2 id="formatReviewTitle">Review format plan</h2>
                 <p class="muted" id="formatReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="formatReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="format">Review one at a time →</button>
+                <span class="status-chip running" id="formatReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="concept-review-layout">
@@ -725,7 +728,10 @@
                 <h2 id="performanceReviewTitle">Review voice performance</h2>
                 <p class="muted" id="performanceReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="performanceReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="voice">Review one at a time →</button>
+                <span class="status-chip running" id="performanceReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="concept-review-layout">
@@ -1040,7 +1046,10 @@
                 <h2 id="previewReviewTitle">Listen before spending</h2>
                 <p class="muted" id="previewReviewSummary">Review story flow, tone, spacing, music and SFX suggestions before any paid narration quote.</p>
               </div>
-              <span class="status-chip running" id="previewReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/review" data-subroute="preview">Review one at a time →</button>
+                <span class="status-chip running" id="previewReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="previewDetail"></div>
@@ -1147,6 +1156,9 @@
           <div class="review-workspace" id="gateReview-concept" hidden></div>
           <div class="review-workspace" id="gateReview-research" hidden></div>
           <div class="review-workspace" id="gateReview-script" hidden></div>
+          <div class="review-workspace" id="gateReview-format" hidden></div>
+          <div class="review-workspace" id="gateReview-voice" hidden></div>
+          <div class="review-workspace" id="gateReview-preview" hidden></div>
         </section>
 
         <section class="app-view" data-view="packaging" id="viewPackaging" hidden>

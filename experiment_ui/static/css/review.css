@@ -287,3 +287,18 @@
 .rw-alternative .rw-script-text { font-size: 13.5px; padding: var(--space-2) var(--space-3); }
 .rw-alternative p { margin: 0; }
 .rw-alternative button { justify-self: start; font-size: 13px; padding: 6px 11px; }
+
+/* Format, voice and preview reviews (UI-13, D-121). */
+.rw-beats {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.rw-beat { display: grid; gap: 6px; }
+.rw-beat p { margin: 0; }
+.rw-beat .rw-script-text { font-size: 14px; }
+.rw-delivery { color: var(--accent); font-size: 12.5px; }
+.rw-audio { width: 100%; margin: var(--space-2) 0; }

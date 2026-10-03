@@ -528,7 +528,7 @@ const ROUTES = {
     view: "gate-review",
     kicker: "PRODUCTIONS",
     title: "Gate Reviews",
-    subtitle: "Analysis findings, concepts and research claims, one at a time."
+    subtitle: "Each human gate, one item at a time: evidence on the left, decision on the right."
   },
   "/packaging": {
     view: "packaging",
@@ -837,7 +837,10 @@ function primaryTargetForWorkflow(workflow) {
     HUMAN_ANALYSIS_GATE: ["analysis", "Review analysis findings"],
     HUMAN_CONCEPT_GATE: ["concept", "Review concepts"],
     HUMAN_RESEARCH_GATE: ["research", "Review research"],
-    HUMAN_SCRIPT_GATE: ["script", "Review script"]
+    HUMAN_SCRIPT_GATE: ["script", "Review script"],
+    HUMAN_FORMAT_GATE: ["format", "Review format"],
+    HUMAN_PERFORMANCE_GATE: ["voice", "Review performance"],
+    HUMAN_NARRATION_PREVIEW_GATE: ["preview", "Listen to prototype"]
   };
   const packagingStates = {
     HUMAN_TITLE_DIRECTION_GATE: ["titles", "Select title directions"],

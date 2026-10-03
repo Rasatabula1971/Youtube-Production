@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  const GATES = ["analysis", "concept", "research", "script"];
+  const GATES = ["analysis", "concept", "research", "script", "format", "voice", "preview"];
   let activeGate = "analysis";
   let showDecided = false;
   const workspaces = {};
@@ -574,7 +574,142 @@
     await yp().refresh();
   }
 
-  const CONFIGS = { analysis: analysis, concept: concept, research: research, script: script };
+  // ------------------------------------------------------------------ Format
+  function criteriaList(item) {
+    const criteria = item.criteria || {};
+    return list((item.required_accept_criteria || Object.keys(criteria)).map(function (key) { return criteria[key] || words(key); }));
+  }
+
+  function beatsTable(beats, directions) {
+    const byBeat = {};
+    (directions || []).forEach(function (d) { if (d && d.beat_id) byBeat[d.beat_id] = d; });
+    const rows = (beats || []).filter(Boolean).map(function (beat) {
+      const d = byBeat[beat.beat_id];
+      const delivery = d ? [
+        d.emotion, d.intensity != null ? "intensity " + d.intensity : "", d.speed != null ? "speed " + d.speed : "",
+        d.pause_before_ms ? "pause before " + d.pause_before_ms + " ms" : "", d.pause_after_ms ? "pause after " + d.pause_after_ms + " ms" : "",
+        (d.emphasis_terms || []).length ? "stress: " + d.emphasis_terms.join(", ") : ""
+      ].filter(Boolean).join(" · ") : "";
+      return '<li class="rw-beat"><p class="attention-kicker">' + esc(beat.beat_id) + (beat.reveal_beat ? " · reveal" : "") +
+        (beat.purpose ? " · " + esc(beat.purpose) : "") + "</p>" +
+        (beat.immutable_narration ? '<p class="rw-script-text">' + esc(beat.immutable_narration) + "</p>" : "") +
+        (beat.treatment ? '<p class="muted">' + esc(beat.treatment) + "</p>" : "") +
+        (delivery ? '<p class="rw-delivery">' + esc(delivery) + "</p>" : "") +
+        "</li>";
+    }).join("");
+    return rows ? '<ol class="rw-beats">' + rows + "</ol>" : "";
+  }
+
+  const ACCEPT_REWORK_REJECT = function (acceptHint, reworkHint) {
+    return [
+      { value: "ACCEPT", label: "Accept", hint: acceptHint, tone: "complete" },
+      { value: "REWORK", label: "Rework", hint: reworkHint, tone: "running", needsNote: true, notePlaceholder: "say what must change" },
+      { value: "REJECT", label: "Reject", hint: "Stop here for this item.", tone: "blocked" }
+    ];
+  };
+
+  const format = {
+    label: "Format",
+    kicker: "FORMAT REVIEW",
+    snapshot: function () { return status().format_gate || {}; },
+    all: function () { return this.snapshot().plans || []; },
+    key: function (item) { return item.concept_id; },
+    title: function (item) { return (item.package || {}).title || item.concept_id; },
+    meta: function (item) {
+      return '<span class="source-chip">' + esc((item.required_branches || []).map(words).join(" + ") || "format") + "</span>" +
+        '<span class="rw-meta-text">' + esc(words(item.format_intent)) + "</span>" + decidedBadge(item.decision);
+    },
+    evidence: function (item) {
+      const branches = (item.branches || []).filter(Boolean).map(function (branch) {
+        return section(words(branch.format) + " · " + (branch.duration_intent_seconds ? Math.round(branch.duration_intent_seconds) + " s" : "duration not set"),
+          facts([["Promise delivery", branch.promise_delivery], ["Payoff", branch.payoff]]) + beatsTable(branch.beats));
+      }).join("");
+      return branches +
+        section("Branch separation", facts([["Separation", item.branch_separation]])) +
+        section("Claims used by branch", facts(Object.keys(item.claim_usage_by_branch || {}).map(function (k) { return [words(k), item.claim_usage_by_branch[k]]; }))) +
+        section("Unused accepted claims", list(item.unused_accepted_claim_ids)) +
+        section("Source overlap", facts([["Overlap", item.source_overlap]])) +
+        section("Accepting confirms", criteriaList(item));
+    },
+    decisions: function () {
+      return ACCEPT_REWORK_REJECT("Voice performance planning starts automatically.", "Re-plan the formats with your direction.");
+    },
+    decide: function (item, decision, note) {
+      const messages = { ACCEPT: "Format plan accepted.", REWORK: "Format plan sent for rework.", REJECT: "Format plan rejected." };
+      return post("/api/format-gate", { concept_id: item.concept_id, decision: decision, criteria: {}, note: note }, messages[decision] || "Saved.");
+    }
+  };
+
+  // ------------------------------------------------------------------- Voice
+  const voice = {
+    label: "Voice",
+    kicker: "VOICE PERFORMANCE REVIEW",
+    snapshot: function () { return status().performance_gate || {}; },
+    all: function () { return this.snapshot().specs || []; },
+    key: function (item) { return item.concept_id + "::" + item.format; },
+    title: function (item) { return item.title || item.concept_id; },
+    meta: function (item) {
+      return '<span class="source-chip">' + esc(words(item.format)) + "</span>" +
+        '<span class="rw-meta-text">' + esc(item.concept_id) +
+        (item.duration_intent_seconds ? " · " + Math.round(item.duration_intent_seconds) + " s" : "") + "</span>" + decidedBadge(item.decision);
+    },
+    evidence: function (item) {
+      return facts([
+        ["Promise delivery", item.promise_delivery],
+        ["Payoff", item.payoff],
+        ["Voice", item.voice_identity],
+        ["Rendering", item.render_prerequisites_configured ? "Voice provider configured" : "Voice provider not configured yet: the free preview may not render"]
+      ]) +
+        section("Beats and delivery", beatsTable(item.beats, item.directions) || '<p class="muted">No beats on this spec.</p>') +
+        section("Accepting confirms", criteriaList(item));
+    },
+    decisions: function () {
+      return ACCEPT_REWORK_REJECT("A free narration preview renders automatically.", "Re-direct the performance with your notes.");
+    },
+    decide: function (item, decision, note) {
+      const messages = { ACCEPT: "Voice performance accepted.", REWORK: "Voice performance sent for rework.", REJECT: "Voice performance rejected." };
+      return post("/api/performance-gate", { concept_id: item.concept_id, format: item.format, decision: decision, criteria: {}, note: note }, messages[decision] || "Saved.");
+    }
+  };
+
+  // ----------------------------------------------------- Narration preview
+  const preview = {
+    label: "Preview",
+    kicker: "NARRATION PREVIEW",
+    snapshot: function () { return status().narration_preview_gate || {}; },
+    all: function () { return this.snapshot().items || []; },
+    key: function (item) { return item.concept_id + "::" + item.format; },
+    title: function (item) { return item.concept_id + " · " + words(item.format); },
+    meta: function (item) {
+      return '<span class="source-chip">free prototype</span>' +
+        '<span class="rw-meta-text">' + (item.audio_ready ? "audio ready" : "audio not rendered yet") + "</span>" + decidedBadge(item.decision);
+    },
+    extraSignature: function (item) { return String(item.audio_sha256 || ""); },
+    evidence: function (item) {
+      const src = "/api/narration-preview-audio?concept_id=" + encodeURIComponent(item.concept_id) + "&format=" + encodeURIComponent(item.format);
+      return section("Listen", item.audio_ready
+        ? '<audio class="rw-audio" controls preload="none" src="' + esc(src) + '">Your browser cannot play this preview.</audio>' +
+          '<p class="muted">Free local preview of the approved performance. Approving unlocks the paid narration quote; nothing is spent yet.</p>'
+        : '<p class="muted">The preview has not rendered yet. It must exist before it can be approved.</p>') +
+        section("Fine-tune one segment", '<p class="muted">Revising a single segment and re-rendering stays in the classic panel. ' +
+          '<button type="button" class="ghost compact" data-route="/analysis">Open classic view</button></p>');
+    },
+    decisions: function (item) {
+      return [
+        { value: "APPROVE_FINAL", label: "Approve → get paid quote", hint: "Sound brief and narration cost preparation start automatically.", tone: "complete",
+          validate: function () { return item.audio_ready ? "" : "Listen first: the preview audio has not rendered yet."; } },
+        { value: "REWORK_PERFORMANCE", label: "Rework performance", hint: "Delivery, pacing or emphasis is wrong.", tone: "running", needsNote: true, notePlaceholder: "say what to change in the delivery" },
+        { value: "REWORK_SCRIPT", label: "Rework script", hint: "The words themselves need changing.", tone: "running", needsNote: true, notePlaceholder: "say what to change in the script" },
+        { value: "REWORK_MUSIC_SFX", label: "Rework music / SFX", hint: "Sound design needs changing.", tone: "running", needsNote: true, notePlaceholder: "say what to change in music or sound effects" }
+      ];
+    },
+    decide: function (item, decision, note) {
+      return post("/api/narration-preview-gate", { concept_id: item.concept_id, format: item.format, decision: decision, note: note },
+        decision === "APPROVE_FINAL" ? "Free prototype approved. Narration quote preparation is unlocked." : "Prototype sent back for " + words(decision).replace("rework ", "") + " rework.");
+    }
+  };
+
+  const CONFIGS = { analysis: analysis, concept: concept, research: research, script: script, format: format, voice: voice, preview: preview };
 
   function isPending(gate, item) {
     const config = CONFIGS[gate];

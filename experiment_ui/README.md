@@ -280,8 +280,8 @@ to match the redesign's navigation:
     rework reason and ready alternatives. Package and Format show progress and
     decisions. Produce shows each version's voice, narration and final render.
   - **Keys.** Tabs follow the WAI-ARIA pattern: ← → move, Home/End jump.
-- `/review#<gate>` — **Gate Reviews** (D-118, D-119): the Analysis, Concept,
-  Research and Script gates on the shared review workspace, one item at a time, with a
+- `/review#<gate>` — **Gate Reviews** (D-118, D-119, D-121): the Analysis,
+  Concept, Research, Script, Format, Voice and Narration Preview gates on the shared review workspace, one item at a time, with a
   gate switcher showing pending counts and "Include decided items" for
   revisiting.
   - **Same requests.** Each decision posts exactly what the classic panel
@@ -311,6 +311,16 @@ to match the redesign's navigation:
       open asks first, then accepts them too.
     - *Requests:* the same as the classic panel, and section editing is
       prepared automatically before the first part action.
+  - **Format, Voice, Preview (D-121).**
+    - *Format:* each branch with its duration, promise delivery, payoff and
+      beats, claims used per branch, unused claims and source overlap.
+    - *Voice:* every beat's fixed narration with its delivery (emotion,
+      intensity, speed, pauses, stressed words).
+    - *Preview:* an audio player for the free prototype. Approving it unlocks
+      the paid narration quote, and it cannot be approved before the audio
+      exists. The three rework choices (performance, script, music/SFX) each
+      need a note.
+    - *Per-segment revision* and re-rendering stay in the classic panel.
   - **Classic view.** It stays in Workspace with every option, including the
     concept override bank, saved ideas, the bounded rework request without a
     model call, and restoring a saved script version.
