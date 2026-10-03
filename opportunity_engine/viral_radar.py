@@ -982,6 +982,142 @@ def load_cluster(cluster_id: str) -> dict[str, Any] | None:
     return next((c for c in load_clusters() if c.get("cluster_id") == cluster_id), None)
 
 
+SPARKLINE_MAX_POINTS = 24
+
+
+def _snapshot_series(video_ids: set[str]) -> dict[str, list[list[float]]]:
+    """[age_hours, views] per video from the append-only snapshot log, one pass."""
+    series: dict[str, list[list[float]]] = {video_id: [] for video_id in video_ids}
+    if not video_ids:
+        return series
+    try:
+        lines = SNAPSHOT_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return series
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict) or row.get("video_id") not in series:
+            continue
+        try:
+            point = [float(row["video_age_hours"]), float(row["views"])]
+        except (KeyError, TypeError, ValueError):
+            continue
+        series[str(row["video_id"])].append(point)
+    for points in series.values():
+        points.sort(key=lambda point: point[0])
+        if len(points) > SPARKLINE_MAX_POINTS:
+            step = (len(points) - 1) / (SPARKLINE_MAX_POINTS - 1)
+            kept = [points[round(i * step)] for i in range(SPARKLINE_MAX_POINTS)]
+            points[:] = kept
+    return series
+
+
+def _float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def radar_overview(now: datetime | None = None) -> dict[str, Any]:
+    """Everything the Viral Radar page shows, read from the radar's own files (UI-04).
+
+    Themes come from the last clustering pass; tracked videos from the radar
+    state; sparkline points from the snapshot log. Nothing is re-measured.
+    """
+    now = now or datetime.now(timezone.utc)
+    settings = radar_config()
+    window_days = int(settings.get("active_window_days") or 15)
+    state = load_state()
+    tracked: dict[str, dict[str, Any]] = state.get("tracked") or {}
+    clusters = load_clusters()
+    ids = set(tracked) | {
+        str(member.get("video_id"))
+        for cluster in clusters
+        for member in cluster.get("members") or []
+        if member.get("video_id")
+    }
+    series = _snapshot_series(ids)
+
+    def video_row(video_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        video = record.get("video") or {}
+        metrics = record.get("metrics") or {}
+        published = _parse_time(video.get("published_at"))
+        age = (now - published).total_seconds() / 3600 if published else _float(metrics.get("age_hours"))
+        return {
+            "video_id": video_id,
+            "opportunity_id": opportunity_id(models.SOURCE_VIRAL_RADAR, video_id),
+            "title": video.get("title"),
+            "channel_title": video.get("channel_title"),
+            "format": record.get("format"),
+            "strength": record.get("strength"),
+            "trajectory": record.get("trajectory"),
+            "breadth": record.get("breadth"),
+            "historical_alignment": record.get("historical_alignment"),
+            "lifetime_ratio": _float(metrics.get("lifetime_ratio")),
+            "views": metrics.get("views", video.get("views")),
+            "age_hours": round(age, 1) if age is not None else None,
+            "day": min(window_days, int(age // 24) + 1) if age is not None and age >= 0 else None,
+            "window_days": window_days,
+            "first_seen_at": record.get("first_seen_at"),
+            "cluster_id": (record.get("cluster") or {}).get("cluster_id"),
+            "series": series.get(video_id, []),
+        }
+
+    videos = [video_row(video_id, record) for video_id, record in tracked.items() if isinstance(record, dict)]
+    videos.sort(key=lambda row: -(row["lifetime_ratio"] or 0))
+    by_id = {row["video_id"]: row for row in videos}
+
+    themes = []
+    for cluster in clusters:
+        members = [m for m in cluster.get("members") or [] if isinstance(m, dict)]
+        rows = [by_id[str(m.get("video_id"))] for m in members if str(m.get("video_id")) in by_id]
+        ratios_ = sorted(
+            r for r in (_float(m.get("lifetime_ratio")) for m in members) if r is not None
+        )
+        top = max(rows, key=lambda row: row["lifetime_ratio"] or 0) if rows else None
+        seen = [str(row.get("first_seen_at")) for row in rows if row.get("first_seen_at")]
+        themes.append(
+            {
+                "cluster_id": cluster.get("cluster_id"),
+                "label": cluster.get("label"),
+                "kind": cluster.get("kind"),
+                "breadth": cluster.get("breadth"),
+                "replication_rule_id": cluster.get("replication_rule_id"),
+                "independent_channel_count": cluster.get("independent_channel_count"),
+                "member_count": cluster.get("member_count", len(members)),
+                "strongest_ratio": ratios_[-1] if ratios_ else None,
+                "median_ratio": _median(ratios_),
+                "direction": top.get("trajectory") if top else None,
+                "historical_alignment": top.get("historical_alignment") if top else None,
+                "first_detected_at": min(seen) if seen else None,
+                "top_video_id": top.get("video_id") if top else None,
+                "top_opportunity_id": top.get("opportunity_id") if top else None,
+                "momentum": top.get("series") if top else [],
+                "videos": [
+                    {k: row[k] for k in ("video_id", "opportunity_id", "title", "channel_title", "lifetime_ratio", "trajectory")}
+                    for row in sorted(rows, key=lambda row: -(row["lifetime_ratio"] or 0))
+                ],
+            }
+        )
+    themes.sort(
+        key=lambda theme: (
+            theme["breadth"] != "REPLICATED",
+            -(theme["strongest_ratio"] or 0),
+        )
+    )
+    return {
+        "generated_at": now.isoformat(),
+        "window_days": window_days,
+        "themes": themes,
+        "tracked": videos,
+        "status": status_snapshot(),
+    }
+
+
 def status_snapshot() -> dict[str, Any]:
     state = load_state()
     try:

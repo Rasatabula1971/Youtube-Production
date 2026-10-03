@@ -237,9 +237,29 @@ to match the redesign's navigation:
   breakouts, inbox ideas, a failed job), active productions, what is running
   automatically, then the compact progress, opportunity and last-activity
   panels.
-- `/opportunity` — **Opportunities**, with sidebar sub-items Discover, Viral
-  Radar, Watching and Approved. The sub-items jump to the entry cards, the
-  radar card or the matching inbox tab (`/opportunity#watching`, …).
+- `/opportunity` — **Opportunities**: the four entry cards in one row, a counts
+  strip (need review, watching, approved, saved) with "Review N ideas one by
+  one", and the inbox. Inbox cards show the lane, a meta line (independent
+  channels, when detected, direction), an outlier figure and the six evidence
+  levels, with "Review opportunity" as the one primary button. Sidebar
+  sub-items: Discover, Viral Radar, Review, Watching, Approved.
+- `/radar` — **Viral Radar** (D-116): monitoring status (automatic or manual
+  only), last scan, next discovery, next snapshots, videos and channels
+  tracked, and "Run scan now". "Emerging now" shows themes, replicated ones
+  first, each with a momentum sparkline of its strongest video, strongest and
+  median outlier, current direction and historical demand. "Watching" lists the
+  breakouts you chose to watch, with Day N / 15, outlier, sparkline and
+  direction, and "All tracked videos" lists the rest. A format filter (All,
+  Long-form, Shorts) filters what is shown. Topic and region filters are not
+  offered because the radar does not support them yet.
+- `/opportunity/review` — **Opportunity Review** (D-116): the Human Opportunity
+  Gate on the shared review workspace. The inbox's "Needs review" items are
+  shown one at a time. Evidence is on the left: summary, rule-backed "why this
+  is interesting", the six evidence levels, videos and "Open full evidence".
+  The decision is on the right: only the actions that item allows, a note, and
+  "Save decision". Keys: ← → move, 1–9 choose, Ctrl+Enter save. Investigate
+  (rework) requires a note. A decided item leaves the queue, and a failed
+  decision keeps your draft. `#<opportunity_id>` links to one item.
 - `/productions` — **Productions**: one row per accepted concept, filtered as
   Active, Review Queue or Completed (`/productions#review`, …). "Workspace"
   (`/analysis`, formerly Analyze & Create) still holds every review panel;
@@ -252,7 +272,7 @@ a radar scheduler that has missed three wakes) next to the job indicator,
 which opens a slide-out drawer from any view; the sidebar footer shows the
 workflow and scheduler state. Background polling continues while navigating.
 
-The local server serves the same application shell at all five routes, so a
+The local server serves the same application shell at every route, so a
 view can be refreshed or bookmarked directly without returning a 404.
 
 ### Productions derived from files
@@ -281,8 +301,11 @@ attributed to a single production; they stay on the Command Center hero.
 four state colours `--status-human|running|blocked|complete`, spacing, type,
 radius, shadow, motion, z-index) and aliases the old variable names so
 `styles.css` keeps working while later patches move its rules across.
-`static/css/shell.css`, `static/css/command-center.css` and
-`static/js/command-center.js` are the first split-out files. The server serves
+Split-out files so far: `static/css/shell.css`, `command-center.css`,
+`opportunity.css` and `review.css`; `static/js/command-center.js`,
+`review-workspace.js` (the shared review workspace), `opportunity-review.js`
+and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
+API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves
 `/css/*.css` and `/js/*.js` only: one directory level, an allowlisted extension
 per folder, no dotfiles, and a resolved path that must stay inside that folder.
 

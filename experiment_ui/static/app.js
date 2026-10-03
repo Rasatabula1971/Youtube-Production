@@ -512,6 +512,18 @@ const ROUTES = {
     title: "Find the next video",
     subtitle: "From proven demand, your own idea, or what is breaking out right now."
   },
+  "/opportunity/review": {
+    view: "opportunity-review",
+    kicker: "OPPORTUNITIES",
+    title: "Opportunity Review",
+    subtitle: "One idea at a time: the evidence on the left, your decision on the right."
+  },
+  "/radar": {
+    view: "radar",
+    kicker: "OPPORTUNITIES",
+    title: "Viral Radar",
+    subtitle: "Recent channel-relative outliers, tracked for up to 15 days."
+  },
   "/analysis": {
     view: "analysis",
     kicker: "ANALYZE & CREATE",
@@ -644,6 +656,10 @@ function renderRoute(options) {
     ? "YouTube Production"
     : route.title + " — YouTube Production";
 
+  if (renderedPath !== path) {
+    if (path === "/radar" && window.RadarPage) window.RadarPage.show();
+    if (path === "/opportunity/review" && window.OpportunityReview) window.OpportunityReview.render();
+  }
   closeSidebar();
   if (shouldScroll && renderedPath !== path) {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -683,13 +699,15 @@ function applySubroute(path, subroute) {
       } catch (_) {}
       renderInbox(latestInbox);
       anchor = document.getElementById("opportunityInboxPanel");
-    } else if (subroute === "radar") {
-      anchor = document.getElementById("viralEntryPanel");
+    } else if (subroute === "historical") {
+      anchor = document.getElementById("historicalReviewPanel");
     } else {
       anchor = document.getElementById("viewOpportunity");
     }
   } else if (path === "/productions" && window.CommandCenter) {
     window.CommandCenter.setProductionFilter(subroute);
+  } else if (path === "/opportunity/review" && window.OpportunityReview) {
+    window.OpportunityReview.focus(decodeURIComponent(subroute));
   }
   if (anchor) {
     anchor.scrollIntoView({ block: "start", behavior: "auto" });
@@ -1016,14 +1034,6 @@ function formatCount(value) {
   return value == null ? "unknown" : Number(value).toLocaleString();
 }
 
-function evidenceChip(label, item) {
-  const level = (item && item.level) || "UNASSESSED";
-  const tone = level === "STRONG" || level === "EVIDENCED" ? "success" : level === "MODERATE" ? "running" : "neutral";
-  return '<span class="status-chip ' + tone + '" title="' +
-    escapeHtml(((item && item.rule_id) || "no rule") + ": " + ((item && item.basis) || []).join("; ")) + '">' +
-    escapeHtml(label + ": " + level) + '</span>';
-}
-
 function routeChip(item) {
   const route = item.route || "UNSCOPED";
   const detail = route === "FUTURE_CHANNEL"
@@ -1041,14 +1051,15 @@ function inboxActionButtons(item) {
     if (action === "APPROVE") {
       const isTopic = item.source_type === "HUMAN_TOPIC";
       const kind = isTopic ? "topic" : item.source_type === "VIRAL_RADAR" ? "viral" : "video";
-      return '<button data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
+      return '<button class="ghost" data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
+        ' data-inbox-id="' + escapeHtml(item.opportunity_id) + '"' +
         ' data-inbox-kind="' + kind + '" data-inbox-excluded="' + excluded + '"' +
         ' title="Approve: this becomes the study set for Experiment 02">' +
         (isTopic ? "Approve these videos" : "Approve") + '</button>';
     }
     if (action === "APPROVE_THEME") {
       const cluster = (viral.cluster || {});
-      return '<button data-inbox-theme="' + escapeHtml(cluster.cluster_id || "") + '"' +
+      return '<button class="ghost" data-inbox-theme="' + escapeHtml(cluster.cluster_id || "") + '"' +
         ' title="Approve the whole theme: one video per independent channel">' +
         'Approve theme (' + escapeHtml(String(cluster.independent_channel_count || "?")) + ' channels)</button>';
     }
@@ -1087,25 +1098,6 @@ function formatRate(value) {
   if (value == null) return "—";
   const number = Number(value);
   return number >= 1000 ? (number / 1000).toFixed(1) + "K" : number.toFixed(number < 10 ? 1 : 0);
-}
-
-function viralChips(viral) {
-  if (!viral) return "";
-  const strengthTone = viral.strength === "BREAKOUT" ? "success" : viral.strength === "NORMAL" ? "neutral" : "running";
-  const trajectoryTone = viral.trajectory === "ACCELERATING" ? "success" : viral.trajectory === "DECELERATING" ? "failed" : "neutral";
-  return '<span class="status-chip ' + strengthTone + '" title="' + escapeHtml(viral.strength_rule_id || "") + '">' +
-      escapeHtml((viral.strength || "").replace(/_/g, " ")) + '</span>' +
-    '<span class="status-chip ' + trajectoryTone + '">' + escapeHtml((viral.trajectory || "").replace(/_/g, " ")) + '</span>' +
-    (viral.lifetime_ratio == null ? "" : '<span class="status-chip neutral" title="' +
-      escapeHtml("basis: " + (viral.ratio_basis || []).join(", ")) + '">' +
-      escapeHtml(viral.lifetime_ratio + "× channel") + '</span>') +
-    (viral.breadth === "REPLICATED" && viral.cluster
-      ? '<span class="status-chip success" title="' + escapeHtml(viral.cluster.replication_rule_id || "") + '">' +
-        escapeHtml("Replicated · " + viral.cluster.independent_channel_count + " channels") + '</span>'
-      : "") +
-    (viral.tracking_status && viral.tracking_status !== "TRACKING"
-      ? '<span class="status-chip neutral">' + escapeHtml(viral.tracking_status.replace(/_/g, " ")) + '</span>'
-      : "");
 }
 
 function drawerSection(title, html) {
@@ -1336,7 +1328,116 @@ document.addEventListener("keydown", function (event) {
   if (event.key === "Escape") closeEvidenceDrawer();
 });
 
+const OPPORTUNITY_COUNTS = [
+  ["NEEDS_REVIEW", "Need review"],
+  ["WATCHING", "Watching"],
+  ["APPROVED", "Approved"],
+  ["SAVED", "Saved"]
+];
+
+function renderOpportunityCounts(counts) {
+  const strip = document.getElementById("opportunityCounts");
+  if (!strip) return;
+  const waiting = counts.NEEDS_REVIEW || 0;
+  strip.innerHTML = OPPORTUNITY_COUNTS.map(function (entry) {
+    return '<button type="button" class="opp-count' + (entry[0] === inboxTab ? " active" : "") +
+      '" data-inbox-tab="' + entry[0] + '"><strong>' + (counts[entry[0]] || 0) + '</strong><span>' +
+      escapeHtml(entry[1]) + '</span></button>';
+  }).join("") +
+    (waiting
+      ? '<button type="button" class="primary-cta opp-review-all" data-route="/opportunity/review">Review ' +
+        waiting + (waiting === 1 ? " idea" : " ideas") + ' one by one →</button>'
+      : "");
+}
+
+function hoursAgoLabel(iso) {
+  const time = Date.parse(iso || "");
+  if (!Number.isFinite(time)) return "";
+  const hours = (Date.now() - time) / 3600000;
+  return hours < 48 ? Math.max(0, Math.round(hours)) + "h ago" : Math.round(hours / 24) + "d ago";
+}
+
+function inboxCardKicker(item) {
+  const viral = item.viral;
+  if (viral) {
+    if (viral.breadth === "REPLICATED") return "Replicated breakout";
+    return String(viral.strength || "Radar find").replace(/_/g, " ").toLowerCase();
+  }
+  return item.source_label || "Opportunity";
+}
+
+function inboxCardMeta(item) {
+  const parts = [];
+  const viral = item.viral;
+  if (viral) {
+    if (viral.cluster && viral.cluster.independent_channel_count) {
+      parts.push(viral.cluster.independent_channel_count + " independent channel" + (viral.cluster.independent_channel_count === 1 ? "" : "s"));
+    }
+    if (item.created_at) parts.push("detected " + hoursAgoLabel(item.created_at));
+    if (viral.trajectory && viral.trajectory !== "INSUFFICIENT_SNAPSHOTS") {
+      parts.push("direction " + viral.trajectory.replace(/_/g, " ").toLowerCase());
+    }
+  } else {
+    if (item.video_count) parts.push(item.video_count + " video" + (item.video_count === 1 ? "" : "s"));
+    if (item.created_at) parts.push("added " + hoursAgoLabel(item.created_at));
+  }
+  return parts.join(" · ");
+}
+
+function inboxCardMetrics(item) {
+  const cells = [];
+  const viral = item.viral;
+  if (viral && viral.lifetime_ratio != null) {
+    cells.push(["Outlier", viral.lifetime_ratio + "×", "running"]);
+  }
+  (item.matrix || []).forEach(function (row) {
+    const level = row.level || "UNASSESSED";
+    const open = level === "UNASSESSED" || level === "HYPOTHESIS";
+    const tone = level === "STRONG" || level === "EVIDENCED" ? "complete" : level === "MODERATE" ? "running" : level === "WEAK" ? "human" : "ready";
+    cells.push([row.label, open ? "open" : level.toLowerCase(), tone, (row.rule_id || "") + " " + (row.basis || []).join("; ")]);
+  });
+  if (!cells.length) return "";
+  return '<dl class="opp-metrics">' + cells.map(function (cell) {
+    return '<div><dt>' + escapeHtml(cell[0]) + '</dt><dd><span class="status-badge status-' + cell[2] + '"' +
+      (cell[3] ? ' title="' + escapeHtml(cell[3].trim() || "Not yet evidenced") + '"' : "") + '>' +
+      escapeHtml(cell[1]) + '</span></dd></div>';
+  }).join("") + '</dl>';
+}
+
+function inboxCard(item) {
+  const tone = item.is_active ? "complete" : item.viral ? "running" : item.status === "NEEDS_REVIEW" ? "human" : "ready";
+  return '<article class="inbox-item opp-card tone-' + tone + (item.is_active ? " active" : "") + '">' +
+    '<div class="opp-card-head">' +
+      '<p class="attention-kicker">' + escapeHtml(inboxCardKicker(item)) + '</p>' +
+      '<span class="source-chip">' + escapeHtml(item.source_label || "") + '</span>' +
+    '</div>' +
+    '<h3 class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</h3>' +
+    '<p class="opp-meta muted">' + escapeHtml(inboxCardMeta(item)) + '</p>' +
+    '<div class="inbox-item-chips">' +
+      (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
+      routeChip(item) +
+    '</div>' +
+    inboxCardMetrics(item) +
+    (item.evidence_moved ? '<p class="evidence-moved">Evidence has moved since your decision — the decision stands; review it if you like.</p>' : "") +
+    (item.status_reason ? '<p class="muted opp-reason">' + escapeHtml(item.status_reason) + '</p>' : "") +
+    '<div class="opp-actions">' +
+      '<button type="button" class="ghost compact inbox-open-evidence" data-inbox-evidence="' +
+        escapeHtml(item.opportunity_id) + '">Open evidence</button>' +
+      (item.status === "NEEDS_REVIEW"
+        ? '<button type="button" class="compact" data-route="/opportunity/review" data-subroute="' +
+          escapeHtml(encodeURIComponent(item.opportunity_id)) + '">Review opportunity →</button>'
+        : "") +
+      '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
+    '</div>' +
+  '</article>';
+}
+
 function renderInbox(inbox) {
+  renderInboxList(inbox);
+  if (window.OpportunityReview) window.OpportunityReview.render();
+}
+
+function renderInboxList(inbox) {
   if (!opportunityInbox) return;
   latestInbox = inbox || {};
   const counts = latestInbox.counts || {};
@@ -1346,6 +1447,7 @@ function renderInbox(inbox) {
       '" aria-selected="' + (tab[0] === inboxTab) + '" data-inbox-tab="' + tab[0] + '">' +
       escapeHtml(tab[1]) + ' <span class="inbox-count">' + (counts[tab[0]] || 0) + '</span></button>';
   }).join("");
+  renderOpportunityCounts(counts);
   const items = (latestInbox.items || []).filter(function (item) { return item.status === inboxTab; });
   let html = latestInbox.historical_error
     ? '<p class="muted">' + escapeHtml(latestInbox.historical_error) + '</p>'
@@ -1354,25 +1456,7 @@ function renderInbox(inbox) {
     opportunityInbox.innerHTML = html + '<p class="empty-state">' + escapeHtml(INBOX_EMPTY[inboxTab]) + '</p>';
     return;
   }
-  html += items.map(function (item) {
-    const evidence = (item.evidence || []).map(function (chip) {
-      return evidenceChip(chip.label, chip);
-    }).join("");
-    return '<article class="inbox-item' + (item.is_active ? " active" : "") + '">' +
-      '<div class="inbox-item-main">' +
-        '<div class="inbox-item-chips"><span class="source-chip">' + escapeHtml(item.source_label || "") + '</span>' +
-          (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
-          routeChip(item) + viralChips(item.viral) + (item.viral ? "" : evidence) + '</div>' +
-        '<strong class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</strong>' +
-        (item.evidence_moved ? '<span class="evidence-moved">Evidence has moved since your decision — the decision stands; review it if you like.</span>' : "") +
-        (item.status_reason ? '<span class="muted">' + escapeHtml(item.status_reason) + '</span>' : "") +
-        (item.summary ? '<span class="muted">' + escapeHtml(item.summary) + '</span>' : "") +
-        '<button type="button" class="ghost compact inbox-open-evidence" data-inbox-evidence="' +
-          escapeHtml(item.opportunity_id) + '">Open evidence</button>' +
-      '</div>' +
-      '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
-    '</article>';
-  }).join("");
+  html += items.map(inboxCard).join("");
   opportunityInbox.innerHTML = html;
 }
 
@@ -1553,6 +1637,61 @@ async function stopAnalyzingVideo() {
   }
 }
 
+function inboxItemById(opportunityId) {
+  return (latestInbox.items || []).find(function (entry) { return entry.opportunity_id === opportunityId; }) || null;
+}
+
+// One place that turns an inbox decision into the right API call, shared by
+// the inbox cards, the Opportunity Review workspace and the Viral Radar page.
+function performInboxDecision(item, action, note) {
+  const excluded = item.route === "EXCLUDED";
+  if (action === "APPROVE") {
+    if (item.source_type === "HUMAN_TOPIC") return analyzeExploredTopic(item.topic_key, excluded);
+    if (item.source_type === "VIRAL_RADAR") {
+      return analyzeHumanSource(
+        "/api/opportunity/viral/analyze",
+        { video_id: item.video_id },
+        excluded,
+        "This breakout is now the study set. Analysis continues automatically."
+      );
+    }
+    return analyzeSubmittedVideo(item.video_id, excluded);
+  }
+  if (action === "APPROVE_THEME") {
+    return analyzeTheme(((item.viral || {}).cluster || {}).cluster_id || "");
+  }
+  if (action === "STOP") return stopAnalyzingVideo();
+  if (action === "REVIEW_BELOW") {
+    navigate("/opportunity", "historical");
+    return Promise.resolve();
+  }
+  return submitInboxAction(item.opportunity_id, action, note);
+}
+
+function analyzeTheme(clusterId) {
+  return analyzeHumanSource(
+    "/api/opportunity/viral/analyze",
+    { cluster_id: clusterId },
+    false,
+    "This theme's videos are now the study set. Analysis continues automatically."
+  );
+}
+
+window.YP = {
+  api: function (url, options) { return api(url, options); },
+  escapeHtml: escapeHtml,
+  formatCount: formatCount,
+  formatRate: formatRate,
+  showToast: showToast,
+  navigate: navigate,
+  inbox: function () { return latestInbox; },
+  inboxItem: inboxItemById,
+  decide: performInboxDecision,
+  analyzeTheme: analyzeTheme,
+  openEvidence: function (opportunityId, trigger) { return openEvidenceDrawer(opportunityId, trigger); },
+  routeLabel: function (route) { return ROUTE_LABELS[route] || route; }
+};
+
 if (opportunityInbox) {
   exploreTopicForm.addEventListener("submit", exploreTopic);
   analyzeVideoForm.addEventListener("submit", submitVideoForAnalysis);
@@ -1561,6 +1700,15 @@ if (opportunityInbox) {
   });
   runViralRadar.addEventListener("click", function () {
     runAction("viral_radar");
+  });
+  document.getElementById("opportunityCounts").addEventListener("click", function (event) {
+    const tab = event.target.closest("[data-inbox-tab]");
+    if (!tab) return;
+    inboxTab = tab.dataset.inboxTab;
+    try {
+      window.localStorage.setItem("opportunityInboxTab", inboxTab);
+    } catch (_) {}
+    renderInbox(latestInbox);
   });
   opportunityInboxTabs.addEventListener("click", function (event) {
     const tab = event.target.closest("[data-inbox-tab]");
@@ -1574,19 +1722,8 @@ if (opportunityInbox) {
   opportunityInbox.addEventListener("click", function (event) {
     const analyzeButton = event.target.closest("[data-inbox-analyze]");
     if (analyzeButton) {
-      const excluded = Boolean(analyzeButton.dataset.inboxExcluded);
-      if (analyzeButton.dataset.inboxKind === "topic") {
-        analyzeExploredTopic(analyzeButton.dataset.inboxAnalyze, excluded);
-      } else if (analyzeButton.dataset.inboxKind === "viral") {
-        analyzeHumanSource(
-          "/api/opportunity/viral/analyze",
-          { video_id: analyzeButton.dataset.inboxAnalyze },
-          excluded,
-          "This breakout is now the study set. Analysis continues automatically."
-        );
-      } else {
-        analyzeSubmittedVideo(analyzeButton.dataset.inboxAnalyze, excluded);
-      }
+      const item = inboxItemById(analyzeButton.dataset.inboxId);
+      if (item) performInboxDecision(item, "APPROVE", "");
       return;
     }
     if (event.target.closest("[data-video-stop]")) {
@@ -1594,7 +1731,7 @@ if (opportunityInbox) {
       return;
     }
     if (event.target.closest("[data-inbox-review]")) {
-      document.getElementById("historicalReviewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      navigate("/opportunity", "historical");
       return;
     }
     const evidenceButton = event.target.closest("[data-inbox-evidence]");
@@ -1604,12 +1741,7 @@ if (opportunityInbox) {
     }
     const themeButton = event.target.closest("[data-inbox-theme]");
     if (themeButton) {
-      analyzeHumanSource(
-        "/api/opportunity/viral/analyze",
-        { cluster_id: themeButton.dataset.inboxTheme },
-        false,
-        "This theme's videos are now the study set. Analysis continues automatically."
-      );
+      analyzeTheme(themeButton.dataset.inboxTheme);
       return;
     }
     const actionButton = event.target.closest("[data-inbox-action]");
@@ -6812,6 +6944,7 @@ function renderAll(data) {
   renderHomeActivity(data.job || {}, data.opportunity_research || {});
   renderOpportunityGate(data.opportunity_gate || {});
   renderInbox(data.opportunity_inbox || {});
+  if (window.RadarPage) window.RadarPage.render(data);
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);
