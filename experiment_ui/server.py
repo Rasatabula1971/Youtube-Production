@@ -40,6 +40,7 @@ APP_ROUTES = {
     "/production",
     "/review",
     "/packaging",
+    "/produce",
     "/analysis",
     "/productions",
     "/tools",

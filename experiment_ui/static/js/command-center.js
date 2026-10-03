@@ -150,6 +150,20 @@
       }).length,
       detail: "Listen to the free prototype before any paid narration."
     });
+    // Production gates (D-122) live on the Produce page; count them together.
+    if (window.Produce) {
+      const produceTabs = ["narration", "visuals", "rights", "roughcut", "spend", "edit", "export"];
+      const counts = produceTabs.map(function (tab) { return window.Produce.pending(tab); });
+      const first = counts.findIndex(function (count) { return count > 0; });
+      gates.push({
+        id: first === -1 ? "narration" : produceTabs[first],
+        route: "/produce",
+        label: "Production",
+        noun: "production decision",
+        count: counts.reduce(function (sum, count) { return sum + count; }, 0),
+        detail: "Spend, visuals, rough cut, edit preview or final export."
+      });
+    }
     return gates.filter(function (gate) { return gate.count > 0; });
   }
 
@@ -187,7 +201,7 @@
         title: plural(gate.count, gate.noun) + " to review",
         detail: gate.detail,
         action: "Review " + gate.noun + "s",
-        route: "/review",
+        route: gate.route || "/review",
         subroute: gate.id
       });
     });
@@ -405,7 +419,7 @@
         kind: gate.label + " Gate",
         detail: gate.detail,
         tone: "human",
-        route: "/review",
+        route: gate.route || "/review",
         subroute: gate.id,
         count: gate.count
       });

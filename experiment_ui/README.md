@@ -343,6 +343,24 @@ to match the redesign's navigation:
   - **Image approval.** Approving rendered thumbnail images (subject photo,
     accent and render) stays in the classic Thumbnail panel, and the Final
     package tab says when an image still needs approval.
+- `/produce#<tab>` — **Produce** (D-122): the seven production gates on the
+  shared review workspace, posting exactly what the classic panels post.
+  - **Narration spend:** quote, initial estimate and worst-case ceiling.
+    Accepting needs every spend check and confirms the amount.
+  - **Choose visuals:** candidate cards per shot. Blocked candidates cannot
+    be picked, and a shot whose storyboard changed waits for re-search.
+  - **Footage rights:** approving needs a documented editorial purpose, plus
+    an optional context note.
+  - **Rough cut:** scenes with their assignments. Rework is routed to one
+    shot's visual, to pacing (format) or to audio (voice).
+  - **Visual spend:** a per-shot maximum that must be above zero and within
+    the hard cap, with a confirmation; or keep the placeholder, or retry
+    existing footage with an instruction.
+  - **Edit preview** and **Final export:** video players, approve or return
+    to visuals, narration or sound (returns need a note). Final approval
+    binds the rendered bytes and publishes nothing.
+  - **Kept in the classic view:** asset registration (final narration audio,
+    managed and generated visuals, final sound) and storyboard shot editing.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions.
 - `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
@@ -389,7 +407,7 @@ four state colours `--status-human|running|blocked|complete`, spacing, type,
 radius, shadow, motion, z-index) and aliases the old variable names so
 `styles.css` keeps working while later patches move its rules across.
 Split-out files so far: `static/css/shell.css`, `command-center.css`,
-`opportunity.css`, `review.css`, `production.css` and `packaging.css`; `static/js/production-workspace.js`, `gate-reviews.js`, `packaging.js`, `static/js/command-center.js`,
+`opportunity.css`, `review.css`, `production.css` and `packaging.css`; `static/js/production-workspace.js`, `gate-reviews.js`, `packaging.js`, `produce.js`, `static/js/command-center.js`,
 `review-workspace.js` (the shared review workspace), `opportunity-review.js`
 and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
 API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves

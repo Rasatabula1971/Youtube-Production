@@ -149,3 +149,36 @@
   .pk-packages, .pk-grid { grid-template-columns: 1fr; }
   .pk-table-wrap .pw-rows { min-width: 0; }
 }
+
+/* Produce workspace (UI-14, D-122). */
+.pd-video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.pd-textarea {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font: 13px/1.45 var(--font-sans);
+  resize: vertical;
+}
+
+.pd-cost { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-strong); }
+.pd-cost input {
+  width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font: 14px var(--font-sans);
+}
