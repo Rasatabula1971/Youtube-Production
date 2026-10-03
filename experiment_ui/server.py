@@ -39,6 +39,7 @@ APP_ROUTES = {
     "/radar",
     "/production",
     "/review",
+    "/packaging",
     "/analysis",
     "/productions",
     "/tools",

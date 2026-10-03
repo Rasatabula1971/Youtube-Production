@@ -3165,3 +3165,54 @@ the original, applies `SELECT_ALTERNATIVE`, which locks the part.
 **Kept in the classic view.** Preparing a bounded rework request without
 calling the model, and restoring a saved script version. Both are rare, and
 restoring needs the version picker.
+
+
+## D-120 — UI Patch 6: the Packaging workspace
+
+**Status:** Accepted
+
+**Five tabs, two decisions.** `/packaging` follows the redesign's packaging
+page:
+- **Title Direction** and **Final package** are the two human gates in the
+  live workflow, on the shared review workspace.
+- **Brief & angles**, **Thumbnail concepts** and **Pairing** show what the
+  automatic steps produced. They have no decisions because the pipeline has
+  none there.
+
+**Choices live with the item, not the form.** Both gates need more than one
+choice:
+- Title Direction: a Short and a Long-form title, each with editable wording.
+- Final package: a package plus the required checks.
+
+These are kept per item in the page module, so the 5-second status poll and
+any repaint never lose a pick, an edited title or a ticked check. Editing a
+title's wording selects that title.
+
+**Same requests and rules as the classic panels.**
+- **Title Direction** posts `{concept_id, decision, selected_titles, note}`:
+  - Accept needs both formats chosen with non-blank wording.
+  - Rework needs a note.
+  - A decided item offers only Rework, matching the gate's rule that a
+    finalized decision changes only through rework.
+- **Final package** posts `{video_id, decision, package_id, criteria, note,
+  rework_target}`:
+  - Accept needs a chosen package and every required check, which the server
+    also enforces.
+  - Rework needs a target from the gate config and an instruction, and shows
+    the classic confirmation.
+- A test keeps the page's check and rework labels in step with
+  `final_packaging_gate_config.json`.
+
+**Thumbnail image approval stays classic.** Approving a rendered thumbnail
+means choosing a subject photo and accent and re-rendering, a different job
+from a decision. The Final package tab therefore shows which packages wait on
+an approved image and links to the classic panel. A package whose image is
+approved but has no preview is labelled as such, never as unapproved.
+
+**Entry points.** These open the matching tab:
+- the Command Center hero for HUMAN_TITLE_DIRECTION_GATE,
+  TITLE_DIRECTION_REJECTED, HUMAN_FINAL_PACKAGING_GATE and
+  FINAL_PACKAGING_REJECTED;
+- a production's "Continue review" at the Package stage;
+- the classic panels' "Open packaging workspace" buttons;
+- Productions → Packaging in the sidebar.

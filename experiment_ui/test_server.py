@@ -53,6 +53,7 @@ class ExperimentUiTests(unittest.TestCase):
                 "/radar",
                 "/production",
                 "/review",
+                "/packaging",
                 "/analysis",
                 "/productions",
                 "/tools",

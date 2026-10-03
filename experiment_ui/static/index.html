@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/opportunity.css">
   <link rel="stylesheet" href="/css/review.css">
   <link rel="stylesheet" href="/css/production.css">
+  <link rel="stylesheet" href="/css/packaging.css">
 </head>
 <body>
   <div class="app-shell">
@@ -44,7 +45,7 @@
           </div>
         </div>
         <div class="nav-group">
-          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production /review" class="nav-item">
+          <a href="/productions" data-route="/productions" data-also-routes="/analysis /production /review /packaging" class="nav-item">
             <span class="nav-icon" aria-hidden="true">▶</span>
             <span>Productions</span>
             <span class="nav-count" id="navProductionCount" hidden></span>
@@ -53,6 +54,7 @@
             <a href="/productions#active" data-route="/productions" data-subroute="active" class="nav-subitem">Active</a>
             <a href="/productions#review" data-route="/productions" data-subroute="review" class="nav-subitem">Review Queue</a>
             <a href="/review" data-route="/review" class="nav-subitem">Gate reviews</a>
+            <a href="/packaging" data-route="/packaging" class="nav-subitem">Packaging</a>
             <a href="/productions#completed" data-route="/productions" data-subroute="completed" class="nav-subitem">Completed</a>
             <a href="/analysis" data-route="/analysis" class="nav-subitem">Workspace</a>
           </div>
@@ -560,7 +562,10 @@
                 <h2 id="titleDirectionReviewTitle">Select preferred title directions</h2>
                 <p class="muted" id="titleDirectionReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="titleDirectionReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/packaging" data-subroute="titles">Open packaging workspace →</button>
+                <span class="status-chip running" id="titleDirectionReviewStatus">PENDING</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="titleDirectionDetail"></div>
@@ -654,7 +659,10 @@
                 <h2 id="finalPackagingReviewTitle">Choose the final package</h2>
                 <p class="muted" id="finalPackagingReviewSummary"></p>
               </div>
-              <span class="status-chip running" id="finalPackagingReviewStatus">PENDING</span>
+              <div class="panel-head-actions">
+                <button type="button" class="compact" data-route="/packaging" data-subroute="final">Open packaging workspace →</button>
+                <span class="status-chip running" id="finalPackagingReviewStatus">PENDING</span>
+              </div>
             </div>
 
             <div class="concept-review-layout">
@@ -1141,6 +1149,15 @@
           <div class="review-workspace" id="gateReview-script" hidden></div>
         </section>
 
+        <section class="app-view" data-view="packaging" id="viewPackaging" hidden>
+          <div class="pw-tabs pk-tabs" id="packagingTabs" role="tablist" aria-label="Packaging steps"></div>
+          <div class="review-workspace pk-panel" id="packaging-titles"></div>
+          <div class="pk-panel" id="packaging-angles" hidden></div>
+          <div class="pk-panel" id="packaging-thumbnails" hidden></div>
+          <div class="pk-panel" id="packaging-pairing" hidden></div>
+          <div class="review-workspace pk-panel" id="packaging-final" hidden></div>
+        </section>
+
         <section class="app-view" data-view="production" id="viewProduction" hidden>
           <div id="productionWorkspace" class="production-workspace"></div>
         </section>
@@ -1246,6 +1263,7 @@
   <script src="/js/radar.js"></script>
   <script src="/js/production-workspace.js"></script>
   <script src="/js/gate-reviews.js"></script>
+  <script src="/js/packaging.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

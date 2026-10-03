@@ -233,6 +233,31 @@ class ShellMarkupTests(unittest.TestCase):
         offered = set(re.findall(r'\["([A-Z_]+)", ', block.group(1)))
         self.assertEqual(offered, set(ALLOWED_REWORK_REASONS))
 
+    def test_packaging_page_covers_the_gate_config(self) -> None:
+        script = (STATIC / "js" / "packaging.js").read_text(encoding="utf-8")
+        for tab in re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("const FORMATS")[0]):
+            with self.subTest(tab=tab):
+                self.assertIn(f'id="packaging-{tab}"', self.html)
+        self.assertIn('id="packagingTabs"', self.html)
+        for endpoint in ["/api/title-direction-gate", "/api/final-packaging-gate"]:
+            with self.subTest(endpoint=endpoint):
+                self.assertIn(f'"{endpoint}"', script)
+                self.assertIn(endpoint, server.HUMAN_GATE_MUTATION_ROUTES)
+        config = json.loads(
+            (server.PROJECT_ROOT / "packaging_engine" / "final_packaging_gate_config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        labels = re.search(r"const CRITERIA_LABELS = \{(.*?)\};", script, re.S)
+        rework = re.search(r"const REWORK_LABELS = \{(.*?)\};", script, re.S)
+        assert labels is not None and rework is not None
+        for criterion in config["required_accept_criteria"] + [config["image_criterion"]]:
+            with self.subTest(criterion=criterion):
+                self.assertIn(criterion + ":", labels.group(1))
+        for target in config["rework_targets"]:
+            with self.subTest(target=target):
+                self.assertIn(target + ":", rework.group(1))
+
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")
         for route in server.APP_ROUTES:
