@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +135,8 @@ def packets_from_study_set(
                     "cross_channel_replication": _replication(topic_evidence, config),
                 },
                 historical_evidence={
+                    # Same key the existing Human Opportunity Gate uses.
+                    "gate_opportunity_id": f"{niche}:{topic}:{fmt}" if niche else f"{topic}:{fmt}",
                     "experiment_01_5_handoff_ids": [item.get("handoff_id") for item in items],
                     "gate_statuses": sorted({str(item.get("gate_status")) for item in items}),
                     "age_matched_velocity_index": metric,
@@ -151,15 +154,21 @@ def packets_from_study_set(
     return packets
 
 
-def build(study_set_file: Path = STUDY_SET_FILE) -> dict[str, Any]:
+def build(study_set_file: Path | None = None) -> dict[str, Any]:
+    study_set_file = study_set_file or STUDY_SET_FILE
     if not study_set_file.is_file():
         return {"status": "WAITING_FOR_01_5", "packets": []}
     study_set = json.loads(study_set_file.read_text(encoding="utf-8"))
     if not isinstance(study_set, list):
         raise ValueError(f"{study_set_file} must contain a list")
     artifacts = [source_artifact(study_set_file, "experiment_01_5_study_set")]
+    # The study set's own timestamp, so rebuilding never makes old packets "new".
+    built_at = datetime.fromtimestamp(study_set_file.stat().st_mtime, tz=timezone.utc)
     packets = packets_from_study_set(
-        study_set, source_artifacts=artifacts, config=channel_scope.load_config()
+        study_set,
+        source_artifacts=artifacts,
+        config=channel_scope.load_config(),
+        created_at=built_at.isoformat(),
     )
     return {
         "status": "READY" if packets else "NO_HISTORICAL_OPPORTUNITIES",
@@ -178,7 +187,7 @@ def write(result: dict[str, Any], output_file: Path = OUTPUT_FILE) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--study-set", type=Path, default=STUDY_SET_FILE)
+    parser.add_argument("--study-set", type=Path, default=None)
     args = parser.parse_args()
     result = build(args.study_set)
     # Always write, so an emptied or missing study set never leaves stale packets.

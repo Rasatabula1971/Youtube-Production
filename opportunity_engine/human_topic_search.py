@@ -351,7 +351,8 @@ def explore(
     if found:
         try:
             measured = (measurer or measure_via_api)([v["video_id"] for v in found])
-            measurement["source"] = "YOUTUBE_DATA_API"
+            if measured:
+                measurement["source"] = "YOUTUBE_DATA_API"
         except IntakeError as exc:
             measurement["error"] = str(exc)
 

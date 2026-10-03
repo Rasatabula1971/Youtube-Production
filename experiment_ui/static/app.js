@@ -23,10 +23,12 @@ const refreshStatus = document.getElementById("refreshStatus");
 const opportunityGate = document.getElementById("opportunityGate");
 const analyzeVideoForm = document.getElementById("analyzeVideoForm");
 const analyzeVideoSubmit = document.getElementById("analyzeVideoSubmit");
-const submittedVideos = document.getElementById("submittedVideos");
+const opportunityInbox = document.getElementById("opportunityInbox");
+const opportunityInboxTabs = document.getElementById("opportunityInboxTabs");
+const historicalEntryStatus = document.getElementById("historicalEntryStatus");
+const runHistoricalSearch = document.getElementById("runHistoricalSearch");
 const exploreTopicForm = document.getElementById("exploreTopicForm");
 const exploreTopicSubmit = document.getElementById("exploreTopicSubmit");
-const exploredTopics = document.getElementById("exploredTopics");
 const analysisActions = document.getElementById("analysisActions");
 const analysisCurrentPanel = document.getElementById("analysisCurrentPanel");
 const analysisCurrentTitle = document.getElementById("analysisCurrentTitle");
@@ -504,9 +506,9 @@ const ROUTES = {
   },
   "/opportunity": {
     view: "opportunity",
-    kicker: "HUMAN GATE",
-    title: "Opportunity",
-    subtitle: "Review the evidence and make the topic decision."
+    kicker: "OPPORTUNITY DISCOVERY",
+    title: "Find the next video",
+    subtitle: "From proven demand, your own idea, or what is breaking out right now."
   },
   "/analysis": {
     view: "analysis",
@@ -931,65 +933,157 @@ const ROUTE_LABELS = {
   UNSCOPED: "Needs a fit check"
 };
 
+const INBOX_TABS = [
+  ["NEEDS_REVIEW", "Needs review"],
+  ["WATCHING", "Watching"],
+  ["APPROVED", "Approved"],
+  ["SAVED", "Saved"],
+  ["REJECTED", "Rejected"]
+];
+const INBOX_EMPTY = {
+  NEEDS_REVIEW: "Nothing waiting. Explore a topic, check a video or run the historical search.",
+  WATCHING: "Viral candidates you choose to keep tracking will appear here once the radar is built.",
+  APPROVED: "Nothing approved yet.",
+  SAVED: "No saved ideas. Ideas for future channels are parked here automatically.",
+  REJECTED: "Nothing rejected."
+};
+let inboxTab = "NEEDS_REVIEW";
+let latestInbox = {};
+try {
+  inboxTab = window.localStorage.getItem("opportunityInboxTab") || inboxTab;
+} catch (_) {}
+
 function formatCount(value) {
   return value == null ? "unknown" : Number(value).toLocaleString();
 }
 
 function evidenceChip(label, item) {
   const level = (item && item.level) || "UNASSESSED";
-  const tone = level === "STRONG" ? "success" : level === "MODERATE" ? "running" : "neutral";
+  const tone = level === "STRONG" || level === "EVIDENCED" ? "success" : level === "MODERATE" ? "running" : "neutral";
   return '<span class="status-chip ' + tone + '" title="' +
     escapeHtml(((item && item.rule_id) || "no rule") + ": " + ((item && item.basis) || []).join("; ")) + '">' +
     escapeHtml(label + ": " + level) + '</span>';
 }
 
-function renderExploredTopics(snapshot) {
-  if (!exploredTopics) return;
-  const topics = (snapshot && snapshot.topics) || [];
-  const active = (snapshot && snapshot.active) || null;
-  if (!topics.length) {
-    exploredTopics.innerHTML = '<p class="empty-state">No topics explored yet.</p>';
+function routeChip(item) {
+  const route = item.route || "UNSCOPED";
+  const detail = route === "FUTURE_CHANNEL"
+    ? " · " + (item.route_channel_id || "")
+    : route === "EXCLUDED" ? " · " + (item.route_rule_id || "") : "";
+  const tone = route === "ACTIVE_CHANNEL" ? "success" : route === "EXCLUDED" ? "failed" : "running";
+  return '<span class="status-chip ' + tone + '" title="' + escapeHtml(item.route_reason || "") + '">' +
+    escapeHtml((ROUTE_LABELS[route] || route) + detail) + '</span>';
+}
+
+function inboxActionButtons(item) {
+  const excluded = item.route === "EXCLUDED" ? "1" : "";
+  return (item.actions || []).map(function (action) {
+    if (action === "ANALYZE") {
+      const isTopic = item.source_type === "HUMAN_TOPIC";
+      return '<button data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
+        ' data-inbox-kind="' + (isTopic ? "topic" : "video") + '" data-inbox-excluded="' + excluded + '">' +
+        (isTopic ? "Analyze these videos" : "Analyze why it worked") + '</button>';
+    }
+    if (action === "STOP") {
+      return '<button class="ghost" data-video-stop>Stop analyzing</button>';
+    }
+    if (action === "REVIEW_BELOW") {
+      return '<button class="ghost" data-inbox-review>Review below</button>';
+    }
+    const labels = { SAVE: "Save", REJECT: "Reject", RESTORE: "Back to review" };
+    return '<button class="ghost" data-inbox-action="' + action + '" data-inbox-id="' +
+      escapeHtml(item.opportunity_id) + '">' + labels[action] + '</button>';
+  }).join("");
+}
+
+function inboxDetails(item) {
+  const facts = [];
+  if (item.measurement_source) facts.push("measured via " + item.measurement_source);
+  if (item.measurement_error) facts.push("API unavailable: " + item.measurement_error);
+  if (item.failed_searches) facts.push(item.failed_searches + " of " + item.search_count + " searches failed");
+  if (item.excluded_result_count) facts.push(item.excluded_result_count + " result(s) excluded by scope rules");
+  const evidence = (item.evidence || []).map(function (chip) {
+    return '<li><strong>' + escapeHtml(chip.label + ": " + chip.level) + '</strong> <span class="muted">(' +
+      escapeHtml(chip.rule_id || "no rule") + ') ' + escapeHtml((chip.basis || []).join("; ")) + '</span></li>';
+  }).join("");
+  const videos = (item.videos || []).map(function (video) {
+    return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
+      escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' +
+      escapeHtml(video.channel_title || "") + ' · ' + escapeHtml(formatCount(video.views)) + ' views' +
+      (video.age_days == null ? "" : " · " + escapeHtml(String(video.age_days)) + " days old") + '</span></li>';
+  }).join("");
+  return '<details class="inbox-details"><summary>Evidence and videos</summary>' +
+    (item.summary ? '<p class="muted">' + escapeHtml(item.summary) + '</p>' : "") +
+    (evidence ? '<ul class="inbox-evidence">' + evidence + '</ul>' : '<p class="muted">No rule-backed evidence yet; viewer need, mechanism and content gap are hypotheses until analysed.</p>') +
+    (videos ? '<ol class="topic-videos">' + videos + '</ol>' : "") +
+    (facts.length ? '<p class="muted">' + escapeHtml(facts.join(" · ")) + '</p>' : "") +
+    ((item.notes || []).length ? '<p class="muted">Your note: ' + escapeHtml(item.notes[0]) + '</p>' : "") +
+    (item.route_reason ? '<p class="muted">Scope: ' + escapeHtml(item.route_reason) + '</p>' : "") +
+    '</details>';
+}
+
+function renderInbox(inbox) {
+  if (!opportunityInbox) return;
+  latestInbox = inbox || {};
+  const counts = latestInbox.counts || {};
+  if (!INBOX_TABS.some(function (tab) { return tab[0] === inboxTab; })) inboxTab = "NEEDS_REVIEW";
+  opportunityInboxTabs.innerHTML = INBOX_TABS.map(function (tab) {
+    return '<button type="button" role="tab" class="inbox-tab' + (tab[0] === inboxTab ? " active" : "") +
+      '" aria-selected="' + (tab[0] === inboxTab) + '" data-inbox-tab="' + tab[0] + '">' +
+      escapeHtml(tab[1]) + ' <span class="inbox-count">' + (counts[tab[0]] || 0) + '</span></button>';
+  }).join("");
+  const items = (latestInbox.items || []).filter(function (item) { return item.status === inboxTab; });
+  let html = latestInbox.historical_error
+    ? '<p class="muted">' + escapeHtml(latestInbox.historical_error) + '</p>'
+    : "";
+  if (!items.length) {
+    opportunityInbox.innerHTML = html + '<p class="empty-state">' + escapeHtml(INBOX_EMPTY[inboxTab]) + '</p>';
     return;
   }
-  exploredTopics.innerHTML = topics.map(function (topic) {
-    const isActive = Boolean(active && active.topic_key && active.topic_key === topic.topic_key);
-    const route = topic.route || "UNSCOPED";
-    const routeDetail = route === "FUTURE_CHANNEL"
-      ? " · " + (topic.route_channel_id || "")
-      : route === "EXCLUDED" ? " · " + (topic.route_rule_id || "") : "";
-    const chipTone = route === "ACTIVE_CHANNEL" ? "success" : route === "EXCLUDED" ? "failed" : "running";
-    const action = isActive
-      ? '<span class="status-chip success">Being analyzed</span>' +
-        '<button class="ghost" data-video-stop>Stop analyzing</button>'
-      : (topic.video_count
-        ? '<button data-topic-analyze="' + escapeHtml(topic.topic_key) + '"' +
-          ' data-topic-excluded="' + (route === "EXCLUDED" ? "1" : "") + '">Analyze these videos</button>'
-        : '<span class="muted">No relevant videos found</span>');
-    const notes = [];
-    if (topic.failed_searches) notes.push(topic.failed_searches + " of " + (topic.variants || []).length + " searches failed");
-    if (topic.measurement_error) notes.push("measured from search results only (" + topic.measurement_error + ")");
-    if (topic.excluded_count) notes.push(topic.excluded_count + " result(s) excluded by scope rules");
-    return '<article class="submitted-video' + (isActive ? " active" : "") + '">' +
-      '<div class="submitted-video-copy">' +
-        '<strong>' + escapeHtml(topic.title || topic.topic_key) + '</strong>' +
-        '<span class="muted">' + escapeHtml(topic.summary || "") + '</span>' +
-        '<span class="topic-evidence">' +
-          evidenceChip("Demand", topic.demand) + evidenceChip("Replication", topic.replication) +
-          '<span class="status-chip ' + chipTone + '">' + escapeHtml((ROUTE_LABELS[route] || route) + routeDetail) + '</span>' +
-        '</span>' +
-        ((topic.top_videos || []).length
-          ? '<ol class="topic-videos">' + topic.top_videos.map(function (video) {
-              return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
-                escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' +
-                escapeHtml(video.channel_title || "") + ' · ' + escapeHtml(formatCount(video.views)) + ' views</span></li>';
-            }).join("") + '</ol>'
-          : "") +
-        (notes.length ? '<span class="muted">' + escapeHtml(notes.join(" · ")) + '</span>' : "") +
-        ((topic.notes || []).length ? '<span class="muted">Your note: ' + escapeHtml(topic.notes[0]) + '</span>' : "") +
+  html += items.map(function (item) {
+    const evidence = (item.evidence || []).map(function (chip) {
+      return evidenceChip(chip.label, chip);
+    }).join("");
+    return '<article class="inbox-item' + (item.is_active ? " active" : "") + '">' +
+      '<div class="inbox-item-main">' +
+        '<div class="inbox-item-chips"><span class="source-chip">' + escapeHtml(item.source_label || "") + '</span>' +
+          (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
+          routeChip(item) + evidence + '</div>' +
+        '<strong class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</strong>' +
+        (item.status_reason ? '<span class="muted">' + escapeHtml(item.status_reason) + '</span>' : "") +
+        inboxDetails(item) +
       '</div>' +
-      '<div class="submitted-video-actions">' + action + '</div>' +
+      '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
     '</article>';
   }).join("");
+  opportunityInbox.innerHTML = html;
+}
+
+function renderHistoricalEntry(data) {
+  if (!historicalEntryStatus) return;
+  const research = data.opportunity_research || {};
+  const action = (data.actions || []).find(function (item) { return item.id === "opportunity_research"; }) || {};
+  const gate = data.opportunity_gate || {};
+  let status = research.message || action.reason || "";
+  if ((gate.opportunities || []).length) {
+    status = (gate.opportunities || []).length + " historical topic(s) in the inbox. " + (action.reason || "");
+  }
+  historicalEntryStatus.textContent = status;
+  runHistoricalSearch.disabled = !action.enabled;
+  runHistoricalSearch.title = action.reason || "";
+}
+
+async function submitInboxAction(opportunityId, action) {
+  try {
+    const payload = await api("/api/opportunity/inbox", {
+      method: "POST",
+      body: JSON.stringify({ opportunity_id: opportunityId, action: action })
+    });
+    renderInbox(payload);
+    showToast(action === "RESTORE" ? "Moved back to Needs review." : action === "SAVE" ? "Saved." : "Rejected.", false);
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 async function exploreTopic(event) {
@@ -1006,72 +1100,16 @@ async function exploreTopic(event) {
         note: document.getElementById("exploreTopicNote").value.trim()
       })
     });
-    renderSubmittedVideos(payload);
+    inboxTab = "NEEDS_REVIEW";
+    renderInbox(payload);
     exploreTopicForm.reset();
-    showToast("Topic explored. Review the evidence below.", false);
+    showToast("Topic explored. It is in the inbox.", false);
   } catch (error) {
     showToast(error.message, true);
   } finally {
     exploreTopicSubmit.disabled = false;
     exploreTopicSubmit.textContent = "Explore topic";
   }
-}
-
-if (exploreTopicForm) {
-  exploreTopicForm.addEventListener("submit", exploreTopic);
-  exploredTopics.addEventListener("click", function (event) {
-    const analyzeButton = event.target.closest("[data-topic-analyze]");
-    if (analyzeButton) {
-      analyzeExploredTopic(analyzeButton.dataset.topicAnalyze, Boolean(analyzeButton.dataset.topicExcluded));
-      return;
-    }
-    if (event.target.closest("[data-video-stop]")) stopAnalyzingVideo();
-  });
-}
-
-function renderSubmittedVideos(snapshot) {
-  renderExploredTopics(snapshot);
-  if (!submittedVideos) return;
-  const videos = (snapshot && snapshot.videos) || [];
-  const active = (snapshot && snapshot.active) || null;
-  if (!videos.length) {
-    submittedVideos.innerHTML =
-      '<p class="empty-state">No videos submitted yet.</p>';
-    return;
-  }
-  submittedVideos.innerHTML = videos.map(function (video) {
-    const isActive = Boolean(active && active.video_id && active.video_id === video.video_id);
-    const route = video.route || "UNSCOPED";
-    const routeDetail = route === "FUTURE_CHANNEL"
-      ? " · " + (video.route_channel_id || "")
-      : route === "EXCLUDED"
-        ? " · " + (video.route_rule_id || "")
-        : "";
-    const chipTone = route === "ACTIVE_CHANNEL" ? "success" : route === "EXCLUDED" ? "failed" : "running";
-    const action = isActive
-      ? '<span class="status-chip success">Being analyzed</span>' +
-        '<button class="ghost" data-video-stop>Stop analyzing</button>'
-      : '<button data-video-analyze="' + escapeHtml(video.video_id) + '"' +
-        ' data-video-excluded="' + (route === "EXCLUDED" ? "1" : "") + '">Analyze why it worked</button>';
-    return '<article class="submitted-video' + (isActive ? " active" : "") + '">' +
-      '<div class="submitted-video-copy">' +
-        '<a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer"><strong>' +
-          escapeHtml(video.title || video.video_id) + '</strong></a>' +
-        '<span class="muted">' + escapeHtml(video.channel_title || "Unknown channel") +
-          ' · ' + escapeHtml(formatCount(video.views)) + ' views · ' +
-          escapeHtml((video.format || "").replace("_", "-")) +
-          (video.age_days == null ? "" : " · " + escapeHtml(String(video.age_days)) + " days old") +
-          ' · measured via ' + escapeHtml(video.measurement_source || "unknown") + '</span>' +
-        '<span><span class="status-chip ' + chipTone + '">' +
-          escapeHtml((ROUTE_LABELS[route] || route) + routeDetail) + '</span> ' +
-          '<span class="muted">' + escapeHtml(video.route_reason || "") + '</span></span>' +
-        ((video.notes || []).length
-          ? '<span class="muted">Your note: ' + escapeHtml(video.notes[0]) + '</span>'
-          : "") +
-      '</div>' +
-      '<div class="submitted-video-actions">' + action + '</div>' +
-    '</article>';
-  }).join("");
 }
 
 async function submitVideoForAnalysis(event) {
@@ -1089,9 +1127,10 @@ async function submitVideoForAnalysis(event) {
         note: document.getElementById("analyzeVideoNote").value.trim()
       })
     });
-    renderSubmittedVideos(payload);
+    inboxTab = "NEEDS_REVIEW";
+    renderInbox(payload);
     analyzeVideoForm.reset();
-    showToast("Video saved. Review it below, then choose Analyze why it worked.", false);
+    showToast("Video saved. It is in the inbox.", false);
   } catch (error) {
     showToast(error.message, true);
   } finally {
@@ -1111,7 +1150,8 @@ async function analyzeHumanSource(url, body, excluded, successMessage) {
         method: "POST",
         body: JSON.stringify(body)
       });
-      renderSubmittedVideos(payload);
+      inboxTab = "APPROVED";
+      renderInbox(payload);
       showToast(successMessage, false);
       await loadStatus();
       return;
@@ -1150,7 +1190,7 @@ async function stopAnalyzingVideo() {
   if (!window.confirm("Stop analyzing your idea? The historical opportunity decision (if any) becomes the study set again.")) return;
   try {
     const payload = await api("/api/opportunity/video/stop", { method: "POST", body: "{}" });
-    renderSubmittedVideos(payload);
+    renderInbox(payload);
     showToast("Stopped analyzing your idea.", false);
     await loadStatus();
   } catch (error) {
@@ -1158,15 +1198,42 @@ async function stopAnalyzingVideo() {
   }
 }
 
-if (analyzeVideoForm) {
+if (opportunityInbox) {
+  exploreTopicForm.addEventListener("submit", exploreTopic);
   analyzeVideoForm.addEventListener("submit", submitVideoForAnalysis);
-  submittedVideos.addEventListener("click", function (event) {
-    const analyzeButton = event.target.closest("[data-video-analyze]");
+  runHistoricalSearch.addEventListener("click", function () {
+    runAction("opportunity_research");
+  });
+  opportunityInboxTabs.addEventListener("click", function (event) {
+    const tab = event.target.closest("[data-inbox-tab]");
+    if (!tab) return;
+    inboxTab = tab.dataset.inboxTab;
+    try {
+      window.localStorage.setItem("opportunityInboxTab", inboxTab);
+    } catch (_) {}
+    renderInbox(latestInbox);
+  });
+  opportunityInbox.addEventListener("click", function (event) {
+    const analyzeButton = event.target.closest("[data-inbox-analyze]");
     if (analyzeButton) {
-      analyzeSubmittedVideo(analyzeButton.dataset.videoAnalyze, Boolean(analyzeButton.dataset.videoExcluded));
+      const excluded = Boolean(analyzeButton.dataset.inboxExcluded);
+      if (analyzeButton.dataset.inboxKind === "topic") {
+        analyzeExploredTopic(analyzeButton.dataset.inboxAnalyze, excluded);
+      } else {
+        analyzeSubmittedVideo(analyzeButton.dataset.inboxAnalyze, excluded);
+      }
       return;
     }
-    if (event.target.closest("[data-video-stop]")) stopAnalyzingVideo();
+    if (event.target.closest("[data-video-stop]")) {
+      stopAnalyzingVideo();
+      return;
+    }
+    if (event.target.closest("[data-inbox-review]")) {
+      document.getElementById("historicalReviewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const actionButton = event.target.closest("[data-inbox-action]");
+    if (actionButton) submitInboxAction(actionButton.dataset.inboxId, actionButton.dataset.inboxAction);
   });
 }
 
@@ -6356,7 +6423,8 @@ function renderAll(data) {
   renderHomeOpportunity(data.opportunity_gate || {});
   renderHomeActivity(data.job || {}, data.opportunity_research || {});
   renderOpportunityGate(data.opportunity_gate || {});
-  renderSubmittedVideos(data.submitted_videos || {});
+  renderInbox(data.opportunity_inbox || {});
+  renderHistoricalEntry(data);
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});
