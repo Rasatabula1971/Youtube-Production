@@ -8142,6 +8142,11 @@ class Handler(BaseHTTPRequestHandler):
                         if body.get("replacement_text") is not None
                         else None
                     ),
+                    version_id=(
+                        str(body["version_id"])
+                        if body.get("version_id") is not None
+                        else None
+                    ),
                 )
                 self._send_json(payload)
                 return

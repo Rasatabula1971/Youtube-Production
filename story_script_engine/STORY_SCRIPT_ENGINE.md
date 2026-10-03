@@ -320,6 +320,32 @@ Slice 5 does not alter Slice 4 alternatives generation. Manual free-text editing
 remains a separate human action, though it shares the same section-state lock
 and exact parent-version helper.
 
+### Slice 5B — saved-version restore
+
+Every selection or manual edit saves the parent draft as
+`revision_NNNN.script_draft.json` (the revision it contains). Slice 5B lets the
+reviewer list those saved versions and restore one.
+
+- `list_saved_versions` returns version ID, revision, hash, edit type and a
+  `compatible` flag, without exposing filesystem paths. A version is
+  compatible only when it belongs to the same concept, format and exact script
+  request (request hash and source).
+- `RESTORE_VERSION` (section service and `/api/script-section-review` with
+  `version_id`) restores a compatible version as a **new** revision: the
+  current draft is saved first, the restored draft keeps the current request
+  provenance, passes the full Script validator, records `RESTORE_VERSION`
+  provenance, and resets section decisions. The Human Script Gate response and
+  approved bundle are invalidated, and stale alternatives and rework requests
+  for the branch are removed.
+- Restoring a version identical to the current script, an unknown version, a
+  malformed `version_id` or a version from a different script request is
+  refused without changing anything.
+- The restore runs under the same section-state lock and recoverable
+  transaction backups as selection and manual edit; any failure rolls back.
+
+There is no restore button in the Experiment UI yet; the action is available
+through the section service and API.
+
 ### Existing downstream selective-rework capabilities
 
 The repository already contains capabilities beyond Slice 5:
