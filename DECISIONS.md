@@ -2882,3 +2882,38 @@ Save and Reject (R11).
   `POST /api/opportunity/inbox` waits for running jobs like the other gate
   routes.
 
+## D-114 — The radar runs on the existing task; evidence opens in a drawer
+
+**Status:** Accepted
+
+**O13: one scheduler.** The Windows task from D-052 / D-054 (every 2 hours,
+installed from Tools) now runs `opportunity_engine/scheduled_tick.py` (R1). Each
+wake runs the existing Opportunity Research continuation unchanged, then one
+radar tick (`radar_scheduler.py`):
+
+- **Full discovery** when the last one is at least
+  `radar_schedule.discovery_every_hours` old (8 by default; the spec allows
+  6–12).
+- **Otherwise a snapshot-only pass** when a tracked video is due on its
+  age-based cadence. This mode only re-measures tracked videos (1 API unit per
+  50) and never searches or crawls.
+- **Otherwise nothing.**
+
+A lock file prevents overlapping ticks, and the existing scheduler's lock
+helpers are reused. State stays in the radar's own files, so ticks are
+resumable. One step failing never skips the other. A status file feeds the
+radar card: last check, next snapshot due, next discovery due. Users who
+installed the earlier task re-run the install so the task uses the new
+runner; the task name is unchanged.
+
+**O14: the evidence drawer.** Inbox cards open a side drawer with the spec's
+sections (§25) instead of an inline expander.
+- **Chart.** The trajectory chart (§26) plots views against hours since
+  publishing from the radar's own append-only snapshots, never from
+  reconstructed history. It is a single 2 px series in the validated dark-mode
+  mark colour #4493f8, with 8 px markers, a hairline grid and one axis.
+- **Interaction.** A crosshair tooltip responds to both hover and ←/→ on the
+  focused chart. A snapshot table and a views-per-hour table carry the same
+  values without hovering.
+- **Behaviour.** The drawer closes on Esc and returns focus to the card.
+

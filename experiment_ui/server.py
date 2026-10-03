@@ -97,7 +97,7 @@ from opportunity_engine import active_source as opportunity_active_source
 from opportunity_engine import human_topic_search, human_video_intake
 from opportunity_engine import inbox as opportunity_inbox
 from opportunity_engine import models as opportunity_models
-from opportunity_engine import viral_radar
+from opportunity_engine import radar_scheduler, viral_radar
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -657,7 +657,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": "Fetches current view counts for the same frozen video IDs. No new search discovery.",
     },
     "exp13_auto_refresh_install": {
-        "label": "Install Opportunity Auto-Continue",
+        "label": "Install Opportunity Automation (research + viral radar)",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -672,12 +672,13 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             sys.executable,
         ],
         "description": (
-            "Registers the Windows continuation task used by automatic "
-            "Opportunity Research while velocity evidence is pending."
+            "Registers the one Windows task (every 2 hours): Opportunity Research "
+            "continuation while velocity evidence is pending, then a viral radar tick "
+            "(discovery every 8 hours, snapshots of tracked breakouts when due)."
         ),
     },
     "exp13_auto_refresh_remove": {
-        "label": "Remove Opportunity Auto-Continue",
+        "label": "Remove Opportunity Automation",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -687,7 +688,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "-File",
             "scripts/remove_experiment_01_3_auto_refresh.ps1",
         ],
-        "description": "Removes the Windows Opportunity Research continuation task.",
+        "description": "Removes the Windows task (research continuation and viral radar ticks).",
     },
     "exp14_plan": {
         "label": "Build 01.4 Expansion Plan",
@@ -7832,7 +7833,10 @@ def status_payload() -> dict[str, Any]:
         },
         "opportunity_gate": opportunity_gate,
         "opportunity_inbox": opportunity_inbox_snapshot(opportunity_gate),
-        "viral_radar": viral_radar.status_snapshot(),
+        "viral_radar": {
+            **viral_radar.status_snapshot(),
+            "schedule": radar_scheduler.load_status(),
+        },
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
@@ -7973,6 +7977,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/opportunity/inbox":
             self._send_json(opportunity_inbox_snapshot())
+            return
+        if route == "/api/opportunity/viral/snapshots":
+            query = parse_qs(urlparse(self.path).query)
+            video_id = str((query.get("video_id") or [""])[0])
+            self._send_json({"video_id": video_id, "snapshots": viral_radar.snapshots_for(video_id)})
             return
         if route == "/api/vision-review":
             self._send_json(vision_review_snapshot())

@@ -12,4 +12,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 & schtasks.exe /Delete /TN $LegacyTaskName /F 2>$null | Out-Null
-Write-Host "Opportunity Research continuation task removed."
+Write-Host "Opportunity automation task removed (research continuation and viral radar)."

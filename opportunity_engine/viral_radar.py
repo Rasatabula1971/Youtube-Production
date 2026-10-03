@@ -543,12 +543,27 @@ def snapshot_due(record: dict[str, Any] | None, hours: float, settings: dict[str
     last = _parse_time(record["last_snapshot_at"])
     if last is None:
         return True
-    cadence = settings["snapshot_cadence_hours"][-1][1]
+    return (now - last).total_seconds() / 3600 >= cadence_hours(hours, settings)
+
+
+def cadence_hours(age: float, settings: dict[str, Any]) -> float:
     for max_age, every in settings["snapshot_cadence_hours"]:
-        if hours <= float(max_age):
-            cadence = every
-            break
-    return (now - last).total_seconds() / 3600 >= float(cadence)
+        if age <= float(max_age):
+            return float(every)
+    return float(settings["snapshot_cadence_hours"][-1][1])
+
+
+def next_snapshot_due(state: dict[str, Any], settings: dict[str, Any], now: datetime) -> datetime | None:
+    """When the earliest tracked video next needs a snapshot (None if none tracked)."""
+    due: list[datetime] = []
+    for record in state["tracked"].values():
+        last = _parse_time(record.get("last_snapshot_at"))
+        hours = age_hours(record.get("video") or {}, now)
+        if last is None or hours is None:
+            due.append(now)
+            continue
+        due.append(last + timedelta(hours=cadence_hours(hours, settings)))
+    return min(due) if due else None
 
 
 def append_snapshot(video: dict[str, Any], hours: float, observed_at: str) -> None:
@@ -711,13 +726,26 @@ def save_packet(packet: dict[str, Any]) -> None:
 # --------------------------------------------------------------------------
 
 
+MODE_FULL = "full"
+MODE_SNAPSHOTS = "snapshots"
+
+
 def run(
     *,
     api: Api | None = None,
     searcher: Searcher | None = None,
     config: dict[str, Any] | None = None,
     now: datetime | None = None,
+    mode: str = MODE_FULL,
 ) -> dict[str, Any]:
+    """One radar pass.
+
+    ``full`` discovers (watchlist crawl and bucket searches) and measures;
+    ``snapshots`` (O13) only re-measures already-tracked videos, which costs
+    one API unit per 50 videos and never searches.
+    """
+    if mode not in (MODE_FULL, MODE_SNAPSHOTS):
+        raise ValueError(f"Unknown radar mode: {mode}")
     config = config or channel_scope.load_config()
     settings = radar_config(config)
     now = now or datetime.now(timezone.utc)
@@ -725,6 +753,7 @@ def run(
     state = load_state()
     summary: dict[str, Any] = {
         "run_at": observed_at,
+        "mode": mode,
         "status": STATUS_COMPLETE,
         "errors": [],
         "api_calls": 0,
@@ -750,18 +779,21 @@ def run(
         return api_call(resource, **params)
 
     before = len(state["watchlist"])
-    seed_watchlist_from_system(state, settings, now)
-    discovery = bucket_discovery(state, searcher or search_url_flat, settings, now)
-    summary["bucket_discovery"] = discovery
-    if discovery["status"] in (THROTTLED, YT_DLP_FAILED):
-        summary["status"] = STATUS_PARTIAL
-        summary["errors"].append(f"bucket discovery: {discovery['status']}")
-    state["last_discovery_run"] = observed_at
+    if mode == MODE_FULL:
+        seed_watchlist_from_system(state, settings, now)
+        discovery = bucket_discovery(state, searcher or search_url_flat, settings, now)
+        summary["bucket_discovery"] = discovery
+        if discovery["status"] in (THROTTLED, YT_DLP_FAILED):
+            summary["status"] = STATUS_PARTIAL
+            summary["errors"].append(f"bucket discovery: {discovery['status']}")
+        state["last_discovery_run"] = observed_at
 
     try:
-        summary["errors"].extend(resolve_handles(state, counted, settings, now))
-        refresh_channels(state, counted)
-        uploads = crawl_uploads(state, counted, settings)
+        uploads: dict[str, list[str]] = {}
+        if mode == MODE_FULL:
+            summary["errors"].extend(resolve_handles(state, counted, settings, now))
+            refresh_channels(state, counted)
+            uploads = crawl_uploads(state, counted, settings)
         tracked_ids = list(state["tracked"])
         measured = measure_videos([v for ids in uploads.values() for v in ids] + tracked_ids, counted)
     except RadarError as exc:
@@ -773,7 +805,7 @@ def run(
 
     summary["watchlist_size"] = len(state["watchlist"])
     summary["new_channels"] = len(state["watchlist"]) - before
-    if not state["watchlist"]:
+    if mode == MODE_FULL and not state["watchlist"]:
         summary["status"] = STATUS_PARTIAL
         summary["errors"].append(
             "The watchlist is empty: no seed handle resolved and no channel has been seen yet."
@@ -909,6 +941,34 @@ def _write_summary(summary: dict[str, Any]) -> None:
     atomic_write_json(SUMMARY_FILE, summary)
 
 
+def snapshots_for(video_id: str) -> list[dict[str, Any]]:
+    """The stored snapshots of one video, oldest first, for the trajectory chart (O14)."""
+    if not VIDEO_ID_PATTERN.fullmatch(str(video_id or "")):
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        lines = SNAPSHOT_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("video_id") == video_id and row.get("views") is not None:
+            rows.append(
+                {
+                    "observed_at": row.get("observed_at"),
+                    "views": int(row["views"]),
+                    "video_age_hours": row.get("video_age_hours"),
+                    "likes": row.get("likes"),
+                    "comments": row.get("comments"),
+                }
+            )
+    rows.sort(key=lambda r: str(r.get("observed_at") or ""))
+    return rows
+
+
 def load_clusters() -> list[dict[str, Any]]:
     try:
         payload = json.loads(CLUSTERS_FILE.read_text(encoding="utf-8"))
@@ -940,12 +1000,12 @@ def status_snapshot() -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("mode", choices=["run", "status"])
+    parser.add_argument("mode", choices=["run", "snapshots", "status"])
     args = parser.parse_args()
     if args.mode == "status":
         print(json.dumps(status_snapshot(), indent=2))
         return
-    summary = run()
+    summary = run(mode=MODE_SNAPSHOTS if args.mode == "snapshots" else MODE_FULL)
     print(f"Viral radar: {summary['status']}  ({summary['api_calls']} API calls)")
     print(f"  Watchlist {summary['watchlist_size']} channels (+{summary['new_channels']} new)")
     print(f"  Recent uploads checked {summary['recent_videos']}: {summary['classified']}")

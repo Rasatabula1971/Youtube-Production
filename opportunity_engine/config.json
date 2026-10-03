@@ -539,5 +539,10 @@
       ]
     },
     "max_study_videos": 4
+  },
+  "radar_schedule": {
+    "enabled": true,
+    "discovery_every_hours": 8,
+    "lock_stale_minutes": 60
   }
 }

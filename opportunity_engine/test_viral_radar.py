@@ -163,6 +163,11 @@ class RunTests(RadarTestCase):
         self.assertEqual(packet["trajectory"], "ACCELERATING")
         self.assertTrue(packet["trajectory_history_available"])
         self.assertEqual(len(vr.SNAPSHOT_FILE.read_text().splitlines()), 3)
+        series = vr.snapshots_for(vid(10))
+        self.assertEqual([row["views"] for row in series], [60_000, 70_000, 90_000])
+        self.assertEqual([row["video_age_hours"] for row in series], [30.0, 36.0, 42.0])
+        self.assertEqual(vr.snapshots_for("../../etc"), [])
+        self.assertEqual(vr.snapshots_for(vid(99)), [])
 
         # Re-running inside the cadence does not add a snapshot.
         self.run_radar(api, now=NOW + timedelta(hours=13))

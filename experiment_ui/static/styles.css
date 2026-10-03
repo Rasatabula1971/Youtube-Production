@@ -2162,3 +2162,71 @@ button.danger {
   .inbox-item { flex-direction: column; align-items: stretch; }
   .submitted-video-actions { justify-content: flex-start; }
 }
+
+/* Evidence drawer and trajectory chart (Opportunity Discovery O14) */
+.evidence-drawer { width: min(720px, 100vw); }
+.evidence-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+.drawer-section {
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+}
+.drawer-section h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.drawer-section p { margin: 4px 0; font-size: 12px; }
+.drawer-section ul,
+.drawer-section ol { margin: 4px 0; padding-left: 18px; font-size: 12px; }
+.trajectory {
+  position: relative;
+  margin-top: 6px;
+}
+.trajectory svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.trajectory svg:focus-visible { outline: 2px solid rgba(68,147,248,.7); outline-offset: 4px; border-radius: 6px; }
+.trajectory .grid line { stroke: rgba(255, 255, 255, .08); stroke-width: 1; }
+.trajectory .axis-label { fill: var(--muted); font-size: 11px; }
+.trajectory .series-line { fill: none; stroke: #4493f8; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trajectory .series-point { fill: #4493f8; stroke: #111821; stroke-width: 2; }
+.trajectory .crosshair { stroke: rgba(255, 255, 255, .35); stroke-width: 1; }
+.trajectory-tooltip {
+  position: absolute;
+  pointer-events: none;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0d131b;
+  font-size: 12px;
+  white-space: nowrap;
+  transform: translate(-50%, -110%);
+}
+.trajectory-tooltip strong { display: block; font-size: 13px; }
+.trajectory-tooltip span { color: var(--muted); }
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.data-table th { color: var(--muted); font-weight: 600; }
+.data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.inbox-open-evidence { justify-self: start; }

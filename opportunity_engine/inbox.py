@@ -175,6 +175,17 @@ def _base_item(packet: dict[str, Any]) -> dict[str, Any]:
         ),
         "search_count": len(intake.get("search_log") or []),
         "excluded_result_count": len(intake.get("excluded_videos") or []),
+        "seed": packet.get("seed") or {},
+        "historical_evidence": packet.get("historical_evidence"),
+        "provenance": {
+            "generator": (packet.get("provenance") or {}).get("generator"),
+            "source_artifacts": [
+                {"role": a.get("role"), "path": a.get("path"), "sha256": str(a.get("sha256") or "")[:12]}
+                for a in (packet.get("provenance") or {}).get("source_artifacts") or []
+            ],
+            "packet_sha256": str(packet.get("packet_sha256") or "")[:12],
+            "created_at": packet.get("created_at"),
+        },
         "is_active": False,
         "status": NEEDS_REVIEW,
         "status_reason": "",
@@ -274,6 +285,14 @@ def _viral_summary(packet: dict[str, Any]) -> dict[str, Any]:
         "lifetime_vph": metrics.get("lifetime_vph"),
         "ratio_basis": metrics.get("ratio_basis") or [],
         "views_per_follower": metrics.get("views_per_follower"),
+        "likes_per_view": metrics.get("likes_per_view"),
+        "comments_per_view": metrics.get("comments_per_view"),
+        "subscriber_outlier": metrics.get("subscriber_outlier"),
+        "baseline_median_vph": baseline.get("median_lifetime_vph"),
+        "baseline_rule": baseline.get("rule"),
+        "baseline_age_days": baseline.get("sample_age_days"),
+        "published_at": ((packet.get("candidate_videos") or [{}])[0]).get("published_at"),
+        "classification_history": viral.get("classification_history") or [],
         "baseline_median_views": baseline.get("median_views"),
         "baseline_sample_size": baseline.get("sample_size"),
         "cluster": viral.get("cluster"),

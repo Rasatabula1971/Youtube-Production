@@ -1051,57 +1051,233 @@ function viralChips(viral) {
       : "");
 }
 
-function viralDetails(viral) {
-  if (!viral) return "";
-  const rows = [
-    ["Age", viral.age_hours == null ? "—" : (viral.age_hours / 24).toFixed(1) + " days"],
-    ["Views", formatCount(viral.views)],
-    ["Channel normal (median)", formatCount(viral.baseline_median_views) + " from " + (viral.baseline_sample_size || 0) + " mature uploads"],
-    ["Channel outlier", viral.lifetime_ratio == null ? "—" : viral.lifetime_ratio + "× (lifetime vs lifetime)"],
-    ["Views/hour vs normal", viral.vph_ratio == null ? "—" : viral.vph_ratio + "× (" + formatRate(viral.lifetime_vph) + " VPH)"],
-    ["Views per follower", viral.views_per_follower == null ? "hidden or unknown" : String(viral.views_per_follower)],
-    ["Historical demand", (viral.historical_alignment || "").replace(/_/g, " ")],
-    ["Theme", viral.cluster
-      ? viral.cluster.label + " · " + String(viral.cluster.kind || "").replace(/_/g, " ").toLowerCase() +
-        " · " + viral.cluster.independent_channel_count + " independent channel(s)"
-      : "no shared theme yet"]
-  ];
-  const intervals = (viral.intervals || []).map(function (interval) {
-    return "<li>" + escapeHtml(String(interval.from).slice(5, 16).replace("T", " ") + " → " +
-      String(interval.to).slice(5, 16).replace("T", " ") + ": " + formatRate(interval.vph) + " VPH") + "</li>";
-  }).join("");
-  return '<dl class="viral-facts">' + rows.map(function (row) {
-      return '<dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(row[1]) + '</dd>';
-    }).join("") + '</dl>' +
-    (intervals
-      ? '<p class="muted">Snapshot velocity</p><ul class="inbox-evidence">' + intervals + '</ul>'
-      : '<p class="muted">' + (viral.trajectory_history_available ? "" : "No earlier snapshots yet: past views are never reconstructed, only measured from now on.") + '</p>') +
-    '<p class="muted">CTR, retention and viewed-vs-swiped are not publicly observable and are never estimated.</p>';
+function drawerSection(title, html) {
+  return html ? '<section class="drawer-section"><h4>' + escapeHtml(title) + '</h4>' + html + '</section>' : "";
 }
 
-function inboxDetails(item) {
-  const facts = [];
-  if (item.measurement_source) facts.push("measured via " + item.measurement_source);
-  if (item.measurement_error) facts.push("API unavailable: " + item.measurement_error);
-  if (item.failed_searches) facts.push(item.failed_searches + " of " + item.search_count + " searches failed");
-  if (item.excluded_result_count) facts.push(item.excluded_result_count + " result(s) excluded by scope rules");
+function factTable(rows) {
+  const kept = rows.filter(function (row) { return row[1] !== null && row[1] !== undefined && row[1] !== ""; });
+  if (!kept.length) return "";
+  return '<dl class="viral-facts">' + kept.map(function (row) {
+    return '<dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(String(row[1])) + '</dd>';
+  }).join("") + '</dl>';
+}
+
+function formatHours(hours) {
+  if (hours == null) return "—";
+  return hours < 48 ? Math.round(hours) + " h" : (hours / 24).toFixed(1) + " d";
+}
+
+function renderTrajectory(container, snapshots) {
+  const points = (snapshots || [])
+    .filter(function (row) { return row.video_age_hours != null && row.views != null; })
+    .map(function (row) { return { x: Number(row.video_age_hours), y: Number(row.views), at: row.observed_at }; });
+  if (!points.length) {
+    container.innerHTML = '<p class="muted">No snapshots yet. The radar measures this video from its next run; earlier views are never reconstructed.</p>';
+    return;
+  }
+  // Drawn at the container's real width so axis text stays 11px on phones.
+  const width = Math.max(280, Math.round(container.clientWidth || 600));
+  const height = width < 420 ? 180 : 220;
+  const left = 48, right = 12, top = 12, bottom = 28;
+  const xMax = Math.max(points[points.length - 1].x, 24);
+  const yMax = Math.max.apply(null, points.map(function (p) { return p.y; })) * 1.1 || 1;
+  const sx = function (x) { return left + (x / xMax) * (width - left - right); };
+  const sy = function (y) { return top + (1 - y / yMax) * (height - top - bottom); };
+  const yTicks = [0, 0.5, 1].map(function (f) { return Math.round(yMax * f / 1.1); });
+  const xTicks = [0, xMax / 2, xMax];
+  const svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" tabindex="0" aria-label="Views over time since publication. Use left and right arrow keys to step through snapshots.">' +
+    '<g class="grid">' + yTicks.map(function (t) {
+      return '<line x1="' + left + '" x2="' + (width - right) + '" y1="' + sy(t) + '" y2="' + sy(t) + '"/>';
+    }).join("") + '</g>' +
+    yTicks.map(function (t) {
+      return '<text class="axis-label" x="' + (left - 8) + '" y="' + (sy(t) + 4) + '" text-anchor="end">' + escapeHtml(t === 0 ? "0" : formatRate(t)) + '</text>';
+    }).join("") +
+    xTicks.map(function (t) {
+      return '<text class="axis-label" x="' + sx(t) + '" y="' + (height - 8) + '" text-anchor="middle">' + escapeHtml(formatHours(t)) + '</text>';
+    }).join("") +
+    '<polyline class="series-line" points="' + points.map(function (p) { return sx(p.x) + "," + sy(p.y); }).join(" ") + '"/>' +
+    points.map(function (p) { return '<circle class="series-point" r="4" cx="' + sx(p.x) + '" cy="' + sy(p.y) + '"/>'; }).join("") +
+    '<line class="crosshair" x1="0" x2="0" y1="' + top + '" y2="' + (height - bottom) + '" visibility="hidden"/>' +
+    '</svg>';
+  container.innerHTML = svg;
+  const svgElement = container.querySelector("svg");
+  const crosshair = svgElement.querySelector(".crosshair");
+  const tooltip = document.createElement("div");
+  tooltip.className = "trajectory-tooltip";
+  tooltip.hidden = true;
+  const value = document.createElement("strong");
+  const label = document.createElement("span");
+  tooltip.appendChild(value);
+  tooltip.appendChild(label);
+  container.appendChild(tooltip);
+  let current = points.length - 1;
+  function show(index) {
+    current = Math.max(0, Math.min(points.length - 1, index));
+    const point = points[current];
+    const scale = svgElement.getBoundingClientRect().width / width;
+    crosshair.setAttribute("x1", sx(point.x));
+    crosshair.setAttribute("x2", sx(point.x));
+    crosshair.setAttribute("visibility", "visible");
+    value.textContent = formatCount(point.y) + " views";
+    label.textContent = formatHours(point.x) + " after publishing · " + String(point.at || "").slice(5, 16).replace("T", " ") + " UTC";
+    tooltip.hidden = false;
+    // Keep the whole tooltip inside the chart, even at the first and last points.
+    const half = tooltip.offsetWidth / 2;
+    const boxWidth = container.clientWidth;
+    const x = Math.min(Math.max(sx(point.x) * scale, half), Math.max(half, boxWidth - half));
+    tooltip.style.left = x + "px";
+    tooltip.style.top = (sy(point.y) * scale) + "px";
+  }
+  function hide() {
+    crosshair.setAttribute("visibility", "hidden");
+    tooltip.hidden = true;
+  }
+  svgElement.addEventListener("pointermove", function (event) {
+    const rect = svgElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / (rect.width / width);
+    let best = 0;
+    points.forEach(function (p, i) { if (Math.abs(sx(p.x) - x) < Math.abs(sx(points[best].x) - x)) best = i; });
+    show(best);
+  });
+  svgElement.addEventListener("pointerleave", hide);
+  svgElement.addEventListener("focus", function () { show(current); });
+  svgElement.addEventListener("blur", hide);
+  svgElement.addEventListener("keydown", function (event) {
+    if (event.key === "ArrowLeft") { event.preventDefault(); show(current - 1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); show(current + 1); }
+  });
+}
+
+function snapshotTable(snapshots, intervals) {
+  const rows = (snapshots || []).map(function (row) {
+    return '<tr><td>' + escapeHtml(String(row.observed_at || "").slice(5, 16).replace("T", " ")) + '</td><td class="num">' +
+      escapeHtml(formatHours(row.video_age_hours)) + '</td><td class="num">' + escapeHtml(formatCount(row.views)) + '</td></tr>';
+  }).join("");
+  const velocity = (intervals || []).map(function (interval) {
+    return '<tr><td>' + escapeHtml(String(interval.from).slice(5, 16).replace("T", " ") + " → " + String(interval.to).slice(5, 16).replace("T", " ")) +
+      '</td><td class="num">' + escapeHtml(formatRate(interval.vph)) + '</td></tr>';
+  }).join("");
+  return (rows ? '<table class="data-table"><thead><tr><th>Snapshot (UTC)</th><th class="num">Age</th><th class="num">Views</th></tr></thead><tbody>' + rows + '</tbody></table>' : "") +
+    (velocity ? '<table class="data-table"><thead><tr><th>Interval</th><th class="num">Views/hour</th></tr></thead><tbody>' + velocity + '</tbody></table>' : "");
+}
+
+function evidenceDrawerHtml(item) {
+  const viral = item.viral;
+  const matrix = item.matrix || [];
+  const gaps = matrix.filter(function (row) { return row.level === "UNASSESSED" || row.level === "HYPOTHESIS"; });
+  const byDimension = {};
+  matrix.forEach(function (row) { byDimension[row.dimension] = row; });
+  function dimension(name) {
+    const row = byDimension[name] || {};
+    const assessed = row.level && row.level !== "UNASSESSED" && row.level !== "HYPOTHESIS";
+    return '<p><strong>' + escapeHtml(row.level || "UNASSESSED") + '</strong> ' +
+      escapeHtml(assessed ? (row.rule_id || "") + " — " + (row.basis || []).join("; ") : "Not evidenced yet: Experiment 02 and research answer this.") + '</p>';
+  }
+  const seed = item.seed || {};
+  const historical = item.historical_evidence;
+  const provenance = item.provenance || {};
   const videos = (item.videos || []).map(function (video) {
     return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
-      escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' +
-      escapeHtml(video.channel_title || "") + ' · ' + escapeHtml(formatCount(video.views)) + ' views' +
+      escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' + escapeHtml(video.channel_title || "") +
+      ' · ' + escapeHtml(formatCount(video.views)) + ' views' +
       (video.age_days == null ? "" : " · " + escapeHtml(String(video.age_days)) + " days old") + '</span></li>';
   }).join("");
-  return '<details class="inbox-details"><summary>Evidence and videos</summary>' +
-    (item.summary ? '<p class="muted">' + escapeHtml(item.summary) + '</p>' : "") +
-    evidenceMatrix(item) +
-    viralDetails(item.viral) +
-    decisionHistory(item) +
-    (videos ? '<ol class="topic-videos">' + videos + '</ol>' : "") +
-    (facts.length ? '<p class="muted">' + escapeHtml(facts.join(" · ")) + '</p>' : "") +
-    ((item.notes || []).length ? '<p class="muted">Your note: ' + escapeHtml(item.notes[0]) + '</p>' : "") +
-    (item.route_reason ? '<p class="muted">Scope: ' + escapeHtml(item.route_reason) + '</p>' : "") +
-    '</details>';
+  return drawerSection("Summary", '<p>' + escapeHtml(item.summary || "") + '</p>' +
+      (item.status_reason ? '<p class="muted">' + escapeHtml(item.status_reason) + '</p>' : "") +
+      (item.evidence_moved ? '<p class="evidence-moved">Evidence has moved since your decision — the decision stands.</p>' : "")) +
+    drawerSection("Source", factTable([
+      ["Lane", item.source_label],
+      ["Channel", (ROUTE_LABELS[item.route] || item.route) + (item.route_channel_id ? " · " + item.route_channel_id : "")],
+      ["Scope rule", item.route_rule_id],
+      ["Why", item.route_reason],
+      ["Your question", seed.question],
+      ["Your topic", seed.topic],
+      ["Link", seed.video_url],
+      ["Your note", (item.notes || [])[0]]
+    ])) +
+    drawerSection("Evidence matrix", evidenceMatrix(item)) +
+    (viral ? drawerSection("Viral evidence", factTable([
+      ["Strength", (viral.strength || "").replace(/_/g, " ") + (viral.strength_rule_id ? " (" + viral.strength_rule_id + ")" : "")],
+      ["Trajectory", (viral.trajectory || "").replace(/_/g, " ")],
+      ["Breadth", (viral.breadth || "").replace(/_/g, " ")],
+      ["Theme", viral.cluster ? viral.cluster.label + " · " + String(viral.cluster.kind || "").replace(/_/g, " ").toLowerCase() + " · " + viral.cluster.independent_channel_count + " independent channel(s)" : null],
+      ["Channel outlier", viral.lifetime_ratio == null ? null : viral.lifetime_ratio + "× median views (lifetime vs lifetime)"],
+      ["Views/hour vs normal", viral.vph_ratio == null ? null : viral.vph_ratio + "× (" + formatRate(viral.lifetime_vph) + " VPH)"],
+      ["Views per follower", viral.views_per_follower == null ? (viral.subscriber_outlier === "UNAVAILABLE" ? "follower count hidden" : null) : viral.views_per_follower],
+      ["Likes per view", viral.likes_per_view],
+      ["Comments per view", viral.comments_per_view],
+      ["Not observable", "CTR, retention and viewed-vs-swiped are never estimated"]
+    ])) +
+      drawerSection("Trajectory", '<p class="muted">Views since publishing, from the radar’s own snapshots.</p><div class="trajectory" data-trajectory-for="' +
+        escapeHtml(item.video_id || "") + '"><p class="muted">Loading snapshots…</p></div><div data-trajectory-table></div>') +
+      drawerSection("Channel baseline", factTable([
+        ["Median views", formatCount(viral.baseline_median_views)],
+        ["Median views/hour", formatRate(viral.baseline_median_vph)],
+        ["Sample", (viral.baseline_sample_size || 0) + " uploads" + (viral.baseline_age_days ? " aged " + viral.baseline_age_days.min + "–" + viral.baseline_age_days.max + " days" : "")],
+        ["Rule", viral.baseline_rule]
+      ])) : "") +
+    (historical ? drawerSection("Historical evidence", factTable([
+      ["Age-matched velocity index", historical.age_matched_velocity_index],
+      ["Independent channels", historical.topic_unique_channels],
+      ["Replicated families", (historical.replicated_families || []).join(", ")],
+      ["01.5 gate status", (historical.gate_statuses || []).join(", ")]
+    ])) : "") +
+    drawerSection("Viewer questions", dimension("viewer_need")) +
+    drawerSection("Mechanisms", dimension("mechanism_evidence")) +
+    drawerSection("Content gaps", dimension("content_gap")) +
+    drawerSection("Research gaps", gaps.length
+      ? '<ul>' + gaps.map(function (row) { return '<li>' + escapeHtml(row.label) + ": " + escapeHtml(row.level.toLowerCase()) + '</li>'; }).join("") + '</ul>'
+      : '<p>Every dimension has rule-backed evidence.</p>') +
+    drawerSection("Candidate videos", videos ? '<ol>' + videos + '</ol>' : "") +
+    drawerSection("Decisions", decisionHistory(item) || '<p class="muted">No decisions yet.</p>') +
+    drawerSection("Provenance", factTable([
+      ["Generator", provenance.generator],
+      ["Packet", provenance.packet_sha256],
+      ["Created", provenance.created_at],
+      ["Measured via", item.measurement_source],
+      ["Measurement note", item.measurement_error],
+      ["Inputs", (provenance.source_artifacts || []).map(function (a) { return a.role + " " + a.sha256; }).join("; ")]
+    ]));
 }
+
+async function openEvidenceDrawer(opportunityId, trigger) {
+  const item = (latestInbox.items || []).find(function (entry) { return entry.opportunity_id === opportunityId; });
+  if (!item) return;
+  evidenceDrawerReturnFocus = trigger || null;
+  document.getElementById("evidenceDrawerKicker").textContent = (item.source_label || "EVIDENCE") + " · " + String(item.status || "").replace(/_/g, " ");
+  document.getElementById("evidenceDrawerTitle").textContent = item.title || item.opportunity_id;
+  evidenceDrawerBody.innerHTML = evidenceDrawerHtml(item);
+  evidenceDrawer.classList.add("open");
+  evidenceDrawer.setAttribute("aria-hidden", "false");
+  evidenceScrim.classList.add("open");
+  document.getElementById("closeEvidenceDrawer").focus();
+  const chart = evidenceDrawerBody.querySelector("[data-trajectory-for]");
+  if (chart && item.video_id) {
+    try {
+      const data = await api("/api/opportunity/viral/snapshots?video_id=" + encodeURIComponent(item.video_id));
+      renderTrajectory(chart, data.snapshots || []);
+      evidenceDrawerBody.querySelector("[data-trajectory-table]").innerHTML =
+        snapshotTable(data.snapshots || [], (item.viral || {}).intervals || []);
+    } catch (error) {
+      chart.innerHTML = '<p class="muted">' + escapeHtml("Snapshots could not be loaded: " + error.message) + '</p>';
+    }
+  }
+}
+
+function closeEvidenceDrawer() {
+  if (!evidenceDrawer.classList.contains("open")) return;
+  evidenceDrawer.classList.remove("open");
+  evidenceDrawer.setAttribute("aria-hidden", "true");
+  evidenceScrim.classList.remove("open");
+  if (evidenceDrawerReturnFocus && document.body.contains(evidenceDrawerReturnFocus)) evidenceDrawerReturnFocus.focus();
+}
+
+document.getElementById("closeEvidenceDrawer").addEventListener("click", closeEvidenceDrawer);
+evidenceScrim.addEventListener("click", closeEvidenceDrawer);
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape") closeEvidenceDrawer();
+});
 
 function renderInbox(inbox) {
   if (!opportunityInbox) return;
@@ -1133,7 +1309,9 @@ function renderInbox(inbox) {
         '<strong class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</strong>' +
         (item.evidence_moved ? '<span class="evidence-moved">Evidence has moved since your decision — the decision stands; review it if you like.</span>' : "") +
         (item.status_reason ? '<span class="muted">' + escapeHtml(item.status_reason) + '</span>' : "") +
-        inboxDetails(item) +
+        (item.summary ? '<span class="muted">' + escapeHtml(item.summary) + '</span>' : "") +
+        '<button type="button" class="ghost compact inbox-open-evidence" data-inbox-evidence="' +
+          escapeHtml(item.opportunity_id) + '">Open evidence</button>' +
       '</div>' +
       '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
     '</article>';
@@ -1171,6 +1349,15 @@ function renderViralEntry(data) {
       ((last.errors || []).length ? " · " + last.errors[0] : "");
   }
   if (radar.throttled_until) status += " · YouTube search backing off until " + String(radar.throttled_until).slice(0, 16).replace("T", " ");
+  const schedule = radar.schedule;
+  if (schedule && schedule.checked_at) {
+    status += " · Automatic: last check " + String(schedule.checked_at).slice(5, 16).replace("T", " ") +
+      " (" + String(schedule.action || "").replace(/_/g, " ").toLowerCase() + ")" +
+      (schedule.next_snapshot_due ? ", next snapshot " + String(schedule.next_snapshot_due).slice(5, 16).replace("T", " ") : "") +
+      (schedule.next_discovery_due ? ", next discovery " + String(schedule.next_discovery_due).slice(5, 16).replace("T", " ") : "") + " UTC";
+  } else {
+    status += " · Not automatic yet: install Opportunity Automation in Tools to run it every few hours.";
+  }
   viralEntryStatus.textContent = status;
   runViralRadar.disabled = !action.enabled;
   runViralRadar.title = action.reason || "";
@@ -1351,6 +1538,11 @@ if (opportunityInbox) {
     }
     if (event.target.closest("[data-inbox-review]")) {
       document.getElementById("historicalReviewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const evidenceButton = event.target.closest("[data-inbox-evidence]");
+    if (evidenceButton) {
+      openEvidenceDrawer(evidenceButton.dataset.inboxEvidence, evidenceButton);
       return;
     }
     const themeButton = event.target.closest("[data-inbox-theme]");
