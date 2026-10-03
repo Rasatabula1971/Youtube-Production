@@ -131,8 +131,10 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn('id="packagingBriefPanel"', html)
         self.assertIn("renderPackagingBrief", script)
         self.assertIn("THUMBNAIL_CONCEPTS_READY", script)
+        self.assertIn("PACKAGE_VALIDATION_READY", script)
         self.assertIn("psychological_angles", script)
         self.assertIn("thumbnail_concepts", script)
+        self.assertIn("package_validation", script)
         self.assertIn("renderResearchReview", script)
         self.assertIn("/api/research-gate", script)
         self.assertIn("renderScriptSectionReview", script)
@@ -161,6 +163,8 @@ class ExperimentUiTests(unittest.TestCase):
             "psychological_angle_generate",
             "thumbnail_concept_prepare",
             "thumbnail_concept_generate",
+            "package_pairing_prepare",
+            "package_pairing_generate",
         ):
             self.assertIn(action_id, server.ACTION_DEFS)
 
@@ -169,7 +173,7 @@ class ExperimentUiTests(unittest.TestCase):
         )
         self.assertEqual(
             server.AUTO_MACHINE_ACTION_ORDER[
-                script_index + 1 : script_index + 9
+                script_index + 1 : script_index + 11
             ],
             [
                 "title_direction_prepare",
@@ -180,6 +184,8 @@ class ExperimentUiTests(unittest.TestCase):
                 "psychological_angle_generate",
                 "thumbnail_concept_prepare",
                 "thumbnail_concept_generate",
+                "package_pairing_prepare",
+                "package_pairing_generate",
             ],
         )
 
