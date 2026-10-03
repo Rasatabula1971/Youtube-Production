@@ -49,9 +49,11 @@ ignore = ["TRY004"]
 "experiment_01_discovery/youtube_discovery.py" = ["S310"]
 "experiment_ui/server.py" = ["S603", "S606", "S607"]
 "experiment_ui/workflow_automation.py" = ["S603"]
-# yt-dlp metadata read: argv list, shell=False, the URL is rebuilt from a
-# validated 11-character video id.
+# yt-dlp metadata reads and flat searches: argv lists, shell=False, the URL is
+# rebuilt from a validated 11-character video id and searches pass the query
+# after "--" so it cannot become an option.
 "opportunity_engine/human_video_intake.py" = ["S603"]
+"opportunity_engine/human_topic_search.py" = ["S603"]
 # Fetch is pinned to https://i.ytimg.com/vi/ and Ollama to loopback; ffmpeg/ffprobe
 # run with fixed argv lists.
 "packaging_engine/niche_thumbnail_study.py" = ["S310", "S603", "S607"]

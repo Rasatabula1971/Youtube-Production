@@ -24,6 +24,9 @@ const opportunityGate = document.getElementById("opportunityGate");
 const analyzeVideoForm = document.getElementById("analyzeVideoForm");
 const analyzeVideoSubmit = document.getElementById("analyzeVideoSubmit");
 const submittedVideos = document.getElementById("submittedVideos");
+const exploreTopicForm = document.getElementById("exploreTopicForm");
+const exploreTopicSubmit = document.getElementById("exploreTopicSubmit");
+const exploredTopics = document.getElementById("exploredTopics");
 const analysisActions = document.getElementById("analysisActions");
 const analysisCurrentPanel = document.getElementById("analysisCurrentPanel");
 const analysisCurrentTitle = document.getElementById("analysisCurrentTitle");
@@ -932,7 +935,102 @@ function formatCount(value) {
   return value == null ? "unknown" : Number(value).toLocaleString();
 }
 
+function evidenceChip(label, item) {
+  const level = (item && item.level) || "UNASSESSED";
+  const tone = level === "STRONG" ? "success" : level === "MODERATE" ? "running" : "neutral";
+  return '<span class="status-chip ' + tone + '" title="' +
+    escapeHtml(((item && item.rule_id) || "no rule") + ": " + ((item && item.basis) || []).join("; ")) + '">' +
+    escapeHtml(label + ": " + level) + '</span>';
+}
+
+function renderExploredTopics(snapshot) {
+  if (!exploredTopics) return;
+  const topics = (snapshot && snapshot.topics) || [];
+  const active = (snapshot && snapshot.active) || null;
+  if (!topics.length) {
+    exploredTopics.innerHTML = '<p class="empty-state">No topics explored yet.</p>';
+    return;
+  }
+  exploredTopics.innerHTML = topics.map(function (topic) {
+    const isActive = Boolean(active && active.topic_key && active.topic_key === topic.topic_key);
+    const route = topic.route || "UNSCOPED";
+    const routeDetail = route === "FUTURE_CHANNEL"
+      ? " · " + (topic.route_channel_id || "")
+      : route === "EXCLUDED" ? " · " + (topic.route_rule_id || "") : "";
+    const chipTone = route === "ACTIVE_CHANNEL" ? "success" : route === "EXCLUDED" ? "failed" : "running";
+    const action = isActive
+      ? '<span class="status-chip success">Being analyzed</span>' +
+        '<button class="ghost" data-video-stop>Stop analyzing</button>'
+      : (topic.video_count
+        ? '<button data-topic-analyze="' + escapeHtml(topic.topic_key) + '"' +
+          ' data-topic-excluded="' + (route === "EXCLUDED" ? "1" : "") + '">Analyze these videos</button>'
+        : '<span class="muted">No relevant videos found</span>');
+    const notes = [];
+    if (topic.failed_searches) notes.push(topic.failed_searches + " of " + (topic.variants || []).length + " searches failed");
+    if (topic.measurement_error) notes.push("measured from search results only (" + topic.measurement_error + ")");
+    if (topic.excluded_count) notes.push(topic.excluded_count + " result(s) excluded by scope rules");
+    return '<article class="submitted-video' + (isActive ? " active" : "") + '">' +
+      '<div class="submitted-video-copy">' +
+        '<strong>' + escapeHtml(topic.title || topic.topic_key) + '</strong>' +
+        '<span class="muted">' + escapeHtml(topic.summary || "") + '</span>' +
+        '<span class="topic-evidence">' +
+          evidenceChip("Demand", topic.demand) + evidenceChip("Replication", topic.replication) +
+          '<span class="status-chip ' + chipTone + '">' + escapeHtml((ROUTE_LABELS[route] || route) + routeDetail) + '</span>' +
+        '</span>' +
+        ((topic.top_videos || []).length
+          ? '<ol class="topic-videos">' + topic.top_videos.map(function (video) {
+              return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
+                escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' +
+                escapeHtml(video.channel_title || "") + ' · ' + escapeHtml(formatCount(video.views)) + ' views</span></li>';
+            }).join("") + '</ol>'
+          : "") +
+        (notes.length ? '<span class="muted">' + escapeHtml(notes.join(" · ")) + '</span>' : "") +
+        ((topic.notes || []).length ? '<span class="muted">Your note: ' + escapeHtml(topic.notes[0]) + '</span>' : "") +
+      '</div>' +
+      '<div class="submitted-video-actions">' + action + '</div>' +
+    '</article>';
+  }).join("");
+}
+
+async function exploreTopic(event) {
+  event.preventDefault();
+  const text = document.getElementById("exploreTopicText").value.trim();
+  if (!text) return;
+  exploreTopicSubmit.disabled = true;
+  exploreTopicSubmit.textContent = "Searching… (up to a minute)";
+  try {
+    const payload = await api("/api/opportunity/topic", {
+      method: "POST",
+      body: JSON.stringify({
+        text: text,
+        note: document.getElementById("exploreTopicNote").value.trim()
+      })
+    });
+    renderSubmittedVideos(payload);
+    exploreTopicForm.reset();
+    showToast("Topic explored. Review the evidence below.", false);
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    exploreTopicSubmit.disabled = false;
+    exploreTopicSubmit.textContent = "Explore topic";
+  }
+}
+
+if (exploreTopicForm) {
+  exploreTopicForm.addEventListener("submit", exploreTopic);
+  exploredTopics.addEventListener("click", function (event) {
+    const analyzeButton = event.target.closest("[data-topic-analyze]");
+    if (analyzeButton) {
+      analyzeExploredTopic(analyzeButton.dataset.topicAnalyze, Boolean(analyzeButton.dataset.topicExcluded));
+      return;
+    }
+    if (event.target.closest("[data-video-stop]")) stopAnalyzingVideo();
+  });
+}
+
 function renderSubmittedVideos(snapshot) {
+  renderExploredTopics(snapshot);
   if (!submittedVideos) return;
   const videos = (snapshot && snapshot.videos) || [];
   const active = (snapshot && snapshot.active) || null;
@@ -942,7 +1040,7 @@ function renderSubmittedVideos(snapshot) {
     return;
   }
   submittedVideos.innerHTML = videos.map(function (video) {
-    const isActive = Boolean(active && active.video_id === video.video_id);
+    const isActive = Boolean(active && active.video_id && active.video_id === video.video_id);
     const route = video.route || "UNSCOPED";
     const routeDetail = route === "FUTURE_CHANNEL"
       ? " · " + (video.route_channel_id || "")
@@ -1002,20 +1100,19 @@ async function submitVideoForAnalysis(event) {
   }
 }
 
-async function analyzeSubmittedVideo(videoId, excluded) {
-  const body = { video_id: videoId };
+async function analyzeHumanSource(url, body, excluded, successMessage) {
   if (excluded) {
-    if (!window.confirm("This video matches an exclusion rule for Science Inside. Analyze it anyway?")) return;
+    if (!window.confirm("This idea matches an exclusion rule for Science Inside. Analyze it anyway?")) return;
     body.allow_excluded = true;
   }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const payload = await api("/api/opportunity/video/analyze", {
+      const payload = await api(url, {
         method: "POST",
         body: JSON.stringify(body)
       });
       renderSubmittedVideos(payload);
-      showToast("This video is now the study set. Analysis continues automatically.", false);
+      showToast(successMessage, false);
       await loadStatus();
       return;
     } catch (error) {
@@ -1031,12 +1128,30 @@ async function analyzeSubmittedVideo(videoId, excluded) {
   }
 }
 
+function analyzeSubmittedVideo(videoId, excluded) {
+  return analyzeHumanSource(
+    "/api/opportunity/video/analyze",
+    { video_id: videoId },
+    excluded,
+    "This video is now the study set. Analysis continues automatically."
+  );
+}
+
+function analyzeExploredTopic(topicKey, excluded) {
+  return analyzeHumanSource(
+    "/api/opportunity/topic/analyze",
+    { topic_key: topicKey },
+    excluded,
+    "This topic's videos are now the study set. Analysis continues automatically."
+  );
+}
+
 async function stopAnalyzingVideo() {
-  if (!window.confirm("Stop analyzing this video? The historical opportunity decision (if any) becomes the study set again.")) return;
+  if (!window.confirm("Stop analyzing your idea? The historical opportunity decision (if any) becomes the study set again.")) return;
   try {
     const payload = await api("/api/opportunity/video/stop", { method: "POST", body: "{}" });
     renderSubmittedVideos(payload);
-    showToast("Stopped analyzing the submitted video.", false);
+    showToast("Stopped analyzing your idea.", false);
     await loadStatus();
   } catch (error) {
     showToast(error.message, true);
@@ -1058,11 +1173,14 @@ if (analyzeVideoForm) {
 function activeHumanVideoBanner(gate) {
   const video = gate && gate.active_human_video;
   if (!video) return "";
+  const isTopic = video.source_type === "HUMAN_TOPIC";
   return '<div class="gate-summary"><div class="gate-summary-copy">' +
-    '<span class="status-chip success">ANALYZING YOUR VIDEO</span><span>' +
-    escapeHtml(video.title || video.video_id) +
-    (video.channel_title ? " — " + escapeHtml(video.channel_title) : "") +
-    '</span><span class="muted">Your submitted video is the active study set. Approving a historical topic below replaces it.</span>' +
+    '<span class="status-chip success">' + (isTopic ? "ANALYZING YOUR TOPIC" : "ANALYZING YOUR VIDEO") + '</span><span>' +
+    escapeHtml(video.title || video.video_id || video.topic_key) +
+    (isTopic
+      ? " — " + escapeHtml(String(video.video_count || 0)) + " video(s)"
+      : (video.channel_title ? " — " + escapeHtml(video.channel_title) : "")) +
+    '</span><span class="muted">Your idea is the active study set. Approving a historical topic below replaces it.</span>' +
     '</div><button data-route="/analysis">Continue to Analyze →</button></div>';
 }
 
