@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "active_channel_id": "science_inside",
+  "channels": {
+    "science_inside": {
+      "status": "ACTIVE",
+      "name": "Science Inside",
+      "thesis": "Something people see, use or wonder about, and a mechanism inside it most of them do not know.",
+      "niches": [
+        "everyday_science",
+        "science_engineering",
+        "automotive_racing"
+      ],
+      "episode_families": [
+        "tyres_and_grip",
+        "animals_defying_physics",
+        "machines_you_use_daily",
+        "sound_and_music",
+        "car_science",
+        "weather_and_the_world",
+        "your_body_mechanisms_only"
+      ],
+      "formats": [
+        "long_form",
+        "short"
+      ]
+    },
+    "car_modifications": {
+      "status": "FUTURE",
+      "name": "Car modifications",
+      "niches": [],
+      "route_terms": [
+        "car mod",
+        "car mods",
+        "modified car",
+        "project car",
+        "turbo kit",
+        "coilovers",
+        "stance",
+        "tuning build",
+        "dyno pull",
+        "exhaust build"
+      ]
+    },
+    "retirement_ageing": {
+      "status": "FUTURE",
+      "name": "Ageing finance and retirement",
+      "niches": [],
+      "route_terms": [
+        "retirement savings",
+        "retirement plan",
+        "retirement income",
+        "retirement planning",
+        "retire early",
+        "pension",
+        "annuity",
+        "social security benefits",
+        "old age",
+        "seniors",
+        "elderly",
+        "long-term care"
+      ]
+    },
+    "storytime": {
+      "status": "FUTURE",
+      "name": "Storytime",
+      "niches": [],
+      "route_terms": [
+        "storytime",
+        "story time"
+      ]
+    }
+  },
+  "niche_routes": {
+    "everyday_science": "science_inside",
+    "science_engineering": "science_inside",
+    "automotive_racing": "science_inside"
+  },
+  "exclusions": [
+    {
+      "rule_id": "EX-SPORT-NONMOTOR",
+      "layer": "SUBJECT",
+      "reason": "Non-motor sport event content: interest is tied to the event and has no mechanism to explain.",
+      "terms": [
+        "highlights",
+        "all goals",
+        "match recap",
+        "transfer news",
+        "transfer rumour",
+        "post match",
+        "fantasy football",
+        "lineup prediction"
+      ],
+      "unless_terms": [
+        "physics",
+        "science",
+        "engineering",
+        "how does",
+        "why does",
+        "explained",
+        "f1",
+        "formula 1",
+        "motorsport"
+      ]
+    },
+    {
+      "rule_id": "EX-GAMING",
+      "layer": "SUBJECT",
+      "reason": "Video-game play content: viewers watch play, not mechanisms.",
+      "terms": [
+        "gameplay",
+        "let's play",
+        "lets play",
+        "walkthrough",
+        "speedrun",
+        "esports",
+        "minecraft",
+        "fortnite",
+        "roblox",
+        "game review"
+      ],
+      "unless_terms": [
+        "physics",
+        "how game engines",
+        "sim racing",
+        "simracing",
+        "explained"
+      ]
+    },
+    {
+      "rule_id": "EX-GET-RICH",
+      "layer": "SUBJECT",
+      "reason": "Get-rich finance: unverifiable claims and scam risk.",
+      "terms": [
+        "crypto",
+        "bitcoin",
+        "memecoin",
+        "stock pick",
+        "stocks to buy",
+        "trading signals",
+        "forex",
+        "day trading",
+        "side hustle",
+        "dropshipping",
+        "passive income",
+        "get rich"
+      ],
+      "unless_terms": [
+        "scam explained",
+        "how the scam works"
+      ]
+    },
+    {
+      "rule_id": "EX-FORMAT",
+      "layer": "FORMAT",
+      "reason": "Format with no transferable mechanism or viewer question.",
+      "terms": [
+        "official music video",
+        "official trailer",
+        "teaser trailer",
+        "reaction",
+        "reacts to",
+        "prank",
+        "mukbang",
+        "asmr",
+        "compilation",
+        "funny moments",
+        "meme",
+        "full stream",
+        "livestream",
+        "podcast clip",
+        "exposed",
+        "epic fails",
+        "fail compilation",
+        "challenge video",
+        "beef"
+      ],
+      "unless_terms": [
+        "chemical reaction",
+        "reaction time",
+        "nuclear reaction"
+      ]
+    },
+    {
+      "rule_id": "EX-RISK",
+      "layer": "RISK",
+      "reason": "Contested, tragic or high-stakes subject outside the research gate's evidence rules.",
+      "terms": [
+        "election",
+        "president",
+        "prime minister",
+        "war",
+        "airstrike",
+        "shooting",
+        "killed",
+        "tragedy",
+        "conspiracy",
+        "flat earth",
+        "cure for",
+        "doctor reacts",
+        "betting",
+        "casino",
+        "gambling",
+        "true crime"
+      ],
+      "unless_terms": [
+        "world war ii engineering",
+        "ww2 aircraft",
+        "spitfire",
+        "sr-71"
+      ]
+    },
+    {
+      "rule_id": "EX-CAR-ILLEGAL",
+      "layer": "RISK",
+      "reason": "Illegal or policy-risk vehicle modification.",
+      "terms": [
+        "dpf delete",
+        "egr delete",
+        "emissions delete",
+        "defeat device",
+        "cat delete",
+        "street race",
+        "street racing"
+      ],
+      "unless_terms": []
+    }
+  ],
+  "made_for_kids_excluded": true,
+  "evidence_rules": {
+    "historical_demand": [
+      {
+        "rule_id": "HD-01.5-PASS",
+        "level": "STRONG",
+        "description": "At least one Experiment 01.5 PASS packet: replicated topic channels, velocity samples, age-matched index, replicated depth family and the view reference."
+      },
+      {
+        "rule_id": "HD-01.5-REVIEW",
+        "level": "MODERATE",
+        "description": "Topic evidence is ready but no packet passed the depth-family or view-reference conditions."
+      }
+    ],
+    "cross_channel_replication": [
+      {
+        "rule_id": "CCR-TOPIC-STRONG",
+        "level": "STRONG",
+        "minimum_unique_channels": 6,
+        "description": "The topic/format cell has at least 6 independent channels."
+      },
+      {
+        "rule_id": "CCR-TOPIC-MODERATE",
+        "level": "MODERATE",
+        "minimum_unique_channels": 3,
+        "description": "The topic/format cell has at least 3 independent channels."
+      },
+      {
+        "rule_id": "CCR-TOPIC-LOW",
+        "level": "LOW",
+        "minimum_unique_channels": 1,
+        "description": "Fewer than 3 independent channels."
+      }
+    ]
+  }
+}

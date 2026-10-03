@@ -62,8 +62,8 @@ def validate_profile(profile: Any) -> dict[str, Any]:
         errors.append("schema_version must equal 1")
 
     status = str(profile.get("status") or "")
-    if status not in {"UNCONFIGURED", "APPROVED"}:
-        errors.append("status must be UNCONFIGURED or APPROVED")
+    if status not in {"UNCONFIGURED", "DRAFT", "APPROVED"}:
+        errors.append("status must be UNCONFIGURED, DRAFT or APPROVED")
 
     version = profile.get("version")
     if not isinstance(version, int) or isinstance(version, bool) or version < 0:
@@ -115,18 +115,26 @@ def validate_profile(profile: Any) -> dict[str, Any]:
                 "UNCONFIGURED profile must not define prohibited_style"
             )
 
-    if status == "APPROVED":
+    if status in {"DRAFT", "APPROVED"}:
         if version is None or not isinstance(version, int) or version < 1:
-            errors.append("APPROVED profile version must be at least 1")
+            errors.append(f"{status} profile version must be at least 1")
         for field in ("channel_id", "channel_name", "niche"):
             if not str(profile.get(field) or "").strip():
-                errors.append(f"APPROVED profile requires {field}")
+                errors.append(f"{status} profile requires {field}")
         for field in sorted(_REQUIRED_APPROVED_OBJECTS):
             value = profile.get(field)
             if not isinstance(value, dict) or not value:
                 errors.append(
-                    f"APPROVED profile requires non-empty {field}"
+                    f"{status} profile requires non-empty {field}"
                 )
+
+    # A draft is a complete proposal that nobody has approved yet; it must
+    # not carry approval provenance and never affects generation.
+    if status == "DRAFT" and isinstance(provenance, dict):
+        if provenance.get("approved_by") or provenance.get("approved_at"):
+            errors.append("DRAFT profile must not record approval")
+
+    if status == "APPROVED":
         if isinstance(provenance, dict):
             if not str(provenance.get("approved_by") or "").strip():
                 errors.append(
@@ -205,6 +213,10 @@ def load_active_profile_binding(
         raise FileNotFoundError(profile_path)
 
     profile = load_profile(profile_path)
+    if profile["status"] == "DRAFT":
+        raise ValueError(
+            "Channel Voice profile is a DRAFT; approve it before selecting it"
+        )
     return {
         "profile": profile,
         "binding": {
