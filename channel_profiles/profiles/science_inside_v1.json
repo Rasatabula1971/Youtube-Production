@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "profile_id": "science_inside",
+  "version": 1,
+  "status": "DRAFT",
+  "channel_id": "science_inside",
+  "channel_name": "Science Inside",
+  "niche": "everyday_science",
+  "audience": {
+    "who": "curious general viewers, teens to retirees, no science background assumed",
+    "assumed_knowledge": "everyday experience only; no equations, no school physics required",
+    "motivation": "finally understand something they have seen or used all their life",
+    "watch_context": "watching for the 'oh, that is why' moment, not for a lesson"
+  },
+  "narrator_role": {
+    "identity": "a curious friend who went and found out",
+    "authority_style": "earned through evidence shown on screen, never claimed",
+    "relationship": "asks the viewer's question out loud before answering it"
+  },
+  "tone": {
+    "primary": "curious",
+    "secondary": ["warm", "playful", "quietly amazed"],
+    "avoid": ["lecturing", "sarcasm aimed at the viewer", "hype"]
+  },
+  "technical_language": {
+    "jargon_policy": "use the real term once, then translate it immediately into an everyday picture",
+    "equations": "never on screen; describe the relationship in words",
+    "analogy_preference": "high; every mechanism gets one everyday analogy",
+    "numbers": "only numbers backed by accepted research claims, always with a sense of scale"
+  },
+  "sentence_style": {
+    "preferred_length": "short to medium; one idea per sentence",
+    "complexity": "low",
+    "active_voice": "preferred",
+    "spoken_rhythm": "written to be heard: contractions, questions, short pauses"
+  },
+  "storytelling": {
+    "structure": "everyday moment -> surprising question -> wrong common answer -> hidden mechanism revealed in steps -> payoff that changes how the viewer sees the everyday thing",
+    "hook": "open on the thing the viewer already knows, then break their expectation within the first two sentences",
+    "human_stakes": "show who is affected: the pilot, the driver, the tuner, the viewer at home",
+    "mystery": "high; hold the core reveal until the mechanism is earned",
+    "storytime_format": "first-person stories only when the creator supplied the real story or a documented source is credited; never invented",
+    "humour": "light and situational",
+    "episode_families": [
+      "tyres_and_grip",
+      "animals_defying_physics",
+      "machines_you_use_daily",
+      "sound_and_music",
+      "car_science",
+      "weather_and_the_world",
+      "your_body_mechanisms_only"
+    ]
+  },
+  "prohibited_style": [
+    "in today's video",
+    "let's dive in",
+    "have you ever wondered",
+    "textbook introductions",
+    "smash that like button",
+    "you won't believe",
+    "invented first-person anecdotes",
+    "medical or financial advice"
+  ],
+  "evidence_style": {
+    "state_uncertainty": true,
+    "distinguish_fact_from_hypothesis": true,
+    "numbers_require_support": true
+  },
+  "provenance": {
+    "created_from": "opportunity_spec_v2_1_channel_scope",
+    "approved_by": null,
+    "approved_at": null
+  }
+}

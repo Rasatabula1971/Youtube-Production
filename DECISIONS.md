@@ -2657,3 +2657,53 @@ section had been accepted one by one.
 **Consequence.** Existing script drafts become stale (the script validation
 contract and request instructions changed) and are regenerated under the new
 rules on the next run.
+
+## D-106 — One channel now; other subjects wait on future-channel shelves
+
+**Status:** Accepted
+
+The system builds one channel, **Science Inside**: the science inside everyday
+things (plane tyres, wet vs dry tyres, hummingbird flight, the steelpan). Car
+modifications, ageing finance and retirement, and storytime are **future
+channels**. Opportunities that fit them are routed to that channel's shelf
+instead of being discarded, so each future channel starts with evidence.
+
+Every Opportunity Packet records `channel.route` (ACTIVE_CHANNEL,
+FUTURE_CHANNEL, EXCLUDED with the rule id, or UNSCOPED). Exclusions are
+configured in `opportunity_engine/config.json` by layer (subject, format, risk),
+use whole-word matching, allow mechanism-led exceptions ("why a free kick
+dips"), and stay visible and reversible. YouTube's own category never excludes
+on its own because many motorsport channels file under *Sports*.
+
+**Consequence.** An `everyday_science` niche is added to `niches.json`. The
+Experiment 01.3 topic set is unchanged for now, so the existing frozen cohort is
+not disturbed.
+
+## D-107 — Canonical Opportunity Packets wrap the historical engine
+
+**Status:** Accepted
+
+Opportunity Discovery v2.1 (`opportunity_engine/OPPORTUNITY_DISCOVERY_SPEC.md`)
+adds human-topic, human-video and viral-radar lanes beside the historical
+01.3 → 01.5 engine. All lanes produce one packet shape (`packet_schema.py`).
+
+- Evidence dimensions stay separate; a level above UNASSESSED / HYPOTHESIS must
+  name a written rule (`config.json → evidence_rules`) and its basis.
+- Viral classification is four independent axes (strength, trajectory, breadth,
+  historical alignment); no single breakout label or score is stored.
+- `opportunity_id` is stable across rebuilds; `packet_sha256` ignores rebuild
+  timestamps and changes only with the evidence.
+- The historical adapter reads the 01.5 study set and groups it exactly as the
+  existing Opportunity Gate does (niche:topic:format). 01.3–01.5 and the
+  existing gate are unchanged until the unified gate slice (O12).
+
+## D-108 — Channel Voice profiles may be DRAFT
+
+**Status:** Accepted
+
+A `DRAFT` profile is a complete voice proposal that no human has approved. It
+must satisfy every APPROVED content requirement, must not record approval
+provenance, never affects generation, and cannot be selected as the active
+profile. The Science Inside voice ships as `science_inside_v1.json` in DRAFT;
+approving it (status, approver, timestamp, selector) is a separate human step
+because activating a voice makes existing story plans and scripts stale.
