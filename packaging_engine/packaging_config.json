@@ -6,6 +6,7 @@
     "either"
   ],
   "minimum_research_dependencies": 0,
+  "channel_niche": null,
   "design_advisories": {
     "evidence_status": "HYPOTHESIS",
     "note": "Generic published title/thumbnail guidance. Directional only: advisories are shown at the Packaging Gate and never reject a package until channel performance validates or replaces them.",

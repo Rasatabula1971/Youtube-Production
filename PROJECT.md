@@ -672,6 +672,11 @@ elements, cues, palette) and the title/thumbnail division of labor. Generic
 published title/thumbnail guidance is checked as non-blocking HYPOTHESIS
 advisories shown at the gate (D-070).
 
+A niche thumbnail study (`packaging_engine/niche_thumbnail_study.py`)
+tabulates 20-30 breakout thumbnails per niche and format, reports where the
+niche follows or diverges from each D-070 hypothesis, and feeds those
+conventions into package requests when `channel_niche` is configured (D-071).
+
 ### Packaging Gate
 
 Every package candidate receives ACCEPT / REWORK / REJECT.

@@ -84,6 +84,15 @@ def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
         owners[slug] = raw
 
 
+def niche_conventions(niche: Any, format_intent: Any) -> dict[str, Any]:
+    """Attach the niche thumbnail tabulation when the channel niche is configured."""
+    if not niche:
+        return {}
+    from niche_thumbnail_study import packaging_conventions
+
+    return packaging_conventions(str(niche), str(format_intent or ""))
+
+
 def build_package_request(
     concept: dict[str, Any],
     config: dict[str, Any],
@@ -115,6 +124,9 @@ def build_package_request(
             "source_dependency_test": concept.get("source_dependency_test", {}),
             "concept_gate": concept.get("concept_gate", {}),
         },
+        "niche_thumbnail_conventions": niche_conventions(
+            config.get("channel_niche"), concept.get("format_intent")
+        ),
         "package_count_requested": int(config["packages_per_concept"]),
         "allowed_format_intents": list(config["allowed_format_intents"]),
         "instructions": [
@@ -140,6 +152,7 @@ def build_package_request(
             "Thumbnail text, when used, should be 3-5 bold words that add to the title rather than repeat it.",
             "Specify a background / subject / accent palette that stays legible at phone size; pick an accent that stands apart from the niche's usual palette.",
             "These design targets are published starting hypotheses, not proven rules; never trade truthfulness for them.",
+            "When niche_thumbnail_conventions are present, they describe the niche's breakout thumbnails: where the niche diverges from a generic hypothesis, prefer the niche convention, and choose an accent from the differentiation candidates rather than the crowded hue families.",
         ],
         "response_schema": {
             "concept_id": concept_id,
@@ -301,7 +314,7 @@ _ADVISORY_STOPWORDS = frozenset(
 )
 
 
-def _content_tokens(text: str) -> list[str]:
+def content_tokens(text: str) -> list[str]:
     cleaned = re.sub(r"[^0-9a-z\s]", "", text.lower())
     return [token for token in cleaned.split() if token not in _ADVISORY_STOPWORDS]
 
@@ -378,9 +391,9 @@ def design_advisories(
             )
 
     overlap_max = rules.get("thumbnail_text_title_overlap_max")
-    overlay_tokens = _content_tokens(overlay)
+    overlay_tokens = content_tokens(overlay)
     if overlay_tokens and title and overlap_max is not None:
-        title_tokens = set(_content_tokens(title))
+        title_tokens = set(content_tokens(title))
         shared = sum(token in title_tokens for token in overlay_tokens)
         ratio = round(shared / len(overlay_tokens), 2)
         if ratio > float(overlap_max):

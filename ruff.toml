@@ -33,6 +33,9 @@ ignore = ["TRY004"]
 "experiment_01_discovery/youtube_discovery.py" = ["S310"]
 "experiment_ui/server.py" = ["S603", "S606", "S607"]
 "experiment_ui/workflow_automation.py" = ["S603"]
+# Fetch is pinned to https://i.ytimg.com/vi/ and Ollama to loopback; ffmpeg/ffprobe
+# run with fixed argv lists.
+"packaging_engine/niche_thumbnail_study.py" = ["S310", "S603", "S607"]
 "source_acquisition/agent_reach_adapter.py" = ["S603"]
 "source_acquisition/experiment_02_evidence.py" = ["S603"]
 "source_acquisition/experiment_02_visual.py" = ["S603"]

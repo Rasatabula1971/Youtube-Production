@@ -171,3 +171,9 @@ live in `packaging_config.json` under `design_advisories`:
 Advisories are shown to the human Packaging Gate and carried into the research
 handoff. They never reject a package and never produce a score. Remove the
 `design_advisories` block to disable them. See D-070.
+
+## Niche thumbnail conventions
+
+When `channel_niche` is set in `packaging_config.json` and a niche thumbnail
+tabulation exists, each package request carries `niche_thumbnail_conventions`.
+See `NICHE_THUMBNAIL_STUDY.md` and D-071.

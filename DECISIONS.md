@@ -1299,3 +1299,29 @@ before/after contrast as the focal point rather than an expressive face.
 
 Producing the thumbnail image (1280x720 or larger, locked template) and a
 mock-feed preview remain Production Engine work and are not implemented here.
+
+## D-071 — Niche thumbnail conventions are tabulated, not assumed
+
+**Status:** Accepted
+
+The D-070 hypotheses are generic. Before trusting them for a niche, the
+project tabulates 20-30 of that niche's breakout thumbnails per format.
+
+Selection reuses Experiment 01 evidence: `ON_INTENT` relevance, ranked by
+outlier-reliability tier and channel-relative outlier ratio rather than raw
+views, with at most two videos per channel so one large channel cannot define
+the convention.
+
+Color, contrast and resolution are measured deterministically from the image
+with ffmpeg. Text, focal subject, element and cue counts require human
+confirmation. A local vision model may draft them, but drafts are never
+tabulated.
+
+Each D-070 hypothesis is reported as `NICHE_FOLLOWS` or `NICHE_DIVERGES`. When
+the channel niche is configured, Packaging receives the tabulation and is told
+to prefer niche conventions where they diverge and to pick an accent outside
+the niche's crowded hue families.
+
+The tabulation is descriptive. It records conventions of successful videos,
+not causes of their success, and it does not measure CTR. The Learning Engine
+remains the eventual authority once the channel has its own data.
