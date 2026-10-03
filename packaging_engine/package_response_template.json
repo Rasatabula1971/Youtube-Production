@@ -4,10 +4,25 @@
     {
       "package_id": "CONCEPT_ID-pkg001",
       "title": "",
+      "title_keyword": "",
       "thumbnail": {
         "message": "",
         "visual_concept": "",
-        "text_overlay": ""
+        "text_overlay": "",
+        "focal_subject": "",
+        "visual_elements": [
+          ""
+        ],
+        "visual_cues": [],
+        "palette": {
+          "background": "",
+          "subject": "",
+          "accent": ""
+        }
+      },
+      "division_of_labor": {
+        "thumbnail_carries": "",
+        "title_carries": ""
       },
       "opening_frame": {
         "purpose": "",

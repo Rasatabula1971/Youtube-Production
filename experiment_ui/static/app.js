@@ -1489,6 +1489,12 @@ function renderPackagingReview(snapshot, force) {
   const pkg = items[packagingCursor] || {};
   const thumbnail = pkg.thumbnail || {};
   const opening = pkg.opening_frame || {};
+  const palette = thumbnail.palette || {};
+  const division = pkg.division_of_labor || {};
+  const advisories = (pkg.packaging_advisories || []).map(function (item) {
+    return "<li><strong>" + escapeHtml(humanizeToken(item.rule || "")) + ":</strong> " +
+      escapeHtml(item.guidance || "") + "</li>";
+  }).join("");
   const dependencies = (pkg.research_dependencies || []).map(function (item) {
     return "<li>" + escapeHtml(item) + "</li>";
   }).join("");
@@ -1524,6 +1530,22 @@ function renderPackagingReview(snapshot, force) {
       (thumbnail.text_overlay
         ? '<br><strong>Text:</strong> ' + escapeHtml(thumbnail.text_overlay)
         : "") +
+      (thumbnail.focal_subject
+        ? '<br><strong>Focal subject:</strong> ' + escapeHtml(thumbnail.focal_subject)
+        : "") +
+      (thumbnail.visual_elements
+        ? '<br><strong>Elements (' + thumbnail.visual_elements.length + '):</strong> ' +
+          escapeHtml(thumbnail.visual_elements.join(" · "))
+        : "") +
+      (thumbnail.visual_cues
+        ? '<br><strong>Cues (' + thumbnail.visual_cues.length + '):</strong> ' +
+          escapeHtml(thumbnail.visual_cues.join(" · ") || "none")
+        : "") +
+      (palette.accent
+        ? '<br><strong>Palette:</strong> ' + escapeHtml(palette.background || "") +
+          ' / ' + escapeHtml(palette.subject || "") +
+          ' / accent ' + escapeHtml(palette.accent)
+        : "") +
       '</p></div>' +
     '<div class="concept-detail-card"><h4>OPENING FRAME</h4><p><strong>Purpose:</strong> ' +
       escapeHtml(opening.purpose || "") + '<br><strong>Visual:</strong> ' +
@@ -1541,7 +1563,19 @@ function renderPackagingReview(snapshot, force) {
       escapeHtml(pkg.curiosity_gap || "") + '<br><strong>Expected payoff:</strong> ' +
       escapeHtml(pkg.expected_payoff || "") + '</p></div>' +
     '<div class="concept-detail-card"><h4>TITLE + THUMBNAIL</h4><p>' +
-      escapeHtml(pkg.title_thumbnail_relationship || "") + '</p></div>' +
+      escapeHtml(pkg.title_thumbnail_relationship || "") +
+      (pkg.title_keyword
+        ? '<br><strong>Keyword:</strong> ' + escapeHtml(pkg.title_keyword) +
+          ' · <strong>Title length:</strong> ' + String((pkg.title || "").length)
+        : "") +
+      (division.thumbnail_carries
+        ? '<br><strong>Thumbnail carries:</strong> ' + escapeHtml(division.thumbnail_carries) +
+          '<br><strong>Title carries:</strong> ' + escapeHtml(division.title_carries || "")
+        : "") +
+      '</p></div>' +
+    '<div class="concept-detail-card"><h4>DESIGN ADVISORIES (HYPOTHESIS, NON-BLOCKING)</h4>' +
+      (advisories ? '<ul>' + advisories + '</ul>' : '<p>None.</p>') +
+      '</div>' +
     '<div class="concept-detail-card"><h4>POSITIONING</h4><p><strong>Gap:</strong> ' +
       escapeHtml(pkg.gap_positioning || "") + '<br><strong>Channel fit:</strong> ' +
       escapeHtml(pkg.channel_fit_alignment || "") + '</p></div>' +

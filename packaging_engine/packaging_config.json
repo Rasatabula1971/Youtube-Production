@@ -5,5 +5,21 @@
     "short",
     "either"
   ],
-  "minimum_research_dependencies": 0
+  "minimum_research_dependencies": 0,
+  "design_advisories": {
+    "evidence_status": "HYPOTHESIS",
+    "note": "Generic published title/thumbnail guidance. Directional only: advisories are shown at the Packaging Gate and never reject a package until channel performance validates or replaces them.",
+    "title_length_chars": {
+      "min": 40,
+      "max": 60
+    },
+    "title_keyword_max_start_chars": 30,
+    "thumbnail_text_words": {
+      "min": 3,
+      "max": 5
+    },
+    "thumbnail_text_title_overlap_max": 0.6,
+    "thumbnail_max_visual_elements": 3,
+    "thumbnail_max_visual_cues": 2
+  }
 }

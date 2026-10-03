@@ -667,6 +667,11 @@ The project uses a package-before-script rule:
 The engine creates multiple package candidates but does not rank them or predict
 CTR.
 
+Each package also declares its thumbnail design (focal subject, visual
+elements, cues, palette) and the title/thumbnail division of labor. Generic
+published title/thumbnail guidance is checked as non-blocking HYPOTHESIS
+advisories shown at the gate (D-070).
+
 ### Packaging Gate
 
 Every package candidate receives ACCEPT / REWORK / REJECT.

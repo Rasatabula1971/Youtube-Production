@@ -72,7 +72,9 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         "required": [
             "package_id",
             "title",
+            "title_keyword",
             "thumbnail",
+            "division_of_labor",
             "opening_frame",
             "expected_viewer",
             "awareness_level",
@@ -92,14 +94,52 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
         "properties": {
             "package_id": {"type": "string", "minLength": 1},
             "title": {"type": "string", "minLength": 1},
+            "title_keyword": {"type": "string", "minLength": 1},
             "thumbnail": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["message", "visual_concept", "text_overlay"],
+                "required": [
+                    "message",
+                    "visual_concept",
+                    "text_overlay",
+                    "focal_subject",
+                    "visual_elements",
+                    "visual_cues",
+                    "palette",
+                ],
                 "properties": {
                     "message": {"type": "string", "minLength": 1},
                     "visual_concept": {"type": "string", "minLength": 1},
                     "text_overlay": {"type": "string"},
+                    "focal_subject": {"type": "string", "minLength": 1},
+                    "visual_elements": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "visual_cues": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "palette": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["background", "subject", "accent"],
+                        "properties": {
+                            "background": {"type": "string", "minLength": 1},
+                            "subject": {"type": "string", "minLength": 1},
+                            "accent": {"type": "string", "minLength": 1},
+                        },
+                    },
+                },
+            },
+            "division_of_labor": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["thumbnail_carries", "title_carries"],
+                "properties": {
+                    "thumbnail_carries": {"type": "string", "minLength": 1},
+                    "title_carries": {"type": "string", "minLength": 1},
                 },
             },
             "opening_frame": {
@@ -160,7 +200,14 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "7. Do not predict CTR, views, virality, retention, or recommendation performance.\n"
         "8. List any factual or evidentiary dependency that Research must verify before scripting.\n"
         "9. Do not rank or score package options.\n"
-        "10. The future script must be capable of fully delivering the package promise.\n\n"
+        "10. The future script must be capable of fully delivering the package promise.\n"
+        "11. Thumbnail carries emotion/curiosity; title carries context/fact. Record both in division_of_labor.\n"
+        "12. Put title_keyword near the front of the title; aim for about 40-60 title characters.\n"
+        "13. One focal_subject, at most 2-3 visual_elements, at most 1-2 visual_cues (arrows/circles). "
+        "The channel is faceless, so the subject itself or a before/after is the focal point.\n"
+        "14. text_overlay, when used, is 3-5 bold words that add to the title rather than repeat it.\n"
+        "15. palette must stay legible at phone size: dark/bright contrast plus an accent that stands apart from the niche. "
+        "Rules 12-15 are starting hypotheses; never trade truthfulness for them.\n\n"
         "PACKAGE REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )

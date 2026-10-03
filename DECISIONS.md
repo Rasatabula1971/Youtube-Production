@@ -1269,3 +1269,33 @@ Quota/capacity errors retain the D-068 routing behavior: 429/temporary 5xx may
 advance to the next configured free Gemini model, and exhaustion preserves
 partial state for a later retry. Paid inference remains prohibited.
 
+
+## D-070 — Title/thumbnail design guidance enters Packaging as hypotheses
+
+**Status:** Accepted
+
+Generic published title/thumbnail guidance is incorporated into the Packaging
+Engine without promoting it to a production rule.
+
+Packages must now declare their design: a title keyword, one thumbnail focal
+subject, the list of distinct visual elements, any arrows/circles, a
+background/subject/accent palette, and the division of labor between thumbnail
+(emotion/curiosity) and title (context/fact). These fields are structural and
+missing values reject the package.
+
+The numeric guidance — 40-60 title characters, keyword near the front, 3-5 word
+thumbnail text that does not repeat the title, at most 3 visual elements and at
+most 2 arrows/circles — is evaluated as non-blocking `packaging_advisories`
+marked `HYPOTHESIS`. The thresholds are configuration. Most published figures
+trace back to vendor blogs that repeat the same unverified studies, so they
+remain directional until the Learning Engine can compare them with the
+channel's own click and retention data, and niche conventions override them.
+
+The human Packaging Gate adds two ACCEPT criteria:
+`thumbnail_single_focal_point` and `thumbnail_mobile_readable`.
+
+The channel is faceless, so packaging asks for the subject itself or a
+before/after contrast as the focal point rather than an expressive face.
+
+Producing the thumbnail image (1280x720 or larger, locked template) and a
+mock-feed preview remain Production Engine work and are not implemented here.

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -132,6 +133,13 @@ def build_package_request(
             "List factual or evidentiary dependencies that research must verify before the package can be considered fully supported.",
             "Do not rank the package options.",
             "Do not optimize for clickbait that the future video cannot deliver.",
+            "Division of labor: the thumbnail carries emotion and curiosity; the title carries context and fact.",
+            "Name the main search keyword and place it near the front of the title; aim for roughly 40-60 title characters so it survives mobile truncation.",
+            "Design the thumbnail around one focal subject with at most 2-3 distinct visual elements and at most 1-2 arrows or circles.",
+            "The channel is faceless: make the subject itself the focal point (the object, the mechanism, or a before/after contrast).",
+            "Thumbnail text, when used, should be 3-5 bold words that add to the title rather than repeat it.",
+            "Specify a background / subject / accent palette that stays legible at phone size; pick an accent that stands apart from the niche's usual palette.",
+            "These design targets are published starting hypotheses, not proven rules; never trade truthfulness for them.",
         ],
         "response_schema": {
             "concept_id": concept_id,
@@ -139,10 +147,25 @@ def build_package_request(
                 {
                     "package_id": "unique stable id",
                     "title": "candidate title",
+                    "title_keyword": "main search keyword, appearing near the front of the title",
                     "thumbnail": {
                         "message": "what the thumbnail communicates",
                         "visual_concept": "visual idea",
-                        "text_overlay": "optional short overlay or empty string",
+                        "text_overlay": "optional 3-5 word overlay or empty string",
+                        "focal_subject": "the single thing the eye lands on first",
+                        "visual_elements": [
+                            "each distinct visual element, focal subject included"
+                        ],
+                        "visual_cues": ["arrow or circle, if any"],
+                        "palette": {
+                            "background": "background tone",
+                            "subject": "subject tone",
+                            "accent": "accent colour and the emotion it signals",
+                        },
+                    },
+                    "division_of_labor": {
+                        "thumbnail_carries": "the emotion / curiosity the thumbnail carries",
+                        "title_carries": "the context / fact the title carries",
                     },
                     "opening_frame": {
                         "purpose": "what the first frame should establish",
@@ -184,6 +207,7 @@ def validate_package(
 
     for field in (
         "title",
+        "title_keyword",
         "expected_viewer",
         "awareness_level",
         "viewer_problem",
@@ -215,6 +239,35 @@ def validate_package(
             errors.append("thumbnail.message is required")
         if not str(thumbnail.get("visual_concept", "")).strip():
             errors.append("thumbnail.visual_concept is required")
+        if not str(thumbnail.get("focal_subject", "")).strip():
+            errors.append("thumbnail.focal_subject is required")
+        elements = thumbnail.get("visual_elements")
+        if not isinstance(elements, list) or not elements:
+            errors.append("thumbnail.visual_elements must be a non-empty list")
+        elif any(not str(value).strip() for value in elements):
+            errors.append("thumbnail.visual_elements items must be non-empty")
+        cues = thumbnail.get("visual_cues")
+        if not isinstance(cues, list):
+            errors.append("thumbnail.visual_cues must be a list")
+        elif any(not str(value).strip() for value in cues):
+            errors.append(
+                "thumbnail.visual_cues may be empty, but listed items must be non-empty"
+            )
+        palette = thumbnail.get("palette")
+        if not isinstance(palette, dict):
+            errors.append("thumbnail.palette must be an object")
+        else:
+            for key in ("background", "subject", "accent"):
+                if not str(palette.get(key, "")).strip():
+                    errors.append(f"thumbnail.palette.{key} is required")
+
+    division = package.get("division_of_labor")
+    if not isinstance(division, dict):
+        errors.append("division_of_labor must be an object")
+    else:
+        for key in ("thumbnail_carries", "title_carries"):
+            if not str(division.get(key, "")).strip():
+                errors.append(f"division_of_labor.{key} is required")
 
     opening_frame = package.get("opening_frame")
     if not isinstance(opening_frame, dict):
@@ -240,6 +293,125 @@ def validate_package(
         errors.append("package concept_id does not match request")
 
     return errors
+
+
+_ADVISORY_STOPWORDS = frozenset(
+    "a an and are as at be by for from how i in is it my of on or the this "
+    "to was what when why with you your".split()
+)
+
+
+def _content_tokens(text: str) -> list[str]:
+    cleaned = re.sub(r"[^0-9a-z\s]", "", text.lower())
+    return [token for token in cleaned.split() if token not in _ADVISORY_STOPWORDS]
+
+
+def design_advisories(
+    package: dict[str, Any],
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Non-blocking checks of generic title/thumbnail guidance.
+
+    The thresholds are published starting hypotheses (see D-070). They are
+    surfaced to the human Packaging Gate and never reject a package.
+    """
+    rules = config.get("design_advisories")
+    if not isinstance(rules, dict):
+        return []
+    status = str(rules.get("evidence_status", "HYPOTHESIS"))
+    advisories: list[dict[str, Any]] = []
+
+    def add(rule: str, observed: Any, guidance: str) -> None:
+        advisories.append(
+            {
+                "rule": rule,
+                "observed": observed,
+                "guidance": guidance,
+                "evidence_status": status,
+            }
+        )
+
+    title = str(package.get("title", "")).strip()
+    length = rules.get("title_length_chars")
+    if title and isinstance(length, dict):
+        low, high = int(length["min"]), int(length["max"])
+        if not low <= len(title) <= high:
+            add(
+                "TITLE_LENGTH",
+                len(title),
+                f"Title is {len(title)} characters; target {low}-{high} so it "
+                "survives mobile truncation.",
+            )
+
+    keyword = str(package.get("title_keyword", "")).strip()
+    max_start = rules.get("title_keyword_max_start_chars")
+    if title and keyword and max_start is not None:
+        start = title.lower().find(keyword.lower())
+        if start < 0:
+            add(
+                "TITLE_KEYWORD_MISSING",
+                keyword,
+                "The declared keyword does not appear in the title.",
+            )
+        elif start > int(max_start):
+            add(
+                "TITLE_KEYWORD_LATE",
+                start,
+                f"Keyword starts at character {start}; place it within the "
+                f"first {int(max_start)} characters.",
+            )
+
+    thumbnail = package.get("thumbnail")
+    if not isinstance(thumbnail, dict):
+        return advisories
+
+    overlay = str(thumbnail.get("text_overlay", "") or "").strip()
+    words = rules.get("thumbnail_text_words")
+    if overlay and isinstance(words, dict):
+        count = len(overlay.split())
+        low, high = int(words["min"]), int(words["max"])
+        if not low <= count <= high:
+            add(
+                "THUMBNAIL_TEXT_WORDS",
+                count,
+                f"Thumbnail text is {count} words; target {low}-{high} bold words.",
+            )
+
+    overlap_max = rules.get("thumbnail_text_title_overlap_max")
+    overlay_tokens = _content_tokens(overlay)
+    if overlay_tokens and title and overlap_max is not None:
+        title_tokens = set(_content_tokens(title))
+        shared = sum(token in title_tokens for token in overlay_tokens)
+        ratio = round(shared / len(overlay_tokens), 2)
+        if ratio > float(overlap_max):
+            add(
+                "THUMBNAIL_TEXT_REPEATS_TITLE",
+                ratio,
+                "Thumbnail text mostly repeats the title; it should add to it.",
+            )
+
+    elements = thumbnail.get("visual_elements")
+    max_elements = rules.get("thumbnail_max_visual_elements")
+    if isinstance(elements, list) and max_elements is not None:
+        if len(elements) > int(max_elements):
+            add(
+                "THUMBNAIL_ELEMENT_COUNT",
+                len(elements),
+                f"{len(elements)} distinct visual elements; keep to "
+                f"{int(max_elements)} or fewer around one focal subject.",
+            )
+
+    cues = thumbnail.get("visual_cues")
+    max_cues = rules.get("thumbnail_max_visual_cues")
+    if isinstance(cues, list) and max_cues is not None:
+        if len(cues) > int(max_cues):
+            add(
+                "THUMBNAIL_CUE_COUNT",
+                len(cues),
+                f"{len(cues)} arrows/circles; use at most {int(max_cues)}.",
+            )
+
+    return advisories
 
 
 def validate_response(
@@ -305,6 +477,7 @@ def validate_response(
             ]
         )
         normalized["source_overlap"] = overlap
+        normalized["packaging_advisories"] = design_advisories(normalized, config)
         if overlap.get("blocking"):
             match = overlap.get("matches", [{}])[0]
             errors.append(
