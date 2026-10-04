@@ -3589,3 +3589,69 @@ and a Ctrl/Cmd-click opens a new tab. A contract test pins these rules.
 - A `__proto__` id leaves `Object.prototype` clean.
 - The D-124 axe audit, the keyboard walkthrough and the D-126 guideline
   checks still pass.
+
+## D-128 — The Master Product Vision governs; its audit sets the correction order
+
+**Status:** Accepted
+
+**Context.** On 3 October 2026 an audit compared the repository (at the
+laptop's `6d561d1`, before UI Patches 9–13) against the Master Product Vision
+and Build Comparison Specification. It found the foundations on track but
+several workflow deviations, and the complete production-to-learning loop not
+yet built.
+
+**Decision.**
+- **What governs.** The Master Product Vision is the governing product
+  definition, with Opportunity Discovery v2.1 for discovery. Older decisions
+  that conflict with it do not override it; the conflicting decisions are
+  superseded case by case, as each correction lands.
+- **Correction order.** Deviations are corrected before new integrations are
+  built, in this order:
+  - **A1:** test isolation, plus README and roadmap status.
+  - **A2:** stage completion policy. A resumable batch is not a complete
+    stage. The Gemini fallback applies only to verified provider or quota
+    failures.
+  - **A3:** a concept pool of 15–25, with semantic de-duplication and five
+    diverse finalists or an explicit shortfall.
+  - **A4:** conditional research review (auto-cleared, review required or
+    blocked).
+  - **A5:** one resolved format.
+  - **A6:** append-only decision history for analysis and research.
+  - **Then:** packaging (a 2–3 title shortlist, an image-provider adapter,
+    three candidate visuals), planning and money (visual-plan approval before
+    narration spend, approval of the final audio, one budget ledger per
+    video), production execution, Tesseract, publishing and performance
+    learning.
+- **Milestone.** One Science Inside video from an approved opportunity to a
+  reviewed, editable near-final production, with complete provenance and a
+  combined cost ledger. Feature slices do not substitute for that run.
+- **Human decisions.** These are not taken by the build: approving the
+  Science Inside channel voice, choosing the image provider, the per-video
+  budget figures (about $5 target and $10 ceiling), and installing the
+  scheduled automation on the laptop.
+
+**A1 in this patch.**
+- **Cause.** The audit's nine failing tests on the populated laptop were test
+  defects, not product defects:
+  - Eight UI tests read the machine's real approved study set or prepared
+    profiles. The server resolves about 90 output paths at import time, and
+    each test patched only some of them.
+  - One acquisition test assumed a single subprocess call, but a machine
+    with whisper and ffmpeg installed runs a second, transcription, call.
+- **Fix.**
+  - `experiment_ui/testing_isolation.py` redirects every server output path
+    to an empty temporary tree: per test in `test_server.py`, per module in
+    every other UI test file.
+  - The acquisition test pins `local_transcription_available` to False.
+  - A guard test fails if the real paths become visible again.
+- **Verified.** I reproduced the failures by planting a study set and
+  prepared profiles in the real output folders, with whisper, agent-reach and
+  mcporter on the PATH: the same nine tests failed. After the fix, all 12
+  suites pass both in that populated state and in a clean checkout.
+- **Docs.** The README's status, pipeline, repository, runtime, Experiment 02,
+  Transformation, Research, Packaging and UI sections now describe what is
+  built. PROJECT.md carries a status note marking its historical parts.
+- **Follow-up.** The module documents `packaging_engine/PACKAGING_ENGINE.md`
+  (pre-script flow) and `production_engine/PRODUCTION_ENGINE.md` (two slices
+  only) still describe older states; they are updated with the corrections
+  that touch them.
