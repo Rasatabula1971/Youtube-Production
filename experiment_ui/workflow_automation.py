@@ -191,11 +191,39 @@ def partial_message(action_id: str) -> str:
 
 def next_enabled_action(
     readiness: dict[str, dict[str, Any]],
+    skip: set[str] | frozenset[str] = frozenset(),
 ) -> str | None:
     for action_id in AUTO_MACHINE_ACTION_ORDER:
-        if readiness.get(action_id, {}).get("enabled"):
+        if action_id not in skip and readiness.get(action_id, {}).get("enabled"):
             return action_id
     return None
+
+
+def _with_stuck(result: dict[str, Any], stuck: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Report a stuck step as PARTIAL even when later work went ahead (D-154).
+
+    A step that keeps returning partial (for example research for one concept
+    whose questions have no source yet) is set aside so later steps that are
+    already allowed (for example the script of a concept whose research is
+    verified) still run. The run still ends PARTIAL and names the stuck step.
+    """
+    if not stuck:
+        return result
+    if result.get("status") in {"FAILED", "NO_PROGRESS"}:
+        # A real failure later on stays the headline; the stuck step is listed.
+        return {**result, "stuck_actions": list(stuck)}
+    action_id, first = next(iter(stuck.items()))
+    combined = dict(first)
+    combined["completed_actions"] = result.get("completed_actions", [])
+    combined["stuck_actions"] = list(stuck)
+    if result.get("workflow_state"):
+        combined["workflow_state"] = result["workflow_state"]
+    if result.get("message") and result.get("status") != "PARTIAL":
+        combined["message"] = (
+            f"{first['message']} Other work went ahead and stopped at: {result['message']}"
+        )
+    combined["failed_action"] = action_id
+    return combined
 
 
 def run_action(action_id: str) -> int:
@@ -214,7 +242,12 @@ def run_action(action_id: str) -> int:
 
 def run_until_human_gate() -> dict[str, Any]:
     completed_actions: list[str] = []
+    stuck: dict[str, dict[str, Any]] = {}
+    result = _run_steps(completed_actions, stuck)
+    return _with_stuck(result, stuck)
 
+
+def _run_steps(completed_actions: list[str], stuck: dict[str, dict[str, Any]]) -> dict[str, Any]:
     for _ in range(MAX_STEPS_PER_RUN):
         readiness = control.action_readiness()
         guidance = control.workflow_guidance(readiness)
@@ -315,7 +348,7 @@ def run_until_human_gate() -> dict[str, Any]:
                 or "Workflow reached the current production boundary.",
             }
 
-        action_id = next_enabled_action(readiness)
+        action_id = next_enabled_action(readiness, skip=set(stuck))
         if action_id is None:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
@@ -336,21 +369,23 @@ def run_until_human_gate() -> dict[str, Any]:
             }
 
         after = control.action_readiness()
-        next_id = next_enabled_action(after)
+        next_id = next_enabled_action(after, skip=set(stuck))
         if next_id == action_id:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
                 if code == 2:
-                    message = partial_message(action_id)
-                    return {
+                    # Set it aside and let later steps that are already
+                    # allowed run; the run still ends PARTIAL (D-154).
+                    stuck[action_id] = {
                         "status": "PARTIAL",
                         "failed_action": action_id,
                         "return_code": code,
                         "completed_actions": completed_actions,
                         "before_reason": before_reason,
                         "after_reason": after_reason,
-                        "message": message,
+                        "message": partial_message(action_id),
                     }
+                    continue
                 return {
                     "status": "NO_PROGRESS",
                     "failed_action": action_id,

@@ -4713,3 +4713,22 @@ however, said no usable source pages were found.
   claim that cleared only on a mirrored source returns to human review;
   one flagged only by a false risk match may now clear.
 - Human decisions are never replaced.
+
+## D-154 — A stuck automatic step no longer holds back later allowed steps
+
+**Context.** With three accepted concepts, research for two still had
+unanswered questions while "The 4-Gram Wheel Balance Margin" had verified
+research and a story plan. Continue Automatically ran research acquisition
+first (it comes earlier in the pipeline order), got a partial result with no
+progress, and stopped. The 4-Gram script was never drafted, although D-104
+lets each concept move on as soon as its own research is verified.
+
+**Decision.** When a step returns partial without progress, Continue
+Automatically sets it aside for the rest of that run and goes on with the
+next step that is already allowed. Readiness rules decide what is allowed,
+so nothing runs early. The run still ends PARTIAL, names the stuck step and
+its message, and says where the other work stopped. A later step that fails
+stays the headline failure, with the stuck step listed.
+
+**Consequences.** One concept's missing sources no longer stall the
+others. Each run retries the stuck step first, as before.

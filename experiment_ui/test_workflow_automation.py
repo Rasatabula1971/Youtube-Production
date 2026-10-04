@@ -1317,6 +1317,62 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["failed_action"], "concept_generate")
         self.assertIn("Retry Continue Automatically later", result["message"])
 
+    def test_stuck_partial_step_does_not_hold_later_allowed_steps(self):
+        # Research for two concepts stays partial, but the script of the
+        # concept whose research is verified must still be drafted (D-154).
+        state = {"script": False}
+
+        def readiness():
+            ready = {"research_acquire": {"enabled": True, "reason": "evidence 1/3"}}
+            if not state["script"]:
+                ready["script_generate"] = {"enabled": True, "reason": "drafts 0/1"}
+            return ready
+
+        def fake_run(action_id):
+            if action_id == "script_generate":
+                state["script"] = True
+                return 0
+            return 2
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={"state": "HUMAN_SCRIPT_GATE", "current_title": "Review the script"},
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run) as run,
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual([c.args[0] for c in run.call_args_list], ["research_acquire", "script_generate"])
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["failed_action"], "research_acquire")
+        self.assertEqual(result["completed_actions"], ["script_generate"])
+        self.assertEqual(result["stuck_actions"], ["research_acquire"])
+        self.assertIn("Review the script", result["message"])
+
+    def test_later_failure_stays_failed_when_a_step_is_stuck(self):
+        def readiness():
+            return {
+                "research_acquire": {"enabled": True, "reason": "evidence 1/3"},
+                "script_generate": {"enabled": True, "reason": "drafts 0/1"},
+            }
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(automation.control, "workflow_guidance", return_value={"state": "ACTION_REQUIRED"}),
+            patch.object(
+                automation, "run_action",
+                side_effect=lambda a: 2 if a == "research_acquire" else 1,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "FAILED")
+        self.assertEqual(result["failed_action"], "script_generate")
+        self.assertEqual(result["stuck_actions"], ["research_acquire"])
+
     def test_stops_if_successful_command_makes_no_progress(self):
         readiness = {
             "exp2_prepare": {
