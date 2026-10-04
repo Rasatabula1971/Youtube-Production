@@ -135,6 +135,21 @@ covered does the package become:
 READY_FOR_STORY_SCRIPT
 ~~~
 
+## Decision history
+
+Every Research Gate decision is appended to
+`research_engine/output/research_gate_history.jsonl` and never rewritten
+(D-133). The log keeps:
+
+- human ACCEPT, REWORK and REJECT decisions, with the reviewer, note and the
+  decision they replaced;
+- automatic acceptances by the evidence policy, logged once, and their
+  withdrawal when the claim or policy changes;
+- question waivers and their removal.
+
+The review state still holds only the current decision; each claim in the
+review page shows its full history, newest first.
+
 ## Verified research package
 
 The gate writes a verified research package containing:

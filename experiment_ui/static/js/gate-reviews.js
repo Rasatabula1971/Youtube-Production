@@ -63,6 +63,20 @@
     return esc(label || "");
   }
 
+  // Every past decision on an item, newest first, from the gate's append-only
+  // log (D-133). A changed decision adds a line; nothing is overwritten.
+  function historySection(events) {
+    const rows = (events || []).filter(Boolean).slice().reverse().map(function (event) {
+      const when = String(event.recorded_at || "").replace("T", " ").slice(0, 16);
+      const who = event.decided_by === "EVIDENCE_POLICY" ? "evidence policy" : (event.reviewer || "you");
+      const was = event.previous_decision ? " (was " + words(event.previous_decision) + ")" : "";
+      return "<li><strong>" + esc(words(event.decision || "")) + "</strong>" + esc(was) +
+        ' <span class="muted">· ' + esc(who) + (when ? " · " + esc(when) : "") + "</span>" +
+        (event.note ? "<br>" + esc(event.note) : "") + "</li>";
+    }).join("");
+    return rows ? section("Decision history", '<ul class="rw-list rw-history">' + rows + "</ul>") : "";
+  }
+
   // Resolves true on success and false when the server refused, so callers
   // keep the reviewer's choices after a failure (UI-19).
   async function post(url, body, okMessage) {
@@ -102,7 +116,8 @@
         ["Confidence", item.confidence],
         ["Mechanisms", item.mechanism_ids]
       ]) +
-        section("Supporting evidence", evidence ? '<ul class="rw-list rw-evidence-list">' + evidence + "</ul>" : '<p class="muted">No evidence references on this finding.</p>');
+        section("Supporting evidence", evidence ? '<ul class="rw-list rw-evidence-list">' + evidence + "</ul>" : '<p class="muted">No evidence references on this finding.</p>') +
+        historySection(item.decision_history);
     },
     decisions: function () {
       return [
@@ -288,7 +303,8 @@
         ]) +
         section("Sources", sources ? '<ul class="rw-list rw-evidence-list">' + sources + "</ul>" : '<p class="muted">No evidence links on this claim.</p>') +
         section("Research questions for this concept", questions ? '<ul class="rw-list rw-questions">' + questions + "</ul>" : "") +
-        section("Accepting confirms", list(Object.values(item.criteria_descriptions || {})));
+        section("Accepting confirms", list(Object.values(item.criteria_descriptions || {}))) +
+        historySection(item.decision_history);
     },
     decisions: function (item) {
       const conflicted = ((item.coverage || {}).state || "") === "CONFLICTED";

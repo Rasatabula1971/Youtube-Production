@@ -3860,3 +3860,44 @@ video.
   format configs for them only.
 - Making the other format from the same idea is a separate decision: accept
   the concept again or save the idea, rather than an automatic second branch.
+
+
+## D-133 — Append-only decision history for analysis and research
+
+**Status:** Accepted (vision: append-only reviewed history; correction A6 of D-128)
+
+**Context.** The newer script and packaging gates keep versions and archived
+decisions, but the Analysis Gate, vision review and Research Gate kept only
+the latest decision. Changing a decision overwrote it, an automatic research
+acceptance left no trace once withdrawn, and waivers vanished when removed.
+Nobody could tell later what had been decided before, by whom, or why.
+
+**Decision.**
+- **Shared helper.** `pipeline_integrity.append_jsonl` appends one JSON
+  record per line and syncs it to disk; earlier lines are never rewritten.
+  `read_jsonl` skips a torn final line left by a crash.
+- **Research Gate** (`research_gate_history.jsonl`) logs:
+  - every human ACCEPT, REWORK and REJECT, with the reviewer, note and the
+    decision it replaced;
+  - each automatic acceptance once;
+  - the withdrawal of an automatic acceptance when its claim or the policy
+    changes, logged before any new acceptance;
+  - waivers and their removal.
+- **Analysis Gate** (`human_review_history.jsonl`) logs every finding
+  decision, with the profile hash it was made against.
+- **Vision review** (`vision_review_history.jsonl`) logs every frame
+  decision, with the accepted observation and the source hashes.
+- **Review UI.** Snapshots attach each item's `decision_history`, and the
+  Analysis and Research review pages show it newest first.
+
+**Consequences.**
+- The live state files are unchanged and still hold only the current
+  decision, so every reader of them keeps working. The logs are a record,
+  not a second source of truth.
+- The logs live under the gitignored output folders beside the state they
+  describe. They grow by one line per decision, so no rotation is needed.
+- Decisions made before this change have no history lines; their current
+  state is still in the review files.
+- The Opportunity, Script and Packaging gates already keep their own history
+  or versions and are unchanged. The Concept Gate was outside the audit's
+  finding and is unchanged; it can use the same helper if needed.

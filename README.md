@@ -54,7 +54,8 @@ audit found that these deviate from the vision and are being corrected first:
   failures (both fixed by A2, D-129);
 - visual planning comes after narration;
 - budgets are split by stage rather than per video;
-- reviewed history is not append-only everywhere.
+- reviewed history is not append-only everywhere (fixed for analysis and
+  research by A6, D-133).
 
 These are not built yet:
 
@@ -75,7 +76,7 @@ are built:
 | A3 | Concept pool of 15–25 and diverse finalists (done, D-130) |
 | A4 | Conditional research review (done, D-131) |
 | A5 | One resolved format (done, D-132) |
-| A6 | Append-only analysis and research history |
+| A6 | Append-only analysis and research history (done, D-133) |
 
 After that come packaging, then planning and budget, then production,
 Tesseract, publishing and learning. The next milestone is one Science Inside

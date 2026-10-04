@@ -103,3 +103,28 @@ def exit_code_for_status(status: str) -> int:
         }
         else 2
     )
+
+
+def append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    """Append one JSON record as a line; earlier lines are never rewritten (D-133)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(line)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Records of an append-only log; a torn or invalid line is skipped."""
+    if not path.exists():
+        return []
+    records = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            records.append(value)
+    return records
