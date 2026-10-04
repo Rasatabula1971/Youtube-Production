@@ -31,6 +31,7 @@ import json
 import os
 import re
 import statistics
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -39,7 +40,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from evidence_quality import (
+# Importers outside this folder (the radar and the opportunity intake jobs)
+# reach this module as a package; its sibling imports are bare names.
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+from evidence_quality import (  # noqa: E402
     RELEVANCE_ADJACENT,
     RELEVANCE_OFF_INTENT,
     RELEVANCE_ON_INTENT,
@@ -48,7 +55,7 @@ from evidence_quality import (
     RELIABILITY_UNAVAILABLE,
     annotate_evidence_quality,
 )
-from market_intelligence import (
+from market_intelligence import (  # noqa: E402
     aggregate_topic_evidence,
     append_snapshots,
     build_query_competition_profile,
