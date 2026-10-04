@@ -6948,6 +6948,42 @@ class JobManager:
 
 
 JOB_LOG_NAME = re.compile(r"^\d{8}_\d{6}_[a-z0-9_]+$")
+AUTO_STEP_LINE = re.compile(r"^AUTOMATIC MACHINE STEP\s+\S+\s+(.+)$")
+
+
+def job_with_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
+    return {**job, "progress": job_progress(job)} if job else job
+
+
+def job_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What a running job is doing now, read from its log (D-155).
+
+    The page shows the current step, how many steps have run and when the
+    log last changed, so a long model call does not look like a frozen screen.
+    """
+    if not job or job.get("status") not in {"RUNNING", "STOPPING"}:
+        return None
+    path = Path(str(job.get("log_path") or ""))
+    try:
+        stat = path.stat()
+        with path.open("rb") as handle:
+            handle.seek(max(0, stat.st_size - 60000))
+            text = handle.read().decode("utf-8", "replace")
+    except OSError:
+        return {"current_step": None, "step_number": 0, "last_line": "", "last_output_at": None}
+    lines = [line.strip() for line in text.splitlines()]
+    steps = [m.group(1).strip() for m in (AUTO_STEP_LINE.match(line) for line in lines) if m]
+    last_line = next(
+        (line for line in reversed(lines) if line and not set(line) <= {"=", "-"}), ""
+    )
+    return {
+        "current_step": steps[-1] if steps else None,
+        # Only the tail is read, so a long run may show a lower count; the
+        # label is what matters.
+        "step_number": len(steps),
+        "last_line": last_line[:200],
+        "last_output_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+    }
 
 
 def record_job_history(job: dict[str, Any]) -> None:
@@ -8406,7 +8442,7 @@ def status_payload() -> dict[str, Any]:
         "project_root": str(PROJECT_ROOT),
         "stages": stage_statuses(),
         "actions": actions,
-        "job": JOB_MANAGER.current(),
+        "job": job_with_progress(JOB_MANAGER.current()),
         "checkpoint": {
             "exists": EXP13_CHECKPOINT.exists(),
             "status": checkpoint_status(),

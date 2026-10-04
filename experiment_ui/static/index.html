@@ -109,6 +109,15 @@
         </div>
       </header>
 
+      <div class="run-banner" id="runBanner" role="status" aria-live="polite" hidden>
+        <div class="run-banner-bar" aria-hidden="true"><span></span></div>
+        <div class="run-banner-copy">
+          <strong id="runBannerTitle">Working…</strong>
+          <span id="runBannerDetail"></span>
+        </div>
+        <button type="button" class="ghost compact" data-job-drawer>Live log</button>
+      </div>
+
       <main class="view-container" id="mainContent" tabindex="-1">
         <section class="app-view" data-view="home" id="viewHome">
           <section class="hero-step" id="homeCurrentStep">
