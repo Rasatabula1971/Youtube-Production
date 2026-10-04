@@ -37,6 +37,7 @@ from analysis_model_runner import (
     call_direct_gemini_backup,
     call_fair_bridge,
     direct_gemini_available,
+    direct_gemini_unavailable_reason,
     inference_cost_authorized,
     load_runner_config,
     parse_model_json,
@@ -339,7 +340,8 @@ def call_gemini_only(payload: dict[str, Any], *, timeout_seconds: float) -> dict
         "attempts": [],
     }
     if not direct_gemini_available():
-        return {**not_run, "reason_code": "DIRECT_GEMINI_NOT_CONFIGURED"}
+        reason = direct_gemini_unavailable_reason() or "DIRECT_GEMINI_NOT_CONFIGURED"
+        return {**not_run, "reason_code": reason}
     return call_direct_gemini_backup(payload, timeout_seconds=timeout_seconds, fair_result=not_run)
 
 

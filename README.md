@@ -223,6 +223,11 @@ To start again from Opportunities, close the UI and run
 would move). It moves every production and the Opportunity Gate's choice
 into `.archive/` and deletes nothing (D-157).
 
+Direct Gemini (concept generation, and the fallback when FAIR's free pool
+is exhausted) runs only after you confirm in
+`experiment_02_analysis/direct_gemini_billing.json` that the key's Google
+Cloud project has no billing account (D-161).
+
 See `experiment_ui/README.md`.
 
 

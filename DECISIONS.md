@@ -4949,3 +4949,24 @@ reproduction of each serious finding) of the build at D-159.
   spent; narration already records partial spend.
 - The gate policy only runs inside an automatic run; at a held gate with no
   machine step ready, Continue Automatically stays disabled.
+
+## D-161 — Direct Gemini runs only on a dated billing attestation
+
+**Context.** The direct Gemini route (D-151) is free only while the Google
+Cloud project behind `DIRECT_GEMINI_API_KEY` has no billing account. The
+code recorded that belief as a constant (`direct_backup_free_tier_only:
+true`, `paid_inference_executed: null`) and the cost check accepted it. The
+audit (D-160) flagged this: unknown cost was treated as zero.
+
+**Decision.** `experiment_02_analysis/direct_gemini_billing.json` holds the
+operator's attestation: `billing_disabled_confirmed` and `confirmed_on`.
+While it is false, no direct Gemini call is made anywhere: concept
+generation on the `direct_gemini` route and the FAIR exhaustion fallback
+both return `DIRECT_GEMINI_BILLING_UNCONFIRMED` without an HTTP request, and
+Continue Automatically's message says exactly what to check and set. When
+it is true, a direct call records `paid_inference_executed: false` and the
+attestation date.
+
+**Consequences.** The file ships as `false`: the operator checks Billing
+for that project in Google Cloud Console, then sets it to true with the
+date. If billing is ever attached to the project, set it back to false.
