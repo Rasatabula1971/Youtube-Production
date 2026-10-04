@@ -4970,3 +4970,28 @@ attestation date.
 **Consequences.** The file ships as `false`: the operator checks Billing
 for that project in Google Cloud Console, then sets it to true with the
 date. If billing is ever attached to the project, set it back to false.
+
+## D-162 — Viral Radar shortlist: lane, minimum outlier, freshness, replication first
+
+**Context.** The first full radar scan tracked 136 videos. Most were off the
+channel's lane (finance, fitness, history-for-sleep, game simulators) or
+below a ratio worth reading, and the page listed them all.
+
+**Decision.**
+- **Lane.** `opportunity_engine/radar_lane.py` sorts each tracked video
+  into ON_LANE, UNCLEAR, OFF_LANE or OTHER_LANGUAGE from its title and
+  channel, using the word lists in `radar_lane_config.json` (an off-lane
+  term wins; a `*` term matches as a stem; a title that is mostly non-Latin
+  is another language). A theme takes the best lane of its members. No
+  model call; the operator edits the lists.
+- **Filters on the page.** Lane (my lane = on lane + unclear, or
+  everything), minimum outlier (any, 3×, 5×, 10×), freshness (any, ≤ 7
+  days, ≤ 3 days) and format. Default: my lane, ≥ 3×. The choice is kept in
+  the browser; the bar says how many items it hides and offers a reset.
+  Watched videos always show.
+- **Replication first.** Themes with two or more independent channels are
+  pinned above the rest regardless of ratio.
+
+**Consequences.** Lane is a reading aid, not a gate: an off-lane video can
+still be reviewed by switching to "Everything". Wrong lane calls are fixed
+by editing the word lists.

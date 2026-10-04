@@ -490,6 +490,14 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertIn('href="https://www.youtube.com/watch?v=', script)
         self.assertIn('rel="noopener noreferrer"', script.split("function watchLink", 1)[1][:400])
 
+    def test_radar_filters_cover_lane_ratio_freshness_and_pin_replication(self) -> None:
+        script = (STATIC / "js" / "radar.js").read_text(encoding="utf-8")
+        for attr in ("data-radar-lane", "data-radar-ratio", "data-radar-age", "data-radar-reset", "data-radar-format"):
+            self.assertIn(attr, script)
+        self.assertIn('DEFAULT_FILTERS = { lane: "lane", minRatio: 3, maxDay: 0 }', script)
+        self.assertIn("independent_channel_count || 0) >= 2 ? 0 : 1", script)
+        self.assertIn('localStorage.setItem(FILTER_KEY', script)
+
     def test_nav_routes_are_app_routes(self) -> None:
         for route in set(re.findall(r'data-route="([^"]+)"', self.html)):
             with self.subTest(route=route):

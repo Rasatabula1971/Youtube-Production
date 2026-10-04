@@ -7,6 +7,14 @@
 
   const REFRESH_MS = 30000;
   const FORMATS = [["all", "All formats"], ["long_form", "Long-form"], ["short", "Shorts"]];
+  // Shortlist filters (D-162). Lane comes from the server's word lists;
+  // ratio and freshness are the two numbers worth a threshold.
+  const LANES = [["lane", "My lane"], ["all", "Everything"]];
+  const RATIOS = [[0, "Any ratio"], [3, "≥ 3×"], [5, "≥ 5×"], [10, "≥ 10×"]];
+  const AGES = [[0, "Any age"], [7, "≤ 7 days"], [3, "≤ 3 days"]];
+  const FILTER_KEY = "radarFilters";
+  const DEFAULT_FILTERS = { lane: "lane", minRatio: 3, maxDay: 0 };
+  const LANE_LABEL = { ON_LANE: "on lane", UNCLEAR: "unclear lane", OFF_LANE: "off lane", OTHER_LANGUAGE: "other language" };
 
   let overview = null;
   let fetchedAt = 0;
@@ -15,6 +23,49 @@
   let error = "";
   let formatFilter = "all";
   let latestStatus = null;
+  let filtersState = loadFilters();
+
+  function loadFilters() {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(FILTER_KEY) || "null");
+      if (saved && typeof saved === "object") return Object.assign({}, DEFAULT_FILTERS, saved);
+    } catch (_) {}
+    return Object.assign({}, DEFAULT_FILTERS);
+  }
+
+  function saveFilters() {
+    try { window.localStorage.setItem(FILTER_KEY, JSON.stringify(filtersState)); } catch (_) {}
+  }
+
+  function laneAllowed(lane) {
+    return filtersState.lane === "all" || lane === "ON_LANE" || lane === "UNCLEAR" || !lane;
+  }
+
+  function rowPasses(row) {
+    if (!matchesFormat(row)) return false;
+    if (!laneAllowed(row.lane)) return false;
+    if (filtersState.minRatio && !((row.lifetime_ratio || 0) >= filtersState.minRatio)) return false;
+    if (filtersState.maxDay && !(row.day != null && row.day <= filtersState.maxDay)) return false;
+    return true;
+  }
+
+  function themePasses(theme) {
+    const rows = (theme.videos || []).map(function (video) {
+      const tracked = (overview.tracked || []).find(function (r) { return r.video_id === video.video_id; });
+      return tracked || video;
+    });
+    if (formatFilter !== "all" && !rows.some(matchesFormat)) return false;
+    if (!laneAllowed(theme.lane)) return false;
+    if (filtersState.minRatio && !((theme.strongest_ratio || 0) >= filtersState.minRatio)) return false;
+    if (filtersState.maxDay && !rows.some(function (r) { return r.day != null && r.day <= filtersState.maxDay; })) return false;
+    return true;
+  }
+
+  function laneBadge(lane) {
+    if (!lane || lane === "ON_LANE") return "";
+    const tone = lane === "OFF_LANE" ? "blocked" : "ready";
+    return ' <span class="status-badge status-' + tone + '">' + esc(LANE_LABEL[lane] || words(lane)) + "</span>";
+  }
 
   function $(id) { return document.getElementById(id); }
   function yp() { return window.YP; }
@@ -109,13 +160,26 @@
     (radar.throttled_until ? '<p class="radar-error">YouTube search is backing off until ' + esc(clock(radar.throttled_until)) + ".</p>" : "");
   }
 
-  function filters() {
-    return '<div class="radar-filters" role="group" aria-label="Format">' +
-      FORMATS.map(function (f) {
-        return '<button type="button" class="inbox-tab' + (f[0] === formatFilter ? " active" : "") +
-          '" aria-pressed="' + (f[0] === formatFilter) + '" data-radar-format="' + f[0] + '">' + esc(f[1]) + "</button>";
-      }).join("") +
-      '<span class="muted radar-note">Topic and region filters are not available yet: the radar scans its channel watchlist and rotating science queries.</span>' +
+  function pills(name, options, current, attr) {
+    return '<div class="radar-filter-group" role="group" aria-label="' + esc(name) + '">' +
+      options.map(function (option) {
+        const on = String(option[0]) === String(current);
+        return '<button type="button" class="inbox-tab' + (on ? " active" : "") + '" aria-pressed="' + on +
+          '" ' + attr + '="' + esc(String(option[0])) + '">' + esc(option[1]) + "</button>";
+      }).join("") + "</div>";
+  }
+
+  function filters(hidden) {
+    const isDefault = filtersState.lane === DEFAULT_FILTERS.lane && filtersState.minRatio === DEFAULT_FILTERS.minRatio &&
+      filtersState.maxDay === DEFAULT_FILTERS.maxDay && formatFilter === "all";
+    return '<div class="radar-filters">' +
+      pills("Lane", LANES, filtersState.lane, "data-radar-lane") +
+      pills("Minimum outlier", RATIOS, filtersState.minRatio, "data-radar-ratio") +
+      pills("Freshness", AGES, filtersState.maxDay, "data-radar-age") +
+      pills("Format", FORMATS, formatFilter, "data-radar-format") +
+      '<span class="muted radar-note">' + (hidden ? esc(String(hidden)) + " hidden by these filters. " : "") +
+        (isDefault ? "Default: your lane, at least 3× the channel's normal." : '<button type="button" class="ghost compact" data-radar-reset>Reset filters</button>') +
+      "</span>" +
     "</div>";
   }
 
@@ -132,11 +196,11 @@
     const evidenceId = theme.top_opportunity_id && yp().inboxItem(theme.top_opportunity_id) ? theme.top_opportunity_id : "";
     const videos = (theme.videos || []).map(function (video) {
       return "<li>" + watchLink(video.video_id, video.title || video.video_id) + ' <span class="muted">· ' + esc(video.channel_title || "") +
-        " · " + esc(ratio(video.lifetime_ratio)) + " · " + esc(words(video.trajectory)) + "</span></li>";
+        " · " + esc(ratio(video.lifetime_ratio)) + (video.day != null ? " · day " + esc(String(video.day)) : "") + " · " + esc(words(video.trajectory)) + "</span></li>";
     }).join("");
     return '<article class="theme-card' + (replicated ? " replicated" : "") + '">' +
       '<div class="theme-head"><p class="attention-kicker">' + esc(replicated ? "Replicated breakout" : words(theme.breadth || "one off")) +
-        (theme.kind ? " · " + esc(words(theme.kind)) : "") + "</p>" +
+        (theme.kind ? " · " + esc(words(theme.kind)) : "") + laneBadge(theme.lane) + "</p>" +
         '<h3 class="theme-title">' + esc(theme.label || theme.cluster_id) + "</h3>" +
         '<p class="muted">' + esc((theme.member_count || 0) + " video(s) · " + (theme.independent_channel_count || 0) +
           " independent channel(s)" + (theme.first_detected_at ? " · first detected " + ago(theme.first_detected_at) : "")) + "</p></div>" +
@@ -162,7 +226,7 @@
     const statusLabel = status ? words(status) : "excluded or not in inbox";
     return '<article class="tracked-row">' +
       '<div class="tracked-main"><h3 class="production-title">' + watchLink(row.video_id, row.title || row.video_id) + "</h3>" +
-        '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format === "short" ? "Short" : "Long-form") + " · " + statusLabel) + "</p></div>" +
+        '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format === "short" ? "Short" : "Long-form") + " · " + statusLabel) + laneBadge(row.lane) + "</p></div>" +
       '<div class="tracked-day"><strong>' + esc(row.day == null ? "—" : "Day " + row.day + " / " + row.window_days) + "</strong></div>" +
       '<div class="tracked-ratio"><strong>' + esc(ratio(row.lifetime_ratio)) + '</strong><span class="muted">channel normal</span></div>' +
       '<div class="tracked-trend">' + sparkline(row.series, row.title || row.video_id) + "</div>" +
@@ -178,15 +242,20 @@
     if (!overview) {
       return '<p class="empty-state">' + esc(error || (loading ? "Loading the radar…" : "Open this page to load the radar.")) + "</p>";
     }
-    const themes = (overview.themes || []).filter(function (theme) {
-      return formatFilter === "all" || (theme.videos || []).some(function (video) {
-        const row = (overview.tracked || []).find(function (r) { return r.video_id === video.video_id; });
-        return row && matchesFormat(row);
-      });
+    const allThemes = overview.themes || [];
+    const themes = allThemes.filter(themePasses);
+    // Replication is the strongest signal: pinned first, then by ratio.
+    themes.sort(function (a, b) {
+      const ra = (a.independent_channel_count || 0) >= 2 ? 0 : 1;
+      const rb = (b.independent_channel_count || 0) >= 2 ? 0 : 1;
+      return ra - rb || (b.strongest_ratio || 0) - (a.strongest_ratio || 0);
     });
-    const tracked = (overview.tracked || []).filter(matchesFormat);
+    const allTracked = overview.tracked || [];
+    // Watched videos always show: you asked to follow them.
+    const tracked = allTracked.filter(function (row) { return inboxStatus(row.opportunity_id) === "WATCHING" || rowPasses(row); });
     const watching = tracked.filter(function (row) { return inboxStatus(row.opportunity_id) === "WATCHING"; });
     const others = tracked.filter(function (row) { return inboxStatus(row.opportunity_id) !== "WATCHING"; });
+    hiddenCount = (allThemes.length - themes.length) + (allTracked.length - tracked.length);
     return (error ? '<p class="radar-error">' + esc(error) + "</p>" : "") +
       '<section class="cc-section" aria-labelledby="radarEmergingTitle"><div class="cc-section-head"><h2 id="radarEmergingTitle">Emerging now</h2>' +
         '<p class="muted">Themes from the last scan, replicated across independent channels first.</p></div>' +
@@ -206,11 +275,13 @@
   }
 
   let painted = "";
+  let hiddenCount = 0;
 
   function paint() {
     const root = $("radarPage");
     if (!root || !latestStatus || !yp()) return;
-    const html = header(latestStatus) + filters() + body();
+    const main = body();
+    const html = header(latestStatus) + filters(hiddenCount) + main;
     // Polling repaints only on change, so open details and focus survive.
     if (html === painted && root.innerHTML) return;
     painted = html;
@@ -252,6 +323,19 @@
     const format = event.target.closest("[data-radar-format]");
     if (format) {
       formatFilter = format.dataset.radarFormat;
+      paint();
+      return;
+    }
+    const lane = event.target.closest("[data-radar-lane]");
+    const ratioPill = event.target.closest("[data-radar-ratio]");
+    const age = event.target.closest("[data-radar-age]");
+    const reset = event.target.closest("[data-radar-reset]");
+    if (lane || ratioPill || age || reset) {
+      if (lane) filtersState.lane = lane.dataset.radarLane;
+      if (ratioPill) filtersState.minRatio = Number(ratioPill.dataset.radarRatio);
+      if (age) filtersState.maxDay = Number(age.dataset.radarAge);
+      if (reset) { filtersState = Object.assign({}, DEFAULT_FILTERS); formatFilter = "all"; }
+      saveFilters();
       paint();
       return;
     }
