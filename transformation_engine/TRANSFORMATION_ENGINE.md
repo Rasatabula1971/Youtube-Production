@@ -186,7 +186,7 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
-### Concept generation settings (D-146, D-147, D-148)
+### Concept generation settings (D-146 to D-151)
 
 `transformation_engine/concept_model_route.json` holds three settings:
 
@@ -199,13 +199,13 @@ before the human gate.
   model-run report lists every call. Without the setting, all concepts are
   requested in one call. Reason: free models dropped `human_framing` and
   `viewer_need_evidence` when asked for five full concepts at once.
-- **`route`** (currently `"fair"`). `"fair"` uses free models through FAIR.
+- **`route`** (currently `"direct_gemini"`, D-151). `"fair"` uses free models through FAIR.
   `"direct_gemini"` uses the project's `DIRECT_GEMINI_API_KEY` only, with no
   FAIR and no fallback; it is free only while the key's Google Cloud project
   has no billing enabled, and it departs from vision §101, so it is a manual
   override rather than the default.
 
-- **`pause_between_calls_seconds`** (currently 65). The minimum gap between
+- **`pause_between_calls_seconds`** (currently 10 for Gemini; use 65 on the `fair` route). The minimum gap between
   any two concept calls, across mechanisms and across automatic steps; the
   time of the last call is kept in `output/concept_call_clock.json`. Groq's
   free tier limits tokens per minute. A call that FAIR still reports as rate
