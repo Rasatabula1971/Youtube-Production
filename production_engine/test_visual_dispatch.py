@@ -85,6 +85,26 @@ class VisualDispatchTests(unittest.TestCase):
         ledger = video_budget.read_jsonl(self.root / "video_budget_ledger.jsonl")
         self.assertEqual((ledger[-1]["event"], ledger[-1]["amount_usd"]), ("ACTUAL", 1.0))
 
+    def test_a_failed_call_with_unknown_outcome_stays_committed(self):
+        def lost(prompt, *, count, settings):
+            raise ValueError("Image provider call failed: URLError")
+
+        with self.assertRaisesRegex(ValueError, "URLError"):
+            dispatch.generate(request_file=self.request_path, reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": lost})
+        ledger = video_budget.read_jsonl(self.root / "video_budget_ledger.jsonl")
+        self.assertEqual(ledger[-1]["event"], "UNCONFIRMED")
+        self.assertEqual(ledger[-1]["amount_usd"], 1.0)
+        summary = video_budget.summary(ledger[-1]["video_id"], ledger=self.root / "video_budget_ledger.jsonl")
+        self.assertEqual(summary["committed_usd"], 1.0)
+        self.assertEqual(summary["unconfirmed"][0]["category"], "visual")
+
+        def refused(prompt, *, count, settings):
+            raise ValueError("Image provider refused the request (HTTP 400)")
+
+        with self.assertRaisesRegex(ValueError, "HTTP 400"):
+            dispatch.generate(request_file=self.request_path, reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": refused})
+        self.assertEqual(len(video_budget.read_jsonl(self.root / "video_budget_ledger.jsonl")), len(ledger))
+
     def test_generation_stops_at_the_shots_authorized_maximum(self):
         self.generate()
         self.generate()  # 2.0 of 2.5 spent

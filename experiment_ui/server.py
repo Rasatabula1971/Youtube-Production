@@ -91,6 +91,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/visual-dispatch",
     "/api/publish-gate",
     "/api/editor-exchange",
+    "/api/budget-reconcile",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -9708,6 +9709,20 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     raise ValueError("Action must be EXPORT, IMPORT_EDIT or DISCARD_EDIT")
                 self._send_json({"editor_exchange": editor_exchange_state()})
+                return
+
+            if route == "/api/budget-reconcile":
+                # The operator settles what a paid call really cost (D-166):
+                # an unconfirmed call, or a correction to any ledger item.
+                video_budget.reconcile(
+                    video=str(body.get("video_id", "")),
+                    category=str(body.get("category", "")),
+                    ref=str(body.get("ref", "")),
+                    total_usd=body.get("total_usd"),
+                    actor=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    note=str(body.get("note") or ""),
+                )
+                self._send_json({"video_budget": video_budget_state()})
                 return
 
             if route == "/api/visual-dispatch":

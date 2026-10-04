@@ -331,8 +331,18 @@ def generate(
     adapter = (adapters or ADAPTERS)[str(settings["kind"])]
     try:
         images = adapter(prompt, count=count, settings=settings)
-    except Exception:
-        video_budget.release(video=budget_video, category="thumbnail_image", ref=budget_ref, note="provider call failed", ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent))
+    except Exception as exc:
+        ledger = video_budget.ledger_in(render.THUMBNAILS_DIR.parent)
+        if video_budget.outcome_unknown(exc):
+            # The call may have run and billed: keep the estimate committed
+            # until you confirm the cost on the Budget tab (D-166).
+            video_budget.mark_unconfirmed(
+                video=budget_video, category="thumbnail_image", ref=budget_ref, amount_usd=estimated,
+                actor=reviewer, note=f"Thumbnail image call failed with an unknown outcome: {str(exc)[:200]}",
+                ledger=ledger,
+            )
+        else:
+            video_budget.release(video=budget_video, category="thumbnail_image", ref=budget_ref, note="provider refused the call; nothing charged", ledger=ledger)
         raise
     actual = round(float(settings["price_per_image_usd"]) * len(images), 4)
     video_budget.record_actual(

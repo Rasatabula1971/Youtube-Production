@@ -54,6 +54,7 @@ class PublishTests(unittest.TestCase):
             patch.object(gate, "VERIFIED_DIR", root / "verified"),
             patch.object(gate, "APPROVED_DIR", root / "approved"),
             patch.object(gate, "PUBLISHED_DIR", root / "published"),
+            patch.object(gate, "PENDING_UPLOADS_DIR", root / "pending"),
             patch.object(gate, "HISTORY_FILE", root / "history.jsonl"),
             patch.object(gate, "load_config", side_effect=lambda: copy.deepcopy(self.config)),
         ):
@@ -127,8 +128,14 @@ class UploadTests(PublishTests):
         item.start()
         self.addCleanup(item.stop)
         self.requests = []
+        self.bodies = []
 
-    def fake_http(self, thumbnail_fails=False):
+    def fake_http(self, thumbnail_fails=False, interrupt_put=False, probe=None):
+        """probe: what the session answers to a Content-Range bytes */size probe:
+        ("308", "bytes=0-4") to resume after byte 4, "done" for a finished session,
+        "gone" for a dead one."""
+        state = {"interrupted": False}
+
         def http(request, timeout):
             url = request.full_url
             self.requests.append((request.get_method(), url, request))
@@ -137,6 +144,18 @@ class UploadTests(PublishTests):
             if url.startswith(uploader.UPLOAD_URL.split("?")[0]) and request.get_method() == "POST" and "thumbnails" not in url:
                 return {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=s1"}, b""
             if request.get_method() == "PUT":
+                if request.get_header("Content-range", "").startswith("bytes */"):
+                    if probe == "done":
+                        return {}, json.dumps({"id": "VIDEOid_001"}).encode()
+                    if probe == "gone":
+                        raise uploader.UploadHttpError("YouTube refused the request (HTTP 404)", code=404)
+                    if isinstance(probe, tuple):
+                        raise uploader.UploadHttpError("Resume Incomplete (HTTP 308)", code=308, headers={"Range": probe[1]})
+                    raise AssertionError("unexpected probe")
+                if interrupt_put and not state["interrupted"]:
+                    state["interrupted"] = True
+                    raise ValueError("YouTube request failed: TimeoutError")
+                self.bodies.append(request.data.read() if hasattr(request.data, "read") else request.data)
                 return {}, json.dumps({"id": "VIDEOid_001"}).encode()
             if "thumbnails/set" in url:
                 if thumbnail_fails:
@@ -144,6 +163,66 @@ class UploadTests(PublishTests):
                 return {}, b"{}"
             raise AssertionError(url)
         return http
+
+    def puts(self):
+        return [r for m, u, r in self.requests if m == "PUT"]
+
+    def starts(self):
+        return [r for m, u, r in self.requests if m == "POST" and "uploadType=resumable" in u]
+
+    def test_an_interrupted_upload_is_saved_and_resumed_from_the_reported_byte(self):
+        self.approve()
+        with self.assertRaisesRegex(ValueError, "resumes where it stopped"):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(interrupt_put=True))
+        pending = gate.pending_upload("c1", "long_form")
+        self.assertEqual(pending["session"], "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=s1")
+        self.assertEqual(pending["size"], self.video.stat().st_size)
+        self.assertTrue(self.item()["pending_upload"])
+
+        self.requests = []
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(probe=("308", "bytes=0-4")))
+        self.assertEqual(self.starts(), [])  # no second session: no second video
+        probe, continued = self.puts()
+        self.assertEqual(probe.get_header("Content-range"), f"bytes */{self.video.stat().st_size}")
+        size = self.video.stat().st_size
+        self.assertEqual(continued.get_header("Content-range"), f"bytes 5-{size - 1}/{size}")
+        self.assertEqual(continued.get_header("Content-length"), str(size - 5))
+        self.assertEqual(self.bodies[-1], self.video.read_bytes()[5:])
+        published = snap["items"][0]["published"]
+        self.assertEqual((published["youtube_video_id"], published["resumed"]), ("VIDEOid_001", True))
+        self.assertIsNone(gate.pending_upload("c1", "long_form"))
+        self.assertIsNone(self.item()["pending_upload"])
+
+    def test_a_session_that_already_finished_is_recorded_without_sending_bytes(self):
+        self.approve()
+        with self.assertRaises(ValueError):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(interrupt_put=True))
+        self.requests = []
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(probe="done"))
+        self.assertEqual(len(self.puts()), 1)
+        self.assertEqual(self.starts(), [])
+        self.assertEqual(snap["items"][0]["published"]["youtube_video_id"], "VIDEOid_001")
+
+    def test_a_dead_session_starts_a_fresh_upload_once(self):
+        self.approve()
+        with self.assertRaises(ValueError):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(interrupt_put=True))
+        self.requests = []
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(probe="gone"))
+        self.assertEqual(len(self.starts()), 1)
+        self.assertEqual(len(self.puts()), 2)  # the probe, then the whole file
+        self.assertIsNone(self.puts()[1].get_header("Content-range"))
+        self.assertFalse(snap["items"][0]["published"]["resumed"])
+        self.assertIsNone(gate.pending_upload("c1", "long_form"))
+
+    def test_a_pending_record_for_other_bytes_is_discarded(self):
+        self.approve()
+        gate.save_pending_upload({"concept_id": "c1", "format": "long_form", "session": "https://www.googleapis.com/x",
+                                  "size": 1, "video_sha256": "other"})
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        self.assertEqual(len(self.starts()), 1)
+        self.assertEqual(len(self.puts()), 1)
+        self.assertEqual(snap["items"][0]["published"]["youtube_video_id"], "VIDEOid_001")
 
     def test_upload_is_off_until_enabled_and_authorized(self):
         self.config["youtube_upload"]["enabled"] = False

@@ -8,6 +8,7 @@ import json
 from unittest.mock import patch
 
 from production_engine import thumbnail_image_provider as images
+import video_budget
 from production_engine import thumbnail_review as review
 from production_engine.test_thumbnail_render import RID, PipelineTestCase
 
@@ -92,6 +93,29 @@ class ProviderTests(PipelineTestCase):
         self.config["per_video_cap_usd"] = 0.2
         with self.assertRaisesRegex(ValueError, "per-video cap"):
             self.generate()
+
+    def test_a_failed_call_with_unknown_outcome_stays_committed_until_confirmed(self):
+        def timed_out(prompt, *, count, settings):
+            raise ValueError("Image provider call failed: TimeoutError")
+
+        with self.assertRaisesRegex(ValueError, "TimeoutError"):
+            images.generate(render_id=RID, max_cost_usd="0.12", reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": timed_out})
+        ledger = video_budget.ledger_in(images.render.THUMBNAILS_DIR.parent)
+        events = [e["event"] for e in video_budget.read_jsonl(ledger)]
+        self.assertEqual(events, ["RESERVE", "UNCONFIRMED"])
+        video = video_budget.read_jsonl(ledger)[-1]["video_id"]
+        summary = video_budget.summary(video, ledger=ledger)
+        self.assertEqual(summary["committed_usd"], 0.12)
+        self.assertEqual(len(summary["unconfirmed"]), 1)
+        self.assertIn("unknown outcome", summary["unconfirmed"][0]["note"])
+
+        def refused(prompt, *, count, settings):
+            raise ValueError("Image provider refused the request (HTTP 401)")
+
+        with self.assertRaisesRegex(ValueError, "HTTP 401"):
+            images.generate(render_id=RID, max_cost_usd="0.12", reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": refused})
+        events = [e["event"] for e in video_budget.read_jsonl(ledger)]
+        self.assertEqual(events[-2:], ["RESERVE", "RELEASE"])
 
     def test_choosing_a_candidate_sets_the_subject_image(self):
         view = self.generate()

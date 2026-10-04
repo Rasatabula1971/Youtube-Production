@@ -15,6 +15,14 @@ re-checks the approval and the exact video and thumbnail bytes, runs once per
 video (a published video cannot be uploaded again) and is recorded through
 ``publish_review.record_upload``. A failure after YouTube accepted the video
 records the video id with the error, so a retry never creates a duplicate.
+
+The upload is resumable end to end (D-167): the session URI is saved to a
+pending-upload record before any video bytes are sent. A retry after a
+timeout or lost connection first asks YouTube how much of that session it
+holds (``Content-Range: bytes */size``): a finished session yields the
+video id and is recorded, a partial one is continued from the byte YouTube
+reports, and only a dead session starts a new upload. One approved video
+therefore never becomes two private videos on the channel.
 """
 
 from __future__ import annotations
@@ -99,13 +107,25 @@ def body_for(metadata: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class UploadHttpError(ValueError):
+    """An HTTP error answer, with its status and headers (308 carries the resume offset)."""
+
+    def __init__(self, message: str, *, code: int, headers: dict[str, str] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.headers = headers or {}
+
+
 def _http(request: urllib.request.Request, timeout: float) -> tuple[dict[str, str], bytes]:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed Google https URLs
             return dict(response.headers.items()), response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read()[:300].decode("utf-8", "replace") if hasattr(exc, "read") else ""
-        raise ValueError(f"YouTube refused the request (HTTP {exc.code}): {detail}") from exc
+        headers = dict(exc.headers.items()) if getattr(exc, "headers", None) else {}
+        raise UploadHttpError(
+            f"YouTube refused the request (HTTP {exc.code}): {detail}", code=int(exc.code), headers=headers
+        ) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise ValueError(f"YouTube request failed: {type(exc).__name__}") from exc
 
@@ -155,26 +175,58 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
     token = access_token(config, http)
     auth = {"Authorization": f"Bearer {token}"}
     size = video.stat().st_size
-    start = urllib.request.Request(  # noqa: S310 - fixed https URL
-        UPLOAD_URL,
-        data=json.dumps(body_for(approval["metadata"])).encode("utf-8"),
-        headers={**auth, "Content-Type": "application/json; charset=UTF-8",
-                 "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": VIDEO_TYPES[video.suffix.lower()]},
-        method="POST",
-    )
-    headers, _ = http(start, 60)
-    session = headers.get("Location") or headers.get("location")
-    if not session or not session.startswith("https://www.googleapis.com/"):
-        raise ValueError("YouTube did not return an upload session")
-    with video.open("rb") as handle:
-        put = urllib.request.Request(  # noqa: S310 - session checked to be https://www.googleapis.com/
-            session, data=handle, method="PUT",
-            headers={**auth, "Content-Type": VIDEO_TYPES[video.suffix.lower()], "Content-Length": str(size)},
+    content_type = VIDEO_TYPES[video.suffix.lower()]
+
+    video_id = ""
+    resumed = False
+    pending = publish_review.pending_upload(concept_id, fmt)
+    if pending:
+        session = str(pending.get("session") or "")
+        current = (
+            pending.get("video_sha256") == approval["video_sha256"]
+            and int(pending.get("size") or -1) == size
+            and session.startswith("https://www.googleapis.com/")
         )
-        _headers, body = http(put, timeout)
-    video_id = str(json.loads(body.decode("utf-8")).get("id") or "")
-    if not publish_review.VIDEO_ID.match(video_id):
-        raise ValueError("YouTube did not return a video id")
+        found = _resume(session, video, size, content_type, auth, http, timeout) if current else None
+        if found:
+            video_id, resumed = found, True
+        else:
+            # Stale (another video) or dead session: it cannot hold our bytes.
+            publish_review.clear_pending_upload(concept_id, fmt)
+
+    if not video_id:
+        start = urllib.request.Request(  # noqa: S310 - fixed https URL
+            UPLOAD_URL,
+            data=json.dumps(body_for(approval["metadata"])).encode("utf-8"),
+            headers={**auth, "Content-Type": "application/json; charset=UTF-8",
+                     "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": content_type},
+            method="POST",
+        )
+        headers, _ = http(start, 60)
+        session = headers.get("Location") or headers.get("location") or ""
+        if not session or not session.startswith("https://www.googleapis.com/"):
+            raise ValueError("YouTube did not return an upload session")
+        # Saved before any byte goes out: a retry resumes this session (D-167).
+        publish_review.save_pending_upload(
+            {
+                "artifact": "pending_upload",
+                "concept_id": concept_id,
+                "format": fmt,
+                "session": session,
+                "size": size,
+                "content_type": content_type,
+                "video_sha256": approval["video_sha256"],
+                "started_at": publish_review.now(),
+            }
+        )
+        try:
+            video_id = _put_from(session, video, 0, size, content_type, auth, http, timeout)
+        except ValueError as exc:
+            raise ValueError(
+                f"{exc} The upload session is saved: choose Upload to YouTube again and it resumes "
+                "where it stopped instead of starting a second video."
+            ) from exc
+    publish_review.clear_pending_upload(concept_id, fmt)
 
     thumbnail_error = None
     try:
@@ -190,5 +242,66 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
         thumbnail_error = str(exc)
     return publish_review.record_upload(
         concept_id=concept_id, format=fmt, youtube_video_id=video_id, method="YOUTUBE_DATA_API",
-        details={"thumbnail_set": thumbnail_error is None, "thumbnail_error": thumbnail_error},
+        details={"thumbnail_set": thumbnail_error is None, "thumbnail_error": thumbnail_error, "resumed": resumed},
     )
+
+
+def _video_id_from(body: bytes) -> str:
+    try:
+        video_id = str(json.loads(body.decode("utf-8")).get("id") or "")
+    except (ValueError, AttributeError):
+        video_id = ""
+    if not publish_review.VIDEO_ID.match(video_id):
+        raise ValueError("YouTube did not return a video id")
+    return video_id
+
+
+def _put_from(
+    session: str, video: Path, offset: int, size: int, content_type: str, auth: dict[str, str],
+    http: Callable[..., tuple[dict[str, str], bytes]], timeout: float,
+) -> str:
+    """Send the video bytes from ``offset`` to the end of the session; returns the video id."""
+    headers = {**auth, "Content-Type": content_type, "Content-Length": str(size - offset)}
+    if offset:
+        headers["Content-Range"] = f"bytes {offset}-{size - 1}/{size}"
+    with video.open("rb") as handle:
+        handle.seek(offset)
+        put = urllib.request.Request(  # noqa: S310 - session checked to be https://www.googleapis.com/
+            session, data=handle, method="PUT", headers=headers,
+        )
+        _headers, body = http(put, timeout)
+    return _video_id_from(body)
+
+
+def _resume(
+    session: str, video: Path, size: int, content_type: str, auth: dict[str, str],
+    http: Callable[..., tuple[dict[str, str], bytes]], timeout: float,
+) -> str | None:
+    """Ask YouTube what it holds of a saved session and finish it (D-167).
+
+    Returns the video id when the session is complete or could be continued,
+    None when the session is gone and a new upload must start.
+    """
+    probe = urllib.request.Request(  # noqa: S310 - session checked to be https://www.googleapis.com/
+        session, data=b"", method="PUT",
+        headers={**auth, "Content-Length": "0", "Content-Range": f"bytes */{size}"},
+    )
+    try:
+        _headers, body = http(probe, 60)
+    except UploadHttpError as exc:
+        if exc.code == 308:
+            received = {k.lower(): v for k, v in exc.headers.items()}.get("range") or ""
+            offset = 0
+            if received:
+                try:
+                    offset = int(received.split("-")[-1]) + 1
+                except ValueError:
+                    offset = 0
+            if offset >= size:
+                offset = 0
+            return _put_from(session, video, offset, size, content_type, auth, http, timeout)
+        if exc.code in {400, 404, 410}:
+            return None
+        raise
+    # 200/201: the session already finished; the body carries the video.
+    return _video_id_from(body)

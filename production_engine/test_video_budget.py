@@ -114,3 +114,45 @@ class VideoBudgetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnconfirmedSpendTests(VideoBudgetTests):
+    """A paid call with an unknown outcome stays committed until a person settles it (D-166)."""
+
+    def test_unconfirmed_amount_counts_until_reconciled(self):
+        budget.reserve(video="v:f", category="thumbnail_image", ref="t1", amount_usd=0.12)
+        snap = budget.mark_unconfirmed(video="v:f", category="thumbnail_image", ref="t1", amount_usd=0.12, note="timed out")
+        self.assertEqual(snap["committed_usd"], 0.12)
+        self.assertEqual(snap["actual_usd"], 0.0)
+        self.assertEqual([u["ref"] for u in snap["unconfirmed"]], ["t1"])
+        self.assertEqual(snap["unconfirmed"][0]["note"], "timed out")
+        self.assertEqual(budget.snapshot()["unconfirmed_count"], 1)
+
+        settled = budget.reconcile(video="v:f", category="thumbnail_image", ref="t1", total_usd=0.08, note="two of three images came back")
+        self.assertEqual(settled["unconfirmed"], [])
+        self.assertEqual(settled["actual_usd"], 0.08)
+        self.assertEqual(settled["committed_usd"], 0.08)
+        events = [e["event"] for e in budget.read_jsonl(budget.LEDGER_FILE)]
+        self.assertEqual(events, ["RESERVE", "UNCONFIRMED", "ACTUAL", "RELEASE"])
+
+    def test_cost_nothing_releases_everything(self):
+        budget.mark_unconfirmed(video="v:f", category="visual", ref="shot:a:unconfirmed:1", amount_usd=1.0)
+        self.assertEqual(budget.summary("v:f")["committed_usd"], 1.0)
+        settled = budget.reconcile(video="v:f", category="visual", ref="shot:a:unconfirmed:1", total_usd=0)
+        self.assertEqual((settled["committed_usd"], settled["actual_usd"], settled["unconfirmed"]), (0.0, 0.0, []))
+
+    def test_any_item_can_be_corrected_and_unknown_items_cannot(self):
+        budget.record_actual(video="v:f", category="narration", ref="narration", total_usd=2.0)
+        corrected = budget.reconcile(video="v:f", category="narration", ref="narration", total_usd=2.5, note="provider invoice")
+        self.assertEqual(corrected["actual_usd"], 2.5)
+        with self.assertRaisesRegex(ValueError, "Unknown budget item"):
+            budget.reconcile(video="v:f", category="narration", ref="nope", total_usd=1)
+        with self.assertRaisesRegex(ValueError, "confirmed cost"):
+            budget.reconcile(video="v:f", category="narration", ref="narration", total_usd="abc")
+
+    def test_outcome_unknown_only_clears_provider_refusals(self):
+        self.assertFalse(budget.outcome_unknown(ValueError("Image provider refused the request (HTTP 401)")))
+        self.assertFalse(budget.outcome_unknown(ValueError("refused (HTTP 429)")))
+        self.assertTrue(budget.outcome_unknown(ValueError("Image provider refused the request (HTTP 503)")))
+        self.assertTrue(budget.outcome_unknown(ValueError("Image provider call failed: TimeoutError")))
+        self.assertTrue(budget.outcome_unknown(RuntimeError("boom")))

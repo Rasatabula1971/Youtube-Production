@@ -324,9 +324,11 @@ class ShellMarkupTests(unittest.TestCase):
             {"APPROVE_WITH_GAPS", "REWORK_VISUAL", "REWORK_PACING", "REWORK_AUDIO"},
         )
         self.assertEqual(
-            values("const spend = {", "const generate = {"),
+            values("const spend = {", "const unconfirmed = {"),
             {"AUTHORIZE_GENERATION", "KEEP_PLACEHOLDER", "RETRY_EXISTING"},
         )
+        # Confirm spend (D-166): what a failed paid call really cost.
+        self.assertEqual(values("const unconfirmed = {", "const budget = {"), {"COST", "NOTHING"})
         self.assertEqual(values("const generate = {", "function videoGate"), {"GENERATE", "CHOOSE"})
         returns = {"RETURN_TO_VISUALS", "RETURN_TO_NARRATION", "RETURN_TO_SOUND"}
         self.assertEqual(returns | {"APPROVE_EDIT_DIRECTION"}, set(edit_preview_review.DECISIONS))
@@ -599,3 +601,19 @@ class RadarLearningContractTests(unittest.TestCase):
         self.assertIn("if (!learning().active || !row || !row.taste_label) return \"\";", text)
         self.assertIn('order: "ratio"', text)
         self.assertIn("function learningNote()", text)
+
+
+class SpendAndUploadContractTests(unittest.TestCase):
+    """Confirm spend on the Budget tab (D-166) and the resumable upload hint (D-167)."""
+
+    def test_budget_reconcile_route_is_a_human_gate_mutation(self) -> None:
+        self.assertIn("/api/budget-reconcile", server.HUMAN_GATE_MUTATION_ROUTES)
+
+    def test_produce_page_offers_confirm_spend_and_resume_upload(self) -> None:
+        text = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
+        self.assertIn('post("/api/budget-reconcile"', text)
+        self.assertIn("data-pd-confirm-cost", text)
+        self.assertIn('{ value: "NOTHING", label: "It cost nothing"', text)
+        self.assertIn('kind: "unconfirmed"', text)
+        self.assertIn('"Resume upload to YouTube"', text)
+        self.assertIn("item.pending_upload", text)

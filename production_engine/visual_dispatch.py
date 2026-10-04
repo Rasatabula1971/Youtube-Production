@@ -191,7 +191,19 @@ def _generate(
             f"this shot's authorized ${authorized:.2f}"
         )
     prompt = build_prompt(request)
-    images = (adapters or ADAPTERS)[str(settings["kind"])](prompt, count=count, settings=settings)
+    try:
+        images = (adapters or ADAPTERS)[str(settings["kind"])](prompt, count=count, settings=settings)
+    except Exception as exc:
+        if video_budget.outcome_unknown(exc):
+            # The call may have run and billed: keep the estimate committed
+            # until you confirm the cost on the Budget tab (D-166).
+            video_budget.mark_unconfirmed(
+                video=video_budget.video_id(request.get("concept_id"), request.get("format")),
+                category="visual", ref=f"shot:{request.get('shot_id')}:unconfirmed:{now()}", amount_usd=estimate,
+                actor=reviewer, note=f"Visual generation call failed with an unknown outcome: {str(exc)[:200]}",
+                ledger=video_budget.ledger_in(OUTPUT),
+            )
+        raise
     cost = round(float(settings["price_per_image_usd"]) * len(images), 4)
     directory = CANDIDATES_DIR / key
     directory.mkdir(parents=True, exist_ok=True)
