@@ -600,7 +600,25 @@
     if (counter) counter.textContent = counter.textContent.replace(/\d+ characters$/, target.value.length + " characters");
   });
 
+  // Pending packaging decisions for the one Review Queue (D-164).
+  function queueItems() {
+    const rows = [];
+    TABS.forEach(function (tab) {
+      const config = REVIEW_TABS[tab[0]];
+      if (!config) return;
+      config.items().filter(config.pending).forEach(function (item) {
+        rows.push({
+          route: "/packaging", subroute: tab[0] + "/" + encodeURIComponent(config.key(item)),
+          gate: tab[1], group: tab[2], title: String(config.title(item) || ""),
+          concept_id: item.concept_id || ""
+        });
+      });
+    });
+    return rows;
+  }
+
   window.Packaging = {
+    queueItems: queueItems,
     open: open,
     show: function () { if (window.location.pathname === "/packaging") open(window.location.hash.slice(1)); },
     render: function () { if (window.location.pathname === "/packaging") render(); },

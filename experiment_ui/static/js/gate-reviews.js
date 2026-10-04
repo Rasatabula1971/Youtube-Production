@@ -976,7 +976,37 @@
     render();
   });
 
+  // Every pending item of every gate on this page, for the one Review Queue
+  // (D-164). Script branches are listed whole here: their sections load on
+  // the page itself.
+  function queueItems() {
+    const rows = [];
+    GATES.forEach(function (gate) {
+      const config = CONFIGS[gate];
+      if (gate === "script") {
+        scripts().forEach(function (branch) {
+          if (String(branch.decision || "PENDING").toUpperCase() !== "PENDING") return;
+          rows.push({
+            route: "/review", subroute: "script", gate: "Script", group: GATE_GROUPS[gate],
+            title: (branch.title || branch.concept_id) + " · " + words(branch.format) + " script",
+            concept_id: branch.concept_id
+          });
+        });
+        return;
+      }
+      config.all().filter(function (item) { return item && isPending(gate, item); }).forEach(function (item) {
+        rows.push({
+          route: "/review", subroute: gate + "/" + encodeURIComponent(config.key(item)),
+          gate: config.label, group: GATE_GROUPS[gate],
+          title: String(config.title(item) || ""), concept_id: item.concept_id || ""
+        });
+      });
+    });
+    return rows;
+  }
+
   window.GateReviews = {
+    queueItems: queueItems,
     open: open,
     show: function () {
       if (window.location.pathname === "/review") open(window.location.hash.slice(1));

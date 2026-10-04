@@ -13,7 +13,10 @@
   const RATIOS = [[0, "Any ratio"], [3, "≥ 3×"], [5, "≥ 5×"], [10, "≥ 10×"]];
   const AGES = [[0, "Any age"], [7, "≤ 7 days"], [3, "≤ 3 days"]];
   const FILTER_KEY = "radarFilters";
-  const DEFAULT_FILTERS = { lane: "lane", minRatio: 3, maxDay: 0 };
+  const DEFAULT_FILTERS = { lane: "lane", minRatio: 3, maxDay: 0, order: "ratio" };
+  // Order: by outlier, or by what you tend to pick (D-165, once learned).
+  const ORDERS = [["ratio", "Strongest outlier"], ["taste", "What I pick"]];
+  const TASTE_LABEL = { LIKELY: "like your picks", UNSURE: "unsure", UNLIKELY: "unlike your picks" };
   const LANE_LABEL = { ON_LANE: "on lane", UNCLEAR: "unclear lane", OFF_LANE: "off lane", OTHER_LANGUAGE: "other language" };
 
   let overview = null;
@@ -59,6 +62,43 @@
     if (filtersState.minRatio && !((theme.strongest_ratio || 0) >= filtersState.minRatio)) return false;
     if (filtersState.maxDay && !rows.some(function (r) { return r.day != null && r.day <= filtersState.maxDay; })) return false;
     return true;
+  }
+
+  function learning() {
+    return (overview && overview.learning) || { active: false, decisions: 0, needed: 20 };
+  }
+
+  function orderActive() {
+    return filtersState.order === "taste" && learning().active;
+  }
+
+  function tasteBadge(row) {
+    if (!learning().active || !row || !row.taste_label) return "";
+    const tone = row.taste_label === "LIKELY" ? "complete" : row.taste_label === "UNLIKELY" ? "blocked" : "ready";
+    return ' <span class="status-badge status-' + tone + '" title="Learned from your Approve, Watch, Save and Reject decisions">' +
+      esc(TASTE_LABEL[row.taste_label] || words(row.taste_label)) + "</span>";
+  }
+
+  function byOrder(a, b, ratioA, ratioB) {
+    if (orderActive()) {
+      const ta = a.taste == null ? -2 : a.taste;
+      const tb = b.taste == null ? -2 : b.taste;
+      if (tb !== ta) return tb - ta;
+    }
+    return (ratioB || 0) - (ratioA || 0);
+  }
+
+  function learningNote() {
+    const state = learning();
+    if (state.active) {
+      const strongest = state.strongest || { for: [], against: [] };
+      return '<p class="muted radar-learning">Learned from ' + esc(String(state.decisions)) + " of your decisions" +
+        (strongest.for.length ? ". Words you pick: " + esc(strongest.for.slice(0, 6).join(", ")) : "") +
+        (strongest.against.length ? ". Words you reject: " + esc(strongest.against.slice(0, 6).join(", ")) : "") + ".</p>";
+    }
+    return '<p class="muted radar-learning">\"What I pick\" ordering starts after ' + esc(String(state.needed || 20)) +
+      " Approve, Watch, Save or Reject decisions on radar candidates, with at least " + esc(String(state.needed_each_side || 5)) +
+      " on each side (" + esc(String(state.decisions || 0)) + " so far).</p>";
   }
 
   function laneBadge(lane) {
@@ -171,15 +211,17 @@
 
   function filters(hidden) {
     const isDefault = filtersState.lane === DEFAULT_FILTERS.lane && filtersState.minRatio === DEFAULT_FILTERS.minRatio &&
-      filtersState.maxDay === DEFAULT_FILTERS.maxDay && formatFilter === "all";
+      filtersState.maxDay === DEFAULT_FILTERS.maxDay && filtersState.order === DEFAULT_FILTERS.order && formatFilter === "all";
     return '<div class="radar-filters">' +
       pills("Lane", LANES, filtersState.lane, "data-radar-lane") +
       pills("Minimum outlier", RATIOS, filtersState.minRatio, "data-radar-ratio") +
       pills("Freshness", AGES, filtersState.maxDay, "data-radar-age") +
       pills("Format", FORMATS, formatFilter, "data-radar-format") +
+      (learning().active ? pills("Order", ORDERS, filtersState.order, "data-radar-order") : "") +
       '<span class="muted radar-note">' + (hidden ? esc(String(hidden)) + " hidden by these filters. " : "") +
         (isDefault ? "Default: your lane, at least 3× the channel's normal." : '<button type="button" class="ghost compact" data-radar-reset>Reset filters</button>') +
       "</span>" +
+      learningNote() +
     "</div>";
   }
 
@@ -196,7 +238,7 @@
     const evidenceId = theme.top_opportunity_id && yp().inboxItem(theme.top_opportunity_id) ? theme.top_opportunity_id : "";
     const videos = (theme.videos || []).map(function (video) {
       return "<li>" + watchLink(video.video_id, video.title || video.video_id) + ' <span class="muted">· ' + esc(video.channel_title || "") +
-        " · " + esc(ratio(video.lifetime_ratio)) + (video.day != null ? " · day " + esc(String(video.day)) : "") + " · " + esc(words(video.trajectory)) + "</span></li>";
+        " · " + esc(ratio(video.lifetime_ratio)) + (video.day != null ? " · day " + esc(String(video.day)) : "") + " · " + esc(words(video.trajectory)) + "</span>" + tasteBadge(video) + "</li>";
     }).join("");
     return '<article class="theme-card' + (replicated ? " replicated" : "") + '">' +
       '<div class="theme-head"><p class="attention-kicker">' + esc(replicated ? "Replicated breakout" : words(theme.breadth || "one off")) +
@@ -226,7 +268,7 @@
     const statusLabel = status ? words(status) : "excluded or not in inbox";
     return '<article class="tracked-row">' +
       '<div class="tracked-main"><h3 class="production-title">' + watchLink(row.video_id, row.title || row.video_id) + "</h3>" +
-        '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format === "short" ? "Short" : "Long-form") + " · " + statusLabel) + laneBadge(row.lane) + "</p></div>" +
+        '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format === "short" ? "Short" : "Long-form") + " · " + statusLabel) + laneBadge(row.lane) + tasteBadge(row) + "</p></div>" +
       '<div class="tracked-day"><strong>' + esc(row.day == null ? "—" : "Day " + row.day + " / " + row.window_days) + "</strong></div>" +
       '<div class="tracked-ratio"><strong>' + esc(ratio(row.lifetime_ratio)) + '</strong><span class="muted">channel normal</span></div>' +
       '<div class="tracked-trend">' + sparkline(row.series, row.title || row.video_id) + "</div>" +
@@ -248,13 +290,14 @@
     themes.sort(function (a, b) {
       const ra = (a.independent_channel_count || 0) >= 2 ? 0 : 1;
       const rb = (b.independent_channel_count || 0) >= 2 ? 0 : 1;
-      return ra - rb || (b.strongest_ratio || 0) - (a.strongest_ratio || 0);
+      return ra - rb || byOrder(a, b, a.strongest_ratio, b.strongest_ratio);
     });
     const allTracked = overview.tracked || [];
     // Watched videos always show: you asked to follow them.
     const tracked = allTracked.filter(function (row) { return inboxStatus(row.opportunity_id) === "WATCHING" || rowPasses(row); });
     const watching = tracked.filter(function (row) { return inboxStatus(row.opportunity_id) === "WATCHING"; });
-    const others = tracked.filter(function (row) { return inboxStatus(row.opportunity_id) !== "WATCHING"; });
+    const others = tracked.filter(function (row) { return inboxStatus(row.opportunity_id) !== "WATCHING"; })
+      .sort(function (a, b) { return byOrder(a, b, a.lifetime_ratio, b.lifetime_ratio); });
     hiddenCount = (allThemes.length - themes.length) + (allTracked.length - tracked.length);
     return (error ? '<p class="radar-error">' + esc(error) + "</p>" : "") +
       '<section class="cc-section" aria-labelledby="radarEmergingTitle"><div class="cc-section-head"><h2 id="radarEmergingTitle">Emerging now</h2>' +
@@ -268,7 +311,7 @@
           : '<p class="empty-state">Nothing watched. Choose Watch in Opportunity Review to follow a breakout here.</p>') +
       "</section>" +
       '<section class="cc-section" aria-labelledby="radarTrackedTitle"><div class="cc-section-head"><h2 id="radarTrackedTitle">All tracked videos</h2>' +
-        '<p class="muted">Strongest outlier first.</p></div>' +
+        '<p class="muted">' + (orderActive() ? "What you tend to pick first, then strongest outlier." : "Strongest outlier first.") + "</p></div>" +
         (others.length ? '<div class="production-list">' + others.map(trackedRow).join("") + "</div>"
           : '<p class="empty-state">No other tracked videos.</p>') +
       "</section>";
@@ -329,11 +372,13 @@
     const lane = event.target.closest("[data-radar-lane]");
     const ratioPill = event.target.closest("[data-radar-ratio]");
     const age = event.target.closest("[data-radar-age]");
+    const order = event.target.closest("[data-radar-order]");
     const reset = event.target.closest("[data-radar-reset]");
-    if (lane || ratioPill || age || reset) {
+    if (lane || ratioPill || age || order || reset) {
       if (lane) filtersState.lane = lane.dataset.radarLane;
       if (ratioPill) filtersState.minRatio = Number(ratioPill.dataset.radarRatio);
       if (age) filtersState.maxDay = Number(age.dataset.radarAge);
+      if (order) filtersState.order = order.dataset.radarOrder === "taste" ? "taste" : "ratio";
       if (reset) { filtersState = Object.assign({}, DEFAULT_FILTERS); formatFilter = "all"; }
       saveFilters();
       paint();

@@ -282,6 +282,12 @@ to match the redesign's navigation:
   - **Shortlist filters (D-162):** lane (my lane / everything, from
     `opportunity_engine/radar_lane_config.json`), minimum outlier, freshness
     and format; replicated themes pinned first; the bar counts what it hides.
+  - **What I pick (D-165):** after 20 Approve / Watch / Save / Reject
+    decisions on radar candidates (at least 5 each way) the page learns a
+    word model from them, shows "like your picks" / "unlike your picks"
+    beside each video, names the strongest words for and against, and
+    offers an Order pill: strongest outlier, or what you pick. Nothing is
+    hidden by it. Until then the filter bar says how many decisions it has.
 - `/opportunity/review` — **Opportunity Review** (D-116): the Human Opportunity
   Gate on the shared review workspace. The inbox's "Needs review" items are
   shown one at a time. Evidence is on the left: summary, rule-backed "why this
@@ -293,8 +299,13 @@ to match the redesign's navigation:
 - `/productions` — **Productions** (D-117): one row per accepted concept with
   its stage, status, what it waits on, when its files last changed, and a stage
   bar. "Open →" goes to the Production Workspace. The tabs are Active, Review
-  Queue and Completed. **Review Queue** lists every decision waiting, across
-  productions and the opportunity inbox, with "Start review queue →". "+ New"
+  Queue and Completed. **Review Queue** (D-164) lists every pending item of
+  every gate, with the gate as a label: your decisions first (Concept,
+  Research, Script, Final package, Format, Voice, Budget, Footage rights,
+  Final export, Publish…), then a production waiting on you without a gate
+  item, then the ideas inbox, then what the gate policy held. Each row opens
+  that item on its page; "Start review queue →" opens the first. The nav
+  item carries the count. "+ New"
   goes to Opportunities, because a production starts from an accepted concept.
   - **One Continue per row (D-163).** Each production row (and
     the Production Workspace) shows a blocker line when the last automatic

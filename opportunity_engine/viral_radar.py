@@ -44,7 +44,14 @@ from experiment_01_discovery.market_intelligence import (  # noqa: E402
     calculate_snapshot_velocity,
     load_snapshot_history,
 )
-from opportunity_engine import channel_scope, historical_adapter, models, radar_lane, viral_cluster  # noqa: E402
+from opportunity_engine import (  # noqa: E402
+    channel_scope,
+    historical_adapter,
+    models,
+    radar_lane,
+    radar_learning,
+    viral_cluster,
+)
 from opportunity_engine.human_video_intake import (  # noqa: E402
     VIDEO_ID_PATTERN,
     _iso8601_seconds,
@@ -1041,6 +1048,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
         if member.get("video_id")
     }
     series = _snapshot_series(ids)
+    taste = taste_model()
 
     def video_row(video_id: str, record: dict[str, Any]) -> dict[str, Any]:
         video = record.get("video") or {}
@@ -1048,10 +1056,13 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
         published = _parse_time(video.get("published_at"))
         age = (now - published).total_seconds() / 3600 if published else _float(metrics.get("age_hours"))
         lane = radar_lane.classify(video.get("title"), video.get("channel_title"))
+        score = taste.score(video.get("title"), video.get("channel_id"))
         return {
             "video_id": video_id,
             "lane": lane["lane"],
             "lane_hits": lane["hits"],
+            "taste": score,
+            "taste_label": radar_learning.taste_label(score),
             "opportunity_id": opportunity_id(models.SOURCE_VIRAL_RADAR, video_id),
             "title": video.get("title"),
             "channel_title": video.get("channel_title"),
@@ -1093,6 +1104,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
                 "independent_channel_count": cluster.get("independent_channel_count"),
                 "member_count": cluster.get("member_count", len(members)),
                 "lane": radar_lane.theme_lane([row["lane"] for row in rows]),
+                "taste": max((r["taste"] for r in rows if r.get("taste") is not None), default=None),
                 "strongest_ratio": ratios_[-1] if ratios_ else None,
                 "median_ratio": _median(ratios_),
                 "direction": top.get("trajectory") if top else None,
@@ -1102,7 +1114,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
                 "top_opportunity_id": top.get("opportunity_id") if top else None,
                 "momentum": top.get("series") if top else [],
                 "videos": [
-                    {k: row[k] for k in ("video_id", "opportunity_id", "title", "channel_title", "lifetime_ratio", "trajectory", "lane", "day")}
+                    {k: row[k] for k in ("video_id", "opportunity_id", "title", "channel_title", "lifetime_ratio", "trajectory", "lane", "day", "taste", "taste_label")}
                     for row in sorted(rows, key=lambda row: -(row["lifetime_ratio"] or 0))
                 ],
             }
@@ -1118,8 +1130,20 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
         "window_days": window_days,
         "themes": themes,
         "tracked": videos,
+        "learning": taste.status(),
         "status": status_snapshot(),
     }
+
+
+def taste_model() -> radar_learning.TasteModel:
+    """What the operator picks, learned from inbox decisions on radar packets (D-165)."""
+    from opportunity_engine import inbox  # the inbox imports this module
+
+    try:
+        items = inbox.load_state().get("items") or {}
+    except (OSError, ValueError, AttributeError):
+        items = {}
+    return radar_learning.TasteModel(radar_learning.examples(items, list_packets()))
 
 
 def status_snapshot() -> dict[str, Any]:

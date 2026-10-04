@@ -494,7 +494,7 @@ class ShellMarkupTests(unittest.TestCase):
         script = (STATIC / "js" / "radar.js").read_text(encoding="utf-8")
         for attr in ("data-radar-lane", "data-radar-ratio", "data-radar-age", "data-radar-reset", "data-radar-format"):
             self.assertIn(attr, script)
-        self.assertIn('DEFAULT_FILTERS = { lane: "lane", minRatio: 3, maxDay: 0 }', script)
+        self.assertIn('DEFAULT_FILTERS = { lane: "lane", minRatio: 3, maxDay: 0, order: "ratio" }', script)
         self.assertIn("independent_channel_count || 0) >= 2 ? 0 : 1", script)
         self.assertIn('localStorage.setItem(FILTER_KEY', script)
 
@@ -514,3 +514,88 @@ class ShellMarkupTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewQueueTests(unittest.TestCase):
+    """The one Review Queue (D-164): every gate's pending items, in one order."""
+
+    HARNESS = r"""
+const fs = require("fs");
+const vm = require("vm");
+const calls = [];
+global.window = {
+  location: { pathname: "/", hash: "" },
+  GateReviews: { queueItems: () => [
+    { route: "/review", subroute: "research/c1%3A%3Aclm1", gate: "Research", group: "yours", title: "A claim", concept_id: "c1" },
+    { route: "/review", subroute: "format/c2", gate: "Format", group: "policy", title: "Plan c2", concept_id: "c2" }
+  ] },
+  Packaging: { queueItems: () => [
+    { route: "/packaging", subroute: "final/v1", gate: "Final package", group: "yours", title: "Video 1", concept_id: "c3" }
+  ] },
+  Produce: { queueItems: () => { throw new Error("not ready"); } }
+};
+global.document = { addEventListener: () => {}, getElementById: () => null, querySelectorAll: () => [] };
+global.history = { replaceState: () => {} };
+vm.runInThisContext(fs.readFileSync(process.argv[2], "utf8"));
+const data = {
+  productions: { productions: [
+    { concept_id: "c1", title: "Concept one", status: "HUMAN_REVIEW", stage_label: "Research", detail: "1 claim" },
+    { concept_id: "c4", title: "Concept four", status: "HUMAN_REVIEW", stage_label: "Research", detail: "Not ready: 1 question unanswered." },
+    { concept_id: "c5", title: "Concept five", status: "READY", stage_label: "Script", detail: "" }
+  ] },
+  opportunity_inbox: { items: [ { opportunity_id: "opp_1", status: "NEEDS_REVIEW", title: "Idea", source_label: "radar" } ] }
+};
+process.stdout.write(JSON.stringify(window.CommandCenter._test.reviewQueue(data)));
+"""
+
+    def test_queue_lists_items_then_productions_then_inbox_then_policy(self) -> None:
+        import shutil
+        import subprocess
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            harness = Path(tmp) / "harness.js"
+            harness.write_text(self.HARNESS, encoding="utf-8")
+            result = subprocess.run(  # noqa: S603 - fixed argument list
+                [node, str(harness), str(STATIC / "js" / "command-center.js")],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        queue = json.loads(result.stdout)
+        self.assertEqual(
+            [(row["kind"], row["title"]) for row in queue],
+            [
+                ("Research Gate", "A claim"),
+                ("Final package Gate", "Video 1"),
+                ("Research", "Concept four"),
+                ("Opportunity · radar", "Idea"),
+                ("Format · held by gate policy", "Plan c2"),
+            ],
+        )
+        self.assertEqual(queue[0]["detail"], "Concept one")
+        self.assertEqual(queue[0]["route"], "/review")
+        self.assertEqual(queue[0]["subroute"], "research/c1%3A%3Aclm1")
+        self.assertNotIn("Concept one", [row["title"] for row in queue])
+
+    def test_every_gate_page_exposes_its_queue_items(self) -> None:
+        for name in ["js/gate-reviews.js", "js/packaging.js", "js/produce.js"]:
+            with self.subTest(source=name):
+                text = (STATIC / name).read_text(encoding="utf-8")
+                self.assertIn("function queueItems()", text)
+                self.assertIn("queueItems: queueItems", text)
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="navReviewQueueCount"', html)
+
+
+class RadarLearningContractTests(unittest.TestCase):
+    """The radar page orders by what you pick only once the model is active (D-165)."""
+
+    def test_order_pills_and_taste_badges_are_gated_on_learning(self) -> None:
+        text = (STATIC / "js" / "radar.js").read_text(encoding="utf-8")
+        self.assertIn('(learning().active ? pills("Order", ORDERS, filtersState.order, "data-radar-order") : "")', text)
+        self.assertIn("function tasteBadge(row)", text)
+        self.assertIn("if (!learning().active || !row || !row.taste_label) return \"\";", text)
+        self.assertIn('order: "ratio"', text)
+        self.assertIn("function learningNote()", text)

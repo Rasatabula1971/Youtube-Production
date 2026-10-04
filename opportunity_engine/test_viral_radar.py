@@ -331,6 +331,42 @@ class OverviewTests(RadarTestCase):
     def test_overview_without_files_is_empty(self):
         overview = vr.radar_overview(now=NOW)
         self.assertEqual((overview["themes"], overview["tracked"]), ([], []))
+        self.assertFalse(overview["learning"]["active"])
+        self.assertEqual(overview["learning"]["decisions"], 0)
+
+    def test_overview_learns_taste_from_inbox_decisions(self):
+        """D-165: enough Save/Reject decisions on radar packets rank the tracked rows."""
+        from opportunity_engine import inbox
+
+        self.write_fixture()
+        picks = ["How brakes stop a car", "Why tyres do not burst", "How a jet engine works",
+                 "How glass stops a bullet", "Why bridges sway", "How a fridge makes cold",
+                 "How airbags fire", "Why magnets stick", "How turbines spin", "How popcorn pops"]
+        rejects = ["Social security for seniors", "Chest workout for muscle", "Crypto crash",
+                   "Atlantis history for sleep", "Tax brackets 2026", "Leg day for lifters",
+                   "Bitcoin news", "Hypertrophy tips", "Medicare guide", "Templar bloodline"]
+        items = {}
+        vr.PACKETS_DIR.mkdir(parents=True, exist_ok=True)
+        for n, title in enumerate(picks + rejects):
+            video_id = f"L{n:010d}"
+            packet = {"opportunity_id": "opp_viral_radar__" + video_id, "source_type": "VIRAL_RADAR",
+                      "title": title, "candidate_videos": [{"video_id": video_id, "title": title, "channel_id": CH2 if n >= len(picks) else CH}]}
+            (vr.PACKETS_DIR / f"{video_id}.json").write_text(json.dumps(packet), encoding="utf-8")
+            items[packet["opportunity_id"]] = {"status": "SAVED" if n < len(picks) else "REJECTED"}
+        state_file = self.root / "inbox_state.json"
+        state_file.write_text(json.dumps({"schema_version": 1, "items": items}), encoding="utf-8")
+        with patch.object(inbox, "STATE_FILE", state_file):
+            overview = vr.radar_overview(now=NOW)
+        self.assertTrue(overview["learning"]["active"])
+        self.assertEqual(overview["learning"]["decisions"], 20)
+        by_id = {row["video_id"]: row for row in overview["tracked"]}
+        self.assertIn(by_id[vid(1)]["taste_label"], ("LIKELY", "UNSURE", "UNLIKELY"))
+        self.assertIsNotNone(by_id[vid(1)]["taste"])
+        # The brake-cooling fixture is on the picked channel and uses no rejected words.
+        self.assertGreater(by_id[vid(1)]["taste"], 0)
+        theme = next(t for t in overview["themes"] if t["cluster_id"] == "cl_x")
+        self.assertIsNotNone(theme["taste"])
+        self.assertIn("taste_label", theme["videos"][0])
 
     def test_sparkline_series_is_downsampled(self):
         vr.RADAR_DIR.mkdir(parents=True, exist_ok=True)
