@@ -97,9 +97,37 @@ def local_check(text: str, request: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float, strict: bool = False) -> dict[str, Any]:
+def inspect_requests() -> list[dict[str, Any]]:
+    """Compare every concept request without calling a model."""
+    rows = []
+    for path in sorted(REQUESTS_DIR.glob("*.concept_request.json")):
+        request = json.loads(path.read_text(encoding="utf-8"))
+        template = (request.get("response_schema") or {}).get("concepts") or [{}]
+        example = template[0] if isinstance(template, list) and template and isinstance(template[0], dict) else {}
+        run = OUTPUT_DIR / "concept_model_runs" / f"{path.name.split('.')[0]}.model_run.json"
+        status = json.loads(run.read_text(encoding="utf-8")).get("status") if run.is_file() else None
+        rows.append({
+            "mechanism_id": request.get("mechanism_id"),
+            "last_run_status": status,
+            "concept_count_requested": request.get("concept_count_requested"),
+            "request_chars": len(json.dumps(request, ensure_ascii=False)),
+            "template_has_human_framing": "human_framing" in example,
+            "template_has_viewer_need_evidence": "viewer_need_evidence" in example,
+            "has_human_framing_contract": bool(request.get("human_framing_contract")),
+            "observed_examples": len(request.get("observed_examples") or []),
+            "transferable_descriptions": len(request.get("transferable_descriptions") or []),
+            "viewer_need_signal_context": len(request.get("viewer_need_signal_context") or []),
+            "source_elements_to_avoid": len(request.get("source_specific_elements_to_avoid") or []),
+        })
+    return rows
+
+
+def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float, strict: bool = False,
+             count: int | None = None) -> dict[str, Any]:
     request_path = REQUESTS_DIR / f"{safe_slug(mechanism)}.concept_request.json"
     request = json.loads(request_path.read_text(encoding="utf-8"))
+    if count:
+        request["concept_count_requested"] = int(count)
     config = runner.load_runner_config()
     prompt = runner.build_prompt(request, maximum_chars=int(config["runner"].get("max_prompt_chars", 95000)))
     schema = runner.provider_schema(runner.response_schema(request))
@@ -146,7 +174,7 @@ def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float, strict
         report["answer_check"] = local_check(text, request)
 
     DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
-    stem = f"{safe_slug(mechanism)}.{safe_slug(model)}" + (".strict" if strict else "")
+    stem = f"{safe_slug(mechanism)}.{safe_slug(model)}" + (".strict" if strict else "") + (f".n{count}" if count else "")
     (DIAGNOSTICS_DIR / f"{stem}.txt").write_text(text, encoding="utf-8")
     report["text_file"] = str(DIAGNOSTICS_DIR / f"{stem}.txt")
     (DIAGNOSTICS_DIR / f"{stem}.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -155,13 +183,20 @@ def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float, strict
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Diagnose a failing concept mechanism on Groq")
-    parser.add_argument("--mechanism", required=True)
+    parser.add_argument("--mechanism")
+    parser.add_argument("--inspect", action="store_true", help="compare the concept requests; no model call")
+    parser.add_argument("--count", type=int, help="ask for this many concepts instead of the request's number")
     parser.add_argument("--model", default="openai/gpt-oss-120b")
     parser.add_argument("--max-tokens", type=int, default=32768)
     parser.add_argument("--timeout", type=float, default=300)
     parser.add_argument("--strict", action="store_true", help="ask Groq for constrained (strict) decoding")
     args = parser.parse_args()
-    report = diagnose(args.mechanism, args.model, args.max_tokens, args.timeout, strict=args.strict)
+    if args.inspect:
+        print(json.dumps(inspect_requests(), indent=2, ensure_ascii=False))
+        return
+    if not args.mechanism:
+        parser.error("--mechanism is required unless --inspect is given")
+    report = diagnose(args.mechanism, args.model, args.max_tokens, args.timeout, strict=args.strict, count=args.count)
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
 

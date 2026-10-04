@@ -26,7 +26,7 @@ class ConceptDiagnoseTests(unittest.TestCase):
     def runner_config(self):
         return FIXTURES.runner_config()
 
-    def run_diagnose(self, status, payload, strict=False):
+    def run_diagnose(self, status, payload, strict=False, count=None):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "curiosity_gap.concept_request.json").write_text(json.dumps(self.request()), encoding="utf-8")
@@ -37,7 +37,7 @@ class ConceptDiagnoseTests(unittest.TestCase):
                 patch.object(diag, "groq_key", return_value="k"),
                 patch.object(diag, "post", return_value=(status, payload)) as post,
             ):
-                report = diag.diagnose("curiosity_gap", "openai/gpt-oss-120b", 32768, 30, strict=strict)
+                report = diag.diagnose("curiosity_gap", "openai/gpt-oss-120b", 32768, 30, strict=strict, count=count)
                 saved = json.loads(Path(report["text_file"]).with_suffix(".json").read_text())
             body = post.call_args.args[0]
         self.assertEqual(saved["http_status"], status)
@@ -85,3 +85,17 @@ class ConceptDiagnoseTests(unittest.TestCase):
         self.assertTrue(report["strict"])
         self.assertTrue(report["text_file"].endswith(".strict.txt"))
         self.assertEqual(report["answer_check"]["accepted"], 1)
+
+    def test_count_overrides_the_request_and_inspect_compares_requests(self):
+        content = json.dumps({"mechanism_id": "curiosity_gap", "concepts": [self.valid_concept()]})
+        report = self.run_diagnose(200, {"choices": [{"finish_reason": "stop", "message": {"content": content}}]}, count=2)
+        self.assertEqual(report["concept_count_requested"], 2)
+        self.assertIn(".n2.", report["text_file"])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "curiosity_gap.concept_request.json").write_text(json.dumps(self.request()), encoding="utf-8")
+            with patch.object(diag, "REQUESTS_DIR", root), patch.object(diag, "OUTPUT_DIR", root):
+                rows = diag.inspect_requests()
+        self.assertEqual(rows[0]["mechanism_id"], "curiosity_gap")
+        self.assertIn("template_has_human_framing", rows[0])
+        self.assertIsNone(rows[0]["last_run_status"])
