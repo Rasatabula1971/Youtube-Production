@@ -8927,6 +8927,16 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         security_error = self._post_security_error()
         if security_error:
+            # Read (and discard) a small body before refusing. On Windows,
+            # closing a socket with unread data resets the connection, so the
+            # client would see "connection aborted" instead of the 403.
+            try:
+                pending = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                pending = 0
+            if 0 < pending <= 1_000_000:
+                self.rfile.read(pending)
+            self.close_connection = True
             self._send_json({"error": security_error}, 403)
             return
 
