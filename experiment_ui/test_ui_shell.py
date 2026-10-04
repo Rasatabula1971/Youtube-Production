@@ -293,7 +293,7 @@ class ShellMarkupTests(unittest.TestCase):
 
         script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
         tabs = re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("let activeTab")[0])
-        self.assertEqual(len(tabs), 10)
+        self.assertEqual(len(tabs), 11)
         for tab in tabs:
             with self.subTest(tab=tab):
                 self.assertIn(f'id="produce-{tab}"', self.html)
@@ -332,6 +332,7 @@ class ShellMarkupTests(unittest.TestCase):
             "/api/final-audio-gate",
             "/api/visual-plan-gate",
             "/api/visual-dispatch",
+            "/api/publish-gate",
             "/api/visual-candidate-review",
             "/api/visual-rights-review",
             "/api/visual-rough-cut-review",

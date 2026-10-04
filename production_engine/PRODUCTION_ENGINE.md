@@ -287,6 +287,59 @@ PASS result. Partial branch coverage cannot report a global PASS.
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
 
+## Publish package and Human Publish Gate (D-142)
+
+For every approved final export, `publish_review.py` assembles the publish
+package, shown on `/produce#publish`:
+
+- the exact rendered video;
+- the approved thumbnail and the exact title from the Final Packaging Gate;
+- a description: the viewer promise, the verified research sources (web URLs
+  only, deduplicated) and an AI-voice disclosure line;
+- category, language, made-for-kids, privacy (private by default), an
+  optional schedule, tags, and the altered/synthetic content flag (on by
+  default).
+
+You can edit the description, tags, privacy, schedule and synthetic flag.
+The title cannot be edited here.
+
+**Approve.** `APPROVE_PUBLISH` checks YouTube's limits:
+
+- title up to 100 characters, with no angle brackets;
+- description up to 5,000 bytes;
+- tags totalling up to 500 characters;
+- a schedule must be in the future, have a time zone and use private
+  privacy.
+
+The approval is bound to the export approval, the final package bundle and
+the research hashes. `HOLD` needs a note.
+
+**Recording the upload.** After an upload the YouTube video id is recorded
+once in `output/published_videos/<key>.publish_record.json`, either by the
+uploader or by hand ("Record a manual upload"). A published video cannot be
+approved or uploaded again.
+
+## YouTube upload (D-143)
+
+`youtube_upload.py` uploads an approved package through the YouTube Data API
+v3:
+
+1. It exchanges the OAuth refresh token for an access token.
+2. It starts a resumable `videos.insert` upload with the exact metadata,
+   including `status.containsSyntheticMedia` and `publishAt`.
+3. It sends the video bytes.
+4. It calls `thumbnails.set`.
+
+**Before uploading** it re-checks the approval and the video and thumbnail
+hashes, and refuses a video that already has a publish record.
+
+**If the thumbnail fails**, the uploaded video is still recorded (with
+`thumbnail_set: false`), so a retry never uploads a duplicate.
+
+**Off by default.** Setting it up takes `youtube_upload.enabled: true` in
+`publish_config.json` plus the three `YOUTUBE_OAUTH_*` values in `.env`.
+Until then, use the manual upload record.
+
 ## Paid premium-visual dispatch (D-140)
 
 `visual_dispatch.py` generates variants for a shot that was authorized at

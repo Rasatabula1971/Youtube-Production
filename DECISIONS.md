@@ -4275,3 +4275,74 @@ more than authorized, or trust input they should not:
 - A narration whose segments used up their attempts in failed batches needs
   a new spend approval, which resets the count, rather than paying again
   silently.
+
+
+## D-142 — A publish package and a Human Publish Gate
+
+**Status:** Accepted (vision: publishing)
+
+**Context.** The Final Export Gate approves the exact rendered bytes and
+records `upload_authorized: false`. Nothing assembled what YouTube needs,
+and nothing recorded which video id an approved export became.
+
+**Decision.**
+- **Package.** `production_engine/publish_review.py` builds a publish
+  package for every current approved final export:
+  - the render file and hash;
+  - the exact title, approved thumbnail and viewer promise from the final
+    package bundle;
+  - a description with the verified research sources and an AI-voice
+    disclosure;
+  - category, language, made-for-kids, privacy (private by default),
+    optional schedule, tags, and the altered/synthetic content flag (on by
+    default).
+- **Edits.** The human may edit everything except the title. The title stays
+  the one approved at the Final Packaging Gate.
+- **Approval.** APPROVE_PUBLISH validates YouTube's limits and binds the
+  approval to the export approval, bundle and research hashes. HOLD needs a
+  note.
+- **Publish record.** The YouTube video id is recorded once, either by the
+  uploader (D-143) or by hand. A published video cannot be approved or
+  uploaded again.
+- **Workflow.** New stops: `HUMAN_PUBLISH_GATE`, `WAITING_FOR_UPLOAD` and
+  `PUBLISHED`. The UI is the `/produce#publish` tab, and the route
+  `/api/publish-gate` is locked during jobs.
+
+**Consequences.**
+- The pipeline now ends at a recorded YouTube video id, which the learning
+  phase needs to fetch the video's analytics.
+- The synthetic-content flag defaults to on because the narration is an AI
+  voice. Turning it off is a deliberate human choice, recorded with the
+  approval.
+
+
+## D-143 — Direct YouTube upload with the owner's OAuth credentials
+
+**Status:** Accepted (off until the human configures OAuth)
+
+**Context.** Even with an approved publish package, the video, thumbnail and
+metadata had to be uploaded by hand.
+
+**Decision.**
+- **Upload.** `production_engine/youtube_upload.py` uploads an approved
+  package through the YouTube Data API v3:
+  - a refresh-token exchange;
+  - a resumable `videos.insert` with the exact approved snippet and status,
+    including `containsSyntheticMedia` and `publishAt`;
+  - then `thumbnails.set`.
+- **Safeguards.**
+  - Before uploading it re-checks the approval and the exact video and
+    thumbnail bytes.
+  - It runs once per video, under a lock.
+  - It records the video id even if setting the thumbnail fails, so a retry
+    never creates a duplicate.
+- **Setup.** Off until `youtube_upload.enabled` is true and the client id,
+  client secret and refresh token are set in `.env`.
+- **UI.** The Publish tab offers "Upload to YouTube" (with a confirmation
+  step) when the uploader is ready, and "Record a manual upload" always.
+
+**Consequences.**
+- Credentials stay in `.env` on the laptop. The app never stores an access
+  token.
+- Uploads default to private. A scheduled video stays private until YouTube
+  publishes it at `publishAt`.

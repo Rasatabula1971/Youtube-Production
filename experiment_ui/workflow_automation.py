@@ -284,6 +284,9 @@ def run_until_human_gate() -> dict[str, Any]:
             "HUMAN_FINAL_EXPORT_GATE",
             "FINAL_EXPORT_REWORK_REQUIRED",
             "FINAL_EXPORT_APPROVED",
+            "HUMAN_PUBLISH_GATE",
+            "WAITING_FOR_UPLOAD",
+            "PUBLISHED",
             "HUMAN_FINAL_PACKAGING_GATE",
             "FINAL_PACKAGING_REJECTED",
         }:
