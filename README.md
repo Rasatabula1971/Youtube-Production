@@ -275,9 +275,11 @@ these steps:
 5. **Rendering** from a locked template with a supplied subject image, at a
    human thumbnail gate (D-098).
 6. **Title-thumbnail pairing** with hard truth overrides (D-096).
-7. **One final package** at the Final Packaging Gate (D-099).
+7. **One final package** at the Final Packaging Gate (D-099), led by a 2–3
+   title shortlist ranked from the pair validations (D-134).
 
-No CTR prediction or winner score is produced. The older pre-script packaging
+No CTR prediction or viral score is produced; the shortlist rank is an
+explained ordering of validation results. The older pre-script packaging
 flow (D-040, D-041) is disabled in normal readiness and kept only for legacy
 artifacts.
 

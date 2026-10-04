@@ -7,7 +7,9 @@ accepted. When no pair is good enough the reviewer routes targeted rework to
 the layer that is actually weak: the title directions, the thumbnail concepts
 or the script branch.
 
-Accepted packages for every format of a concept form a hash-bound final
+The reviewer is shown a 2–3 title shortlist first (D-134): every title is
+ranked from its pair validations, and accepting a title outside the shortlist
+needs a note. Accepted packages for every format of a concept form a hash-bound final
 package bundle. Format planning consumes that bundle and goes stale when it
 changes.
 """
@@ -34,6 +36,7 @@ from pipeline_integrity import atomic_write_json
 import package_pairing
 from packaging_brief import load_json
 from story_script_engine import safe_slug
+from title_shortlist import build_shortlist, shortlist_settings
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "final_packaging_gate_config.json"
@@ -191,6 +194,7 @@ def _package_view(
         "promise_alignment_reason": package.get("promise_alignment_reason"),
         "hook_alignment_status": package.get("hook_alignment_status"),
         "hook_alignment_reason": package.get("hook_alignment_reason"),
+        "semantic_redundancy": package.get("semantic_redundancy"),
         "diagnostics": package.get("diagnostics", {}),
         "hard_validation_findings": package.get("hard_validation_findings", []),
         "rework_findings": package.get("rework_findings", []),
@@ -252,10 +256,19 @@ def _items(
     for video_id in sorted(grouped):
         raw = grouped[video_id]
         first = raw[0]
+        views = [_package_view(p, config=config, approvals=approvals) for p in raw]
+        shortlist = build_shortlist(views, shortlist_settings(config))
+        rank = {title_id: index for index, title_id in enumerate(shortlist["title_ids"])}
+        for view in views:
+            view["in_title_shortlist"] = view["title_id"] in rank
+        # Shortlisted titles first (PASS pairs first, then shortlist order); the
+        # rest stay reachable.
         packages = sorted(
-            (_package_view(p, config=config, approvals=approvals) for p in raw),
+            views,
             key=lambda p: (
+                not p["in_title_shortlist"],
                 STATUS_ORDER.get(p["validation_status"], 3),
+                rank.get(p["title_id"], len(rank)),
                 not p["selected_title_direction_match"],
                 str(p["package_id"]),
             ),
@@ -278,6 +291,7 @@ def _items(
                 "rework": sum(p["validation_status"] == "REWORK" for p in packages),
                 "reject": sum(p["validation_status"] == "REJECT" for p in packages),
                 "acceptable": sum(p["acceptable"] for p in packages),
+                "title_shortlist": shortlist,
                 "packages": packages,
                 "decision": decision,
                 "selected_package_id": record.get("package_id"),
@@ -577,6 +591,10 @@ def apply_action(
             raise ValueError(
                 "Package cannot be accepted: " + "; ".join(chosen["blocked_reasons"])
             )
+        if not chosen.get("in_title_shortlist") and not clean_note:
+            raise ValueError(
+                "This title is outside the shortlist; add a note saying why you chose it"
+            )
         given = criteria or {}
         normalized = {name: given.get(name) is True for name in required_criteria(config)}
         missing = [name for name, passed in normalized.items() if not passed]
@@ -589,6 +607,7 @@ def apply_action(
                 "image_sha256": chosen["image_sha256"],
                 "render_id": chosen["render_id"] if chosen["image_approved"] else None,
                 "criteria": normalized,
+                "title_in_shortlist": bool(chosen.get("in_title_shortlist")),
             }
         )
         state["decisions"][item["video_id"]] = record

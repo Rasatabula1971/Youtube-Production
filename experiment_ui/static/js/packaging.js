@@ -230,7 +230,7 @@
           "<div><dt>Validation</dt><dd>" + badge(p.validation_status) + "</dd></div>" +
           "<div><dt>Promise</dt><dd>" + badge(p.promise_consistency || d.promise_consistency) + "</dd></div>" +
           "<div><dt>Hook</dt><dd>" + badge(p.hook_alignment_status || d.hook_alignment_status) + "</dd></div>" +
-          (d.semantic_redundancy ? "<div><dt>Redundancy</dt><dd>" + badge(d.semantic_redundancy) + "</dd></div>" : "") +
+          ((p.semantic_redundancy || d.semantic_redundancy) ? "<div><dt>Redundancy</dt><dd>" + badge(p.semantic_redundancy || d.semantic_redundancy) + "</dd></div>" : "") +
           "<div><dt>Matches chosen title</dt><dd>" + badge(p.selected_title_direction_match ? "PASS" : "NOT_SELECTED") + "</dd></div>" +
         "</dl>" +
         (blocked.length ? '<p class="pk-blocked">' + esc(blocked.join("; ")) + "</p>" : "") +
@@ -242,9 +242,27 @@
     "</article>";
   }
 
+  // The 2–3 title shortlist ranked from the pair validations (D-134).
+  function shortlistHtml(item) {
+    const shortlist = item.title_shortlist || {};
+    const rows = (shortlist.entries || []).filter(Boolean).map(function (entry) {
+      return '<li><span class="source-chip">' + esc(entry.rank) + "</span> <strong>" + esc(entry.title_text || entry.title_id) + "</strong>" +
+        '<br><span class="muted">' + esc(entry.reason || "") + "</span></li>";
+    }).join("");
+    return section("Title shortlist", (rows ? '<ul class="rw-list pk-shortlist">' + rows + "</ul>" : "") +
+      (shortlist.note ? '<p class="' + (shortlist.shortfall ? "radar-error" : "muted") + '">' + esc(shortlist.note) + "</p>" : ""));
+  }
+
+  function chosenOutsideShortlist(item) {
+    const id = chosenPackage(item);
+    const chosen = (item.packages || []).find(function (p) { return p && p.package_id === id; });
+    return Boolean(chosen && chosen.in_title_shortlist === false);
+  }
+
   function finalEvidence(item) {
     const packages = (item.packages || []).filter(Boolean);
-    const acceptable = packages.filter(function (p) { return p.acceptable; });
+    const acceptable = packages.filter(function (p) { return p.acceptable && p.in_title_shortlist !== false; });
+    const outside = packages.filter(function (p) { return p.acceptable && p.in_title_shortlist === false; });
     const others = packages.filter(function (p) { return !p.acceptable; });
     const ticks = ticksFor(item);
     const missingImage = packages.some(function (p) { return p.render_id && !p.image_approved; });
@@ -259,12 +277,18 @@
     ]) +
       (item.stale_decision ? '<p class="radar-error">The package matrix changed after your decision; decide again.</p>' : "") +
       (item.last_rework ? '<p class="muted">Last rework: ' + esc(words(item.last_rework.rework_target)) + " — " + esc(item.last_rework.note || "") + "</p>" : "") +
+      shortlistHtml(item) +
       section("Finalists", acceptable.length
         ? '<div class="pk-packages">' + acceptable.map(function (p) { return packageCard(item, p); }).join("") + "</div>"
         : '<p class="muted">No package can be accepted yet' + (missingImage ? ": approve the rendered thumbnail images first." : ".") + "</p>") +
       (missingImage
         ? '<p class="muted">Rendered thumbnails are approved in the classic Thumbnail panel. ' +
           '<a href="/analysis" class="button-link ghost compact" data-route="/analysis">Open classic view</a></p>'
+        : "") +
+      (outside.length
+        ? '<details class="pk-others"><summary>' + outside.length + " acceptable package(s) with titles outside the shortlist</summary>" +
+          '<p class="muted">Choosing one of these needs a note saying why.</p>' +
+          '<div class="pk-packages">' + outside.map(function (p) { return packageCard(item, p); }).join("") + "</div></details>"
         : "") +
       (others.length
         ? '<details class="pk-others"><summary>' + others.length + " other package(s) not acceptable</summary>" +
@@ -294,11 +318,15 @@
       return [
         {
           value: "ACCEPT", label: "Accept this package", hint: "Locks title, thumbnail, hook and promise as one unit; format planning follows.", tone: "complete",
-          validate: function () {
+          validate: function (_item, draft) {
             if (!chosenPackage(item)) return "Choose one of the finalist packages.";
             const ticks = ticksFor(item);
             const missing = (finalGate().required_criteria || []).filter(function (key) { return !ticks[key]; });
-            return missing.length ? "Confirm every check under “Accepting confirms”." : "";
+            if (missing.length) return "Confirm every check under “Accepting confirms”.";
+            if (chosenOutsideShortlist(item) && !String((draft || {}).note || "").trim()) {
+              return "This title is outside the shortlist: add a note saying why you chose it.";
+            }
+            return "";
           }
         },
         {
