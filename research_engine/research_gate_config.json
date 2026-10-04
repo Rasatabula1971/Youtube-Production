@@ -6,5 +6,15 @@
     "safe_for_script"
   ],
   "require_reviewer_name": true,
-  "require_conflict_resolution_note": true
+  "require_conflict_resolution_note": true,
+  "evidence_policy": {
+    "enabled": true,
+    "minimum_independent_supporting_hosts": 2,
+    "auto_clear_source_types": [
+      "primary",
+      "secondary",
+      "dataset",
+      "documentation"
+    ]
+  }
 }

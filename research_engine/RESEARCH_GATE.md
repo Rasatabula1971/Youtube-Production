@@ -2,8 +2,9 @@
 
 ## Purpose
 
-The Research Gate is the human verification point between draft research and
-the Story / Script Engine.
+The Research Gate is the verification point between draft research and the
+Story / Script Engine. Review is conditional (D-131): an evidence policy
+accepts strongly supported claims on its own, and a human decides the rest.
 
 The Research Engine records evidence structure.
 
@@ -39,7 +40,36 @@ Every claim receives exactly one decision:
 - REWORK
 - REJECT
 
-There is no automatic acceptance based on source count.
+A decision comes from a human or, for a claim the evidence policy clears, from
+the policy itself (`decided_by: EVIDENCE_POLICY`).
+
+## Conditional review (evidence policy)
+
+`evidence_policy.py` classifies every claim when the gate is prepared. Each
+evidence quote has already been found verbatim in its acquired page.
+
+- **AUTO_CLEARED** — accepted automatically, with the reasons recorded on the
+  decision and in the verified package. It needs all of these:
+  - supporting quotes from at least two independent websites (hosts; two
+    pages of one site count once);
+  - only `primary`, `secondary`, `dataset` or `documentation` sources;
+  - no contradicting or qualifying source, and coverage not CONFLICTED;
+  - no absolute wording (always, never, only, first, biggest, proven, …);
+  - every figure in the wording present in a supporting quote;
+  - no elevated-risk subject (health, safety, death, legal, money).
+- **REVIEW_REQUIRED** — left for a human, with each failed condition shown
+  as "Why this needs you".
+- **BLOCKED** — no traceable supporting quote; it cannot be accepted, only
+  reworked or rejected.
+
+The policy errs towards review. It never rejects and never replaces a human
+or carried-forward decision, and a human can rework or reject an
+automatically cleared claim at any time. Automatic decisions are recomputed
+on every prepare, so a changed claim or policy never keeps a stale one. The
+gate re-checks each automatic acceptance when it writes the verified package.
+
+The thresholds live under `evidence_policy` in `research_gate_config.json`.
+Setting `"enabled": false` makes every claim a human decision again.
 
 ## ACCEPT criteria
 
