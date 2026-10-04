@@ -842,12 +842,17 @@ def run_apply() -> dict[str, Any]:
             config.get("concepts_per_mechanism", 5),
         )
     )
+    contributed = sorted(current_response_hashes)
+    missing_mechanisms = sorted(request_mechanism_ids - set(contributed))
+    # A resumable batch is not a complete stage (vision §104-105, D-129):
+    # triage starts only when every requested mechanism has contributed at
+    # least one current, validated concept. Until then generation stays the
+    # next step and resumes the missing mechanisms.
     ready_for_triage = (
         len(accepted) >= minimum_candidates
         and bool(current_response_hashes)
+        and not missing_mechanisms
     )
-    contributed = sorted(current_response_hashes)
-    missing_mechanisms = sorted(request_mechanism_ids - set(contributed))
 
     CANDIDATES_FILE.write_text(
         json.dumps(
@@ -866,7 +871,7 @@ def run_apply() -> dict[str, Any]:
                     "Concepts are not ranked.",
                     "Acceptance here means structural/source-dependency validation only.",
                     "Human Concept Gate approval is still required.",
-                    "Provider coverage may be partial when the current validated candidate pool meets the triage minimum.",
+                    "Triage requires every requested mechanism to contribute at least one current validated concept.",
                 ],
             },
             indent=2,
@@ -889,6 +894,8 @@ def run_apply() -> dict[str, Any]:
 
     if ready_for_triage:
         status = "CONCEPT_CANDIDATES_READY"
+    elif accepted and missing_mechanisms:
+        status = "INCOMPLETE_MECHANISM_COVERAGE"
     elif accepted:
         status = "INSUFFICIENT_CONCEPT_CANDIDATES"
     else:

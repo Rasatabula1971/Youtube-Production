@@ -50,8 +50,8 @@ audit found that these deviate from the vision and are being corrected first:
 - research review is mandatory instead of exception-only;
 - the concept pool is smaller than the 15–25 contract, and finalists are not
   forced to be diverse;
-- incomplete stages can advance;
-- the Gemini fallback admits non-quota failures;
+- incomplete stages can advance and the Gemini fallback admits non-quota
+  failures (both fixed by A2, D-129);
 - visual planning comes after narration;
 - budgets are split by stage rather than per video;
 - reviewed history is not append-only everywhere.
@@ -70,8 +70,8 @@ are built:
 
 | Patch | Correction |
 |---|---|
-| A1 | Test isolation, and this status |
-| A2 | Stage completion and fallback policy |
+| A1 | Test isolation, and this status (done, D-128) |
+| A2 | Stage completion and fallback policy (done, D-129) |
 | A3 | Concept pool of 15–25 and diverse finalists |
 | A4 | Conditional research review |
 | A5 | One resolved format |

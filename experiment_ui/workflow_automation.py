@@ -95,6 +95,14 @@ PARTIAL_MESSAGES = {
         "provider/model did not produce new validated output. "
         "Retry Continue Automatically later."
     ),
+    "concept_generate": (
+        "Concept generation is not complete: at least one mechanism has no valid "
+        "concept yet, either because the active provider/model did not answer or "
+        "because its output failed validation. Validated concepts were kept and "
+        "triage waits for every mechanism (D-129). Retry Continue Automatically "
+        "later; it reruns only the missing mechanisms. If one keeps failing, its "
+        "model run report lists the validation errors."
+    ),
     "narration_preview_render": (
         "The zero-cost local narration preview could not be rendered. "
         "Install/configure the local Kokoro preview dependencies and "
