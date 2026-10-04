@@ -92,9 +92,10 @@
         stageTrack(production) +
       "</div>" +
       '<div class="production-status">' + badge(production.status, production.status_label) + "</div>" +
-      '<button type="button" class="ghost compact" data-route="/production" data-subroute="' +
+      '<a href="/production#' +
+        esc(encodeURIComponent(production.concept_id)) + '" class="button-link ghost compact" data-route="/production" data-subroute="' +
         esc(encodeURIComponent(production.concept_id)) + '" aria-label="Open ' +
-        esc(production.title) + '">Open →</button>' +
+        esc(production.title) + '">Open →</a>' +
     "</article>";
   }
 
@@ -256,9 +257,10 @@
   function attentionCard(card) {
     const button = card.drawer
       ? '<button type="button" class="ghost compact" data-job-drawer>' + esc(card.action) + "</button>"
-      : '<button type="button" class="ghost compact" data-route="' + esc(card.route) + '"' +
+      : '<a class="button-link ghost compact" href="' + esc(card.route + (card.subroute ? "#" + card.subroute : "")) +
+        '" data-route="' + esc(card.route) + '"' +
         (card.subroute ? ' data-subroute="' + esc(card.subroute) + '"' : "") + ">" +
-        esc(card.action) + " →</button>";
+        esc(card.action) + " →</a>";
     return '<article class="attention-card tone-' + esc(card.tone) + '">' +
       '<p class="attention-kicker">' + esc(card.kicker) + "</p>" +
       '<h3 class="attention-title">' + esc(card.title) + "</h3>" +
@@ -441,15 +443,17 @@
     if (!queue.length) return '<p class="empty-state">' + esc(PRODUCTION_EMPTY.review) + "</p>";
     const total = queue.reduce(function (sum, entry) { return sum + (entry.count || 1); }, 0);
     return '<div class="queue-head"><p><strong>' + plural(total, "decision") + "</strong> waiting</p>" +
-      '<button type="button" class="primary-cta" data-route="' + esc(queue[0].route) + '" data-subroute="' +
-        esc(queue[0].subroute) + '">Start review queue →</button></div>' +
+      '<a href="' + esc(queue[0].route) + '#' +
+        esc(queue[0].subroute) + '" class="button-link primary-cta" data-route="' + esc(queue[0].route) + '" data-subroute="' +
+        esc(queue[0].subroute) + '">Start review queue →</a></div>' +
       '<ol class="review-queue">' + queue.map(function (entry) {
         return '<li class="queue-row tone-' + esc(entry.tone) + '">' +
           '<div class="queue-main"><strong>' + esc(entry.title) + "</strong>" +
             '<span class="muted">' + esc(entry.detail) + "</span></div>" +
           '<span class="queue-kind">' + esc(entry.kind) + "</span>" +
-          '<button type="button" class="ghost compact" data-route="' + esc(entry.route) + '" data-subroute="' +
-            esc(entry.subroute) + '">Review →</button>' +
+          '<a href="' + esc(entry.route) + '#' +
+            esc(entry.subroute) + '" class="button-link ghost compact" data-route="' + esc(entry.route) + '" data-subroute="' +
+            esc(entry.subroute) + '">Review →</a>' +
         "</li>";
       }).join("") + "</ol>";
   }

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d1117">
   <title>YouTube Production</title>
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/styles.css">
@@ -19,7 +20,7 @@
   <a class="skip-link" href="#mainContent">Skip to content</a>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <div class="brand">
+      <div class="brand" translate="no">
         <div class="brand-mark">YP</div>
         <div>
           <p>YOUTUBE</p>
@@ -139,7 +140,7 @@
                   <p class="section-kicker">PRODUCTIONS</p>
                   <h2 id="activeProductionsTitle">Active productions</h2>
                 </div>
-                <button class="ghost compact" data-route="/productions">All productions</button>
+                <a href="/productions" class="button-link ghost compact" data-route="/productions">All productions</a>
               </div>
               <div id="activeProductions" class="production-list"></div>
             </section>
@@ -192,10 +193,10 @@
               <p class="muted">Any topic or viewer question, in or out of a niche list. YouTube is searched a few ways (no quota, nothing downloaded) and the evidence shows the rule behind each level.</p>
               <form id="exploreTopicForm" class="entry-form">
                 <label>Topic or question
-                  <input id="exploreTopicText" type="text" maxlength="160" autocomplete="off" placeholder="e.g. Why are aircraft windows round?" required>
+                  <input id="exploreTopicText" name="topic" type="text" maxlength="160" autocomplete="off" placeholder="e.g. Why are aircraft windows round?" required>
                 </label>
                 <label>Why this idea? (optional)
-                  <input id="exploreTopicNote" type="text" maxlength="500" placeholder="What made you think of it">
+                  <input id="exploreTopicNote" name="topic_note" type="text" maxlength="500" autocomplete="off" placeholder="What made you think of it…">
                 </label>
                 <button type="submit" id="exploreTopicSubmit">Explore topic</button>
               </form>
@@ -207,13 +208,13 @@
               <p class="muted">Paste a YouTube video you think worked. It is measured (no download) and checked against the Science Inside scope.</p>
               <form id="analyzeVideoForm" class="entry-form">
                 <label>YouTube link
-                  <input id="analyzeVideoUrl" type="text" inputmode="url" autocomplete="off" placeholder="youtube.com/watch?v=… · youtu.be/… · /shorts/…" required>
+                  <input id="analyzeVideoUrl" name="video_url" type="text" inputmode="url" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="youtube.com/watch?v=… · youtu.be/… · /shorts/…" required>
                 </label>
                 <label>Topic (optional)
-                  <input id="analyzeVideoTopic" type="text" maxlength="120" placeholder="e.g. hummingbird flight">
+                  <input id="analyzeVideoTopic" name="video_topic" type="text" maxlength="120" autocomplete="off" placeholder="e.g. hummingbird flight">
                 </label>
                 <label>Why this video? (optional)
-                  <input id="analyzeVideoNote" type="text" maxlength="500" placeholder="What caught your eye">
+                  <input id="analyzeVideoNote" name="video_note" type="text" maxlength="500" autocomplete="off" placeholder="What caught your eye…">
                 </label>
                 <button type="submit" id="analyzeVideoSubmit">Check video</button>
               </form>
@@ -225,7 +226,7 @@
               <p class="muted">No topic needed. Recent uploads doing far better than their own channel's normal, tracked for up to 15 days. About 1 API unit per watched channel.</p>
               <p id="viralEntryStatus" class="entry-status muted"></p>
               <div class="entry-actions">
-                <button type="button" data-route="/radar">Open radar →</button>
+                <a href="/radar" class="button-link" data-route="/radar">Open radar →</a>
                 <button type="button" class="ghost" id="runViralRadar">Run scan now</button>
               </div>
             </section>
@@ -335,7 +336,7 @@
                 <p class="muted" id="humanAnalysisReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="analysis">Review one at a time →</button>
+                <a href="/review#analysis" class="button-link compact" data-route="/review" data-subroute="analysis">Review one at a time →</a>
                 <span class="status-chip running" id="humanAnalysisReviewStatus">PENDING</span>
               </div>
             </div>
@@ -363,7 +364,7 @@
                 <p class="muted" id="conceptReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="concept">Review one at a time →</button>
+                <a href="/review#concept" class="button-link compact" data-route="/review" data-subroute="concept">Review one at a time →</a>
                 <span class="status-chip running" id="conceptReviewStatus">PENDING</span>
               </div>
             </div>
@@ -434,7 +435,7 @@
                 <p class="muted" id="researchReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="research">Review one at a time →</button>
+                <a href="/review#research" class="button-link compact" data-route="/review" data-subroute="research">Review one at a time →</a>
                 <span class="status-chip running" id="researchReviewStatus">PENDING</span>
               </div>
             </div>
@@ -467,7 +468,7 @@
                 <p class="muted" id="scriptReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="script">Review one at a time →</button>
+                <a href="/review#script" class="button-link compact" data-route="/review" data-subroute="script">Review one at a time →</a>
                 <span class="status-chip running" id="scriptReviewStatus">PENDING</span>
               </div>
             </div>
@@ -566,7 +567,7 @@
                 <p class="muted" id="titleDirectionReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/packaging" data-subroute="titles">Open packaging workspace →</button>
+                <a href="/packaging#titles" class="button-link compact" data-route="/packaging" data-subroute="titles">Open packaging workspace →</a>
                 <span class="status-chip running" id="titleDirectionReviewStatus">PENDING</span>
               </div>
             </div>
@@ -615,7 +616,7 @@
                 <form class="thumbnail-subject-form" id="thumbnailSubjectForm">
                   <p class="section-kicker">SUBJECT IMAGE &amp; ACCENT</p>
                   <label class="vision-label" for="thumbnailSubjectPath">Image path (absolute, or relative to the render spec)</label>
-                  <input class="thumbnail-input" id="thumbnailSubjectPath" type="text" autocomplete="off" placeholder="C:\path\to\subject.png">
+                  <input class="thumbnail-input" id="thumbnailSubjectPath" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="C:\path\to\subject.png">
                   <label class="vision-label" for="thumbnailSubjectTier">Source tier</label>
                   <select class="thumbnail-input" id="thumbnailSubjectTier"></select>
                   <div class="thumbnail-field-row">
@@ -632,7 +633,7 @@
                     </div>
                   </div>
                   <label class="vision-label" for="thumbnailSubjectUrl">Source URL</label>
-                  <input class="thumbnail-input" id="thumbnailSubjectUrl" type="text" autocomplete="off" placeholder="Required for licensed web sources">
+                  <input class="thumbnail-input" id="thumbnailSubjectUrl" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Required for licensed web sources">
                   <label class="vision-label" for="thumbnailSubjectAttribution">Attribution</label>
                   <input class="thumbnail-input" id="thumbnailSubjectAttribution" type="text" autocomplete="off">
                   <div class="concept-review-actions">
@@ -663,7 +664,7 @@
                 <p class="muted" id="finalPackagingReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/packaging" data-subroute="final">Open packaging workspace →</button>
+                <a href="/packaging#final" class="button-link compact" data-route="/packaging" data-subroute="final">Open packaging workspace →</a>
                 <span class="status-chip running" id="finalPackagingReviewStatus">PENDING</span>
               </div>
             </div>
@@ -701,7 +702,7 @@
                 <p class="muted" id="formatReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="format">Review one at a time →</button>
+                <a href="/review#format" class="button-link compact" data-route="/review" data-subroute="format">Review one at a time →</a>
                 <span class="status-chip running" id="formatReviewStatus">PENDING</span>
               </div>
             </div>
@@ -732,7 +733,7 @@
                 <p class="muted" id="performanceReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="voice">Review one at a time →</button>
+                <a href="/review#voice" class="button-link compact" data-route="/review" data-subroute="voice">Review one at a time →</a>
                 <span class="status-chip running" id="performanceReviewStatus">PENDING</span>
               </div>
             </div>
@@ -763,7 +764,7 @@
                 <p class="muted" id="visualCandidateReviewSummary">Compare the storyboard intent with discovered footage before rough cut.</p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="visuals">Open produce workspace →</button>
+                <a href="/produce#visuals" class="button-link compact" data-route="/produce" data-subroute="visuals">Open produce workspace →</a>
                 <span class="status-chip running" id="visualCandidateReviewStatus">PENDING</span>
               </div>
             </div>
@@ -810,7 +811,7 @@
                 <p class="muted" id="visualRightsReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="rights">Open produce workspace →</button>
+                <a href="/produce#rights" class="button-link compact" data-route="/produce" data-subroute="rights">Open produce workspace →</a>
                 <span class="status-chip running" id="visualRightsReviewStatus">PENDING</span>
               </div>
             </div>
@@ -846,7 +847,7 @@
               <div class="concept-decision-pane">
                 <div class="concept-complete">The app will not automatically download creator/editorial footage. Supply a local file only for the exact visual selection already approved by the Human Rights/Context Gate.</div>
                 <label class="vision-label" for="managedVisualAssetPath">Local approved file path</label>
-                <input id="managedVisualAssetPath" type="text" placeholder="C:\path\to\approved-clip.mp4">
+                <input id="managedVisualAssetPath" type="text" spellcheck="false" autocapitalize="off" placeholder="C:\path\to\approved-clip.mp4">
                 <label class="vision-label" for="managedVisualNote">Context / edit note</label>
                 <textarea id="managedVisualNote" class="vision-observation" rows="3" maxlength="1000" placeholder="Optional note about the supplied excerpt or intended edit."></textarea>
                 <div class="concept-review-actions">
@@ -867,7 +868,7 @@
                 <p class="muted" id="visualRoughCutReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="roughcut">Open produce workspace →</button>
+                <a href="/produce#roughcut" class="button-link compact" data-route="/produce" data-subroute="roughcut">Open produce workspace →</a>
                 <span class="status-chip running" id="visualRoughCutReviewStatus">PENDING</span>
               </div>
             </div>
@@ -899,7 +900,7 @@
                 <p class="muted" id="visualSpendReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="spend">Open produce workspace →</button>
+                <a href="/produce#spend" class="button-link compact" data-route="/produce" data-subroute="spend">Open produce workspace →</a>
                 <span class="status-chip running" id="visualSpendReviewStatus">PENDING</span>
               </div>
             </div>
@@ -936,7 +937,7 @@
               <div class="concept-decision-pane">
                 <div class="concept-complete">Generate this shot externally with the approved brief. This form only registers the finished local file; it does not call Higgsfield or spend money.</div>
                 <label class="vision-label" for="generatedVisualAssetPath">Local generated file path</label>
-                <input id="generatedVisualAssetPath" type="text" placeholder="C:\path\to\generated-shot.mp4">
+                <input id="generatedVisualAssetPath" type="text" spellcheck="false" autocapitalize="off" placeholder="C:\path\to\generated-shot.mp4">
                 <label class="vision-label" for="generatedVisualActualCost">Actual cost for this shot (USD)</label>
                 <input id="generatedVisualActualCost" type="number" min="0" step="0.01" value="0">
                 <label class="vision-label" for="generatedVisualProvider">Provider</label>
@@ -962,7 +963,7 @@
                 <p class="muted" id="editPreviewReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="edit">Open produce workspace →</button>
+                <a href="/produce#edit" class="button-link compact" data-route="/produce" data-subroute="edit">Open produce workspace →</a>
                 <span class="status-chip running" id="editPreviewReviewStatus">PENDING</span>
               </div>
             </div>
@@ -1001,7 +1002,7 @@
               <div class="concept-decision-pane">
                 <div class="concept-complete">This form never calls or pays a sound provider. Register only an already licensed/owned local file, or explicitly omit the sound with a note.</div>
                 <label class="vision-label" for="finalSoundAssetPath">Local sound file path</label>
-                <input id="finalSoundAssetPath" type="text" placeholder="C:\path\to\licensed-sound.wav">
+                <input id="finalSoundAssetPath" type="text" spellcheck="false" autocapitalize="off" placeholder="C:\path\to\licensed-sound.wav">
                 <label class="vision-label" for="finalSoundLicenceReference">Licence / ownership reference</label>
                 <input id="finalSoundLicenceReference" type="text" maxlength="500" placeholder="Required for registered assets">
                 <label class="vision-label" for="finalSoundSourceName">Source / library</label>
@@ -1035,7 +1036,7 @@
                 <p class="muted" id="finalExportReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="export">Open produce workspace →</button>
+                <a href="/produce#export" class="button-link compact" data-route="/produce" data-subroute="export">Open produce workspace →</a>
                 <span class="status-chip running" id="finalExportReviewStatus">PENDING</span>
               </div>
             </div>
@@ -1068,7 +1069,7 @@
                 <p class="muted" id="previewReviewSummary">Review story flow, tone, spacing, music and SFX suggestions before any paid narration quote.</p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/review" data-subroute="preview">Review one at a time →</button>
+                <a href="/review#preview" class="button-link compact" data-route="/review" data-subroute="preview">Review one at a time →</a>
                 <span class="status-chip running" id="previewReviewStatus">PENDING</span>
               </div>
             </div>
@@ -1115,7 +1116,7 @@
                 <p class="muted" id="narrationSpendReviewSummary">Verify the current quote and worst-case cost before any paid narration call.</p>
               </div>
               <div class="panel-head-actions">
-                <button type="button" class="compact" data-route="/produce" data-subroute="narration">Open produce workspace →</button>
+                <a href="/produce#narration" class="button-link compact" data-route="/produce" data-subroute="narration">Open produce workspace →</a>
                 <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
               </div>
             </div>
@@ -1214,7 +1215,7 @@
           <section class="panel">
             <div class="inbox-head">
               <div class="inbox-tabs" id="productionTabs" role="tablist" aria-label="Production filters"></div>
-              <button type="button" class="ghost compact" data-route="/opportunity" title="New productions start from an accepted opportunity and concept">+ New</button>
+              <a href="/opportunity" class="button-link ghost compact" data-route="/opportunity" title="New productions start from an accepted opportunity and concept">+ New</a>
             </div>
             <div id="productionsList" class="production-list"></div>
           </section>

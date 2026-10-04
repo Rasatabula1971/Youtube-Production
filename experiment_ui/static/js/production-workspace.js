@@ -52,22 +52,23 @@
         return claim.concept_id === production.concept_id && String(claim.decision || "PENDING").toUpperCase() === "PENDING";
       });
       const target = "research" + (claims.length ? "/" + encodeURIComponent(claims[0].concept_id + "::" + claims[0].claim_id) : "");
-      action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="' + esc(target) + '">Continue review →</button>';
+      action = '<a href="/review#' + esc(target) + '" class="button-link primary-cta" data-route="/review" data-subroute="' + esc(target) + '">Continue review →</a>';
     } else if (status === "HUMAN_REVIEW" && production.stage === "PACKAGE") {
-      action = '<button type="button" class="primary-cta" data-route="/packaging" data-subroute="titles">Continue review →</button>';
+      action = '<a href="/packaging#titles" class="button-link primary-cta" data-route="/packaging" data-subroute="titles">Continue review →</a>';
     } else if (status === "HUMAN_REVIEW" && (production.stage === "FORMAT" || production.stage === "PRODUCE")) {
       // Format plans and voice performances are on the shared review workspace (D-121).
-      action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="' +
-        (production.stage === "FORMAT" ? "format" : "voice") + '">Continue review →</button>';
+      const gate = production.stage === "FORMAT" ? "format" : "voice";
+      action = '<a class="button-link primary-cta" href="/review#' + gate + '" data-route="/review" data-subroute="' +
+        gate + '">Continue review →</a>';
     } else if (status === "HUMAN_REVIEW" && production.stage === "SCRIPT") {
       // The Script Gate is on the shared review workspace too (D-119).
-      action = '<button type="button" class="primary-cta" data-route="/review" data-subroute="script">Continue review →</button>';
+      action = '<a href="/review#script" class="button-link primary-cta" data-route="/review" data-subroute="script">Continue review →</a>';
     } else if (status === "HUMAN_REVIEW" || status === "BLOCKED") {
-      action = '<button type="button" class="primary-cta" data-route="/analysis">' +
-        (status === "BLOCKED" ? "Open in workspace →" : "Continue review →") + "</button>";
+      action = '<a href="/analysis" class="button-link primary-cta" data-route="/analysis">' +
+        (status === "BLOCKED" ? "Open in workspace →" : "Continue review →") + "</a>";
     } else if (status === "READY") {
       action = '<p class="muted">The next step runs from the guided workflow on the Command Center.</p>' +
-        '<button type="button" class="ghost compact" data-route="/">Open Command Center</button>';
+        '<a href="/" class="button-link ghost compact" data-route="/">Open Command Center</a>';
     }
     return '<section class="pw-current tone-' + tone(status) + '" aria-label="Current step">' +
       '<p class="section-kicker">CURRENT STEP</p>' +
@@ -112,7 +113,7 @@
     let html;
     if (!conceptId) {
       html = '<div class="rw-empty"><h2>No production selected</h2><p class="muted">Open one from the Productions list.</p>' +
-        '<div class="rw-empty-actions"><button type="button" class="ghost compact" data-route="/productions">Productions</button></div></div>';
+        '<div class="rw-empty-actions"><a href="/productions" class="button-link ghost compact" data-route="/productions">Productions</a></div></div>';
     } else if (!payload) {
       html = '<p class="empty-state">' + esc(error || "Loading production…") + "</p>";
     } else {
@@ -121,7 +122,7 @@
       const active = selected[conceptId] || currentSectionId(sections);
       const section = sections.find(function (s) { return s.id === active; }) || sections[0];
       html =
-        '<button type="button" class="ghost compact pw-back" data-route="/productions">← Productions</button>' +
+        '<a href="/productions" class="button-link ghost compact pw-back" data-route="/productions">← Productions</a>' +
         '<header class="pw-head">' +
           '<div class="pw-head-copy"><h2 class="pw-title">' + esc(production.title) + "</h2>" +
             (production.premise ? '<p class="muted pw-premise">' + esc(production.premise) + "</p>" : "") + "</div>" +

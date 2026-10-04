@@ -20,6 +20,7 @@
 }
 
 .entry-actions button,
+.entry-actions .button-link,
 .entry-card > button,
 .entry-form button { font-size: 13px; padding: 8px 12px; }
 

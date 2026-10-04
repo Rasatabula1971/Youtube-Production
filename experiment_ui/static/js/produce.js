@@ -515,7 +515,7 @@
         esc(tab[1]) + ' <span class="tab-count">' + pendingCount(tab[0]) + "</span></button>";
     }).join("") + "</div>" +
       '<div class="gate-switcher"><label class="gate-toggle"><input type="checkbox" data-pd-decided' + (showDecided ? " checked" : "") + "> Include decided items</label>" +
-      '<button type="button" class="ghost compact" data-route="/analysis" title="Asset registration, storyboard edits and every original option">Classic view</button></div>';
+      '<a href="/analysis" class="button-link ghost compact" data-route="/analysis" title="Asset registration, storyboard edits and every original option">Classic view</a></div>';
     if (html === paintedTabs && bar.innerHTML) return;
     paintedTabs = html;
     bar.innerHTML = html;

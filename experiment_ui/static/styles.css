@@ -15,7 +15,10 @@ body {
 
 button, input { font: inherit; }
 
-button {
+/* Navigation that looks like a button is a link (.button-link) so
+   Ctrl/Cmd-click and "open in new tab" work (UI-18). */
+button,
+.button-link {
   border: 1px solid transparent;
   border-radius: 10px;
   padding: 10px 14px;
@@ -23,9 +26,20 @@ button {
   background: var(--accent-2);
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: .16s ease;
+  touch-action: manipulation;
+  transition: transform .16s ease, filter .16s ease, background-color .16s ease, border-color .16s ease;
 }
 
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  line-height: normal;
+  text-decoration: none;
+}
+
+.button-link:hover,
 button:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.08);
@@ -36,12 +50,14 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button.ghost {
+button.ghost,
+.button-link.ghost {
   background: transparent;
   border-color: var(--border);
 }
 
-button.compact { padding: 8px 11px; }
+button.compact,
+.button-link.compact { padding: 8px 11px; }
 
 button.danger {
   background: transparent;
@@ -1499,7 +1515,7 @@ button.danger {
   background: rgba(0,0,0,.48);
   opacity: 0;
   pointer-events: none;
-  transition: .2s ease;
+  transition: opacity .2s ease;
 }
 
 .drawer-scrim.open,
@@ -1579,7 +1595,7 @@ button.danger {
   opacity: 0;
   transform: translateY(9px);
   pointer-events: none;
-  transition: .2s ease;
+  transition: opacity .2s ease, transform .2s ease;
   font-size: 12px;
 }
 

@@ -144,7 +144,7 @@
         (evidenceId ? '<button type="button" class="ghost compact" data-radar-evidence="' + esc(evidenceId) + '">Evidence</button>' : "") +
         (replicated
           ? '<button type="button" class="compact" data-radar-theme="' + esc(theme.cluster_id) + '">Analyze why →</button>'
-          : (evidenceId && inboxStatus(evidenceId) === "NEEDS_REVIEW" ? '<button type="button" class="ghost compact" data-route="/opportunity/review" data-subroute="' + esc(encodeURIComponent(evidenceId)) + '">Review →</button>' : "")) +
+          : (evidenceId && inboxStatus(evidenceId) === "NEEDS_REVIEW" ? '<a href="/opportunity/review#' + esc(encodeURIComponent(evidenceId)) + '" class="button-link ghost compact" data-route="/opportunity/review" data-subroute="' + esc(encodeURIComponent(evidenceId)) + '">Review →</a>' : "")) +
       "</div>" +
     "</article>";
   }
@@ -161,7 +161,7 @@
       '<div><span class="status-badge status-' + trajectoryTone(row.trajectory) + '">' + esc(words(row.trajectory) || "unknown") + "</span></div>" +
       '<div class="tracked-actions">' +
         (status ? '<button type="button" class="ghost compact" data-radar-evidence="' + esc(row.opportunity_id) + '">Evidence</button>' : "") +
-        (status === "NEEDS_REVIEW" ? '<button type="button" class="ghost compact" data-route="/opportunity/review" data-subroute="' + esc(encodeURIComponent(row.opportunity_id)) + '">Review →</button>' : "") +
+        (status === "NEEDS_REVIEW" ? '<a href="/opportunity/review#' + esc(encodeURIComponent(row.opportunity_id)) + '" class="button-link ghost compact" data-route="/opportunity/review" data-subroute="' + esc(encodeURIComponent(row.opportunity_id)) + '">Review →</a>' : "") +
       "</div>" +
     "</article>";
   }

@@ -220,4 +220,5 @@
   .pw-rows td:last-child { grid-column: 1 / -1; }
 }
 
-#viewProductions .inbox-head > button { font-size: 13px; padding: 6px 11px; }
+#viewProductions .inbox-head > button,
+#viewProductions .inbox-head > .button-link { font-size: 13px; padding: 6px 11px; }

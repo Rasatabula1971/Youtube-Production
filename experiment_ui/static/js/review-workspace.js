@@ -26,6 +26,7 @@
     let currentKey = null;
     let renderedKey = null; // the item whose decision panel is on screen
     const drafts = {}; // unsaved choice and note per item, kept while moving around
+    const typed = {};  // items whose note the user typed and has not sent yet (UI-18)
     let currentIndex = 0;
     let lastSignature = "";
     let busy = false;
@@ -205,6 +206,7 @@
           decision.takesNote === false ? "" : draft.note.trim(),
           { select: draft.select }
         );
+        delete typed[draft.key];
         const still = list().find(function (entry) { return options.key(entry) === draft.key; });
         const stillOffered = still && (options.decisions(still) || []).some(function (d) { return d.value === draft.value; });
         if (!still || !stillOffered) {
@@ -226,6 +228,12 @@
     }
 
     if (root) {
+      root.addEventListener("input", function (event) {
+        if (event.target.matches && event.target.matches("[data-rw-note]") && renderedKey) {
+          if (event.target.value.trim()) typed[renderedKey] = true;
+          else delete typed[renderedKey];
+        }
+      });
       root.addEventListener("click", function (event) {
         const mover = event.target.closest("[data-rw-move]");
         if (mover) {
@@ -278,6 +286,8 @@
       });
     }
 
+    registry.push(function () { return Object.keys(typed).length > 0; });
+
     return {
       render: function () { render(false); },
       refresh: function () { render(true); },
@@ -289,5 +299,17 @@
     };
   }
 
-  window.ReviewWorkspace = { create: create };
+  // Warn before closing or reloading the tab while a typed review note has
+  // not been sent (Web Interface Guidelines: unsaved changes).
+  const registry = [];
+  function hasUnsavedNotes() {
+    return registry.some(function (check) { return check(); });
+  }
+  window.addEventListener("beforeunload", function (event) {
+    if (!hasUnsavedNotes()) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  window.ReviewWorkspace = { create: create, hasUnsavedNotes: hasUnsavedNotes };
 })();

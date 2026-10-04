@@ -258,7 +258,7 @@
         : '<p class="muted">No package can be accepted yet' + (missingImage ? ": approve the rendered thumbnail images first." : ".") + "</p>") +
       (missingImage
         ? '<p class="muted">Rendered thumbnails are approved in the classic Thumbnail panel. ' +
-          '<button type="button" class="ghost compact" data-route="/analysis">Open classic view</button></p>'
+          '<a href="/analysis" class="button-link ghost compact" data-route="/analysis">Open classic view</a></p>'
         : "") +
       (others.length
         ? '<details class="pk-others"><summary>' + others.length + " other package(s) not acceptable</summary>" +

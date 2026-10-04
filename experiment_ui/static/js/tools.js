@@ -31,10 +31,13 @@
     return '<span class="status-badge status-' + (tones[status] || "ready") + '">' + esc(words(status || "unknown")) + "</span>";
   }
 
-  function shortTime(value) {
-    const text = String(value || "");
-    const match = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
-    return match ? match[1] + " " + match[2] : text;
+  // Locale-aware date and time (UI-18); falls back to the raw value.
+  function shortTime(value, timeOnly) {
+    const date = new Date(String(value || ""));
+    if (!value || isNaN(date.getTime())) return String(value || "");
+    return timeOnly
+      ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   }
 
   function renderHealth() {
@@ -71,7 +74,7 @@
     host.innerHTML = jobs.map(function (job) {
       const id = String(job.id || "");
       const open = Object.prototype.hasOwnProperty.call(openLogs, id);
-      const times = [shortTime(job.started_at), job.finished_at ? "→ " + shortTime(job.finished_at).slice(-5) : ""]
+      const times = [shortTime(job.started_at), job.finished_at ? "→ " + shortTime(job.finished_at, true) : ""]
         .filter(Boolean).join(" ");
       const exit = job.return_code === null || job.return_code === undefined ? "" : " · exit " + esc(job.return_code);
       let log = "";
