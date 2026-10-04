@@ -4346,3 +4346,44 @@ metadata had to be uploaded by hand.
   token.
 - Uploads default to private. A scheduled video stays private until YouTube
   publishes it at `publishAt`.
+
+## D-144 — An editable project for Tesseract, and the finished edit back
+
+**Status:** Accepted (round trip with Tesseract itself still to be confirmed)
+
+**Context.** The vision makes Tesseract the final editable production
+environment: automation builds the near-final video, and the human moves
+clips, changes timing, replaces scenes and polishes it there. The audit
+found no project exchange: only the rendered MP4 left the pipeline, and
+scene ids had no mapping into an editor. Tesseract's own project format is
+not documented anywhere available to this build.
+
+**Decision.**
+- **Export.** `production_engine/tesseract_exchange.py` turns the current
+  local final render into one project folder:
+  - copies of the exact media;
+  - the timeline as OpenTimelineIO and as Final Cut Pro 7 XML;
+  - the automated render for reference;
+  - the thumbnail's editable source;
+  - `exchange.json` listing every clip.
+- **Stable ids.** Each clip is named `V-<shot>`, `N-<segment>` or
+  `S-<sound requirement>`, so a returned `.otio` maps back to scenes
+  (kept, moved, retimed, removed, added).
+- **Import.** The finished video is probed (video at the format's frame
+  size, audio present), copied into managed storage and bound to its hash,
+  the export and the automated render.
+- **Final Export Gate.** A current returned edit replaces the automated
+  render as the candidate. An approval of the automated render stops
+  counting. `RETURN_TO_EDITOR` sends an edit back; discarding it (with a
+  note) restores the automated render.
+- **Unverified contract.** The config records `round_trip_verified: false`,
+  and the UI shows the contract note, until one project has been through
+  Tesseract and back.
+
+**Consequences.**
+- Publishing uses whichever version passed the Final Export Gate, so a hand
+  edit reaches YouTube only after the human approves its exact bytes.
+- A new automated render makes the export and any returned edit stale.
+- If Tesseract turns out to need its own project format, an adapter for it
+  replaces or joins the two open formats; the ids, import and gate binding
+  stay as they are.

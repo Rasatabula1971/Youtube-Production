@@ -88,6 +88,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/narration-dispatch",
     "/api/visual-dispatch",
     "/api/publish-gate",
+    "/api/editor-exchange",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -412,6 +413,8 @@ from production_engine import narration_dispatch
 from production_engine import visual_dispatch
 from production_engine import publish_review
 from production_engine import youtube_upload
+# The same module object final_export_review uses (bare import from PRODUCTION_DIR).
+import tesseract_exchange
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -3221,6 +3224,14 @@ def publish_gate_state() -> dict[str, Any]:
         return {**publish_review.snapshot(), "uploader": youtube_upload.status()}
     except (OSError, ValueError, KeyError) as exc:
         return {"status": "ERROR", "error": str(exc), "items": [], "uploader": {"ready": False, "problems": [str(exc)]}}
+
+
+def editor_exchange_state() -> dict[str, Any]:
+    """Tesseract project exchange (D-144): exports and returned edits; never raises."""
+    try:
+        return tesseract_exchange.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "items": []}
 
 
 def final_audio_gate_state() -> dict[str, Any]:
@@ -8198,7 +8209,9 @@ def workflow_guidance(
                 "current_detail": (
                     "Watch the exact local final candidate with final visuals, "
                     "narration and licensed/omitted sound decisions. Approve export "
-                    "or return visuals, narration or sound for rework."
+                    "or return visuals, narration or sound for rework. To polish it "
+                    "by hand, export the editable project to Tesseract first; the "
+                    "returned edit then becomes the candidate."
                 ),
                 "next_action_id": None,
                 "next_title": "Approve export or return a creative layer",
@@ -8487,6 +8500,7 @@ def status_payload() -> dict[str, Any]:
         "narration_dispatch": narration_dispatch_state(),
         "visual_dispatch": visual_dispatch_state(),
         "publish_gate": publish_gate_state(),
+        "editor_exchange": editor_exchange_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -8762,16 +8776,22 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             render_path = Path(str(match["render_file"])).resolve()
+            # The automated render, or an edit returned from Tesseract (D-144).
             if (
                 render_path.parent.resolve()
                 != PRODUCTION_FINAL_RENDER_DIR.resolve()
+                and render_path.parent.parent.resolve()
+                != tesseract_exchange.RETURN_DIR.resolve()
             ):
                 self._send_json(
                     {"error": "Invalid final render path."},
                     403,
                 )
                 return
-            self._send_static(render_path, "video/mp4")
+            self._send_static(
+                render_path,
+                "video/quicktime" if render_path.suffix.lower() == ".mov" else "video/mp4",
+            )
             return
         if route == "/api/edit-preview-video":
             query = parse_qs(urlparse(self.path).query)
@@ -9551,6 +9571,30 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     raise ValueError("Action must be APPROVE_PUBLISH, HOLD, RECORD_UPLOAD or UPLOAD")
                 self._send_json({"publish_gate": publish_gate_state()})
+                return
+
+            if route == "/api/editor-exchange":
+                # Tesseract project exchange (D-144): export the editable
+                # project, import the finished edit, or discard it.
+                action = str(body.get("action", "")).strip().upper()
+                concept_id = str(body.get("concept_id", ""))
+                fmt = str(body.get("format", ""))
+                if action == "EXPORT":
+                    tesseract_exchange.export(concept_id=concept_id, format=fmt)
+                elif action == "IMPORT_EDIT":
+                    tesseract_exchange.import_edit(
+                        concept_id=concept_id, format=fmt,
+                        video_path=str(body.get("video_path") or ""),
+                        timeline_path=str(body.get("timeline_path") or "") or None,
+                        note=str(body.get("note") or ""),
+                    )
+                elif action == "DISCARD_EDIT":
+                    tesseract_exchange.discard_edit(
+                        concept_id=concept_id, format=fmt, note=str(body.get("note") or "")
+                    )
+                else:
+                    raise ValueError("Action must be EXPORT, IMPORT_EDIT or DISCARD_EDIT")
+                self._send_json({"editor_exchange": editor_exchange_state()})
                 return
 
             if route == "/api/visual-dispatch":

@@ -18,6 +18,7 @@
     ["spend", "Visual spend"],
     ["generate", "Generate visuals"],
     ["edit", "Edit preview"],
+    ["tesseract", "Tesseract"],
     ["export", "Final export"],
     ["publish", "Publish"]
   ];
@@ -32,8 +33,9 @@
   const rightsContext = Object.create(null);   // rights key -> context note
   const maxCost = Object.create(null);         // spend key -> number
   const generatedChoice = Object.create(null); // request file -> candidate_id
-  const reworkSegments = Object.create(null);
-  const pubEdits = Object.create(null);        // publish key -> {field: value}  // final audio key -> {segment_id: bool}
+  const reworkSegments = Object.create(null);  // final audio key -> {segment_id: bool}
+  const pubEdits = Object.create(null);        // publish key -> {field: value}
+  const exchangeInputs = Object.create(null);  // exchange key -> {video_path, timeline_path}
   let paintedTabs = "";
 
   function yp() { return window.YP; }
@@ -615,13 +617,13 @@
           ? "Already decided. The decision is locked, as in the classic panel; a new render reopens it."
           : "";
       },
-      decisions: function () {
+      decisions: function (item) {
         return [
           { value: config.approve, label: config.approveLabel, hint: config.approveHint, tone: "complete" },
           noteRework("RETURN_TO_VISUALS", "Return to visuals", "Visual choices or generation need changing."),
           noteRework("RETURN_TO_NARRATION", "Return to narration", "Narration audio needs changing."),
           noteRework("RETURN_TO_SOUND", "Return to sound", "Music or sound effects need changing.")
-        ];
+        ].concat(config.extraDecisions ? config.extraDecisions(item) : []);
       },
       decide: function (item, decision, note) {
         return post(config.endpoint, { result_file: item.result_file, decision: decision, note: note },
@@ -643,8 +645,12 @@
     approve: "APPROVE_EXPORT", approveLabel: "Approve final export", approveHint: "Binds these exact rendered bytes. Nothing is uploaded or published.",
     approvedToast: "Final export approved.",
     note: "Approval binds these exact rendered bytes. It does not upload or publish the video.",
+    extraDecisions: function (item) {
+      return item.source === "EDITOR" ? [noteRework("RETURN_TO_EDITOR", "Return to the editor", "The edit needs more work in Tesseract.")] : [];
+    },
     facts: function (item) {
       return [
+        ["Version", item.source === "EDITOR" ? "Edited in Tesseract" : "Automated render"],
         ["Duration", Number(item.duration_seconds || 0).toFixed(1) + " s"],
         ["Sound assets mixed", Number(item.sound_assets_mixed || 0)],
         ["Sound omissions", Number(item.sound_omissions || 0)],
@@ -652,6 +658,101 @@
       ];
     }
   });
+
+  // ------------------------------------------------------------- Tesseract
+  // Tesseract project exchange (D-144): export the editable project, then
+  // import the finished edit, which becomes the Final Export candidate.
+  function fileName(path) { return String(path || "").split(/[\\/]/).pop(); }
+
+  const tesseract = {
+    kicker: "TESSERACT",
+    gate: function () { return status().editor_exchange || {}; },
+    all: function () { return (this.gate().items || []).filter(Boolean); },
+    pending: function (item) { return item.status === "EXPORTED"; },
+    key: function (item) { return item.key; },
+    title: function (item) { return item.concept_id + " · " + words(item.format); },
+    meta: function (item) {
+      return '<span class="source-chip">' + esc(this.gate().editor_name || "Tesseract") + '</span><span class="rw-meta-text">' + Number(item.duration_seconds || 0).toFixed(1) + " s</span>" +
+        decidedBadge(words(item.status), item.status === "EDIT_RETURNED" ? "complete" : item.status === "EXPORTED" ? "human" : "running");
+    },
+    evidence: function (item) {
+      const gate = this.gate();
+      const record = item.export || null;
+      const edit = item.edit || null;
+      const key = item.key;
+      const inputs = exchangeInputs[key] || {};
+      const field = function (name, label, placeholder) {
+        return '<label class="pd-pub-field"><span>' + esc(label) + '</span><input type="text" data-pd-ex="' + name + '" data-key="' + esc(key) +
+          '" placeholder="' + esc(placeholder) + '" value="' + esc(inputs[name] || "") + '"></label>';
+      };
+      let html = gate.round_trip_verified ? "" : '<p class="muted">' + esc(gate.contract_note || "") + "</p>";
+      html += record
+        ? section("Editable project", facts([
+          ["Folder", record.folder],
+          ["Timelines", fileName(record.otio_file) + " · " + fileName(record.xml_file)],
+          ["Clips", Number(record.clips || 0) + " on " + Number(record.tracks || 0) + " tracks"],
+          ["Thumbnail source", (record.thumbnail_files || []).length ? (record.thumbnail_files || []).map(fileName).join(", ") : "not found"],
+          ["Exported", record.exported_at]
+        ]) + '<p class="muted">Open the .otio or .xml in Tesseract. Keep the clip names (V-, N-, S-) so changed scenes can be traced back.</p>')
+        : section("Editable project", '<p class="muted">Not exported yet. Export writes the media, an OpenTimelineIO timeline, a Final Cut Pro 7 XML timeline, the automated render for reference and the thumbnail source into one folder.</p>');
+      if (edit) {
+        const checks = (edit.quality_checks || []).map(function (c) {
+          return "<li>" + esc(words(c.check)) + ": " + esc(c.status) + " — " + esc(c.detail) + "</li>";
+        }).join("");
+        const changes = edit.scene_changes;
+        let changeHtml = '<p class="muted">No edited timeline was imported, so scene changes are not known.</p>';
+        if (changes) {
+          const counts = Object.keys(changes.counts || {}).map(function (k) { return words(k) + " " + changes.counts[k]; }).join(" · ");
+          const rows = (changes.clips || []).filter(function (r) { return r.change !== "KEPT"; }).map(function (r) {
+            return "<li><strong>" + esc(r.clip_id) + "</strong> " + esc(words(r.change)) +
+              (r.new_start_seconds !== null && r.new_start_seconds !== undefined ? " · now at " + Number(r.new_start_seconds).toFixed(2) + " s for " + Number(r.new_duration_seconds).toFixed(2) + " s" : "") + "</li>";
+          }).concat((changes.added || []).map(function (a) { return "<li><strong>" + esc(a.clip_id) + "</strong> added on " + esc(a.track) + "</li>"; })).join("");
+          changeHtml = "<p>" + esc(counts) + "</p>" + (rows ? '<ul class="rw-list">' + rows + "</ul>" : "");
+        }
+        html += section("Returned edit", facts([
+          ["File", edit.original_file_name],
+          ["Duration", Number(edit.duration_seconds || 0).toFixed(1) + " s"],
+          ["Imported", edit.imported_at],
+          ["Note", edit.note]
+        ]) + '<ul class="rw-list">' + checks + "</ul>" + '<p class="muted">This edit is now the candidate at Final export.</p>') +
+          section("Scene changes", changeHtml);
+      }
+      if (record) {
+        html += section(edit ? "Replace the edit" : "Import the finished edit",
+          field("video_path", "Edited video file on this computer (.mp4 or .mov)", "C:\\…\\final_edit.mp4") +
+          field("timeline_path", "Edited timeline (.otio, optional)", "C:\\…\\final_edit.otio"));
+      }
+      return html;
+    },
+    decisions: function (item) {
+      const key = item.key;
+      const options = [];
+      if (!item.export) {
+        options.push({ value: "EXPORT", label: "Export editable project", tone: "complete", hint: "Free and local; nothing is uploaded." });
+        return options;
+      }
+      options.push({
+        value: "IMPORT_EDIT", label: item.edit ? "Import a new edit" : "Import the finished edit", tone: "complete",
+        hint: "Checked for frame size and audio, then sent to Final export.",
+        validate: function () { return String((exchangeInputs[key] || {}).video_path || "").trim() ? "" : "Enter the path of the edited video file."; }
+      });
+      if (item.edit) options.push(noteRework("DISCARD_EDIT", "Discard the edit", "Use the automated render again.", "say why the edit is discarded"));
+      return options;
+    },
+    decide: function (item, decision, note) {
+      const inputs = exchangeInputs[item.key] || {};
+      const body = { action: decision, concept_id: item.concept_id, format: item.format, note: note };
+      if (decision === "IMPORT_EDIT") {
+        body.video_path = inputs.video_path || "";
+        body.timeline_path = inputs.timeline_path || "";
+      }
+      const messages = { EXPORT: "Editable project exported.", IMPORT_EDIT: "Edit imported; review it at Final export.", DISCARD_EDIT: "Edit discarded." };
+      return post("/api/editor-exchange", body, messages[decision] || "Saved.").then(function (ok) {
+        if (ok && decision === "IMPORT_EDIT") delete exchangeInputs[item.key];
+        return ok;
+      });
+    }
+  };
 
   // ---------------------------------------------------------------- Publish
   // The publish package for an approved export (D-142): review and edit the
@@ -756,7 +857,7 @@
     }
   };
 
-  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, export: exportGate, publish: publish };
+  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, tesseract: tesseract, export: exportGate, publish: publish };
 
   // ------------------------------------------------------------ Page shell
   function items(tab) {
@@ -934,6 +1035,9 @@
     if (!t.dataset) return;
     if (t.dataset.pdContext) rightsContext[t.dataset.pdContext] = t.value;
     if (t.dataset.pdCost) maxCost[t.dataset.pdCost] = Number(t.value || 0);
+    if (t.dataset.pdEx) {
+      (exchangeInputs[t.dataset.key] = exchangeInputs[t.dataset.key] || {})[t.dataset.pdEx] = t.value;
+    }
     if (t.dataset.pdPub) {
       (pubEdits[t.dataset.key] = pubEdits[t.dataset.key] || {})[t.dataset.pdPub] = t.type === "checkbox" ? t.checked : t.value;
     }

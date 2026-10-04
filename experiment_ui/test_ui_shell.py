@@ -293,7 +293,7 @@ class ShellMarkupTests(unittest.TestCase):
 
         script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
         tabs = re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("let activeTab")[0])
-        self.assertEqual(len(tabs), 11)
+        self.assertEqual(len(tabs), 12)
         for tab in tabs:
             with self.subTest(tab=tab):
                 self.assertIn(f'id="produce-{tab}"', self.html)
@@ -325,14 +325,19 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertEqual(values("const generate = {", "function videoGate"), {"GENERATE", "CHOOSE"})
         returns = {"RETURN_TO_VISUALS", "RETURN_TO_NARRATION", "RETURN_TO_SOUND"}
         self.assertEqual(returns | {"APPROVE_EDIT_DIRECTION"}, set(edit_preview_review.DECISIONS))
-        self.assertEqual(returns | {"APPROVE_EXPORT"}, set(final_export_review.DECISIONS))
+        self.assertEqual(returns | {"APPROVE_EXPORT", "RETURN_TO_EDITOR"}, set(final_export_review.DECISIONS))
         self.assertEqual(values("function videoGate", "const edit = "), returns)
+        self.assertEqual(values("const exportGate = ", "// ---"), {"RETURN_TO_EDITOR"})
+        self.assertEqual(
+            values("const tesseract = {", "// ---"), {"EXPORT", "IMPORT_EDIT", "DISCARD_EDIT"}
+        )
         for endpoint in [
             "/api/narration-spend-gate",
             "/api/final-audio-gate",
             "/api/visual-plan-gate",
             "/api/visual-dispatch",
             "/api/publish-gate",
+            "/api/editor-exchange",
             "/api/visual-candidate-review",
             "/api/visual-rights-review",
             "/api/visual-rough-cut-review",
