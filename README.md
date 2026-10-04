@@ -272,7 +272,8 @@ these steps:
 2. **A packaging brief:** evidence-bound and deterministic (D-094).
 3. **Psychological angles.**
 4. **Thumbnail concepts,** informed by niche conventions (D-097).
-5. **Rendering** from a locked template with a supplied subject image, at a
+5. **Rendering** from a locked template with a subject image chosen from
+   three generated or imported candidates (D-135), or supplied directly, at a
    human thumbnail gate (D-098).
 6. **Title-thumbnail pairing** with hard truth overrides (D-096).
 7. **One final package** at the Final Packaging Gate (D-099), led by a 2–3

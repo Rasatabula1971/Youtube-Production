@@ -68,6 +68,28 @@ def competitors(unit: dict[str, Any], template: dict[str, Any]) -> list[dict[str
     return items
 
 
+def _image_candidates(render_id: str) -> dict[str, Any]:
+    """Candidate subject images (D-135) with file URLs for the UI."""
+    try:
+        from production_engine import thumbnail_image_provider as images
+    except ImportError:  # executed as a script from production_engine/
+        import thumbnail_image_provider as images  # type: ignore[no-redef]
+
+    view = images.candidates_view(render_id)
+    for row in view["candidates"]:
+        row["image_url"] = file_url(render_id, str(row["file"]), str(row["candidate_id"]))
+    return view
+
+
+def image_provider_status() -> dict[str, Any]:
+    try:
+        from production_engine import thumbnail_image_provider as images
+    except ImportError:  # executed as a script from production_engine/
+        import thumbnail_image_provider as images  # type: ignore[no-redef]
+
+    return images.provider_status()
+
+
 def snapshot() -> dict[str, Any]:
     template = render.load_template()
     units = render.load_render_units(template)
@@ -131,6 +153,7 @@ def snapshot() -> dict[str, Any]:
                 "criteria_decisions": review.get("criteria", {}) if current_review else {},
                 "note": review.get("note", "") if current_review else "",
                 "required_accept_criteria": list(criteria),
+                "image_candidates": _image_candidates(render_id),
             }
         )
 
@@ -143,6 +166,7 @@ def snapshot() -> dict[str, Any]:
         "reviewer": reviewer(),
         "criteria": criteria,
         "allowed_source_tiers": list(template["subject_allowed_source_tiers"]),
+        "image_provider": image_provider_status(),
         "unit_count": len(items),
         "rendered": sum(item["render_status"] == "RENDERED" for item in items),
         "pending": len(items) - len(decided),
@@ -211,6 +235,13 @@ def thumbnail_file_path(render_id: str, name: str) -> Path:
     allowed = {"thumbnail.jpg"} | {
         f"{preview['name']}.png" for preview in template["phone_previews"]
     }
+    if name.startswith("candidates/"):
+        current_unit(render_id)
+        try:
+            from production_engine import thumbnail_image_provider as images
+        except ImportError:  # executed as a script from production_engine/
+            import thumbnail_image_provider as images  # type: ignore[no-redef]
+        return images.candidate_file_path(render_id, name)
     if name not in allowed:
         raise ValueError("Unknown thumbnail file")
     current_unit(render_id)

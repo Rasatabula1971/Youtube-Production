@@ -103,6 +103,52 @@ unknown sources are refused. Non-own sources need a licence; licensed web
 sources also need a source URL. A competitor's thumbnail is never a valid
 subject.
 
+## Candidate images (D-135)
+
+`thumbnail_image_provider.py` puts a candidate step in front of the subject
+image. The prompt is built from the thumbnail concept: hero subject,
+secondary element, anomaly, action, emotion, composition, background and
+separation. It always forbids text, logos, watermarks and real people.
+
+- **Generate.** One call to the configured provider for three candidates.
+  - You give an explicit maximum cost; that click is the spend
+    authorization.
+  - The maximum must cover the estimate (price per image × 3) and stay
+    within `per_thumbnail_cap_usd`.
+  - The video's generated-image spend must stay within `per_video_cap_usd`.
+  - Every generation is appended to
+    `output/thumbnails/thumbnail_image_spend.jsonl`.
+- **Import.** An image made in any other tool is copied in as a candidate,
+  with its tool, source tier, licence and cost.
+- **Use this image.** The candidate becomes the render spec's subject image
+  through the normal subject validation, so licence and tier rules apply.
+  Rendering, staleness and the Human Thumbnail Gate are unchanged.
+
+Candidates live in `output/thumbnails/<render_id>/candidates/`, with
+`image_candidates.json` recording:
+
+- the provider and model;
+- the prompt and its hash;
+- the concept hash;
+- the licence and cost.
+
+A candidate made for an earlier version of the concept cannot be chosen.
+
+**No provider is chosen yet.** The built-in adapter speaks the common
+OpenAI-compatible images request (`model`, `prompt`, `n`, `size`, returning
+`data[].b64_json`). It stays off until `thumbnail_image_config.json` sets all
+of these:
+
+- `active_provider`;
+- the endpoint and model;
+- the licence terms;
+- `price_per_image_usd` (never guessed);
+- `contract_verified: true`;
+- the API key variable (`THUMBNAIL_IMAGE_API_KEY` in `.env`).
+
+A provider with another request shape needs one adapter function in
+`ADAPTERS`.
+
 ## Outputs
 
 `production_engine/output/thumbnails/<render_id>/`:

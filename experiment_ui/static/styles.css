@@ -1789,6 +1789,55 @@ button.danger {
   border-radius: 6px;
 }
 
+/* Candidate subject images (D-135). */
+.thumbnail-candidates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.thumbnail-candidate {
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.thumbnail-candidate.chosen {
+  border-color: var(--accent, #3b82f6);
+}
+
+.thumbnail-candidate img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.thumbnail-candidate figcaption {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.thumbnail-generate,
+.thumbnail-import {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 10px;
+}
+
+.thumbnail-import label,
+.thumbnail-generate label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
 /* Mock feed: fixed YouTube-like surfaces, independent of the UI theme. */
 .tfeed-wrap {
   display: flex;
