@@ -431,11 +431,49 @@
     });
   }
 
-  // Section 14 of the redesign: every decision waiting, in one list.
+  // Every pending item of every gate, from the page modules that render
+  // them (D-164). Each page keeps its tabs; this is the one list.
+  function gateItems() {
+    const rows = [];
+    [window.GateReviews, window.Packaging, window.Produce].forEach(function (page) {
+      if (!page || typeof page.queueItems !== "function") return;
+      try {
+        page.queueItems().forEach(function (row) { rows.push(row); });
+      } catch (_) { /* a page that cannot list yet leaves the queue to the others */ }
+    });
+    return rows;
+  }
+
+  // Section 14 of the redesign: every decision waiting, in one list. Your
+  // own decisions first, then the ideas inbox, then what the gate policy
+  // held; within a group, pipeline order, so what unblocks most comes first.
   function reviewQueue(data) {
     const queue = [];
+    const items = gateItems();
+    const withItems = {};
+    items.forEach(function (row) { if (row.concept_id) withItems[row.concept_id] = true; });
+    const titles = {};
+    ((data.productions || {}).productions || []).forEach(function (production) {
+      titles[production.concept_id] = production.title;
+    });
+    function conceptTitle(row) {
+      return row.concept_id && titles[row.concept_id] && titles[row.concept_id] !== row.title ? titles[row.concept_id] : "";
+    }
+    items.filter(function (row) { return row.group !== "policy"; }).forEach(function (row) {
+      queue.push({
+        title: row.title || row.gate,
+        kind: row.gate + " Gate",
+        detail: conceptTitle(row),
+        tone: "human",
+        route: row.route,
+        subroute: row.subroute
+      });
+    });
+    // A production that waits on you without a gate item (research that is
+    // decided but not ready, a blocked concept) keeps its own row.
     ((data.productions || {}).productions || []).forEach(function (production) {
       if (production.status !== "HUMAN_REVIEW" && production.status !== "BLOCKED") return;
+      if (withItems[production.concept_id]) return;
       queue.push({
         title: production.title,
         kind: production.stage_label + (production.status === "BLOCKED" ? " · blocked" : ""),
@@ -443,17 +481,6 @@
         tone: STATUS_TONE[production.status],
         route: "/production",
         subroute: encodeURIComponent(production.concept_id)
-      });
-    });
-    gateWaiting(data).forEach(function (gate) {
-      queue.push({
-        title: plural(gate.count, gate.noun) + " waiting",
-        kind: gate.label + " Gate",
-        detail: gate.detail,
-        tone: "human",
-        route: gate.route || "/review",
-        subroute: gate.id,
-        count: gate.count
       });
     });
     inboxItems(data).forEach(function (item) {
@@ -464,6 +491,16 @@
         tone: "running",
         route: "/opportunity/review",
         subroute: encodeURIComponent(item.opportunity_id)
+      });
+    });
+    items.filter(function (row) { return row.group === "policy"; }).forEach(function (row) {
+      queue.push({
+        title: row.title || row.gate,
+        kind: row.gate + " · held by gate policy",
+        detail: conceptTitle(row),
+        tone: "ready",
+        route: row.route,
+        subroute: row.subroute
       });
     });
     return queue;
@@ -539,6 +576,7 @@
     renderRunning(runningItems(data, scheduler, now));
     renderHealth(data, scheduler);
     setCount("navAttentionCount", attention.total);
+    setCount("navReviewQueueCount", reviewQueue(data).length);
     setCount("navOpportunityCount", inboxItems(data).length);
     setCount("navProductionCount", Number(productions.active_count || 0));
     renderProductionsView();
@@ -577,6 +615,6 @@
   window.CommandCenter = {
     render: render,
     setProductionFilter: setProductionFilter,
-    _test: { attentionItems: attentionItems, schedulerState: schedulerState, filterProductions: filterProductions, productionRow: productionRow }
+    _test: { attentionItems: attentionItems, schedulerState: schedulerState, filterProductions: filterProductions, productionRow: productionRow, reviewQueue: reviewQueue }
   };
 })();

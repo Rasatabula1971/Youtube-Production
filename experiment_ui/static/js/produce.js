@@ -1111,7 +1111,26 @@
     }
   });
 
+  // Pending production decisions for the one Review Queue (D-164); tools are not decisions.
+  function queueItems() {
+    const rows = [];
+    TABS.forEach(function (tab) {
+      const config = CONFIGS[tab[0]];
+      if (!config || tab[2] === "tools" || typeof config.key !== "function") return;
+      config.all().filter(function (item) { return item && config.pending(item); }).forEach(function (item) {
+        rows.push({
+          route: "/produce", subroute: tab[0] + "/" + encodeURIComponent(config.key(item)),
+          gate: tab[1], group: tab[2],
+          title: String((typeof config.title === "function" ? config.title(item) : "") || config.key(item) || ""),
+          concept_id: item.concept_id || ""
+        });
+      });
+    });
+    return rows;
+  }
+
   window.Produce = {
+    queueItems: queueItems,
     open: open,
     show: function () { if (window.location.pathname === "/produce") open(window.location.hash.slice(1)); },
     render: function () { if (window.location.pathname === "/produce") render(); },

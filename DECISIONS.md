@@ -5044,3 +5044,54 @@ question a claim does refer to but no claim answers (the claim was
 rejected or reworked) stays with the person, and the row says so. The
 research summary in the Command Center and the Review Queue reads the
 same text.
+
+## D-164 — One Review Queue of every pending item, with the gate as a label
+
+**Context.** The decisions waiting on the operator were spread over about
+twenty tabs on three pages (Gate reviews, Packaging, Produce), grouped in
+D-159 but still tabs. The Review Queue listed productions and gate counts,
+not the items.
+
+**Decision.** Each gate page module exposes `queueItems()`: every pending
+item it would render, with its gate label, its group (yours / held by
+policy), a title, the concept it belongs to, and the deep link that opens
+that item on its page. The Command Center's `reviewQueue()` merges them
+into one list: your own decisions first, then a production that waits on
+you without a gate item (research decided but not ready, a blocked
+concept), then the ideas inbox, then what the gate policy held. Within a
+group the order is the pipeline order, because an upstream decision
+unblocks the most. The Review Queue nav item carries the count. Script
+branches are listed whole; their sections load on the Script page. A page
+that cannot list yet (its data not loaded) leaves the queue to the others.
+The tabs stay as the place where a decision is made; the queue is the one
+place to see what is waiting.
+
+**Consequences.** "What do I have to decide?" has one answer. Items have no
+timestamp of their own, so the order is pipeline order, not newest first;
+a per-item "waiting since" needs the gates to record it and is not done
+here.
+
+## D-165 — The radar learns what the operator picks
+
+**Context.** The lane filter (D-162) is a word list the operator edits. The
+operator's own Approve, Watch, Save and Reject decisions on radar
+candidates are labels of the same thing and were unused.
+
+**Decision.** `opportunity_engine/radar_learning.py` builds a log-odds word
+model from the inbox decisions on radar packets: tokens are the title's
+words (how, why and what kept: for an explainer channel they are the
+signal) plus one token for the channel; a picked candidate (SAVED,
+APPROVED, WATCHING, or an APPROVE/SAVE/WATCH in its history) counts for,
+a REJECTED one against. Each tracked video gets a `taste` score in -1..1
+and a label (LIKELY / UNSURE / UNLIKELY); a theme takes its best member's.
+The model stays inactive until 20 decisions with at least 5 on each side;
+until then the radar page says how many it has. When active the page
+offers an Order pill ("Strongest outlier" / "What I pick"), shows the
+label beside each video, and names the strongest words for and against.
+Nothing is hidden by the score: it orders, the filters decide what shows.
+Replicated themes stay pinned first.
+
+**Consequences.** After a few dozen decisions the list reads in the
+operator's taste without editing word lists. The model is recomputed from
+the files on every overview, so a changed decision changes the ranking at
+once. It is a ranking aid, not a gate, and the lane word lists remain.
