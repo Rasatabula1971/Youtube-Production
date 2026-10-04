@@ -37,6 +37,7 @@
   const visualChoice = Object.create(null);    // shot key -> candidate_id
   const rightsContext = Object.create(null);   // rights key -> context note
   const maxCost = Object.create(null);         // spend key -> number
+  const confirmCost = Object.create(null);     // unconfirmed spend key -> number (D-166)
   const generatedChoice = Object.create(null); // request file -> candidate_id
   const reworkSegments = Object.create(null);  // final audio key -> {segment_id: bool}
   const pubEdits = Object.create(null);        // publish key -> {field: value}
@@ -554,6 +555,54 @@
       " committed of " + esc(Number(v.target_usd).toFixed(2)) + " target (cap " + esc(Number(v.ceiling_usd).toFixed(2)) + ")</span>";
   }
 
+  // Paid calls whose cost nobody confirmed (D-166): a timeout or provider
+  // error after the call was sent may still have billed, so the estimate
+  // stays committed until you say what it cost.
+  function unconfirmedSpend() {
+    const rows = [];
+    (((status().video_budget || {}).videos) || []).forEach(function (video) {
+      (video.unconfirmed || []).forEach(function (item) { rows.push(item); });
+    });
+    return rows;
+  }
+
+  const unconfirmed = {
+    kicker: "CONFIRM SPEND",
+    pending: function () { return true; },
+    key: function (item) { return item.video_id + "::" + item.category + "::" + item.ref; },
+    title: function (item) { return "Confirm spend · " + words(item.category) + " · " + item.video_id; },
+    meta: function (item) {
+      return '<span class="source-chip">' + esc(money(item.amount_usd)) + " held</span>" + decidedBadge("unconfirmed", "human");
+    },
+    evidence: function (item) {
+      const key = this.key(item);
+      const value = confirmCost[key] !== undefined ? confirmCost[key] : Number(item.amount_usd || 0);
+      return facts([
+        ["What happened", item.note],
+        ["Held against the budget", money(item.amount_usd)],
+        ["Recorded", item.recorded_at]
+      ]) +
+        '<p class="muted">The provider call failed after it was sent, so it may still have been billed. Check the provider\'s usage page, then say what it cost. The amount stays committed against this video\'s budget until you do.</p>' +
+        '<label class="pd-pub-field"><span>It cost (USD)</span><input type="number" min="0" step="0.01" data-pd-confirm-cost="' + esc(key) + '" value="' + esc(String(value)) + '"></label>';
+    },
+    decisions: function (item) {
+      const key = this.key(item);
+      return [
+        { value: "COST", label: "It cost this much", tone: "human", hint: "Records the amount you entered as spent.",
+          validate: function () { const v = confirmCost[key] !== undefined ? confirmCost[key] : Number(item.amount_usd || 0); return Number.isFinite(v) && v >= 0 ? "" : "Enter the cost in US dollars."; } },
+        { value: "NOTHING", label: "It cost nothing", tone: "complete", hint: "Releases the held amount." }
+      ];
+    },
+    decide: function (item, decision, note) {
+      const key = this.key(item);
+      const amount = decision === "NOTHING" ? 0 : (confirmCost[key] !== undefined ? confirmCost[key] : Number(item.amount_usd || 0));
+      return post("/api/budget-reconcile", {
+        video_id: item.video_id, category: item.category, ref: item.ref, total_usd: amount, note: note || ""
+      }, decision === "NOTHING" ? "Released: it cost nothing." : "Recorded as " + money(amount) + " spent.")
+        .then(function (ok) { if (ok) delete confirmCost[key]; return ok; });
+    }
+  };
+
   const budget = {
     kicker: "BUDGET",
     gate: function () {
@@ -561,16 +610,19 @@
       return { status: n.status || v.status ? [n.status, v.status].filter(Boolean).join(" / ") : "" };
     },
     all: function () {
-      return narration.all().map(function (item) { return { kind: "narration", inner: item, decision: item.decision || null }; })
+      return unconfirmedSpend().map(function (item) { return { kind: "unconfirmed", inner: item, decision: null }; })
+        .concat(narration.all().map(function (item) { return { kind: "narration", inner: item, decision: item.decision || null }; }))
         .concat(spend.all().map(function (item) { return { kind: "spend", inner: item, decision: item.decision || null }; }));
     },
-    config: function (item) { return item.kind === "narration" ? narration : spend; },
+    config: function (item) { return item.kind === "narration" ? narration : item.kind === "unconfirmed" ? unconfirmed : spend; },
     video: function (item) {
+      if (item.kind === "unconfirmed") return String(item.inner.video_id || "").split(":");
       return item.kind === "narration" ? [item.inner.concept_id, item.inner.format] : [item.inner.packet.concept_id, item.inner.packet.format];
     },
     pending: function (item) { return this.config(item).pending(item.inner); },
     key: function (item) { return item.kind + "::" + this.config(item).key(item.inner); },
     title: function (item) {
+      if (item.kind === "unconfirmed") return unconfirmed.title(item.inner);
       const video = this.video(item);
       return (item.kind === "narration" ? "Paid narration" : "Generate visual " + item.inner.gap.shot_id) + " · " + video[0] + " · " + words(video[1]);
     },
@@ -866,6 +918,10 @@
         section("Sources in the description", sources ? '<ul class="rw-list">' + sources + "</ul>" : '<p class="muted">No verified sources found.</p>') +
         (item.status === "APPROVED_FOR_UPLOAD"
           ? section("Upload",
+            (item.pending_upload
+              ? '<p class="radar-error">An earlier upload was interrupted' + (item.pending_upload.started_at ? " (started " + esc(item.pending_upload.started_at) + ")" : "") +
+                ". Upload to YouTube resumes that session where it stopped; it will not create a second video.</p>"
+              : "") +
             ((this.gate().uploader || {}).ready
               ? '<p class="muted">Upload sends this exact video, thumbnail and metadata to YouTube.</p>'
               : '<p class="muted">Direct upload is off: ' + esc(((this.gate().uploader || {}).problems || []).join(" ")) + "</p>") +
@@ -883,7 +939,8 @@
       if (item.status === "APPROVED_FOR_UPLOAD") {
         const options = [];
         if ((this.gate().uploader || {}).ready) {
-          options.push({ value: "UPLOAD", label: "Upload to YouTube", tone: "complete", hint: "Privacy: " + ((item.metadata || {}).privacy_status || "private") + ".",
+          options.push({ value: "UPLOAD", label: item.pending_upload ? "Resume upload to YouTube" : "Upload to YouTube", tone: "complete",
+            hint: (item.pending_upload ? "Continues the interrupted session. " : "") + "Privacy: " + ((item.metadata || {}).privacy_status || "private") + ".",
             confirm: function () { return "Upload this video to YouTube now as " + ((item.metadata || {}).privacy_status || "private") + "?"; } });
         }
         options.push({ value: "RECORD_UPLOAD", label: "Record a manual upload", tone: "running", hint: "You uploaded it in YouTube Studio.",
@@ -987,9 +1044,11 @@
     const rows = videos.map(function (v) {
       const tone = v.over_ceiling ? "blocked" : v.over_target ? "human" : "complete";
       const label = v.over_ceiling ? "Over ceiling" : v.over_target ? "Over target" : "Within target";
+      const held = (v.unconfirmed || []).length;
       return "<li><strong>" + esc(v.video_id) + "</strong> · committed " + esc(money(v.committed_usd)) +
         " of " + esc(money(v.ceiling_usd)) + " · spent " + esc(money(v.actual_usd)) +
-        ' <span class="status-badge status-' + tone + '">' + esc(label) + "</span></li>";
+        ' <span class="status-badge status-' + tone + '">' + esc(label) + "</span>" +
+        (held ? ' <span class="status-badge status-human">' + held + " unconfirmed call" + (held === 1 ? "" : "s") + " to settle</span>" : "") + "</li>";
     }).join("");
     return '<section class="pd-budget" aria-label="Budget per video"><p class="attention-kicker">BUDGET PER VIDEO</p>' +
       '<p class="muted">Target ' + esc(money(budget.target_usd)) + " · ceiling " + esc(money(budget.ceiling_usd)) +
@@ -1095,6 +1154,8 @@
       t.closest(".pk-packages").querySelectorAll(".pk-package").forEach(function (card) { card.classList.toggle("chosen", card.contains(t)); });
     } else if (t.dataset.pdCost) {
       maxCost[t.dataset.pdCost] = Number(t.value || 0);
+    } else if (t.dataset.pdConfirmCost) {
+      confirmCost[t.dataset.pdConfirmCost] = Number(t.value || 0);
     }
   });
 
@@ -1103,6 +1164,7 @@
     if (!t.dataset) return;
     if (t.dataset.pdContext) rightsContext[t.dataset.pdContext] = t.value;
     if (t.dataset.pdCost) maxCost[t.dataset.pdCost] = Number(t.value || 0);
+    if (t.dataset.pdConfirmCost) confirmCost[t.dataset.pdConfirmCost] = Number(t.value || 0);
     if (t.dataset.pdEx) {
       (exchangeInputs[t.dataset.key] = exchangeInputs[t.dataset.key] || {})[t.dataset.pdEx] = t.value;
     }

@@ -5095,3 +5095,56 @@ Replicated themes stay pinned first.
 operator's taste without editing word lists. The model is recomputed from
 the files on every overview, so a changed decision changes the ranking at
 once. It is a ranking aid, not a gate, and the lane word lists remain.
+
+## D-166 — Unconfirmed spend: a failed image call keeps its money committed until you settle it
+
+**Context.** The audit (2026-10-04, N-3) found that thumbnail and premium
+visual generation treated any failed provider call as costing nothing:
+the thumbnail path released its reservation, the visual path had none. A
+timeout or a 5xx after the request was sent may still have billed, and
+nothing in the app let the operator correct the ledger afterwards.
+
+**Decision.**
+- **A new ledger event, UNCONFIRMED.** It keeps the estimated amount
+  committed (counted like a reservation) and marks the item as needing a
+  person. `video_budget.outcome_unknown(exc)` decides: an HTTP 4xx answer
+  means the provider refused before doing work, so the reservation is
+  released; anything else (timeout, lost connection, 5xx, a bad answer
+  after the call) is marked unconfirmed with the error in the note. Both
+  image paths use it; narration already records partial spend.
+- **Reconcile.** `video_budget.reconcile(video, category, ref, total_usd)`
+  records what the item really cost (0 for nothing) and releases what was
+  held, so nothing stays committed by guess. It works on any ledger item,
+  not only an unconfirmed one, so an invoice can correct a recorded cost.
+- **Budget tab.** Unconfirmed calls appear first on the Budget tab as
+  "Confirm spend" items with the error, the held amount, a cost field and
+  two choices: "It cost this much" and "It cost nothing". The per-video
+  budget list counts unconfirmed calls. Route: `/api/budget-reconcile`.
+
+**Consequences.** The ceiling is trustworthy again: money that may be gone
+is counted until a person says otherwise, and a wrong guess is corrected
+on the same tab. The provider's usage page remains the source of truth
+for the amount; the app records the operator's answer with a note.
+
+## D-167 — The YouTube upload resumes instead of uploading twice
+
+**Context.** The audit (N-2) found the YouTube upload not resumable: a
+timeout after the video bytes were sent could leave a private, unrecorded
+video on the channel, and a retry would upload it again.
+
+**Decision.** The session URI YouTube returns is saved to
+`production_engine/output/pending_uploads/<key>.pending_upload.json`
+(with the file size and the approved video hash) before any byte is sent.
+A retry first asks the saved session what it holds
+(`PUT` with `Content-Range: bytes */size`): a finished session answers
+with the video id, which is recorded without sending anything; a 308 with
+a `Range` header is continued from the next byte with a proper
+`Content-Range`; a 400/404/410 means the session is dead, the record is
+discarded and one new upload starts. A record for other bytes (the video
+was re-rendered) is discarded. The record is removed when the id is
+recorded. The Publish tab shows an interrupted upload and the button reads
+"Resume upload to YouTube". The publish record carries `resumed`.
+
+**Consequences.** One approved video never becomes two private videos. A
+retry after any network failure is safe to click. The pending record is
+plain JSON the operator can delete to force a fresh upload.

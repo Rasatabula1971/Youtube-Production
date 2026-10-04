@@ -419,6 +419,15 @@ to match the redesign's navigation:
     binds the rendered bytes and publishes nothing.
   - **Kept in the classic view:** asset registration (final narration audio,
     managed and generated visuals, final sound) and storyboard shot editing.
+  - **Confirm spend (D-166):** a thumbnail or visual generation call that
+    failed after it was sent (timeout, provider error) keeps its estimate
+    committed and appears first on the Budget tab as "Confirm spend", with
+    the error and a cost field: "It cost this much" records the amount,
+    "It cost nothing" releases it. The per-video list counts such calls.
+  - **Resumable upload (D-167):** the Publish tab saves the YouTube upload
+    session before sending bytes; after an interruption the button reads
+    "Resume upload to YouTube" and continues the same session, so one video
+    is never uploaded twice.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions. Its stage strip is a progress indicator, not
   navigation.

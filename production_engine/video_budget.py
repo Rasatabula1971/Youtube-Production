@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -112,16 +113,16 @@ def _events(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _items(video: str, ledger: Path | None = None) -> dict[tuple[str, str], dict[str, float]]:
-    items: dict[tuple[str, str], dict[str, float]] = {}
+def _items(video: str, ledger: Path | None = None) -> dict[tuple[str, str], dict[str, Any]]:
+    items: dict[tuple[str, str], dict[str, Any]] = {}
     for event in _events(_ledger(ledger)):
         if event.get("event") == "CORRUPT":
-            items[("corrupt", "ledger")] = {"reserved": math.inf, "actual": 0.0}
+            items[("corrupt", "ledger")] = {"reserved": math.inf, "actual": 0.0, "unconfirmed": False, "note": ""}
             continue
         if event.get("video_id") != video:
             continue
         key = (str(event.get("category") or ""), str(event.get("ref") or ""))
-        item = items.setdefault(key, {"reserved": 0.0, "actual": 0.0})
+        item = items.setdefault(key, {"reserved": 0.0, "actual": 0.0, "unconfirmed": False, "note": ""})
         kind = event.get("event")
         try:
             amount = float(event.get("amount_usd") or 0)
@@ -132,15 +133,41 @@ def _items(video: str, ledger: Path | None = None) -> dict[tuple[str, str], dict
             amount = math.inf
         if kind == "RESERVE":
             item["reserved"] = amount
+        elif kind == "UNCONFIRMED":
+            # A paid call whose outcome is unknown (timeout, provider error
+            # after dispatch): the money may be gone, so it stays committed
+            # until a person says what it cost (D-166).
+            item["reserved"] = amount
+            item["unconfirmed"] = True
+            item["note"] = str(event.get("note") or "")
+            item["recorded_at"] = event.get("recorded_at")
         elif kind == "RELEASE":
             item["reserved"] = 0.0
+            item["unconfirmed"] = False
         elif kind == "ACTUAL":
             item["actual"] = amount
+            item["unconfirmed"] = False
     return items
 
 
-def _exposure(item: dict[str, float]) -> float:
-    return max(item["reserved"], item["actual"])
+def _exposure(item: dict[str, Any]) -> float:
+    return max(float(item["reserved"]), float(item["actual"]))
+
+
+def unconfirmed_items(video: str, ledger: Path | None = None) -> list[dict[str, Any]]:
+    """Paid calls of one video whose cost nobody has confirmed yet (D-166)."""
+    return [
+        {
+            "video_id": video,
+            "category": category,
+            "ref": ref,
+            "amount_usd": float(item["reserved"]),
+            "note": item.get("note") or "",
+            "recorded_at": item.get("recorded_at"),
+        }
+        for (category, ref), item in _items(video, ledger).items()
+        if item.get("unconfirmed")
+    ]
 
 
 def summary(
@@ -154,7 +181,7 @@ def summary(
         row["committed_usd"] = round(row["committed_usd"] + _exposure(item), 4)
         row["actual_usd"] = round(row["actual_usd"] + item["actual"], 4)
     committed = round(sum(_exposure(item) for item in items.values()), 4)
-    actual = round(sum(item["actual"] for item in items.values()), 4)
+    actual = round(sum(float(item["actual"]) for item in items.values()), 4)
     return {
         "video_id": video,
         "target_usd": float(config["target_usd"]),
@@ -166,6 +193,7 @@ def summary(
         "over_target": committed > float(config["target_usd"]),
         "over_ceiling": committed > float(config["ceiling_usd"]),
         "by_category": by_category,
+        "unconfirmed": unconfirmed_items(video, ledger),
     }
 
 
@@ -227,9 +255,54 @@ def record_actual(
     """Record the total actually spent on one item (money already spent)."""
     with _LOCK:
         amount = money(total_usd, label="Actual cost")
-        current = _items(video, ledger).get((category, ref), {}).get("actual")
-        if current is None or round(current, 4) != amount:
+        item = _items(video, ledger).get((category, ref), {})
+        current = item.get("actual")
+        if current is None or round(float(current), 4) != amount or item.get("unconfirmed"):
             _record("ACTUAL", video=video, category=category, ref=ref, amount=amount, actor=actor, note=note, ledger=ledger)
+        return summary(video, ledger=ledger)
+
+
+def outcome_unknown(exc: BaseException) -> bool:
+    """Whether a failed paid call may still have cost money (D-166).
+
+    A provider that refused the request before doing any work answers with
+    HTTP 4xx (bad key, bad request, quota): nothing was charged. Everything
+    else (timeout, connection lost, 5xx, a bad answer after the call) may
+    have run and billed, so the operator must say what it cost.
+    """
+    match = re.search(r"HTTP (\d{3})", str(exc))
+    if match and match.group(1).startswith("4"):
+        return False
+    return True
+
+
+def mark_unconfirmed(
+    *, video: str, category: str, ref: str, amount_usd: float, actor: str = "", note: str = "",
+    ledger: Path | None = None,
+) -> dict[str, Any]:
+    """Keep ``amount_usd`` committed for a paid call whose outcome is unknown."""
+    with _LOCK:
+        amount = money(amount_usd, label="The unconfirmed amount")
+        _record("UNCONFIRMED", video=video, category=category, ref=ref, amount=amount, actor=actor, note=note, ledger=ledger)
+        return summary(video, ledger=ledger)
+
+
+def reconcile(
+    *, video: str, category: str, ref: str, total_usd: Any, actor: str = "", note: str = "",
+    ledger: Path | None = None,
+) -> dict[str, Any]:
+    """The operator settles one item: what it really cost (0 for nothing).
+
+    Records the actual total and releases what was held for it, so the
+    ledger carries the person's answer and nothing stays committed by guess.
+    Any item may be corrected this way, not only an unconfirmed one.
+    """
+    with _LOCK:
+        amount = money(total_usd, label="The confirmed cost")
+        if (category, ref) not in _items(video, ledger):
+            raise ValueError("Unknown budget item: nothing was recorded for it")
+        _record("ACTUAL", video=video, category=category, ref=ref, amount=amount, actor=actor, note=note or "Confirmed by you", ledger=ledger)
+        _record("RELEASE", video=video, category=category, ref=ref, amount=0, actor=actor, note="settled", ledger=ledger)
         return summary(video, ledger=ledger)
 
 
@@ -239,9 +312,11 @@ def all_videos() -> list[str]:
 
 def snapshot() -> dict[str, Any]:
     config = load_config()
+    videos = [summary(video, config) for video in all_videos()]
     return {
         "target_usd": float(config["target_usd"]),
         "ceiling_usd": float(config["ceiling_usd"]),
         "confirmed_by_human": bool(config.get("confirmed_by_human")),
-        "videos": [summary(video, config) for video in all_videos()],
+        "videos": videos,
+        "unconfirmed_count": sum(len(video["unconfirmed"]) for video in videos),
     }

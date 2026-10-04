@@ -48,6 +48,7 @@ FINAL_PACKAGES_DIR = _ROOT / "packaging_engine" / "output" / "mature_packaging" 
 VERIFIED_DIR = _ROOT / "research_engine" / "output" / "verified_packages"
 APPROVED_DIR = OUTPUT / "approved_publish"
 PUBLISHED_DIR = OUTPUT / "published_videos"
+PENDING_UPLOADS_DIR = OUTPUT / "pending_uploads"
 HISTORY_FILE = OUTPUT / "publish_history.jsonl"
 DECISIONS = {"APPROVE_PUBLISH", "HOLD"}
 PRIVACY = {"private", "unlisted", "public"}
@@ -217,6 +218,29 @@ def _published_path(key: str) -> Path:
     return PUBLISHED_DIR / f"{key}.publish_record.json"
 
 
+def _pending_path(key: str) -> Path:
+    return PENDING_UPLOADS_DIR / f"{key}.pending_upload.json"
+
+
+def pending_upload(concept_id: str, fmt: str) -> dict[str, Any] | None:
+    """A resumable upload session that was started and not finished (D-167)."""
+    path = _pending_path(_key(concept_id, fmt))
+    if not path.exists():
+        return None
+    record = load_json(path)
+    return record if isinstance(record, dict) else None
+
+
+def save_pending_upload(record: dict[str, Any]) -> None:
+    atomic_write_json(_pending_path(_key(str(record["concept_id"]), str(record["format"]))), record)
+
+
+def clear_pending_upload(concept_id: str, fmt: str) -> None:
+    path = _pending_path(_key(concept_id, fmt))
+    if path.exists():
+        path.unlink()
+
+
 def current_approval(concept_id: str, fmt: str) -> dict[str, Any] | None:
     key = _key(concept_id, fmt)
     draft = next((d for d in build_drafts() if d["key"] == key), None)
@@ -251,6 +275,7 @@ def snapshot() -> dict[str, Any]:
                 "status": status,
                 "decision": "APPROVE_PUBLISH" if approval else "HOLD" if held else "PENDING",
                 "published": published,
+                "pending_upload": None if published else pending_upload(draft["concept_id"], draft["format"]),
                 "history": history,
             }
         )
