@@ -287,6 +287,36 @@ PASS result. Partial branch coverage cannot report a global PASS.
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
 
+## Human Visual Plan Gate (D-138)
+
+After the free narration preview is approved, `visual_plan_review.py` builds
+the complete visual plan per video. It holds the paid narration until you
+approve it on `/produce#plan`.
+
+- **Built from:** the approved format plan, using the same requirements as
+  the visual manifest.
+- **Each shot shows:**
+  - its beat, purpose, visual treatment and claims;
+  - its window in the approved preview, taken from the preview's per-beat
+    audio;
+  - the first source tier it will try.
+- **Also shown:** the video's budget (D-136).
+
+| Decision | Effect |
+|---|---|
+| `APPROVE_VISUAL_PLAN` | Bound to the format plan, the preview audio and the plan content. |
+| `REWORK_VISUAL_PLAN` | Needs a note; spend stays held until the format plan is reworked. |
+
+- **Enforcement.** The server refuses ACCEPT at the Narration Spend Gate for
+  a video whose plan is not approved. The workflow stops at
+  `HUMAN_VISUAL_PLAN_GATE`, or at `VISUAL_PLAN_REWORK_REQUIRED` after a
+  rework.
+- **Already-spent videos.** A video whose narration spend was authorized
+  before this gate existed is not pulled back to it.
+- **After the paid narration.** Once it is approved (D-137), the storyboard
+  is retimed to the real audio as before; its shots are the approved plan's
+  beats.
+
 ## Human Final Audio Gate (D-137)
 
 Audio QC is automatic: it checks duration, silence, clipping and missing

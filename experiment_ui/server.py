@@ -84,6 +84,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/thumbnail-spec",
     "/api/thumbnail-images",
     "/api/final-audio-gate",
+    "/api/visual-plan-gate",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -403,6 +404,7 @@ from production_engine.thumbnail_review import (
 from production_engine import thumbnail_image_provider
 from production_engine import video_budget
 from production_engine import narration_final_review
+from production_engine import visual_plan_review
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -3151,6 +3153,43 @@ def narration_artifact_state() -> dict[str, Any]:
         "final_audio": final_audio,
         "audio_ready": audio_ready,
     }
+
+
+def visual_plan_blocking_items(
+    narration_spend_state: dict[str, Any], plan_gate: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Visual plans that still hold narration spend (D-138).
+
+    Videos whose narration spend was already authorized before this gate
+    existed are not pulled back to it.
+    """
+    spent_videos = {
+        (str(item.get("concept_id")), str(item.get("format")))
+        for item in narration_spend_state.get("items", []) or []
+        if isinstance(item, dict) and str(item.get("decision") or "").upper() == "ACCEPT"
+    }
+    return [
+        item
+        for item in plan_gate.get("items", []) or []
+        if isinstance(item, dict)
+        and (str(item.get("concept_id")), str(item.get("format"))) not in spent_videos
+    ]
+
+
+def require_visual_plan_for_spend(body: dict[str, Any]) -> None:
+    """Refuse narration spend authorization until the visual plan is approved."""
+    if str(body.get("decision", "")).strip().upper() != "ACCEPT":
+        return
+    if not visual_plan_review.is_approved(str(body.get("concept_id", "")), str(body.get("format", ""))):
+        raise ValueError("Approve the visual plan for this video before authorizing narration spend")
+
+
+def visual_plan_gate_state() -> dict[str, Any]:
+    """Visual Plan Gate snapshot that degrades to an error status instead of raising."""
+    try:
+        return visual_plan_review.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "complete": False, "items": []}
 
 
 def final_audio_gate_state() -> dict[str, Any]:
@@ -7471,6 +7510,32 @@ def workflow_guidance(
     narration_state = narration_artifact_state()
     narration_render_state = narration_state.get("render", {})
     narration_spend_state = narration_state.get("spend_gate", {})
+    # The complete visual plan is approved before any narration spend (D-138).
+    plan_items = visual_plan_blocking_items(narration_spend_state, visual_plan_gate_state())
+    if any(item.get("decision") == "REWORK_VISUAL_PLAN" for item in plan_items):
+        return {
+            "state": "VISUAL_PLAN_REWORK_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Rework the Visual Plan",
+            "current_detail": (
+                "You sent the visual plan back. Rework the format plan at the Format "
+                "Gate; the visual plan is rebuilt from it and comes back for approval."
+            ),
+            "next_action_id": None,
+            "next_title": "Rework at the Format Gate",
+        }
+    if any(item.get("decision") in {"PENDING", "BLOCKED"} for item in plan_items):
+        return {
+            "state": "HUMAN_VISUAL_PLAN_GATE",
+            "current_action_id": None,
+            "current_title": "Approve the Visual Plan",
+            "current_detail": (
+                "Review every shot, its timing from the approved free preview and its "
+                "visual source before any paid narration is authorized."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Prepare Final Narration Quote",
+        }
     if (
         narration_spend_state.get("status") == "AWAITING_HUMAN_DECISION"
         and narration_spend_state.get("items")
@@ -8351,6 +8416,7 @@ def status_payload() -> dict[str, Any]:
         "thumbnail_gate": thumbnail_gate_state(),
         "video_budget": video_budget_state(),
         "final_audio_gate": final_audio_gate_state(),
+        "visual_plan_gate": visual_plan_gate_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -8678,6 +8744,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/final-audio-gate":
             self._send_json(final_audio_gate_state())
+            return
+        if route == "/api/visual-plan-gate":
+            self._send_json(visual_plan_gate_state())
             return
         if route == "/api/final-audio-file":
             query = parse_qs(urlparse(self.path).query)
@@ -9378,7 +9447,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(payload)
                 return
 
+            if route == "/api/visual-plan-gate":
+                payload = visual_plan_review.apply_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
             if route == "/api/narration-spend-gate":
+                require_visual_plan_for_spend(body)
                 payload = apply_narration_spend_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     format=str(body.get("format", "")),

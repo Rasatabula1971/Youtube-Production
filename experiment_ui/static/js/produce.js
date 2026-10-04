@@ -9,6 +9,7 @@
   "use strict";
 
   const TABS = [
+    ["plan", "Visual plan"],
     ["narration", "Narration spend"],
     ["audio", "Final audio"],
     ["visuals", "Choose visuals"],
@@ -19,7 +20,7 @@
     ["export", "Final export"]
   ];
 
-  let activeTab = "narration";
+  let activeTab = "plan";
   let showDecided = false;
   const workspaces = Object.create(null);
   const pendingFocus = Object.create(null);
@@ -81,9 +82,66 @@
     }
   }
 
+  function seconds(value) {
+    const number = Number(value);
+    return value !== null && value !== undefined && value !== "" && Number.isFinite(number) ? number.toFixed(1) + " s" : "—";
+  }
+
   function noteRework(value, label, hint, placeholder) {
     return { value: value, label: label, hint: hint, tone: "running", needsNote: true, notePlaceholder: placeholder || "say what must change" };
   }
+
+  // ------------------------------------------------------------ Visual plan
+  // The complete visual plan, timed from the approved free preview, approved
+  // before any paid narration (D-138).
+  const plan = {
+    kicker: "VISUAL PLAN",
+    gate: function () { return status().visual_plan_gate || {}; },
+    all: function () { return (this.gate().items || []).filter(Boolean); },
+    pending: function (item) { return ["PENDING", "BLOCKED"].indexOf(String(item.decision || "PENDING").toUpperCase()) !== -1; },
+    key: function (item) { return item.concept_id + "::" + item.format; },
+    title: function (item) { return item.concept_id + " · " + words(item.format); },
+    meta: function (item) {
+      return '<span class="source-chip">' + esc((item.shots || []).length) + " shots</span>" +
+        '<span class="rw-meta-text">' + esc(seconds(item.preview_total_seconds)) + " in the preview</span>" +
+        (this.pending(item) ? "" : decidedBadge(item.decision, item.decision === "APPROVE_VISUAL_PLAN" ? "complete" : "blocked"));
+    },
+    evidence: function (item) {
+      if (item.error) return '<p class="radar-error">The plan cannot be built: ' + esc(item.error) + "</p>";
+      const budget = item.budget || {};
+      const rows = (item.shots || []).map(function (shot) {
+        return "<tr><td>" + esc(shot.beat_id) + "</td><td>" +
+          (shot.preview_start_seconds === null || shot.preview_start_seconds === undefined
+            ? "—" : esc(seconds(shot.preview_start_seconds)) + "–" + esc(seconds(shot.preview_end_seconds))) +
+          "</td><td>" + esc(shot.narrative_purpose) + "</td><td>" + esc(shot.visual_treatment) + "</td><td>" +
+          esc(words(shot.first_source_tier)) + "</td><td>" + esc((shot.claim_ids || []).join(", ")) + "</td></tr>";
+      }).join("");
+      return facts([
+        ["Planned length", seconds(item.duration_intent_seconds)],
+        ["Preview length", seconds(item.preview_total_seconds)],
+        ["Shots without preview timing", item.untimed_shots],
+        ["Video budget", budget.ceiling_usd !== undefined
+          ? "committed " + money(budget.committed_usd) + " of " + money(budget.ceiling_usd) + " (target " + money(budget.target_usd) + ")" : "—"],
+        ["Paid visuals", item.cost_policy ? "at most " + Math.round(100 * Number(item.cost_policy.max_paid_generated_share || 0)) + "% of shots generated" : "—"]
+      ]) +
+        '<p class="muted">Approving this plan comes before any paid narration. Timing is from the free preview; after the paid narration is approved the storyboard is retimed to it.</p>' +
+        section("Shots", rows
+          ? '<div class="pd-table-wrap"><table class="pd-plan"><thead><tr><th>Beat</th><th>Preview time</th><th>Purpose</th><th>Visual</th><th>First source</th><th>Claims</th></tr></thead><tbody>' + rows + "</tbody></table></div>"
+          : '<p class="muted">No shots.</p>');
+    },
+    decisions: function (item) {
+      if (item.error) return [];
+      return [
+        { value: "APPROVE_VISUAL_PLAN", label: "Approve visual plan", hint: "The narration quote and spend can proceed.", tone: "complete" },
+        noteRework("REWORK_VISUAL_PLAN", "Rework plan", "Holds narration spend; rework the format plan.")
+      ];
+    },
+    decide: function (item, decision, note) {
+      return post("/api/visual-plan-gate", {
+        concept_id: item.concept_id, format: item.format, decision: decision, note: note
+      }, decision === "APPROVE_VISUAL_PLAN" ? "Visual plan approved." : "Visual plan sent for rework.");
+    }
+  };
 
   // -------------------------------------------------------- Narration spend
   const narration = {
@@ -158,10 +216,6 @@
   // ----------------------------------------------------------- Final audio
   // The exact paid narration, after automatic Audio QC, approved by ear
   // before any visual work uses its timing (D-137).
-  function seconds(value) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number.toFixed(1) + " s" : "—";
-  }
 
   const finalAudio = {
     kicker: "FINAL AUDIO",
@@ -517,7 +571,7 @@
     }
   });
 
-  const CONFIGS = { narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, edit: edit, export: exportGate };
+  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, edit: edit, export: exportGate };
 
   // ------------------------------------------------------------ Page shell
   function items(tab) {

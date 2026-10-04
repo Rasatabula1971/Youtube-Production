@@ -293,7 +293,7 @@ class ShellMarkupTests(unittest.TestCase):
 
         script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
         tabs = re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("let activeTab")[0])
-        self.assertEqual(len(tabs), 8)
+        self.assertEqual(len(tabs), 9)
         for tab in tabs:
             with self.subTest(tab=tab):
                 self.assertIn(f'id="produce-{tab}"', self.html)
@@ -306,6 +306,9 @@ class ShellMarkupTests(unittest.TestCase):
 
         # Server-side decision sets, copied from each gate module's validation.
         import narration_final_review
+        import visual_plan_review
+
+        self.assertEqual(values("const plan = {", "const narration = {"), set(visual_plan_review.DECISIONS))
 
         self.assertEqual(values("const narration = {", "const finalAudio = {"), {"ACCEPT", "REWORK", "REJECT"})
         self.assertEqual(values("const finalAudio = {", "const visuals = {"), set(narration_final_review.DECISIONS))
@@ -326,6 +329,7 @@ class ShellMarkupTests(unittest.TestCase):
         for endpoint in [
             "/api/narration-spend-gate",
             "/api/final-audio-gate",
+            "/api/visual-plan-gate",
             "/api/visual-candidate-review",
             "/api/visual-rights-review",
             "/api/visual-rough-cut-review",
