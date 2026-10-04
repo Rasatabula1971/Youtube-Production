@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
@@ -225,34 +226,18 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# Bounds the app's own validator enforces concept by concept. They are left out
-# of the schema sent to providers: under strict structured output a provider
-# rejects the whole generation when one concept breaks one bound (for example a
-# single source element listed), and every concept in the batch is lost.
-_POLICY_KEYWORDS = frozenset({"minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength"})
-
-
 def provider_schema(schema: Any) -> Any:
-    """The response schema as a shape (types, required fields, enums) only.
+    """The response schema as sent to providers (D-145, revised by D-148).
 
-    ``response_schema`` stays the authoritative contract; the validator applies
-    its bounds to each concept and rejects only the concepts that break them.
-    String ``const`` values (the mechanism id, a rework target) are kept.
+    Every field bound stays: without them the model invented drama levels
+    outside 4-10 and too few opening moments (laptop run, 4 October 2026).
+    Only the number of concepts in one answer is left to the runner, which
+    keeps at most the requested number (``_cap_concepts``).
     """
-    if isinstance(schema, list):
-        return [provider_schema(item) for item in schema]
-    if not isinstance(schema, dict):
-        return schema
-    if isinstance(schema.get("const"), bool):
-        return {"type": "boolean"}
-    shaped: dict[str, Any] = {}
-    for key, value in schema.items():
-        if key in _POLICY_KEYWORDS:
-            continue
-        if key == "properties" and isinstance(value, dict):
-            shaped[key] = {name: provider_schema(child) for name, child in value.items()}
-        else:
-            shaped[key] = provider_schema(value)
+    shaped = json.loads(json.dumps(schema))
+    concepts = (shaped.get("properties") or {}).get("concepts")
+    if isinstance(concepts, dict):
+        concepts.pop("maxItems", None)
     return shaped
 
 
@@ -293,6 +278,22 @@ def concepts_per_call() -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise ValueError("concept_model_route.json concepts_per_call must be a positive integer")
     return value
+
+
+def pause_between_calls() -> float:
+    """Seconds to wait between one mechanism's calls (D-148).
+
+    Groq's free tier limits tokens per minute; a second concept call in the
+    same minute was refused as RATE_LIMITED and fell to models that fail the
+    schema.
+    """
+    try:
+        value = load_json(ROUTE_FILE).get("pause_between_calls_seconds", 0)
+    except (OSError, ValueError, AttributeError):
+        return 0.0
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise ValueError("concept_model_route.json pause_between_calls_seconds must be a non-negative number")
+    return float(value)
 
 
 def call_gemini_only(payload: dict[str, Any], *, timeout_seconds: float) -> dict[str, Any]:
@@ -351,7 +352,8 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "19. If human_rework_note is present, it is an AUTHORITATIVE human instruction for the one concept identified by human_rework_concept_id. Return exactly one revised concept with that same concept_id. Correct the requested issue while preserving unrelated strengths where possible.\n"
         "20. Human rework never authorizes invented audience evidence, unsupported drama, source copying, or false certainty. If the instruction conflicts with evidence constraints, preserve the constraint and make the safest valid correction.\n"
         "21. If already_generated_concepts is present, those concepts exist already for this mechanism. Generate genuinely different premises, viewer problems and titles, and reuse none of their concept_ids.\n"
-        "22. Every concept must include every field of the response schema, including the complete human_framing and viewer_need_evidence objects.\n\n"
+        "22. Every concept must include every field of the response schema, including the complete human_framing and viewer_need_evidence objects.\n"
+        "23. Drama numbers: capacity, target, hook_level and every story_curve value are whole numbers from 4 to 10; target may not exceed capacity; the highest story_curve value must reach the target; every tempo_curve value is a whole number from 1 to 10; story_curve and tempo_curve each have 4 to 8 values. visual_opening_plan.moments has 3 to 5 moments.\n\n"
         "CONCEPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -660,8 +662,11 @@ def _run_in_calls(
     last: dict[str, Any] = {}
     stop: dict[str, Any] | None = None
 
+    pause = pause_between_calls()
     while len(accepted_titles) < total and len(calls) < max_calls:
         number = len(calls) + 1
+        if number > 1 and pause:
+            time.sleep(pause)
         chunk = dict(request)
         chunk["concept_count_requested"] = min(per_call, total - len(accepted_titles))
         if accepted_titles:

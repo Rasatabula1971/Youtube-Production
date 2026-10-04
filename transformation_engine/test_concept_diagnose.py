@@ -41,7 +41,7 @@ class ConceptDiagnoseTests(unittest.TestCase):
                 saved = json.loads(Path(report["text_file"]).with_suffix(".json").read_text())
             body = post.call_args.args[0]
         self.assertEqual(saved["http_status"], status)
-        self.assertNotIn('"maxItems"', json.dumps(body["response_format"]))
+        self.assertNotIn("maxItems", body["response_format"]["json_schema"]["schema"]["properties"]["concepts"])
         self.assertEqual(body["response_format"]["json_schema"].get("strict", False), strict)
         return report
 
