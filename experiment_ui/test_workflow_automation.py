@@ -7,6 +7,15 @@ import workflow_automation as automation
 
 
 class WorkflowAutomationTests(unittest.TestCase):
+    def setUp(self):
+        # Gate policy decisions are tested in test_gate_autopilot; keep these
+        # runs off the real review files.
+        patcher = patch.object(
+            automation.gate_autopilot, "decide", return_value={"gate": None, "decided": 0, "held": []}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_next_enabled_action_uses_pipeline_order(self):
         readiness = {
             "package_generate": {"enabled": True},
@@ -1392,6 +1401,29 @@ class WorkflowAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "NO_PROGRESS")
         self.assertEqual(result["failed_action"], "exp2_prepare")
+
+
+class GatePolicyRunTests(unittest.TestCase):
+    def test_automatic_gate_decisions_continue_the_run_then_name_held_items(self):
+        outcomes = iter([
+            {"gate": "format", "decided": 2, "held": ["c3: wording overlaps the source video"]},
+            {"gate": "format", "decided": 0, "held": ["c3: wording overlaps the source video"]},
+        ])
+        with (
+            patch.object(automation.control, "action_readiness", return_value={}),
+            patch.object(
+                automation.control, "workflow_guidance",
+                return_value={"state": "HUMAN_FORMAT_GATE", "current_title": "Review the format plan"},
+            ),
+            patch.object(automation.gate_autopilot, "decide", side_effect=lambda *a, **k: next(outcomes)),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], ["gate_policy:format"])
+        self.assertEqual(result["auto_held"], {"format": ["c3: wording overlaps the source video"]})
+        self.assertIn("Held for you by the gate policy", result["message"])
+        self.assertIn("overlaps the source", result["message"])
 
 
 class PartialMessageTests(unittest.TestCase):

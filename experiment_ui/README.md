@@ -120,6 +120,25 @@ The panel shows:
 
 The **Stop** button terminates the current child process.
 
+While a job runs, a banner under the page header on every page shows the
+current automatic step, a ticking clock and the latest log line; it turns
+amber when the log has been quiet for two minutes (D-155).
+
+## Gate policy (D-156)
+
+`gate_policy.json` says how each human gate is decided:
+
+- `HUMAN`: you decide every item.
+- `AUTO_IF_CLEAN`: Continue Automatically decides the items that pass the
+  gate's machine checks (`gate_autopilot.py`) and leaves anything flagged for
+  you. The run log and the PARTIAL/stop message name each held item.
+
+Shipped as `AUTO_IF_CLEAN`: Vision, Analysis, Title Direction, Format, Voice
+Performance and Narration Preview. Concept, Research (which already clears
+claims with two independent sources, D-153), Script, Final Packaging, spend,
+rights, Final Export and Publish stay with you. Set a gate to `HUMAN` to get
+it back.
+
 Logs are retained under:
 
 ~~~text
