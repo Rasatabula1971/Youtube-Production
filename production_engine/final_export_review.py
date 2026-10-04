@@ -2,6 +2,10 @@
 
 Approval is bound to the exact current final render result and rendered bytes.
 Rework decisions route the creative layer back without uploading or publishing.
+
+When a finished edit has come back from Tesseract (D-144), that edit is the
+candidate instead of the automated render: approval binds the edit's record
+and bytes, and an approval of the automated render no longer counts.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from typing import Any
 
 from pipeline_integrity import atomic_write_json
 from final_render import RESULT_DIR, result_is_current
+import tesseract_exchange
 from visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
@@ -26,7 +31,24 @@ DECISIONS = {
     "RETURN_TO_VISUALS",
     "RETURN_TO_NARRATION",
     "RETURN_TO_SOUND",
+    "RETURN_TO_EDITOR",
 }
+
+
+def candidate_is_current(path: Path) -> dict[str, Any] | None:
+    """The automated render result or a returned edit, if still current."""
+    if path.parent.resolve() == tesseract_exchange.RETURN_DIR.resolve():
+        return tesseract_exchange.return_is_current(path)
+    if path.parent.resolve() != RESULT_DIR.resolve():
+        return None
+    result = result_is_current(path)
+    if result is None:
+        return None
+    returned = tesseract_exchange.current_return(
+        str(result.get("concept_id") or ""), str(result.get("format") or "")
+    )
+    # A returned edit replaces the automated render as the candidate.
+    return None if returned is not None else result
 
 
 def _key(concept_id: str, fmt: str) -> str:
@@ -91,7 +113,7 @@ def approval_is_current(path: Path) -> dict[str, Any] | None:
     result_path = Path(
         str(approval.get("source_final_render_result") or "")
     )
-    result = result_is_current(result_path)
+    result = candidate_is_current(result_path)
     if (
         result is None
         or approval.get("source_final_render_result_sha256")
@@ -110,10 +132,15 @@ def snapshot() -> dict[str, Any]:
         if RESULT_DIR.exists()
         else []
     )
-    for path in paths:
-        result = result_is_current(path)
-        if result is None:
+    for automated_path in paths:
+        automated = result_is_current(automated_path)
+        if automated is None:
             continue
+        returned = tesseract_exchange.current_return(
+            str(automated.get("concept_id") or ""),
+            str(automated.get("format") or ""),
+        )
+        path, result = returned if returned is not None else (automated_path, automated)
         review = _current_review(path, result)
         approval_path = _approval_path(result)
         approval = (
@@ -143,11 +170,16 @@ def snapshot() -> dict[str, Any]:
                 result.get("duration_seconds") or 0
             ),
             "sound_assets_mixed": int(
-                result.get("sound_assets_mixed") or 0
+                automated.get("sound_assets_mixed") or 0
             ),
             "sound_omissions": int(
-                result.get("sound_omissions") or 0
+                automated.get("sound_omissions") or 0
             ),
+            "source": "EDITOR" if returned is not None else "AUTOMATED",
+            "automated_render_file": automated.get("render_file"),
+            "editor_note": result.get("note") if returned is not None else None,
+            "quality_checks": result.get("quality_checks") if returned is not None else None,
+            "scene_changes": result.get("scene_changes") if returned is not None else None,
             "decision": review_decision,
             "note": (
                 review.get("note", "")
@@ -169,6 +201,7 @@ def snapshot() -> dict[str, Any]:
             "RETURN_TO_VISUALS",
             "RETURN_TO_NARRATION",
             "RETURN_TO_SOUND",
+            "RETURN_TO_EDITOR",
         }
         for item in items
     )
@@ -200,7 +233,7 @@ def apply_action(
     note: str,
 ) -> dict[str, Any]:
     path = Path(result_file).resolve()
-    result = result_is_current(path)
+    result = candidate_is_current(path)
     if result is None:
         raise ValueError("STALE_FINAL_RENDER_RESULT")
     value = str(decision or "").strip().upper()
@@ -249,6 +282,7 @@ def apply_action(
             "RETURN_TO_VISUALS": "FINAL_VISUALS",
             "RETURN_TO_NARRATION": "FINAL_NARRATION",
             "RETURN_TO_SOUND": "FINAL_SOUND",
+            "RETURN_TO_EDITOR": "FINAL_EDIT",
         }[value]
         request = {
             "artifact": "final_export_rework_request",

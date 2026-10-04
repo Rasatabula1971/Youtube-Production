@@ -287,6 +287,54 @@ PASS result. Partial branch coverage cannot report a global PASS.
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
 
+## Tesseract project exchange (D-144)
+
+Tesseract is the final editable production environment. `tesseract_exchange.py`
+hands it a structured project rather than only the rendered MP4, and brings
+the finished edit back. It is optional: the automated render can be approved
+at the Final Export Gate directly.
+
+**Export** (`/produce#tesseract`, "Export editable project") writes one folder
+per video under `output/editor_projects/<key>/<export id>/`:
+
+- `media/visuals`, `media/narration`, `media/sound`: copies of the exact
+  approved media;
+- `<key>.otio` (OpenTimelineIO) and `<key>.xml` (Final Cut Pro 7 XML): the
+  same timeline, with visuals on V1, narration on A1, then music and
+  sound-effect tracks (overlapping cues on separate tracks);
+- `reference/automated_render.mp4`, for comparison;
+- `thumbnail/`: the approved thumbnail, its render spec and subject image;
+- `exchange.json` (every clip, its source hash, timing and mix volume) and
+  `README.txt`.
+
+Every clip is named with a stable id: `V-<shot id>`, `N-<narration segment
+id>`, `S-<sound requirement id>`. Moving clips and music beds that are shorter
+than their slot repeat, as in the automated render; a short sound effect plays
+once. The export is tied to the exact automated render result, and a new
+render makes it stale.
+
+**Import** ("Import the finished edit") takes the path of the edited video
+(.mp4 or .mov) and, optionally, the edited `.otio`:
+
+- `ffprobe` checks for a video stream at the format's frame size and an audio
+  stream; a failure is refused with the reason;
+- the file is copied into `output/editor_returns/<key>/` and bound to its
+  hash, the export and the automated render it came from;
+- with an edited timeline, each exported clip is reported as kept, moved,
+  retimed, moved and retimed, or removed, and any new clip as added.
+
+The returned edit becomes the candidate at the Final Export Gate in place of
+the automated render. An approval of the automated render stops counting,
+and approving the edit binds its exact bytes. The gate can send an edit back
+with `RETURN_TO_EDITOR`. "Discard the edit" (with a note) makes the automated
+render the candidate again. Exports, imports and discards are logged in
+`output/editor_exchange_history.jsonl`.
+
+**Contract status.** Tesseract's own project format is not known to this
+build, so the export uses the two open timeline formats most editors import.
+`tesseract_exchange_config.json` keeps `round_trip_verified: false` until one
+project has been through Tesseract and back, and the tab says so.
+
 ## Publish package and Human Publish Gate (D-142)
 
 For every approved final export, `publish_review.py` assembles the publish

@@ -63,7 +63,8 @@ These are not built yet:
 
 - paid narration and image or video provider dispatch;
 - AI thumbnail image generation (the renderer uses a supplied subject image);
-- Tesseract project exchange;
+- Tesseract project exchange (open-format project export and edit import,
+  D-144; not yet proven against Tesseract itself until one round trip);
 - upload and publishing (publish package and gate D-142, YouTube upload
   D-143; direct upload is off until OAuth is configured);
 - own-channel analytics;
@@ -111,9 +112,11 @@ Format plan → Format Gate → voice performance → narration preview → narr
     ↓
 Visuals: search → candidates → rights → rough cut → visual spend → edit preview
     ↓
-Final render → Final Export Gate
+Final render → (optional) Tesseract: editable project out, finished edit back
     ↓
-(not built) Tesseract edit · publish · measure · learn  ↺
+Final Export Gate → publish package → Human Publish Gate → upload
+    ↓
+(not built) measure · learn  ↺
 ```
 
 ## Repository
