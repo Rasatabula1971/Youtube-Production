@@ -86,3 +86,16 @@ Human review is not a mechanism score and not a popularity judgment.
 
 Its purpose is to decide whether each analysis claim fairly represents the
 evidence and should be carried into cross-video synthesis.
+
+## Decision history
+
+Every decision is appended to an append-only log and never rewritten (D-133):
+
+- analysis findings: `experiment_02_analysis/output/human_review_history.jsonl`,
+  with the reviewer, note, the decision replaced and the profile hash it was
+  made against;
+- vision frames: `experiment_02_analysis/output/vision_review_history.jsonl`,
+  with the accepted observation and the source hashes.
+
+The review response still holds only the current decision; the review page
+shows each finding's full history.

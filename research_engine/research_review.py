@@ -15,7 +15,7 @@ _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
-from pipeline_integrity import atomic_write_json
+from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
 from evidence_policy import (
     AUTO_CLEARED,
@@ -42,6 +42,26 @@ OUTPUT_DIR = DEFAULT_DRAFTS_DIR.parent
 STATE_FILE = OUTPUT_DIR / "research_gate_ui_state.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
+
+
+def history_file() -> Path:
+    """Append-only log of every Research Gate decision (D-133)."""
+    return STATE_FILE.parent / "research_gate_history.jsonl"
+
+
+def record_history(event: dict[str, Any]) -> None:
+    append_jsonl(
+        history_file(),
+        {"recorded_at": datetime.now(timezone.utc).isoformat(), "gate": "research", **event},
+    )
+
+
+def history_by_key() -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for event in read_jsonl(history_file()):
+        if event.get("concept_id") and event.get("claim_id"):
+            grouped.setdefault(key_for(str(event["concept_id"]), str(event["claim_id"])), []).append(event)
+    return grouped
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -112,16 +132,18 @@ def _apply_evidence_policy(
     requests: list[dict[str, Any]],
     decisions: dict[str, Any],
     config: dict[str, Any],
-) -> None:
+) -> list[dict[str, Any]]:
     """Accept the claims the evidence policy clears; leave the rest to a human.
 
     Conditional review (vision §32, D-131). Automatic decisions are recomputed
     on every prepare, so a changed policy or claim never keeps a stale one. A
     human or carried-forward decision is never replaced: the human always has
     the last word, and can override an automatic acceptance at any time.
+    Returns the history events for new automatic acceptances (D-133).
     """
     settings = policy_settings(config)
     fingerprint = policy_fingerprint(settings)
+    events: list[dict[str, Any]] = []
     for bundle in requests:
         concept_id = bundle["concept_id"]
         for item in bundle["request"].get("items", []):
@@ -130,10 +152,10 @@ def _apply_evidence_policy(
             if isinstance(existing, dict) and existing.get("decided_by") != POLICY_DECIDER:
                 continue
             decisions.pop(key, None)
-            if not settings.get("enabled", True):
-                continue
-            evaluation = evaluate_claim(item, settings)
-            if evaluation["classification"] != AUTO_CLEARED:
+            evaluation = (
+                evaluate_claim(item, settings) if settings.get("enabled", True) else None
+            )
+            if evaluation is None or evaluation["classification"] != AUTO_CLEARED:
                 continue
             decisions[key] = {
                 "claim_id": str(item.get("claim_id") or ""),
@@ -150,6 +172,50 @@ def _apply_evidence_policy(
                     "fingerprint": fingerprint,
                 },
             }
+            unchanged = (
+                isinstance(existing, dict)
+                and existing.get("claim_fingerprint") == decisions[key]["claim_fingerprint"]
+                and (existing.get("policy") or {}).get("fingerprint") == fingerprint
+            )
+            if not unchanged:
+                events.append(
+                    {
+                        "concept_id": concept_id,
+                        "claim_id": decisions[key]["claim_id"],
+                        "decision": "ACCEPT",
+                        "decided_by": POLICY_DECIDER,
+                        "previous_decision": (existing or {}).get("decision"),
+                        "note": decisions[key]["note"],
+                        "claim_fingerprint": decisions[key]["claim_fingerprint"],
+                    }
+                )
+    return events
+
+
+def _record_withdrawn(previous: dict[str, Any], decisions: dict[str, Any]) -> None:
+    """Log each automatic acceptance that no longer stands after a prepare."""
+    prior = previous.get("decisions", {}) if isinstance(previous, dict) else {}
+    for key, saved in (prior if isinstance(prior, dict) else {}).items():
+        if not isinstance(saved, dict) or saved.get("decided_by") != POLICY_DECIDER:
+            continue
+        current = decisions.get(key) or {}
+        if (
+            current.get("decided_by") == POLICY_DECIDER
+            and current.get("claim_fingerprint") == saved.get("claim_fingerprint")
+        ):
+            continue
+        concept_id, _, claim_id = key.partition("::")
+        record_history(
+            {
+                "concept_id": concept_id,
+                "claim_id": claim_id,
+                "decision": "WITHDRAWN",
+                "decided_by": POLICY_DECIDER,
+                "previous_decision": saved.get("decision"),
+                "note": "Automatic acceptance withdrawn: the claim or the policy changed.",
+                "claim_fingerprint": saved.get("claim_fingerprint"),
+            }
+        )
 
 
 def _original_questions(request: dict[str, Any]) -> dict[str, str]:
@@ -271,6 +337,17 @@ def apply_question_waiver(
             concept_waivers.pop(question_id, None)
             if not concept_waivers:
                 waivers.pop(concept_id, None)
+    record_history(
+        {
+            "concept_id": concept_id,
+            "question_id": question_id,
+            "question": questions[question_id],
+            "decision": "WAIVE_QUESTION" if waive else "UNWAIVE_QUESTION",
+            "decided_by": "HUMAN",
+            "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
+            "note": str(note or "").strip(),
+        }
+    )
     state["status"] = "AWAITING_HUMAN_DECISION"
     finalize_if_complete(state, requests)
     return snapshot()
@@ -480,7 +557,10 @@ def prepare_state() -> dict[str, Any]:
 
     previous = load_json(STATE_FILE) if STATE_FILE.exists() else {}
     decisions = _preserved_decisions(requests, previous)
-    _apply_evidence_policy(requests, decisions, load_config())
+    accepted_now = _apply_evidence_policy(requests, decisions, load_config())
+    _record_withdrawn(previous, decisions)
+    for event in accepted_now:
+        record_history(event)
     state = {
         "schema_version": "1.1",
         "status": "AWAITING_HUMAN_DECISION",
@@ -527,6 +607,7 @@ def snapshot() -> dict[str, Any]:
 
     decisions = state.get("decisions", {})
     settings = policy_settings(load_config())
+    history = history_by_key()
     claims = []
     for bundle in requests:
         request = bundle["request"]
@@ -548,6 +629,7 @@ def snapshot() -> dict[str, Any]:
                         "HUMAN" if decision else None
                     ),
                     "evidence_policy": evaluate_claim(item, settings),
+                    "decision_history": history.get(key_for(concept_id, claim_id), []),
                 }
             )
 
@@ -762,13 +844,27 @@ def apply_action(
     ):
         raise ValueError("Accepted conflicted claim requires a resolution note")
 
-    state.setdefault("decisions", {})[key_for(concept_id, claim_id)] = {
+    previous = state.setdefault("decisions", {}).get(key_for(concept_id, claim_id)) or {}
+    state["decisions"][key_for(concept_id, claim_id)] = {
         "claim_id": claim_id,
         "decision": value,
         "criteria": normalized,
         "note": clean_note,
         "claim_fingerprint": claim_fingerprint(item),
     }
+    record_history(
+        {
+            "concept_id": concept_id,
+            "claim_id": claim_id,
+            "decision": value,
+            "decided_by": "HUMAN",
+            "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
+            "previous_decision": previous.get("decision"),
+            "previous_decided_by": previous.get("decided_by") or ("HUMAN" if previous else None),
+            "note": clean_note,
+            "claim_fingerprint": claim_fingerprint(item),
+        }
+    )
 
     if value == "REWORK":
         _apply_rework_feedback(
