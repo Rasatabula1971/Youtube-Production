@@ -1116,6 +1116,7 @@
                 <p class="muted" id="narrationSpendReviewSummary">Verify the current quote and worst-case cost before any paid narration call.</p>
               </div>
               <div class="panel-head-actions">
+                <a href="/produce#plan" class="button-link ghost compact" data-route="/produce" data-subroute="plan">Visual plan →</a>
                 <a href="/produce#narration" class="button-link compact" data-route="/produce" data-subroute="narration">Open produce workspace →</a>
                 <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
               </div>
@@ -1200,7 +1201,8 @@
 
         <section class="app-view" data-view="produce" id="viewProduce" hidden>
           <div id="produceTabs"></div>
-          <div class="review-workspace" id="produce-narration"></div>
+          <div class="review-workspace" id="produce-plan"></div>
+          <div class="review-workspace" id="produce-narration" hidden></div>
           <div class="review-workspace" id="produce-audio" hidden></div>
           <div class="review-workspace" id="produce-visuals" hidden></div>
           <div class="review-workspace" id="produce-rights" hidden></div>

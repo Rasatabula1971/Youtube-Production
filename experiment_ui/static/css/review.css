@@ -314,3 +314,22 @@
   width: 100%;
   max-width: 420px;
 }
+
+/* Visual Plan Gate shot table (D-138). */
+.pd-table-wrap {
+  overflow-x: auto;
+}
+
+.pd-plan {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm, 13px);
+}
+
+.pd-plan th,
+.pd-plan td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}

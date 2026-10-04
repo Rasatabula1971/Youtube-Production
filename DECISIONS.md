@@ -4097,3 +4097,51 @@ named in D-128; completes the NARRATION_AUDIO_READY stop of D-082)
 - Approval is per video; a partial approval is not offered. Re-recording
   goes through the provider and the existing return registration, so spend
   stays inside the approved ceiling and the per-video budget (D-136).
+
+
+## D-138 — The complete visual plan is approved before narration spend
+
+**Status:** Accepted (vision: visual plan approval before expensive
+generation; correction named in D-128; amends the order fixed by D-083)
+
+**Context.** The visual manifest and storyboard were built only after the
+paid narration had been quoted, authorized, returned and QC-checked, because
+they took their timing from the returned audio (D-083). Money was committed
+to narration before anyone had seen the visual plan, and nothing approved
+the plan as a whole.
+
+**Decision.**
+- **Gate.** `production_engine/visual_plan_review.py` adds the Human Visual
+  Plan Gate between the approved free preview and the Narration Spend Gate.
+  Per video it builds the complete plan from the approved format plan, using
+  `visual_acquisition.build_manifest` with no timing, so it is the same
+  requirements as the later manifest.
+- **What the plan shows.**
+  - Each shot's window in the approved free preview, read from the
+    preview's per-beat WAV files.
+  - Each shot's first source tier.
+  - The paid-visual share policy and the video's budget.
+- **Decisions.**
+  - APPROVE_VISUAL_PLAN: bound to the approved format plan, the approved
+    preview audio and the plan content.
+  - REWORK_VISUAL_PLAN: needs a note and holds spend; the format plan is
+    reworked at the Format Gate.
+
+  Decisions are appended to a history log.
+- **Server.**
+  - Refuses narration spend ACCEPT for a video without an approved plan.
+  - Workflow stops: `HUMAN_VISUAL_PLAN_GATE` and
+    `VISUAL_PLAN_REWORK_REQUIRED`.
+  - Route: `/api/visual-plan-gate` (locked during jobs).
+  - Videos already past narration spend are not pulled back.
+- **UI.** `/produce` opens on a "Visual plan" tab with the shot table.
+
+**Consequences.**
+- No paid narration is authorized for a video whose visual plan was not
+  approved.
+- The storyboard is still timed from the paid audio after the Final Audio
+  Gate (D-137); the approved plan fixes its shots and their order. Real
+  durations may differ slightly from the preview, which is why shot-level
+  storyboard editing stays after the paid audio.
+- Rework goes through the Format Gate, the plan's source of truth, rather
+  than a second editable copy of the plan.
