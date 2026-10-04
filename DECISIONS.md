@@ -3901,3 +3901,48 @@ Nobody could tell later what had been decided before, by whom, or why.
 - The Opportunity, Script and Packaging gates already keep their own history
   or versions and are unchanged. The Concept Gate was outside the audit's
   finding and is unchanged; it can use the same helper if needed.
+
+
+## D-134 — A 2–3 title shortlist at the Final Packaging Gate
+
+**Status:** Accepted (vision: 5 Short + 5 Long titles, a 2–3 title shortlist;
+amends D-096 and D-099)
+
+**Context.** Five titles per format were generated, one direction was picked
+at the Title Direction Gate, and the Final Packaging Gate then listed all 25
+title × thumbnail pairs. Nothing narrowed the list to the 2–3 titles the
+vision asks the human to choose between. D-096 forbade any ranking because a
+winner score would invent a prediction the system cannot make.
+
+**Decision.**
+- **Shortlist.** `packaging_engine/title_shortlist.py` builds a 2–3 title
+  shortlist per format from the validated pair matrix. It calls no model and
+  predicts no clicks. The ordering is explained:
+  - the human's chosen title direction first;
+  - then PASS-pair count;
+  - then the mean title-quality diagnostics over PASS pairs;
+  - then `title_id`.
+- **Eligibility and diversity.** A title needs at least one PASS pair, and a
+  near-duplicate of a shortlisted title (content-word Jaccard of 0.5 or more)
+  never takes a place.
+- **Shortfall.** When fewer than two titles qualify, the shortfall is stated
+  and not filled.
+- **Gate.**
+  - Packages for shortlisted titles are listed first, and every package is
+    marked `in_title_shortlist`.
+  - Titles outside the shortlist stay reachable.
+  - Accepting one needs a note, and the decision records
+    `title_in_shortlist`.
+- **Review UI.** The `/packaging` Final tab shows the shortlist with each
+  title's reason. It places acceptable packages with titles outside the
+  shortlist in their own collapsed group.
+- **Fix in passing.** The package view now carries `semantic_redundancy`, so
+  the Redundancy badge appears.
+
+**Consequences.**
+- D-096's rule stands in substance: there is still no viral score, CTR
+  prediction or hidden winner. The ordering uses only validation results
+  already shown on each package, and every entry states its reason.
+- Rework targets, staleness and the final bundle are unchanged (D-099).
+- The thresholds are configurable under `title_shortlist` in
+  `final_packaging_gate_config.json`.
