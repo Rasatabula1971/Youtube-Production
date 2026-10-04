@@ -16,6 +16,7 @@ import argparse
 import json
 import math
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -118,16 +119,56 @@ def expected_speech_duration_seconds(
     return round(max(seconds, 0.25), 3)
 
 
+LOCAL_ADAPTER_KINDS = frozenset({"LOCAL_KOKORO"})
+LOCAL_QUOTE_REFERENCE = "local-render-no-charge"
+
+
+def provider_is_local(config: dict[str, Any]) -> bool:
+    """A provider that renders on this machine for no charge (D-168)."""
+    adapter = config.get("provider_adapter")
+    kind = str(adapter.get("kind") or "") if isinstance(adapter, dict) else ""
+    return kind in LOCAL_ADAPTER_KINDS
+
+
 def provider_contract_verified(config: dict[str, Any]) -> bool:
     contract = config.get("provider_contract", {})
     if not isinstance(contract, dict):
         return False
-    return bool(
+    documented = bool(
         contract.get("schema_verified") is True
-        and str(contract.get("endpoint") or "").strip()
         and str(contract.get("documentation_url") or "").strip()
         and str(contract.get("verified_at") or "").strip()
     )
+    if provider_is_local(config):
+        # A local renderer has no endpoint; its contract is the model licence
+        # and the documented voice list (D-168).
+        return documented
+    return documented and bool(str(contract.get("endpoint") or "").strip())
+
+
+def local_quote(request: dict[str, Any], request_path: Path, config: dict[str, Any]) -> dict[str, Any]:
+    """The $0 quote a local renderer issues itself for the current request (D-168).
+
+    Bound to the request hash like a provider's quote, so a changed request
+    gets a fresh one and the spend gate's "quote is current" rule still holds.
+    """
+    return {
+        "artifact": "narration_provider_quote",
+        "concept_id": request["concept_id"],
+        "format": request["format"],
+        "provider": request["provider"],
+        "render_request_sha256": sha256_file(request_path),
+        "currency": str(config["quote_currency"]),
+        "initial_estimate_usd": 0.0,
+        "worst_case_estimate_usd": 0.0,
+        "attempts_per_segment": request["max_attempts_per_segment"],
+        "quote_reference": LOCAL_QUOTE_REFERENCE,
+        "quoted_at": datetime.now(timezone.utc).isoformat(),
+        "quote_source": (
+            f"Local render by {request['provider']}: no provider charge "
+            "(the model runs on this machine)."
+        ),
+    }
 
 
 def _voice_prerequisites(spec: dict[str, Any]) -> list[str]:
@@ -465,6 +506,15 @@ def prepare(config: dict[str, Any] | None = None) -> dict[str, Any]:
         current_templates.add(template_path.resolve())
 
         quote_path = QUOTES_DIR / f"{key}.narration_provider_quote.json"
+        if provider_is_local(config) and not request["render_blockers"]:
+            # A local renderer quotes itself: $0, bound to this request (D-168).
+            existing = _load_dict_or_none(quote_path) if quote_path.exists() else None
+            if (
+                not isinstance(existing, dict)
+                or existing.get("render_request_sha256") != sha256_file(request_path)
+                or existing.get("quote_reference") != LOCAL_QUOTE_REFERENCE
+            ):
+                atomic_write_json(quote_path, local_quote(request, request_path, config))
         estimate = build_cost_estimate(
             request,
             request_path,

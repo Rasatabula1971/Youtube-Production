@@ -369,8 +369,10 @@ class ShellMarkupTests(unittest.TestCase):
         script = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
         self.assertIn('"/api/tools"', script)
         self.assertIn('"/api/job-log?id="', script)
-        # Diagnostics never post anything except the predefined actions.
-        self.assertNotIn("method:", script)
+        # Diagnostics never post anything except the predefined actions and
+        # the one-click doctor (D-169), which changes nothing.
+        self.assertEqual(script.count('method: "POST"'), 1)
+        self.assertIn('yp().api("/api/doctor", { method: "POST"', script)
 
     def test_shell_accessibility_contract(self) -> None:
         # Skip link first, pointing at the focusable main landmark.
@@ -617,3 +619,16 @@ class SpendAndUploadContractTests(unittest.TestCase):
         self.assertIn('kind: "unconfirmed"', text)
         self.assertIn('"Resume upload to YouTube"', text)
         self.assertIn("item.pending_upload", text)
+
+
+class DoctorContractTests(unittest.TestCase):
+    """The Tools page has a one-click doctor (D-169)."""
+
+    def test_tools_page_has_a_doctor_panel_wired_to_the_route(self) -> None:
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="toolsDoctor"', html)
+        script = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
+        self.assertIn('yp().api("/api/doctor", { method: "POST"', script)
+        self.assertIn('id="toolsDoctorRun"', script)
+        self.assertIn("function renderDoctor()", script)
+        self.assertNotIn("/api/doctor", server.HUMAN_GATE_MUTATION_ROUTES)

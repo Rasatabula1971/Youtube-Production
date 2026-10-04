@@ -131,9 +131,15 @@ class TasteModel:
 
     def strongest(self, limit: int = 8) -> dict[str, list[str]]:
         """The words that most mark a pick and a reject, for the page."""
-        ranked = sorted(self.weights.items(), key=lambda item: item[1])
-        words_for = [tok for tok, weight in reversed(ranked) if weight > 0 and not tok.startswith("channel:")]
-        words_against = [tok for tok, weight in ranked if weight < 0 and not tok.startswith("channel:")]
+        # Ties broken by the word itself, so the page reads the same every time.
+        words_for = [
+            tok for tok, weight in sorted(self.weights.items(), key=lambda item: (-item[1], item[0]))
+            if weight > 0 and not tok.startswith("channel:")
+        ]
+        words_against = [
+            tok for tok, weight in sorted(self.weights.items(), key=lambda item: (item[1], item[0]))
+            if weight < 0 and not tok.startswith("channel:")
+        ]
         return {"for": words_for[:limit], "against": words_against[:limit]}
 
     def status(self) -> dict[str, Any]:
