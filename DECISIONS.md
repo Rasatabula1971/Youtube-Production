@@ -4387,3 +4387,43 @@ not documented anywhere available to this build.
 - If Tesseract turns out to need its own project format, an adapter for it
   replaces or joins the two open formats; the ids, import and gate binding
   stay as they are.
+
+## D-145 — Providers get a shape-only concept schema
+
+**Status:** Accepted
+
+**Context.** On the laptop, two concept mechanisms (progressive reveal and
+specificity) failed on every free route while three passed:
+- Groq answered `PROVIDER_REJECTED_GENERATED_SCHEMA`;
+- the Cloudflare models failed FAIR's schema check.
+
+The schema sent to providers carried the same per-concept policy bounds the
+app's own validator already enforces:
+- an empty `source_specific_elements_used`;
+- fixed `passes: true` and `source_assets_required: false`;
+- item counts and number ranges;
+- the maximum number of concepts.
+
+Under strict structured output, one concept breaking one bound makes the
+provider reject the whole generation, so every concept in the batch was lost.
+The specificity mechanism invites exactly that, such as one listed source
+element. A second run also lost a mechanism to the 300-second runner timeout,
+because Cloudflare attempts took 120–140 s each.
+
+**Decision.**
+- **Shape-only schema.** Providers receive the schema's shape only: types,
+  required fields, `additionalProperties: false`, enums, and the mechanism id
+  (`concept_model_runner.provider_schema`).
+- **Authoritative contract unchanged.** `response_schema` and the validator
+  still apply every bound to each concept and reject only the concepts that
+  break one.
+- **Concept count.** The runner keeps at most the requested number of
+  concepts and records how many extras it dropped.
+- **Timeout.** The model-runner subprocess timeout is 900 s.
+
+**Consequences.**
+- One bad concept no longer costs the four good ones beside it.
+- The validator and its fingerprint are unchanged, so already-validated
+  mechanisms are not regenerated.
+- If a mechanism still fails, its model-run report now carries the
+  validator's per-concept errors instead of a provider's whole-batch refusal.

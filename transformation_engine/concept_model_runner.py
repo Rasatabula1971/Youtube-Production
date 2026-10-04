@@ -217,6 +217,48 @@ def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Bounds the app's own validator enforces concept by concept. They are left out
+# of the schema sent to providers: under strict structured output a provider
+# rejects the whole generation when one concept breaks one bound (for example a
+# single source element listed), and every concept in the batch is lost.
+_POLICY_KEYWORDS = frozenset({"minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength"})
+
+
+def provider_schema(schema: Any) -> Any:
+    """The response schema as a shape (types, required fields, enums) only.
+
+    ``response_schema`` stays the authoritative contract; the validator applies
+    its bounds to each concept and rejects only the concepts that break them.
+    String ``const`` values (the mechanism id, a rework target) are kept.
+    """
+    if isinstance(schema, list):
+        return [provider_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    if isinstance(schema.get("const"), bool):
+        return {"type": "boolean"}
+    shaped: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in _POLICY_KEYWORDS:
+            continue
+        if key == "properties" and isinstance(value, dict):
+            shaped[key] = {name: provider_schema(child) for name, child in value.items()}
+        else:
+            shaped[key] = provider_schema(value)
+    return shaped
+
+
+def _cap_concepts(request: dict[str, Any], response: Any) -> int:
+    """Keep at most the requested number of concepts; return how many were dropped."""
+    if not isinstance(response, dict) or not isinstance(response.get("concepts"), list):
+        return 0
+    rework = bool(request.get("human_rework_note") and request.get("human_rework_concept_id"))
+    limit = 1 if rework else max(1, int(request.get("concept_count_requested") or 5))
+    dropped = max(0, len(response["concepts"]) - limit)
+    response["concepts"] = response["concepts"][:limit]
+    return dropped
+
+
 def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
     prompt = (
         "You are generating original YouTube concept candidates from a validated "
@@ -370,7 +412,7 @@ def run_one(
         request,
         maximum_chars=int(runner_config["runner"].get("max_prompt_chars", 95000)),
     )
-    schema = response_schema(request)
+    schema = provider_schema(response_schema(request))
     schema_chars = len(json.dumps(schema, separators=(",", ":")))
     if schema_chars > 19000:
         raise ValueError(
@@ -462,6 +504,7 @@ def run_one(
 
     try:
         response = parse_model_json(raw_output)
+        concepts_dropped = _cap_concepts(request, response)
         response = _merge_human_rework_response(request, response)
         validation = validate_response(
             response,
@@ -509,6 +552,7 @@ def run_one(
         "raw_output": str(raw_path),
         "structurally_accepted": accepted_count,
         "structurally_rejected": rejected_count,
+        "concepts_beyond_request_dropped": concepts_dropped,
         "validation_rejection_summary": _rejection_error_summary(validation),
         "initial_validation_rejection_summary": initial_validation_errors,
         "validation_repair_attempted": repair_result is not None,

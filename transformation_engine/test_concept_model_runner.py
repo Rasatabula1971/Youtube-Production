@@ -245,6 +245,55 @@ class ConceptModelRunnerTests(unittest.TestCase):
             "Keep This Sibling",
         )
 
+    def test_provider_schema_is_shape_only(self):
+        authoritative = runner.response_schema(self.request())
+        shaped = runner.provider_schema(authoritative)
+        text = json.dumps(shaped)
+        for keyword in ("minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength"):
+            with self.subTest(keyword=keyword):
+                self.assertNotIn(f'"{keyword}"', text)
+        concept = shaped["properties"]["concepts"]["items"]
+        self.assertEqual(concept["required"], authoritative["properties"]["concepts"]["items"]["required"])
+        self.assertFalse(concept["additionalProperties"])
+        dependency = concept["properties"]["source_dependency_test"]["properties"]
+        self.assertEqual(dependency["passes"], {"type": "boolean"})
+        self.assertEqual(concept["properties"]["source_specific_elements_used"], {"type": "array", "items": {"type": "string"}})
+        self.assertIn("HYPOTHESIS", concept["properties"]["viewer_need_evidence"]["properties"]["status"]["enum"])
+        self.assertEqual(shaped["properties"]["mechanism_id"]["const"], "curiosity_gap")
+        # The authoritative contract is unchanged.
+        self.assertTrue(
+            authoritative["properties"]["concepts"]["items"]["properties"]["source_dependency_test"]["properties"]["passes"]["const"]
+        )
+
+    @patch("concept_model_runner.resolve_fair_paths")
+    @patch("concept_model_runner.call_fair_bridge")
+    def test_one_bad_concept_no_longer_sinks_the_batch(self, call_bridge, resolve_paths):
+        bad = dict(self.valid_concept(), concept_id="bad-1", source_specific_elements_used=["the source's pit-stop clip"])
+        extra = [dict(self.valid_concept(), concept_id=f"extra-{n}") for n in range(6)]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            request = dict(self.request(), concept_count_requested=5)
+            request_path = root / "curiosity_gap.concept_request.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            resolve_paths.return_value = {"repo": root, "env_file": root / ".env", "python": root / "python.exe"}
+            call_bridge.return_value = {
+                "status": "ACCEPTED",
+                "output": json.dumps({"mechanism_id": "curiosity_gap", "concepts": [bad] + extra}),
+                "paid_inference_executed": False, "provider_id": "groq", "model_id": "m", "request_id": "r", "attempts": [],
+            }
+            with (
+                patch.object(runner, "MODEL_RUNS_DIR", root / "runs"),
+                patch.object(runner, "RAW_OUTPUTS_DIR", root / "raw"),
+                patch.object(runner, "RESPONSES_DIR", root / "responses"),
+            ):
+                result = runner.run_one(request_path, force=False, runner_config=self.runner_config())
+            sent = call_bridge.call_args.args[0]["expected_schema"]
+        self.assertNotIn('"maxItems"', json.dumps(sent))
+        self.assertEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["concepts_beyond_request_dropped"], 2)
+        self.assertEqual(result["structurally_rejected"], 1)
+        self.assertEqual(result["structurally_accepted"], 4)
+
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
     def test_valid_free_response_is_written_with_request_hash(

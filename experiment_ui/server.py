@@ -8329,8 +8329,10 @@ def workflow_guidance(
                 "current_title": ACTION_DEFS[action_id]["label"],
                 "current_detail": gate_info.get("reason"),
                 "next_action_id": next_id,
+                # Continue Automatically ends at the next human gate, not at
+                # the end of the workflow.
                 "next_title": (
-                    ACTION_DEFS[next_id]["label"] if next_id else "Workflow complete"
+                    ACTION_DEFS[next_id]["label"] if next_id else "Next human gate"
                 ),
             }
 
