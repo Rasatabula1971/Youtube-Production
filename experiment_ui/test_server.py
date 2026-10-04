@@ -11,9 +11,24 @@ from pathlib import Path
 from unittest.mock import patch
 
 import server
+from testing_isolation import isolate_outputs
 
 
 class ExperimentUiTests(unittest.TestCase):
+    def setUp(self):
+        # Never read the real pipeline outputs of the machine running the
+        # tests (vision audit 2026-10-03: 8 failures on a populated laptop).
+        isolate_outputs(self, server)
+
+    def test_tests_never_see_real_pipeline_outputs(self):
+        # The approved study set and prepared profiles leaked into fixtures on
+        # a populated laptop; every output path must point at the test mirror.
+        root = server.PROJECT_ROOT.resolve()
+        for name in ("EXP15_DIR", "EXP2_PREPARED_DIR", "EXP2_ENRICHED_DIR", "JOB_LOG_DIR"):
+            with self.subTest(constant=name):
+                path = getattr(server, name).resolve()
+                self.assertFalse(path.is_relative_to(root), f"{name} still points at {path}")
+
     def test_send_json_ignores_client_disconnect(self):
         class DisconnectingWriter:
             def write(self, _body):

@@ -13,6 +13,18 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import server  # noqa: E402
+from testing_isolation import ModuleIsolation  # noqa: E402
+
+_ISOLATION = ModuleIsolation(server)
+
+
+def setUpModule() -> None:
+    # Never read the real pipeline outputs of the machine running the tests.
+    _ISOLATION.start()
+
+
+def tearDownModule() -> None:
+    _ISOLATION.stop()
 
 STATIC = Path(__file__).resolve().parent / "static"
 

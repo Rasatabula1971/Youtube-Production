@@ -14,110 +14,155 @@ The project separates three early questions:
 
 Transformation, research/story/script, format selection, production, quality control, and learning follow from those decisions.
 
-## Current status
+## Current status (October 2026)
 
-**Milestone M1 — Prove the Opportunity Engine**
+The governing product definition is the **Master Product Vision and Build
+Comparison Specification**, with the Opportunity Discovery spec
+(`opportunity_engine/OPPORTUNITY_DISCOVERY_SPEC.md`, v2.1) for discovery. A
+vision-versus-build audit on 3 October 2026 compared the repository against it
+(D-128).
 
-M1 is **not yet formally closed**. The Opportunity Engine has now produced a
-real 01.3 → 01.4 → 01.5 handoff, but the multi-niche success criteria in
-PROJECT.md have not yet all been demonstrated on live data.
+**What exists.** Working, tested code paths run from opportunity discovery to a
+locally rendered video:
 
-Later-stage Transformation, Packaging, Research and Experiment 02 components
-have been implemented ahead as offline frameworks. Their presence in the repo
-does not mean those milestones are complete or that M1 has been bypassed.
+- **Discovery.** Opportunities come from historical demand (01.3–01.5), your
+  topic, a pasted video, or the viral radar. They all land in one inbox and
+  pass a human opportunity gate.
+- **Analysis.** "Why did it work" analysis runs on free models, and a human
+  analysis gate confirms it.
+- **Concepts.** Original concepts are generated, triaged automatically, and
+  chosen at a human gate.
+- **Research.** Real web sources are gathered and checked claim by claim.
+- **Script.** It is written and reviewed section by section.
+- **Packaging.** Post-script packaging produces title directions, a brief,
+  angles, thumbnail concepts, pairing and one final package.
+- **Format and voice.** Then come the format plan and voice performance.
+- **Narration.** A free preview, then a paid-narration quote gate, with the
+  audio returned manually.
+- **Visuals.** Free-first visual search with rights review, a rough cut and
+  visual spend, then the edit preview, final render and export approval.
 
-The experiment collects independent signals rather than calculating a final opportunity score:
+Everything runs from the local browser UI (`experiment_ui/README.md`).
 
-- Demand
-- Channel-relative breakout
-- Momentum proxy
-- Baseline quality
-- Format candidate
-- Search provenance
-- Relevance quality
-- Outlier reliability
-- Theme labels
-- Query competition profiles
-- Repeated-snapshot velocity
-- Topic-level evidence by niche and format
+**What is not finished.** No complete production has yet run end to end. The
+audit found that these deviate from the vision and are being corrected first:
 
-Current thresholds are research hypotheses, not frozen production rules.
+- research review is mandatory instead of exception-only;
+- the concept pool is smaller than the 15–25 contract, and finalists are not
+  forced to be diverse;
+- incomplete stages can advance;
+- the Gemini fallback admits non-quota failures;
+- visual planning comes after narration;
+- budgets are split by stage rather than per video;
+- reviewed history is not append-only everywhere.
 
-## Planned system
+These are not built yet:
+
+- paid narration and image or video provider dispatch;
+- AI thumbnail image generation (the renderer uses a supplied subject image);
+- Tesseract project exchange;
+- upload and publishing;
+- own-channel analytics;
+- performance learning.
+
+**Correction order.** Patches A1–A6 fix stage policy before more integrations
+are built:
+
+| Patch | Correction |
+|---|---|
+| A1 | Test isolation, and this status |
+| A2 | Stage completion and fallback policy |
+| A3 | Concept pool of 15–25 and diverse finalists |
+| A4 | Conditional research review |
+| A5 | One resolved format |
+| A6 | Append-only analysis and research history |
+
+After that come packaging, then planning and budget, then production,
+Tesseract, publishing and learning. The next milestone is one Science Inside
+video from an approved opportunity to a reviewed, editable near-final
+production, with full provenance and one cost ledger.
+
+Thresholds throughout remain research hypotheses, not frozen production rules.
+The early-discovery signals (demand, channel-relative breakout, momentum,
+quality, format, provenance, relevance, outlier reliability, themes,
+competition, velocity) are collected independently; no single opportunity
+score is calculated.
+
+## Pipeline
 
 ```text
-Opportunity
+Opportunity (historical · topic · video · viral radar) → Opportunity Gate
     ↓
-Transformation / original concept
+Experiment 02: why did it work? → Analysis Gate
     ↓
-Packaging → choose to watch
+Transformation: original concepts → automatic triage → Concept Gate
     ↓
-Retention → keep watching
+Research: sources and claims → Research Gate
     ↓
-Satisfaction → deliver the promise
+Story plan → section-based scripts → Script Gate
     ↓
-Learning
-    ↺
+Packaging: title directions → brief → angles → thumbnail concepts → pairing → Final Package Gate
+    ↓
+Format plan → Format Gate → voice performance → narration preview → narration spend
+    ↓
+Visuals: search → candidates → rights → rough cut → visual spend → edit preview
+    ↓
+Final render → Final Export Gate
+    ↓
+(not built) Tesseract edit · publish · measure · learn  ↺
 ```
 
 ## Repository
 
 ```text
 .
-├── README.md
-├── PROJECT.md
-├── DECISIONS.md
-├── experiment_01_discovery/
-│   ├── experiment_01_3.py
-│   ├── experiment_01_4.py
-│   ├── experiment_01_5.py
-│   ├── niches.json
-│   └── youtube_discovery.py
-├── experiment_02_analysis/
-│   ├── experiment_02.py
-│   ├── experiment_02_config.json
-│   └── profile_template.json
-├── transformation_engine/
-│   ├── transformation_engine.py
-│   ├── concept_gate.py
-│   └── transformation_config.json
-├── research_engine/
-│   ├── research_engine.py
-│   ├── research_gate.py
-│   └── research_config.json
-├── packaging_engine/
-│   ├── packaging_engine.py
-│   └── packaging_gate.py
-├── format_engine/
-│   ├── format_engine.py
-│   ├── format_review.py
-│   └── format_config.json
-└── source_acquisition/
-    ├── agent_reach_adapter.py
-    └── youtube_discovery_benchmark.py
+├── README.md · PROJECT.md · DECISIONS.md
+├── opportunity_engine/       discovery lanes, viral radar, inbox, channel scope
+├── experiment_01_discovery/  historical discovery 01.3 → 01.4 → 01.5
+├── experiment_02_analysis/   evidence ingest, free-model analysis, human review, synthesis
+├── source_acquisition/       yt-dlp / Agent Reach acquisition and benchmarks
+├── transformation_engine/    concepts, triage, Concept Gate
+├── research_engine/          source acquisition, claims, Research Gate
+├── story_script_engine/      story plans, section-based scripts, Script Gate
+├── packaging_engine/         post-script packaging and the Final Package Gate
+├── format_engine/            format plans and the Format Gate
+├── production_engine/        voice, narration, visuals, rough cut, render, export
+├── channel_profiles/         channel voice profiles (Science Inside is still a draft)
+└── experiment_ui/            local browser UI and job runner
 ```
 
 ## Runtime requirements
 
-The project-owned Python code is intentionally **standard-library only**; there
-is no root Python package manifest because the repository itself has no
-third-party Python package dependency. External tools such as yt-dlp / Agent
-Reach and the separate FAIR repository are invoked as external executables or
-subprocesses rather than imported as project dependencies. Optional vidIQ MCP
-support follows the same pattern: it uses Node/npm `npx` to launch the pinned
-open-source `mcp-remote` OAuth bridge, so no vidIQ API key is required.
+The project's own Python code uses the standard library. The only exception is
+the optional free narration preview, which uses `kokoro`, `soundfile` and
+`numpy`. External tools are called as executables:
 
-Copy `.env.example` to `.env` and add only the local values you need.
-The FAIR subprocess coupling and override variables are documented in
-`experiment_02_analysis/ANALYSIS_MODEL_RUNNER.md`.
+- `yt-dlp`;
+- `ffmpeg`;
+- optionally `whisper`, for local transcription;
+- Agent Reach;
+- the separate FAIR repository, for free-model routing;
+- optionally the vidIQ MCP bridge, through `npx`.
 
-Generated experiment output and secrets remain outside Git:
+Copy `.env.example` to `.env` and add only the local values you need, such as
+the YouTube Data API key. The FAIR subprocess coupling and override variables
+are documented in `experiment_02_analysis/ANALYSIS_MODEL_RUNNER.md`.
 
-- `.env`
-- `experiment_01_discovery/output/`
-- `experiment_02_analysis/output/`
+Generated output and secrets stay outside Git: `.env`, every module's
+`output/` folder, and `.experiment_ui/`.
 
-See [PROJECT.md](PROJECT.md) for the system roadmap and [DECISIONS.md](DECISIONS.md) for the decision record.
+**Tests** run per module, as in CI:
+
+```text
+python -m unittest discover -s <module> -p "test_*.py"
+```
+
+The tests never read the machine's real pipeline outputs:
+`experiment_ui/testing_isolation.py` redirects every output path to an empty
+temporary tree. They also do not depend on which optional tools are installed.
+
+See [PROJECT.md](PROJECT.md) for the system design and
+[DECISIONS.md](DECISIONS.md) for the decision record.
 
 
 ## Experiment 01.2
@@ -134,39 +179,46 @@ Experiment 01.2 now produces transparent query competition profiles, persistent 
 
 ## Experiment 02 framework
 
-Experiment 02 is offline-first. It prepares evidence profiles only from the
-human-approved Experiment 01.5 study set, validates creative findings against
-typed source evidence, separates findings from hypotheses, and aggregates
-repeated mechanisms across independent videos/channels.
+Experiment 02 prepares evidence profiles from the active study set: the
+approved 01.5 set, a submitted video, a topic's strongest videos, or a radar
+breakout or theme. Source acquisition fetches transcripts, metadata and
+thumbnails with yt-dlp, falling back to local transcription when whisper and
+ffmpeg are installed.
 
-It does not fetch transcripts or videos automatically and does not spend
-YouTube API quota.
+Visual-structure analysis streams a low-resolution copy. If no stream URL
+resolves, it downloads a temporary copy of 360p or lower and deletes it when
+the job ends. No source video is kept as a project artifact.
+
+Analysis runs on free models through FAIR and is validated against typed source
+evidence. Findings are kept separate from hypotheses, and repeated mechanisms
+are aggregated across independent videos and channels. A human analysis gate
+confirms the result before the Transformation handoff.
 
 See `experiment_02_analysis/EXPERIMENT_02.md`.
 
 
-## Experiment Control UI
+## YouTube Production UI
 
-The experiment phase now includes a local browser control panel so routine runs
-do not require PowerShell commands.
+On Windows, double-click `Start Experiment UI.bat`. The UI opens on localhost.
 
-On Windows, double-click:
+- **Command Center.** What needs you, what is running, and the next action.
+- **Opportunities** and the **Viral Radar**.
+- **Productions:** the list, the review queue, and a workspace per video.
+- **Gate reviews, Packaging and Produce.** Each human gate runs on one shared
+  review workspace.
+- **Tools & Diagnostics:** system health, job history and logs.
 
-`Start Experiment UI.bat`
-
-The UI opens on localhost and provides gated controls for Experiment 01.3,
-01.4, 01.5 and the built Experiment 02 workflow, with live job logs and output
-folder access. On Windows it can also install/remove a self-limiting scheduled
-01.3 frozen-cohort refresh so velocity sampling does not depend on remembering
-to click Refresh manually.
+Automatic steps run between the human gates. On Windows the UI can install the
+scheduled Opportunity Automation, which runs the radar and the 01.3 refresh.
 
 See `experiment_ui/README.md`.
 
 
 ## Transformation Engine
 
-The repository now includes the offline Transformation Engine framework and
-human Concept Gate.
+The Transformation Engine generates original concepts through free models
+(`concept_model_runner.py`, via FAIR), checks them deterministically, and ends
+at the human Concept Gate.
 
 The engine consumes human-confirmed Experiment 02 mechanism handoffs, prepares
 structured concept-generation requests, validates Source Dependency Test
@@ -177,7 +229,9 @@ Concepts now also define the specific viewer problem, viewer moment, desired
 outcome, content-gap evidence state, channel fit, and a three-title clarity
 test before the Concept Gate.
 
-No concept score or automatic winner is produced.
+Automatic triage (`concept_triage.py`) shortlists up to six concepts for the
+Concept Gate; every other concept stays available as an explicit override.
+(Correction A3 moves this to a 15–25 pool with five diverse finalists.)
 
 See `transformation_engine/TRANSFORMATION_ENGINE.md` and
 `transformation_engine/CONCEPT_GATE.md`.
@@ -185,16 +239,20 @@ See `transformation_engine/TRANSFORMATION_ENGINE.md` and
 
 ## Research Engine
 
-The repository now includes the offline Research Engine framework and human
-Research Gate.
+The Research Engine plans research, gathers real sources and ends at the
+human Research Gate.
 
 Accepted concepts are converted into research plans with stable question IDs.
 Structured source/claim evidence preserves support, contradiction and
 qualification without automatically labeling claims true.
 
+Real sources are gathered by `research_acquisition.py`, which tries Agent
+Reach/Exa first, then DuckDuckGo and Wikipedia, and reads pages through Jina.
+
 Only human-accepted claims can enter a verified research package. The package
 stays RESEARCH_INCOMPLETE until every original research question is covered by
-an accepted claim.
+an accepted claim. Correction A4 makes this review exception-only: strong,
+uncontested evidence will clear automatically with a recorded reason.
 
 See `research_engine/RESEARCH_ENGINE.md` and
 `research_engine/RESEARCH_GATE.md`.
@@ -202,21 +260,24 @@ See `research_engine/RESEARCH_ENGINE.md` and
 
 ## Packaging Engine
 
-The repository now includes the Packaging Engine and human Packaging Gate.
+Packaging runs **after the approved script** (D-093). Each format goes through
+these steps:
 
-A human-accepted concept is converted into multiple title / thumbnail /
-opening-frame package candidates. One package may be approved per concept.
+1. **Title directions:** 5 Short and 5 Long, at a human title-direction gate.
+2. **A packaging brief:** evidence-bound and deterministic (D-094).
+3. **Psychological angles.**
+4. **Thumbnail concepts,** informed by niche conventions (D-097).
+5. **Rendering** from a locked template with a supplied subject image, at a
+   human thumbnail gate (D-098).
+6. **Title-thumbnail pairing** with hard truth overrides (D-096).
+7. **One final package** at the Final Packaging Gate (D-099).
 
-The approved package defines the promise the future Story / Script Engine must
-fulfill. It carries the accepted viewer problem/moment/outcome and an explicit
-one-sentence promise, while preserving content-gap and channel-fit context. Its
-research dependencies are injected into the Research Engine as mandatory
-research questions.
+No CTR prediction or winner score is produced. The older pre-script packaging
+flow (D-040, D-041) is disabled in normal readiness and kept only for legacy
+artifacts.
 
-No package score, CTR prediction or automatic winner is produced.
-
-See `packaging_engine/PACKAGING_ENGINE.md` and
-`packaging_engine/PACKAGING_GATE.md`.
+See `packaging_engine/PACKAGING_GATE.md` and the D-093 to D-099 decision
+records. `PACKAGING_ENGINE.md` still describes the older flow.
 
 
 ## Story / Script and Format split
