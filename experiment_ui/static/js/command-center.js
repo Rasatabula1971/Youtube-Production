@@ -386,10 +386,13 @@
     const tone = problems.length ? "blocked" : running ? "running" : "complete";
     pill.className = "health-pill tone-" + tone;
     dot.className = "status-dot tone-" + tone;
+    // The pill never claims more than the scheduler state supports: a
+    // scheduler that has not run yet is not "on time".
+    const schedulerOk = scheduler.tone === "complete";
     label.textContent = problems.length
       ? plural(problems.length, "issue") + " need attention"
-      : running ? "Working" : "System healthy";
-    pill.title = problems.length ? problems.join("\n") : "No failed jobs; scheduler on time.";
+      : running ? "Working" : schedulerOk ? "System healthy" : "Healthy · " + scheduler.short.replace(/^Scheduler: /, "scheduler ");
+    pill.title = problems.length ? problems.join("\n") : "No failed jobs. " + scheduler.text;
 
     const schedulerDot = $("schedulerStatusDot");
     const schedulerText = $("schedulerStatus");
