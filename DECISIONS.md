@@ -4794,3 +4794,28 @@ each held item and why.
   independent sources, and the rest come to a person.
 - Setting a gate to `HUMAN`, or deleting the policy file, restores the
   previous behaviour.
+
+## D-157 — Fresh start from the Opportunity stage archives, never deletes
+
+**Context.** The operator wanted to drop the current productions and choose
+new subjects at the Opportunity stage, without losing discovery and radar
+history.
+
+**Decision.** `scripts/fresh_start.py` moves into
+`.archive/fresh_start_<time>/`:
+- the Opportunity Gate's choice (the decision, the approved study set and
+  the active study source);
+- every output after it: Experiment 02 output and evidence, and the outputs
+  of the transformation, research, packaging, story/script, format and
+  production engines.
+
+It keeps discovery and radar data, the opportunity inbox (saved, rejected
+and watched items stay as they are), saved ideas, job logs, and all code and
+configuration. Without `--yes` it only lists what would move. It refuses
+while the UI is running on its port.
+
+**Consequences.**
+- Approved opportunities return to "needs review".
+- The next Continue Automatically starts after a new Opportunity Gate
+  decision.
+- To undo, move the archived folders back.

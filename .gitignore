@@ -26,3 +26,5 @@ source_acquisition/output/
 kokoro_test.wav
 
 production_engine/output/
+
+.archive/
