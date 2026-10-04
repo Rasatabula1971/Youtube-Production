@@ -9,11 +9,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import concept_diagnose as diag
-from test_concept_model_runner import ConceptModelRunnerTests
+import test_concept_model_runner as runner_tests
 
 
 # The runner tests' fixtures, without running those tests again here.
-FIXTURES = ConceptModelRunnerTests("request")
+FIXTURES = runner_tests.ConceptModelRunnerTests("request")
 
 
 class ConceptDiagnoseTests(unittest.TestCase):
@@ -66,3 +66,14 @@ class ConceptDiagnoseTests(unittest.TestCase):
         self.assertEqual(check["accepted"], 1)
         self.assertEqual(len(check["rejected"]), 1)
         self.assertEqual(check["unexpected_fields"], ["notes"])
+
+    def test_a_gateway_refusal_is_reported_with_its_body(self):
+        report = self.run_diagnose(403, {"raw": "error code: 1010"})
+        self.assertIn("1010", report["unexpected_response"])
+        self.assertNotIn("answer_check", report)
+
+    def test_requests_send_a_named_user_agent(self):
+        with patch.object(diag.urllib.request, "urlopen", side_effect=OSError("offline")) as urlopen:
+            with self.assertRaises(OSError):
+                diag.post({"model": "m"}, "k", 5)
+        self.assertTrue(urlopen.call_args.args[0].get_header("User-agent").startswith("youtube-production"))
