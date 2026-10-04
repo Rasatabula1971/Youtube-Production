@@ -49,6 +49,7 @@
   function esc(value) { return yp().escapeHtml(value); }
   function status() { return (yp() && yp().status()) || {}; }
   function words(value) { return String(value || "").replace(/_/g, " ").toLowerCase(); }
+  function plain(value) { return yp() && yp().plain ? yp().plain(value) : words(value); }
 
   function text(value) {
     if (value == null) return "";
@@ -399,8 +400,8 @@
       }).join("");
       return section(words(set.format) + " · " + (set.angle_count || 0) + " angles", '<div class="pk-grid">' + cards + "</div>");
     }).join("");
-    return section("Packaging brief", briefs ? '<div class="pk-grid">' + briefs + "</div>" : '<p class="muted">Status: ' + esc(words(brief.status)) + "</p>") +
-      (sets || section("Psychological angles", '<p class="muted">Status: ' + esc(words(angles.status)) + "</p>"));
+    return section("Packaging brief", briefs ? '<div class="pk-grid">' + briefs + "</div>" : '<p class="muted">' + esc(plain(brief.status) || "Not started.") + "</p>") +
+      (sets || section("Psychological angles", '<p class="muted">' + esc(plain(angles.status) || "Not started.") + "</p>"));
   }
 
   function thumbnailsHtml() {
@@ -420,7 +421,7 @@
       }).join("");
       return section(words(set.format) + " · " + (set.concept_count || (set.thumbnail_concepts || []).length) + " concepts", '<div class="pk-grid">' + cards + "</div>");
     }).join("");
-    return sets || section("Thumbnail concepts", '<p class="muted">Status: ' + esc(words(concepts.status)) + "</p>");
+    return sets || section("Thumbnail concepts", '<p class="muted">' + esc(plain(concepts.status) || "Not started.") + "</p>");
   }
 
   function pairingHtml() {
@@ -435,7 +436,7 @@
         '<th scope="col">Validation</th><th scope="col">Promise</th><th scope="col">Hook</th></tr></thead><tbody>' + rows + "</tbody></table></div>");
     }).join("");
     return facts([
-      ["Status", words(validation.status)],
+      ["Status", plain(validation.status)],
       ["Pairs", (validation.current_pairs || 0) + " of " + (validation.expected_pairs || 0)],
       ["Results", (validation.pass || 0) + " pass · " + (validation.rework || 0) + " rework · " + (validation.reject || 0) + " reject"]
     ]) + (tables || '<p class="muted">The pairing matrix appears once title and thumbnail concepts are ready.</p>');
@@ -474,7 +475,7 @@
       emptyHtml: function () {
         const gate = tab === "titles" ? titleGate() : finalGate();
         return "<h2>Nothing waiting at " + esc(tab === "titles" ? "Title Direction" : "the Final Package gate") + "</h2>" +
-          '<p class="muted">Status: ' + esc(words(gate.status) || "not started") + ". Decisions appear here when packaging reaches this step.</p>" +
+          '<p class="muted">' + esc(plain(gate.status) || "Not started.") + " Decisions appear here when packaging reaches this step.</p>" +
           '<div class="rw-empty-actions"><a href="/analysis" class="button-link ghost compact" data-route="/analysis">Classic view</a></div>';
       }
     });

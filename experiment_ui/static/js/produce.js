@@ -48,6 +48,7 @@
   function esc(value) { return yp().escapeHtml(value); }
   function status() { return (yp() && yp().status()) || {}; }
   function words(value) { return String(value || "").replace(/_/g, " ").toLowerCase(); }
+  function plain(value) { return yp() && yp().plain ? yp().plain(value) : words(value); }
   function money(value, currency) {
     const number = Number(value);
     return (currency || "USD") + " " + (Number.isFinite(number) ? number.toFixed(2) : "—");
@@ -1018,7 +1019,7 @@
         const label = TABS.find(function (t) { return t[0] === tab; })[1];
         return total && !showDecided
           ? "<h2>Every " + esc(label.toLowerCase()) + " item is decided</h2><p class=\"muted\">Tick “Include decided items” to revisit one.</p>"
-          : "<h2>Nothing waiting at " + esc(label) + "</h2><p class=\"muted\">Status: " + esc(words(config.gate().status) || "not started") + ". Items appear when production reaches this step.</p>";
+          : "<h2>Nothing waiting at " + esc(label) + "</h2><p class=\"muted\">" + esc(plain(config.gate().status) || "Not started.") + " Items appear when production reaches this step.</p>";
       }
     });
     return workspaces[tab];

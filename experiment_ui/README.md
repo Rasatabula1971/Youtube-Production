@@ -279,6 +279,9 @@ to match the redesign's navigation:
   direction, and "All tracked videos" lists the rest. A format filter (All,
   Long-form, Shorts) filters what is shown. Topic and region filters are not
   offered because the radar does not support them yet.
+  - **Headlines (D-170):** a theme is titled by its strongest on-lane
+    video's title (tags, hashtags and channel suffixes trimmed); the keyword
+    stems appear under it as "Shared words".
   - **Shortlist filters (D-162):** lane (my lane / everything, from
     `opportunity_engine/radar_lane_config.json`), minimum outlier, freshness
     and format; replicated themes pinned first; the bar counts what it hides.
@@ -572,6 +575,11 @@ and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
 API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves
 `/css/*.css` and `/js/*.js` only: one directory level, an allowlisted extension
 per folder, no dotfiles, and a resolved path that must stay inside that folder.
+
+Status codes on every page are shown as sentences (D-170): the catalogue in
+`experiment_ui/plain_language.py` is served once per page load and any code it
+does not carry is turned into a sentence by shape, so nothing like
+`WAITING_FOR_DRAFT_RESEARCH_PACKAGES` reaches the screen.
 
 ## Experiment 02 evidence step
 

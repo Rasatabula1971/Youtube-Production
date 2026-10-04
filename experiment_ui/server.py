@@ -31,6 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from pipeline_integrity import append_jsonl, atomic_write_json, atomic_write_text
 
 import doctor as doctor_module
+import plain_language
 import productions as productions_model
 
 STATIC_DIR = HERE / "static"
@@ -8787,6 +8788,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/tools":
             self._send_json(tools_snapshot())
+            return
+        if route == "/api/plain-language":
+            # Status codes as sentences (D-170); fetched once per page load.
+            self._send_json({"sentences": plain_language.catalogue()})
             return
         if route == "/api/job-log":
             query = parse_qs(urlparse(self.path).query)

@@ -21,6 +21,7 @@
   function status() { return (yp() && yp().status()) || {}; }
 
   function words(value) { return String(value || "").replace(/_/g, " ").toLowerCase(); }
+  function plain(value) { return yp() && yp().plain ? yp().plain(value) : words(value); }
 
   function text(value) {
     if (value == null) return "";
@@ -814,13 +815,13 @@
     }
     const snap = config.snapshot();
     const total = config.all().length;
-    const state = snap.status ? words(snap.status) : "not started";
+    const state = snap.status ? plain(snap.status) : "Not started.";
     if (total && !showDecided) {
       return "<h2>Every " + esc(config.label.toLowerCase()) + " item is decided</h2>" +
-        '<p class="muted">Gate status: ' + esc(state) + '. Switch to "All items" to revisit a decision.</p>';
+        '<p class="muted">' + esc(state) + ' Switch to "All items" to revisit a decision.</p>';
     }
     return "<h2>Nothing to review at the " + esc(config.label) + " Gate</h2>" +
-      '<p class="muted">Gate status: ' + esc(state) + ". Items appear here when the pipeline reaches this gate.</p>" +
+      '<p class="muted">' + esc(state) + " Items appear here when the pipeline reaches this gate.</p>" +
       '<div class="rw-empty-actions"><a href="/" class="button-link ghost compact" data-route="/">Command Center</a></div>';
   }
 

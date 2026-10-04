@@ -1094,10 +1094,16 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
         )
         top = max(rows, key=lambda row: row["lifetime_ratio"] or 0) if rows else None
         seen = [str(row.get("first_seen_at")) for row in rows if row.get("first_seen_at")]
+        # The theme reads as the viewer's question, not keyword stems (D-170):
+        # the strongest on-lane member's title, else the strongest member's.
+        on_lane = [row for row in rows if row.get("lane") == radar_lane.ON_LANE and row.get("title")]
+        headline_row = max(on_lane, key=lambda row: row["lifetime_ratio"] or 0) if on_lane else top
+        headline = theme_headline(str((headline_row or {}).get("title") or ""))
         themes.append(
             {
                 "cluster_id": cluster.get("cluster_id"),
                 "label": cluster.get("label"),
+                "headline": headline or cluster.get("label"),
                 "kind": cluster.get("kind"),
                 "breadth": cluster.get("breadth"),
                 "replication_rule_id": cluster.get("replication_rule_id"),
@@ -1133,6 +1139,19 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
         "learning": taste.status(),
         "status": status_snapshot(),
     }
+
+
+_HEADLINE_NOISE = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]\s*|\s*[|#]\s*.*$|\s+(?:#\w+\s*)+$", re.IGNORECASE)
+
+
+def theme_headline(title: str, limit: int = 90) -> str:
+    """A video title trimmed to the question it asks: no bracketed tags, no hashtags."""
+    text = _HEADLINE_NOISE.sub(" ", str(title or "")).strip(" -–—:·")
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > limit:
+        cut = text[:limit].rsplit(" ", 1)[0]
+        text = cut + "…"
+    return text
 
 
 def taste_model() -> radar_learning.TasteModel:

@@ -187,7 +187,7 @@
       '<span class="health-pill tone-' + (automatic ? "complete" : "ready") + '"><span class="status-dot tone-' +
         (automatic ? "complete" : "ready") + '"></span>' + (automatic ? "Automatic monitoring" : "Manual only") + "</span>" +
       '<dl class="radar-facts">' +
-        "<div><dt>Last scan</dt><dd>" + esc(last ? clock(last.run_at) + " · " + words(last.status) : "never") + "</dd></div>" +
+        "<div><dt>Last scan</dt><dd>" + esc(last ? clock(last.run_at) + " · " + (yp().plain ? yp().plain(last.status) : words(last.status)) : "never") + "</dd></div>" +
         "<div><dt>Next discovery</dt><dd>" + esc(schedule && schedule.next_discovery_due ? clock(schedule.next_discovery_due) : "—") + "</dd></div>" +
         "<div><dt>Next snapshots</dt><dd>" + esc(schedule && schedule.next_snapshot_due ? clock(schedule.next_snapshot_due) : "—") + "</dd></div>" +
         "<div><dt>Tracking</dt><dd>" + esc(String(radar.tracked_count || 0)) + " videos · " + esc(String(radar.watchlist_size || 0)) + " channels</dd></div>" +
@@ -243,10 +243,11 @@
     return '<article class="theme-card' + (replicated ? " replicated" : "") + '">' +
       '<div class="theme-head"><p class="attention-kicker">' + esc(replicated ? "Replicated breakout" : words(theme.breadth || "one off")) +
         (theme.kind ? " · " + esc(words(theme.kind)) : "") + laneBadge(theme.lane) + "</p>" +
-        '<h3 class="theme-title">' + esc(theme.label || theme.cluster_id) + "</h3>" +
+        '<h3 class="theme-title">' + esc(theme.headline || theme.label || theme.cluster_id) + "</h3>" +
+        (theme.headline && theme.label ? '<p class="muted theme-stems">Shared words: ' + esc(theme.label) + "</p>" : "") +
         '<p class="muted">' + esc((theme.member_count || 0) + " video(s) · " + (theme.independent_channel_count || 0) +
           " independent channel(s)" + (theme.first_detected_at ? " · first detected " + ago(theme.first_detected_at) : "")) + "</p></div>" +
-      '<div class="theme-momentum"><span class="theme-metric-label">Momentum (top video)</span>' + sparkline(theme.momentum, theme.label || "Theme") + "</div>" +
+      '<div class="theme-momentum"><span class="theme-metric-label">Momentum (top video)</span>' + sparkline(theme.momentum, theme.headline || theme.label || "Theme") + "</div>" +
       '<dl class="theme-metrics">' +
         "<div><dt>Strongest outlier</dt><dd>" + esc(ratio(theme.strongest_ratio)) + "</dd></div>" +
         "<div><dt>Median outlier</dt><dd>" + esc(ratio(theme.median_ratio)) + "</dd></div>" +
