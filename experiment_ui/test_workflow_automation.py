@@ -1451,6 +1451,57 @@ class ConceptMessageTests(unittest.TestCase):
                 self.assertIn("Retry Continue Automatically", automation.partial_message("concept_generate"))
 
 
+class LastRunFileTests(unittest.TestCase):
+    """The runner leaves its outcome for the Productions page (D-163)."""
+
+    def test_record_last_run_writes_status_stuck_and_held(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        result = {
+            "status": "PARTIAL",
+            "failed_action": "research_acquire",
+            "return_code": 2,
+            "message": "Source pages were found, but some questions have no source.",
+            "completed_actions": ["research_prepare"],
+            "stuck_messages": {"research_acquire": "Source pages were found, but some questions have no source."},
+            "auto_held": {"research_gate": ["c1/clm002: single source"]},
+            "workflow_state": "HUMAN_RESEARCH_GATE",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "ui" / "last_auto_run.json"
+            with patch.object(automation, "LAST_RUN_FILE", target):
+                automation.record_last_run(result)
+            payload = json.loads(target.read_text(encoding="utf-8"))
+        self.assertEqual(payload["status"], "PARTIAL")
+        self.assertEqual(payload["failed_action"], "research_acquire")
+        self.assertEqual(payload["stuck"], result["stuck_messages"])
+        self.assertEqual(payload["auto_held"], result["auto_held"])
+        self.assertEqual(payload["completed_actions"], ["research_prepare"])
+        self.assertTrue(payload["finished_at"])
+
+    def test_run_result_carries_each_stuck_message(self):
+        state = {"runs": 0}
+
+        def readiness():
+            return {"research_acquire": {"enabled": True, "reason": "ready"}}
+
+        def fake_run(action_id):
+            state["runs"] += 1
+            return 2
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(automation.control, "workflow_guidance", return_value={"state": "AUTO"}),
+            patch.object(automation, "run_action", side_effect=fake_run),
+            patch.object(automation, "partial_message", return_value="no source"),
+        ):
+            result = automation.run_until_human_gate()
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["stuck_messages"], {"research_acquire": "no source"})
+
+
 class PartialMessageTests(unittest.TestCase):
     def test_research_acquisition_message_names_real_error_not_model(self):
         import json

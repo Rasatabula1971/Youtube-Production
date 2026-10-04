@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import datetime, timezone
 from typing import Any
 
 import gate_autopilot
 import server as control
+from pipeline_integrity import atomic_write_json
+
+LAST_RUN_FILE = control.UI_OUTPUT_DIR / "last_auto_run.json"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -147,7 +151,9 @@ def research_acquisition_message() -> str:
             + ". The Research Gate needs every question covered, so research stops here (D-129)."
             + (f" First error: {first_error[:400]}" if first_error else "")
             + " Retry Continue Automatically: those questions are searched again, also as short "
-            "keywords. If it keeps failing, check the search backends with: python "
+            "keywords; a question still without a source after the configured rounds is set "
+            "aside and waived at the Research Gate with a note (D-163). If it keeps failing, "
+            "check the search backends with: python "
             "source_acquisition/agent_reach_adapter.py --mode doctor (Exa needs Agent Reach's "
             "mcporter on PATH)."
         )
@@ -268,6 +274,10 @@ def run_until_human_gate() -> dict[str, Any]:
     stuck: dict[str, dict[str, Any]] = {}
     held: dict[str, list[str]] = {}
     result = _with_stuck(_run_steps(completed_actions, stuck, held), stuck)
+    if stuck:
+        result["stuck_messages"] = {
+            action_id: str(item.get("message") or "") for action_id, item in stuck.items()
+        }
     return _with_held(result, held)
 
 
@@ -473,8 +483,35 @@ def _run_steps(
     }
 
 
+def record_last_run(result: dict[str, Any]) -> None:
+    """Keep the outcome of the latest run for the Productions page (D-163).
+
+    Each production shows the step that stopped the last run and why, so
+    the reason a concept is not moving is on its own row, not only in the
+    job log. Best effort: a failed write never fails the run.
+    """
+    stuck_value = result.get("stuck_messages")
+    stuck: dict[str, Any] = stuck_value if isinstance(stuck_value, dict) else {}
+    payload = {
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "status": str(result.get("status") or ""),
+        "workflow_state": result.get("workflow_state"),
+        "message": str(result.get("message") or ""),
+        "failed_action": result.get("failed_action"),
+        "return_code": result.get("return_code"),
+        "completed_actions": list(result.get("completed_actions") or []),
+        "stuck": {str(action_id): str(message) for action_id, message in stuck.items()},
+        "auto_held": result.get("auto_held") or {},
+    }
+    try:
+        atomic_write_json(LAST_RUN_FILE, payload)
+    except OSError:
+        pass
+
+
 def main() -> None:
     result = run_until_human_gate()
+    record_last_run(result)
     print()
     print("=" * 72)
     print("AUTOMATIC WORKFLOW")

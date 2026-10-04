@@ -12,6 +12,9 @@ Statuses:
   READY         the next automatic step can run (from the guided workflow)
   BLOCKED       the concept was sent for rework or rejected at a gate
   COMPLETE      every branch has a current final render
+
+Each production also carries a ``blocker`` line: what stopped the last
+automatic run at its stage, read from the runner's last-run file (D-163).
 """
 
 from __future__ import annotations
@@ -38,6 +41,26 @@ STATUS_LABEL = {
 }
 
 BLOCKING_DECISIONS = {"REWORK": "sent for rework", "REJECT": "rejected"}
+
+# Which production stage an automatic step belongs to, by action id prefix
+# (D-163). Steps before research (discovery, analysis, concepts) are not a
+# production's, so they map to nothing.
+ACTION_STAGE_PREFIXES: list[tuple[str, str]] = [
+    ("research_", "RESEARCH"),
+    ("story_", "SCRIPT"),
+    ("script_", "SCRIPT"),
+    ("title_direction_", "PACKAGE"),
+    ("packaging_", "PACKAGE"),
+    ("psychological_", "PACKAGE"),
+    ("thumbnail_", "PACKAGE"),
+    ("package_", "PACKAGE"),
+    ("format_", "FORMAT"),
+]
+PRODUCE_PREFIXES = (
+    "voice_", "pre_render_", "narration_", "prototype_", "sound_", "visual_",
+    "edit_", "final_", "rough_cut_", "publish_", "render_",
+)
+BLOCKER_MAX_CHARS = 420
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -82,17 +105,32 @@ def _plural(count: int, word: str) -> str:
 def _research(concept_id: str, research: dict[str, Any]) -> tuple[str, str] | None:
     """Return (status, detail) while research is unfinished, else None."""
     gate = _dict(research.get("research_gate"))
-    verified = {
-        _cid(item)
-        for item in _items(gate.get("verified_packages"))
-        if item.get("status") == "READY_FOR_STORY_SCRIPT"
-    }
-    if concept_id in verified:
+    packages = {_cid(item): item for item in _items(gate.get("verified_packages"))}
+    package = packages.get(concept_id)
+    if package is not None and package.get("status") == "READY_FOR_STORY_SCRIPT":
         return None
     claims = _decisions(_items(gate.get("claims")), concept_id)
     pending = claims.count("PENDING")
     if pending:
         return "HUMAN_REVIEW", f"{_plural(pending, 'research claim')} to verify"
+    if package is not None:
+        # Every claim is decided, yet the concept is not ready: say why in
+        # the gate's own words (an unanswered question, no accepted claim)
+        # instead of "ready to run" while nothing could run (D-163).
+        coverage = next(
+            (row for row in _items(gate.get("question_coverage")) if _cid(row) == concept_id),
+            None,
+        )
+        if coverage is not None and str(coverage.get("summary") or "").strip():
+            return "HUMAN_REVIEW", str(coverage["summary"]).strip()
+        unresolved = len(_ids(package.get("unresolved_question_ids")))
+        if unresolved:
+            return (
+                "HUMAN_REVIEW",
+                f"Not ready for the script: {_plural(unresolved, 'research question')} "
+                "unanswered (waive it or rework a claim)",
+            )
+        return "HUMAN_REVIEW", "Not ready for the script: no research claim was accepted"
     blocked = _blocked(claims)
     if blocked:
         return "BLOCKED", f"Research claims {blocked}"
@@ -231,6 +269,57 @@ def _produce(
     return "READY", "Waiting for voice performance specs", branches
 
 
+def action_stage(action_id: str) -> str | None:
+    """The production stage an automatic step belongs to, or None."""
+    action = str(action_id or "")
+    for prefix, stage in ACTION_STAGE_PREFIXES:
+        if action.startswith(prefix):
+            return stage
+    if action.startswith(PRODUCE_PREFIXES):
+        return "PRODUCE"
+    return None
+
+
+def blocker_for(
+    stage: str,
+    status: str,
+    last_run: dict[str, Any] | None,
+    action_labels: dict[str, str] | None = None,
+) -> str:
+    """What stopped the last automatic run at this production's stage (D-163).
+
+    Shown only while the production is READY: a run that got past the step
+    would have moved the production on, so a stale note cannot outlive the
+    state it describes. A HUMAN_REVIEW or BLOCKED production already names
+    its reason in the detail line.
+    """
+    run = _dict(last_run)
+    if status != "READY" or not run:
+        return ""
+    labels = action_labels or {}
+
+    def label(action_id: str) -> str:
+        return str(labels.get(action_id) or action_id.replace("_", " "))
+
+    def clip(text: str) -> str:
+        text = " ".join(str(text or "").split())
+        return text if len(text) <= BLOCKER_MAX_CHARS else text[: BLOCKER_MAX_CHARS - 1].rstrip() + "…"
+
+    for action_id, message in _dict(run.get("stuck")).items():
+        if action_stage(str(action_id)) == stage:
+            return clip(f"Last run stopped at {label(str(action_id))}: {message}")
+    failed = str(run.get("failed_action") or "")
+    if failed and action_stage(failed) == stage and str(run.get("status") or "") in {"FAILED", "NO_PROGRESS"}:
+        code = run.get("return_code")
+        suffix = f" (exit code {code})" if isinstance(code, int) else ""
+        message = str(run.get("message") or "").strip()
+        return clip(
+            f"Last run failed at {label(failed)}{suffix}"
+            + (f": {message}" if message else ". Open the job log for the error.")
+        )
+    return ""
+
+
 def _stage_track(stage_id: str) -> list[dict[str, str]]:
     current = STAGE_INDEX[stage_id]
     track = []
@@ -257,6 +346,8 @@ def derive(
     voice: dict[str, Any],
     narration: dict[str, Any],
     final_render_keys: set[tuple[str, str]] | None = None,
+    last_run: dict[str, Any] | None = None,
+    action_labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Derive every production from the current artifact state."""
     final_keys = final_render_keys or set()
@@ -301,6 +392,10 @@ def derive(
                 "status": status,
                 "status_label": STATUS_LABEL[status],
                 "detail": detail,
+                "blocker": blocker_for(stage, status, last_run, action_labels),
+                # A READY production is moved on by the automatic runner; the
+                # row offers that as its own Continue (D-163).
+                "can_continue": status == "READY",
                 "stages": _stage_track(stage),
                 "branches": branches,
             }

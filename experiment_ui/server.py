@@ -97,6 +97,7 @@ UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
 JOB_STATE_FILE = UI_OUTPUT_DIR / "job_state.json"
 JOB_HISTORY_FILE = UI_OUTPUT_DIR / "job_history.jsonl"
+LAST_AUTO_RUN_FILE = UI_OUTPUT_DIR / "last_auto_run.json"
 JOB_HISTORY_KEEP = 300
 
 EXP1_OUTPUT = PROJECT_ROOT / "experiment_01_discovery" / "output"
@@ -4223,6 +4224,7 @@ def productions_snapshot(
     """Per-concept productions derived from the artifacts on disk (D-115)."""
     if transformation is None:
         transformation = transformation_artifact_state()
+    last_run = safe_load_json(LAST_AUTO_RUN_FILE)
     snapshot = productions_model.derive(
         concept_gate=transformation.get("concept_gate", {}),
         research=research if research is not None else research_artifact_state(),
@@ -4232,6 +4234,11 @@ def productions_snapshot(
         voice=voice if voice is not None else voice_performance_artifact_state(),
         narration=narration if narration is not None else narration_artifact_state(),
         final_render_keys=final_render_current_keys(),
+        last_run=last_run if isinstance(last_run, dict) else None,
+        action_labels={
+            action_id: str(definition.get("label") or action_id)
+            for action_id, definition in ACTION_DEFS.items()
+        },
     )
     updated = production_updated_at(
         [p["concept_id"] for p in snapshot["productions"]]

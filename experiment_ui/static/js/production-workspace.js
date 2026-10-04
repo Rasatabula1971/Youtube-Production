@@ -67,13 +67,22 @@
       action = '<a href="/analysis" class="button-link primary-cta" data-route="/analysis">' +
         (status === "BLOCKED" ? "Open in workspace →" : "Continue review →") + "</a>";
     } else if (status === "READY") {
-      action = '<p class="muted">The next step runs from the guided workflow on the Command Center.</p>' +
-        '<a href="/" class="button-link ghost compact" data-route="/">Open Command Center</a>';
+      // This production's own Continue (D-163): the automatic runner moves
+      // it on and stops at the next gate; the blocker line says what stopped
+      // the last run here.
+      const job = (yp().status() || {}).automation_job;
+      const running = Boolean(job && (job.status === "RUNNING" || job.status === "STOPPING"));
+      action = '<button type="button" class="primary-cta production-continue" data-continue="' +
+        esc(production.concept_id) + '"' + (running ? ' disabled aria-disabled="true"' : "") + ">" +
+        (running ? "Running…" : "Continue →") + "</button>" +
+        '<p class="muted">Runs every ready step for this stage and stops at the next decision.</p>';
     }
     return '<section class="pw-current tone-' + tone(status) + '" aria-label="Current step">' +
       '<p class="section-kicker">CURRENT STEP</p>' +
       "<h3>" + esc(production.stage_label) + " · " + esc(production.status_label) + "</h3>" +
-      '<p class="pw-current-detail">' + esc(production.detail) + "</p>" + action +
+      '<p class="pw-current-detail">' + esc(production.detail) + "</p>" +
+      (production.blocker ? '<p class="production-blocker">' + esc(production.blocker) + "</p>" : "") +
+      action +
     "</section>";
   }
 

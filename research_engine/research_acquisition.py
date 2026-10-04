@@ -37,6 +37,7 @@ PLANS_DIR = HERE / "output" / "plans"
 OUTPUT_DIR = HERE / "output" / "acquired_evidence"
 SUMMARY_FILE = HERE / "output" / "research_acquisition_summary.json"
 CONFIG_FILE = HERE / "research_acquisition_config.json"
+DEFAULT_MAX_SEARCH_ROUNDS = 2
 
 
 def load_json(path: Path) -> Any:
@@ -72,6 +73,11 @@ def load_config() -> dict[str, Any]:
         "read_backends": [
             str(x) for x in raw.get("read_backends", DEFAULT_READ_BACKENDS)
         ],
+        # After this many acquisition rounds with no usable page, a question
+        # is given up (recorded as unsourced) instead of blocking research (D-163).
+        "max_search_rounds_per_question": max(
+            1, int(raw.get("max_search_rounds_per_question", DEFAULT_MAX_SEARCH_ROUNDS))
+        ),
     }
 
 
@@ -122,19 +128,25 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
     destination = OUTPUT_DIR / f"{safe_slug(concept_id)}.research_evidence.json"
     plan_hash = sha256_file(plan_path)
 
-    if destination.exists() and not force:
+    previous_rounds: dict[str, int] = {}
+    if destination.exists():
         existing = load_json(destination)
         provenance = existing.get("provenance", {})
-        if (
-            isinstance(provenance, dict)
-            and provenance.get("plan_sha256") == plan_hash
-            and existing.get("status") == "COMPLETE"
-        ):
-            return {
-                "status": "SKIPPED_CURRENT",
-                "concept_id": concept_id,
-                "evidence": str(destination),
-            }
+        if isinstance(provenance, dict) and provenance.get("plan_sha256") == plan_hash:
+            if existing.get("status") == "COMPLETE" and not force:
+                return {
+                    "status": "SKIPPED_CURRENT",
+                    "concept_id": concept_id,
+                    "evidence": str(destination),
+                }
+            # The same plan was searched before: count those rounds (D-163).
+            rounds = existing.get("search_rounds")
+            if isinstance(rounds, dict):
+                previous_rounds = {
+                    str(key): int(value)
+                    for key, value in rounds.items()
+                    if isinstance(value, int) and value > 0
+                }
 
     config = load_config()
     questions = plan.get("research_questions", [])
@@ -251,10 +263,29 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         for page in pages
         for question_id in page.get("question_ids", [])
     }
-    unresolved_question_ids = sorted(required_question_ids - covered_question_ids)
+    searched_ids = {str(item["question_id"]) for item in question_searches} | {
+        str(item.get("question_id") or "") for item in errors if item.get("stage") == "search"
+    }
+    search_rounds = {
+        question_id: previous_rounds.get(question_id, 0) + (1 if question_id in searched_ids else 0)
+        for question_id in sorted(required_question_ids | set(previous_rounds))
+    }
+    uncovered = required_question_ids - covered_question_ids
+    # A question still without a page after the configured rounds is given
+    # up with a record of the searches, so research can go on; the Research
+    # Gate waives it automatically with that note (D-163).
+    unsourced_question_ids = sorted(
+        question_id
+        for question_id in uncovered
+        if search_rounds.get(question_id, 0) >= config["max_search_rounds_per_question"]
+    )
+    unresolved_question_ids = sorted(uncovered - set(unsourced_question_ids))
+    blocking_errors = [
+        item for item in errors if str(item.get("question_id") or "") not in unsourced_question_ids
+    ]
     status = (
         "COMPLETE"
-        if pages and not errors and not unresolved_question_ids
+        if pages and not blocking_errors and not unresolved_question_ids
         else "PARTIAL" if pages else "FAILED"
     )
     payload = {
@@ -271,6 +302,8 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         "pages": pages,
         "errors": errors,
         "unresolved_question_ids": unresolved_question_ids,
+        "unsourced_question_ids": unsourced_question_ids,
+        "search_rounds": search_rounds,
         "limits": config,
     }
     atomic_write_json(destination, payload)
@@ -278,9 +311,12 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         "status": status,
         "concept_id": concept_id,
         "pages": len(pages),
-        "errors": len(errors),
+        "errors": len(blocking_errors),
+        "unsourced_questions": len(unsourced_question_ids),
         "first_error": (
-            f"{errors[0]['stage']}: {errors[0]['message']}" if errors else None
+            f"{blocking_errors[0]['stage']}: {blocking_errors[0]['message']}"
+            if blocking_errors
+            else None
         ),
         "evidence": str(destination),
     }

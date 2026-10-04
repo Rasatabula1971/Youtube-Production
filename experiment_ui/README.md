@@ -296,6 +296,15 @@ to match the redesign's navigation:
   Queue and Completed. **Review Queue** lists every decision waiting, across
   productions and the opportunity inbox, with "Start review queue →". "+ New"
   goes to Opportunities, because a production starts from an accepted concept.
+  - **One Continue per row (D-163).** Each production row (and
+    the Production Workspace) shows a blocker line when the last automatic
+    run stopped at its stage, with the step and the reason, and offers its
+    own Continue. The runner records its outcome in
+    `.experiment_ui/last_auto_run.json`. A concept whose research claims are
+    all decided but not ready says why in plain words ("1 question
+    unanswered: mark it Not needed for script, or Rework a claim"); the
+    Research Gate waives a question automatically when no source or claim
+    covers it, and the operator can undo that waiver.
 - `/production#<concept_id>` — **Production Workspace** (D-117): one video. The
   header shows title, premise, stage · status and last update. Eight tabs are
   real sections: Evidence, Analysis, Concept, Research, Script, Package,
@@ -535,7 +544,6 @@ and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
 API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves
 `/css/*.css` and `/js/*.js` only: one directory level, an allowlisted extension
 per folder, no dotfiles, and a resolved path that must stay inside that folder.
-
 
 ## Experiment 02 evidence step
 
