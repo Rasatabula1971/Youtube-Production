@@ -12,6 +12,12 @@ import transformation_engine as engine
 
 
 class ConceptModelRunnerTests(unittest.TestCase):
+    def setUp(self):
+        # Tests choose their route; the real route file must not leak in.
+        route = patch.object(runner, "ROUTE_FILE", Path(tempfile.gettempdir()) / "no-such-concept-route.json")
+        route.start()
+        self.addCleanup(route.stop)
+
     def request(self):
         return {
             "request_type": "transformation_concept_generation",
@@ -293,6 +299,56 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["concepts_beyond_request_dropped"], 2)
         self.assertEqual(result["structurally_rejected"], 1)
         self.assertEqual(result["structurally_accepted"], 4)
+
+    def run_on_route(self, route, *, gemini_available=True, gemini_result=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            route_file = root / "route.json"
+            route_file.write_text(json.dumps({"route": route}), encoding="utf-8")
+            request_path = root / "curiosity_gap.concept_request.json"
+            request_path.write_text(json.dumps(self.request()), encoding="utf-8")
+            with (
+                patch.object(runner, "ROUTE_FILE", route_file),
+                patch.object(runner, "MODEL_RUNS_DIR", root / "runs"),
+                patch.object(runner, "RAW_OUTPUTS_DIR", root / "raw"),
+                patch.object(runner, "RESPONSES_DIR", root / "responses"),
+                patch.object(runner, "resolve_fair_paths", return_value={"repo": root, "env_file": root / ".env", "python": root / "py"}),
+                patch.object(runner, "call_fair_bridge") as fair,
+                patch.object(runner, "direct_gemini_available", return_value=gemini_available),
+                patch.object(runner, "call_direct_gemini_backup", return_value=gemini_result) as gemini,
+            ):
+                result = runner.run_one(request_path, force=False, runner_config=self.runner_config())
+        return result, fair, gemini
+
+    def test_gemini_route_never_calls_fair(self):
+        output = json.dumps({"mechanism_id": "curiosity_gap", "concepts": [self.valid_concept()]})
+        accepted = {
+            "status": "ACCEPTED", "output": output, "provider_id": "direct_gemini_backup", "model_id": "gemini-3.5-flash-lite",
+            "paid_inference_executed": None, "direct_backup_used": True, "direct_backup_free_tier_only": True,
+            "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP", "attempts": [],
+        }
+        result, fair, gemini = self.run_on_route("direct_gemini", gemini_result=accepted)
+        fair.assert_not_called()
+        self.assertEqual(gemini.call_args.kwargs["fair_result"]["reason_code"], "GEMINI_ONLY_ROUTE")
+        self.assertEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["provider_id"], "direct_gemini_backup")
+
+    def test_gemini_route_without_a_key_stops_instead_of_falling_back(self):
+        result, fair, gemini = self.run_on_route("direct_gemini", gemini_available=False)
+        fair.assert_not_called()
+        gemini.assert_not_called()
+        self.assertEqual(result["status"], "MODEL_ESCALATION_REQUIRED")
+        self.assertEqual(result["fair_reason_code"], "DIRECT_GEMINI_NOT_CONFIGURED")
+
+    def test_route_defaults_to_fair_and_rejects_unknown_routes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "none.json"
+            with patch.object(runner, "ROUTE_FILE", missing):
+                self.assertEqual(runner.concept_route(), "fair")
+            bad = Path(tmp) / "bad.json"
+            bad.write_text(json.dumps({"route": "openai"}), encoding="utf-8")
+            with patch.object(runner, "ROUTE_FILE", bad), self.assertRaisesRegex(ValueError, "route must be one of"):
+                runner.concept_route()
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")

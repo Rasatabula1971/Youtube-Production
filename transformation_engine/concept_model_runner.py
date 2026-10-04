@@ -33,7 +33,9 @@ if str(EXP2_DIR) not in sys.path:
 
 from analysis_model_runner import (
     bridge_payload,
+    call_direct_gemini_backup,
     call_fair_bridge,
+    direct_gemini_available,
     inference_cost_authorized,
     load_runner_config,
     parse_model_json,
@@ -56,6 +58,12 @@ from transformation_engine import (
 )
 
 MODEL_RUNS_DIR = OUTPUT_DIR / "concept_model_runs"
+# Which route generates concepts (D-146): "fair" (free models through FAIR) or
+# "direct_gemini" (the project's Gemini key only, no FAIR and no fallback).
+# Kept out of the validation contract, so switching never regenerates
+# mechanisms that already validated.
+ROUTE_FILE = Path(__file__).resolve().parent / "concept_model_route.json"
+ROUTES = {"fair", "direct_gemini"}
 RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_concept_outputs"
 BATCH_SUMMARY_FILE = OUTPUT_DIR / "concept_model_batch_summary.json"
 
@@ -259,6 +267,29 @@ def _cap_concepts(request: dict[str, Any], response: Any) -> int:
     return dropped
 
 
+def concept_route() -> str:
+    try:
+        route = str(load_json(ROUTE_FILE).get("route") or "fair").strip()
+    except (OSError, ValueError, AttributeError):
+        return "fair"
+    if route not in ROUTES:
+        raise ValueError(f"concept_model_route.json route must be one of {sorted(ROUTES)}, not {route!r}")
+    return route
+
+
+def call_gemini_only(payload: dict[str, Any], *, timeout_seconds: float) -> dict[str, Any]:
+    """Generate on the project's Gemini key alone; FAIR is not called."""
+    not_run = {
+        "status": "ESCALATION_REQUIRED",
+        "reason_code": "GEMINI_ONLY_ROUTE",
+        "paid_inference_executed": False,
+        "attempts": [],
+    }
+    if not direct_gemini_available():
+        return {**not_run, "reason_code": "DIRECT_GEMINI_NOT_CONFIGURED"}
+    return call_direct_gemini_backup(payload, timeout_seconds=timeout_seconds, fair_result=not_run)
+
+
 def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
     prompt = (
         "You are generating original YouTube concept candidates from a validated "
@@ -435,16 +466,15 @@ def run_one(
     RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        bridge_result = call_fair_bridge(
-            payload,
-            python_executable=paths["python"],
-            timeout_seconds=float(
-                runner_config["runner"].get(
-                    "subprocess_timeout_seconds",
-                    300,
-                )
-            ),
-        )
+        timeout = float(runner_config["runner"].get("subprocess_timeout_seconds", 300))
+        if concept_route() == "direct_gemini":
+            bridge_result = call_gemini_only(payload, timeout_seconds=timeout)
+        else:
+            bridge_result = call_fair_bridge(
+                payload,
+                python_executable=paths["python"],
+                timeout_seconds=timeout,
+            )
     except Exception as exc:
         report = {
             "mechanism_id": mechanism_id,
