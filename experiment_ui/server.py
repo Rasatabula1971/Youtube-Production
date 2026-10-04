@@ -30,6 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from pipeline_integrity import append_jsonl, atomic_write_json, atomic_write_text
 
+import doctor as doctor_module
 import productions as productions_model
 
 STATIC_DIR = HERE / "static"
@@ -6813,6 +6814,40 @@ class JobManager:
         self._process: subprocess.Popen[str] | None = None
         self._job: dict[str, Any] | None = None
 
+    def recover(self) -> dict[str, Any] | None:
+        """Settle a job the previous UI run left RUNNING in job_state.json (D-169).
+
+        After a crash or a closed launcher window the saved state still says
+        RUNNING. If that process is still alive it is an orphan nobody
+        supervises: it is stopped and recorded ORPHANED. If it is gone, the
+        job is recorded INTERRUPTED. Either way the Tools page and the job
+        drawer say what happened instead of showing a run that never ends.
+        """
+        try:
+            saved = json.loads(JOB_STATE_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(saved, dict) or saved.get("status") not in {"RUNNING", "STOPPING"}:
+            return None
+        pid_value = saved.get("pid")
+        pid = pid_value if isinstance(pid_value, int) and not isinstance(pid_value, bool) and pid_value > 0 else 0
+        alive = pid > 0 and pid_alive(pid)
+        if alive:
+            terminate_pid(pid)
+            saved["status"] = "ORPHANED"
+            saved["note"] = "The UI exited while this job ran; the job was stopped when the UI started again."
+        else:
+            saved["status"] = "INTERRUPTED"
+            saved["note"] = "The UI exited while this job ran and the job did not finish."
+        saved["finished_at"] = utc_now()
+        saved["return_code"] = None
+        with self._lock:
+            if self._process is None:
+                self._job = dict(saved)
+        self._save_state(saved)
+        record_job_history(saved)
+        return saved
+
     def running(self) -> bool:
         with self._lock:
             return self._process is not None and self._process.poll() is None
@@ -7000,6 +7035,45 @@ def job_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
         "last_line": last_line[:200],
         "last_output_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
     }
+
+
+def pid_alive(pid: int) -> bool:
+    """Whether a process id is still running (never signals it)."""
+    if os.name == "nt":
+        try:
+            completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
+                capture_output=True, text=True, check=False, timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return f'"{pid}"' in (completed.stdout or "")
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def terminate_pid(pid: int) -> None:
+    """Stop a process (and its children) the UI started in an earlier run."""
+    if os.name == "nt":
+        subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, timeout=15,
+        )
+        return
+    import signal
+
+    for target in (lambda: os.killpg(pid, signal.SIGTERM), lambda: os.kill(pid, signal.SIGTERM)):
+        try:
+            target()
+            return
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            continue
 
 
 def terminate_process_tree(process: "subprocess.Popen[str]") -> None:
@@ -7198,7 +7272,12 @@ def system_health() -> list[dict[str, Any]]:
 
 
 def tools_snapshot() -> dict[str, Any]:
-    return {"health": system_health(), "jobs": job_history(), "updated_at": utc_now()}
+    return {
+        "health": system_health(),
+        "jobs": job_history(),
+        "doctor": doctor_module.last_report(),
+        "updated_at": utc_now(),
+    }
 
 
 JOB_MANAGER = JobManager()
@@ -9711,6 +9790,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"editor_exchange": editor_exchange_state()})
                 return
 
+            if route == "/api/doctor":
+                # One click, every key and binary tested for real (D-169).
+                self._send_json({"doctor": doctor_module.run()})
+                return
+
             if route == "/api/budget-reconcile":
                 # The operator settles what a paid call really cost (D-166):
                 # an unconfirmed call, or a correction to any ledger item.
@@ -9896,6 +9980,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def run_server(host: str, port: int, open_browser: bool) -> None:
     UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    recovered = JOB_MANAGER.recover()
+    if recovered:
+        print(f"Previous job {recovered.get('id')} was {str(recovered.get('status')).lower()}: {recovered.get('note')}")
     server = ThreadingHTTPServer((host, port), Handler)
     url = f"http://{host}:{port}/"
 

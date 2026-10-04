@@ -146,9 +146,11 @@ identity.
 
 ## Paid narration remains unbuilt
 
-D-061 still governs paid narration: Higgsfield is the planned licensed-voice
-renderer, but the paid adapter is intentionally not part of the current slice.
-Before a paid call is allowed, the system still needs:
+Since D-168 the shipped narration provider is the free local Kokoro voice
+(`LOCAL_KOKORO` adapter, $0, no network); the paid HTTP adapter (D-139)
+remains available for a provider whose contract is verified. The paragraphs
+below describe the paid path. Before a paid call is allowed, the system
+still needs:
 
 - configured licensed voice identity;
 - licence reference;
@@ -233,9 +235,10 @@ authorization; it still does not execute the paid narration render.
 Changing the current estimate invalidates old spend-review decisions and
 approved spend artifacts.
 
-The checked-in Higgsfield narration provider contract remains intentionally
-unverified, so production will stop at provider setup/quote requirements until
-those prerequisites are supplied from verified provider information.
+The Higgsfield narration provider contract is kept, unverified, under
+`paid_provider_example` in `narration_render_config.json`; the active
+provider is the local Kokoro voice (D-168), whose $0 quote the system writes
+itself.
 
 ## Slice 12 — authorized narration return and deterministic Audio QC
 

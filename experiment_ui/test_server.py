@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -2155,3 +2157,76 @@ class PostBodyHardeningTests(unittest.TestCase):
         # A body shorter than its Content-Length must not hold the thread forever.
         self.assertGreater(server.Handler.timeout, 0)
         self.assertLessEqual(server.Handler.timeout, 120)
+
+
+class JobRecoveryTests(unittest.TestCase):
+    """A job the previous UI run left RUNNING is settled at startup (D-169)."""
+
+    def saved(self, root: Path, pid: int) -> Path:
+        state = root / "job_state.json"
+        state.write_text(json.dumps({
+            "id": "20260101_000000_auto_continue", "action_id": "auto_continue", "label": "Continue",
+            "status": "RUNNING", "pid": pid, "started_at": "2026-01-01T00:00:00+00:00",
+            "finished_at": None, "return_code": None, "log_path": str(root / "x.log"),
+        }), encoding="utf-8")
+        return state
+
+    def test_a_dead_pid_is_recorded_interrupted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = self.saved(root, 2_000_000_000)
+            manager = server.JobManager()
+            with (
+                patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "UI_OUTPUT_DIR", root),
+                patch.object(server, "JOB_HISTORY_FILE", root / "job_history.jsonl"),
+                patch.object(server, "pid_alive", return_value=False),
+            ):
+                recovered = manager.recover()
+                current = manager.current()
+                history = (root / "job_history.jsonl").read_text(encoding="utf-8")
+                rewritten = json.loads(state.read_text(encoding="utf-8"))
+        self.assertEqual(recovered["status"], "INTERRUPTED")
+        self.assertEqual(current["status"], "INTERRUPTED")
+        self.assertFalse(manager.running())
+        self.assertIn("INTERRUPTED", history)
+        self.assertEqual(rewritten["status"], "INTERRUPTED")
+        self.assertTrue(rewritten["finished_at"])
+
+    def test_a_live_orphan_is_stopped_and_recorded_orphaned(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            child = subprocess.Popen(  # noqa: S603 - fixed argument list
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                start_new_session=(os.name != "nt"),
+            )
+            try:
+                state = self.saved(root, child.pid)
+                manager = server.JobManager()
+                with (
+                    patch.object(server, "JOB_STATE_FILE", state),
+                    patch.object(server, "UI_OUTPUT_DIR", root),
+                    patch.object(server, "JOB_HISTORY_FILE", root / "job_history.jsonl"),
+                ):
+                    recovered = manager.recover()
+                    deadline = time.time() + 10
+                    while child.poll() is None and time.time() < deadline:
+                        time.sleep(0.05)
+                self.assertEqual(recovered["status"], "ORPHANED")
+                self.assertIsNotNone(child.poll(), "the orphan was not stopped")
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait(timeout=5)
+
+    def test_a_finished_state_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = self.saved(root, 1)
+            payload = json.loads(state.read_text(encoding="utf-8"))
+            payload["status"] = "SUCCEEDED"
+            state.write_text(json.dumps(payload), encoding="utf-8")
+            manager = server.JobManager()
+            with patch.object(server, "JOB_STATE_FILE", state):
+                self.assertIsNone(manager.recover())
+            self.assertIsNone(manager.current())

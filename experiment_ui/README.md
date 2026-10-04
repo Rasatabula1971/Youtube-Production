@@ -438,6 +438,14 @@ to match the redesign's navigation:
     FAIR, Vision and vidIQ Doctors. Each check has a status and a reason.
     Where an action fixes it, a Run Doctor or Install button runs that
     predefined action.
+  - **Doctor (D-169):** one click tests every key and binary for real: the
+    YouTube key with a live Data API call, the Gemini key and billing flag,
+    FFmpeg, FFprobe, yt-dlp, the search backends, Kokoro with espeak-ng, the
+    narration and image providers, the upload OAuth values and free disk.
+    Each row shows its result and how long it took; secrets are never shown.
+  - **Orphaned jobs (D-169):** when the UI starts it settles a job the last
+    run left RUNNING: a live process is stopped and recorded ORPHANED, a gone
+    one INTERRUPTED, both with a note in Recent Jobs.
   - **Recent Jobs:** the last 30 jobs with status, times and exit code.
     *Logs* opens the saved log (the last 60,000 characters).
   - **Advanced:** raw output shortcuts, then collapsible sections for the
@@ -827,10 +835,14 @@ confirmation of the displayed worst-case amount.
 The gate itself makes no paid call. An accepted gate records authorization for
 the exact current quote only.
 
-The current repository configuration deliberately keeps the Higgsfield
-narration contract unverified until a documented endpoint/schema, licensed
-voice identity, licence reference and calibration are configured. Therefore a
-normal live run must stop safely rather than fabricate provider pricing.
+The shipped configuration uses the free local Kokoro voice as the narration
+provider (D-168): the contract is the model's Apache-2.0 licence and voice
+list, the quote is written by the system at $0 and bound to the request, and
+the spend gate runs as usual. A paid HTTP provider stays supported: copy
+`paid_provider_example` over the provider keys in
+`production_engine/narration_render_config.json`, verify its contract, set
+the price and API key variable, and match `voice_performance_config.json`;
+the system still never guesses a price.
 
 The provenance chain is:
 

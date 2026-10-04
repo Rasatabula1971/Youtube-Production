@@ -1,5 +1,5 @@
 {
-  "provider": "higgsfield",
+  "provider": "kokoro_local",
   "planning_policy": "FAIR_FREE_ONLY",
   "allowed_emotions": [
     "neutral",
@@ -18,8 +18,8 @@
   "pause_ms_max": 1200,
   "emphasis_terms_max": 4,
   "voice_identity": {
-    "voice_id": null,
-    "license_reference": null,
-    "calibration_artifact": null
+    "voice_id": "af_heart",
+    "license_reference": "Apache-2.0 (hexgrad/Kokoro-82M model card, voice af_heart)",
+    "calibration_artifact": "narration_preview_audio/<concept>.<format>.preview.wav (the free preview you approved)"
   }
 }

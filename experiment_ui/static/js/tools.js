@@ -94,9 +94,50 @@
     }).join("");
   }
 
+  // The doctor (D-169): every key and binary tested for real, on one click.
+  let doctorRunning = false;
+
+  function renderDoctor() {
+    const host = document.getElementById("toolsDoctor");
+    if (!host) return;
+    const report = snapshot && snapshot.doctor;
+    const button = '<button class="compact" id="toolsDoctorRun"' + (doctorRunning ? " disabled" : "") + ">" +
+      (doctorRunning ? "Checking…" : (report ? "Run doctor again" : "Run doctor")) + "</button>";
+    if (!report) {
+      host.innerHTML = '<p class="muted">Tests the YouTube key with a real call, the Gemini flag, FFmpeg, yt-dlp, the search backends, Kokoro, the narration and image providers, the upload OAuth values and the disk. About ten seconds.</p>' + button;
+      return;
+    }
+    const rows = (report.checks || []).map(function (check) {
+      return '<li class="th-row" data-doctor="' + esc(check.id) + '">' +
+        '<div class="th-main"><strong>' + esc(check.label) + "</strong>" +
+        '<span class="muted">' + esc(check.detail || "") + "</span></div>" +
+        '<div class="th-side">' + badge(check.status, TONE) + '<span class="muted">' + esc(String(check.ms || 0)) + " ms</span></div></li>";
+    }).join("");
+    host.innerHTML = '<p class="muted">Ran ' + esc(shortTime(report.ran_at)) + " · " + esc(String(report.ready || 0)) + " ready · " +
+      esc(String(report.warn || 0)) + " to look at · " + esc(String(report.missing || 0)) + " missing.</p>" + button +
+      '<ul class="th-list">' + rows + "</ul>";
+  }
+
+  async function runDoctor() {
+    if (doctorRunning) return;
+    doctorRunning = true;
+    renderDoctor();
+    try {
+      const data = await yp().api("/api/doctor", { method: "POST", body: "{}" });
+      snapshot = Object.assign({}, snapshot || {}, { doctor: data.doctor });
+      yp().showToast("Doctor finished: " + (data.doctor.missing || 0) + " missing, " + (data.doctor.warn || 0) + " to look at.", false);
+    } catch (error) {
+      yp().showToast(error.message, true);
+    } finally {
+      doctorRunning = false;
+      renderDoctor();
+    }
+  }
+
   function paint() {
     renderHealth();
     renderJobs();
+    renderDoctor();
     const stamp = document.getElementById("toolsUpdated");
     if (stamp) stamp.textContent = snapshot ? "Updated " + shortTime(snapshot.updated_at) : "";
   }
@@ -136,6 +177,10 @@
     const logButton = event.target.closest("[data-job-log]");
     if (logButton) {
       toggleLog(logButton.dataset.jobLog);
+      return;
+    }
+    if (event.target.closest("#toolsDoctorRun")) {
+      runDoctor();
       return;
     }
     if (event.target.closest("#toolsRefresh")) load();

@@ -81,7 +81,10 @@ class RadarLearningTests(unittest.TestCase):
         self.assertEqual(model.score("Zzz qqq", "UCcccccccccccccccccccccc"), 0.0)
         strongest = model.status()["strongest"]
         self.assertIn("how", strongest["for"])
-        self.assertTrue(set(strongest["against"]) & {"tax", "workout", "crypto", "seniors"})
+        self.assertEqual(len(strongest["against"]), 8)
+        self.assertTrue(all(model.weights[tok] < 0 for tok in strongest["against"]))
+        self.assertTrue(all(model.weights[tok] < 0 for tok in ("tax", "workout", "crypto", "seniors")))
+        self.assertEqual(strongest["against"], sorted(strongest["against"], key=lambda t: (model.weights[t], t)))
         self.assertFalse(any(t.startswith("channel:") for t in strongest["for"] + strongest["against"]))
 
     def test_channel_counts_as_evidence(self):

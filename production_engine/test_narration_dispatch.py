@@ -201,3 +201,69 @@ class NarrationDispatchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def local_config():
+    return {
+        "provider": "kokoro_local",
+        "provider_contract": {
+            "schema_verified": True, "endpoint": None,
+            "documentation_url": "https://huggingface.co/hexgrad/Kokoro-82M", "verified_at": "2026-10-04",
+        },
+        "max_regenerations_per_segment": 2, "quote_currency": "USD",
+        "require_provider_quote": True, "audio_qc": {},
+        "provider_adapter": {
+            "kind": "LOCAL_KOKORO", "model": "hexgrad/Kokoro-82M", "voice_id": "af_heart",
+            "api_key_env": None, "price_per_1000_characters_usd": 0.0,
+        },
+    }
+
+
+class LocalKokoroDispatchTests(unittest.TestCase):
+    """The free local voice ships the final narration (D-168)."""
+
+    def setUp(self):
+        NarrationDispatchTests.setUp(self)
+        self.config = local_config()
+        patcher = patch.object(dispatch, "local_renderer_installed", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def fake_local(self, segment, *, settings, endpoint, voice):
+        self.calls.append((segment["segment_id"], settings["kind"], voice.get("voice_id")))
+        return {"bytes": WAV + segment["segment_id"].encode(), "suffix": ".wav", "cost_usd": 0.0, "job_id": "kokoro-local:af_heart"}
+
+    def test_local_provider_needs_no_key_or_endpoint_but_needs_kokoro(self):
+        with patch.dict("os.environ", {"NARRATION_PROVIDER_API_KEY": ""}):
+            status = dispatch.provider_status(self.config)
+        self.assertTrue(status["ready"], status["problems"])
+        self.assertTrue(status["local"])
+        self.assertEqual(status["price_per_1000_characters_usd"], 0.0)
+        self.config["provider_adapter"]["price_per_1000_characters_usd"] = None
+        self.assertTrue(dispatch.provider_status(self.config)["ready"])
+        with patch.object(dispatch, "local_renderer_installed", return_value=False):
+            problems = " ".join(dispatch.provider_status(self.config)["problems"])
+        self.assertIn("Kokoro is not installed", problems)
+
+    def test_local_dispatch_renders_every_segment_for_nothing(self):
+        result = dispatch.dispatch(
+            concept_id="concept-1", format="long_form", reviewer="me",
+            adapters={"LOCAL_KOKORO": self.fake_local},
+        )
+        self.assertEqual([c[0] for c in self.calls], ["b1", "b2"])
+        self.assertEqual(self.calls[0][1], "LOCAL_KOKORO")
+        self.assertEqual(result["actual_cost_usd"], 0.0)
+        self.assertTrue(result["provider_job_id"].startswith("kokoro-local:af_heart"))
+        events = [e for e in dispatch.read_jsonl(dispatch.HISTORY_FILE)]
+        self.assertEqual(events[-1]["event"], "RENDERED")
+        self.assertEqual(events[-1]["total_cost_usd"], 0.0)
+
+    def test_the_shipped_config_is_the_local_voice(self):
+        import json
+
+        shipped = json.loads(Path(dispatch.CONFIG_FILE).read_text(encoding="utf-8"))
+        self.assertEqual(shipped["provider"], "kokoro_local")
+        self.assertEqual(shipped["provider_adapter"]["kind"], "LOCAL_KOKORO")
+        self.assertEqual(shipped["provider_adapter"]["price_per_1000_characters_usd"], 0.0)
+        self.assertTrue(dispatch.provider_contract_verified(shipped))
+        self.assertIn("paid_provider_example", shipped)

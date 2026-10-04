@@ -5148,3 +5148,66 @@ recorded. The Publish tab shows an interrupted upload and the button reads
 **Consequences.** One approved video never becomes two private videos. A
 retry after any network failure is safe to click. The pending record is
 plain JSON the operator can delete to force a fresh upload.
+
+## D-168 — The free local Kokoro voice ships the narration
+
+**Context.** Paid narration had waited on a provider decision since D-061:
+the Higgsfield contract was unverified by design, so every live run
+stopped at "provider setup required". Meanwhile the free preview (Kokoro,
+D-128) was already producing the narration the operator listened to and
+approved. No full video had gone end to end.
+
+**Decision.** The local renderer becomes a first-class narration provider.
+- `narration_dispatch` gains a `LOCAL_KOKORO` adapter: the same engine,
+  voice and delivery handling as the preview, rendering each segment to
+  WAV at $0 with no network call. `provider_status` asks a local provider
+  for no API key or endpoint; it asks that Kokoro be installed and treats
+  a missing price as 0.
+- `narration_render.provider_contract_verified` accepts a local contract
+  without an endpoint (the documented model licence and voice list are the
+  contract). `prepare()` writes the $0 provider quote itself, bound to the
+  request hash like any quote, and refreshes it when the request changes;
+  the spend gate's "quote is current" rule therefore still holds and the
+  gate policy can accept a $0 worst case.
+- The shipped configuration is now the local voice: provider
+  `kokoro_local`, model `hexgrad/Kokoro-82M` (Apache-2.0 weights), voice
+  `af_heart`, price 0, and a matching `voice_identity` with a licence
+  reference. The previous Higgsfield block is kept under
+  `paid_provider_example` in `narration_render_config.json` for switching
+  back; the paid path is unchanged.
+
+**Consequences.** A video can go from script to final render with no paid
+narration call and no provider decision; the first full video is the
+test of whether the voice is good enough to ship. Every gate stays: the
+preview is approved by a person, the spend gate still runs (at $0), Audio
+QC and the Final Audio Gate are unchanged. Changing `voice_performance_config`
+changes its validation contract hash, so specs approved before this
+change are stale and regenerate.
+
+## D-169 — A doctor page, and a job orphaned by a crash is settled at startup
+
+**Context.** An hour of the 2026-10-04 session went into things a single
+check would have shown: a 38-character API key, an environment the UI did
+not inherit, a search backend not on PATH. System Health only said whether
+a key was set. And after a crash or a closed launcher window the saved
+job state said RUNNING forever while the child kept writing artifacts.
+
+**Decision.**
+- **Doctor.** `experiment_ui/doctor.py` runs twelve checks on one click
+  from the Tools page (`POST /api/doctor`): the YouTube key with one real
+  Data API call (1 quota unit), the direct Gemini key and its billing
+  flag, FFmpeg, FFprobe and yt-dlp versions, the search backends (mcporter
+  for Exa, curl for DuckDuckGo and Wikipedia, agent-reach doctor if
+  installed), Kokoro with espeak-ng, the narration provider, the image
+  providers, the upload OAuth values and free disk. Each check runs on its
+  own with a time limit and reports its own failure; secrets are never
+  shown. The report is saved to `.experiment_ui/doctor.json` and shown
+  with timings.
+- **Orphaned jobs.** `JobManager.recover()` runs when the UI starts. If
+  `job_state.json` says RUNNING and the process is still alive, the
+  process tree is stopped and the job recorded ORPHANED; if it is gone,
+  INTERRUPTED. Both land in the job history and the job drawer with a
+  note, instead of a run that never ends.
+
+**Consequences.** "Why does nothing work?" has a ten-second answer. A
+restarted UI never runs beside a ghost of its last job.

@@ -12,7 +12,8 @@ A dispatch is allowed only when all of these hold:
   * the provider contract is verified in narration_render_config.json (the
     narration request is BLOCKED otherwise, so no spend can be approved);
   * the provider adapter is configured: kind, API key variable, price per
-    1,000 characters (never guessed) and model/voice;
+    1,000 characters (never guessed) and model/voice; a local renderer
+    (LOCAL_KOKORO, D-168) needs no key or endpoint and costs $0;
   * the Human Narration Spend Gate approved the exact current request;
   * the estimate for the segments to render, added to what was already
     spent on this narration, stays within the approved worst case.
@@ -44,6 +45,7 @@ from narration_render import (
     artifact_key,
     load_config,
     provider_contract_verified,
+    provider_is_local,
     safe_slug,
     sha256_file,
 )
@@ -133,7 +135,52 @@ def http_tts_json(
     }
 
 
-ADAPTERS: dict[str, Callable[..., dict[str, Any]]] = {"HTTP_TTS_JSON": http_tts_json}
+_LOCAL: dict[str, Any] = {}  # the loaded Kokoro pipeline, once per process
+
+
+def local_kokoro(
+    segment: dict[str, Any], *, settings: dict[str, Any], endpoint: str, voice: dict[str, Any]
+) -> dict[str, Any]:
+    """Render one segment with the local Kokoro model (D-168): no network, no charge.
+
+    The same engine and voice as the free preview, so what you approved at
+    the Narration Preview Gate is what ships. Pauses and speed come from the
+    segment's delivery, as in the preview.
+    """
+    import tempfile
+
+    import narration_preview_render as preview
+
+    if "pipeline" not in _LOCAL:
+        _LOCAL["pipeline"] = preview._load_local_pipeline()
+    pipeline = _LOCAL["pipeline"]
+    import numpy as np
+
+    delivery = segment.get("delivery") or {}
+    voice_id = str(voice.get("voice_id") or settings.get("voice_id") or preview.DEFAULT_VOICE)
+    chunks: list[Any] = [preview._silence(int(delivery.get("pause_before_ms") or 0))]
+    generated = list(
+        pipeline(
+            str(segment.get("immutable_narration") or ""),
+            voice=voice_id,
+            speed=float(delivery.get("speed") or 1.0),
+        )
+    )
+    if not generated:
+        raise ValueError("Kokoro returned no audio for this segment")
+    chunks.extend(np.asarray(item[2], dtype=np.float32) for item in generated)
+    chunks.append(preview._silence(int(delivery.get("pause_after_ms") or 0)))
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "segment.wav"
+        preview._write_wav(path, np.concatenate(chunks))
+        data = path.read_bytes()
+    return {"bytes": data, "suffix": ".wav", "cost_usd": 0.0, "job_id": f"kokoro-local:{voice_id}"}
+
+
+ADAPTERS: dict[str, Callable[..., dict[str, Any]]] = {
+    "HTTP_TTS_JSON": http_tts_json,
+    "LOCAL_KOKORO": local_kokoro,
+}
 
 
 def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -146,21 +193,34 @@ def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "The narration provider contract is not verified (provider_contract in narration_render_config.json)."
         )
     endpoint = str((config.get("provider_contract") or {}).get("endpoint") or "")
+    local = provider_is_local(config)
     if endpoint and not endpoint.startswith("https://"):
         problems.append("The provider endpoint must be an https:// URL.")
     if str(settings.get("kind") or "") not in ADAPTERS:
         problems.append("No narration provider adapter is configured (provider_adapter.kind).")
     price = settings.get("price_per_1000_characters_usd")
-    if not isinstance(price, (int, float)) or price < 0:
+    if local and price is None:
+        price = 0.0
+    if not isinstance(price, (int, float)) or isinstance(price, bool) or price < 0:
         problems.append("The price per 1,000 characters is not set; it is never guessed.")
-    if not _env_value(str(settings.get("api_key_env") or "")):
+    if local:
+        if not local_renderer_installed():
+            problems.append("Kokoro is not installed: install kokoro, soundfile and espeak-ng (the free preview needs them too).")
+    elif not _env_value(str(settings.get("api_key_env") or "")):
         problems.append(f"The API key variable {settings.get('api_key_env') or '(unset)'} is empty.")
     return {
         "provider": config.get("provider"),
+        "local": local,
         "ready": not problems,
         "problems": problems,
         "price_per_1000_characters_usd": price if isinstance(price, (int, float)) else None,
     }
+
+
+def local_renderer_installed() -> bool:
+    import importlib.util
+
+    return all(importlib.util.find_spec(name) is not None for name in ("kokoro", "soundfile", "numpy"))
 
 
 def estimate_usd(segments: list[dict[str, Any]], price_per_1000: float) -> float:
