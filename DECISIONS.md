@@ -4445,7 +4445,8 @@ bad concept should still not sink a batch.
 
 ## D-146 — Concept generation runs on Gemini only
 
-**Status:** Accepted (human decision, 4 October 2026)
+**Status:** Superseded by D-147. The Gemini-only route remains available as a
+manual switch, but the default is FAIR again.
 
 **Context.** Two concept mechanisms failed on every free FAIR route. Direct
 calls showed why: Groq's gpt-oss-120b returned all 5 concepts without
@@ -4474,3 +4475,42 @@ direct Gemini key as its only route.
 - Cost depends on the key's Google Cloud project: free with no billing
   enabled, billed otherwise. The app cannot tell which, so this is the
   human's to confirm.
+
+## D-147 — Concepts are generated in small FAIR calls
+
+**Status:** Accepted (human decision, 4 October 2026)
+
+**Context.** The Build Roadmap and Master Product Vision §100–101 keep FAIR as
+the preferred text route, with direct Gemini only for genuine quota
+exhaustion, never to hide schema or prompt defects. The two failing concept
+mechanisms were such a defect: asked for five full concepts in one answer,
+Groq's gpt-oss-120b dropped `human_framing` and `viewer_need_evidence` from
+every concept. The human chose smaller FAIR calls over the Gemini-only route
+of D-146.
+
+**Decision.**
+- `concept_model_route.json` sets `"route": "fair"` and
+  `"concepts_per_call": 2`.
+- A mechanism's concepts are generated in calls of at most two. Each call is
+  given the working titles and premises of concepts already accepted
+  (`already_generated_concepts`) and asked for different ones.
+- **Counting.** Only validated concepts count towards the requested number.
+  One spare call covers a call that returns nothing usable. A repeated
+  concept id gets a call suffix.
+- **Failures.** Concepts from successful calls are kept if a later call
+  fails, and the report records where it stopped.
+- **The prompt.** Two rules are added: build on, but don't repeat,
+  `already_generated_concepts`; include every field, including the full
+  `human_framing` and `viewer_need_evidence`.
+- **Already validated mechanisms are kept.** The settings live outside the
+  validation contract, so mechanisms that already validated are not
+  regenerated.
+
+**Consequences.**
+- A mechanism takes three or four free calls instead of one. Each answer is
+  about 40% of the old size.
+- The model-run report lists every call: what was asked, what came back,
+  what was accepted, and the rejection reasons.
+- If two concepts per call still come back incomplete, the next step is
+  two-stage generation: the concept first, then its framing sections in a
+  second small call.

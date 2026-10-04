@@ -186,20 +186,32 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
-### Concept route (D-146)
+### Concept generation settings (D-146, D-147)
 
-`transformation_engine/concept_model_route.json` chooses who generates concepts:
+`transformation_engine/concept_model_route.json` holds two settings:
 
-- `"route": "direct_gemini"` (current): the project's `DIRECT_GEMINI_API_KEY`
-  only, Flash-Lite then Flash, with Gemini's structured output. FAIR is not
-  called and nothing falls back to it. Without a key the mechanism stops with
-  `DIRECT_GEMINI_NOT_CONFIGURED`.
-- `"route": "fair"`: free models through FAIR, as described above.
+- **`concepts_per_call`** (currently 2). A mechanism's concepts are generated in
+  several calls of at most this many concepts. Each call sees the working
+  titles and premises of the concepts already accepted and is asked for
+  different ones. Only concepts that pass validation count towards the
+  requested number; one spare call covers a call that returns nothing usable,
+  and concepts from successful calls are kept if a later call fails. The
+  model-run report lists every call. Without the setting, all concepts are
+  requested in one call. Reason: free models dropped `human_framing` and
+  `viewer_need_evidence` when asked for five full concepts at once.
+- **`route`** (currently `"fair"`). `"fair"` uses free models through FAIR.
+  `"direct_gemini"` uses the project's `DIRECT_GEMINI_API_KEY` only, with no
+  FAIR and no fallback; it is free only while the key's Google Cloud project
+  has no billing enabled, and it departs from vision §101, so it is a manual
+  override rather than the default.
 
-The route is outside the validation contract, so switching it does not
+Both settings are outside the validation contract, so changing them does not
 regenerate mechanisms that already validated. Every concept still goes through
-`validate_response()`. Gemini calls are free only while the key's Google Cloud
-project has no billing enabled; the app cannot see that.
+`validate_response()`.
+
+`concept_diagnose.py` sends one mechanism's prompt straight to Groq and saves
+what comes back (error, refused text, finish reason, per-concept validation);
+`--inspect` compares the requests and `--count` asks for fewer concepts.
 
 ### Mechanism coverage (D-129)
 

@@ -277,6 +277,24 @@ def concept_route() -> str:
     return route
 
 
+def concepts_per_call() -> int | None:
+    """How many concepts one model call is asked for (D-147); None means all at once.
+
+    Free models drop required nested sections when asked for five full
+    concepts in one answer, so a mechanism's concepts are generated in
+    several smaller calls.
+    """
+    try:
+        value = load_json(ROUTE_FILE).get("concepts_per_call")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("concept_model_route.json concepts_per_call must be a positive integer")
+    return value
+
+
 def call_gemini_only(payload: dict[str, Any], *, timeout_seconds: float) -> dict[str, Any]:
     """Generate on the project's Gemini key alone; FAIR is not called."""
     not_run = {
@@ -331,7 +349,9 @@ def build_prompt(request: dict[str, Any], *, maximum_chars: int) -> str:
         "technical explanation.\n"
         "18. Do not rank or score concepts.\n"
         "19. If human_rework_note is present, it is an AUTHORITATIVE human instruction for the one concept identified by human_rework_concept_id. Return exactly one revised concept with that same concept_id. Correct the requested issue while preserving unrelated strengths where possible.\n"
-        "20. Human rework never authorizes invented audience evidence, unsupported drama, source copying, or false certainty. If the instruction conflicts with evidence constraints, preserve the constraint and make the safest valid correction.\n\n"
+        "20. Human rework never authorizes invented audience evidence, unsupported drama, source copying, or false certainty. If the instruction conflicts with evidence constraints, preserve the constraint and make the safest valid correction.\n"
+        "21. If already_generated_concepts is present, those concepts exist already for this mechanism. Generate genuinely different premises, viewer problems and titles, and reuse none of their concept_ids.\n"
+        "22. Every concept must include every field of the response schema, including the complete human_framing and viewer_need_evidence objects.\n\n"
         "CONCEPT REQUEST:\n"
         + json.dumps(request, ensure_ascii=False, separators=(",", ":"))
     )
@@ -438,6 +458,15 @@ def run_one(
                 "mechanism_id": mechanism_id,
                 "report": str(report_path),
             }
+
+    rework = bool(request.get("human_rework_note") and request.get("human_rework_concept_id"))
+    per_call = None if rework else concepts_per_call()
+    if per_call is not None and per_call < max(1, int(request.get("concept_count_requested") or 5)):
+        return _run_in_calls(
+            request, request_path=request_path, request_hash=request_hash,
+            validation_contract=validation_contract, slug=slug, report_path=report_path,
+            response_path=response_path, per_call=per_call, runner_config=runner_config,
+        )
 
     prompt = build_prompt(
         request,
@@ -587,6 +616,170 @@ def run_one(
         "initial_validation_rejection_summary": initial_validation_errors,
         "validation_repair_attempted": repair_result is not None,
         "validation_repair_raw_output": str(repair_raw_path) if repair_raw_path else None,
+    }
+    atomic_write_json(report_path, report)
+    return report
+
+
+
+def _call_route(payload: dict[str, Any], paths: dict[str, Path], timeout: float) -> dict[str, Any]:
+    if concept_route() == "direct_gemini":
+        return call_gemini_only(payload, timeout_seconds=timeout)
+    return call_fair_bridge(payload, python_executable=paths["python"], timeout_seconds=timeout)
+
+
+def _run_in_calls(
+    request: dict[str, Any], *, request_path: Path, request_hash: str, validation_contract: str,
+    slug: str, report_path: Path, response_path: Path, per_call: int, runner_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Generate one mechanism's concepts in several small calls (D-147).
+
+    Each call asks for at most ``per_call`` concepts and is told which concepts
+    already exist, so later calls add different ideas. Only concepts that pass
+    validation count towards the requested total; one spare call covers a
+    call that returns nothing usable. Concepts from successful calls are kept
+    even when a later call fails.
+    """
+    mechanism_id = str(request["mechanism_id"])
+    total = max(1, int(request.get("concept_count_requested") or 5))
+    max_calls = -(-total // per_call) + 1
+    config = load_config()
+    paths = resolve_fair_paths(runner_config)
+    timeout = float(runner_config["runner"].get("subprocess_timeout_seconds", 300))
+    maximum_chars = int(runner_config["runner"].get("max_prompt_chars", 95000))
+    for directory in (MODEL_RUNS_DIR, RAW_OUTPUTS_DIR, RESPONSES_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    collected: list[dict[str, Any]] = []
+    accepted_titles: list[dict[str, Any]] = []
+    calls: list[dict[str, Any]] = []
+    attempts: list[dict[str, Any]] = []
+    raw_paths: list[str] = []
+    seen_ids: set[str] = set()
+    dropped = 0
+    last: dict[str, Any] = {}
+    stop: dict[str, Any] | None = None
+
+    while len(accepted_titles) < total and len(calls) < max_calls:
+        number = len(calls) + 1
+        chunk = dict(request)
+        chunk["concept_count_requested"] = min(per_call, total - len(accepted_titles))
+        if accepted_titles:
+            chunk["already_generated_concepts"] = list(accepted_titles)
+        schema = provider_schema(response_schema(chunk))
+        payload = bridge_payload(
+            action="solve", prompt=build_prompt(chunk, maximum_chars=maximum_chars),
+            schema=schema, config=runner_config, paths=paths,
+        )
+        payload["settings"]["client_id"] = "youtube-transformation-concepts"
+        call: dict[str, Any] = {"call": number, "concepts_requested": chunk["concept_count_requested"]}
+        calls.append(call)
+        try:
+            result = _call_route(payload, paths, timeout)
+        except Exception as exc:
+            call.update(status="RUNNER_ERROR", error_type=type(exc).__name__)
+            stop = {"status": "RUNNER_ERROR", "error_type": type(exc).__name__}
+            break
+        last = result
+        attempts.extend(safe_attempts(result))
+        call.update(
+            fair_status=result.get("status"), fair_reason_code=result.get("reason_code"),
+            provider_id=result.get("provider_id"), model_id=result.get("model_id"),
+        )
+        if not inference_cost_authorized(result):
+            report = {
+                "mechanism_id": mechanism_id, "status": "COST_POLICY_VIOLATION",
+                "request_source": str(request_path), "request_sha256": request_hash,
+                "fair_status": result.get("status"), "calls": calls,
+            }
+            atomic_write_json(report_path, report)
+            return report
+        if result.get("status") != "ACCEPTED":
+            call["status"] = "MODEL_ESCALATION_REQUIRED" if result.get("status") == "ESCALATION_REQUIRED" else "MODEL_FAILED"
+            stop = {"status": call["status"]}
+            break
+        raw_path = RAW_OUTPUTS_DIR / f"{slug}.call{number}.txt"
+        atomic_write_text(raw_path, str(result.get("output") or ""))
+        raw_paths.append(str(raw_path))
+        try:
+            response = parse_model_json(str(result.get("output") or ""))
+            dropped += _cap_concepts(chunk, response)
+            concepts = [c for c in response.get("concepts") or [] if isinstance(c, dict)]
+        except Exception as exc:
+            call.update(status="MODEL_OUTPUT_VALIDATION_ERROR", error_type=type(exc).__name__)
+            continue
+        for concept in concepts:
+            concept_id = str(concept.get("concept_id") or "").strip()
+            if concept_id in seen_ids:
+                concept["concept_id"] = f"{concept_id}-{number}"
+            seen_ids.add(str(concept.get("concept_id") or ""))
+        validation = validate_response({"mechanism_id": mechanism_id, "concepts": concepts}, request, config)
+        collected.extend(concepts)
+        accepted_titles.extend(
+            {"concept_id": c.get("concept_id"), "working_title": c.get("working_title"), "premise": c.get("premise")}
+            for c in validation["accepted"]
+        )
+        call.update(
+            status="VALIDATED" if validation["accepted"] else "MODEL_OUTPUT_VALIDATION_ERROR",
+            concepts_returned=len(concepts), accepted=len(validation["accepted"]),
+            rejection_summary=_rejection_error_summary(validation),
+        )
+
+    base_report = {
+        "mechanism_id": mechanism_id,
+        "request_source": str(request_path),
+        "request_sha256": request_hash,
+        "validation_contract_sha256": validation_contract,
+        "fair_request_id": last.get("request_id"),
+        "fair_status": last.get("status"),
+        "fair_reason_code": last.get("reason_code"),
+        "provider_id": last.get("provider_id"),
+        "model_id": last.get("model_id"),
+        "best_quality_score": last.get("best_quality_score"),
+        "verification_state": last.get("verification_state"),
+        "paid_inference_executed": last.get("paid_inference_executed"),
+        "direct_backup_used": last.get("direct_backup_used", False),
+        "direct_backup_may_bill": last.get("direct_backup_may_bill", False),
+        "billing_authorization": last.get("billing_authorization"),
+        "attempts": attempts,
+        "concepts_per_call": per_call,
+        "calls": calls,
+    }
+    if not collected:
+        report = {**base_report, **(stop or {"status": "MODEL_OUTPUT_VALIDATION_ERROR", "error_type": "NoAcceptedConcepts"})}
+        atomic_write_json(report_path, report)
+        return report
+
+    response = {
+        "mechanism_id": mechanism_id,
+        "concepts": collected,
+        "response_provenance": {
+            "request_source": str(request_path),
+            "request_sha256": request_hash,
+            "validation_contract_sha256": validation_contract,
+            "provider_id": last.get("provider_id"),
+            "model_id": last.get("model_id"),
+            "calls": len(calls),
+        },
+    }
+    validation = validate_response(response, request, config)
+    atomic_write_json(response_path, response)
+    accepted_count = len(validation["accepted"])
+    report = {
+        **base_report,
+        "status": "VALIDATED" if accepted_count > 0 else "MODEL_OUTPUT_VALIDATION_ERROR",
+        "error_type": None if accepted_count > 0 else "NoAcceptedConcepts",
+        "model_response": str(response_path),
+        "raw_output": raw_paths,
+        "structurally_accepted": accepted_count,
+        "structurally_rejected": len(validation["rejected"]),
+        "concepts_requested": total,
+        "concepts_beyond_request_dropped": dropped,
+        "validation_rejection_summary": _rejection_error_summary(validation),
+        "initial_validation_rejection_summary": _rejection_error_summary(validation),
+        "validation_repair_attempted": False,
+        "validation_repair_raw_output": None,
+        "stopped_early": stop,
     }
     atomic_write_json(report_path, report)
     return report

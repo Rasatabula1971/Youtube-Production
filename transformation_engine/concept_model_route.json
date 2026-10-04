@@ -1,4 +1,5 @@
 {
-  "route": "direct_gemini",
-  "note": "Concept generation route (D-146). direct_gemini: the project's DIRECT_GEMINI_API_KEY only, no FAIR and no fallback. fair: free models through FAIR. Gemini is free only while the key's Google Cloud project has no billing enabled."
+  "route": "fair",
+  "concepts_per_call": 2,
+  "note": "Concept generation settings (D-146, D-147). route: fair (free models through FAIR) or direct_gemini (the project's DIRECT_GEMINI_API_KEY only, no FAIR, no fallback; free only while the key's Google Cloud project has no billing). concepts_per_call: concepts asked for in one model call; a mechanism's concepts are generated in several calls of this size, each told which concepts already exist."
 }

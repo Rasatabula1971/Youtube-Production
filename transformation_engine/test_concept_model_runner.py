@@ -350,6 +350,86 @@ class ConceptModelRunnerTests(unittest.TestCase):
             with patch.object(runner, "ROUTE_FILE", bad), self.assertRaisesRegex(ValueError, "route must be one of"):
                 runner.concept_route()
 
+    def run_in_calls(self, outputs, *, total=5, per_call=2):
+        """Run one mechanism with concepts_per_call set; outputs feed each FAIR call in turn."""
+        results = []
+        for item in outputs:
+            if isinstance(item, dict) and "status" in item:
+                results.append(item)
+            else:
+                results.append({
+                    "status": "ACCEPTED", "output": json.dumps({"mechanism_id": "curiosity_gap", "concepts": item}),
+                    "paid_inference_executed": False, "provider_id": "groq", "model_id": "m", "request_id": "r", "attempts": [],
+                })
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            route_file = root / "route.json"
+            route_file.write_text(json.dumps({"route": "fair", "concepts_per_call": per_call}), encoding="utf-8")
+            request_path = root / "curiosity_gap.concept_request.json"
+            request_path.write_text(json.dumps(dict(self.request(), concept_count_requested=total)), encoding="utf-8")
+            with (
+                patch.object(runner, "ROUTE_FILE", route_file),
+                patch.object(runner, "MODEL_RUNS_DIR", root / "runs"),
+                patch.object(runner, "RAW_OUTPUTS_DIR", root / "raw"),
+                patch.object(runner, "RESPONSES_DIR", root / "responses"),
+                patch.object(runner, "resolve_fair_paths", return_value={"repo": root, "env_file": root / ".env", "python": root / "py"}),
+                patch.object(runner, "call_fair_bridge", side_effect=results) as fair,
+            ):
+                report = runner.run_one(request_path, force=False, runner_config=self.runner_config())
+                response_file = root / "responses" / "curiosity_gap.json"
+                response = json.loads(response_file.read_text()) if response_file.exists() else None
+        prompts = [c.args[0]["prompt"] for c in fair.call_args_list]
+        schemas = [c.args[0]["expected_schema"] for c in fair.call_args_list]
+        return report, response, prompts, schemas
+
+    def concept(self, concept_id, title=None):
+        return dict(self.valid_concept(), concept_id=concept_id, working_title=title or f"Title {concept_id}")
+
+    def test_concepts_are_generated_in_small_calls_that_know_earlier_ones(self):
+        report, response, prompts, _schemas = self.run_in_calls([
+            [self.concept("c1"), self.concept("c2")],
+            [self.concept("c1", "A different one"), self.concept("c3")],
+            [self.concept("c4")],
+        ])
+        self.assertEqual(report["status"], "VALIDATED")
+        self.assertEqual([c["concepts_requested"] for c in report["calls"]], [2, 2, 1])
+        self.assertEqual(report["structurally_accepted"], 5)
+        ids = [c["concept_id"] for c in response["concepts"]]
+        self.assertEqual(ids, ["c1", "c2", "c1-2", "c3", "c4"])
+        self.assertNotIn('"already_generated_concepts"', prompts[0])
+        self.assertIn('"already_generated_concepts"', prompts[1])
+        self.assertIn("Title c2", prompts[1])
+        self.assertEqual(response["response_provenance"]["calls"], 3)
+
+    def test_a_failed_later_call_keeps_the_concepts_already_made(self):
+        escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+                     "paid_inference_executed": False, "attempts": []}
+        report, response, _prompts, _schemas = self.run_in_calls([[self.concept("c1"), self.concept("c2")], escalated])
+        self.assertEqual(report["status"], "VALIDATED")
+        self.assertEqual(report["structurally_accepted"], 2)
+        self.assertEqual(report["stopped_early"], {"status": "MODEL_ESCALATION_REQUIRED"})
+        self.assertEqual(len(response["concepts"]), 2)
+
+    def test_an_incomplete_call_uses_the_spare_call(self):
+        broken = dict(self.concept("bad"))
+        broken.pop("human_framing")
+        report, _response, _prompts, schemas = self.run_in_calls(
+            [[broken, dict(broken, concept_id="extra")], [self.concept("c1")], [self.concept("c2")]], total=2, per_call=1
+        )
+        self.assertEqual(len(report["calls"]), 3)
+        self.assertEqual(report["calls"][0]["status"], "MODEL_OUTPUT_VALIDATION_ERROR")
+        self.assertEqual(report["structurally_accepted"], 2)
+        self.assertEqual(report["structurally_rejected"], 1)
+        self.assertEqual(report["concepts_beyond_request_dropped"], 1)
+        self.assertNotIn('"maxItems"', json.dumps(schemas[0]))
+
+    def test_a_first_call_failure_writes_no_response(self):
+        escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+                     "paid_inference_executed": False, "attempts": []}
+        report, response, _prompts, _schemas = self.run_in_calls([escalated])
+        self.assertEqual(report["status"], "MODEL_ESCALATION_REQUIRED")
+        self.assertIsNone(response)
+
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
     def test_valid_free_response_is_written_with_request_hash(
