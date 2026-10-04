@@ -119,11 +119,19 @@
     "</div>";
   }
 
+  // The watch page for a tracked video: only an 11-character YouTube id
+  // becomes a link, and only to youtube.com.
+  function watchLink(videoId, label) {
+    const id = String(videoId || "");
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return esc(label || id);
+    return '<a href="https://www.youtube.com/watch?v=' + id + '" target="_blank" rel="noopener noreferrer">' + esc(label || id) + " ↗</a>";
+  }
+
   function themeCard(theme) {
     const replicated = theme.breadth === "REPLICATED";
     const evidenceId = theme.top_opportunity_id && yp().inboxItem(theme.top_opportunity_id) ? theme.top_opportunity_id : "";
     const videos = (theme.videos || []).map(function (video) {
-      return "<li>" + esc(video.title || video.video_id) + ' <span class="muted">· ' + esc(video.channel_title || "") +
+      return "<li>" + watchLink(video.video_id, video.title || video.video_id) + ' <span class="muted">· ' + esc(video.channel_title || "") +
         " · " + esc(ratio(video.lifetime_ratio)) + " · " + esc(words(video.trajectory)) + "</span></li>";
     }).join("");
     return '<article class="theme-card' + (replicated ? " replicated" : "") + '">' +
@@ -153,7 +161,7 @@
     const status = inboxStatus(row.opportunity_id);
     const statusLabel = status ? words(status) : "excluded or not in inbox";
     return '<article class="tracked-row">' +
-      '<div class="tracked-main"><h3 class="production-title">' + esc(row.title || row.video_id) + "</h3>" +
+      '<div class="tracked-main"><h3 class="production-title">' + watchLink(row.video_id, row.title || row.video_id) + "</h3>" +
         '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format === "short" ? "Short" : "Long-form") + " · " + statusLabel) + "</p></div>" +
       '<div class="tracked-day"><strong>' + esc(row.day == null ? "—" : "Day " + row.day + " / " + row.window_days) + "</strong></div>" +
       '<div class="tracked-ratio"><strong>' + esc(ratio(row.lifetime_ratio)) + '</strong><span class="muted">channel normal</span></div>' +
