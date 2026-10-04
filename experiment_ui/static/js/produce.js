@@ -87,6 +87,18 @@
     return value !== null && value !== undefined && value !== "" && Number.isFinite(number) ? number.toFixed(1) + " s" : "—";
   }
 
+  // Paid provider dispatch (D-139): one explicit click, after spend approval.
+  function dispatchBlock(item, segmentIds, label) {
+    const provider = status().narration_dispatch || {};
+    if (!provider.ready) {
+      return '<p class="muted">Provider generation is off: ' + esc((provider.problems || []).join(" ")) +
+        " Register the returned audio in the classic view instead.</p>";
+    }
+    return '<p><button type="button" class="primary compact" data-pd-dispatch="' + esc(item.concept_id) + '" data-format="' + esc(item.format) +
+      '" data-segments="' + esc((segmentIds || []).join(",")) + '">' + esc(label) + "</button></p>" +
+      '<p class="muted">A paid call to ' + esc(provider.provider || "the provider") + ", within the approved worst case.</p>";
+  }
+
   function noteRework(value, label, hint, placeholder) {
     return { value: value, label: label, hint: hint, tone: "running", needsNote: true, notePlaceholder: placeholder || "say what must change" };
   }
@@ -181,6 +193,7 @@
         ["Quote reference", quote.quote_reference || "—"]
       ]) +
         '<p class="muted">Accepting authorizes up to the worst-case figure for this exact quote. It does not call the provider; a changed quote invalidates it.</p>' +
+        (String(item.decision || "").toUpperCase() === "ACCEPT" ? section("Generate the narration", dispatchBlock(item, [], "Generate narration with the provider")) : "") +
         section("Accepting confirms", checks ? '<ul class="pk-criteria">' + checks + "</ul>" : "");
     },
     locked: function (item) {
@@ -242,7 +255,10 @@
       }).join("");
       return '<p class="muted">Audio QC passed (duration, silence, clipping). Listen to every segment: approving makes this exact audio the narration, and its timing drives the visuals.</p>' +
         section("Segments", rows ? '<ul class="rw-list pd-audio-list">' + rows + "</ul>" : '<p class="muted">No segments.</p>') +
-        (item.note ? '<p class="muted">Last note: ' + esc(item.note) + "</p>" : "");
+        (item.note ? '<p class="muted">Last note: ' + esc(item.note) + "</p>" : "") +
+        (item.decision === "REWORK_SEGMENTS" && (item.rework_segment_ids || []).length
+          ? section("Re-record", dispatchBlock(item, item.rework_segment_ids, "Re-record " + item.rework_segment_ids.length + " segment(s) with the provider"))
+          : "");
     },
     decisions: function (item) {
       const key = this.key(item);
@@ -701,6 +717,19 @@
     }
     render();
   }
+
+  document.addEventListener("click", async function (event) {
+    const button = event.target.closest && event.target.closest("[data-pd-dispatch]");
+    if (!button) return;
+    const segments = button.dataset.segments ? button.dataset.segments.split(",") : [];
+    const what = segments.length ? segments.length + " segment(s)" : "the whole narration";
+    if (!window.confirm("Generate " + what + " with the paid provider now? This spends money within the approved worst case.")) return;
+    button.disabled = true;
+    button.textContent = "Generating…";
+    await post("/api/narration-dispatch", { concept_id: button.dataset.pdDispatch, format: button.dataset.format, segment_ids: segments },
+      "Narration generated and registered; Audio QC runs next.");
+    button.disabled = false;
+  });
 
   document.addEventListener("click", function (event) {
     const tab = event.target.closest && event.target.closest("[data-pd-tab]");
