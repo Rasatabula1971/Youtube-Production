@@ -370,8 +370,16 @@ to match the redesign's navigation:
   - **Image approval.** Approving rendered thumbnail images (subject photo,
     accent and render) stays in the classic Thumbnail panel, and the Final
     package tab says when an image still needs approval.
-- `/produce#<tab>` — **Produce** (D-122): the seven production gates on the
-  shared review workspace, posting exactly what the classic panels post.
+- `/produce#<tab>` — **Produce** (D-122, D-159): the production gates on the
+  shared review workspace, posting exactly what the classic panels post. The
+  tab strip is grouped by who decides: **Your decisions** (Budget, Footage
+  rights, Final export, Publish), **Held by gate policy** (Visual plan, Final
+  audio, Choose visuals, Rough cut, Edit preview; shown only while one holds
+  an item for you, or with "Include decided items and empty gates"), and
+  **Tools** (Generate visuals, Tesseract). Gate Reviews and Packaging use
+  the same grouping. **Budget** lists every paid decision (narration spend
+  and visual spend) with the video's committed spend against its target and
+  ceiling; `#narration` and `#spend` links land there.
   - **Narration spend:** quote, initial estimate and worst-case ceiling.
     Accepting needs every spend check and confirms the amount.
   - **Choose visuals:** candidate cards per shot. Blocked candidates cannot

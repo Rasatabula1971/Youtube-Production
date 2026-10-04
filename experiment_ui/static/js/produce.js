@@ -8,22 +8,27 @@
 (function () {
   "use strict";
 
+  // Grouped by who decides (D-159): the operator's own decisions first, then
+  // the gates the gate policy decides when its checks pass (shown only while
+  // they hold something), then tools that are not decisions.
   const TABS = [
-    ["plan", "Visual plan"],
-    ["narration", "Narration spend"],
-    ["audio", "Final audio"],
-    ["visuals", "Choose visuals"],
-    ["rights", "Footage rights"],
-    ["roughcut", "Rough cut"],
-    ["spend", "Visual spend"],
-    ["generate", "Generate visuals"],
-    ["edit", "Edit preview"],
-    ["tesseract", "Tesseract"],
-    ["export", "Final export"],
-    ["publish", "Publish"]
+    ["budget", "Budget", "yours"],
+    ["rights", "Footage rights", "yours"],
+    ["export", "Final export", "yours"],
+    ["publish", "Publish", "yours"],
+    ["plan", "Visual plan", "policy"],
+    ["audio", "Final audio", "policy"],
+    ["visuals", "Choose visuals", "policy"],
+    ["roughcut", "Rough cut", "policy"],
+    ["edit", "Edit preview", "policy"],
+    ["generate", "Generate visuals", "tools"],
+    ["tesseract", "Tesseract", "tools"]
   ];
+  const GROUP_LABELS = { yours: "Your decisions", policy: "Held by gate policy", tools: "Tools" };
+  // Old deep links keep working.
+  const TAB_ALIASES = { narration: "budget", spend: "budget" };
 
-  let activeTab = "plan";
+  let activeTab = "budget";
   let showDecided = false;
   const workspaces = Object.create(null);
   const pendingFocus = Object.create(null);
@@ -531,6 +536,54 @@
     }
   };
 
+
+  // ---------------------------------------------------------------- Budget
+  // One place for every paid decision (D-159): narration spend and visual
+  // spend items, each shown with its video's budget. The underlying
+  // decisions, requests and locks are unchanged.
+  function videoBudget(conceptId, fmt) {
+    const videos = (status().video_budget || {}).videos || [];
+    return videos.find(function (v) { return v && v.video_id === conceptId + ":" + fmt; }) || null;
+  }
+
+  function budgetLine(conceptId, fmt) {
+    const v = videoBudget(conceptId, fmt);
+    if (!v) return "";
+    const tone = v.over_ceiling ? "blocked" : v.over_target ? "human" : "complete";
+    return '<span class="status-badge status-' + tone + ' pd-budget-line">' + esc(money(v.committed_usd)) +
+      " committed of " + esc(Number(v.target_usd).toFixed(2)) + " target (cap " + esc(Number(v.ceiling_usd).toFixed(2)) + ")</span>";
+  }
+
+  const budget = {
+    kicker: "BUDGET",
+    gate: function () {
+      const n = narration.gate(), v = spend.gate();
+      return { status: n.status || v.status ? [n.status, v.status].filter(Boolean).join(" / ") : "" };
+    },
+    all: function () {
+      return narration.all().map(function (item) { return { kind: "narration", inner: item, decision: item.decision || null }; })
+        .concat(spend.all().map(function (item) { return { kind: "spend", inner: item, decision: item.decision || null }; }));
+    },
+    config: function (item) { return item.kind === "narration" ? narration : spend; },
+    video: function (item) {
+      return item.kind === "narration" ? [item.inner.concept_id, item.inner.format] : [item.inner.packet.concept_id, item.inner.packet.format];
+    },
+    pending: function (item) { return this.config(item).pending(item.inner); },
+    key: function (item) { return item.kind + "::" + this.config(item).key(item.inner); },
+    title: function (item) {
+      const video = this.video(item);
+      return (item.kind === "narration" ? "Paid narration" : "Generate visual " + item.inner.gap.shot_id) + " · " + video[0] + " · " + words(video[1]);
+    },
+    meta: function (item) {
+      const video = this.video(item);
+      return this.config(item).meta(item.inner) + budgetLine(video[0], video[1]);
+    },
+    evidence: function (item) { return this.config(item).evidence(item.inner); },
+    locked: function (item) { const c = this.config(item); return c.locked ? c.locked(item.inner) : ""; },
+    decisions: function (item) { return this.config(item).decisions(item.inner); },
+    decide: function (item, decision, note) { return this.config(item).decide(item.inner, decision, note); }
+  };
+
   // ------------------------------------------- Edit preview and final export
   // ------------------------------------------------------- Generate visuals
   // Paid generation for shots authorized at Visual spend (D-140): generate
@@ -857,7 +910,7 @@
     }
   };
 
-  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, tesseract: tesseract, export: exportGate, publish: publish };
+  const CONFIGS = { budget: budget, plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, tesseract: tesseract, export: exportGate, publish: publish };
 
   // ------------------------------------------------------------ Page shell
   function items(tab) {
@@ -897,7 +950,7 @@
       locked: function (item) { return config.locked ? config.locked(item) : ""; },
       initialNote: function (item) {
         const d = item.decision;
-        return (d && typeof d === "object" ? d.note : item.note) || "";
+        return (d && typeof d === "object" ? d.note : (item.inner || item).note) || "";
       },
       decide: function (item, decision, note, extras) { return config.decide(item, decision, note, extras || {}); },
       onNavigate: function (key) {
@@ -944,15 +997,30 @@
       (rows ? '<ul class="rw-list">' + rows + "</ul>" : '<p class="muted">Nothing authorized or spent yet.</p>') + "</section>";
   }
 
+  function visibleTabs() {
+    return TABS.filter(function (tab) {
+      return tab[2] === "yours" || showDecided || tab[0] === activeTab || pendingCount(tab[0]) > 0;
+    });
+  }
+
+  function tabButton(tab) {
+    const on = tab[0] === activeTab;
+    return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on + '" data-pd-tab="' + tab[0] + '">' +
+      esc(tab[1]) + ' <span class="tab-count">' + pendingCount(tab[0]) + "</span></button>";
+  }
+
   function renderTabs() {
     const bar = document.getElementById("produceTabs");
     if (!bar) return;
-    const html = budgetHtml() + '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Production gates">' + TABS.map(function (tab) {
-      const on = tab[0] === activeTab;
-      return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on + '" data-pd-tab="' + tab[0] + '">' +
-        esc(tab[1]) + ' <span class="tab-count">' + pendingCount(tab[0]) + "</span></button>";
-    }).join("") + "</div>" +
-      '<div class="gate-switcher"><label class="gate-toggle"><input type="checkbox" data-pd-decided' + (showDecided ? " checked" : "") + "> Include decided items</label>" +
+    const shown = visibleTabs();
+    const groups = ["yours", "policy", "tools"].map(function (group) {
+      const tabs = shown.filter(function (tab) { return tab[2] === group; });
+      if (!tabs.length) return "";
+      return '<div class="pw-tab-group" role="group" aria-label="' + esc(GROUP_LABELS[group]) + '">' +
+        '<span class="pw-tab-group-label" aria-hidden="true">' + esc(GROUP_LABELS[group]) + "</span>" + tabs.map(tabButton).join("") + "</div>";
+    }).join("");
+    const html = budgetHtml() + '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Production gates">' + groups + "</div>" +
+      '<div class="gate-switcher"><label class="gate-toggle"><input type="checkbox" data-pd-decided' + (showDecided ? " checked" : "") + "> Include decided items and empty gates</label>" +
       '<a href="/analysis" class="button-link ghost compact" data-route="/analysis" title="Asset registration, storyboard edits and every original option">Classic view</a></div>';
     if (html === paintedTabs && bar.innerHTML) return;
     paintedTabs = html;
@@ -980,10 +1048,10 @@
   function open(subroute) {
     const raw = String(subroute || "");
     const slash = raw.indexOf("/");
-    const tab = slash === -1 ? raw : raw.slice(0, slash);
-    if (CONFIGS[tab]) {
+    const tab = TAB_ALIASES[slash === -1 ? raw : raw.slice(0, slash)] || (slash === -1 ? raw : raw.slice(0, slash));
+    if (CONFIGS[tab] && TABS.some(function (t) { return t[0] === tab; })) {
       activeTab = tab;
-      if (slash !== -1) pendingFocus[tab] = window.YPUtil.decode(raw.slice(slash + 1));
+      if (slash !== -1 && !TAB_ALIASES[raw.slice(0, slash)]) pendingFocus[tab] = window.YPUtil.decode(raw.slice(slash + 1));
     }
     render();
   }

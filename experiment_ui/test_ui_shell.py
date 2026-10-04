@@ -250,7 +250,7 @@ class ShellMarkupTests(unittest.TestCase):
 
     def test_packaging_page_covers_the_gate_config(self) -> None:
         script = (STATIC / "js" / "packaging.js").read_text(encoding="utf-8")
-        for tab in re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("const FORMATS")[0]):
+        for tab in re.findall(r'\["([a-z]+)", "[^"]+", "[a-z]+"\]', script.split("const GROUP_ORDER")[0]):
             with self.subTest(tab=tab):
                 self.assertIn(f'id="packaging-{tab}"', self.html)
         self.assertIn('id="packagingTabs"', self.html)
@@ -292,12 +292,17 @@ class ShellMarkupTests(unittest.TestCase):
         import final_export_review
 
         script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
-        tabs = re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("let activeTab")[0])
-        self.assertEqual(len(tabs), 12)
+        tabs = re.findall(r'\["([a-z]+)", "[^"]+", "[a-z]+"\]', script.split("let activeTab")[0])
+        self.assertEqual(len(tabs), 11)
+        # Old deep links to the two spend tabs land on Budget (D-159).
+        self.assertIn('TAB_ALIASES = { narration: "budget", spend: "budget" }', script)
         for tab in tabs:
             with self.subTest(tab=tab):
                 self.assertIn(f'id="produce-{tab}"', self.html)
                 self.assertIn(f'data-subroute="{tab}"', self.html)
+        # Grouped strips name who decides (D-159).
+        for module in ["produce.js", "gate-reviews.js", "packaging.js"]:
+            self.assertIn("Held by gate policy", (STATIC / "js" / module).read_text(encoding="utf-8"))
 
         def values(start: str, end: str) -> set[str]:
             block = script.split(start, 1)[1].split(end, 1)[0]

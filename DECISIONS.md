@@ -4868,3 +4868,34 @@ spend gates.
   each decision is still recorded.
 - One combined Budget screen per video and the merged review screens follow
   as Phase C.
+
+## D-159 — Gate policy Phase C: the review pages are organised by who decides
+
+**Context.** After D-156 and D-158 most gates decide themselves, but the
+Gate Reviews, Packaging and Produce pages still showed every gate as an
+equal tab, so the operator could not see at a glance which decisions were
+theirs. The two spend gates were also on separate tabs although they are one
+question: what this video may cost.
+
+**Decision.**
+- **Grouped tab strips.** Each page's strip has a **Your decisions** group
+  first (Gate Reviews: Concept, Research, Script; Packaging: Final package;
+  Produce: Budget, Footage rights, Final export, Publish), then a **Held by
+  gate policy** group whose tabs appear only while that gate holds an item
+  for a person, is open, or "Include decided items and empty gates" is
+  ticked. Produce adds a **Tools** group (Generate visuals, Tesseract) and
+  Packaging a reference group for what the automatic steps made.
+- **Budget tab.** Narration spend and visual spend items are listed together
+  per video, each with the video's committed spend against its target and
+  ceiling. The decisions, requests, checks and locks are the existing ones;
+  `/produce#narration` and `/produce#spend` open Budget.
+- **Defaults.** Gate Reviews opens on Concept, Packaging on Final package and
+  Produce on Budget. The Command Center's production card and the workflow
+  links point at the same tabs.
+
+**Consequences.**
+- The six decisions the operator chose to keep are the first thing on each
+  page; the automatic gates stay reachable and still show what they held.
+- The script-gate and research-gate screens are unchanged: a concept's
+  research is decided before its script exists (D-104), so research flags
+  cannot sit inside the Script Gate.

@@ -7,13 +7,18 @@
 (function () {
   "use strict";
 
+  // Grouped by who decides (D-159): the final package is the operator's
+  // decision; title direction is decided by the gate policy when its checks
+  // pass and shown only while it holds something; the rest is reference.
   const TABS = [
-    ["titles", "Title Direction"],
-    ["angles", "Brief & angles"],
-    ["thumbnails", "Thumbnail concepts"],
-    ["pairing", "Pairing"],
-    ["final", "Final package"]
+    ["final", "Final package", "yours"],
+    ["titles", "Title Direction", "policy"],
+    ["angles", "Brief & angles", "reference"],
+    ["thumbnails", "Thumbnail concepts", "reference"],
+    ["pairing", "Pairing", "reference"]
   ];
+  const GROUP_ORDER = ["yours", "policy", "reference"];
+  const GROUP_LABELS = { yours: "Your decision", policy: "Held by gate policy", reference: "What the automatic steps made" };
   const FORMATS = [["short", "Short"], ["long_form", "Long-form"]];
   const CRITERIA_LABELS = {
     title_and_thumbnail_read_as_one_unit: "Title and thumbnail add different information and read as one idea.",
@@ -29,7 +34,7 @@
     SCRIPT: "Script branch"
   };
 
-  let activeTab = "titles";
+  let activeTab = "final";
   const pendingFocus = Object.create(null);
   const workspaces = Object.create(null);
   // Selections made in the evidence panels, kept per item so repaints keep them.
@@ -487,14 +492,23 @@
     }
   }
 
+  function tabButton(tab) {
+    const on = tab[0] === activeTab;
+    const count = pendingCount(tab[0]);
+    return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on +
+      '" data-pk-tab="' + tab[0] + '">' + esc(tab[1]) + (REVIEW_TABS[tab[0]] ? ' <span class="tab-count">' + count + "</span>" : "") + "</button>";
+  }
+
   function renderTabs() {
     const bar = document.getElementById("packagingTabs");
     if (!bar) return;
-    const html = TABS.map(function (tab) {
-      const on = tab[0] === activeTab;
-      const count = pendingCount(tab[0]);
-      return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on +
-        '" data-pk-tab="' + tab[0] + '">' + esc(tab[1]) + (REVIEW_TABS[tab[0]] ? ' <span class="tab-count">' + count + "</span>" : "") + "</button>";
+    const html = GROUP_ORDER.map(function (group) {
+      const tabs = TABS.filter(function (tab) {
+        return tab[2] === group && (group !== "policy" || tab[0] === activeTab || pendingCount(tab[0]) > 0);
+      });
+      if (!tabs.length) return "";
+      return '<div class="pw-tab-group" role="group" aria-label="' + esc(GROUP_LABELS[group]) + '">' +
+        '<span class="pw-tab-group-label" aria-hidden="true">' + esc(GROUP_LABELS[group]) + "</span>" + tabs.map(tabButton).join("") + "</div>";
     }).join("");
     if (painted.tabs === html) return;
     painted.tabs = html;

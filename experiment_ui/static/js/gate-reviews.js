@@ -6,7 +6,12 @@
   "use strict";
 
   const GATES = ["analysis", "concept", "research", "script", "format", "voice", "preview"];
-  let activeGate = "analysis";
+  // Grouped by who decides (D-159). Gates the gate policy decides when its
+  // checks pass are shown only while they hold something for a person.
+  const GATE_GROUPS = { concept: "yours", research: "yours", script: "yours", analysis: "policy", format: "policy", voice: "policy", preview: "policy" };
+  const GROUP_ORDER = ["yours", "policy"];
+  const GROUP_LABELS = { yours: "Your decisions", policy: "Held by gate policy" };
+  let activeGate = "concept";
   let showDecided = false;
   const workspaces = Object.create(null);
   const pendingFocus = Object.create(null);
@@ -858,18 +863,27 @@
 
   let switcherHtml = "";
 
+  function gateTab(gate) {
+    const on = gate === activeGate;
+    return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on +
+      '" data-gate-tab="' + gate + '">' + esc(CONFIGS[gate].label) + ' <span class="tab-count">' + pendingCount(gate) + "</span></button>";
+  }
+
   function renderSwitcher() {
     const bar = document.getElementById("gateReviewSwitcher");
     if (!bar) return;
     // Same underline tab bar and switcher row as Packaging and Produce (UI-17).
-    const html = '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Gate">' + GATES.map(function (gate) {
-      const on = gate === activeGate;
-      const count = pendingCount(gate);
-      return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on +
-        '" data-gate-tab="' + gate + '">' + esc(CONFIGS[gate].label) + ' <span class="tab-count">' + count + "</span></button>";
-    }).join("") + "</div>" +
+    const groups = GROUP_ORDER.map(function (group) {
+      const gates = GATES.filter(function (gate) {
+        return GATE_GROUPS[gate] === group && (group === "yours" || showDecided || gate === activeGate || pendingCount(gate) > 0);
+      });
+      if (!gates.length) return "";
+      return '<div class="pw-tab-group" role="group" aria-label="' + esc(GROUP_LABELS[group]) + '">' +
+        '<span class="pw-tab-group-label" aria-hidden="true">' + esc(GROUP_LABELS[group]) + "</span>" + gates.map(gateTab).join("") + "</div>";
+    }).join("");
+    const html = '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Gate">' + groups + "</div>" +
       '<div class="gate-switcher"><label class="gate-toggle"><input type="checkbox" data-gate-show-decided' + (showDecided ? " checked" : "") +
-      "> Include decided items</label>" +
+      "> Include decided items and empty gates</label>" +
       '<a href="/analysis" class="button-link ghost compact" data-route="/analysis" title="The original panels, with every option">Classic view</a></div>';
     if (html === switcherHtml && bar.innerHTML) return;
     switcherHtml = html;
