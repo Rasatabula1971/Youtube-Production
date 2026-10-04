@@ -46,9 +46,13 @@ def _text(value: Any) -> str:
     return ""
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def concept_fields(concept: dict[str, Any]) -> dict[str, str]:
-    framing = concept.get("human_framing") if isinstance(concept.get("human_framing"), dict) else {}
-    hook = framing.get("hook_experience") if isinstance(framing.get("hook_experience"), dict) else {}
+    framing = _mapping(concept.get("human_framing"))
+    hook = _mapping(framing.get("hook_experience"))
     return {
         "premise": _text(concept.get("premise")),
         "viewer_problem": _text(concept.get("viewer_problem")),
@@ -85,8 +89,8 @@ def concept_similarity(first: dict[str, Any], second: dict[str, Any]) -> float:
 
 
 def hook_archetype(concept: dict[str, Any]) -> str:
-    framing = concept.get("human_framing") if isinstance(concept.get("human_framing"), dict) else {}
-    hook = framing.get("hook_experience") if isinstance(framing.get("hook_experience"), dict) else {}
+    framing = _mapping(concept.get("human_framing"))
+    hook = _mapping(framing.get("hook_experience"))
     return str(hook.get("archetype") or "").strip().upper() or "UNSPECIFIED"
 
 

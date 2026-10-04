@@ -160,7 +160,8 @@
         ["Viewer problem", item.viewer_problem],
         ["Viewer moment", item.viewer_moment],
         ["Desired outcome", item.desired_outcome],
-        ["Format intent", item.format_intent]
+        ["Format intent", item.format_intent === "either" ? "either (you choose one when accepting)" : item.format_intent],
+        ["Chosen format", item.chosen_format]
       ]) +
         section("Why viewers would watch", facts([
           ["Viewer need", (need.status ? need.status + " — " : "") + (need.rationale || "")],
@@ -183,22 +184,36 @@
         ])) +
         section("Accepting confirms", list(confirms));
     },
-    decisions: function () {
-      return [
-        { value: "ACCEPT", label: "Accept", hint: "Becomes a production; research starts automatically.", tone: "complete" },
+    // Each production makes one video (D-132): a concept that fits either
+    // format is accepted as long-form or as a Short.
+    decisions: function (item) {
+      const either = String((item || {}).format_intent || "") === "either";
+      const accept = either
+        ? [
+          { value: "ACCEPT_LONG_FORM", label: "Accept as long-form", hint: "Fits either format; make it a long-form video.", tone: "complete" },
+          { value: "ACCEPT_SHORT", label: "Accept as Short", hint: "Fits either format; make it a Short.", tone: "complete" }
+        ]
+        : [{ value: "ACCEPT", label: "Accept", hint: "Becomes a production; research starts automatically.", tone: "complete" }];
+      return accept.concat([
         { value: "REWORK", label: "Rework", hint: "Regenerate it with your direction.", tone: "running", needsNote: true, notePlaceholder: "say what must change" },
         { value: "SAVE_IDEA", label: "Save idea", hint: "Park it in the saved ideas bank.", tone: "human" },
         { value: "REJECT", label: "Reject", hint: "Not for this channel.", tone: "blocked" }
-      ];
+      ]);
     },
     decide: function (item, decision, note) {
-      const messages = { ACCEPT: "Concept accepted.", REWORK: "Concept marked for rework.", SAVE_IDEA: "Concept saved for later.", REJECT: "Concept rejected." };
-      return post("/api/concept-gate", {
+      const formats = { ACCEPT_LONG_FORM: "long_form", ACCEPT_SHORT: "short" };
+      const messages = {
+        ACCEPT: "Concept accepted.", ACCEPT_LONG_FORM: "Concept accepted as long-form.", ACCEPT_SHORT: "Concept accepted as a Short.",
+        REWORK: "Concept marked for rework.", SAVE_IDEA: "Concept saved for later.", REJECT: "Concept rejected."
+      };
+      const body = {
         concept_id: item.concept_id,
-        decision: decision,
+        decision: formats[decision] ? "ACCEPT" : decision,
         criteria: {},
         note: note
-      }, messages[decision] || "Saved.");
+      };
+      if (formats[decision]) body.format = formats[decision];
+      return post("/api/concept-gate", body, messages[decision] || "Saved.");
     }
   };
 
