@@ -182,7 +182,29 @@ def research_claims_message() -> str:
     )
 
 
+CONCEPT_BATCH_SUMMARY = control.PROJECT_ROOT / "transformation_engine" / "output" / "concept_model_batch_summary.json"
+
+
+def concept_generation_message() -> str:
+    """Name the one setup problem a retry cannot fix: the Gemini billing attestation (D-161)."""
+    try:
+        text = CONCEPT_BATCH_SUMMARY.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    if "DIRECT_GEMINI_BILLING_UNCONFIRMED" in text:
+        return (
+            "Concept generation made no model call: the direct Gemini route is off until you "
+            "confirm that the Google Cloud project behind DIRECT_GEMINI_API_KEY has no billing "
+            "account. Check Billing for that project in Google Cloud Console, then set "
+            "billing_disabled_confirmed to true (and confirmed_on to today) in "
+            "experiment_02_analysis/direct_gemini_billing.json and retry Continue Automatically."
+        )
+    return PARTIAL_MESSAGES["concept_generate"]
+
+
 def partial_message(action_id: str) -> str:
+    if action_id == "concept_generate":
+        return concept_generation_message()
     if action_id == "research_acquire":
         return research_acquisition_message()
     if action_id == "research_generate":

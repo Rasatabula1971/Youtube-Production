@@ -1434,6 +1434,23 @@ class StuckStatusTests(unittest.TestCase):
         self.assertEqual(result["stuck_actions"], ["research_acquire"])
 
 
+class ConceptMessageTests(unittest.TestCase):
+    def test_unconfirmed_gemini_billing_is_named_instead_of_retry_advice(self):
+        import json as _json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "s.json"
+            summary.write_text(_json.dumps({"results": [{"fair_reason_code": "DIRECT_GEMINI_BILLING_UNCONFIRMED"}]}))
+            with patch.object(automation, "CONCEPT_BATCH_SUMMARY", summary):
+                message = automation.partial_message("concept_generate")
+            self.assertIn("direct_gemini_billing.json", message)
+            summary.write_text(_json.dumps({"results": [{"fair_reason_code": "OTHER"}]}))
+            with patch.object(automation, "CONCEPT_BATCH_SUMMARY", summary):
+                self.assertIn("Retry Continue Automatically", automation.partial_message("concept_generate"))
+
+
 class PartialMessageTests(unittest.TestCase):
     def test_research_acquisition_message_names_real_error_not_model(self):
         import json
