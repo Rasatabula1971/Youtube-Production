@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,27 @@ FAIL_STATUSES = {
 }
 
 
+# On Windows, os.replace fails with "Access is denied" or a sharing violation
+# (both PermissionError) while another process briefly has the target open,
+# for example the UI's status refresh reading a summary file the automation
+# job is rewriting. Linux and macOS allow the replace. Retrying for about two
+# seconds rides out that overlap; a file that stays locked still raises.
+_REPLACE_ATTEMPTS = 12
+
+
+def _replace(source: Path, target: Path) -> None:
+    delay = 0.01
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.25)
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
@@ -47,7 +69,7 @@ def atomic_write_text(path: Path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp_path, path)
+        _replace(temp_path, path)
     finally:
         if temp_path.exists():
             temp_path.unlink()
