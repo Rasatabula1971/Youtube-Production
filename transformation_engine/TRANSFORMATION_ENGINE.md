@@ -211,6 +211,12 @@ before the human gate.
   free tier limits tokens per minute. A call that FAIR still reports as rate
   limited waits this long and is retried once (D-148, D-149).
 
+When a call returns concepts that are complete except for `human_framing` and
+`viewer_need_evidence`, one small follow-up call on the same route asks for just
+those two sections for just those concept ids (D-150). The answers are merged in
+and every concept is validated as usual; the report records the completion
+under the call's `section_completion`.
+
 The schema sent to the provider keeps every field bound (drama levels 4–10,
 3–5 opening moments and so on). The prompt also states the cross-field drama
 rules a schema cannot express: target no higher than capacity, and the story

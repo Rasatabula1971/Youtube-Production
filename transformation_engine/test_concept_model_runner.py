@@ -439,8 +439,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(len(response["concepts"]), 2)
 
     def test_an_incomplete_call_uses_the_spare_call(self):
-        broken = dict(self.concept("bad"))
-        broken.pop("human_framing")
+        broken = dict(self.concept("bad"), source_specific_elements_used=["the source's pit-stop clip"])
         report, _response, _prompts, schemas = self.run_in_calls(
             [[broken, dict(broken, concept_id="extra")], [self.concept("c1")], [self.concept("c2")]], total=2, per_call=1
         )
@@ -450,6 +449,46 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(report["structurally_rejected"], 1)
         self.assertEqual(report["concepts_beyond_request_dropped"], 1)
         self.assertNotIn("maxItems", schemas[0]["properties"]["concepts"])
+
+    def bare(self, concept_id):
+        concept = self.concept(concept_id)
+        sections = {name: concept.pop(name) for name in ("human_framing", "viewer_need_evidence")}
+        return concept, sections
+
+    def completion(self, *pairs):
+        return {
+            "status": "ACCEPTED",
+            "output": json.dumps({"concepts": [{"concept_id": cid, **sections} for cid, sections in pairs]}),
+            "paid_inference_executed": False, "provider_id": "groq", "model_id": "m", "request_id": "r", "attempts": [],
+        }
+
+    def test_missing_framing_sections_are_completed_by_a_follow_up_call(self):
+        first, first_sections = self.bare("s1")
+        second, second_sections = self.bare("s2")
+        report, response, prompts, schemas = self.run_in_calls(
+            [[first, second], self.completion(("s1", first_sections), ("s2", second_sections))], total=2, per_call=1
+        )
+        call = report["calls"][0]
+        self.assertEqual(call["section_completion"]["status"], "COMPLETED")
+        self.assertEqual(call["section_completion"]["concepts"], ["s1"])
+        self.assertEqual(report["structurally_accepted"], 1)
+        self.assertIn("TASK FOR THIS CALL", prompts[1])
+        self.assertNotIn('"premise":"', prompts[1].split("CONCEPTS:")[0][-50:])
+        items = schemas[1]["properties"]["concepts"]["items"]
+        self.assertEqual(items["properties"]["concept_id"]["enum"], ["s1"])
+        self.assertEqual(sorted(items["required"]), ["concept_id", "human_framing", "viewer_need_evidence"])
+        self.assertIsInstance(response["concepts"][0]["human_framing"], dict)
+
+    def test_a_failed_completion_leaves_the_concept_rejected(self):
+        first, _sections = self.bare("s1")
+        escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+                     "paid_inference_executed": False, "attempts": []}
+        report, _response, _prompts, _schemas = self.run_in_calls(
+            [[first], escalated, [self.concept("c2")], [self.concept("c3")]], total=2, per_call=1
+        )
+        self.assertEqual(report["calls"][0]["section_completion"]["status"], "NOT_COMPLETED")
+        self.assertEqual(report["calls"][0]["status"], "MODEL_OUTPUT_VALIDATION_ERROR")
+        self.assertEqual(report["structurally_accepted"], 2)
 
     def test_a_first_call_failure_writes_no_response(self):
         escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",

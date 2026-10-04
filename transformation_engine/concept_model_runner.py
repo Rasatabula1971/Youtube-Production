@@ -662,6 +662,99 @@ def _call_route(payload: dict[str, Any], paths: dict[str, Path], timeout: float)
     return call_fair_bridge(payload, python_executable=paths["python"], timeout_seconds=timeout)
 
 
+COMPLETED_SECTIONS = ("viewer_need_evidence", "human_framing")
+
+
+def _missing_sections(concept: dict[str, Any]) -> list[str]:
+    return [name for name in COMPLETED_SECTIONS if not isinstance(concept.get(name), dict)]
+
+
+def _complete_sections(
+    chunk: dict[str, Any], concepts: list[dict[str, Any]], *, paths: dict[str, Path], timeout: float,
+    pause: float, maximum_chars: int, runner_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Ask for only the missing human_framing / viewer_need_evidence (D-150).
+
+    Free models sometimes return otherwise complete concepts without these two
+    nested sections, consistently for some mechanisms even at two concepts per
+    call. One small follow-up call on the same route asks for just those
+    sections for just those concept ids; the answers are merged in and every
+    concept is then validated as usual. Nothing else in a concept is changed.
+    """
+    incomplete = [c for c in concepts if _missing_sections(c)]
+    ids = [str(c.get("concept_id") or "") for c in incomplete]
+    item = response_schema(chunk)["properties"]["concepts"]["items"]["properties"]
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["concepts"],
+        "properties": {
+            "concepts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["concept_id", *COMPLETED_SECTIONS],
+                    "properties": {
+                        "concept_id": {"type": "string", "enum": ids},
+                        **{name: item[name] for name in COMPLETED_SECTIONS},
+                    },
+                },
+            }
+        },
+    }
+    shown = [{k: v for k, v in c.items() if k not in COMPLETED_SECTIONS} for c in incomplete]
+    prompt = (
+        build_prompt(chunk, maximum_chars=maximum_chars)
+        + "\n\nTASK FOR THIS CALL (it replaces the response format above): the concepts below were "
+        "generated for this request but are missing viewer_need_evidence and human_framing. For each "
+        "concept_id, return only those two objects, written for that concept and following every rule "
+        "above. Return JSON {\"concepts\": [{\"concept_id\", \"viewer_need_evidence\", "
+        "\"human_framing\"}]} for exactly these concept_ids. Do not change or repeat any other field.\n"
+        "CONCEPTS:\n" + json.dumps(shown, ensure_ascii=False, separators=(",", ":"))
+    )
+    payload = bridge_payload(action="solve", prompt=prompt, schema=schema, config=runner_config, paths=paths)
+    payload["settings"]["client_id"] = "youtube-transformation-concepts"
+    try:
+        _wait_for_pacing(pause)
+        result = _call_route(payload, paths, timeout)
+        _record_call()
+        if pause and _rate_limited(result):
+            time.sleep(pause)
+            result = _call_route(payload, paths, timeout)
+            _record_call()
+    except Exception as exc:
+        return {"status": "RUNNER_ERROR", "error_type": type(exc).__name__, "concepts": ids, "attempts": []}
+    outcome: dict[str, Any] = {
+        "concepts": ids, "fair_status": result.get("status"), "provider_id": result.get("provider_id"),
+        "model_id": result.get("model_id"), "attempts": safe_attempts(result),
+    }
+    if not inference_cost_authorized(result):
+        return {**outcome, "status": "COST_POLICY_VIOLATION"}
+    if result.get("status") != "ACCEPTED":
+        return {**outcome, "status": "NOT_COMPLETED"}
+    try:
+        answer = parse_model_json(str(result.get("output") or ""))
+        sections = {
+            str(entry.get("concept_id") or ""): entry
+            for entry in answer.get("concepts") or []
+            if isinstance(entry, dict)
+        }
+    except Exception as exc:
+        return {**outcome, "status": "NOT_COMPLETED", "error_type": type(exc).__name__}
+    completed = 0
+    for concept in incomplete:
+        entry = sections.get(str(concept.get("concept_id") or ""))
+        if not entry:
+            continue
+        for name in _missing_sections(concept):
+            if isinstance(entry.get(name), dict):
+                concept[name] = entry[name]
+        completed += not _missing_sections(concept)
+    return {**outcome, "status": "COMPLETED" if completed == len(incomplete) else "PARTLY_COMPLETED", "completed": completed}
+
+
 def _run_in_calls(
     request: dict[str, Any], *, request_path: Path, request_hash: str, validation_contract: str,
     slug: str, report_path: Path, response_path: Path, per_call: int, runner_config: dict[str, Any],
@@ -757,6 +850,20 @@ def _run_in_calls(
             if concept_id in seen_ids:
                 concept["concept_id"] = f"{concept_id}-{number}"
             seen_ids.add(str(concept.get("concept_id") or ""))
+        if any(_missing_sections(c) for c in concepts):
+            completion = _complete_sections(
+                chunk, concepts, paths=paths, timeout=timeout, pause=pause,
+                maximum_chars=maximum_chars, runner_config=runner_config,
+            )
+            attempts.extend(completion.pop("attempts", []))
+            call["section_completion"] = completion
+            if completion.get("status") == "COST_POLICY_VIOLATION":
+                report = {
+                    "mechanism_id": mechanism_id, "status": "COST_POLICY_VIOLATION",
+                    "request_source": str(request_path), "request_sha256": request_hash, "calls": calls,
+                }
+                atomic_write_json(report_path, report)
+                return report
         validation = validate_response({"mechanism_id": mechanism_id, "concepts": concepts}, request, config)
         collected.extend(concepts)
         accepted_titles.extend(

@@ -4580,3 +4580,36 @@ still failed, partly on pacing:
 - Groq also refused the format of `specificity`'s first call. Which rule it
   broke is not in FAIR's report; `concept_diagnose.py --mechanism
   specificity --count 2` shows Groq's own error naming the field.
+
+## D-150 — Missing framing sections are completed by a follow-up call
+
+**Status:** Accepted
+
+**Context.** After D-149 only the `specificity` mechanism was missing. The
+diagnostic showed Groq's gpt-oss-120b returning two otherwise complete
+specificity concepts without `human_framing` and `viewer_need_evidence`, even
+at two concepts per call. Progressive reveal includes them at that size, so
+splitting calls further does not fix this mechanism.
+
+**Decision.**
+- **When it runs.** A call can return concepts that lack either section. For
+  those concepts, one follow-up call on the same route asks for only the
+  missing sections.
+- **What the follow-up asks.** It uses the same request context, lists the
+  concept ids, and shows the concepts' other fields. Its schema allows only
+  those ids and those two sections, with their full bounds.
+- **Merging.** The answers are merged by concept id, and nothing else in a
+  concept changes. Every concept is then validated as usual.
+- **Rules kept.** The follow-up is paced and rate-limit-retried like any
+  other call. A paid result fails closed.
+- **If it fails.** The concepts stay incomplete and are rejected by the
+  validator, as before.
+- **Reporting.** The report records the follow-up under the call's
+  `section_completion`, with its status, concept ids and provider.
+
+**Consequences.**
+- This is the two-stage generation named in D-147: free, through FAIR, and
+  fixing the actual gap rather than routing around it (vision §101).
+- A mechanism that needs it takes about twice as many calls.
+- None of this touches the validation contract, so validated mechanisms are
+  kept.
