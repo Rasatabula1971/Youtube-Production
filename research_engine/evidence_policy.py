@@ -46,12 +46,16 @@ DEFAULT_POLICY: dict[str, Any] = {
     "risk_terms": [
         "health", "medical", "medicine", "disease", "cancer", "drug", "drugs",
         "dose", "dosage", "symptom", "symptoms", "treatment", "cure", "cures",
-        "vaccine", "diet", "pregnan", "toxic", "poison", "poisonous", "fatal",
+        "vaccine", "diet", "pregnan*", "toxic", "poison", "poisonous", "fatal",
         "lethal", "death", "deaths", "die", "dies", "killed", "kill", "injury",
         "injuries", "dangerous", "unsafe", "illegal", "lawsuit", "legal",
-        "invest", "investment", "profit", "returns",
+        "legally", "invest", "investing", "investor", "investors", "investment",
+        "profit", "returns",
     ],
 }
+# Risk terms match whole words; a term ending in "*" matches as a stem
+# ("pregnan*" matches "pregnancy"). Plain prefix matching flagged "diesel"
+# (die) and "investigations" (invest) as elevated-risk wording.
 
 
 def policy_settings(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -86,6 +90,34 @@ def _numbers(text: Any) -> set[str]:
     }
 
 
+def _normalised(text: Any) -> str:
+    return " ".join(_words(text))
+
+
+def _independent_works(supporting: list[dict[str, Any]]) -> list[str]:
+    """Supporting sources grouped into independent works.
+
+    Two links are the same work when they share a website, a title or the
+    quoted text: one paper mirrored on two sites (a library copy and its DOI
+    page) is still one source.
+    """
+    groups: list[dict[str, set[str]]] = []
+    for link in supporting:
+        source = link.get("source") or {}
+        keys = {
+            "host": {_host(source.get("url"))} - {""},
+            # Short titles ("Home", "PDF") say nothing about the work.
+            "title": {t for t in {_normalised(source.get("title"))} if len(t.split()) >= 4},
+            "quote": {_normalised(link.get("evidence_quote"))} - {""},
+        }
+        if not keys["host"]:
+            continue
+        matching = [g for g in groups if any(g[k] & keys[k] for k in keys)]
+        merged = {k: set().union(keys[k], *(g[k] for g in matching)) for k in keys}
+        groups = [g for g in groups if g not in matching] + [merged]
+    return [sorted(g["host"])[0] for g in groups]
+
+
 def evaluate_claim(item: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
     """Classify one Research Gate item (claim with its evidence and sources)."""
     evidence = [link for link in item.get("evidence", []) if isinstance(link, dict)]
@@ -114,7 +146,7 @@ def evaluate_claim(item: dict[str, Any], settings: dict[str, Any]) -> dict[str, 
     if any(str(link.get("stance") or "").upper() == "QUALIFIES" for link in evidence):
         reasons.append("A cited source qualifies this claim, so its wording needs care.")
 
-    hosts = {_host((link.get("source") or {}).get("url")) for link in supporting} - {""}
+    hosts = _independent_works(supporting)
     minimum_hosts = int(settings.get("minimum_independent_supporting_hosts", 2))
     if len(hosts) < minimum_hosts:
         reasons.append(
@@ -145,8 +177,16 @@ def evaluate_claim(item: dict[str, Any], settings: dict[str, Any]) -> dict[str, 
             "A figure in the wording is not in any quoted evidence: " + ", ".join(unquoted) + "."
         )
 
-    risk_terms = [str(term).lower() for term in settings.get("risk_terms", [])]
-    risky = sorted({term for term in risk_terms if any(word.startswith(term) for word in words)})
+    risky = sorted(
+        {
+            term.rstrip("*")
+            for term in (str(value).lower() for value in settings.get("risk_terms", []))
+            if any(
+                word.startswith(term[:-1]) if term.endswith("*") else word == term
+                for word in words
+            )
+        }
+    )
     if risky:
         reasons.append("Elevated risk (" + ", ".join(risky) + "): a human must confirm the wording.")
 

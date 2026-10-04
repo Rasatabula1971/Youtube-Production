@@ -74,6 +74,40 @@ class ResearchAcquisitionTests(unittest.TestCase):
         self.assertEqual(result["errors"], 2)
         self.assertIn("search: Every web search backend failed", result["first_error"])
 
+    def test_a_rework_note_searches_the_claim_and_does_not_block(self):
+        path = self.root / "c2.research_plan.json"
+        path.write_text(json.dumps({
+            "concept_id": "c2",
+            "research_questions": [
+                {"question_id": "q1", "question": "Why are aircraft tyres filled with nitrogen?"},
+                {"question_id": "hrw_clm_001", "question": "find the answer elsewhere or discontinue",
+                 "origin": "human_rework", "rework_claim_id": "clm_001"},
+            ],
+            "human_rework_requests": [{"question_id": "hrw_clm_001", "claim_id": "clm_001",
+                                       "note": "find the answer elsewhere or discontinue",
+                                       "original_claim": {"statement": "Nitrogen leaks through rubber more slowly."}}],
+        }), encoding="utf-8")
+        queries = []
+
+        def search(query, *, limit, backends):
+            queries.append(query)
+            if query.startswith("Nitrogen"):
+                raise RuntimeError("no results")
+            return {"backend": "exa", "result_urls": ["https://example.org/n2"], "attempts": []}
+
+        def read(url, *, backends):
+            return {"backend": "direct", "content": "Evidence text"}
+
+        with (
+            patch.object(module, "search_web_with_fallback", side_effect=search),
+            patch.object(module, "read_web_page_with_fallback", side_effect=read),
+        ):
+            result = module.acquire_plan(path)
+        self.assertNotIn("find the answer elsewhere or discontinue", queries)
+        self.assertIn("Nitrogen leaks through rubber more slowly.", queries)
+        evidence = json.loads(Path(result["evidence"]).read_text())
+        self.assertEqual(evidence["unresolved_question_ids"], [])
+
     def test_keyword_query_drops_question_words(self):
         self.assertEqual(
             module.keyword_query(

@@ -147,9 +147,18 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
     errors: list[dict[str, Any]] = []
     total_chars = 0
 
+    rework_statements = {
+        str(request.get("question_id") or ""): str((request.get("original_claim") or {}).get("statement") or "")
+        for request in plan.get("human_rework_requests") or []
+        if isinstance(request, dict)
+    }
     for question in questions:
         question_id = str(question.get("question_id", "")).strip()
         query = str(question.get("question", "")).strip()
+        if question.get("origin") == "human_rework":
+            # A rework note is an instruction for the model, not a search
+            # query: search the reworked claim's statement instead (D-153).
+            query = rework_statements.get(question_id, "").strip() or query
         if not question_id or not query:
             continue
 
@@ -230,10 +239,12 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
             if page["url"] in urls and question_id not in page["question_ids"]:
                 page["question_ids"].append(question_id)
 
+    # Rework instructions never block (research_gate); only original questions must have a source.
     required_question_ids = {
         str(question.get("question_id"))
         for question in questions
         if isinstance(question, dict) and question.get("question_id")
+        and question.get("origin") != "human_rework"
     }
     covered_question_ids = {
         str(question_id)
