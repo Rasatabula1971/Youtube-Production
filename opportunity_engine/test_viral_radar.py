@@ -392,3 +392,20 @@ class UnitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RadarJobImportTests(unittest.TestCase):
+    """The radar job runs as a plain script, without the test runner's path setup."""
+
+    def test_default_api_imports_youtube_discovery_outside_pytest(self):
+        import os
+        import subprocess
+
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env["YOUTUBE_API_KEY"] = "test"
+        completed = subprocess.run(
+            [sys.executable, "-c", "import opportunity_engine.viral_radar as v; v.default_api()"],
+            cwd=str(Path(__file__).resolve().parent.parent), env=env,
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr[-800:])
