@@ -909,7 +909,7 @@
                 <p class="muted" id="visualSpendReviewSummary"></p>
               </div>
               <div class="panel-head-actions">
-                <a href="/produce#spend" class="button-link compact" data-route="/produce" data-subroute="spend">Open produce workspace →</a>
+                <a href="/produce#budget" class="button-link compact" data-route="/produce" data-subroute="budget">Open Budget →</a>
                 <span class="status-chip running" id="visualSpendReviewStatus">PENDING</span>
               </div>
             </div>
@@ -1131,7 +1131,7 @@
               </div>
               <div class="panel-head-actions">
                 <a href="/produce#plan" class="button-link ghost compact" data-route="/produce" data-subroute="plan">Visual plan →</a>
-                <a href="/produce#narration" class="button-link compact" data-route="/produce" data-subroute="narration">Open produce workspace →</a>
+                <a href="/produce#budget" class="button-link compact" data-route="/produce" data-subroute="budget">Open Budget →</a>
                 <span class="status-chip running" id="narrationSpendReviewStatus">PENDING</span>
               </div>
             </div>
@@ -1195,8 +1195,8 @@
 
         <section class="app-view" data-view="gate-review" id="viewGateReview" hidden>
           <div id="gateReviewSwitcher"></div>
-          <div class="review-workspace" id="gateReview-analysis"></div>
-          <div class="review-workspace" id="gateReview-concept" hidden></div>
+          <div class="review-workspace" id="gateReview-analysis" hidden></div>
+          <div class="review-workspace" id="gateReview-concept"></div>
           <div class="review-workspace" id="gateReview-research" hidden></div>
           <div class="review-workspace" id="gateReview-script" hidden></div>
           <div class="review-workspace" id="gateReview-format" hidden></div>
@@ -1215,7 +1215,8 @@
 
         <section class="app-view" data-view="produce" id="viewProduce" hidden>
           <div id="produceTabs"></div>
-          <div class="review-workspace" id="produce-plan"></div>
+          <div class="review-workspace" id="produce-budget"></div>
+          <div class="review-workspace" id="produce-plan" hidden></div>
           <div class="review-workspace" id="produce-narration" hidden></div>
           <div class="review-workspace" id="produce-audio" hidden></div>
           <div class="review-workspace" id="produce-visuals" hidden></div>

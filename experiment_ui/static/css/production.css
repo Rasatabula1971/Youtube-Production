@@ -108,6 +108,23 @@
   font-weight: var(--weight-strong);
 }
 
+/* Budget line on each paid decision (D-159); wraps on narrow screens. */
+.pd-budget-line { max-width: 100%; white-space: normal; line-height: 1.3; }
+
+/* Tab groups (D-159): "Your decisions" first, then gates the policy holds. */
+.pw-tab-group { display: inline-flex; align-items: center; flex: none; }
+.pw-tab-group + .pw-tab-group { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--border-subtle); }
+.pw-tab-group-label {
+  flex: none;
+  margin-right: 6px;
+  font-size: 10px;
+  font-weight: var(--weight-strong);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .pw-tab:hover:not(:disabled) { transform: none; color: var(--text-primary); background: rgba(255, 255, 255, .03); }
 .pw-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
 .pw-tab-state { font-size: 11px; }

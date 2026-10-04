@@ -116,7 +116,7 @@ class ClientHardeningTests(unittest.TestCase):
     def test_decided_gates_stay_locked_like_the_classic_panels(self) -> None:
         self.assertIn("item.approved_for_paid_quote", read("js/gate-reviews.js").split("locked: function (item)", 1)[1][:200])
         produce = read("js/produce.js")
-        self.assertEqual(produce.count("locked: function (item)"), 3)  # option wiring + narration + video gates
+        self.assertEqual(produce.count("locked: function (item)"), 4)  # option wiring + narration + budget (delegates) + video gates
         for name in ["js/gate-reviews.js", "js/produce.js"]:
             with self.subTest(module=name):
                 self.assertIn("config.locked && config.locked(item) ? [] : config.decisions(item)", read(name))

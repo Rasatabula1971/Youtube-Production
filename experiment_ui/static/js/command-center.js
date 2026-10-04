@@ -153,16 +153,16 @@
     });
     // Production gates (D-122) live on the Produce page; count them together.
     if (window.Produce) {
-      const produceTabs = ["narration", "visuals", "rights", "roughcut", "spend", "edit", "export"];
+      const produceTabs = ["budget", "rights", "export", "publish", "plan", "audio", "visuals", "roughcut", "edit"];
       const counts = produceTabs.map(function (tab) { return window.Produce.pending(tab); });
       const first = counts.findIndex(function (count) { return count > 0; });
       gates.push({
-        id: first === -1 ? "narration" : produceTabs[first],
+        id: first === -1 ? "budget" : produceTabs[first],
         route: "/produce",
         label: "Production",
         noun: "production decision",
         count: counts.reduce(function (sum, count) { return sum + count; }, 0),
-        detail: "Spend, visuals, rough cut, edit preview or final export."
+        detail: "Budget, footage rights, final export or publish, plus anything the gate policy held for you."
       });
     }
     return gates.filter(function (gate) { return gate.count > 0; });

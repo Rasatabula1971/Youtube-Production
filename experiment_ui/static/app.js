@@ -531,7 +531,7 @@ const ROUTES = {
     view: "gate-review",
     kicker: "PRODUCTIONS",
     title: "Gate Reviews",
-    subtitle: "Each human gate, one item at a time: evidence on the left, decision on the right."
+    subtitle: "Concepts, research flags and scripts, one item at a time; the automatic gates appear when they hold something for you."
   },
   "/packaging": {
     view: "packaging",
@@ -543,7 +543,7 @@ const ROUTES = {
     view: "produce",
     kicker: "PRODUCTIONS",
     title: "Produce",
-    subtitle: "Narration spend, visuals, rough cut, edit preview and final export."
+    subtitle: "Budget, footage rights, final export and publish; the other gates appear when the gate policy holds something for you."
   },
   "/production": {
     view: "production",
@@ -930,11 +930,11 @@ function primaryTargetForWorkflow(workflow) {
     FINAL_PACKAGING_REJECTED: "Revisit final package"
   };
   const produceStates = {
-    HUMAN_NARRATION_SPEND_GATE: ["narration", "Review narration spend"],
+    HUMAN_NARRATION_SPEND_GATE: ["budget", "Review narration spend"],
     HUMAN_VISUAL_CANDIDATE_GATE: ["visuals", "Choose visuals"],
     HUMAN_VISUAL_RIGHTS_GATE: ["rights", "Review footage context"],
     HUMAN_ROUGH_CUT_GATE: ["roughcut", "Review rough cut"],
-    HUMAN_VISUAL_SPEND_GATE: ["spend", "Review visual spend"],
+    HUMAN_VISUAL_SPEND_GATE: ["budget", "Review visual spend"],
     HUMAN_EDIT_PREVIEW_GATE: ["edit", "Review edit preview"],
     HUMAN_FINAL_EXPORT_GATE: ["export", "Review final render"]
   };
