@@ -13,6 +13,7 @@ import json
 import subprocess
 from typing import Any
 
+import gate_autopilot
 import server as control
 
 AUTO_MACHINE_ACTION_ORDER = [
@@ -243,14 +244,51 @@ def run_action(action_id: str) -> int:
 def run_until_human_gate() -> dict[str, Any]:
     completed_actions: list[str] = []
     stuck: dict[str, dict[str, Any]] = {}
-    result = _run_steps(completed_actions, stuck)
-    return _with_stuck(result, stuck)
+    held: dict[str, list[str]] = {}
+    result = _with_stuck(_run_steps(completed_actions, stuck, held), stuck)
+    return _with_held(result, held)
 
 
-def _run_steps(completed_actions: list[str], stuck: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _with_held(result: dict[str, Any], held: dict[str, list[str]]) -> dict[str, Any]:
+    """Name the items an automatic gate left for a person (D-156)."""
+    held = {gate: items for gate, items in held.items() if items}
+    if not held:
+        return result
+    lines = [f"{gate.replace('_', ' ')}: " + "; ".join(items[:3]) for gate, items in held.items()]
+    return {
+        **result,
+        "auto_held": held,
+        "message": (str(result.get("message") or "") + " Held for you by the gate policy: "
+                    + " | ".join(lines)).strip(),
+    }
+
+
+def run_gate_policy(state: str | None, completed_actions: list[str], held: dict[str, list[str]]) -> bool:
+    """Decide the clean items of an automatic gate; True when anything was decided."""
+    outcome = gate_autopilot.decide(state, control)
+    if outcome.get("gate"):
+        held[outcome["gate"]] = list(outcome.get("held") or [])
+    if not outcome.get("decided"):
+        return False
+    print()
+    print("=" * 72)
+    print(f"AUTOMATIC MACHINE STEP — Gate policy: {outcome['gate'].replace('_', ' ')}")
+    print("=" * 72)
+    print(f"Decided automatically: {outcome['decided']}; left for you: {len(outcome.get('held') or [])}")
+    for line in outcome.get("held") or []:
+        print(f"  held: {line}")
+    completed_actions.append(f"gate_policy:{outcome['gate']}")
+    return True
+
+
+def _run_steps(
+    completed_actions: list[str], stuck: dict[str, dict[str, Any]], held: dict[str, list[str]]
+) -> dict[str, Any]:
     for _ in range(MAX_STEPS_PER_RUN):
         readiness = control.action_readiness()
         guidance = control.workflow_guidance(readiness)
+        if run_gate_policy(guidance.get("state"), completed_actions, held):
+            continue
         preview_machine_pending = any(
             readiness.get(action_id, {}).get("enabled")
             for action_id in (

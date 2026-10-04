@@ -4750,3 +4750,47 @@ shows the same step and clock. The status payload carries this as
 
 **Consequences.** Only the log tail is read on each status poll, so a very
 long run may show a lower step number; the step name stays correct.
+
+## D-156 — Gate policy: clean items at six gates are decided automatically
+
+**Context.** A video stopped at about 17 human gates. The operator chose to
+keep six decisions: Pick (opportunity and concepts), Script, Packaging
+(title and thumbnail), Budget, Final cut and Publish. Every other gate is to
+be decided automatically when its checks pass, with anything flagged still
+coming to a person. This is Phase A; the visual gates, a single Budget
+approval and the merged review screens follow.
+
+**Decision.** `experiment_ui/gate_policy.json` sets each gate to `HUMAN` or
+`AUTO_IF_CLEAN`. When Continue Automatically stops at an `AUTO_IF_CLEAN`
+gate, `gate_autopilot.py` decides, through the same functions the review
+pages call, every pending item that passes the gate's checks, and the run
+continues. The checks are:
+
+- **Vision:** a machine observation exists, with HIGH or MODERATE
+  confidence and no uncertainty noted.
+- **Analysis:** confidence is not LOW and every evidence reference resolves.
+- **Title Direction:** for each format, the first title in the configured
+  angle order that fits the length contract and cites evidence. The final
+  title is still chosen with the thumbnail at the Final Packaging Gate.
+- **Format:** no source overlap, and the Short and Long-form branches are
+  separate.
+- **Voice Performance:** the spec reached the gate, which means it passed
+  deterministic validation.
+- **Narration Preview:** the audio is rendered and the engagement check
+  passed with no warnings.
+
+An item that fails a check, or whose decision the gate refuses, stays
+pending. The run then stops at that gate as before, and its message lists
+each held item and why.
+
+**Consequences.**
+- Automatic decisions are made as reviewer `gate-policy-auto`, with a note
+  beginning "Automatic (gate policy D-156)" where the gate keeps notes.
+  Vision frame decisions have no note field and are identified only by the
+  reviewer.
+- A person can still change any automatic decision from the review page,
+  as with their own.
+- Research is unchanged: D-153 already clears claims backed by two
+  independent sources, and the rest come to a person.
+- Setting a gate to `HUMAN`, or deleting the policy file, restores the
+  previous behaviour.
