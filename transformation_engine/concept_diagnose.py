@@ -56,7 +56,10 @@ def groq_key() -> str:
 def post(body: dict[str, Any], key: str, timeout: float) -> tuple[int, dict[str, Any]]:
     request = urllib.request.Request(  # noqa: S310 - fixed https Groq endpoint
         GROQ_URL, data=json.dumps(body).encode("utf-8"), method="POST",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        # Groq sits behind Cloudflare, which answers 403 to urllib's default
+        # "Python-urllib" user agent before the request reaches Groq.
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                 "Accept": "application/json", "User-Agent": "youtube-production-concept-diagnose/1.0"},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https Groq endpoint
@@ -127,6 +130,10 @@ def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float) -> dic
         failed = str(error.get("failed_generation") or "")
         report["failed_generation_check"] = local_check(failed, request) if failed else None
         text = failed
+    elif status != 200:
+        # Not Groq's error format (for example a gateway page): keep what came back.
+        report["unexpected_response"] = json.dumps(payload, ensure_ascii=False)[:2000]
+        text = ""
     else:
         choice = ((payload.get("choices") or [{}])[0]) if isinstance(payload, dict) else {}
         report["finish_reason"] = choice.get("finish_reason")
