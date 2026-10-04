@@ -484,6 +484,12 @@ class ShellMarkupTests(unittest.TestCase):
             scripts.index("/js/review-workspace.js"), scripts.index("/js/opportunity-review.js")
         )
 
+    def test_radar_links_only_validated_video_ids_to_youtube(self) -> None:
+        script = (STATIC / "js" / "radar.js").read_text(encoding="utf-8")
+        self.assertIn('/^[A-Za-z0-9_-]{11}$/.test(id)', script)
+        self.assertIn('href="https://www.youtube.com/watch?v=', script)
+        self.assertIn('rel="noopener noreferrer"', script.split("function watchLink", 1)[1][:400])
+
     def test_nav_routes_are_app_routes(self) -> None:
         for route in set(re.findall(r'data-route="([^"]+)"', self.html)):
             with self.subTest(route=route):
