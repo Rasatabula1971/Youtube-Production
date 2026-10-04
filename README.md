@@ -48,8 +48,8 @@ Everything runs from the local browser UI (`experiment_ui/README.md`).
 audit found that these deviate from the vision and are being corrected first:
 
 - research review is mandatory instead of exception-only;
-- the concept pool is smaller than the 15–25 contract, and finalists are not
-  forced to be diverse;
+- the concept pool was smaller than the 15–25 contract and finalists were not
+  forced to be diverse (fixed by A3, D-130);
 - incomplete stages can advance and the Gemini fallback admits non-quota
   failures (both fixed by A2, D-129);
 - visual planning comes after narration;
@@ -72,7 +72,7 @@ are built:
 |---|---|
 | A1 | Test isolation, and this status (done, D-128) |
 | A2 | Stage completion and fallback policy (done, D-129) |
-| A3 | Concept pool of 15–25 and diverse finalists |
+| A3 | Concept pool of 15–25 and diverse finalists (done, D-130) |
 | A4 | Conditional research review |
 | A5 | One resolved format |
 | A6 | Append-only analysis and research history |
@@ -229,9 +229,11 @@ Concepts now also define the specific viewer problem, viewer moment, desired
 outcome, content-gap evidence state, channel fit, and a three-title clarity
 test before the Concept Gate.
 
-Automatic triage (`concept_triage.py`) shortlists up to six concepts for the
-Concept Gate; every other concept stays available as an explicit override.
-(Correction A3 moves this to a 15–25 pool with five diverse finalists.)
+Requests are sized so one opportunity's pool lands in 15–25 concepts.
+Automatic triage (`concept_triage.py`) shortlists up to five distinct
+finalists: no near-duplicates, and no single mechanism or hook type filling
+the list. A shortfall is shown rather than filled. Every other concept stays
+available as an explicit override (D-130).
 
 See `transformation_engine/TRANSFORMATION_ENGINE.md` and
 `transformation_engine/CONCEPT_GATE.md`.

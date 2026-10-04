@@ -375,6 +375,8 @@ def snapshot() -> dict[str, Any]:
         "override_concepts": override_items,
         "saved_idea_count": len(saved_ideas),
         "saved_ideas": saved_ideas,
+        # Pool size against the 15–25 target, and any finalist shortfall (D-130).
+        "selection": candidates.get("selection"),
     }
 
 

@@ -121,6 +121,23 @@
   };
 
   // ----------------------------------------------------------------- Concept
+  // Pool size against the 15–25 target, the finalist shortfall, and why a
+  // concept brought in from View all candidates was not a finalist (D-130).
+  function selectionNote(selection, item) {
+    if (!selection) return "";
+    const pool = selection.pool || {};
+    const lines = [];
+    if (pool.note) lines.push(pool.note);
+    if (selection.note) lines.push(selection.note);
+    const diversity = (item.llm_triage || {}).diversity;
+    if (diversity && diversity.reason === "NEAR_DUPLICATE") {
+      lines.push("Not a finalist: it restates " + diversity.duplicate_of + " (similarity " + diversity.similarity + ").");
+    } else if (diversity && diversity.reason === "APPROACH_ALREADY_REPRESENTED") {
+      lines.push("Not a finalist: its mechanism and hook type were already represented by stronger finalists.");
+    }
+    return lines.length ? list(lines) : "";
+  }
+
   const concept = {
     label: "Concept",
     kicker: "CONCEPT REVIEW",
@@ -156,6 +173,7 @@
           ["How it is applied", item.mechanism_application],
           ["Transformation", item.transformation_method]
         ])) +
+        section("How it was chosen", selectionNote(this.snapshot().selection, item)) +
         section("Research questions", list(item.research_questions)) +
         section("Checks", facts([
           ["Title clarity test", item.title_clarity_test],
