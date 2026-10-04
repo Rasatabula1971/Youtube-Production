@@ -115,6 +115,24 @@
   white-space: nowrap;
 }
 
+.production-blocker {
+  margin: 4px 0 0;
+  font-size: var(--text-sm, 13px);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border-left: 3px solid var(--warning);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.production-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .production-detail {
   margin: 3px 0 0;
   color: var(--text-muted);

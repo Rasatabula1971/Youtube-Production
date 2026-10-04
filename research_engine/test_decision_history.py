@@ -87,9 +87,15 @@ class ResearchHistoryTests(unittest.TestCase):
         self.case.prepared(self.stack, Path(self.tmp.name), package)
         review.apply_question_waiver(concept_id="c1", question_id="rq002", waive=True, note="Not knowable.")
         review.apply_question_waiver(concept_id="c1", question_id="rq002", waive=False, note=None)
+        # No claim refers to rq002, so the policy waived it first (D-163);
+        # the person's waiver and its removal follow.
         self.assertEqual(
-            [event["decision"] for event in self.history()],
-            ["WAIVE_QUESTION", "UNWAIVE_QUESTION"],
+            [(event["decision"], event["decided_by"]) for event in self.history()],
+            [
+                ("WAIVE_QUESTION", review.POLICY_DECIDER),
+                ("WAIVE_QUESTION", "HUMAN"),
+                ("UNWAIVE_QUESTION", "HUMAN"),
+            ],
         )
 
 

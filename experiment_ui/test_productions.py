@@ -93,6 +93,68 @@ class ProductionsDerivationTests(unittest.TestCase):
         self.assertEqual(item["status"], "HUMAN_REVIEW")
         self.assertEqual(item["detail"], "2 research claims to verify")
 
+    def test_decided_but_incomplete_research_needs_review_and_says_why(self) -> None:
+        research = {
+            "draft_concept_ids": [CID],
+            "research_gate": {
+                "claims": [{"concept_id": CID, "decision": "ACCEPT"}],
+                "verified_packages": [
+                    {"concept_id": CID, "status": "RESEARCH_INCOMPLETE", "unresolved_question_ids": ["rq002"]}
+                ],
+                "question_coverage": [
+                    {"concept_id": CID, "summary": "Not ready for the script: 1 question unanswered."}
+                ],
+            },
+        }
+        item = only(derive(research=research))
+        self.assertEqual(item["status"], "HUMAN_REVIEW")
+        self.assertEqual(item["detail"], "Not ready for the script: 1 question unanswered.")
+        self.assertFalse(item["can_continue"])
+
+        del research["research_gate"]["question_coverage"]
+        item = only(derive(research=research))
+        self.assertEqual(item["status"], "HUMAN_REVIEW")
+        self.assertIn("1 research question unanswered", item["detail"])
+
+        research["research_gate"]["verified_packages"][0]["unresolved_question_ids"] = []
+        research["research_gate"]["claims"][0]["decision"] = "REJECT"
+        item = only(derive(research=research))
+        self.assertEqual(item["status"], "HUMAN_REVIEW")
+        self.assertIn("no research claim was accepted", item["detail"])
+
+    def test_blocker_names_the_step_that_stopped_the_last_run_at_this_stage(self) -> None:
+        last_run = {
+            "status": "PARTIAL",
+            "failed_action": "research_acquire",
+            "stuck": {"research_acquire": "Source pages were found, but some questions have no source."},
+        }
+        labels = {"research_acquire": "Acquire Research Evidence"}
+        item = only(derive(last_run=last_run, action_labels=labels))
+        self.assertEqual(item["status"], "READY")
+        self.assertTrue(item["can_continue"])
+        self.assertEqual(
+            item["blocker"],
+            "Last run stopped at Acquire Research Evidence: Source pages were found, but some questions have no source.",
+        )
+        # A stuck step of another stage is not this production's blocker.
+        scripted = only(derive(research=VERIFIED, last_run=last_run, action_labels=labels))
+        self.assertEqual(scripted["stage"], "SCRIPT")
+        self.assertEqual(scripted["blocker"], "")
+        # A failed step with no message points at the job log.
+        failed = only(derive(last_run={"status": "FAILED", "failed_action": "research_prepare", "return_code": 1}))
+        self.assertEqual(failed["blocker"], "Last run failed at research prepare (exit code 1). Open the job log for the error.")
+        # A production waiting on a person carries no blocker: its detail says why.
+        pending = {"research_gate": {"claims": [{"concept_id": CID, "decision": "PENDING"}]}}
+        self.assertEqual(only(derive(research=pending, last_run=last_run))["blocker"], "")
+
+    def test_action_stage_maps_step_prefixes(self) -> None:
+        self.assertEqual(productions.action_stage("research_generate"), "RESEARCH")
+        self.assertEqual(productions.action_stage("script_gate_prepare"), "SCRIPT")
+        self.assertEqual(productions.action_stage("thumbnail_concept_generate"), "PACKAGE")
+        self.assertEqual(productions.action_stage("format_generate"), "FORMAT")
+        self.assertEqual(productions.action_stage("narration_prepare"), "PRODUCE")
+        self.assertIsNone(productions.action_stage("concept_generate"))
+
     def test_reworked_script_is_blocked(self) -> None:
         story = {"script_gate": {"scripts": [{"concept_id": CID, "decision": "REWORK"}]}}
         item = only(derive(research=VERIFIED, story=story))

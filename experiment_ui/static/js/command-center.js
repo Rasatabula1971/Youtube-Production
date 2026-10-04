@@ -79,23 +79,41 @@
       }).join("") + "</ol>";
   }
 
+  function jobRunning(data) {
+    const job = (data || {}).automation_job;
+    return Boolean(job && (job.status === "RUNNING" || job.status === "STOPPING"));
+  }
+
+  // One Continue per production (D-163): the row says what stopped the last
+  // run at its stage and starts the automatic runner from the row itself.
+  function continueButton(production, running) {
+    if (!production.can_continue) return "";
+    return '<button type="button" class="primary-cta compact production-continue" data-continue="' +
+      esc(production.concept_id) + '"' + (running ? ' disabled aria-disabled="true"' : "") +
+      ' aria-label="Continue ' + esc(production.title) + '">' +
+      (running ? "Running…" : "Continue →") + "</button>";
+  }
+
   function productionRow(production) {
+    const running = jobRunning(latest);
     return '<article class="production-row">' +
       '<div class="production-main">' +
         '<h3 class="production-title">' + esc(production.title) + "</h3>" +
         '<p class="production-detail">' + esc(production.detail) +
           (production.updated_at ? ' <span class="production-updated">· updated ' + esc(relativeTime(production.updated_at, Date.now())) + "</span>" : "") +
         "</p>" +
+        (production.blocker ? '<p class="production-blocker">' + esc(production.blocker) + "</p>" : "") +
       "</div>" +
       '<div class="production-stage">' +
         '<span class="production-stage-label">' + esc(production.stage_label) + "</span>" +
         stageTrack(production) +
       "</div>" +
       '<div class="production-status">' + badge(production.status, production.status_label) + "</div>" +
+      '<div class="production-actions">' + continueButton(production, running) +
       '<a href="/production#' +
         esc(encodeURIComponent(production.concept_id)) + '" class="button-link ghost compact" data-route="/production" data-subroute="' +
         esc(encodeURIComponent(production.concept_id)) + '" aria-label="Open ' +
-        esc(production.title) + '">Open →</a>' +
+        esc(production.title) + '">Open →</a></div>' +
     "</article>";
   }
 
@@ -534,6 +552,14 @@
   }
 
   document.addEventListener("click", function (event) {
+    const go = event.target.closest("[data-continue]");
+    if (go) {
+      if (go.disabled || typeof window.runAction !== "function") return;
+      go.disabled = true;
+      go.textContent = "Starting…";
+      window.runAction("auto_continue");
+      return;
+    }
     const tab = event.target.closest("[data-production-filter]");
     if (!tab) return;
     setProductionFilter(tab.dataset.productionFilter);
@@ -551,6 +577,6 @@
   window.CommandCenter = {
     render: render,
     setProductionFilter: setProductionFilter,
-    _test: { attentionItems: attentionItems, schedulerState: schedulerState, filterProductions: filterProductions }
+    _test: { attentionItems: attentionItems, schedulerState: schedulerState, filterProductions: filterProductions, productionRow: productionRow }
   };
 })();

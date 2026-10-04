@@ -42,6 +42,7 @@ OUTPUT_DIR = DEFAULT_DRAFTS_DIR.parent
 STATE_FILE = OUTPUT_DIR / "research_gate_ui_state.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
+POLICY_REVIEWER = "evidence-policy"
 
 
 def history_file() -> Path:
@@ -253,12 +254,15 @@ def _original_questions(request: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _preserved_waivers(
+def _preserved_by_question(
     requests: list[dict[str, Any]],
     previous: dict[str, Any],
+    field: str,
+    *,
+    human_only: bool = False,
 ) -> dict[str, Any]:
-    """Keep a waiver only while its question still exists with the same wording."""
-    prior = previous.get("waived_questions", {}) if isinstance(previous, dict) else {}
+    """Keep a per-question record only while its question still exists with the same wording."""
+    prior = previous.get(field, {}) if isinstance(previous, dict) else {}
     if not isinstance(prior, dict):
         return {}
     preserved: dict[str, Any] = {}
@@ -269,14 +273,181 @@ def _preserved_waivers(
         if not isinstance(saved, dict):
             continue
         kept = {
-            question_id: waiver
-            for question_id, waiver in saved.items()
-            if isinstance(waiver, dict)
-            and questions.get(question_id) == waiver.get("question")
+            question_id: record
+            for question_id, record in saved.items()
+            if isinstance(record, dict)
+            and questions.get(question_id) == record.get("question")
+            and not (human_only and record.get("decided_by") == POLICY_DECIDER)
         }
         if kept:
             preserved[concept_id] = kept
     return preserved
+
+
+def _preserved_waivers(
+    requests: list[dict[str, Any]],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep a human waiver while its question still exists with the same wording.
+
+    Automatic waivers are recomputed on every prepare (D-163), so one never
+    outlives the evidence that justified it.
+    """
+    return _preserved_by_question(requests, previous, "waived_questions", human_only=True)
+
+
+def _preserved_holds(
+    requests: list[dict[str, Any]],
+    previous: dict[str, Any],
+) -> dict[str, Any]:
+    """Questions whose automatic waiver a person removed: they stay with the person."""
+    return _preserved_by_question(requests, previous, "unwaived_questions")
+
+
+def evidence_file(concept_id: str) -> Path:
+    return OUTPUT_DIR / "acquired_evidence" / f"{safe_slug(concept_id)}.research_evidence.json"
+
+
+def _unsourced_questions(bundle: dict[str, Any]) -> dict[str, int]:
+    """Original questions the acquisition gave up on, with the rounds searched (D-163)."""
+    try:
+        evidence = load_json(evidence_file(bundle["concept_id"]))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(evidence, dict):
+        return {}
+    try:
+        draft = load_json(Path(bundle["draft_path"]))
+    except (OSError, ValueError):
+        draft = {}
+    if not isinstance(draft, dict):
+        draft = {}
+    draft_provenance = draft.get("draft_provenance")
+    plan_hash = draft_provenance.get("plan_sha256") if isinstance(draft_provenance, dict) else None
+    provenance = evidence.get("provenance")
+    evidence_hash = provenance.get("plan_sha256") if isinstance(provenance, dict) else None
+    if plan_hash and evidence_hash and plan_hash != evidence_hash:
+        return {}
+    rounds_value = evidence.get("search_rounds")
+    rounds: dict[str, Any] = rounds_value if isinstance(rounds_value, dict) else {}
+    return {
+        str(question_id): int(rounds.get(str(question_id)) or 0)
+        for question_id in evidence.get("unsourced_question_ids") or []
+    }
+
+
+def _auto_waivers(
+    requests: list[dict[str, Any]],
+    waivers: dict[str, Any],
+    holds: dict[str, Any],
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Waive the original questions the research could not answer (D-163).
+
+    A question is waived automatically when the acquisition gave it up after
+    the configured search rounds, or when no claim in the draft even refers to
+    it: nothing a person could accept would answer it, so holding the concept
+    at the gate for it is a dead end. A human waiver is never replaced, and a
+    question whose automatic waiver a person removed is left to that person.
+    The script then may not state anything about the waived question, as with
+    a human waiver. Returns the history events for new automatic waivers.
+    """
+    settings = config.get("auto_waive_questions") if isinstance(config, dict) else None
+    if isinstance(settings, dict) and not settings.get("enabled", True):
+        return []
+    events: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc).isoformat()
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        request = bundle["request"]
+        referenced: set[str] = set()
+        for item in request.get("items", []):
+            referenced.update(str(question_id) for question_id in item.get("question_ids", []))
+        unsourced = _unsourced_questions(bundle)
+        saved_waivers = waivers.get(concept_id)
+        concept_waivers: dict[str, Any] = saved_waivers if isinstance(saved_waivers, dict) else {}
+        saved_holds = holds.get(concept_id)
+        concept_holds: dict[str, Any] = saved_holds if isinstance(saved_holds, dict) else {}
+        for question_id, text in _original_questions(request).items():
+            if question_id in concept_waivers or question_id in concept_holds:
+                continue
+            if question_id in unsourced:
+                rounds = unsourced[question_id]
+                note = (
+                    f"Waived automatically: no usable source was found for this question "
+                    f"after {rounds} search round{'' if rounds == 1 else 's'}."
+                )
+            elif question_id not in referenced:
+                note = (
+                    "Waived automatically: the sources found gave no claim that answers "
+                    "this question."
+                )
+            else:
+                continue
+            concept_waivers[question_id] = {
+                "question": text,
+                "note": note,
+                "reviewer": POLICY_REVIEWER,
+                "decided_by": POLICY_DECIDER,
+                "waived_at": now,
+            }
+            waivers[concept_id] = concept_waivers
+            events.append(
+                {
+                    "concept_id": concept_id,
+                    "question_id": question_id,
+                    "question": text,
+                    "decision": "WAIVE_QUESTION",
+                    "decided_by": POLICY_DECIDER,
+                    "reviewer": POLICY_REVIEWER,
+                    "note": note,
+                }
+            )
+    return events
+
+
+def _already_recorded(previous: dict[str, Any], event: dict[str, Any]) -> bool:
+    prior = previous.get("waived_questions", {}) if isinstance(previous, dict) else {}
+    saved = (prior.get(event["concept_id"]) or {}) if isinstance(prior, dict) else {}
+    record = saved.get(event["question_id"]) if isinstance(saved, dict) else None
+    return (
+        isinstance(record, dict)
+        and record.get("decided_by") == POLICY_DECIDER
+        and record.get("note") == event["note"]
+        and record.get("question") == event["question"]
+    )
+
+
+def concept_summary(
+    *,
+    pending: int,
+    accepted: int,
+    decided: int,
+    unanswered: int,
+    waived: int,
+) -> str:
+    """Plain words for where one concept stands at the Research Gate (D-163)."""
+    if pending:
+        line = f"{pending} claim{'' if pending == 1 else 's'} to decide"
+        if unanswered:
+            line += f"; {unanswered} question{'' if unanswered == 1 else 's'} still unanswered"
+        return line + "."
+    if not decided:
+        return "No claims to decide yet."
+    if not accepted:
+        return (
+            "Not ready for the script: no claim was accepted. Rework a claim with a note, "
+            "or send the concept back."
+        )
+    if unanswered:
+        return (
+            f"Not ready for the script: {unanswered} question{'' if unanswered == 1 else 's'} "
+            "unanswered. Mark it Not needed for script, or Rework a claim with a note asking "
+            "for evidence on it."
+        )
+    return "Ready for the script." + (
+        f" {waived} question{' was' if waived == 1 else 's were'} waived." if waived else ""
+    )
 
 
 def question_coverage(
@@ -316,12 +487,30 @@ def question_coverage(
                 }
             )
         working_title = (request.get("concept") or {}).get("working_title")
+        claim_decisions = [
+            str((decisions.get(key_for(concept_id, str(item["claim_id"]))) or {}).get("decision") or "PENDING")
+            for item in request.get("items", [])
+        ]
+        pending = claim_decisions.count("PENDING")
+        accepted_count = claim_decisions.count("ACCEPT")
+        unanswered = sum(q["status"] == "UNANSWERED" for q in questions)
+        waived = sum(q["status"] == "WAIVED" for q in questions)
         rows.append(
             {
                 "concept_id": concept_id,
                 "working_title": working_title,
                 "questions": questions,
-                "unanswered": sum(q["status"] == "UNANSWERED" for q in questions),
+                "unanswered": unanswered,
+                "pending_claims": pending,
+                "accepted_claims": accepted_count,
+                "ready": bool(claim_decisions) and not pending and accepted_count > 0 and not unanswered,
+                "summary": concept_summary(
+                    pending=pending,
+                    accepted=accepted_count,
+                    decided=len(claim_decisions),
+                    unanswered=unanswered,
+                    waived=waived,
+                ),
             }
         )
     return rows
@@ -346,6 +535,7 @@ def apply_question_waiver(
     if question_id not in questions:
         raise ValueError("Only an original research question of this concept can be waived")
     waivers = state.setdefault("waived_questions", {})
+    holds = state.setdefault("unwaived_questions", {})
     if waive:
         clean_note = str(note or "").strip()
         if not clean_note:
@@ -354,14 +544,27 @@ def apply_question_waiver(
             "question": questions[question_id],
             "note": clean_note,
             "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
+            "decided_by": "HUMAN",
             "waived_at": datetime.now(timezone.utc).isoformat(),
         }
+        concept_holds = holds.get(concept_id)
+        if isinstance(concept_holds, dict):
+            concept_holds.pop(question_id, None)
+            if not concept_holds:
+                holds.pop(concept_id, None)
     else:
         concept_waivers = waivers.get(concept_id, {})
-        if isinstance(concept_waivers, dict):
-            concept_waivers.pop(question_id, None)
-            if not concept_waivers:
-                waivers.pop(concept_id, None)
+        removed = concept_waivers.pop(question_id, None) if isinstance(concept_waivers, dict) else None
+        if isinstance(concept_waivers, dict) and not concept_waivers:
+            waivers.pop(concept_id, None)
+        if isinstance(removed, dict) and removed.get("decided_by") == POLICY_DECIDER:
+            # The person overruled the automatic waiver: it must not come back
+            # on the next prepare (D-163).
+            holds.setdefault(concept_id, {})[question_id] = {
+                "question": questions[question_id],
+                "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
+                "unwaived_at": datetime.now(timezone.utc).isoformat(),
+            }
     record_history(
         {
             "concept_id": concept_id,
@@ -588,13 +791,19 @@ def prepare_state() -> dict[str, Any]:
     _record_withdrawn(previous, decisions)
     for event in accepted_now:
         record_history(event)
+    waivers = _preserved_waivers(requests, previous)
+    holds = _preserved_holds(requests, previous)
+    for event in _auto_waivers(requests, waivers, holds, load_config()):
+        if not _already_recorded(previous, event):
+            record_history(event)
     state = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "status": "AWAITING_HUMAN_DECISION",
         "draft_hashes": drafts_hashes(),
         "reviewer": os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER),
         "decisions": decisions,
-        "waived_questions": _preserved_waivers(requests, previous),
+        "waived_questions": waivers,
+        "unwaived_questions": holds,
     }
     finalize_if_complete(state, requests)
     return snapshot()

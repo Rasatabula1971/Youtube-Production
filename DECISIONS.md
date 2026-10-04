@@ -4995,3 +4995,52 @@ below a ratio worth reading, and the page listed them all.
 **Consequences.** Lane is a reading aid, not a gate: an off-lane video can
 still be reviewed by switching to "Everything". Wrong lane calls are fixed
 by editing the word lists.
+
+## D-163 — One Continue per production, and research that cannot dead-end on a question
+
+**Context.** Continue Automatically was one global button whose result
+landed in a job log; a production that was not moving showed "Ready to
+run" with no reason on its row. At the Research Gate, a concept whose
+claims were all accepted still could not go to the script when one of its
+original questions had no accepted claim, and the only way out was a
+Waive button the operator had to find.
+
+**Decision.**
+- **Per-production status and Continue.** `workflow_automation` writes its
+  outcome to `.experiment_ui/last_auto_run.json` (status, message, the
+  step that was stuck or failed and its message, held gate items). The
+  productions model maps each automatic step to a stage by its action id
+  prefix and gives every READY production a `blocker` line: what stopped
+  the last run at its stage. The Productions rows and the Production
+  Workspace show that line and carry their own Continue, which starts
+  the same automatic runner (the pipeline is one; the row is where the
+  result is read). While a job runs the button says Running.
+- **A decided concept says why it is not ready.** `question_coverage`
+  rows now carry `pending_claims`, `accepted_claims`, `ready` and a plain
+  `summary` ("2 claims to decide", "Not ready for the script: 1 question
+  unanswered. Mark it Not needed for script, or Rework a claim…", "Ready
+  for the script. 1 question was waived."). A production whose claims
+  are all decided but whose verified package is RESEARCH_INCOMPLETE is
+  "Needs your review" with that summary, no longer "Ready to run".
+- **Automatic waivers.** On every prepare the Research Gate waives an
+  original question automatically, with a note and a history event
+  (`decided_by: EVIDENCE_POLICY`), when the acquisition gave it up or no
+  claim in the draft refers to it. A human waiver is never replaced; a
+  person can remove an automatic waiver (recorded in
+  `unwaived_questions`) and it does not come back; the script may not
+  state anything about a waived question, as before. Off switch:
+  `auto_waive_questions.enabled` in `research_gate_config.json`.
+- **Acquisition gives a question up after N rounds.** The evidence file
+  counts `search_rounds` per question across runs of the same plan. A
+  question still without a page after
+  `max_search_rounds_per_question` (default 2, `research_acquisition_config.json`)
+  is listed in `unsourced_question_ids` and no longer blocks COMPLETE
+  evidence; its search errors stop counting against the run.
+
+**Consequences.** A concept with one unanswerable question reaches the
+script after at most two acquisition rounds without a person waiving
+anything; the gate line and the production row say what was waived. A
+question a claim does refer to but no claim answers (the claim was
+rejected or reworked) stays with the person, and the row says so. The
+research summary in the Command Center and the Review Queue reads the
+same text.

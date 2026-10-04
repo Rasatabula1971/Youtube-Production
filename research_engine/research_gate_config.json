@@ -7,6 +7,9 @@
   ],
   "require_reviewer_name": true,
   "require_conflict_resolution_note": true,
+  "auto_waive_questions": {
+    "enabled": true
+  },
   "evidence_policy": {
     "enabled": true,
     "minimum_independent_supporting_hosts": 2,

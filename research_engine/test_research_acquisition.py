@@ -152,3 +152,67 @@ class ResearchAcquisitionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SearchRoundTests(unittest.TestCase):
+    """A question with no source is given up after the configured rounds (D-163)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        patcher = patch.object(module, "OUTPUT_DIR", self.root / "evidence")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def two_question_plan(self):
+        path = plan(self.root)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["research_questions"].append(
+            {"question_id": "rq002", "question": "How long does it last?"}
+        )
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def acquire(self, path, *, force=False):
+        def search(query, *, limit, backends):
+            if "last" in query:
+                return {"backend": "duckduckgo", "result_urls": [], "attempts": []}
+            return {"backend": "wikipedia_api", "result_urls": ["https://example.org/a"], "attempts": []}
+
+        def read(url, *, backends):
+            return {"backend": "direct", "content": "Evidence text"}
+
+        with (
+            patch.object(module, "search_web_with_fallback", side_effect=search),
+            patch.object(module, "read_web_page_with_fallback", side_effect=read),
+        ):
+            return module.acquire_plan(path, force=force)
+
+    def test_second_round_without_a_source_gives_the_question_up(self):
+        path = self.two_question_plan()
+        first = self.acquire(path)
+        self.assertEqual(first["status"], "PARTIAL")
+        evidence = json.loads(Path(first["evidence"]).read_text(encoding="utf-8"))
+        self.assertEqual(evidence["unresolved_question_ids"], ["rq002"])
+        self.assertEqual(evidence["unsourced_question_ids"], [])
+        self.assertEqual(evidence["search_rounds"], {"q1": 1, "q2": 1, "rq002": 1})
+
+        second = self.acquire(path, force=True)
+        self.assertEqual(second["status"], "COMPLETE")
+        self.assertEqual(second["unsourced_questions"], 1)
+        evidence = json.loads(Path(second["evidence"]).read_text(encoding="utf-8"))
+        self.assertEqual(evidence["unresolved_question_ids"], [])
+        self.assertEqual(evidence["unsourced_question_ids"], ["rq002"])
+        self.assertEqual(evidence["search_rounds"], {"q1": 2, "q2": 2, "rq002": 2})
+
+    def test_a_changed_plan_starts_the_count_again(self):
+        path = self.two_question_plan()
+        self.acquire(path)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["research_questions"][1]["question"] = "How long does it really last?"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        again = self.acquire(path, force=True)
+        self.assertEqual(again["status"], "PARTIAL")
+        evidence = json.loads(Path(again["evidence"]).read_text(encoding="utf-8"))
+        self.assertEqual(evidence["search_rounds"]["rq002"], 1)
