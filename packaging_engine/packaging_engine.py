@@ -120,7 +120,14 @@ def build_package_request(
             "concept_gate": concept.get("concept_gate", {}),
         },
         "package_count_requested": int(config["packages_per_concept"]),
-        "allowed_format_intents": list(config["allowed_format_intents"]),
+        # A concept accepted after D-132 carries one resolved format; its
+        # packages must use it. Older "either" handoffs keep the full list.
+        "allowed_format_intents": (
+            [str(concept.get("format_intent"))]
+            if str(concept.get("format_intent") or "") in {"long_form", "short"}
+            and str(concept.get("format_intent")) in config["allowed_format_intents"]
+            else list(config["allowed_format_intents"])
+        ),
         "title_variations_per_format": int(config["title_variations_per_format"]),
         "title_angles": list(config["title_angles"]),
         "title_contracts": {
@@ -420,6 +427,13 @@ def validate_response(
             concept_id=concept_id,
             config=config,
         )
+        allowed_here = [str(value) for value in request.get("allowed_format_intents") or []]
+        package_format = str(package.get("format_intent", "")).strip()
+        if allowed_here and package_format and package_format not in allowed_here:
+            errors.append(
+                "format_intent must be the concept's resolved format: "
+                + ", ".join(allowed_here)
+            )
 
         package_id = str(package.get("package_id", "")).strip()
         if package_id and package_id in seen_ids:

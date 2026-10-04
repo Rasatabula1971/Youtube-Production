@@ -74,7 +74,7 @@ are built:
 | A2 | Stage completion and fallback policy (done, D-129) |
 | A3 | Concept pool of 15–25 and diverse finalists (done, D-130) |
 | A4 | Conditional research review (done, D-131) |
-| A5 | One resolved format |
+| A5 | One resolved format (done, D-132) |
 | A6 | Append-only analysis and research history |
 
 After that come packaging, then planning and budget, then production,

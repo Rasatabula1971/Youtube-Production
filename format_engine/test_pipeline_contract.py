@@ -166,7 +166,7 @@ def package_candidate() -> dict:
         "core_promise": "Explain why race brakes need conditions road brakes cannot.",
         "curiosity_gap": "Why does the obvious road-car solution fail?",
         "expected_payoff": "Viewer understands the engineering tradeoff.",
-        "format_intent": "either",
+        "format_intent": "long_form",
         "title_thumbnail_relationship": "Title asks why; thumbnail shows contrast.",
         "research_dependencies": [
             "Verify operating-temperature differences between race and road brakes."
@@ -251,19 +251,21 @@ class PipelineContractTests(unittest.TestCase):
             handoff["concepts"][0]["human_framing"]["drama"]["target"],
             6,
         )
+        # A concept generated as 'either' leaves the gate with one format (D-132).
+        self.assertEqual(handoff["concepts"][0]["format_intent"], "long_form")
+        resolution = handoff["concepts"][0]["format_resolution"]
+        self.assertEqual(resolution["requested_format_intent"], "either")
+        self.assertEqual(resolution["decided_by"], "DEFAULT")
         return handoff
 
     # ---- seam 4 → 5: Packaging Gate → Research ------------------------------
 
     def research_handoff(self, concept_handoff: dict) -> dict:
         engine_config = packaging_engine.load_config()
-        self.assertIn(
-            "either",
-            engine_config["allowed_format_intents"],
-            "packaging config must allow the 'either' intent the concept carries",
-        )
         concept = concept_handoff["concepts"][0]
         request = packaging_engine.build_package_request(concept, engine_config)
+        # Packages inherit the concept's resolved format.
+        self.assertEqual(request["allowed_format_intents"], ["long_form"])
         result = packaging_engine.validate_response(
             {
                 "concept_id": "c1",
@@ -313,7 +315,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(handoff["concept_count"], 1)
         packaged = handoff["concepts"][0]
         self.assertEqual(packaged["packaging"]["one_sentence_promise"], PROMISE)
-        self.assertEqual(packaged["packaging"]["format_intent"], "either")
+        self.assertEqual(packaged["packaging"]["format_intent"], "long_form")
         self.assertTrue(packaged["packaging"]["research_dependencies"])
         self.assertEqual(
             packaged["packaging"]["selected_titles"]["short"]["title"],
@@ -395,7 +397,8 @@ class PipelineContractTests(unittest.TestCase):
         _, verified = research_gate.apply_gate(draft, request, response, gate_config)
         self.assertEqual(verified["status"], "READY_FOR_STORY_SCRIPT")
         self.assertEqual(verified["unresolved_question_ids"], [])
-        self.assertEqual(verified["concept"]["packaging"]["format_intent"], "either")
+        self.assertEqual(verified["concept"]["packaging"]["format_intent"], "long_form")
+        self.assertEqual(verified["concept"]["format_intent"], "long_form")
         return verified
 
     # ---- seam 6 → 7: Script Gate → Format -----------------------------------
@@ -644,7 +647,15 @@ class PipelineContractTests(unittest.TestCase):
             ),
         ):
             final_summary = None
-            for fmt in ("long_form", "short"):
+            # One resolved format, so one script branch (D-132).
+            self.assertEqual(
+                story_script_engine.resolve_script_branches(
+                    story_plan["package"]["format_intent"],
+                    story_script_engine.load_script_psychology_config(),
+                ),
+                ["long_form"],
+            )
+            for fmt in ("long_form",):
                 request = story_script_engine.build_script_request(
                     story_plan,
                     story_plan_path,
@@ -717,10 +728,7 @@ class PipelineContractTests(unittest.TestCase):
         approved_path = Path(final_summary["approved_script"])
         self.assertTrue(approved_path.exists())
         bundle = json.loads(approved_path.read_text(encoding="utf-8"))
-        self.assertEqual(
-            sorted(bundle["branch_scripts"]),
-            ["long_form", "short"],
-        )
+        self.assertEqual(sorted(bundle["branch_scripts"]), ["long_form"])
         return approved_path
 
 
@@ -734,8 +742,8 @@ class PipelineContractTests(unittest.TestCase):
         request = format_engine.build_format_request(
             approved, approved_script_path, config
         )
-        # 'either' must fan out into two separate production branches.
-        self.assertEqual(request["required_branches"], ["long_form", "short"])
+        # One resolved format reaches Format as one production branch.
+        self.assertEqual(request["required_branches"], ["long_form"])
         # The promise has now crossed four stages untouched.
         self.assertEqual(request["package"]["one_sentence_promise"], PROMISE)
         self.assertEqual(request["package"]["selected_titles"], {})
@@ -744,17 +752,14 @@ class PipelineContractTests(unittest.TestCase):
             "INTERNAL_WORKING_TITLE",
         )
         self.assertEqual(
-            request["branch_story_packages"]["short"]["title"],
+            request["branch_story_packages"]["long_form"]["title"],
             "Why Racing Brakes Behave Backwards",
         )
         self.assertEqual(
             request["script_section_ids_by_branch"]["long_form"],
             ["lf1", "lf2", "lf3"],
         )
-        self.assertEqual(
-            request["script_section_ids_by_branch"]["short"],
-            ["sh1", "sh2", "sh3"],
-        )
+        self.assertNotIn("short", request["script_section_ids_by_branch"])
         # This is the hash the Experiment UI uses to decide the request is current.
         self.assertEqual(
             request["request_provenance"]["approved_script_sha256"],
@@ -792,23 +797,10 @@ class PipelineContractTests(unittest.TestCase):
                         beat("lf4", "payoff", "Heat as target.", ["lf3"], claim_ids),
                     ],
                 },
-                {
-                    "format": "short",
-                    "duration_intent_seconds": 45,
-                    "promise_delivery": "One counterintuitive fact, fast.",
-                    "payoff": "Viewer leaves with the single mechanism.",
-                    "beats": [
-                        beat("sh1", "cold open", "State the claim.", ["sh1"], claim_ids[:1]),
-                        beat("sh2", "proof", "One visual.", ["sh2"], claim_ids[:1]),
-                        beat("sh3", "close", "Restate in a line.", ["sh3"], claim_ids),
-                    ],
-                },
             ],
         }
         validation = format_engine.validate_format_response(response, request)
         self.assertTrue(validation["valid"], validation["errors"])
-        self.assertFalse(validation["branch_separation"]["identical"])
-        self.assertFalse(validation["branch_separation"]["truncation"])
 
         plan = {
             **response,
@@ -870,8 +862,8 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(approved_plan["concept_id"], "c1")
         self.assertEqual(approved_plan["package"]["one_sentence_promise"], PROMISE)
         self.assertEqual(
-            sorted(branch["format"] for branch in approved_plan["branches"]),
-            ["long_form", "short"],
+            [branch["format"] for branch in approved_plan["branches"]],
+            ["long_form"],
         )
 
     def test_format_stage_refuses_a_script_without_format_intent(self):

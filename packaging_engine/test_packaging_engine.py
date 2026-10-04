@@ -193,6 +193,21 @@ class PackagingEngineTests(unittest.TestCase):
         self.assertEqual(len(result["accepted"]), 1)
         self.assertEqual(len(result["rejected"]), 0)
 
+    def test_packages_must_use_the_concept_resolved_format(self):
+        # D-132: an accepted concept carries one format; its packages follow it.
+        request = build_package_request(self.concept, self.config)
+        self.assertEqual(request["allowed_format_intents"], ["long_form"])
+        package = self.valid_package()
+        package["format_intent"] = "either"
+        result = validate_response({"concept_id": "c1", "packages": [package]}, request, self.config)
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertIn(
+            "format_intent must be the concept's resolved format: long_form",
+            result["rejected"][0]["errors"],
+        )
+        legacy = build_package_request({**self.concept, "format_intent": "either"}, self.config)
+        self.assertEqual(legacy["allowed_format_intents"], self.config["allowed_format_intents"])
+
     def test_request_preserves_viewer_problem_and_gap(self):
         request = build_package_request(
             self.concept,

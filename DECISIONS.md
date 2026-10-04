@@ -3819,3 +3819,44 @@ wording needs care, or risk is elevated.
   clearance costs more than one extra human decision, so the thresholds lean
   towards review. They can be loosened in config once real runs show how
   often strong claims are held back.
+
+
+## D-132 — One resolved format per production
+
+**Status:** Accepted (vision: early Short / long-form decision; correction A5 of D-128)
+
+**Context.** A concept could be generated with `format_intent: either`, and
+that value travelled unchanged to Story / Script and Format, which expanded it
+into two script branches and two production branches. One accepted concept
+therefore became two videos to write, review and produce, although the vision
+makes the Short / long-form decision early and each production makes one
+video.
+
+**Decision.**
+- **Resolution at the Concept Gate.** `transformation_engine/format_resolution.py`
+  resolves every accepted concept to `long_form` or `short`, in this order:
+  - the format the human chose when accepting;
+  - the concept's own single format;
+  - for `either`, `either_default_format` in `concept_gate_config.json`
+    (long-form).
+- **Record.** The research handoff carries the resolved `format_intent` and a
+  `format_resolution` record: the format, what was requested, `decided_by`
+  (HUMAN, CONCEPT or DEFAULT) and the reason. A format can only accompany
+  ACCEPT.
+- **Review UI.** An `either` concept shows "Accept as long-form" and "Accept
+  as Short" in place of a single Accept.
+- **Packaging.** A packaging request for a resolved concept allows only that
+  format, and a package naming another format is rejected.
+- **Downstream.** Story / Script and Format are unchanged. They now receive
+  one format and so write and plan one branch.
+
+**Consequences.**
+- A new production makes exactly one video, and the second script, its review
+  and its production work are no longer spent on a format nobody chose.
+- Generation is unchanged. Concepts may still be marked `either`, which
+  records that the idea fits both formats; the choice happens at acceptance.
+- Productions accepted before this change keep `either` in their handoff and
+  can finish with two branches. The `either` mappings remain in the script and
+  format configs for them only.
+- Making the other format from the same idea is a separate decision: accept
+  the concept again or save the idea, rather than an automatic second branch.
