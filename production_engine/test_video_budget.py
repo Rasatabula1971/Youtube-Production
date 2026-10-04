@@ -89,6 +89,22 @@ class VideoBudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "category"):
             budget.reserve(video="a:b", category="snacks", ref="x", amount_usd=1)
 
+    def test_nan_and_infinity_never_reach_the_ledger(self):
+        for bad in (float("nan"), float("inf"), -1, "abc", True):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(ValueError, "US dollars"):
+                    budget.reserve(video="v:f", category="visual", ref="x", amount_usd=bad)
+                with self.assertRaisesRegex(ValueError, "US dollars"):
+                    budget.record_actual(video="v:f", category="visual", ref="x", total_usd=bad)
+        self.assertEqual(budget.summary("v:f")["committed_usd"], 0)
+
+    def test_a_corrupt_ledger_amount_blocks_rather_than_loosens(self):
+        budget.LEDGER_FILE.write_text(
+            json.dumps({"video_id": "v:f", "category": "visual", "ref": "x", "event": "RESERVE", "amount_usd": "NaN"}) + "\n"
+        )
+        with self.assertRaisesRegex(ValueError, "ceiling"):
+            budget.reserve(video="v:f", category="visual", ref="y", amount_usd=1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -126,6 +126,54 @@ class NarrationDispatchTests(unittest.TestCase):
         ledger = dispatch.read_jsonl(self.root / "video_budget_ledger.jsonl")
         self.assertEqual(ledger[-1]["event"], "ACTUAL")
 
+    def test_failed_dispatches_count_toward_spend_and_attempts(self):
+        def flaky(segment, **kwargs):
+            if segment["segment_id"] == "b2":
+                raise ValueError("synthetic provider failure")
+            return self.fake(segment, **kwargs)
+
+        for _ in range(4):
+            try:
+                dispatch.dispatch(concept_id="concept-1", format="long_form", adapters={"HTTP_TTS_JSON": flaky})
+            except ValueError:
+                pass
+        # b1 was paid for three times (the approved 1 + 2 regenerations); a
+        # fourth call is refused instead of paying again.
+        self.assertEqual(sum(c[0] == "b1" for c in self.calls), 3)
+        paid = sum(e["cost_usd"] for e in dispatch.read_jsonl(dispatch.HISTORY_FILE))
+        ledger = dispatch.read_jsonl(self.root / "video_budget_ledger.jsonl")
+        self.assertAlmostEqual(ledger[-1]["amount_usd"], round(paid, 4), places=4)
+        with self.assertRaisesRegex(ValueError, "all 3 approved attempts"):
+            self.run_dispatch()
+
+    def test_concurrent_dispatches_cannot_both_pass_the_worst_case_check(self):
+        import threading
+
+        self.config["provider_adapter"]["price_per_1000_characters_usd"] = 80.0  # one full render fits, two do not
+        gate = threading.Event()
+
+        def slow(segment, **kwargs):
+            gate.wait(timeout=0.2)
+            return self.fake(segment, **kwargs)
+
+        outcomes = []
+
+        def call():
+            try:
+                dispatch.dispatch(concept_id="concept-1", format="long_form", adapters={"HTTP_TTS_JSON": slow})
+                outcomes.append("ok")
+            except ValueError as exc:
+                outcomes.append(str(exc))
+
+        threads = [threading.Thread(target=call) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        gate.set()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(outcomes.count("ok"), 1)
+        self.assertEqual(len(self.calls), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

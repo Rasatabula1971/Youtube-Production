@@ -151,3 +151,27 @@ class ProviderTests(PipelineTestCase):
         self.assertEqual(json.loads(request.data)["n"], 1)
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
         self.assertEqual(result[0]["bytes"], PNG)
+
+    def test_provider_image_urls_must_be_https(self):
+        body = {"data": [{"url": "file:///etc/hostname"}]}
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return json.dumps(body).encode()
+
+        settings = self.config["providers"]["openai_compatible"]
+        with patch.object(images.urllib.request, "urlopen", return_value=Response()) as urlopen:
+            with self.assertRaisesRegex(ValueError, "non-https"):
+                images.openai_compatible_images("a prompt", count=1, settings=settings)
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_nan_maximum_cost_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "maximum cost"):
+            self.generate("nan")
+        self.assertEqual(self.calls, [])

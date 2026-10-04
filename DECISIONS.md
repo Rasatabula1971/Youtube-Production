@@ -4232,3 +4232,46 @@ must choose the final generated asset.
   provider is chosen and given an adapter, moving shots are still made
   outside and registered by hand.
 - Nothing is called until the human chooses and configures a provider.
+
+
+## D-141 — Paid dispatch hardening
+
+**Status:** Accepted (fixes found by offline reproduction probes against
+D-135 to D-140)
+
+**Context.** Offline probes reproduced five ways the paid steps could spend
+more than authorized, or trust input they should not:
+1. After failed narration dispatches, a retry forgot the money already paid
+   and restarted attempt counts. Segment b1 was paid five times against
+   three approved attempts, and the ledger understated spend.
+2. Two simultaneous visual generations both passed the shot's authorized
+   maximum check, spending US$2.00 against US$1.50.
+3. A variant generated for an earlier version of a request (a different
+   brief) could still be chosen as the shot's asset.
+4. A NaN amount made every later budget comparison false. One NaN
+   reservation let a US$100 reservation through a US$10 ceiling.
+5. The images adapter fetched any `url` in the provider's response,
+   including `file://`, which reads local files.
+
+**Decision.**
+1. **Narration accounting.** Narration dispatch counts every dispatch under
+   the current spend approval: money paid and per-segment calls, failed
+   batches included. The worst-case check and attempt policy use those
+   totals.
+2. **Locks.** Narration dispatch (per video) and visual generation (per
+   shot) run under a named lock, so check, pay and record are atomic.
+3. **Variant binding.** Generated variants are bound to the request's hash.
+   Only variants of the current request are shown or can be chosen.
+4. **Money values.** `video_budget.money` accepts only finite, non-negative
+   numbers, and every budget call and thumbnail cost input uses it. A
+   corrupt ledger amount counts as infinite, so it blocks further spend
+   instead of loosening the budget.
+5. **URLs.** Provider image URLs are fetched only over `https`. Every
+   configured provider endpoint (thumbnail, visual, narration) must be
+   `https://` before the provider is ready.
+
+**Consequences.**
+- Each probe is now a regression test that fails on the old code.
+- A narration whose segments used up their attempts in failed batches needs
+  a new spend approval, which resets the count, rather than paying again
+  silently.

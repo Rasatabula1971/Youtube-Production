@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from pipeline_integrity import append_jsonl, read_jsonl
+from pipeline_integrity import append_jsonl, named_lock, read_jsonl
 import video_budget
 from narration_render import (
     CONFIG_FILE,
@@ -45,6 +45,7 @@ from narration_render import (
     load_config,
     provider_contract_verified,
     safe_slug,
+    sha256_file,
 )
 from narration_render_import import (
     current_authorization,
@@ -144,6 +145,9 @@ def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
         problems.append(
             "The narration provider contract is not verified (provider_contract in narration_render_config.json)."
         )
+    endpoint = str((config.get("provider_contract") or {}).get("endpoint") or "")
+    if endpoint and not endpoint.startswith("https://"):
+        problems.append("The provider endpoint must be an https:// URL.")
     if str(settings.get("kind") or "") not in ADAPTERS:
         problems.append("No narration provider adapter is configured (provider_adapter.kind).")
     price = settings.get("price_per_1000_characters_usd")
@@ -180,6 +184,36 @@ def dispatch(
     adapters: dict[str, Callable[..., dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     concept_id, fmt = str(concept_id or "").strip(), str(format or "").strip()
+    # One dispatch per video at a time: two clicks must not both pass the
+    # worst-case check before either has paid.
+    with named_lock(f"narration_dispatch:{artifact_key(concept_id, fmt)}"):
+        return _dispatch(concept_id, fmt, segment_ids, reviewer, adapters)
+
+
+def _paid_so_far(key: str, approval_sha256: str) -> tuple[float, dict[str, int]]:
+    """Money and per-segment calls already paid under the current spend approval.
+
+    Failed dispatches count: the provider was paid for every segment it
+    returned before the failure, whether or not the batch was registered.
+    """
+    paid = 0.0
+    calls: dict[str, int] = {}
+    for event in _history(key):
+        if event.get("spend_approval_sha256") != approval_sha256:
+            continue
+        paid += float(event.get("cost_usd") or 0)
+        for segment_id in event.get("rendered", []) or []:
+            calls[str(segment_id)] = calls.get(str(segment_id), 0) + 1
+    return round(paid, 4), calls
+
+
+def _dispatch(
+    concept_id: str,
+    fmt: str,
+    segment_ids: Any,
+    reviewer: str,
+    adapters: dict[str, Callable[..., dict[str, Any]]] | None,
+) -> dict[str, Any]:
     config = load_config(CONFIG_FILE)
     status = provider_status(config)
     if not status["ready"]:
@@ -187,7 +221,10 @@ def dispatch(
     authorization = current_authorization(concept_id, fmt)
     if authorization is None:
         raise ValueError("The Narration Spend Gate has not approved the current request for this video")
-    _request_path, request, _estimate_path, _estimate, _spend_path, spend = authorization
+    _request_path, request, _estimate_path, _estimate, spend_path, spend = authorization
+    approval_sha256 = sha256_file(spend_path)
+    key = artifact_key(concept_id, fmt)
+    paid, calls = _paid_so_far(key, approval_sha256)
     ceiling = float((spend.get("spend_gate") or {}).get("worst_case_estimate_usd") or 0)
     planned = [s for s in request.get("segments", []) if isinstance(s, dict)]
     previous = current_result(concept_id, fmt)
@@ -208,13 +245,15 @@ def dispatch(
     max_attempts = int(request.get("max_attempts_per_segment") or 1)
     attempts = {}
     for segment in targets:
-        prior = int((previous_segments.get(str(segment["segment_id"])) or {}).get("attempt") or 0)
+        segment_id = str(segment["segment_id"])
+        registered_attempt = int((previous_segments.get(segment_id) or {}).get("attempt") or 0)
+        prior = max(registered_attempt, calls.get(segment_id, 0))
         if prior + 1 > max_attempts:
             raise ValueError(f"{segment['segment_id']} has used all {max_attempts} approved attempts")
         attempts[str(segment["segment_id"])] = prior + 1
 
     settings = config["provider_adapter"]
-    spent_before = float((previous_result or {}).get("actual_cost_usd") or 0)
+    spent_before = max(paid, float((previous_result or {}).get("actual_cost_usd") or 0))
     estimate = estimate_usd(targets, float(settings["price_per_1000_characters_usd"]))
     if spent_before + estimate > ceiling:
         raise ValueError(
@@ -222,7 +261,6 @@ def dispatch(
             f"spent would pass the approved worst case ${ceiling:.2f}"
         )
 
-    key = artifact_key(concept_id, fmt)
     stamp = now()
     staging = STAGING_DIR / key / stamp.replace(":", "-")
     staging.mkdir(parents=True, exist_ok=True)
@@ -254,6 +292,7 @@ def dispatch(
         append_jsonl(HISTORY_FILE, {
             "recorded_at": now(), "key": key, "concept_id": concept_id, "format": fmt,
             "event": "FAILED", "rendered": sorted(rendered), "cost_usd": round(cost, 4),
+            "spend_approval_sha256": approval_sha256,
             "error": str(exc), "reviewer": reviewer,
         })
         if cost:
@@ -282,6 +321,7 @@ def dispatch(
     append_jsonl(HISTORY_FILE, {
         "recorded_at": now(), "key": key, "concept_id": concept_id, "format": fmt,
         "event": "RENDERED", "rendered": sorted(rendered), "attempts": attempts,
+        "spend_approval_sha256": approval_sha256,
         "cost_usd": round(cost, 4), "total_cost_usd": total, "provider_job_id": job_id, "reviewer": reviewer,
     })
     return result

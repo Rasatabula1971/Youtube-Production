@@ -25,6 +25,7 @@ recorded, because it has already happened; an overrun shows as such.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,10 +43,28 @@ CATEGORIES = ("narration", "visual", "thumbnail_image", "sound")
 _LOCK = named_lock("video_budget")
 
 
+def money(value: Any, *, label: str = "amount") -> float:
+    """A finite, non-negative US-dollar amount; NaN and infinity are refused.
+
+    NaN compares false with everything, so one NaN in a sum would silently
+    disable every ceiling check that follows.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be a number of US dollars")
+    try:
+        amount = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a number of US dollars") from exc
+    if not math.isfinite(amount) or amount < 0:
+        raise ValueError(f"{label} must be a finite, non-negative number of US dollars")
+    return round(amount, 4)
+
+
 def load_config() -> dict[str, Any]:
     config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     for key in ("target_usd", "ceiling_usd"):
-        if not isinstance(config.get(key), (int, float)) or config[key] < 0:
+        value = config.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
             raise ValueError(f"Video budget config needs a non-negative {key}")
     if config["target_usd"] > config["ceiling_usd"]:
         raise ValueError("The budget target cannot exceed the ceiling")
@@ -78,7 +97,13 @@ def _items(video: str, ledger: Path | None = None) -> dict[tuple[str, str], dict
         key = (str(event.get("category") or ""), str(event.get("ref") or ""))
         item = items.setdefault(key, {"reserved": 0.0, "actual": 0.0})
         kind = event.get("event")
-        amount = float(event.get("amount_usd") or 0)
+        try:
+            amount = float(event.get("amount_usd") or 0)
+        except (TypeError, ValueError):
+            amount = math.inf
+        if not math.isfinite(amount) or amount < 0:
+            # A corrupt line must never loosen the budget: it blocks instead.
+            amount = math.inf
         if kind == "RESERVE":
             item["reserved"] = amount
         elif kind == "RELEASE":
@@ -146,9 +171,7 @@ def reserve(
     """Authorize up to ``amount_usd`` for one item; refused above the ceiling."""
     with _LOCK:
         config = load_config()
-        amount = round(float(amount_usd), 4)
-        if amount < 0:
-            raise ValueError("A reservation cannot be negative")
+        amount = money(amount_usd, label="A reservation")
         items = _items(video, ledger)
         current = items.get((category, ref), {"reserved": 0.0, "actual": 0.0})
         others = sum(_exposure(item) for key, item in items.items() if key != (category, ref))
@@ -177,9 +200,7 @@ def record_actual(
 ) -> dict[str, Any]:
     """Record the total actually spent on one item (money already spent)."""
     with _LOCK:
-        amount = round(float(total_usd), 4)
-        if amount < 0:
-            raise ValueError("Actual cost cannot be negative")
+        amount = money(total_usd, label="Actual cost")
         current = _items(video, ledger).get((category, ref), {}).get("actual")
         if current is None or round(current, 4) != amount:
             _record("ACTUAL", video=video, category=category, ref=ref, amount=amount, actor=actor, note=note, ledger=ledger)

@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from pipeline_integrity import append_jsonl, read_jsonl
+from pipeline_integrity import append_jsonl, named_lock, read_jsonl
 import video_budget
 from visual_acquisition import load_json, safe_slug
 from visual_generated_asset_import import (
@@ -86,6 +86,8 @@ def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     for key, label in (("endpoint", "endpoint"), ("model", "model"), ("license", "licence terms")):
         if not str(settings.get(key) or "").strip():
             problems.append(f"The provider {label} is not set.")
+    if str(settings.get("endpoint") or "").strip() and not str(settings.get("endpoint")).startswith("https://"):
+        problems.append("The provider endpoint must be an https:// URL.")
     price = settings.get("price_per_image_usd")
     if not isinstance(price, (int, float)) or price < 0:
         problems.append("The price per image is not set; it is never guessed.")
@@ -150,17 +152,32 @@ def _request_path(request_file: Any) -> Path:
     return path
 
 
+def _request_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def generate(
     *,
     request_file: Any,
     reviewer: str = "",
     adapters: dict[str, Callable[..., list[dict[str, Any]]]] | None = None,
 ) -> dict[str, Any]:
+    path = _request_path(request_file)
+    # One generation per shot at a time: two clicks must not both pass the
+    # authorized-maximum check before either has paid.
+    with named_lock(f"visual_dispatch:{path.name}"):
+        return _generate(path, reviewer, adapters)
+
+
+def _generate(
+    path: Path,
+    reviewer: str,
+    adapters: dict[str, Callable[..., list[dict[str, Any]]]] | None,
+) -> dict[str, Any]:
     config = load_config()
     status = provider_status(config)
     if not status["ready"]:
         raise ValueError("Premium visual generation is not available: " + " ".join(status["problems"]))
-    path = _request_path(request_file)
     request = _assert_current_request(path)
     key = _shot_key(request)
     settings = config["providers"][status["active_provider"]]
@@ -189,7 +206,7 @@ def generate(
         stored.append({"candidate_id": digest[:16], "file": f"{digest[:16]}{suffix}", "provider_job_id": image.get("provider_job_id")})
     append_jsonl(HISTORY_FILE, {
         "recorded_at": now(), "event": "GENERATED", "shot_key": key, "request_file": str(path),
-        "request_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "request_sha256": _request_sha256(path),
         "provider": status["active_provider"], "model": settings.get("model"),
         "prompt": prompt, "cost_usd": cost, "candidates": stored, "reviewer": reviewer,
     })
@@ -205,7 +222,12 @@ def choose(*, request_file: Any, candidate_id: str) -> dict[str, Any]:
     path = _request_path(request_file)
     request = _assert_current_request(path)
     key = _shot_key(request)
+    current_sha = _request_sha256(path)
     for event in reversed(_events(key)):
+        # A variant made for an earlier version of the request (another brief
+        # or authorization) cannot become this shot's asset.
+        if event.get("request_sha256") != current_sha:
+            continue
         for candidate in event.get("candidates", []):
             if candidate.get("candidate_id") == candidate_id:
                 return register(
@@ -223,9 +245,11 @@ def choose(*, request_file: Any, candidate_id: str) -> dict[str, Any]:
 def shot_view(path: Path) -> dict[str, Any]:
     request = load_json(path)
     key = _shot_key(request)
+    current_sha = _request_sha256(path)
     candidates = [
         {**candidate, "provider": event.get("provider"), "generated_at": event.get("recorded_at")}
         for event in _events(key)
+        if event.get("request_sha256") == current_sha
         for candidate in event.get("candidates", [])
         if (CANDIDATES_DIR / key / str(candidate.get("file"))).is_file()
     ]

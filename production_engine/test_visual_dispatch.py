@@ -112,6 +112,37 @@ class VisualDispatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "STALE"):
             self.generate()
 
+    def test_concurrent_generations_cannot_both_pass_the_authorization(self):
+        import concurrent.futures
+
+        payload = json.loads(self.request_path.read_text())
+        payload["spend_authorization"]["max_cost_usd"] = 1.5
+        self.request_path.write_text(json.dumps(payload))
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            futures = [pool.submit(self.generate) for _ in range(2)]
+            outcomes = []
+            for future in futures:
+                try:
+                    future.result(10)
+                    outcomes.append("ok")
+                except ValueError:
+                    outcomes.append("refused")
+        self.assertEqual(sorted(outcomes), ["ok", "refused"])
+        self.assertEqual(dispatch.spent_on_shot("c1.short.shot-001"), 1.0)
+
+    def test_variants_from_an_earlier_request_cannot_be_chosen(self):
+        old = self.generate()["candidates"][0]["candidate_id"]
+        request = json.loads(self.request_path.read_text())
+        request["generation_brief"]["subject_and_action"] = "A turbine blade cross section"
+        self.request_path.write_text(json.dumps(request))
+        self.assertEqual(dispatch.shot_view(self.request_path)["candidates"], [])
+        with self.assertRaisesRegex(ValueError, "Unknown generated variant"):
+            dispatch.choose(request_file=self.request_path, candidate_id=old)
+
+    def test_non_https_endpoint_is_not_ready(self):
+        self.config["providers"]["openai_compatible"]["endpoint"] = "file:///etc/passwd"
+        self.assertIn("https", " ".join(dispatch.provider_status(self.config)["problems"]))
+
 
 if __name__ == "__main__":
     unittest.main()
