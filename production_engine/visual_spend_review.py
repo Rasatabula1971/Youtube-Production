@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+import video_budget
 from visual_acquisition import load_json, sha256_file
 from visual_gap_planner import gap_plan_is_current
 
@@ -498,6 +499,24 @@ def apply_action(
             raise ValueError(
                 "Visual authorization total would exceed the configured $"
                 + f"{workflow_cap:.2f} USD hard cap"
+            )
+
+        # One budget per video (D-136): the authorization is a reservation
+        # against this video's ceiling; anything else releases it.
+        budget_video = video_budget.video_id(plan.get("concept_id"), plan.get("format"))
+        if decision == "AUTHORIZE_GENERATION":
+            video_budget.reserve(
+                video=budget_video,
+                category="visual",
+                ref=f"shot:{shot_id}",
+                amount_usd=round(requested_cost, 2),
+                note=note.strip(),
+                ledger=video_budget.ledger_in(GAPS.parent),
+            )
+        else:
+            video_budget.release(
+                video=budget_video, category="visual", ref=f"shot:{shot_id}", note=decision,
+                ledger=video_budget.ledger_in(GAPS.parent),
             )
 
         atomic_write_json(spend_path, review)

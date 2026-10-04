@@ -19,6 +19,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
+import video_budget
 from narration_render import (
     ESTIMATES_DIR,
     OUTPUT_DIR,
@@ -289,7 +290,17 @@ def apply_payload(
         f"{artifact_key(request['concept_id'], request['format'])}"
         ".approved_narration_spend.json"
     )
+    budget_video = video_budget.video_id(request["concept_id"], request["format"])
     if decision == "ACCEPT":
+        # The approved worst case is this video's narration reservation (D-136).
+        video_budget.reserve(
+            video=budget_video,
+            category="narration",
+            ref="narration",
+            amount_usd=float(request["worst_case_estimate_usd"]),
+            note="Narration spend approved at the worst-case estimate",
+            ledger=video_budget.ledger_in(APPROVED_DIR.parent),
+        )
         estimate = load_json(source)
         payload = {
             **estimate,
@@ -302,8 +313,13 @@ def apply_payload(
         APPROVED_DIR.mkdir(parents=True, exist_ok=True)
         atomic_write_json(approved_path, payload)
         summary["approved_narration_spend"] = str(approved_path)
-    elif approved_path.exists():
-        approved_path.unlink()
+    else:
+        video_budget.release(
+            video=budget_video, category="narration", ref="narration", note=decision,
+            ledger=video_budget.ledger_in(APPROVED_DIR.parent),
+        )
+        if approved_path.exists():
+            approved_path.unlink()
 
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(SUMMARY_FILE, summary)

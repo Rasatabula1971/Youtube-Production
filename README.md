@@ -53,7 +53,8 @@ audit found that these deviate from the vision and are being corrected first:
 - incomplete stages can advance and the Gemini fallback admits non-quota
   failures (both fixed by A2, D-129);
 - visual planning comes after narration;
-- budgets are split by stage rather than per video;
+- budgets are split by stage rather than per video (one ledger per video
+  since D-136);
 - reviewed history is not append-only everywhere (fixed for analysis and
   research by A6, D-133).
 

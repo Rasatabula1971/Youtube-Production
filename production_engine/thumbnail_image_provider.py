@@ -42,6 +42,11 @@ except ImportError:  # executed as a script from production_engine/
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
+try:
+    import video_budget
+except ImportError:  # imported as production_engine.thumbnail_image_provider
+    from production_engine import video_budget
+
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "thumbnail_image_config.json"
 PROJECT_ENV_FILE = HERE.parent / ".env"
@@ -306,10 +311,27 @@ def generate(
             f"the per-video cap ${config['per_video_cap_usd']}"
         )
 
+    budget_video = str(unit["video_id"])
+    budget_ref = f"thumbnail:{render_id}:{now()}"
+    # Reserve against the whole-video budget before any paid call (D-136).
+    video_budget.reserve(
+        video=budget_video, category="thumbnail_image", ref=budget_ref,
+        amount_usd=authorized, actor=reviewer, note="Thumbnail candidate generation",
+        ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent),
+    )
     prompt = build_prompt(unit)
     adapter = (adapters or ADAPTERS)[str(settings["kind"])]
-    images = adapter(prompt, count=count, settings=settings)
+    try:
+        images = adapter(prompt, count=count, settings=settings)
+    except Exception:
+        video_budget.release(video=budget_video, category="thumbnail_image", ref=budget_ref, note="provider call failed", ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent))
+        raise
     actual = round(float(settings["price_per_image_usd"]) * len(images), 4)
+    video_budget.record_actual(
+        video=budget_video, category="thumbnail_image", ref=budget_ref, total_usd=actual, actor=reviewer,
+        ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent),
+    )
+    video_budget.release(video=budget_video, category="thumbnail_image", ref=budget_ref, note="spent", ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent))
     manifest = load_manifest(render_id)
     record_base = {
         "origin": "GENERATED",
@@ -397,6 +419,13 @@ def import_candidate(
         },
     )
     _save(render_id, load_manifest(render_id), [record])
+    if cost:
+        video_budget.record_actual(
+            video=str(unit["video_id"]), category="thumbnail_image",
+            ref=f"import:{render_id}:{record['candidate_id']}", total_usd=cost, actor=reviewer,
+            note=f"Imported from {label}",
+            ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent),
+        )
     append_jsonl(
         ledger_path(),
         {

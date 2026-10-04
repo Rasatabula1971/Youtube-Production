@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+import video_budget
 from visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
@@ -138,6 +139,14 @@ def register(
     provider_name = str(provider or "").strip()
     if not provider_name:
         raise ValueError("provider is required")
+    video_budget.record_actual(
+        video=video_budget.video_id(request.get("concept_id"), request.get("format")),
+        category="visual",
+        ref=f"shot:{request.get('shot_id')}",
+        total_usd=cost,
+        note=f"Generated asset from {provider_name}",
+        ledger=video_budget.ledger_in(REGISTRY_DIR.parent),
+    )
 
     ASSET_DIR.mkdir(parents=True, exist_ok=True)
     REGISTRY_DIR.mkdir(parents=True, exist_ok=True)

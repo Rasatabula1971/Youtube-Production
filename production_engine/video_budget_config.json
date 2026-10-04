@@ -1,0 +1,6 @@
+{
+  "target_usd": 5.0,
+  "ceiling_usd": 10.0,
+  "confirmed_by_human": false,
+  "note": "Proposed per-video budget from the vision; set confirmed_by_human to true once you confirm it."
+}

@@ -128,3 +128,16 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
         if isinstance(value, dict):
             records.append(value)
     return records
+
+
+_NAMED_LOCKS: dict[str, Any] = {}
+
+
+def named_lock(name: str) -> Any:
+    """One process-wide re-entrant lock per name, shared however a module is imported."""
+    import threading
+
+    lock = _NAMED_LOCKS.get(name)
+    if lock is None:
+        lock = _NAMED_LOCKS.setdefault(name, threading.RLock())
+    return lock
