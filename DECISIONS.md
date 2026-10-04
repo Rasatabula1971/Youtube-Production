@@ -3772,3 +3772,50 @@ both reach the Concept Gate, and one mechanism could fill every place.
 pool is under 15 needs more than one request per mechanism, a larger change
 to request identity. Until then the shortfall is visible, and the Concept
 Gate's rework action is the way to ask for more.
+
+
+## D-131 — Conditional research review
+
+**Status:** Accepted (vision §32; correction A4 of D-128)
+
+**Context.** Every research claim waited for a human decision, even when two
+independent sources quoted it verbatim. Vision §32 locks research review as
+conditional: a claim may progress automatically when the evidence is strong,
+the sources are reliable, nothing meaningful conflicts and the claim is not
+high-risk. Human review is required when evidence conflicts or is weak, the
+wording needs care, or risk is elevated.
+
+**Decision.**
+- **Policy.** `research_engine/evidence_policy.py` classifies each claim, on
+  top of the existing verbatim quote verification, as AUTO_CLEARED,
+  REVIEW_REQUIRED or BLOCKED.
+  - It auto-clears only with supporting quotes from at least two independent
+    websites and only primary, secondary, dataset or documentation sources.
+  - Any of these sends the claim to a human: a contradicting or qualifying
+    source, CONFLICTED coverage, absolute wording, a figure missing from
+    every supporting quote, or an elevated-risk subject (health, safety,
+    death, legal, money).
+  - BLOCKED means no traceable supporting quote; such a claim can only be
+    reworked or rejected.
+- **Wiring.** Prepare records an automatic ACCEPT, with
+  `decided_by: EVIDENCE_POLICY` and the reasons, for each cleared claim.
+  - It never replaces a human or carried-forward decision, and drops and
+    recomputes its own decisions on every prepare.
+  - The gate re-checks each automatic acceptance before writing the verified
+    package, and records `decided_by` and `policy_reasons` on the claim.
+- **Review UI.** Cleared claims leave the pending list. Shown with decided
+  items, they carry a "Cleared automatically" badge and their reasons. Every
+  remaining claim shows "Why this needs you".
+- **Configuration.** Thresholds are in `research_gate_config.json` under
+  `evidence_policy`; `enabled: false` restores human review of every claim.
+
+**Consequences.**
+- When every claim clears and every research question is answered, research
+  completes without stopping, and automation continues to Story / Script.
+- The decision fingerprint adds `decided_by` only for automatic decisions, so
+  packages a human decided before this change keep their fingerprints and
+  their downstream work stays current.
+- The policy is deliberately lexical and conservative. A wrong automatic
+  clearance costs more than one extra human decision, so the thresholds lean
+  towards review. They can be loosened in config once real runs show how
+  often strong claims are held back.

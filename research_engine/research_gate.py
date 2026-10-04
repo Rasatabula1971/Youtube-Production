@@ -20,8 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from evidence_policy import AUTO_CLEARED, evaluate_claim, policy_settings
+
 HERE = Path(__file__).resolve().parent
 HUMAN_REWORK_ORIGIN = "human_rework"
+POLICY_DECIDER = "EVIDENCE_POLICY"
 CONFIG_FILE = HERE / "research_gate_config.json"
 
 OUTPUT_DIR = HERE / "output"
@@ -265,12 +268,34 @@ def validate_decisions(
                 f"Accepted conflicted claim {claim_id} requires a resolution note"
             )
 
+        decided_by = str(decision.get("decided_by") or "HUMAN").strip().upper()
+        if decided_by not in {"HUMAN", POLICY_DECIDER}:
+            raise ValueError(f"Unknown decided_by for {claim_id}: {decided_by!r}")
+        policy_reasons: list[str] = []
+        if decided_by == POLICY_DECIDER:
+            # The evidence policy may only accept, and only a claim it clears
+            # now; it can never reject or overrule a human (D-131).
+            evaluation = evaluate_claim(item_lookup[claim_id], policy_settings(config))
+            if (
+                value != "ACCEPT"
+                or not policy_settings(config).get("enabled", True)
+                or evaluation["classification"] != AUTO_CLEARED
+            ):
+                raise ValueError(
+                    f"Automatic acceptance of {claim_id} no longer holds; "
+                    "run Prepare Research Gate again"
+                )
+            policy_reasons = evaluation["reasons"]
+
         mapped[claim_id] = {
             "claim_id": claim_id,
             "decision": value,
             "criteria": normalized,
             "note": note,
+            "decided_by": decided_by,
         }
+        if policy_reasons:
+            mapped[claim_id]["policy_reasons"] = policy_reasons
 
     missing = sorted(expected - set(mapped))
     if missing:
@@ -325,9 +350,12 @@ def apply_gate(
             "decision": decision["decision"],
             "criteria": decision["criteria"],
             "note": decision["note"],
-            "reviewer": reviewer,
+            "decided_by": decision["decided_by"],
+            "reviewer": reviewer if decision["decided_by"] == "HUMAN" else POLICY_DECIDER,
             "reviewed_at": reviewed_at,
         }
+        if decision.get("policy_reasons"):
+            claim["research_gate"]["policy_reasons"] = decision["policy_reasons"]
 
         if decision["decision"] == "ACCEPT":
             buckets["accepted"].append(claim)
@@ -425,9 +453,16 @@ def apply_gate(
             "reviewer": reviewer,
             "reviewed_at": reviewed_at,
             "accepted_claim_ids": sorted(accepted_claim_ids),
+            "auto_cleared_claim_ids": sorted(
+                claim_id
+                for claim_id, decision in mapped.items()
+                if decision["decided_by"] == POLICY_DECIDER
+            ),
         },
         "notes": [
-            "Verified means human-approved for this project's script use, not universal truth.",
+            "Verified means approved for this project's script use, not universal truth: "
+            "by a human, or automatically when the evidence policy cleared the claim "
+            "(research_gate.decided_by and policy_reasons say which and why).",
             "Only sources referenced by accepted claims are retained.",
             "The Story / Script Engine must stay within accepted claim wording and evidence scope.",
             "Waived research questions have no verified answer; the script must not state facts about them.",

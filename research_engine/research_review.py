@@ -17,9 +17,16 @@ if str(_INTEGRITY_ROOT) not in sys.path:
 
 from pipeline_integrity import atomic_write_json
 
+from evidence_policy import (
+    AUTO_CLEARED,
+    evaluate_claim,
+    policy_fingerprint,
+    policy_settings,
+)
 from research_gate import (
     DEFAULT_DRAFTS_DIR,
     HUMAN_REWORK_ORIGIN,
+    POLICY_DECIDER,
     REVIEW_REQUESTS_DIR,
     REVIEWED_DIR,
     SUMMARY_FILE,
@@ -99,6 +106,50 @@ def _preserved_decisions(
                 continue
             preserved[key] = saved
     return preserved
+
+
+def _apply_evidence_policy(
+    requests: list[dict[str, Any]],
+    decisions: dict[str, Any],
+    config: dict[str, Any],
+) -> None:
+    """Accept the claims the evidence policy clears; leave the rest to a human.
+
+    Conditional review (vision §32, D-131). Automatic decisions are recomputed
+    on every prepare, so a changed policy or claim never keeps a stale one. A
+    human or carried-forward decision is never replaced: the human always has
+    the last word, and can override an automatic acceptance at any time.
+    """
+    settings = policy_settings(config)
+    fingerprint = policy_fingerprint(settings)
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        for item in bundle["request"].get("items", []):
+            key = key_for(concept_id, str(item.get("claim_id") or ""))
+            existing = decisions.get(key)
+            if isinstance(existing, dict) and existing.get("decided_by") != POLICY_DECIDER:
+                continue
+            decisions.pop(key, None)
+            if not settings.get("enabled", True):
+                continue
+            evaluation = evaluate_claim(item, settings)
+            if evaluation["classification"] != AUTO_CLEARED:
+                continue
+            decisions[key] = {
+                "claim_id": str(item.get("claim_id") or ""),
+                "decision": "ACCEPT",
+                "criteria": {
+                    criterion: True for criterion in item.get("required_accept_criteria", [])
+                },
+                "note": "Cleared automatically: " + " ".join(evaluation["reasons"]),
+                "claim_fingerprint": claim_fingerprint(item),
+                "decided_by": POLICY_DECIDER,
+                "policy": {
+                    "classification": evaluation["classification"],
+                    "reasons": evaluation["reasons"],
+                    "fingerprint": fingerprint,
+                },
+            }
 
 
 def _original_questions(request: dict[str, Any]) -> dict[str, str]:
@@ -428,12 +479,14 @@ def prepare_state() -> dict[str, Any]:
         return {"status": "WAITING_FOR_DRAFT_RESEARCH_PACKAGES", "claims": []}
 
     previous = load_json(STATE_FILE) if STATE_FILE.exists() else {}
+    decisions = _preserved_decisions(requests, previous)
+    _apply_evidence_policy(requests, decisions, load_config())
     state = {
         "schema_version": "1.1",
         "status": "AWAITING_HUMAN_DECISION",
         "draft_hashes": drafts_hashes(),
         "reviewer": os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER),
-        "decisions": _preserved_decisions(requests, previous),
+        "decisions": decisions,
         "waived_questions": _preserved_waivers(requests, previous),
     }
     finalize_if_complete(state, requests)
@@ -473,6 +526,7 @@ def snapshot() -> dict[str, Any]:
         }
 
     decisions = state.get("decisions", {})
+    settings = policy_settings(load_config())
     claims = []
     for bundle in requests:
         request = bundle["request"]
@@ -490,10 +544,15 @@ def snapshot() -> dict[str, Any]:
                     "decision": decision.get("decision", "PENDING"),
                     "criteria_decisions": decision.get("criteria", {}),
                     "note": decision.get("note", ""),
+                    "decided_by": decision.get("decided_by") or (
+                        "HUMAN" if decision else None
+                    ),
+                    "evidence_policy": evaluate_claim(item, settings),
                 }
             )
 
     pending = sum(item["decision"] == "PENDING" for item in claims)
+    auto_cleared = sum(item["decided_by"] == POLICY_DECIDER for item in claims)
     verified_statuses = []
     current_concept_ids = {bundle["concept_id"] for bundle in requests}
     if VERIFIED_DIR.exists():
@@ -520,6 +579,8 @@ def snapshot() -> dict[str, Any]:
         "reviewer": state.get("reviewer", DEFAULT_REVIEWER),
         "claim_count": claim_count,
         "pending": pending,
+        "auto_cleared": auto_cleared,
+        "evidence_policy_enabled": bool(settings.get("enabled", True)),
         "claims": claims,
         "verified_packages": verified_statuses,
         "ready_for_story_script": ready_count,
@@ -533,6 +594,15 @@ def normalize_criteria(criteria: Any, required: list[str]) -> dict[str, bool]:
     return {criterion: criteria.get(criterion) is True for criterion in required}
 
 
+def _decision_identity(decision: dict[str, Any]) -> dict[str, Any]:
+    identity = {key: decision.get(key) for key in ("claim_id", "decision", "criteria", "note")}
+    # Only automatic decisions add a key, so fingerprints of packages decided
+    # by a human before D-131 are unchanged and their downstream work stays current.
+    if decision.get("decided_by"):
+        identity["decided_by"] = decision["decided_by"]
+    return identity
+
+
 def _decision_fingerprint(
     bundle: dict[str, Any],
     decisions: dict[str, Any],
@@ -542,10 +612,7 @@ def _decision_fingerprint(
     payload = {
         "draft_sha256": sha256_file(Path(bundle["draft_path"])),
         "decisions": [
-            {
-                key: decisions[key_for(concept_id, str(item["claim_id"]))].get(key)
-                for key in ("claim_id", "decision", "criteria", "note")
-            }
+            _decision_identity(decisions[key_for(concept_id, str(item["claim_id"]))])
             for item in bundle["request"].get("items", [])
         ],
         "waivers": waivers,

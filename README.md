@@ -47,7 +47,7 @@ Everything runs from the local browser UI (`experiment_ui/README.md`).
 **What is not finished.** No complete production has yet run end to end. The
 audit found that these deviate from the vision and are being corrected first:
 
-- research review is mandatory instead of exception-only;
+- research review is mandatory instead of exception-only (fixed by A4, D-131);
 - the concept pool was smaller than the 15–25 contract and finalists were not
   forced to be diverse (fixed by A3, D-130);
 - incomplete stages can advance and the Gemini fallback admits non-quota
@@ -73,7 +73,7 @@ are built:
 | A1 | Test isolation, and this status (done, D-128) |
 | A2 | Stage completion and fallback policy (done, D-129) |
 | A3 | Concept pool of 15–25 and diverse finalists (done, D-130) |
-| A4 | Conditional research review |
+| A4 | Conditional research review (done, D-131) |
 | A5 | One resolved format |
 | A6 | Append-only analysis and research history |
 
@@ -251,10 +251,12 @@ qualification without automatically labeling claims true.
 Real sources are gathered by `research_acquisition.py`, which tries Agent
 Reach/Exa first, then DuckDuckGo and Wikipedia, and reads pages through Jina.
 
-Only human-accepted claims can enter a verified research package. The package
-stays RESEARCH_INCOMPLETE until every original research question is covered by
-an accepted claim. Correction A4 makes this review exception-only: strong,
-uncontested evidence will clear automatically with a recorded reason.
+Only accepted claims can enter a verified research package. The package stays
+RESEARCH_INCOMPLETE until every original research question is covered by an
+accepted claim. Review is exception-only (A4, D-131): a claim with verified
+quotes from two independent reliable websites, no conflict, plain wording and
+no elevated risk is accepted automatically with its reasons recorded; every
+other claim waits for a human, who sees why.
 
 See `research_engine/RESEARCH_ENGINE.md` and
 `research_engine/RESEARCH_GATE.md`.

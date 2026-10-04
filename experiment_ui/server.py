@@ -4858,8 +4858,9 @@ def stage_statuses() -> list[dict[str, Any]]:
             "tone": research_tone,
             "detail": (
                 "Starts directly from the accepted Concept Gate handoff, acquires "
-                "real web evidence, structures traceable claims, and stops for "
-                "human claim approval before Story / Script."
+                "real web evidence, structures traceable claims, clears strongly "
+                "supported claims automatically and stops only for the claims that "
+                "need a human before Story / Script."
             ),
             "next_action": research_next,
             "criteria": [
@@ -7127,7 +7128,8 @@ def workflow_guidance(
             "current_action_id": None,
             "current_title": "Review Research Claims",
             "current_detail": (
-                "Check each claim against its cited acquired source evidence. "
+                "Strongly supported claims were cleared automatically; check the "
+                "ones left against their cited acquired source evidence. "
                 "Accept only wording safe to carry into the script."
             ),
             "next_action_id": "auto_continue",

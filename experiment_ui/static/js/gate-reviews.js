@@ -221,7 +221,21 @@
         '<span class="rw-meta-text">' + esc((item.concept || {}).working_title || item.concept_id) +
         (item.role ? " · " + esc(words(item.role)) : "") + "</span>" +
         (conflicted ? '<span class="status-badge status-blocked">Conflicting sources</span>' : "") +
+        (item.decided_by === "EVIDENCE_POLICY" ? '<span class="status-badge status-complete">Cleared automatically</span>' : "") +
         decidedBadge(item.decision);
+    },
+    // Conditional review (D-131): the evidence policy accepts strong claims on
+    // its own and says why every other claim needs a human.
+    policy: function (item) {
+      const policy = item.evidence_policy || {};
+      const reasons = (policy.reasons || []).filter(Boolean);
+      if (!reasons.length) return "";
+      if (item.decided_by === "EVIDENCE_POLICY") {
+        return section("Why it was cleared automatically", list(reasons) +
+          '<p class="muted">You can still rework or reject it.</p>');
+      }
+      if (policy.classification === "BLOCKED") return section("Why it cannot be accepted", list(reasons));
+      return section(item.decision === "PENDING" ? "Why this needs you" : "Why it needed you", list(reasons));
     },
     evidence: function (item) {
       const sources = (item.evidence || []).map(function (link) {
@@ -252,10 +266,11 @@
             : "") +
         "</li>";
       }).join("");
-      return facts([
-        ["Coverage", item.coverage],
-        ["Carried from earlier review", item.carried_from_review]
-      ]) +
+      return this.policy(item) +
+        facts([
+          ["Coverage", item.coverage],
+          ["Carried from earlier review", item.carried_from_review]
+        ]) +
         section("Sources", sources ? '<ul class="rw-list rw-evidence-list">' + sources + "</ul>" : '<p class="muted">No evidence links on this claim.</p>') +
         section("Research questions for this concept", questions ? '<ul class="rw-list rw-questions">' + questions + "</ul>" : "") +
         section("Accepting confirms", list(Object.values(item.criteria_descriptions || {})));
