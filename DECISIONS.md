@@ -4189,3 +4189,46 @@ verified contract, endpoint or price.
   is missing, and manual registration still works.
 - Choosing the provider, verifying its contract and setting its price stay
   the human's decisions.
+
+
+## D-140 — The app generates premium visuals for authorized shots; the human chooses
+
+**Status:** Accepted (vision: real production execution; the provider
+choice and contract remain the human's)
+
+**Context.** A shot reaches premium generation only after free and existing
+sources failed and the human authorized a maximum at the Visual Spend Gate.
+The handoff wrote a provider-neutral request, but the asset was then made
+outside the app and registered by hand. The request's policy says the human
+must choose the final generated asset.
+
+**Decision.**
+- **Generation.** `production_engine/visual_dispatch.py` generates
+  `variants_per_shot` variants (default 2) for a current, authorized request.
+  The prompt is the request's generation brief and negative constraints.
+- **Conditions.** A generation needs all of these:
+  - a chosen provider with endpoint, model, licence and price (never
+    guessed);
+  - a verified contract;
+  - an API key;
+  - the shot's spend so far plus the estimate within its authorized
+    maximum.
+- **Choice.** Variants are kept as candidates, and the human chooses one on
+  `/produce#generate`. The choice is registered through the existing import
+  with the shot's total spend, as `APP_PROVIDER_DISPATCH`.
+- **Records.** Spend goes into the per-video budget immediately (D-136), and
+  every generation is appended to a history log.
+- **Adapter.** The one built-in adapter makes still images through the
+  OpenAI-compatible images request.
+- **Server.** The route `/api/visual-dispatch` (GENERATE or CHOOSE) is
+  locked during jobs; `/api/visual-dispatch-file` serves only stored
+  variants.
+
+**Consequences.**
+- With a configured provider, an authorized shot goes from spend approval to
+  a registered asset without manual file handling. Assembly, the edit
+  preview and export are unchanged.
+- Video generation is not covered by the built-in adapter. Until a video
+  provider is chosen and given an adapter, moving shots are still made
+  outside and registered by hand.
+- Nothing is called until the human chooses and configures a provider.
