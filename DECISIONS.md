@@ -3721,3 +3721,54 @@ exhaustion, this can be widened per attempt.
 **Not verified here.** The external FAIR repository is not in this
 workspace, so the meaning of its reason codes is taken from their names and
 the bridge code.
+
+## D-130 — A 15–25 concept pool, five distinct finalists, and a stated shortfall
+
+**Status:** Accepted (vision §§26–28; correction A3 of D-128)
+
+**Context.** Each mechanism produced five concepts, so the pool was simply
+mechanisms × 5. Triage could shortlist 0–6 concepts purely by score, and
+only identical concept IDs were removed. Two restatements of one idea could
+both reach the Concept Gate, and one mechanism could fill every place.
+
+**Decision.**
+- **Pool size.** Requests are sized to put the pool in 15–25: five per
+  mechanism, clamped to that range and spread evenly, with at most eight per
+  request because free models fail on oversized structured output.
+  - One mechanism therefore yields eight, two yield 15 and five yield 25.
+  - The merge records the pool against the target (`pool`).
+  - Triage still opens once every mechanism has contributed (D-129), so a
+    below-target pool is reported rather than blocked.
+- **Similarity.** A deterministic measure,
+  `concept_diversity.concept_similarity`, compares the vision's dimensions:
+  premise, framing, hook, title and payoff, pooled as stemmed content words.
+  - On real-shaped concepts, a paraphrased restatement scored 0.52, a
+    related but different idea from the same domain 0.16, and unrelated
+    ideas 0.03–0.06.
+  - The near-duplicate threshold is 0.35. It is configurable as
+    `near_duplicate_threshold`.
+- **Finalists for the final model comparison** are chosen in rank order
+  without near-duplicates, and while alternatives exist, at most three come
+  from one mechanism or one hook type.
+- **Shortlist.** Up to five distinct concepts scoring 70 or more. A
+  near-duplicate of a higher-ranked concept never takes a place, and no
+  mechanism or hook type takes more than two places while others qualify.
+- **Shortfall.** When fewer than five qualify, the empty places stay empty
+  and the Concept Gate says so. Each excluded concept keeps its reason and
+  stays reachable under View all candidates, where the existing override,
+  rework and save-idea actions are unchanged.
+
+**Consequences.**
+- The final model pass is unchanged: it still only scores, and deterministic
+  code still decides.
+- The validation contract fingerprint covers the engine and its config, so
+  this patch invalidates cached concept responses. Existing pools regenerate
+  once at the new size.
+- Requests can now ask for up to eight concepts. If a free model fails on
+  that size, A2's partial handling retries the mechanism, and the per-request
+  cap can be lowered in `transformation_config.json`.
+
+**Not done here.** A targeted top-up that generates more concepts when the
+pool is under 15 needs more than one request per mechanism, a larger change
+to request identity. Until then the shortfall is visible, and the Concept
+Gate's rework action is the way to ask for more.

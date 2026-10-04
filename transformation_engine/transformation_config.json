@@ -7,5 +7,13 @@
   ],
   "require_ready_handoff": true,
   "minimum_research_questions": 2,
-  "minimum_candidates_for_triage": 5
+  "minimum_candidates_for_triage": 5,
+  "concept_pool": {
+    "minimum": 15,
+    "maximum": 25,
+    "per_request_minimum": 2,
+    "per_request_maximum": 8
+  },
+  "finalist_count": 5,
+  "near_duplicate_threshold": 0.35
 }
