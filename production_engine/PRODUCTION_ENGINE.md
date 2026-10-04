@@ -49,6 +49,34 @@ rules.
 
 The budget can be changed later without changing the manifest schema.
 
+### One budget per video (D-136)
+
+`video_budget.py` keeps one append-only ledger,
+`output/video_budget_ledger.jsonl`, keyed by video (`concept:format`). Every
+paid step records into it:
+
+| Step | Records |
+|---|---|
+| Narration Spend Gate ACCEPT | reserves the approved worst case; any other decision releases it |
+| Narration return | the actual cumulative narration cost |
+| Visual Spend Gate AUTHORIZE | reserves the shot's maximum; Keep placeholder or Retry releases it |
+| Generated visual import | the shot's actual cost |
+| Thumbnail candidate generation | reserves the maximum before the call, then records the actual |
+| Thumbnail import, final sound import | the actual cost already spent outside the app |
+
+An item counts at the larger of its live reservation and its actual spend.
+
+- **Above the ceiling:** a new reservation that would take the video's
+  committed total above `ceiling_usd` is refused. This applies across
+  narration, visuals and thumbnails.
+- **Above the target:** a reservation is allowed and the overrun is flagged.
+- **Actual spend:** always recorded, because it has already happened.
+
+The target (US$5) and ceiling (US$10) live in `video_budget_config.json`,
+with `confirmed_by_human: false` until you confirm them. The stage caps (per
+shot, per thumbnail, global visual workflow) still apply on top of the
+budget. The `/produce` page shows each video's committed and spent totals.
+
 ## Third-party excerpts
 
 An `EDITORIAL_EXCERPT` is never auto-selected. It remains

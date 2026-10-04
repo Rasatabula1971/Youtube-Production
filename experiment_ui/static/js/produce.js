@@ -522,10 +522,29 @@
     }
   }
 
+  // One budget per video (D-136): what is committed (authorized or spent)
+  // against the ceiling, and what has actually been spent.
+  function budgetHtml() {
+    const budget = status().video_budget || {};
+    const videos = (budget.videos || []).filter(Boolean);
+    if (!videos.length && !budget.ceiling_usd) return "";
+    const rows = videos.map(function (v) {
+      const tone = v.over_ceiling ? "blocked" : v.over_target ? "human" : "complete";
+      const label = v.over_ceiling ? "Over ceiling" : v.over_target ? "Over target" : "Within target";
+      return "<li><strong>" + esc(v.video_id) + "</strong> · committed " + esc(money(v.committed_usd)) +
+        " of " + esc(money(v.ceiling_usd)) + " · spent " + esc(money(v.actual_usd)) +
+        ' <span class="status-badge status-' + tone + '">' + esc(label) + "</span></li>";
+    }).join("");
+    return '<section class="pd-budget" aria-label="Budget per video"><p class="attention-kicker">BUDGET PER VIDEO</p>' +
+      '<p class="muted">Target ' + esc(money(budget.target_usd)) + " · ceiling " + esc(money(budget.ceiling_usd)) +
+      (budget.confirmed_by_human ? "" : " · proposed, not yet confirmed by you") + "</p>" +
+      (rows ? '<ul class="rw-list">' + rows + "</ul>" : '<p class="muted">Nothing authorized or spent yet.</p>') + "</section>";
+  }
+
   function renderTabs() {
     const bar = document.getElementById("produceTabs");
     if (!bar) return;
-    const html = '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Production gates">' + TABS.map(function (tab) {
+    const html = budgetHtml() + '<div class="pw-tabs pk-tabs" role="tablist" aria-label="Production gates">' + TABS.map(function (tab) {
       const on = tab[0] === activeTab;
       return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on + '" data-pd-tab="' + tab[0] + '">' +
         esc(tab[1]) + ' <span class="tab-count">' + pendingCount(tab[0]) + "</span></button>";

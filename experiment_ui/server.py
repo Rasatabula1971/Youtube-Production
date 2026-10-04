@@ -400,6 +400,7 @@ from production_engine.thumbnail_review import (
     thumbnail_file_path,
 )
 from production_engine import thumbnail_image_provider
+from production_engine import video_budget
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -1652,6 +1653,14 @@ def final_packaging_gate_state() -> dict[str, Any]:
             "complete": False,
             "items": [],
         }
+
+
+def video_budget_state() -> dict[str, Any]:
+    """Per-video budget (D-136) that degrades to an error status instead of raising."""
+    try:
+        return video_budget.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"error": str(exc), "videos": []}
 
 
 def thumbnail_gate_state() -> dict[str, Any]:
@@ -8281,6 +8290,7 @@ def status_payload() -> dict[str, Any]:
         ),
         "final_export_gate": final_export_review_snapshot(),
         "thumbnail_gate": thumbnail_gate_state(),
+        "video_budget": video_budget_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),

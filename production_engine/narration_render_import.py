@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+import video_budget
 from narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
 from narration_render import (
     ESTIMATES_DIR,
@@ -351,6 +352,15 @@ def register(
         RENDER_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         result_path = (
             RENDER_RESULTS_DIR / f"{key}.narration_render_result.json"
+        )
+        # The cumulative narration cost for this video (D-136).
+        video_budget.record_actual(
+            video=video_budget.video_id(concept_id, fmt),
+            category="narration",
+            ref="narration",
+            total_usd=actual_cost,
+            note="Paid narration returned",
+            ledger=video_budget.ledger_in(RENDER_RESULTS_DIR.parent),
         )
 
         had_previous = branch_dir.exists()

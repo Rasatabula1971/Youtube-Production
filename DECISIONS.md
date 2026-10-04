@@ -3996,3 +3996,57 @@ chosen, and no app code had yet made a paid provider call.
   `thumbnail_image_config.json`.
 - Candidates are bound to the concept version, so a reworked concept cannot
   silently reuse an image made for the old one.
+
+
+## D-136 — One budget per video
+
+**Status:** Accepted (vision: one combined budget for the whole video; the
+US$5 target and US$10 ceiling remain to be confirmed by the human)
+
+**Context.** Every paid step kept its own money rules, and none of them
+added up spend per video:
+- the Visual Spend Gate capped authorizations across all productions
+  together;
+- narration was approved at a quoted worst case with no dollar ceiling;
+- thumbnail images had their own small caps;
+- final sound recorded costs with no cap.
+
+The US$5 target was advisory only.
+
+**Decision.**
+- **Ledger.** `production_engine/video_budget.py` keeps one append-only
+  ledger keyed by video (`concept:format`). It has three event kinds:
+  - RESERVE: the most authorized for an item;
+  - RELEASE: that authorization withdrawn;
+  - ACTUAL: the total spent on the item so far.
+
+  An item counts at the larger of its reservation and its actual spend.
+- **Rules.**
+  - A reservation that would take a video above its ceiling is refused, in
+    every category.
+  - Above the target, a reservation is allowed and flagged.
+  - Actual spend is always recorded, because it has already happened.
+- **Who records what.**
+  - Narration Spend Gate ACCEPT reserves the worst case.
+  - Visual Spend Gate AUTHORIZE reserves the shot's maximum.
+  - Thumbnail generation reserves before the paid call.
+  - Narration return, generated-visual import, thumbnail import and
+    final-sound import record actual costs.
+- **Concurrency.** One process-wide lock covers every
+  check-then-record, so two simultaneous authorizations cannot both pass
+  the ceiling. It is held in `pipeline_integrity.named_lock` so it is shared
+  however the module is imported.
+- **Location.** Each stage writes the ledger beside its own output folders,
+  which in use is always `production_engine/output`. Tests that move a
+  stage's folders therefore move its ledger too.
+- **Visibility.** The `/produce` page shows each video's committed and spent
+  totals against the target and ceiling, and states that the budget is
+  still a proposal.
+
+**Consequences.**
+- A narration worst case, visual authorizations and thumbnail generations
+  can no longer add up past US$10 for one video.
+- Existing stage caps still apply on top of the budget.
+- Spend from before this change is not in the ledger.
+- Changing the budget is a config edit; `confirmed_by_human` records that you
+  have confirmed it.
