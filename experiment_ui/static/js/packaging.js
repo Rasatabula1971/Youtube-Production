@@ -30,12 +30,14 @@
   };
 
   let activeTab = "titles";
-  const pendingFocus = {};
-  const workspaces = {};
+  const pendingFocus = Object.create(null);
+  const workspaces = Object.create(null);
   // Selections made in the evidence panels, kept per item so repaints keep them.
-  const titleChoices = {};   // concept_id -> { short: {title_id, title_text}, long_form: {...} }
-  const packageChoice = {};  // video_id -> package_id
-  const criteriaTicks = {};  // video_id -> { criterion: bool }
+  // Maps keyed by ids from generated content have no prototype, so an id
+  // such as "__proto__" cannot reach Object.prototype (UI-19).
+  const titleChoices = Object.create(null);   // concept_id -> { short: {title_id, title_text}, long_form: {...} }
+  const packageChoice = Object.create(null);  // video_id -> package_id
+  const criteriaTicks = Object.create(null);  // video_id -> { criterion: bool }
   let painted = {};
 
   function yp() { return window.YP; }
@@ -75,13 +77,17 @@
     return '<span class="status-badge status-' + tone + '">' + esc(words(v) || "unknown") + "</span>";
   }
 
+  // Resolves true on success and false when the server refused, so callers
+  // keep the reviewer's choices after a failure (UI-19).
   async function post(url, body, okMessage) {
     try {
       await yp().api(url, { method: "POST", body: JSON.stringify(body) });
       yp().showToast(okMessage, false);
       await yp().refresh();
+      return true;
     } catch (error) {
       yp().showToast(error.message, true);
+      return false;
     }
   }
 
@@ -181,7 +187,7 @@
         decision: decision,
         selected_titles: selected,
         note: note
-      }, messages[decision] || "Saved.").then(function () { delete titleChoices[item.concept_id]; });
+      }, messages[decision] || "Saved.").then(function (ok) { if (ok) delete titleChoices[item.concept_id]; return ok; });
     }
   };
 
@@ -321,16 +327,19 @@
         criteria: Object.assign({}, ticksFor(item)),
         note: note,
         rework_target: decision === "REWORK" ? extras.select : null
-      }, messages[decision] || "Saved.").then(function () {
-        delete packageChoice[item.video_id];
-        delete criteriaTicks[item.video_id];
+      }, messages[decision] || "Saved.").then(function (ok) {
+        if (ok) {
+          delete packageChoice[item.video_id];
+          delete criteriaTicks[item.video_id];
+        }
+        return ok;
       });
     }
   };
 
   // --------------------------------------------------------- Read-only tabs
   function byVideo(rows) {
-    const groups = {};
+    const groups = Object.create(null);
     (rows || []).forEach(function (row) {
       if (!row) return;
       const key = row.video_id || row.concept_id || "unknown";
@@ -432,7 +441,8 @@
       emptyHtml: function () {
         const gate = tab === "titles" ? titleGate() : finalGate();
         return "<h2>Nothing waiting at " + esc(tab === "titles" ? "Title Direction" : "the Final Package gate") + "</h2>" +
-          '<p class="muted">Status: ' + esc(words(gate.status) || "not started") + ". Decisions appear here when packaging reaches this step.</p>";
+          '<p class="muted">Status: ' + esc(words(gate.status) || "not started") + ". Decisions appear here when packaging reaches this step.</p>" +
+          '<div class="rw-empty-actions"><a href="/analysis" class="button-link ghost compact" data-route="/analysis">Classic view</a></div>';
       }
     });
     return workspaces[tab];
@@ -496,7 +506,7 @@
     const tab = slash === -1 ? raw : raw.slice(0, slash);
     if (TABS.some(function (t) { return t[0] === tab; })) {
       activeTab = tab;
-      if (slash !== -1) pendingFocus[tab] = decodeURIComponent(raw.slice(slash + 1));
+      if (slash !== -1) pendingFocus[tab] = window.YPUtil.decode(raw.slice(slash + 1));
     }
     render();
   }

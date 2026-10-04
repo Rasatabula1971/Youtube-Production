@@ -73,6 +73,32 @@
     }
   });
 
+  // The skip link moves focus without touching the URL: the hash is the
+  // router's (#<production id>, #<tab>), so "#mainContent" must never land
+  // there (UI-19).
+  document.addEventListener("click", function (event) {
+    const skip = event.target.closest && event.target.closest(".skip-link");
+    if (!skip) return;
+    event.preventDefault();
+    const main = document.getElementById("mainContent");
+    if (main) {
+      main.focus();
+      main.scrollIntoView({ block: "start" });
+    }
+  });
+
+  // URL hashes are user-editable: a malformed escape such as "#%E0" must
+  // not throw out of routing and stop the app loading (UI-19).
+  window.YPUtil = {
+    decode: function (value) {
+      try {
+        return decodeURIComponent(String(value || ""));
+      } catch (_) {
+        return "";
+      }
+    }
+  };
+
   window.YPA11y = {
     reducedMotion: function () {
       return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);

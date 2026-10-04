@@ -16,7 +16,7 @@
   let loading = false;
   let fetchedAt = 0;
   let statusMarker = "";
-  let selected = {};
+  let selected = Object.create(null);
   let painted = "";
 
   function $(id) { return document.getElementById(id); }
@@ -115,7 +115,10 @@
       html = '<div class="rw-empty"><h2>No production selected</h2><p class="muted">Open one from the Productions list.</p>' +
         '<div class="rw-empty-actions"><a href="/productions" class="button-link ghost compact" data-route="/productions">Productions</a></div></div>';
     } else if (!payload) {
-      html = '<p class="empty-state">' + esc(error || "Loading production…") + "</p>";
+      html = error
+        ? '<div class="rw-empty"><p>' + esc(error) + '</p><div class="rw-empty-actions">' +
+          '<a href="/productions" class="button-link ghost compact" data-route="/productions">Productions</a></div></div>'
+        : '<p class="empty-state">Loading production…</p>';
     } else {
       const production = payload.production;
       const sections = payload.sections || [];
@@ -233,7 +236,7 @@
   window.ProductionWorkspace = {
     open: open,
     show: function () {
-      if (window.location.pathname === "/production") open(decodeURIComponent(window.location.hash.slice(1)));
+      if (window.location.pathname === "/production") open(window.YPUtil.decode(window.location.hash.slice(1)));
     },
     // Called on every status poll; refetch when the pipeline moved or data is old.
     refresh: function (data) {

@@ -8,8 +8,8 @@
   const GATES = ["analysis", "concept", "research", "script", "format", "voice", "preview"];
   let activeGate = "analysis";
   let showDecided = false;
-  const workspaces = {};
-  const pendingFocus = {};
+  const workspaces = Object.create(null);
+  const pendingFocus = Object.create(null);
 
   function yp() { return window.YP; }
   function esc(value) { return yp().escapeHtml(value); }
@@ -63,13 +63,17 @@
     return esc(label || "");
   }
 
+  // Resolves true on success and false when the server refused, so callers
+  // keep the reviewer's choices after a failure (UI-19).
   async function post(url, body, okMessage) {
     try {
       await yp().api(url, { method: "POST", body: JSON.stringify(body) });
       yp().showToast(okMessage, false);
       await yp().refresh();
+      return true;
     } catch (error) {
       yp().showToast(error.message, true);
+      return false;
     }
   }
 
@@ -264,8 +268,8 @@
   // A script branch is reviewed section by section (hook, sections, closing),
   // then as a whole. Section actions use /api/script-section-review and the
   // whole-script decision /api/script-gate, exactly as the classic panel does.
-  const sectionSnapshots = {};
-  const sectionLoading = {};
+  const sectionSnapshots = Object.create(null);
+  const sectionLoading = Object.create(null);
   const REWORK_REASONS = [
     ["", "Choose a reason (or write an instruction)"],
     ["TOO_BORING", "Too boring"],
@@ -377,7 +381,7 @@
         '<span class="status-badge status-' + tone + '">' + esc(words(state)) + (item.target.locked ? " · locked" : "") + "</span>";
     },
     claims: function (item, ids) {
-      const byId = {};
+      const byId = Object.create(null);
       (item.branch.accepted_claims || []).forEach(function (c) { if (c && c.claim_id) byId[c.claim_id] = c.statement; });
       return (ids || []).map(function (id) { return byId[id] ? id + ": " + byId[id] : id; });
     },
@@ -473,7 +477,7 @@
                 (open.some(function (t) { return t.decision === "REWORK_REQUESTED"; }) ? ", and pending section reworks will be cancelled." : ".");
             }
           },
-          { value: "REWORK", label: "Rework the whole script", hint: "Regenerate the draft with your direction.", tone: "running", needsNote: true, notePlaceholder: "say what must change" },
+          { value: "REWORK", label: "Rework the whole script", hint: "Regenerate the draft with your direction.", tone: "running", needsNote: true, noteMaxLength: 1400, notePlaceholder: "say what must change" },
           { value: "REJECT", label: "Reject", hint: "This branch will not be produced.", tone: "blocked" }
         ];
       }
@@ -483,7 +487,7 @@
       }
       const manual = {
         value: "MANUAL_EDIT", label: "Edit by hand", hint: "Your text replaces this part and locks it.", tone: "human",
-        needsNote: true, noteLabel: "New text", noteRows: 8, noteMaxLength: 6000, notePlaceholder: "write the replacement text",
+        needsNote: true, noteLabel: "New text", noteRows: 8, noteMaxLength: 5000, notePlaceholder: "write the replacement text",
         notePrefill: function () { return target.text || ""; },
         validate: function (_item, draft) {
           return draft.note.trim() === String(target.text || "").trim() ? "Change the text before saving the edit." : "";
@@ -499,7 +503,7 @@
         { value: "ACCEPT", label: "Accept and lock", hint: "This part is final unless you unlock it.", tone: "complete", takesNote: false },
         {
           value: "REWORK", label: "Rework", hint: "Ask for A / B / C alternatives for this part only.", tone: "running",
-          select: { label: "Reason", options: REWORK_REASONS }, noteLabel: "Instruction", notePlaceholder: "what should change (optional with a reason)",
+          select: { label: "Reason", options: REWORK_REASONS }, noteLabel: "Instruction", noteMaxLength: 1200, notePlaceholder: "what should change (optional with a reason)",
           validate: function (_item, draft) {
             if (!draft.select && !draft.note.trim()) return "Choose a rework reason or write an instruction.";
             if (draft.select === "CUSTOM" && !draft.note.trim()) return "A custom rework needs an instruction.";
@@ -520,7 +524,7 @@
           criteria: {},
           note: note,
           accept_open_sections: decision === "ACCEPT" && open.length > 0
-        }, messages[decision] || "Saved.").then(function () { return loadSections(item.concept_id, item.format); });
+        }, messages[decision] || "Saved.").then(function (ok) { return loadSections(item.concept_id, item.format).then(function () { return ok; }); });
       }
       return sectionAction(item.concept_id, item.format, decision, item.target.target_id, {
         reason: decision === "REWORK" ? (extras.select || null) : null,
@@ -555,6 +559,7 @@
         version_id: null
       };
     };
+    let ok = true;
     try {
       // Section actions need the section state; prepare it first, as the
       // classic panel's Edit button does.
@@ -569,9 +574,11 @@
       }
     } catch (error) {
       yp().showToast(error.message, true);
+      ok = false;
     }
     await loadSections(conceptId, format);
     await yp().refresh();
+    return ok;
   }
 
   // ------------------------------------------------------------------ Format
@@ -581,7 +588,7 @@
   }
 
   function beatsTable(beats, directions) {
-    const byBeat = {};
+    const byBeat = Object.create(null);
     (directions || []).forEach(function (d) { if (d && d.beat_id) byBeat[d.beat_id] = d; });
     const rows = (beats || []).filter(Boolean).map(function (beat) {
       const d = byBeat[beat.beat_id];
@@ -694,6 +701,11 @@
         section("Fine-tune one segment", '<p class="muted">Revising a single segment and re-rendering stays in the classic panel. ' +
           '<a href="/analysis" class="button-link ghost compact" data-route="/analysis">Open classic view</a></p>');
     },
+    locked: function (item) {
+      return item.approved_for_paid_quote
+        ? "Approved for the paid quote. This decision is locked, as in the classic panel; changes now go through narration spend."
+        : "";
+    },
     decisions: function (item) {
       return [
         { value: "APPROVE_FINAL", label: "Approve → get paid quote", hint: "Sound brief and narration cost preparation start automatically.", tone: "complete",
@@ -760,7 +772,9 @@
       title: function (item) { return config.title(item); },
       meta: function (item) { return config.meta(item); },
       renderEvidence: function (item) { return config.evidence(item); },
-      decisions: function (item) { return config.decisions(item); },
+      // Decided items the classic panel locks stay locked here (UI-19).
+      decisions: function (item) { return config.locked && config.locked(item) ? [] : config.decisions(item); },
+      locked: function (item) { return config.locked ? config.locked(item) : ""; },
       initialValue: function (item) {
         if (config.initialValue) return config.initialValue(item);
         const decision = String(item.decision || "PENDING").toUpperCase();
@@ -836,7 +850,7 @@
     const gate = slash === -1 ? raw : raw.slice(0, slash);
     if (CONFIGS[gate]) {
       activeGate = gate;
-      if (slash !== -1) pendingFocus[gate] = decodeURIComponent(raw.slice(slash + 1));
+      if (slash !== -1) pendingFocus[gate] = window.YPUtil.decode(raw.slice(slash + 1));
     }
     render();
   }

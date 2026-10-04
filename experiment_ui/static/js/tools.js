@@ -15,7 +15,7 @@
   let loading = false;
   let lastLoaded = 0;
   let lastJobSignature = "";
-  const openLogs = {};   // job id -> text (null while loading)
+  const openLogs = Object.create(null);   // job id -> text (null while loading)
 
   function yp() { return window.YP; }
   function esc(value) { return yp().escapeHtml(value); }
