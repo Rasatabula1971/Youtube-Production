@@ -87,6 +87,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/visual-plan-gate",
     "/api/narration-dispatch",
     "/api/visual-dispatch",
+    "/api/publish-gate",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -409,6 +410,8 @@ from production_engine import narration_final_review
 from production_engine import visual_plan_review
 from production_engine import narration_dispatch
 from production_engine import visual_dispatch
+from production_engine import publish_review
+from production_engine import youtube_upload
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -3210,6 +3213,14 @@ def visual_dispatch_state() -> dict[str, Any]:
         return visual_dispatch.snapshot()
     except (OSError, ValueError, KeyError) as exc:
         return {"ready": False, "problems": [str(exc)], "shots": []}
+
+
+def publish_gate_state() -> dict[str, Any]:
+    """Publish packages and the YouTube uploader's readiness (D-142, D-143); never raises."""
+    try:
+        return {**publish_review.snapshot(), "uploader": youtube_upload.status()}
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "items": [], "uploader": {"ready": False, "problems": [str(exc)]}}
 
 
 def final_audio_gate_state() -> dict[str, Any]:
@@ -8225,6 +8236,41 @@ def workflow_guidance(
                 "next_title": "Approve the exact current final render",
             }
 
+        publish = publish_gate_state()
+        publish_items = [item for item in publish.get("items", []) if isinstance(item, dict)]
+        if any(item.get("status") in {"PENDING", "HELD"} for item in publish_items):
+            return {
+                "state": "HUMAN_PUBLISH_GATE",
+                "current_action_id": None,
+                "current_title": "Approve the Publish Package",
+                "current_detail": (
+                    "Check the title, thumbnail, description with sources, privacy, "
+                    "schedule and the AI-content disclosure, then approve or hold."
+                ),
+                "next_action_id": None,
+                "next_title": "Upload to YouTube",
+            }
+        if any(item.get("status") == "APPROVED_FOR_UPLOAD" for item in publish_items):
+            return {
+                "state": "WAITING_FOR_UPLOAD",
+                "current_action_id": None,
+                "current_title": "Upload to YouTube",
+                "current_detail": (
+                    "The publish package is approved. Upload it from the Publish tab, "
+                    "or upload it by hand in YouTube Studio and record the video id."
+                ),
+                "next_action_id": None,
+                "next_title": "Record the published video",
+            }
+        if publish_items and all(item.get("status") == "PUBLISHED" for item in publish_items):
+            return {
+                "state": "PUBLISHED",
+                "current_action_id": None,
+                "current_title": "Published",
+                "current_detail": "Every approved video has a YouTube video id recorded.",
+                "next_action_id": None,
+                "next_title": "Learning from channel analytics",
+            }
         return {
             "state": "FINAL_EXPORT_APPROVED",
             "current_action_id": None,
@@ -8440,6 +8486,7 @@ def status_payload() -> dict[str, Any]:
         "visual_plan_gate": visual_plan_gate_state(),
         "narration_dispatch": narration_dispatch_state(),
         "visual_dispatch": visual_dispatch_state(),
+        "publish_gate": publish_gate_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -9480,6 +9527,30 @@ class Handler(BaseHTTPRequestHandler):
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
+                return
+
+            if route == "/api/publish-gate":
+                # Publishing (D-142, D-143): approve or hold the package, record
+                # a manual upload, or upload through the YouTube Data API.
+                action = str(body.get("action", "")).strip().upper()
+                concept_id = str(body.get("concept_id", ""))
+                fmt = str(body.get("format", ""))
+                if action in {"APPROVE_PUBLISH", "HOLD"}:
+                    publish_review.apply_action(
+                        concept_id=concept_id, format=fmt, decision=action,
+                        metadata=body.get("metadata"),
+                        note=(str(body["note"]) if body.get("note") is not None else None),
+                    )
+                elif action == "RECORD_UPLOAD":
+                    publish_review.record_upload(
+                        concept_id=concept_id, format=fmt,
+                        youtube_video_id=str(body.get("youtube_video_id", "")), method="MANUAL",
+                    )
+                elif action == "UPLOAD":
+                    youtube_upload.upload(concept_id=concept_id, format=fmt)
+                else:
+                    raise ValueError("Action must be APPROVE_PUBLISH, HOLD, RECORD_UPLOAD or UPLOAD")
+                self._send_json({"publish_gate": publish_gate_state()})
                 return
 
             if route == "/api/visual-dispatch":

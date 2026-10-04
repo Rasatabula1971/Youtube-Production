@@ -18,7 +18,8 @@
     ["spend", "Visual spend"],
     ["generate", "Generate visuals"],
     ["edit", "Edit preview"],
-    ["export", "Final export"]
+    ["export", "Final export"],
+    ["publish", "Publish"]
   ];
 
   let activeTab = "plan";
@@ -31,7 +32,8 @@
   const rightsContext = Object.create(null);   // rights key -> context note
   const maxCost = Object.create(null);         // spend key -> number
   const generatedChoice = Object.create(null); // request file -> candidate_id
-  const reworkSegments = Object.create(null);  // final audio key -> {segment_id: bool}
+  const reworkSegments = Object.create(null);
+  const pubEdits = Object.create(null);        // publish key -> {field: value}  // final audio key -> {segment_id: bool}
   let paintedTabs = "";
 
   function yp() { return window.YP; }
@@ -651,7 +653,110 @@
     }
   });
 
-  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, export: exportGate };
+  // ---------------------------------------------------------------- Publish
+  // The publish package for an approved export (D-142): review and edit the
+  // metadata, approve or hold, then upload (D-143) or record a manual upload.
+  function pubValue(item, field) {
+    const edits = pubEdits[item.key] || {};
+    return Object.prototype.hasOwnProperty.call(edits, field) ? edits[field] : (item.metadata || {})[field];
+  }
+
+  function localDateTime(iso) {
+    if (!iso) return "";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    const pad = function (n) { return String(n).padStart(2, "0"); };
+    return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + "T" + pad(date.getHours()) + ":" + pad(date.getMinutes());
+  }
+
+  const publish = {
+    kicker: "PUBLISH",
+    gate: function () { return status().publish_gate || {}; },
+    all: function () { return (this.gate().items || []).filter(Boolean); },
+    pending: function (item) { return item.status !== "PUBLISHED"; },
+    key: function (item) { return item.key; },
+    title: function (item) { return (item.metadata || {}).title || item.key; },
+    meta: function (item) {
+      return '<span class="source-chip">' + esc(words(item.format)) + '</span><span class="rw-meta-text">' + esc(item.concept_id) + "</span>" +
+        decidedBadge(words(item.status), item.status === "PUBLISHED" ? "complete" : item.status === "HELD" ? "blocked" : "human");
+    },
+    evidence: function (item) {
+      const editable = item.status === "PENDING" || item.status === "HELD";
+      const key = item.key;
+      const field = function (name, label, html) { return '<label class="pd-pub-field"><span>' + esc(label) + "</span>" + html + "</label>"; };
+      const dis = editable ? "" : " disabled";
+      const tags = pubValue(item, "tags");
+      const sources = (item.sources || []).map(function (s) { return "<li>" + esc(s.title) + " — " + esc(s.url) + "</li>"; }).join("");
+      const published = item.published || {};
+      return ((item.problems || []).length ? '<p class="radar-error">' + esc(item.problems.join(" ")) + "</p>" : "") +
+        facts([
+          ["Video file", String(item.video_file || "").split(/[\\/]/).pop()],
+          ["Thumbnail", item.thumbnail_file ? String(item.thumbnail_file).split(/[\\/]/).pop() : "missing"],
+          ["Category", (item.metadata || {}).category_id],
+          ["Made for kids", (item.metadata || {}).made_for_kids ? "yes" : "no"]
+        ]) +
+        (item.status === "PUBLISHED"
+          ? '<p>Published as <a href="' + esc(published.url) + '" target="_blank" rel="noopener noreferrer">' + esc(published.youtube_video_id) + "</a> (" + esc(words(published.method)) + ").</p>" +
+            (published.thumbnail_set === false ? '<p class="radar-error">The thumbnail was not set: ' + esc(published.thumbnail_error || "") + " Set it in YouTube Studio.</p>" : "")
+          : "") +
+        section("Title (from the Final Packaging Gate)", "<p><strong>" + esc(pubValue(item, "title")) + "</strong></p>") +
+        section("Metadata",
+          field("description", "Description", '<textarea rows="8" data-pd-pub="description" data-key="' + esc(key) + '"' + dis + ">" + esc(pubValue(item, "description")) + "</textarea>") +
+          field("tags", "Tags (comma separated)", '<input type="text" data-pd-pub="tags" data-key="' + esc(key) + '" value="' + esc(Array.isArray(tags) ? tags.join(", ") : tags || "") + '"' + dis + ">") +
+          field("privacy", "Privacy", '<select data-pd-pub="privacy_status" data-key="' + esc(key) + '"' + dis + ">" + ["private", "unlisted", "public"].map(function (v) {
+            return '<option value="' + v + '"' + (pubValue(item, "privacy_status") === v ? " selected" : "") + ">" + v + "</option>";
+          }).join("") + "</select>") +
+          field("publish_at", "Schedule (optional; uploads as private until then)", '<input type="datetime-local" data-pd-pub="publish_at" data-key="' + esc(key) + '" value="' + esc(localDateTime(pubValue(item, "publish_at"))) + '"' + dis + ">") +
+          '<label class="pd-pub-check"><input type="checkbox" data-pd-pub="contains_synthetic_media" data-key="' + esc(key) + '"' + (pubValue(item, "contains_synthetic_media") ? " checked" : "") + dis +
+            "> Contains realistic altered or synthetic content (AI voice, AI visuals)</label>") +
+        section("Sources in the description", sources ? '<ul class="rw-list">' + sources + "</ul>" : '<p class="muted">No verified sources found.</p>') +
+        (item.status === "APPROVED_FOR_UPLOAD"
+          ? section("Upload",
+            ((this.gate().uploader || {}).ready
+              ? '<p class="muted">Upload sends this exact video, thumbnail and metadata to YouTube.</p>'
+              : '<p class="muted">Direct upload is off: ' + esc(((this.gate().uploader || {}).problems || []).join(" ")) + "</p>") +
+            field("video_id", "Uploaded by hand? YouTube video id", '<input type="text" maxlength="11" data-pd-pub="youtube_video_id" data-key="' + esc(key) + '" value="' + esc((pubEdits[key] || {}).youtube_video_id || "") + '">'))
+          : "");
+    },
+    decisions: function (item) {
+      const key = item.key;
+      if (item.status === "PENDING" || item.status === "HELD") {
+        return [
+          { value: "APPROVE_PUBLISH", label: "Approve publish package", hint: "Binds this exact video, thumbnail and metadata.", tone: "complete" },
+          noteRework("HOLD", "Hold", "Keep it unpublished for now.", "say why it is held")
+        ];
+      }
+      if (item.status === "APPROVED_FOR_UPLOAD") {
+        const options = [];
+        if ((this.gate().uploader || {}).ready) {
+          options.push({ value: "UPLOAD", label: "Upload to YouTube", tone: "complete", hint: "Privacy: " + ((item.metadata || {}).privacy_status || "private") + ".",
+            confirm: function () { return "Upload this video to YouTube now as " + ((item.metadata || {}).privacy_status || "private") + "?"; } });
+        }
+        options.push({ value: "RECORD_UPLOAD", label: "Record a manual upload", tone: "running", hint: "You uploaded it in YouTube Studio.",
+          validate: function () { return /^[A-Za-z0-9_-]{11}$/.test(String((pubEdits[key] || {}).youtube_video_id || "")) ? "" : "Enter the 11-character YouTube video id."; } });
+        return options;
+      }
+      return [];
+    },
+    decide: function (item, decision, note) {
+      const edits = Object.assign({}, pubEdits[item.key] || {});
+      const body = { action: decision, concept_id: item.concept_id, format: item.format, note: note };
+      if (decision === "APPROVE_PUBLISH") {
+        if (typeof edits.tags === "string") edits.tags = edits.tags.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+        if (edits.publish_at !== undefined) edits.publish_at = edits.publish_at ? new Date(edits.publish_at).toISOString() : null;
+        delete edits.youtube_video_id;
+        body.metadata = edits;
+      }
+      if (decision === "RECORD_UPLOAD") body.youtube_video_id = edits.youtube_video_id;
+      const messages = { APPROVE_PUBLISH: "Publish package approved.", HOLD: "Video held.", UPLOAD: "Uploaded to YouTube.", RECORD_UPLOAD: "Upload recorded." };
+      return post("/api/publish-gate", body, messages[decision] || "Saved.").then(function (ok) {
+        if (ok) delete pubEdits[item.key];
+        return ok;
+      });
+    }
+  };
+
+  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, export: exportGate, publish: publish };
 
   // ------------------------------------------------------------ Page shell
   function items(tab) {
@@ -829,6 +934,9 @@
     if (!t.dataset) return;
     if (t.dataset.pdContext) rightsContext[t.dataset.pdContext] = t.value;
     if (t.dataset.pdCost) maxCost[t.dataset.pdCost] = Number(t.value || 0);
+    if (t.dataset.pdPub) {
+      (pubEdits[t.dataset.key] = pubEdits[t.dataset.key] || {})[t.dataset.pdPub] = t.type === "checkbox" ? t.checked : t.value;
+    }
   });
 
   window.Produce = {

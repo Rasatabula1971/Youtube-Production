@@ -1,0 +1,187 @@
+"""Publish package, Human Publish Gate and YouTube upload (D-142, D-143)."""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+import publish_review as gate
+import youtube_upload as uploader
+
+
+def sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class PublishTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = self.root = Path(tmp.name)
+        for name in ("exports", "bundles", "verified"):
+            (root / name).mkdir()
+        self.video = root / "final.mp4"
+        self.video.write_bytes(b"\x00\x00\x00\x18ftypmp42video")
+        self.thumb = root / "thumb.jpg"
+        self.thumb.write_bytes(b"\xff\xd8\xffthumb")
+        self.export = root / "exports" / "c1.long_form.approved_final_export.json"
+        self.export.write_text(json.dumps({"concept_id": "c1", "format": "long_form"}))
+        self.approval = {
+            "artifact": "approved_final_export", "status": "FINAL_EXPORT_APPROVED",
+            "concept_id": "c1", "format": "long_form",
+            "render_file": str(self.video), "render_sha256": sha(self.video),
+        }
+        (root / "bundles" / "c1.final_package.json").write_text(json.dumps({"packages": {"long_form": {
+            "title_text": "Why F1 Brakes <Glow>", "viewer_promise": "See why racing brakes must run hot.",
+            "thumbnail_image": {"image": str(self.thumb), "image_sha256": sha(self.thumb)},
+        }}}))
+        (root / "verified" / "c1.verified_research_package.json").write_text(json.dumps({"sources": [
+            {"title": "Brake study", "url": "https://example.org/brakes"},
+            {"title": "Dup", "url": "https://example.org/brakes"},
+            {"title": "Not a web page", "url": "file:///etc/passwd"},
+        ]}))
+        self.config = json.loads(gate.CONFIG_FILE.read_text())
+        for item in (
+            patch.object(gate, "APPROVED_EXPORT_DIR", root / "exports"),
+            patch.object(gate, "approval_is_current", side_effect=lambda path: copy.deepcopy(self.approval)),
+            patch.object(gate, "FINAL_PACKAGES_DIR", root / "bundles"),
+            patch.object(gate, "VERIFIED_DIR", root / "verified"),
+            patch.object(gate, "APPROVED_DIR", root / "approved"),
+            patch.object(gate, "PUBLISHED_DIR", root / "published"),
+            patch.object(gate, "HISTORY_FILE", root / "history.jsonl"),
+            patch.object(gate, "load_config", side_effect=lambda: copy.deepcopy(self.config)),
+        ):
+            item.start()
+            self.addCleanup(item.stop)
+
+    def item(self):
+        return gate.snapshot()["items"][0]
+
+    def approve(self, **metadata):
+        return gate.apply_action(concept_id="c1", format="long_form", decision="APPROVE_PUBLISH", metadata=metadata)
+
+    def test_draft_uses_the_final_package_sources_and_a_disclosure(self):
+        item = self.item()
+        meta = item["metadata"]
+        self.assertEqual(item["status"], "PENDING")
+        self.assertEqual(meta["title"], "Why F1 Brakes Glow")  # angle brackets removed
+        self.assertIn("See why racing brakes must run hot.", meta["description"])
+        self.assertIn("- Brake study: https://example.org/brakes", meta["description"])
+        self.assertNotIn("file://", meta["description"])
+        self.assertIn("AI-generated voice", meta["description"])
+        self.assertEqual((meta["privacy_status"], meta["contains_synthetic_media"]), ("private", True))
+
+    def test_approval_validates_youtube_limits_and_keeps_the_title(self):
+        with self.assertRaisesRegex(ValueError, "5,000 bytes"):
+            self.approve(description="x" * 5001)
+        with self.assertRaisesRegex(ValueError, "500 characters"):
+            self.approve(tags=["t" * 300, "u" * 300])
+        with self.assertRaisesRegex(ValueError, "private, unlisted or public"):
+            self.approve(privacy_status="secret")
+        with self.assertRaisesRegex(ValueError, "future"):
+            self.approve(publish_at="2020-01-01T00:00:00Z")
+        later = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        with self.assertRaisesRegex(ValueError, "private until it publishes"):
+            self.approve(publish_at=later, privacy_status="public")
+        snap = self.approve(title="Clickbait", tags="brakes, f1", publish_at=later)
+        meta = snap["items"][0]["metadata"]
+        self.assertEqual(meta["title"], "Why F1 Brakes Glow")
+        self.assertEqual(meta["tags"], ["brakes", "f1"])
+        self.assertTrue(meta["publish_at"].endswith("Z"))
+        self.assertEqual(snap["items"][0]["status"], "APPROVED_FOR_UPLOAD")
+
+    def test_approval_is_bound_to_the_rendered_bytes(self):
+        self.approve()
+        self.approval["render_sha256"] = "changed"
+        self.assertEqual(self.item()["status"], "PENDING")
+
+    def test_hold_needs_a_note_and_manual_upload_is_recorded_once(self):
+        with self.assertRaisesRegex(ValueError, "note"):
+            gate.apply_action(concept_id="c1", format="long_form", decision="HOLD")
+        with self.assertRaisesRegex(ValueError, "Approve the publish package"):
+            gate.record_upload(concept_id="c1", format="long_form", youtube_video_id="abcdefghijk", method="MANUAL")
+        self.approve()
+        with self.assertRaisesRegex(ValueError, "11 letters"):
+            gate.record_upload(concept_id="c1", format="long_form", youtube_video_id="bad id", method="MANUAL")
+        snap = gate.record_upload(concept_id="c1", format="long_form", youtube_video_id="abcdefghijk", method="MANUAL")
+        self.assertEqual(snap["items"][0]["status"], "PUBLISHED")
+        self.assertEqual(snap["items"][0]["published"]["url"], "https://www.youtube.com/watch?v=abcdefghijk")
+        with self.assertRaisesRegex(ValueError, "already"):
+            gate.record_upload(concept_id="c1", format="long_form", youtube_video_id="abcdefghijk", method="MANUAL")
+        with self.assertRaisesRegex(ValueError, "already published"):
+            self.approve()
+
+
+class UploadTests(PublishTests):
+    def setUp(self):
+        super().setUp()
+        self.config["youtube_upload"]["enabled"] = True
+        env = {"YOUTUBE_OAUTH_CLIENT_ID": "id", "YOUTUBE_OAUTH_CLIENT_SECRET": "secret", "YOUTUBE_OAUTH_REFRESH_TOKEN": "refresh"}
+        item = patch.dict("os.environ", env)
+        item.start()
+        self.addCleanup(item.stop)
+        self.requests = []
+
+    def fake_http(self, thumbnail_fails=False):
+        def http(request, timeout):
+            url = request.full_url
+            self.requests.append((request.get_method(), url, request))
+            if url == uploader.TOKEN_URL:
+                return {}, json.dumps({"access_token": "tok"}).encode()
+            if url.startswith(uploader.UPLOAD_URL.split("?")[0]) and request.get_method() == "POST" and "thumbnails" not in url:
+                return {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=s1"}, b""
+            if request.get_method() == "PUT":
+                return {}, json.dumps({"id": "VIDEOid_001"}).encode()
+            if "thumbnails/set" in url:
+                if thumbnail_fails:
+                    raise ValueError("YouTube refused the request (HTTP 403)")
+                return {}, b"{}"
+            raise AssertionError(url)
+        return http
+
+    def test_upload_is_off_until_enabled_and_authorized(self):
+        self.config["youtube_upload"]["enabled"] = False
+        self.assertIn("off", " ".join(uploader.status()["problems"]))
+        self.approve()
+        with self.assertRaisesRegex(ValueError, "not available"):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        self.assertEqual(self.requests, [])
+
+    def test_upload_sends_the_approved_package_and_records_the_video(self):
+        later = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        self.approve(publish_at=later, tags=["brakes"])
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        start = next(r for m, u, r in self.requests if m == "POST" and "uploadType=resumable" in u)
+        body = json.loads(start.data)
+        self.assertEqual(body["snippet"]["title"], "Why F1 Brakes Glow")
+        self.assertEqual(body["status"]["privacyStatus"], "private")
+        self.assertTrue(body["status"]["containsSyntheticMedia"])
+        self.assertIn("publishAt", body["status"])
+        self.assertEqual(start.get_header("Authorization"), "Bearer tok")
+        published = snap["items"][0]["published"]
+        self.assertEqual((published["youtube_video_id"], published["method"], published["thumbnail_set"]), ("VIDEOid_001", "YOUTUBE_DATA_API", True))
+        with self.assertRaisesRegex(ValueError, "already published"):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+
+    def test_changed_video_bytes_are_refused(self):
+        self.approve()
+        self.video.write_bytes(b"tampered")
+        with self.assertRaisesRegex(ValueError, "changed since approval"):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+
+    def test_thumbnail_failure_still_records_the_uploaded_video(self):
+        self.approve()
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(thumbnail_fails=True))
+        published = snap["items"][0]["published"]
+        self.assertEqual(published["youtube_video_id"], "VIDEOid_001")
+        self.assertFalse(published["thumbnail_set"])
+
+
+if __name__ == "__main__":
+    unittest.main()

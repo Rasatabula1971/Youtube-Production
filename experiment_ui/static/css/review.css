@@ -333,3 +333,27 @@
   text-align: left;
   vertical-align: top;
 }
+
+/* Publish tab fields (D-142). */
+.pd-pub-field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.pd-pub-field > span {
+  font-size: var(--text-sm, 13px);
+  color: var(--muted);
+}
+
+.pd-pub-field textarea,
+.pd-pub-field input,
+.pd-pub-field select {
+  width: 100%;
+}
+
+.pd-pub-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}

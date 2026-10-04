@@ -1,0 +1,15 @@
+{
+  "category_id": "28",
+  "default_privacy": "private",
+  "default_language": "en",
+  "made_for_kids": false,
+  "contains_synthetic_media_default": true,
+  "max_description_sources": 12,
+  "youtube_upload": {
+    "enabled": false,
+    "client_id_env": "YOUTUBE_OAUTH_CLIENT_ID",
+    "client_secret_env": "YOUTUBE_OAUTH_CLIENT_SECRET",
+    "refresh_token_env": "YOUTUBE_OAUTH_REFRESH_TOKEN",
+    "timeout_seconds": 600
+  }
+}

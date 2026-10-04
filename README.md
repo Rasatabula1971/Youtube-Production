@@ -64,7 +64,8 @@ These are not built yet:
 - paid narration and image or video provider dispatch;
 - AI thumbnail image generation (the renderer uses a supplied subject image);
 - Tesseract project exchange;
-- upload and publishing;
+- upload and publishing (publish package and gate D-142, YouTube upload
+  D-143; direct upload is off until OAuth is configured);
 - own-channel analytics;
 - performance learning.
 
