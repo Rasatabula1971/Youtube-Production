@@ -328,6 +328,19 @@ class OverviewTests(RadarTestCase):
         self.assertEqual(by_id[vid(1)]["opportunity_id"], "opp_viral_radar__" + vid(1))
         self.assertEqual(by_id[vid(3)]["series"], [])
 
+    def test_theme_headline_is_the_strongest_members_title_trimmed(self):
+        self.write_fixture()
+        overview = vr.radar_overview(now=NOW)
+        theme = next(t for t in overview["themes"] if t["cluster_id"] == "cl_x")
+        self.assertEqual(theme["headline"], "Brake cooling 2")
+        self.assertEqual(theme["label"], "brake cooling")
+        self.assertEqual(vr.theme_headline("Why F1 brakes GLOW (4K) [Part 2] #shorts #f1"), "Why F1 brakes GLOW")
+        self.assertEqual(vr.theme_headline("How a jet engine works | Explained"), "How a jet engine works")
+        long = vr.theme_headline("word " * 40)
+        self.assertLessEqual(len(long), 92)
+        self.assertTrue(long.endswith("…"))
+        self.assertEqual(vr.theme_headline(""), "")
+
     def test_overview_without_files_is_empty(self):
         overview = vr.radar_overview(now=NOW)
         self.assertEqual((overview["themes"], overview["tracked"]), ([], []))

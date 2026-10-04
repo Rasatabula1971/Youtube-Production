@@ -595,6 +595,56 @@ function humanizeToken(value) {
     .replace(/\b\w/g, function (match) { return match.toUpperCase(); });
 }
 
+// Status codes as sentences (D-170). The written catalogue comes from the
+// server once; a code it does not carry is built by shape here, so a new
+// code never shows up raw.
+let plainSentences = {};
+const PLAIN_GATES = {
+  VISION: "visual evidence", ANALYSIS: "analysis", CONCEPT: "concept", RESEARCH: "research", SCRIPT: "script",
+  TITLE_DIRECTION: "title direction", FINAL_PACKAGING: "final package", FORMAT: "format",
+  PERFORMANCE: "voice performance", NARRATION_PREVIEW: "narration preview", NARRATION_SPEND: "narration spend",
+  FINAL_AUDIO: "final audio", VISUAL_PLAN: "visual plan", VISUAL_CANDIDATE: "visual candidate",
+  VISUAL_RIGHTS: "footage rights", ROUGH_CUT: "rough cut", VISUAL_SPEND: "visual spend",
+  EDIT_PREVIEW: "edit preview", FINAL_EXPORT: "final export", PUBLISH: "publish"
+};
+
+function plainWords(code) {
+  return code.replace(/_/g, " ").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function plainSentence(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return "";
+  const key = text.toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(plainSentences, key)) return plainSentences[key];
+  if (!/^[A-Z0-9_]+$/.test(key)) return text;
+  const gate = key.match(/^HUMAN_([A-Z_]+)_GATE$/);
+  if (gate) return "Waiting for your decision at the " + (PLAIN_GATES[gate[1]] || plainWords(gate[1])) + " gate.";
+  const prefixes = [["WAITING_FOR_", "Waiting for {}."], ["WAITING_", "Waiting for {}."], ["READY_FOR_", "Ready for {}."],
+    ["READY_TO_", "Ready to {}."], ["NO_", "No {} yet."], ["SKIPPED_", "Skipped: {}."], ["FAIL_CLOSED_", "Stopped safely: {}."]];
+  for (const [prefix, template] of prefixes) {
+    if (key.startsWith(prefix) && key.length > prefix.length) return template.replace("{}", plainWords(key.slice(prefix.length)));
+  }
+  const suffixes = [["_REWORK_REQUIRED", "{} was sent back for rework."], ["_REQUIRED", "{} is required."],
+    ["_APPROVED", "{} is approved."], ["_REJECTED", "{} was rejected."], ["_READY", "{} is ready."],
+    ["_FAILED", "{} failed."], ["_COMPLETE", "{} is done."], ["_UNAVAILABLE", "{} is not available."], ["_ERROR", "{} hit an error."]];
+  for (const [suffix, template] of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length) {
+      const body = plainWords(key.slice(0, -suffix.length));
+      return template.replace("{}", body.charAt(0).toUpperCase() + body.slice(1));
+    }
+  }
+  const body = plainWords(key);
+  return body.charAt(0).toUpperCase() + body.slice(1) + ".";
+}
+
+async function loadPlainLanguage() {
+  try {
+    const data = await api("/api/plain-language");
+    if (data && data.sentences && typeof data.sentences === "object") plainSentences = data.sentences;
+  } catch (_) { /* the shape rules above still apply */ }
+}
+
 function safeYoutubeUrl(value) {
   try {
     const url = new URL(String(value || ""));
@@ -1857,8 +1907,10 @@ window.YP = {
   openEvidence: function (opportunityId, trigger) { return openEvidenceDrawer(opportunityId, trigger); },
   routeLabel: function (route) { return ROUTE_LABELS[route] || route; },
   status: function () { return latestStatus; },
-  refresh: function () { return loadStatus(); }
+  refresh: function () { return loadStatus(); },
+  plain: plainSentence
 };
+loadPlainLanguage();
 
 if (opportunityInbox) {
   exploreTopicForm.addEventListener("submit", exploreTopic);
@@ -3578,7 +3630,7 @@ function renderResearchReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>CLAIM</h4><h3>' +
       escapeHtml(claim.statement || claim.claim_id) + '</h3>' +
       '<div class="concept-meta"><span>' + escapeHtml(humanizeToken(claim.role)) +
-      '</span><span>' + escapeHtml(humanizeToken(coverage.state)) +
+      '</span><span>' + escapeHtml(plainSentence(coverage.state)) +
       '</span><span>Concept ' + escapeHtml(claim.concept_id || "") +
       '</span></div></div>' +
     '<div class="concept-detail-card"><h4>RESEARCH QUESTIONS</h4><p>' +

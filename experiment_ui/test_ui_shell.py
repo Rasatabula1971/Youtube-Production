@@ -632,3 +632,20 @@ class DoctorContractTests(unittest.TestCase):
         self.assertIn('id="toolsDoctorRun"', script)
         self.assertIn("function renderDoctor()", script)
         self.assertNotIn("/api/doctor", server.HUMAN_GATE_MUTATION_ROUTES)
+
+
+class PlainLanguageContractTests(unittest.TestCase):
+    """Status codes reach the pages as sentences (D-170)."""
+
+    def test_pages_show_sentences_not_codes(self) -> None:
+        app = (STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertIn("plain: plainSentence", app)
+        self.assertIn('api("/api/plain-language")', app)
+        for name in ("js/gate-reviews.js", "js/packaging.js", "js/produce.js"):
+            with self.subTest(source=name):
+                text = (STATIC / name).read_text(encoding="utf-8")
+                self.assertIn("function plain(value)", text)
+                self.assertNotIn("Status: ' + esc(words(", text)
+                self.assertNotIn("Gate status: ' + esc(words(", text)
+        radar = (STATIC / "js" / "radar.js").read_text(encoding="utf-8")
+        self.assertIn("theme.headline || theme.label", radar)

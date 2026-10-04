@@ -5211,3 +5211,30 @@ job state said RUNNING forever while the child kept writing artifacts.
 
 **Consequences.** "Why does nothing work?" has a ten-second answer. A
 restarted UI never runs beside a ghost of its last job.
+
+## D-170 — Fewer, better words: status codes become sentences, themes become questions
+
+**Context.** The pages leaked internals: gate panels said "Gate status:
+waiting for draft research packages", and radar themes were keyword stems
+("bullet bulletproof glas material").
+
+**Decision.**
+- **One translation table.** `experiment_ui/plain_language.py` holds a
+  written sentence for every status code a page shows and builds one by
+  shape for any other (WAITING_FOR_X, READY_FOR_X, HUMAN_X_GATE,
+  X_REWORK_REQUIRED, NO_X, SKIPPED_X …), so a new code never appears raw.
+  A test runs every code the engines emit through it. The catalogue is
+  served once per page load (`/api/plain-language`) and `YP.plain(code)`
+  applies it; the same shape rules exist in app.js for a code the
+  catalogue does not carry. The gate pages, Packaging, Produce, the radar
+  and the research coverage line use it where they showed codes.
+- **Theme headline.** The radar theme reads as the strongest on-lane
+  member's title, trimmed of bracketed tags, hashtags and "| Channel"
+  suffixes (`theme_headline`), with the stem label shown under it as
+  "Shared words". No model call: a creator's title already states the
+  viewer's question better than a stem list does.
+
+**Consequences.** The app reads like a tool. Codes stay in the files and
+the API, where they are stable identifiers; only the words on the page
+changed. Adding a code to a gate means adding a sentence to one file, and
+the test says so when it is missing.
