@@ -125,14 +125,31 @@ PARTIAL_MESSAGES = {
 def research_acquisition_message() -> str:
     """Explain a research evidence failure with the real backend error."""
     first_error = ""
+    incomplete: list[str] = []
     try:
         summary = json.loads(RESEARCH_ACQUISITION_SUMMARY.read_text(encoding="utf-8"))
         for item in summary.get("results", []):
             if isinstance(item, dict) and (item.get("first_error") or item.get("message")):
-                first_error = str(item.get("first_error") or item.get("message"))
-                break
-    except (OSError, ValueError, AttributeError):
+                first_error = first_error or str(item.get("first_error") or item.get("message"))
+            if isinstance(item, dict) and item.get("status") == "PARTIAL" and int(item.get("pages") or 0) > 0:
+                incomplete.append(
+                    f"{item.get('concept_id')} ({item.get('pages')} pages, "
+                    f"{item.get('errors')} question search(es) failed)"
+                )
+    except (OSError, ValueError, AttributeError, TypeError):
         pass
+    if incomplete:
+        # Pages were found; only some questions have no source yet (D-152).
+        return (
+            "Source pages were found, but some research questions still have no source: "
+            + "; ".join(incomplete[:3])
+            + ". The Research Gate needs every question covered, so research stops here (D-129)."
+            + (f" First error: {first_error[:400]}" if first_error else "")
+            + " Retry Continue Automatically: those questions are searched again, also as short "
+            "keywords. If it keeps failing, check the search backends with: python "
+            "source_acquisition/agent_reach_adapter.py --mode doctor (Exa needs Agent Reach's "
+            "mcporter on PATH)."
+        )
     return (
         "Research web search and page reading returned no usable source pages, so "
         "there is nothing for the Research Gate yet. This is a network/search "
