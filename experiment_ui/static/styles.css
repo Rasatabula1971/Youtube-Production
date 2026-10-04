@@ -839,7 +839,54 @@ button.danger {
   50% { box-shadow: 0 0 0 6px rgba(47,129,247,0); }
 }
 
+/* Live run banner (D-155): visible on every page while a job runs. */
+.run-banner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 26px;
+  padding: 10px 14px 12px;
+  border: 1px solid rgba(47,129,247,.55);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.run-banner[hidden] { display: none; }
+.run-banner.quiet { border-color: rgba(210,153,34,.6); }
+.run-banner-bar {
+  grid-column: 1 / -1;
+  order: 2;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(47,129,247,.15);
+}
+.run-banner-bar span {
+  display: block;
+  width: 30%;
+  height: 100%;
+  background: var(--accent-2);
+  animation: run-banner-slide 1.6s ease-in-out infinite;
+}
+.run-banner-copy { min-width: 0; display: grid; gap: 2px; }
+.run-banner-copy strong { font-size: 13px; }
+.run-banner-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes run-banner-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+@media (max-width: 620px) {
+  .run-banner { margin: 0 16px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .run-banner-bar span,
   .running-spinner,
   .running-dots span,
   #analysisCurrentPanel.is-running,

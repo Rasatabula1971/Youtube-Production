@@ -2068,3 +2068,38 @@ class ExperimentUiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JobProgressTests(unittest.TestCase):
+    """The live run banner reads the current step from the job log (D-155)."""
+
+    def test_reports_current_step_count_and_last_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "job.log"
+            log.write_text(
+                "=" * 72 + "\nAUTOMATIC MACHINE STEP — Acquire research evidence\n" + "=" * 72 + "\n"
+                "searching rq001\n"
+                "=" * 72 + "\nAUTOMATIC MACHINE STEP — Draft scripts\n" + "=" * 72 + "\n"
+                "calling model for c1.long\n\n",
+                encoding="utf-8",
+            )
+            progress = server.job_progress({"status": "RUNNING", "log_path": str(log)})
+        self.assertEqual(progress["current_step"], "Draft scripts")
+        self.assertEqual(progress["step_number"], 2)
+        self.assertEqual(progress["last_line"], "calling model for c1.long")
+        self.assertTrue(progress["last_output_at"])
+
+    def test_single_action_job_has_no_step_but_still_reports_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "job.log"
+            log.write_text("working\n", encoding="utf-8")
+            progress = server.job_progress({"status": "RUNNING", "log_path": str(log)})
+        self.assertIsNone(progress["current_step"])
+        self.assertEqual(progress["last_line"], "working")
+
+    def test_finished_or_missing_job_has_no_progress(self):
+        self.assertIsNone(server.job_progress({"status": "SUCCEEDED", "log_path": "x"}))
+        self.assertIsNone(server.job_progress(None))
+        self.assertIsNone(server.job_with_progress(None))
+        missing = server.job_progress({"status": "RUNNING", "log_path": "/nonexistent/x.log"})
+        self.assertEqual(missing["step_number"], 0)

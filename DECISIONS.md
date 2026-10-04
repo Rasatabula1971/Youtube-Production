@@ -4732,3 +4732,21 @@ stays the headline failure, with the stuck step listed.
 
 **Consequences.** One concept's missing sources no longer stall the
 others. Each run retries the stuck step first, as before.
+
+## D-155 — A live run banner shows that a job is working
+
+**Context.** Continue Automatically can run for many minutes, and a single
+model or web call can take up to 15 minutes. The top-right job button showed
+only "RUNNING" and the job name, so a long call looked like a frozen screen.
+
+**Decision.** While a job runs, a banner is shown under the page header on
+every page. It names the current automatic step (read from the job log's
+"AUTOMATIC MACHINE STEP" lines) and the step number. A clock ticks every
+second, a moving bar runs across the banner, and the latest log line is
+shown. If the log has not changed for two minutes, the banner turns amber and
+says the job is still working and how long it has been quiet. The job button
+shows the same step and clock. The status payload carries this as
+`job.progress` (`current_step`, `step_number`, `last_line`, `last_output_at`).
+
+**Consequences.** Only the log tail is read on each status poll, so a very
+long run may show a lower step number; the step name stays correct.

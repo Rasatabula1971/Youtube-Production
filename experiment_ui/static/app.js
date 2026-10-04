@@ -411,6 +411,9 @@ const narrationReturnNext = document.getElementById("narrationReturnNext");
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
+const runBanner = document.getElementById("runBanner");
+const runBannerTitle = document.getElementById("runBannerTitle");
+const runBannerDetail = document.getElementById("runBannerDetail");
 const jobDrawer = document.getElementById("jobDrawer");
 const drawerScrim = document.getElementById("drawerScrim");
 const closeJobDrawer = document.getElementById("closeJobDrawer");
@@ -7102,12 +7105,59 @@ function renderTools(data) {
   renderStages(data.stages || []);
 }
 
+// Live run banner (D-155): the current step and a ticking clock on every
+// page, so a long model call never looks like a frozen screen.
+const RUN_QUIET_AFTER_MS = 120000;
+let runBannerJob = null;
+let runBannerTimer = null;
+
+function paintRunBanner() {
+  const job = runBannerJob;
+  if (!job) return;
+  const now = Date.now();
+  const started = Date.parse(job.started_at || "");
+  const elapsed = formatElapsed(now - (Number.isFinite(started) ? started : now));
+  const progress = job.progress || {};
+  const step = progress.current_step;
+  const name = job.label || job.action_id || "Job";
+  const stopping = job.status === "STOPPING";
+  runBannerTitle.textContent =
+    (stopping ? "Stopping: " : "Working: ") +
+    (step ? "step " + (progress.step_number || 1) + " — " + step : name) + " · " + elapsed;
+  const lastOutput = Date.parse(progress.last_output_at || "");
+  const quietFor = Number.isFinite(lastOutput) ? now - lastOutput : 0;
+  const quiet = quietFor > RUN_QUIET_AFTER_MS;
+  runBanner.classList.toggle("quiet", quiet);
+  runBannerDetail.textContent = quiet
+    ? "Still working: no new output for " + formatElapsed(quietFor) +
+      ". AI and web calls can take up to 15 minutes; the log shows the last line."
+    : (step ? name + ". " : "") + (progress.last_line ? "Latest: " + progress.last_line : "Starting…");
+  jobSummaryStatus.textContent = (stopping ? "STOPPING" : "RUNNING") + " · " + elapsed;
+  jobSummaryLabel.textContent = step || name;
+}
+
+function updateRunBanner(job) {
+  const running = Boolean(job && (job.status === "RUNNING" || job.status === "STOPPING"));
+  runBanner.hidden = !running;
+  runBannerJob = running ? job : null;
+  if (!running) {
+    if (runBannerTimer) {
+      clearInterval(runBannerTimer);
+      runBannerTimer = null;
+    }
+    return;
+  }
+  paintRunBanner();
+  if (!runBannerTimer) runBannerTimer = setInterval(paintRunBanner, 1000);
+}
+
 function renderJob(job, log) {
   const hasJob = job && Object.keys(job).length;
   noteJobLogActivity(job, log);
   updateRunningActivity(job);
   if (!hasJob) {
     updateRunningActivity(null);
+    updateRunBanner(null);
     jobSummaryButton.className = "job-summary neutral";
     jobSummaryButton.setAttribute("aria-label", "Live job: idle");
     jobSummaryStatus.textContent = "IDLE";
@@ -7136,6 +7186,7 @@ function renderJob(job, log) {
   );
   jobSummaryStatus.textContent = job.status || "UNKNOWN";
   jobSummaryLabel.textContent = job.label || job.action_id || "Job";
+  updateRunBanner(job);
 
   jobTitle.textContent = job.label || job.action_id || "Job";
   let meta =
