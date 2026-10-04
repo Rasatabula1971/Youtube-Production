@@ -4819,3 +4819,52 @@ while the UI is running on its port.
 - The next Continue Automatically starts after a new Opportunity Gate
   decision.
 - To undo, move the archived folders back.
+
+## D-158 — Gate policy Phase B: visual gates and spend under the confirmed budget
+
+**Context.** The operator confirmed the per-video budget: a $5 target and a
+$10 ceiling. Phase B of D-156 applies the gate policy to the visual and
+spend gates.
+
+**Decision.**
+- **Budget.** `video_budget_config.json` is marked `confirmed_by_human`.
+- **Gates now `AUTO_IF_CLEAN`, and their checks:**
+  - **Visual Plan:** the plan builds, every shot is timed, and the video is
+    not over its target.
+  - **Visual Candidates:** each shot gets the first `ELIGIBLE` candidate.
+    Results are sorted best first, and only verified-licence footage is
+    `ELIGIBLE`. A shot with nothing usable is marked as a gap. A shot whose
+    only finds are editorial or unverified footage is held for a person.
+    Stale search results are held.
+  - **Rough Cut:** approve with gaps. This authorizes no spend; the gaps go
+    on to gap planning.
+  - **Edit Preview:** approve when the preview video exists. The note gives
+    the number of placeholder segments. The finished video is still reviewed
+    at the Final Export Gate.
+  - **Final Audio:** approve, because only videos whose audio QC passed are
+    listed.
+  - **Narration Spend:** approve, with every criterion recorded, only when
+    all of these hold:
+    - the provider contract is verified;
+    - a voice id and licence reference are set;
+    - the visual plan is approved;
+    - the worst-case cost keeps the video's committed spend at or under the
+      $5 target.
+  - **Visual Spend:** authorize a shot only when the active image provider
+    is verified and priced, with cost = price × variants, and only if that
+    cost keeps the video at or under the target.
+- **Spend above the target, an unknown price, or an unconfirmed budget is
+  held for a person.** Nothing can be authorized above the ceiling, which
+  `video_budget.reserve` enforces as before.
+- **Visual Rights stays human.** Licensed footage is already approved
+  automatically before that gate, so only editorial footage reaches it, and
+  editorial footage is never approved automatically.
+
+**Consequences.**
+- No narration provider, voice licence or image provider is configured yet,
+  so both spend gates hold every item, with that reason, until they are.
+- `human_authorization_required` in the visual spend config stays true: the
+  operator's budget confirmation and this policy are that authorization, and
+  each decision is still recorded.
+- One combined Budget screen per video and the merged review screens follow
+  as Phase C.

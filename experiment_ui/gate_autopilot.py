@@ -33,6 +33,14 @@ STATE_GATES = {
     "HUMAN_FORMAT_GATE": "format",
     "HUMAN_PERFORMANCE_GATE": "performance",
     "HUMAN_NARRATION_PREVIEW_GATE": "narration_preview",
+    # Phase B (D-158).
+    "HUMAN_VISUAL_PLAN_GATE": "visual_plan",
+    "HUMAN_NARRATION_SPEND_GATE": "narration_spend",
+    "HUMAN_FINAL_AUDIO_GATE": "final_audio",
+    "HUMAN_VISUAL_CANDIDATE_GATE": "visual_candidate",
+    "HUMAN_ROUGH_CUT_GATE": "rough_cut",
+    "HUMAN_VISUAL_SPEND_GATE": "visual_spend",
+    "HUMAN_EDIT_PREVIEW_GATE": "edit_preview",
 }
 
 CLEAN_VISION_CONFIDENCE = {"HIGH", "MODERATE"}
@@ -291,6 +299,232 @@ def _decide_narration_preview(control: Any) -> tuple[int, list[str]]:
     return decided, held
 
 
+# --- Phase B: visual gates and spend (D-158) -------------------------------
+
+
+def _json_file(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def spend_problem(control: Any, concept_id: str, fmt: str, cost_usd: float | None) -> str | None:
+    """Spend is automatic only on a confirmed budget and while the video stays at or under its target."""
+    if cost_usd is None or cost_usd <= 0:
+        return "the cost is not known"
+    budget = control.video_budget
+    try:
+        summary = budget.summary(budget.video_id(concept_id, fmt))
+    except (OSError, ValueError) as exc:
+        return f"the budget could not be read ({exc})"
+    if not summary.get("confirmed_by_human"):
+        return "the per-video budget is not confirmed"
+    after = round(float(summary.get("committed_usd") or 0) + float(cost_usd), 4)
+    if after > float(summary.get("target_usd") or 0):
+        return (
+            f"${cost_usd:.2f} would bring this video to ${after:.2f}, above the "
+            f"${float(summary.get('target_usd') or 0):.2f} target"
+        )
+    return None
+
+
+def visual_plan_problem(item: dict[str, Any]) -> str | None:
+    if item.get("error"):
+        return "the plan cannot be built: " + str(item["error"])[:200]
+    if int(item.get("untimed_shots") or 0):
+        return f"{item['untimed_shots']} shot(s) have no timing"
+    budget = item.get("budget") or {}
+    if budget.get("over_target") or budget.get("over_ceiling"):
+        return "the video is already over its budget target"
+    return None
+
+
+def best_candidate(shot: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """The first ELIGIBLE candidate (results are pre-sorted best first)."""
+    candidates = [c for c in shot.get("candidates") or [] if isinstance(c, dict)]
+    eligible = next((c for c in candidates if c.get("state") == "ELIGIBLE"), None)
+    if eligible is not None:
+        return eligible, None
+    if any(c.get("state") == "HUMAN_REVIEW_REQUIRED" for c in candidates):
+        return None, "only editorial or unverified footage was found"
+    return None, None
+
+
+def _decide_visual_plan(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    snapshot = control.visual_plan_gate_state()
+    for item in snapshot.get("items", []):
+        if item.get("decision") not in {"PENDING", "BLOCKED"}:
+            continue
+        concept_id, fmt = str(item.get("concept_id")), str(item.get("format"))
+        problem = visual_plan_problem(item)
+        if problem:
+            held.append(f"{concept_id} {fmt}: {problem}")
+            continue
+        decided += _apply(
+            control.visual_plan_review.apply_action, dict(
+                concept_id=concept_id, format=fmt, decision="APPROVE_VISUAL_PLAN",
+                note=NOTE + "every shot is timed and the video is within its budget target.",
+            ),
+            f"{concept_id} {fmt}", held,
+        )
+    return decided, held
+
+
+def _decide_narration_spend(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    production = Path(control.PRODUCTION_DIR)
+    render = _json_file(production / "narration_render_config.json")
+    identity = _json_file(production / "voice_performance_config.json").get("voice_identity") or {}
+    for item in control.narration_spend_gate_snapshot().get("items", []):
+        if item.get("decision") != "PENDING":
+            continue
+        concept_id, fmt = str(item.get("concept_id")), str(item.get("format"))
+        label = f"{concept_id} {fmt}"
+        if not (render.get("provider_contract") or {}).get("schema_verified"):
+            held.append(f"{label}: the narration provider's contract is not verified")
+            continue
+        if not identity.get("voice_id") or not identity.get("license_reference"):
+            held.append(f"{label}: the voice and its licence are not set")
+            continue
+        if not control.visual_plan_review.is_approved(concept_id, fmt):
+            held.append(f"{label}: the visual plan is not approved")
+            continue
+        worst = item.get("worst_case_estimate_usd")
+        problem = spend_problem(control, concept_id, fmt, float(worst) if worst is not None else None)
+        if problem:
+            held.append(f"{label}: {problem}")
+            continue
+        criteria = {name: True for name in item.get("required_accept_criteria") or []}
+        decided += _apply(
+            control.apply_narration_spend_gate_action, dict(
+                concept_id=concept_id, format=fmt, decision="ACCEPT", criteria=criteria,
+                note=NOTE + f"worst case ${float(worst):.2f} keeps the video within its confirmed "
+                "budget target; provider contract verified; voice and licence set.",
+            ),
+            label, held,
+        )
+    return decided, held
+
+
+def _decide_final_audio(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    # Only videos whose audio QC passed are listed at this gate.
+    for item in control.final_audio_gate_state().get("items", []):
+        if item.get("decision") != "PENDING":
+            continue
+        concept_id, fmt = str(item.get("concept_id")), str(item.get("format"))
+        decided += _apply(
+            control.narration_final_review.apply_action, dict(
+                concept_id=concept_id, format=fmt, decision="APPROVE_FINAL_AUDIO",
+                note=NOTE + "audio QC passed (duration, silence and clipping).",
+            ),
+            f"{concept_id} {fmt}", held,
+        )
+    return decided, held
+
+
+def _decide_visual_candidate(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    for packet in control.visual_candidate_review_snapshot().get("packets", []):
+        result_file = str(packet.get("result_file"))
+        if packet.get("stale_shot_ids"):
+            held.append(f"{packet.get('concept_id')} {packet.get('format')}: search results are out of date")
+            continue
+        decisions = packet.get("decisions") or {}
+        for shot in packet.get("shots", []):
+            shot_id = str(shot.get("shot_id") or "")
+            if not shot_id or shot_id in decisions:
+                continue
+            candidate, problem = best_candidate(shot)
+            if problem:
+                held.append(f"shot {shot_id}: {problem}")
+                continue
+            if candidate is None:
+                kwargs = dict(result_file=result_file, shot_id=shot_id, action="NEEDS_BETTER_VISUAL",
+                              note=NOTE + "no usable footage found; left as a gap.")
+            else:
+                kwargs = dict(result_file=result_file, shot_id=shot_id, action="SELECT",
+                              candidate_id=str(candidate.get("candidate_id")),
+                              note=NOTE + "best licensed candidate with verified reuse rights.")
+            decided += _apply(control.apply_visual_candidate_review_action, kwargs, f"shot {shot_id}", held)
+    return decided, held
+
+
+def _decide_rough_cut(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    for item in control.visual_rough_cut_review_snapshot().get("items", []):
+        if item.get("decision") is not None and item.get("review_current"):
+            continue
+        summary = item.get("summary") or {}
+        decided += _apply(
+            control.apply_visual_rough_cut_review_action, dict(
+                rough_cut_file=str(item.get("rough_cut_file")), decision="APPROVE_WITH_GAPS",
+                note=NOTE + f"{summary.get('placeholders', 0)} placeholder(s) go on to gap planning; "
+                "approving authorizes no spend.",
+            ),
+            f"{item.get('concept_id')} {item.get('format')}", held,
+        )
+    return decided, held
+
+
+def _decide_visual_spend(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    providers = _json_file(Path(control.PRODUCTION_DIR) / "visual_provider_config.json")
+    active = str(providers.get("active_provider") or "")
+    provider = (providers.get("providers") or {}).get(active) or {}
+    price = provider.get("price_per_image_usd")
+    variants = int(providers.get("variants_per_shot") or 1)
+    for item in control.visual_spend_review_snapshot().get("items", []):
+        concept_id, fmt = str(item.get("concept_id")), str(item.get("format"))
+        decisions = item.get("decisions") or {}
+        for gap in item.get("hero_candidates") or []:
+            shot_id = str(gap.get("shot_id") or "")
+            if not shot_id or shot_id in decisions:
+                continue
+            label = f"{concept_id} {fmt} shot {shot_id}"
+            if not active or not provider.get("contract_verified"):
+                held.append(f"{label}: no verified image provider is set")
+                continue
+            cost = float(price) * variants if isinstance(price, (int, float)) else None
+            problem = spend_problem(control, concept_id, fmt, cost)
+            if problem:
+                held.append(f"{label}: {problem}")
+                continue
+            decided += _apply(
+                control.apply_visual_spend_review_action, dict(
+                    gap_plan_file=str(item.get("gap_plan_file")), shot_id=shot_id,
+                    decision="AUTHORIZE_GENERATION", max_cost_usd=cost,
+                    note=NOTE + f"${cost:.2f} ({variants} variant(s)) keeps the video within its "
+                    "confirmed budget target.",
+                ),
+                label, held,
+            )
+    return decided, held
+
+
+def _decide_edit_preview(control: Any) -> tuple[int, list[str]]:
+    decided, held = 0, list[str]()
+    for item in control.edit_preview_review_snapshot().get("items", []):
+        if item.get("decision") != "PENDING":
+            continue
+        label = str(item.get("result_file"))
+        if not item.get("preview_file"):
+            held.append(f"{label}: the preview video is missing")
+            continue
+        decided += _apply(
+            control.apply_edit_preview_action, dict(
+                result_file=label, decision="APPROVE_EDIT_DIRECTION",
+                note=NOTE + f"preview rendered with {item.get('placeholder_segments', 0)} placeholder "
+                "segment(s); you review the finished video at the Final Export Gate.",
+            ),
+            label, held,
+        )
+    return decided, held
+
+
 RUNNERS: dict[str, Callable[[Any], tuple[int, list[str]]]] = {
     "vision": _decide_vision,
     "analysis": _decide_analysis,
@@ -298,6 +532,13 @@ RUNNERS: dict[str, Callable[[Any], tuple[int, list[str]]]] = {
     "format": _decide_format,
     "performance": _decide_performance,
     "narration_preview": _decide_narration_preview,
+    "visual_plan": _decide_visual_plan,
+    "narration_spend": _decide_narration_spend,
+    "final_audio": _decide_final_audio,
+    "visual_candidate": _decide_visual_candidate,
+    "rough_cut": _decide_rough_cut,
+    "visual_spend": _decide_visual_spend,
+    "edit_preview": _decide_edit_preview,
 }
 
 
