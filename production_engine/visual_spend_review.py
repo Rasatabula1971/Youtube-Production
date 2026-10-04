@@ -290,6 +290,7 @@ def snapshot() -> dict[str, Any]:
     decided_total = 0
     authorized = 0
     stale_removed = 0
+    stale_ignored = 0
     authorized_max_total = 0.0
     current_spend_paths: set[Path] = set()
 
@@ -353,10 +354,13 @@ def snapshot() -> dict[str, Any]:
         )
 
     if SPEND.exists():
+        # Stale spend reviews are counted, never deleted on a status poll: a
+        # rough-cut change mid-job must not erase authorizations in the window
+        # before the gap plan is rebuilt (audit 2026-10-04). They are inert
+        # because every consumer checks the gap-plan hash.
         for stale_path in SPEND.glob("*.visual_spend_review.json"):
             if stale_path.resolve() not in current_spend_paths:
-                stale_path.unlink()
-                stale_removed += 1
+                stale_ignored += 1
 
     workflow_cap = float(config["workflow_hard_cap_usd"])
     authorized_max_total = round(authorized_max_total, 2)
@@ -383,6 +387,7 @@ def snapshot() -> dict[str, Any]:
         "authorized": authorized,
         "authorized_max_total_usd": authorized_max_total,
         "stale_removed": stale_removed,
+        "stale_ignored": stale_ignored,
         "currency": config["currency"],
         "per_shot_hard_cap_usd": config["per_shot_hard_cap_usd"],
         "workflow_hard_cap_usd": workflow_cap,

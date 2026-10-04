@@ -715,10 +715,16 @@ def apply_review_action(
         if isinstance(item, dict) and item.get("item_id")
     }
     previous = mapped.get(item_id) or {}
+    # Who decided this item, not who opened the response file: the gate
+    # policy and a person can decide items of the same video (D-156).
+    reviewer = reviewer_id()
+    decider = os.getenv("YOUTUBE_DECIDED_BY", "HUMAN").strip().upper() or "HUMAN"
     mapped[item_id] = {
         "item_id": item_id,
         "decision": decision,
         "note": str(note or ""),
+        "reviewer": reviewer,
+        "decided_by": decider,
     }
     append_jsonl(
         history_file(),
@@ -728,8 +734,8 @@ def apply_review_action(
             "video_id": video_id,
             "item_id": item_id,
             "decision": decision,
-            "decided_by": "HUMAN",
-            "reviewer": str(response.get("reviewer") or reviewer_id()),
+            "decided_by": decider,
+            "reviewer": reviewer,
             "previous_decision": previous.get("decision"),
             "note": str(note or ""),
             "profile_content_sha256": request.get("request_provenance", {}).get(

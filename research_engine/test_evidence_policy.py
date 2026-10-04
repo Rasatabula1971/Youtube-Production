@@ -187,6 +187,26 @@ class ConditionalReviewTests(unittest.TestCase):
         self.assertEqual(policy["classification"], REVIEW_REQUIRED)
         self.assertIn("Weak evidence", policy["reasons"][0])
 
+    def test_human_rework_is_not_cleared_again_by_the_policy_after_reprepare(self):
+        # A REWORK regenerates the draft; when the claim comes back unchanged
+        # the policy must leave it to the person who sent it back (audit 2026-10-04).
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.prepared(stack, Path(tmp), self.strong_package())
+            plan_path = review.OUTPUT_DIR / "plans" / "c1.research_plan.json"
+            plan_path.parent.mkdir(parents=True, exist_ok=True)
+            plan_path.write_text(json.dumps({
+                "concept_id": "c1", "instructions": [],
+                "research_questions": [{"question_id": "rq001", "question": "What causes it?", "origin": "concept"}],
+            }), encoding="utf-8")
+            review.apply_action(
+                concept_id="c1", claim_id="clm001", decision="REWORK", criteria={}, note="Find a better source."
+            )
+            snapshot = review.prepare_state()
+        claim = snapshot["claims"][0]
+        self.assertEqual(claim["decision"], "PENDING")
+        self.assertNotEqual(claim.get("decided_by"), "EVIDENCE_POLICY")
+        self.assertFalse(snapshot["complete"])
+
     def test_human_decision_wins_and_survives_reprepare(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.prepared(stack, Path(tmp), self.strong_package())

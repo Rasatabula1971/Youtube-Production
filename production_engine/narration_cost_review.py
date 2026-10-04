@@ -18,7 +18,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from pipeline_integrity import atomic_write_json
+from pipeline_integrity import atomic_write_json, named_lock
 import video_budget
 from narration_render import (
     ESTIMATES_DIR,
@@ -439,6 +439,16 @@ def apply_action(
     note: str | None = None,
 ) -> dict[str, Any]:
     key = artifact_key(concept_id, format)
+    # Two decisions on the same video at once (two tabs, or a person and the
+    # gate policy) must not interleave reserve/release with the approval file
+    # (audit 2026-10-04).
+    with named_lock(f"narration_spend_gate:{key}"):
+        return _apply_action(key, concept_id, format, decision, criteria, note)
+
+
+def _apply_action(
+    key: str, concept_id: str, format: str, decision: str, criteria: dict[str, Any], note: str | None
+) -> dict[str, Any]:
     request_path = (
         REVIEW_REQUESTS_DIR / f"{key}.narration_spend_review_request.json"
     )

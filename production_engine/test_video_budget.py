@@ -105,6 +105,12 @@ class VideoBudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ceiling"):
             budget.reserve(video="v:f", category="visual", ref="y", amount_usd=1)
 
+    def test_a_torn_ledger_line_blocks_rather_than_loosens(self):
+        budget.LEDGER_FILE.write_text('{"event":"RESERVE","video_id":"v:f","category":"visual","ref":"x","amount_usd":9.0' + "\n")
+        with self.assertRaisesRegex(ValueError, "ceiling"):
+            budget.reserve(video="v:f", category="visual", ref="y", amount_usd=0.5)
+        self.assertTrue(budget.summary("v:f")["over_ceiling"])
+
 
 if __name__ == "__main__":
     unittest.main()

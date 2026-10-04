@@ -4899,3 +4899,53 @@ question: what this video may cost.
 - The script-gate and research-gate screens are unchanged: a concept's
   research is decided before its script exists (D-104), so research flags
   cannot sit inside the Script Gate.
+
+## D-160 — Audit 2026-10-04: request hardening, spend accounting, decision integrity
+
+**Context.** A structured adversarial audit (static checks, dependency and
+security scans, live request fuzzing, five targeted reviews and a
+reproduction of each serious finding) of the build at D-159.
+
+**Decision.** The confirmed defects are fixed in one change:
+
+- **Requests.** A POST with a bad or oversized `Content-Length`, invalid
+  UTF-8, a non-object JSON value or deeply nested JSON used to crash the
+  handler thread; a body shorter than its length held the thread forever.
+  Bodies are capped (4 MB), parsed defensively (400/413), and the handler
+  has a 60-second socket timeout.
+- **Narration spend.** The provider's reported cost is validated as money
+  (bool and NaN no longer pass), the approved worst case is checked before
+  every segment call, and if the rendered audio cannot be registered the
+  spend is still recorded and the audio kept. Narration spend decisions are
+  serialised per video. A torn budget-ledger line now blocks reservations
+  instead of silently loosening the ceiling.
+- **Decision integrity.** A claim a person sent back for REWORK is no longer
+  re-accepted by the evidence policy when the regenerated claim comes back
+  unchanged. Vision and analysis decisions record the reviewer and
+  `decided_by` per decision; the gate policy sets `YOUTUBE_DECIDED_BY=GATE_POLICY`
+  while it decides, so automatic decisions are never logged as HUMAN.
+- **State on polls.** The rights and visual-spend snapshots no longer delete
+  stale review files during a status poll; stale files are ignored
+  (`stale_ignored`) and inert. This removes a window in which a running
+  job's rewrite of an upstream file erased human decisions.
+- **Jobs.** Stop ends the job's whole process tree; the UI stops a running
+  job on exit; a job is finalised once even when two polls see it end; the
+  history log is append-only; the live log is read as a tail. The page
+  never overlaps its own status polls.
+- **Providers.** A Gemini HTTP 429 counts as rate limiting on the direct
+  route, and a batch stops once the quota is exhausted. The direct page
+  reader refuses loopback, private and link-local hosts before and after
+  redirects, caps page size at 5 MB and redirects at 5. Provider JSON must
+  be an object. `SAFETY_STOP` is reported as such, not as PARTIAL.
+
+**Consequences.** Findings not fixed here, recorded for the operator:
+- The direct-Gemini route asserts "free tier" from configuration alone;
+  nothing verifies the key's project has no billing.
+- A YouTube upload whose final response is lost can leave an unrecorded
+  (private) video; a retry would upload it again.
+- A job orphaned by a UI crash (not a normal exit) is not re-adopted on
+  restart.
+- Thumbnail and visual generation treat a failure after dispatch as $0
+  spent; narration already records partial spend.
+- The gate policy only runs inside an automatic run; at a held gate with no
+  machine step ready, Continue Automatically stays disabled.

@@ -7248,7 +7248,14 @@ function isolated(name, call) {
   }
 }
 
+// One status request at a time (audit 2026-10-04): a slow server must not
+// get a pile of overlapping polls, each running the same snapshots.
+let statusInFlight = false;
+let jobInFlight = false;
+
 async function loadStatus() {
+  if (statusInFlight) return;
+  statusInFlight = true;
   try {
     const data = await api("/api/status");
     csrfToken = String(data.csrf_token || "");
@@ -7258,10 +7265,14 @@ async function loadStatus() {
     }
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    statusInFlight = false;
   }
 }
 
 async function loadJob() {
+  if (jobInFlight) return;
+  jobInFlight = true;
   try {
     const data = await api("/api/job");
     renderJob(data.job, data.log);
@@ -7269,10 +7280,13 @@ async function loadJob() {
       (data.job.status === "RUNNING" || data.job.status === "STOPPING");
     if (!running) {
       stopJobPolling();
+      jobInFlight = false;
       await loadStatus();
     }
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    jobInFlight = false;
   }
 }
 

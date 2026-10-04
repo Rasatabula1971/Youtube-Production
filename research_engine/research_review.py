@@ -121,6 +121,9 @@ def _preserved_decisions(
                     }
                 continue
             if str(saved.get("decision") or "").upper() == "REWORK":
+                # The regenerated claim is reviewed afresh by a person: the
+                # rework itself is not carried, but neither may the evidence
+                # policy clear what a person sent back (audit 2026-10-04).
                 continue
             if saved.get("claim_fingerprint") != claim_fingerprint(item):
                 continue
@@ -128,10 +131,28 @@ def _preserved_decisions(
     return preserved
 
 
+def _human_holds(requests: list[dict[str, Any]], previous: dict[str, Any]) -> set[str]:
+    """Claims a person REWORKed whose regenerated text is unchanged: they stay with a person."""
+    prior = previous.get("decisions", {}) if isinstance(previous, dict) else {}
+    held: set[str] = set()
+    for bundle in requests:
+        for item in bundle["request"].get("items", []):
+            key = key_for(bundle["concept_id"], str(item.get("claim_id") or ""))
+            saved = prior.get(key)
+            if (
+                isinstance(saved, dict)
+                and str(saved.get("decision") or "").upper() == "REWORK"
+                and saved.get("decided_by") != POLICY_DECIDER
+            ):
+                held.add(key)
+    return held
+
+
 def _apply_evidence_policy(
     requests: list[dict[str, Any]],
     decisions: dict[str, Any],
     config: dict[str, Any],
+    held: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Accept the claims the evidence policy clears; leave the rest to a human.
 
@@ -150,6 +171,10 @@ def _apply_evidence_policy(
             key = key_for(concept_id, str(item.get("claim_id") or ""))
             existing = decisions.get(key)
             if isinstance(existing, dict) and existing.get("decided_by") != POLICY_DECIDER:
+                continue
+            if held and key in held:
+                # A person sent this claim back; it is theirs to decide again.
+                decisions.pop(key, None)
                 continue
             decisions.pop(key, None)
             evaluation = (
@@ -557,7 +582,9 @@ def prepare_state() -> dict[str, Any]:
 
     previous = load_json(STATE_FILE) if STATE_FILE.exists() else {}
     decisions = _preserved_decisions(requests, previous)
-    accepted_now = _apply_evidence_policy(requests, decisions, load_config())
+    accepted_now = _apply_evidence_policy(
+        requests, decisions, load_config(), held=_human_holds(requests, previous)
+    )
     _record_withdrawn(previous, decisions)
     for event in accepted_now:
         record_history(event)

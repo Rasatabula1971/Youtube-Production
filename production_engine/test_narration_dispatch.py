@@ -126,6 +126,30 @@ class NarrationDispatchTests(unittest.TestCase):
         ledger = dispatch.read_jsonl(self.root / "video_budget_ledger.jsonl")
         self.assertEqual(ledger[-1]["event"], "ACTUAL")
 
+    def test_provider_cost_above_the_worst_case_stops_before_the_next_segment(self):
+        ceiling = self.case["worst_case"] if "worst_case" in self.case else None
+        def pricey(segment, **kwargs):
+            audio = self.fake(segment, **kwargs)
+            audio["cost_usd"] = 10_000.0  # the provider bills far more than estimated
+            return audio
+
+        with self.assertRaisesRegex(ValueError, "approved worst case"):
+            dispatch.dispatch(concept_id="concept-1", format="long_form", adapters={"HTTP_TTS_JSON": pricey})
+        self.assertEqual(len(self.calls), 1, "only the first segment was paid for")
+        event = dispatch.read_jsonl(dispatch.HISTORY_FILE)[-1]
+        self.assertEqual(event["event"], "FAILED")
+        self.assertEqual(event["cost_usd"], 10_000.0)
+        ledger = dispatch.read_jsonl(self.root / "video_budget_ledger.jsonl")
+        self.assertEqual((ledger[-1]["event"], ledger[-1]["amount_usd"]), ("ACTUAL", 10_000.0))
+        del ceiling
+
+    def test_unusable_reported_costs_fall_back_to_the_estimate(self):
+        for bad in (True, float("nan"), -1, "free", None):
+            with self.subTest(bad=bad):
+                self.assertGreater(dispatch._reported_cost(bad, fallback=0.25), 0)
+                self.assertEqual(dispatch._reported_cost(bad, fallback=0.25), 0.25)
+        self.assertEqual(dispatch._reported_cost(0.1, fallback=0.25), 0.1)
+
     def test_failed_dispatches_count_toward_spend_and_attempts(self):
         def flaky(segment, **kwargs):
             if segment["segment_id"] == "b2":

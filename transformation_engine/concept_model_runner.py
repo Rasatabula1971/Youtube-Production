@@ -321,8 +321,10 @@ def _record_call() -> None:
 
 
 def _rate_limited(result: dict[str, Any]) -> bool:
-    return result.get("status") == "ESCALATION_REQUIRED" and any(
+    """FAIR reports RATE_LIMITED; the direct Gemini route reports HTTP_429 (audit 2026-10-04)."""
+    return result.get("status") in {"ESCALATION_REQUIRED", "MODEL_ESCALATION_REQUIRED"} and any(
         str(attempt.get("error_type") or "") == "RATE_LIMITED"
+        or str(attempt.get("error_detail") or "").startswith("HTTP_429")
         for attempt in result.get("attempts") or []
         if isinstance(attempt, dict)
     )
@@ -969,7 +971,8 @@ def run_batch(
             "COST_POLICY_VIOLATION",
             "RUNNER_ERROR",
             "MODEL_FAILED",
-        }:
+        } or _rate_limited(result):
+            # Quota exhausted: the next request would only burn more calls.
             break
 
     merge_summary = run_apply()
