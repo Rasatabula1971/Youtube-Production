@@ -26,7 +26,7 @@ class ConceptDiagnoseTests(unittest.TestCase):
     def runner_config(self):
         return FIXTURES.runner_config()
 
-    def run_diagnose(self, status, payload):
+    def run_diagnose(self, status, payload, strict=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "curiosity_gap.concept_request.json").write_text(json.dumps(self.request()), encoding="utf-8")
@@ -37,11 +37,12 @@ class ConceptDiagnoseTests(unittest.TestCase):
                 patch.object(diag, "groq_key", return_value="k"),
                 patch.object(diag, "post", return_value=(status, payload)) as post,
             ):
-                report = diag.diagnose("curiosity_gap", "openai/gpt-oss-120b", 32768, 30)
+                report = diag.diagnose("curiosity_gap", "openai/gpt-oss-120b", 32768, 30, strict=strict)
                 saved = json.loads(Path(report["text_file"]).with_suffix(".json").read_text())
             body = post.call_args.args[0]
         self.assertEqual(saved["http_status"], status)
         self.assertNotIn('"maxItems"', json.dumps(body["response_format"]))
+        self.assertEqual(body["response_format"]["json_schema"].get("strict", False), strict)
         return report
 
     def test_refusal_keeps_the_failed_generation_and_reason(self):
@@ -77,3 +78,10 @@ class ConceptDiagnoseTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 diag.post({"model": "m"}, "k", 5)
         self.assertTrue(urlopen.call_args.args[0].get_header("User-agent").startswith("youtube-production"))
+
+    def test_strict_mode_is_requested_and_reported(self):
+        content = json.dumps({"mechanism_id": "curiosity_gap", "concepts": [self.valid_concept()]})
+        report = self.run_diagnose(200, {"choices": [{"finish_reason": "stop", "message": {"content": content}}]}, strict=True)
+        self.assertTrue(report["strict"])
+        self.assertTrue(report["text_file"].endswith(".strict.txt"))
+        self.assertEqual(report["answer_check"]["accepted"], 1)
