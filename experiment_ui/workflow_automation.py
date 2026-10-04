@@ -258,6 +258,8 @@ def run_until_human_gate() -> dict[str, Any]:
             "WAITING_NARRATION_RENDER_RETURN",
             "NARRATION_AUDIO_QC_FAILED",
             "NARRATION_AUDIO_READY",
+            "HUMAN_FINAL_AUDIO_GATE",
+            "FINAL_AUDIO_REWORK_REQUIRED",
             "HUMAN_VISUAL_CANDIDATE_GATE",
             "HUMAN_VISUAL_RIGHTS_GATE",
             "HUMAN_ROUGH_CUT_GATE",

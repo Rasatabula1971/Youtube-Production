@@ -1145,7 +1145,10 @@
                 <h2 id="narrationReturnTitle">Register final narration audio</h2>
                 <p class="muted" id="narrationReturnSummary">Register only audio produced under the current approved spend ceiling.</p>
               </div>
-              <span class="status-chip running" id="narrationReturnStatus">RETURN REQUIRED</span>
+              <div class="panel-head-actions">
+                <a href="/produce#audio" class="button-link compact" data-route="/produce" data-subroute="audio">Approve final audio →</a>
+                <span class="status-chip running" id="narrationReturnStatus">RETURN REQUIRED</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="narrationReturnDetail"></div>
@@ -1198,6 +1201,7 @@
         <section class="app-view" data-view="produce" id="viewProduce" hidden>
           <div id="produceTabs"></div>
           <div class="review-workspace" id="produce-narration"></div>
+          <div class="review-workspace" id="produce-audio" hidden></div>
           <div class="review-workspace" id="produce-visuals" hidden></div>
           <div class="review-workspace" id="produce-rights" hidden></div>
           <div class="review-workspace" id="produce-roughcut" hidden></div>
