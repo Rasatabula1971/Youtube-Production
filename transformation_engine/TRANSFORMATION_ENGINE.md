@@ -205,9 +205,11 @@ before the human gate.
   has no billing enabled, and it departs from vision §101, so it is a manual
   override rather than the default.
 
-- **`pause_between_calls_seconds`** (currently 65). The wait between one
-  mechanism's calls. Groq's free tier limits tokens per minute, and a second
-  call in the same minute was refused as rate limited (D-148).
+- **`pause_between_calls_seconds`** (currently 65). The minimum gap between
+  any two concept calls, across mechanisms and across automatic steps; the
+  time of the last call is kept in `output/concept_call_clock.json`. Groq's
+  free tier limits tokens per minute. A call that FAIR still reports as rate
+  limited waits this long and is retried once (D-148, D-149).
 
 The schema sent to the provider keeps every field bound (drama levels 4–10,
 3–5 opening moments and so on). The prompt also states the cross-field drama

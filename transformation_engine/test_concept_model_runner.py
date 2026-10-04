@@ -372,6 +372,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
                 patch.object(runner, "resolve_fair_paths", return_value={"repo": root, "env_file": root / ".env", "python": root / "py"}),
                 patch.object(runner, "call_fair_bridge", side_effect=results) as fair,
                 patch.object(runner.time, "sleep") as sleep,
+                patch.object(runner, "CALL_CLOCK_FILE", root / "clock.json"),
             ):
                 report = runner.run_one(request_path, force=False, runner_config=self.runner_config())
                 self.sleeps = [c.args[0] for c in sleep.call_args_list]
@@ -402,7 +403,31 @@ class ConceptModelRunnerTests(unittest.TestCase):
 
     def test_calls_after_the_first_wait_for_the_rate_limit(self):
         self.run_in_calls([[self.concept("c1"), self.concept("c2")], [self.concept("c3")]], total=3, pause=65)
-        self.assertEqual(self.sleeps, [65.0])
+        self.assertEqual(len(self.sleeps), 1)
+        self.assertTrue(60 < self.sleeps[0] <= 65)
+
+    def test_a_rate_limited_call_waits_and_retries_once(self):
+        limited = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
+                   "paid_inference_executed": False,
+                   "attempts": [{"provider_id": "groq", "error_type": "RATE_LIMITED", "disposition": "QUOTA_FAILURE"}]}
+        report, response, _prompts, _schemas = self.run_in_calls(
+            [limited, [self.concept("c1"), self.concept("c2")], [self.concept("c3")]], total=3, pause=65
+        )
+        self.assertEqual(report["status"], "VALIDATED")
+        self.assertTrue(report["calls"][0]["rate_limited_retry"])
+        self.assertEqual(self.sleeps[0], 65)
+        self.assertEqual(len(report["calls"]), 2)
+        self.assertEqual(len(response["concepts"]), 3)
+
+    def test_a_recent_call_from_another_run_is_waited_for(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock = Path(tmp) / "clock.json"
+            clock.write_text(json.dumps({"last_call_at": runner.time.time() - 20}), encoding="utf-8")
+            with patch.object(runner, "CALL_CLOCK_FILE", clock), patch.object(runner.time, "sleep") as sleep:
+                runner._wait_for_pacing(65)
+                runner._wait_for_pacing(0)
+        self.assertEqual(sleep.call_count, 1)
+        self.assertTrue(40 < sleep.call_args.args[0] <= 45)
 
     def test_a_failed_later_call_keeps_the_concepts_already_made(self):
         escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",

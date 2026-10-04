@@ -4553,3 +4553,30 @@ to Cloudflare models that fail the schema.
   that costs.
 - None of this touches the validation contract, so validated mechanisms are
   kept.
+
+## D-149 — Concept calls are paced across mechanisms and runs
+
+**Status:** Accepted
+
+**Context.** With D-148 in place, `progressive_reveal` validated: two calls
+each returned two accepted concepts, and the pool reached 15. `specificity`
+still failed, partly on pacing:
+- D-148's pause applied only between calls of the same mechanism, so
+  `specificity` started straight after `progressive_reveal`'s calls;
+- the automation's second round began at once;
+- Groq refused both as `RATE_LIMITED`, and FAIR fell to Cloudflare models
+  that fail the schema.
+
+**Decision.**
+- `pause_between_calls_seconds` is the minimum gap between any two concept
+  calls. Every automatic step runs as its own process, so the time of the
+  last call is kept in `transformation_engine/output/concept_call_clock.json`.
+- A call that FAIR returns as escalated because Groq was rate limited waits
+  the pause and is retried once. The report marks it `rate_limited_retry`.
+
+**Consequences.**
+- Free per-minute limits no longer turn into schema failures on the
+  fallback models.
+- Groq also refused the format of `specificity`'s first call. Which rule it
+  broke is not in FAIR's report; `concept_diagnose.py --mechanism
+  specificity --count 2` shows Groq's own error naming the field.
