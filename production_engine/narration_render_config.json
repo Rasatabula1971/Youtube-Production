@@ -16,5 +16,14 @@
     "unexpected_silence_seconds": 0.8,
     "silence_noise_db": -50.0,
     "clipping_peak_dbfs": -0.1
+  },
+  "provider_adapter": {
+    "kind": "HTTP_TTS_JSON",
+    "model": "",
+    "voice_id": "",
+    "api_key_env": "NARRATION_PROVIDER_API_KEY",
+    "price_per_1000_characters_usd": null,
+    "audio_format": "wav",
+    "timeout_seconds": 120
   }
 }

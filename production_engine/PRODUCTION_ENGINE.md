@@ -287,6 +287,47 @@ PASS result. Partial branch coverage cannot report a global PASS.
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
 
+## Paid narration dispatch (D-139)
+
+`narration_dispatch.py` makes the paid provider call itself and hands the
+audio to the existing return registration. Audio QC, the Final Audio Gate and
+the per-video budget then apply unchanged.
+
+**When it is allowed.** All of these must hold:
+
+- the provider contract is verified (`provider_contract` in
+  `narration_render_config.json`; until then the narration request is
+  BLOCKED);
+- `provider_adapter` names an adapter kind, model and voice, the API key
+  variable (`NARRATION_PROVIDER_API_KEY`) and the price per 1,000
+  characters, which is never guessed;
+- the Narration Spend Gate approved the exact current request;
+- the estimate for the segments to render, plus what this narration already
+  cost, stays within the approved worst case.
+
+**Re-recording.** The first dispatch renders every segment. After a
+`REWORK_SEGMENTS` decision at the Final Audio Gate, a dispatch re-records
+only the named segments, as the next attempt within the approved
+regeneration policy. The other segments keep their registered audio.
+
+**Failures.** A provider failure part-way records what was already spent,
+in the dispatch history and in the budget.
+
+**The built-in adapter.** `HTTP_TTS_JSON` posts:
+
+```json
+{"model": "...", "voice_id": "...", "text": "...", "speed": 1.0,
+ "emotion": "...", "intensity": "...", "format": "wav"}
+```
+
+It accepts either an audio response or JSON with base64 `audio`, plus an
+optional `cost_usd` and `job_id`. A provider with another shape needs one
+adapter function in `ADAPTERS`.
+
+**UI.** The buttons are on `/produce`: "Generate narration with the
+provider" on an approved Narration spend item, and "Re-record N segments" on
+a Final audio rework. Each asks for confirmation first.
+
 ## Human Visual Plan Gate (D-138)
 
 After the free narration preview is approved, `visual_plan_review.py` builds

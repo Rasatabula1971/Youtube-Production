@@ -4145,3 +4145,47 @@ the plan as a whole.
   storyboard editing stays after the paid audio.
 - Rework goes through the Format Gate, the plan's source of truth, rather
   than a second editable copy of the plan.
+
+
+## D-139 — The app calls the paid narration provider itself, within approved spend
+
+**Status:** Accepted (vision: real production execution; the provider
+choice and contract remain the human's)
+
+**Context.** The paid narration was produced outside the app and its audio
+registered by hand: provider job, cumulative cost and one file per segment.
+Everything up to the spend approval and after the return was automated, but
+the call itself was manual. The configured provider (Higgsfield) has no
+verified contract, endpoint or price.
+
+**Decision.**
+- **Dispatch.** `production_engine/narration_dispatch.py` renders segments
+  with the configured adapter and registers them through
+  `narration_render_import.register`, so Audio QC, the Final Audio Gate
+  (D-137) and the per-video budget (D-136) are unchanged.
+- **Conditions.** A dispatch needs all of these:
+  - a verified provider contract;
+  - a configured adapter;
+  - an API key;
+  - a price per 1,000 characters (never guessed);
+  - a current spend approval;
+  - an estimate within the approved worst case after what was already
+    spent.
+- **Re-recording.** It covers only named segments, as the next attempt
+  within the approved regeneration policy; the other segments keep their
+  audio.
+- **Failures.** Partial spend on a provider failure is recorded in the
+  history and the budget.
+- **Adapter.** The one adapter, `HTTP_TTS_JSON`, posts the segment text and
+  delivery as JSON and accepts audio, or JSON with base64 audio.
+- **UI.** `/produce` has "Generate narration with the provider" and
+  "Re-record N segments" buttons, each with a confirmation step. The server
+  route `/api/narration-dispatch` is locked during jobs.
+
+**Consequences.**
+- With a verified provider configured, a video's narration goes from spend
+  approval to the Final Audio Gate without manual file handling.
+- Until then nothing changes: the request stays BLOCKED, the UI says what
+  is missing, and manual registration still works.
+- Choosing the provider, verifying its contract and setting its price stay
+  the human's decisions.

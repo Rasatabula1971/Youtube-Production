@@ -85,6 +85,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/thumbnail-images",
     "/api/final-audio-gate",
     "/api/visual-plan-gate",
+    "/api/narration-dispatch",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -405,6 +406,7 @@ from production_engine import thumbnail_image_provider
 from production_engine import video_budget
 from production_engine import narration_final_review
 from production_engine import visual_plan_review
+from production_engine import narration_dispatch
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -3190,6 +3192,14 @@ def visual_plan_gate_state() -> dict[str, Any]:
         return visual_plan_review.snapshot()
     except (OSError, ValueError, KeyError) as exc:
         return {"status": "ERROR", "error": str(exc), "complete": False, "items": []}
+
+
+def narration_dispatch_state() -> dict[str, Any]:
+    """Paid narration provider readiness (D-139); never raises."""
+    try:
+        return narration_dispatch.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"ready": False, "problems": [str(exc)], "history": []}
 
 
 def final_audio_gate_state() -> dict[str, Any]:
@@ -7568,10 +7578,11 @@ def workflow_guidance(
                 "current_action_id": None,
                 "current_title": "Register Final Narration Audio",
                 "current_detail": (
-                    "Spend is authorized for the exact current quote. Supply the "
-                    "provider job/reference, actual cumulative cost, and one local "
-                    "audio file for every narration segment. The repository does "
-                    "not call an unverified paid provider."
+                    "Spend is authorized for the exact current quote. Generate the "
+                    "narration with the configured provider on the Narration spend "
+                    "tab, or supply the provider job/reference, actual cumulative "
+                    "cost and one local audio file for every segment. The app never "
+                    "calls an unverified provider."
                 ),
                 "next_action_id": None,
                 "next_title": "Automatic local Audio QC",
@@ -8417,6 +8428,7 @@ def status_payload() -> dict[str, Any]:
         "video_budget": video_budget_state(),
         "final_audio_gate": final_audio_gate_state(),
         "visual_plan_gate": visual_plan_gate_state(),
+        "narration_dispatch": narration_dispatch_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -9441,6 +9453,22 @@ class Handler(BaseHTTPRequestHandler):
                     **rough_payload,
                     "rework_routed_to": routed_to,
                 }
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-dispatch":
+                # A paid provider call (D-139): only after spend approval,
+                # within the approved worst case, by an explicit human click.
+                result = narration_dispatch.dispatch(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    segment_ids=body.get("segment_ids"),
+                    reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                )
+                payload = {"result": result, "narration_dispatch": narration_dispatch_state()}
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
