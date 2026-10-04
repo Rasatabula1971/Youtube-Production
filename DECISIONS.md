@@ -4390,7 +4390,7 @@ not documented anywhere available to this build.
 
 ## D-145 — Providers get a shape-only concept schema
 
-**Status:** Accepted
+**Status:** Accepted; it did not fix the failure it targeted (see Result)
 
 **Context.** On the laptop, two concept mechanisms (progressive reveal and
 specificity) failed on every free route while three passed:
@@ -4427,3 +4427,18 @@ because Cloudflare attempts took 120–140 s each.
   mechanisms are not regenerated.
 - If a mechanism still fails, its model-run report now carries the
   validator's per-concept errors instead of a provider's whole-batch refusal.
+
+**Result.** On the laptop both mechanisms still failed the same way after
+this change, so the policy bounds were not the cause. The real cause is not
+yet known: FAIR keeps neither the refused text nor Groq's reason.
+`transformation_engine/concept_diagnose.py` sends the same prompt and
+provider schema straight to Groq and saves:
+- the error code and message;
+- the refused text (`failed_generation`);
+- the finish reason and token use;
+- the app's own validation of the text, including fields the schema does
+  not allow (the validator ignores extra fields, but the provider schema
+  forbids them).
+
+The fix waits for that evidence. The shape-only schema stays, because one
+bad concept should still not sink a batch.
