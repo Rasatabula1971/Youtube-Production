@@ -6427,6 +6427,7 @@ function renderThumbnailReview(snapshot, force) {
 
   thumbnailDetail.innerHTML =
     visual +
+    thumbnailCandidatesHtml(item) +
     '<div class="concept-detail-card"><h4>THUMBNAIL CONCEPT · ' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
       '<h3>' + escapeHtml(item.text_overlay || "(no text)") + '</h3>' +
       '<p><strong>Hero subject:</strong> ' + escapeHtml(item.hero_subject || "") +
@@ -6492,6 +6493,66 @@ function renderThumbnailReview(snapshot, force) {
   thumbnailAccept.disabled = item.render_status !== "RENDERED" ||
     Boolean(item.stale_reasons && item.stale_reasons.length);
   thumbnailEditing = false;
+}
+
+// Candidate subject images (D-135): generate three with the configured
+// provider (an explicit maximum cost authorizes the spend), or import images
+// made elsewhere, then pick one as the subject image.
+function thumbnailCandidatesHtml(item) {
+  const view = item.image_candidates || {};
+  const provider = latestThumbnailSnapshot.image_provider || {};
+  const tiers = latestThumbnailSnapshot.allowed_source_tiers || [];
+  const rows = (view.candidates || []).filter(function (c) { return c && c.current; });
+  const grid = rows.length
+    ? '<div class="thumbnail-candidates">' + rows.map(function (c) {
+        return '<figure class="thumbnail-candidate' + (c.chosen ? " chosen" : "") + '">' +
+          '<img src="' + escapeHtml(c.image_url || "") + '" alt="Candidate image ' + escapeHtml(c.candidate_id || "") + '" loading="lazy">' +
+          '<figcaption>' + escapeHtml(c.provider || "") + " · " + escapeHtml(humanizeToken(c.source_tier || "")) +
+          (typeof c.cost_usd === "number" ? " · $" + escapeHtml(c.cost_usd.toFixed(2)) : "") +
+          (c.chosen
+            ? ' <strong>In use</strong>'
+            : ' <button type="button" class="ghost compact" data-thumb-candidate="' + escapeHtml(c.candidate_id || "") + '">Use this image</button>') +
+          '</figcaption></figure>';
+      }).join("") + '</div>'
+    : '<p>No candidate images yet.</p>';
+  const generate = provider.ready
+    ? '<form class="thumbnail-generate" data-thumb-generate>' +
+        '<label>Maximum cost (US$) <input type="number" min="0" step="0.01" name="max_cost_usd" required' +
+        (typeof provider.price_per_image_usd === "number" ? ' placeholder="estimate ' + escapeHtml((provider.price_per_image_usd * 3).toFixed(2)) + '"' : "") +
+        '></label> <button type="submit">Generate 3 candidates</button>' +
+        '<p class="muted">Uses ' + escapeHtml(provider.label || provider.active_provider || "") + " (" + escapeHtml(provider.model || "") + "). This is a paid call.</p></form>"
+    : '<p class="muted">Generation is off: ' + escapeHtml((provider.problems || []).join(" ")) + "</p>";
+  const importForm =
+    '<details><summary>Import an image made elsewhere</summary><form class="thumbnail-import" data-thumb-import>' +
+      '<label>Image file path <input name="path" required placeholder="C:\\images\\subject.png"></label>' +
+      '<label>Made with <input name="provider" placeholder="tool or site"></label>' +
+      '<label>Source tier <select name="source_tier" required><option value="">Choose…</option>' +
+        tiers.map(function (tier) { return '<option value="' + escapeHtml(tier) + '">' + escapeHtml(humanizeToken(tier)) + "</option>"; }).join("") +
+      '</select></label>' +
+      '<label>Licence <input name="license" placeholder="licence or terms"></label>' +
+      '<label>Cost (US$) <input type="number" min="0" step="0.01" name="cost_usd" value="0"></label>' +
+      '<button type="submit">Import</button></form></details>';
+  return '<div class="concept-detail-card"><h4>CANDIDATE IMAGES</h4>' + grid + generate + importForm +
+    (view.prompt ? '<details><summary>Image prompt</summary><p>' + escapeHtml(view.prompt) + "</p></details>" : "") +
+    (typeof view.video_spend_usd === "number" ? '<p class="muted">Spent on generated images for this video: $' + escapeHtml(view.video_spend_usd.toFixed(2)) + "</p>" : "") +
+    "</div>";
+}
+
+async function thumbnailImageAction(body, message) {
+  const current = currentThumbnailItem();
+  if (!current) return;
+  try {
+    const payload = await api("/api/thumbnail-images", {
+      method: "POST",
+      body: JSON.stringify(Object.assign({ render_id: current.item.render_id }, body))
+    });
+    thumbnailEditing = false;
+    showToast(message, false);
+    await loadStatus();
+    renderThumbnailReview(payload, true);
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 function moveThumbnailCursor(delta) {
@@ -7824,6 +7885,34 @@ thumbnailCriteria.addEventListener("change", function () {
   thumbnailEditing = true;
 });
 thumbnailSubjectForm.addEventListener("submit", saveThumbnailSubject);
+thumbnailDetail.addEventListener("input", function () {
+  thumbnailEditing = true;
+});
+thumbnailDetail.addEventListener("click", function (event) {
+  const button = event.target.closest("[data-thumb-candidate]");
+  if (!button) return;
+  thumbnailImageAction({ action: "CHOOSE", candidate_id: button.dataset.thumbCandidate },
+    "Candidate set as the subject image. Render to update the thumbnail.");
+});
+thumbnailDetail.addEventListener("submit", function (event) {
+  const form = event.target;
+  if (form.matches("[data-thumb-generate]")) {
+    event.preventDefault();
+    const max = form.elements.max_cost_usd.value;
+    if (!window.confirm("Generate 3 candidate images? This is a paid provider call, up to $" + max + ".")) return;
+    thumbnailImageAction({ action: "GENERATE", max_cost_usd: Number(max) }, "Candidate images generated.");
+  } else if (form.matches("[data-thumb-import]")) {
+    event.preventDefault();
+    thumbnailImageAction({
+      action: "IMPORT",
+      path: form.elements.path.value,
+      provider: form.elements.provider.value,
+      source_tier: form.elements.source_tier.value,
+      license: form.elements.license.value,
+      cost_usd: Number(form.elements.cost_usd.value || 0)
+    }, "Image imported as a candidate.");
+  }
+});
 thumbnailRender.addEventListener("click", function () {
   runAction("thumbnail_render");
 });

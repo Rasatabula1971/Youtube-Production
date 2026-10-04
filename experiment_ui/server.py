@@ -82,6 +82,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/narration-performance-review",
     "/api/thumbnail-gate",
     "/api/thumbnail-spec",
+    "/api/thumbnail-images",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -398,6 +399,7 @@ from production_engine.thumbnail_review import (
 from production_engine.thumbnail_review import (
     thumbnail_file_path,
 )
+from production_engine import thumbnail_image_provider
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -9330,6 +9332,37 @@ class Handler(BaseHTTPRequestHandler):
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
                 self._send_json(payload)
+                return
+
+            if route == "/api/thumbnail-images":
+                # Candidate subject images (D-135). GENERATE is a paid provider
+                # call the human authorizes with an explicit maximum cost.
+                render_id = str(body.get("render_id", ""))
+                action = str(body.get("action", "")).strip().upper()
+                if action == "GENERATE":
+                    thumbnail_image_provider.generate(
+                        render_id=render_id,
+                        max_cost_usd=body.get("max_cost_usd"),
+                        reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    )
+                elif action == "IMPORT":
+                    thumbnail_image_provider.import_candidate(
+                        render_id=render_id,
+                        path=body.get("path"),
+                        provider=body.get("provider"),
+                        source_tier=body.get("source_tier"),
+                        license=body.get("license"),
+                        cost_usd=body.get("cost_usd"),
+                        reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    )
+                elif action == "CHOOSE":
+                    thumbnail_image_provider.choose(
+                        render_id=render_id,
+                        candidate_id=str(body.get("candidate_id", "")),
+                    )
+                else:
+                    raise ValueError("Action must be GENERATE, IMPORT or CHOOSE")
+                self._send_json(thumbnail_gate_state())
                 return
 
             if route == "/api/thumbnail-spec":

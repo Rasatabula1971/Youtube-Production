@@ -3946,3 +3946,53 @@ winner score would invent a prediction the system cannot make.
 - Rework targets, staleness and the final bundle are unchanged (D-099).
 - The thresholds are configurable under `title_shortlist` in
   `final_packaging_gate_config.json`.
+
+
+## D-135 — Candidate thumbnail images through a provider-agnostic adapter
+
+**Status:** Accepted (vision: AI image router producing three candidate
+visuals; the provider choice remains the human's)
+
+**Context.** The renderer composed thumbnails only from an image the human
+supplied by typing a file path. The vision has an image router produce three
+candidate visuals for the human to choose from. No image provider has been
+chosen, and no app code had yet made a paid provider call.
+
+**Decision.**
+- **Candidate step.** `production_engine/thumbnail_image_provider.py` adds a
+  candidate step in front of the existing subject image:
+  - a text-free prompt built from the Slice 25 concept;
+  - GENERATE: three candidates from the configured provider;
+  - IMPORT: an image made in any other tool, with its provenance;
+  - CHOOSE: the candidate becomes the subject image through
+    `thumbnail_review.update_spec`.
+- **Spend.** A generation is a paid call the human authorizes with an
+  explicit maximum cost. The maximum must cover the estimate and stay within
+  the per-thumbnail cap (US$0.50). The video's generated-image spend must
+  stay within the per-video cap (US$2.00). Every generation is appended to a
+  spend ledger.
+- **Provider.** The one adapter speaks the common OpenAI-compatible images
+  request. It is off until the human sets:
+  - the provider, endpoint and model;
+  - the licence terms;
+  - the price per image;
+  - a verified contract;
+  - the API key.
+
+  Until then the UI says what is missing, and imports still work.
+- **Unchanged.** Rights validation, rendering, staleness, the Human
+  Thumbnail Gate and final packaging. A chosen candidate is an ordinary
+  subject image with source tier `CHEAP_AI` and the provider's licence.
+- **UI.** The classic Thumbnail panel shows the candidates with "Use this
+  image", the generation form (only when a provider is ready, with a confirm
+  step), an import form, the prompt and the video's spend so far.
+
+**Consequences.**
+- Choosing the provider, its licence and its price is still the human's
+  decision. Configuring one turns generation on with no code change, unless
+  it needs a different request shape (one adapter function).
+- The caps are placeholders inside the proposed US$5 target / US$10 ceiling
+  per video, which is also still to be confirmed. They live in
+  `thumbnail_image_config.json`.
+- Candidates are bound to the concept version, so a reworked concept cannot
+  silently reuse an image made for the old one.
