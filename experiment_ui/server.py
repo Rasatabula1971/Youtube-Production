@@ -28,7 +28,7 @@ PROJECT_ROOT = HERE.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline_integrity import atomic_write_json
+from pipeline_integrity import append_jsonl, atomic_write_json, atomic_write_text
 
 import productions as productions_model
 
@@ -48,6 +48,8 @@ APP_ROUTES = {
 }
 IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
+# Every POST body is a small JSON object (ids, decisions, notes, paths).
+MAX_POST_BYTES = 4_000_000
 HUMAN_GATE_MUTATION_ROUTES = {
     "/api/opportunity-gate",
     "/api/opportunity/video/analyze",
@@ -6852,16 +6854,22 @@ class JobManager:
             child_env["PYTHONUTF8"] = "1"
             child_env["PYTHONIOENCODING"] = "utf-8"
 
-            process = subprocess.Popen(
-                action["command"],
-                cwd=PROJECT_ROOT,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                text=True,
-                shell=False,
-                creationflags=creationflags,
-                env=child_env,
-            )
+            try:
+                process = subprocess.Popen(
+                    action["command"],
+                    cwd=PROJECT_ROOT,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    shell=False,
+                    creationflags=creationflags,
+                    # Its own process group, so Stop can end the step it spawned too.
+                    start_new_session=(os.name != "nt"),
+                    env=child_env,
+                )
+            except OSError:
+                log_handle.close()
+                raise
 
             self._process = process
             self._job = {
@@ -6883,7 +6891,8 @@ class JobManager:
 
     def _finalize(self, return_code: int | None) -> None:
         with self._lock:
-            if not self._job:
+            if not self._job or self._job.get("finished_at"):
+                # Two polls can observe the exit at once; record it once.
                 return
             log_handle = self._job.pop("_log_handle", None)
             if log_handle:
@@ -6914,12 +6923,7 @@ class JobManager:
             if self._job:
                 self._job["status"] = "STOPPING"
 
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+        terminate_process_tree(process)
         self._finalize(process.returncode)
         return self.public_job()
 
@@ -6937,10 +6941,14 @@ class JobManager:
             return ""
         path = Path(str(job.get("log_path", "")))
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            # Tail only: this is polled every second while a job runs.
+            with path.open("rb") as handle:
+                size = handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, size - max_chars * 4))
+                tail = handle.read()
         except OSError:
             return ""
-        return text[-max_chars:]
+        return tail.decode("utf-8", errors="replace")[-max_chars:]
 
     def _save_state(self, payload: dict[str, Any]) -> None:
         UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -6986,6 +6994,41 @@ def job_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def terminate_process_tree(process: "subprocess.Popen[str]") -> None:
+    """End a job and the step it spawned (audit 2026-10-04).
+
+    The job runs workflow_automation, which runs each step as its own child;
+    terminating only the job left the step writing artifacts after the UI
+    said STOPPED.
+    """
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True, check=False, timeout=15,
+        )
+    else:
+        import signal
+
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        if os.name != "nt":
+            import signal
+
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        process.kill()
+        process.wait(timeout=5)
+
+
 def record_job_history(job: dict[str, Any]) -> None:
     """Append one finished job to the history log (UI-15, D-123); best effort."""
     if not job or not job.get("id"):
@@ -6995,12 +7038,11 @@ def record_job_history(job: dict[str, Any]) -> None:
         for key in ("id", "action_id", "label", "status", "started_at", "finished_at", "return_code")
     }
     try:
-        UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        lines: list[str] = []
-        if JOB_HISTORY_FILE.exists():
-            lines = JOB_HISTORY_FILE.read_text(encoding="utf-8").splitlines()
-        lines.append(json.dumps(entry, ensure_ascii=False))
-        JOB_HISTORY_FILE.write_text("\n".join(lines[-JOB_HISTORY_KEEP:]) + "\n", encoding="utf-8")
+        # Append only (one write per job); trimming rewrites nothing in place.
+        append_jsonl(JOB_HISTORY_FILE, entry)
+        lines = JOB_HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+        if len(lines) > JOB_HISTORY_KEEP:
+            atomic_write_text(JOB_HISTORY_FILE, "\n".join(lines[-JOB_HISTORY_KEEP:]) + "\n")
     except OSError:
         return
 
@@ -8584,6 +8626,9 @@ def static_asset_path(route: str) -> Path | None:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "ExperimentControlUI/1.0"
+    # A request that stops sending (a body shorter than its Content-Length)
+    # used to hold its handler thread forever (D-160).
+    timeout = 60
 
     def log_message(self, format: str, *args: Any) -> None:
         return
@@ -8976,12 +9021,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": security_error}, 403)
             return
 
-        length = int(self.headers.get("Content-Length", "0") or 0)
+        # The body is untrusted even on a same-origin request: a bad length,
+        # invalid UTF-8, a non-object JSON value or a deeply nested one used
+        # to crash this handler thread (D-160).
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_POST_BYTES:
+            self.close_connection = True
+            self._send_json({"error": "Invalid or oversized request body."}, 413 if length > 0 else 400)
+            return
         raw = self.rfile.read(length) if length else b"{}"
         try:
             body = json.loads(raw.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             self._send_json({"error": "Invalid JSON body."}, 400)
+            return
+        if not isinstance(body, dict):
+            self._send_json({"error": "The JSON body must be an object."}, 400)
             return
 
         gate_lock_error = human_gate_mutation_block_reason(route)
@@ -9835,6 +9893,12 @@ def run_server(host: str, port: int, open_browser: bool) -> None:
         pass
     finally:
         server.server_close()
+        # A job must not outlive the UI that supervises it (audit 2026-10-04).
+        try:
+            if JOB_MANAGER.running():
+                JOB_MANAGER.stop()
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            pass
 
 
 def main() -> None:

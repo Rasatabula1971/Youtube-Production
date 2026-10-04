@@ -22,6 +22,8 @@ from typing import Any
 
 POLICY_FILE = Path(__file__).resolve().parent / "gate_policy.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DECIDED_BY_ENV = "YOUTUBE_DECIDED_BY"
+POLICY_DECIDER = "GATE_POLICY"
 AUTO = "AUTO_IF_CLEAN"
 NOTE = "Automatic (gate policy D-156): "
 
@@ -62,15 +64,23 @@ def gate_mode(gate: str, policy: dict[str, Any]) -> str:
 
 @contextmanager
 def _reviewer(reviewer_id: str) -> Iterator[None]:
-    previous = os.environ.get(REVIEWER_ENV)
+    """Gate modules read the reviewer and the decider from the environment.
+
+    Every gate records the reviewer id; the ones that keep a decided_by field
+    (vision, analysis) read YOUTUBE_DECIDED_BY so automatic decisions are never
+    logged as HUMAN (audit 2026-10-04).
+    """
+    previous = {name: os.environ.get(name) for name in (REVIEWER_ENV, DECIDED_BY_ENV)}
     os.environ[REVIEWER_ENV] = reviewer_id
+    os.environ[DECIDED_BY_ENV] = POLICY_DECIDER
     try:
         yield
     finally:
-        if previous is None:
-            os.environ.pop(REVIEWER_ENV, None)
-        else:
-            os.environ[REVIEWER_ENV] = previous
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 # --- per-gate checks -------------------------------------------------------

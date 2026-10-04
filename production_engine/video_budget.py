@@ -89,9 +89,35 @@ def video_id(concept_id: Any, fmt: Any) -> str:
     return f"{str(concept_id or '').strip()}:{str(fmt or '').strip()}"
 
 
+def _events(path: Path) -> list[dict[str, Any]]:
+    """Ledger records; an unreadable non-empty line blocks every video.
+
+    ``read_jsonl`` skips torn lines, which for a budget ledger would silently
+    loosen the ceiling (audit 2026-10-04): a lost RESERVE is money forgotten.
+    """
+    if not path.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except ValueError:
+            value = None
+        if not isinstance(value, dict):
+            records.append({"video_id": None, "event": "CORRUPT", "amount_usd": "corrupt"})
+            continue
+        records.append(value)
+    return records
+
+
 def _items(video: str, ledger: Path | None = None) -> dict[tuple[str, str], dict[str, float]]:
     items: dict[tuple[str, str], dict[str, float]] = {}
-    for event in read_jsonl(_ledger(ledger)):
+    for event in _events(_ledger(ledger)):
+        if event.get("event") == "CORRUPT":
+            items[("corrupt", "ledger")] = {"reserved": math.inf, "actual": 0.0}
+            continue
         if event.get("video_id") != video:
             continue
         key = (str(event.get("category") or ""), str(event.get("ref") or ""))

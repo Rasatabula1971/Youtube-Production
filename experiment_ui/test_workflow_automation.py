@@ -1426,6 +1426,14 @@ class GatePolicyRunTests(unittest.TestCase):
         self.assertIn("overlaps the source", result["message"])
 
 
+class StuckStatusTests(unittest.TestCase):
+    def test_safety_stop_is_not_downgraded_to_partial_by_a_stuck_step(self):
+        stuck = {"research_acquire": {"status": "PARTIAL", "message": "stuck", "completed_actions": []}}
+        result = automation._with_stuck({"status": "SAFETY_STOP", "completed_actions": ["x"]}, stuck)
+        self.assertEqual(result["status"], "SAFETY_STOP")
+        self.assertEqual(result["stuck_actions"], ["research_acquire"])
+
+
 class PartialMessageTests(unittest.TestCase):
     def test_research_acquisition_message_names_real_error_not_model(self):
         import json

@@ -161,10 +161,17 @@ class VisualRightsReviewTests(unittest.TestCase):
                         decision="APPROVE_CONTEXT_USE",
                         transformative_purpose="Explain the event.",
                     )
+                # A stale review's rights file is ignored, not deleted: this
+                # runs on every status poll (D-160).
+                stale_rights = rights._path(review_path)
+                stale_rights.parent.mkdir(parents=True, exist_ok=True)
+                stale_rights.write_text(json.dumps({"decisions": {"shot-001": {"decision": "APPROVE_CONTEXT_USE"}}}))
                 snapshot = rights.snapshot()
+                self.assertTrue(stale_rights.exists())
 
             self.assertEqual(snapshot["required"], 0)
             self.assertEqual(snapshot["stale_reviews"], 1)
+            self.assertEqual(snapshot["stale_ignored"], 1)
             self.assertEqual(snapshot["items"], [])
 
     def test_selected_candidate_change_invalidates_old_rights_decision(self):

@@ -194,6 +194,20 @@ class VisionReviewTests(unittest.TestCase):
                     observation="",
                 )
 
+    def test_review_action_records_reviewer_and_decider(self):
+        # The gate policy sets both variables while it decides (D-156, D-160).
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            self.write_visual_source(root, scene_count=1)
+            packet = vision.build_packet("v1", provider="human")
+            frame_id = packet["frames"][0]["frame_id"]
+            with patch.dict("os.environ", {"YOUTUBE_REVIEWER_ID": "gate-policy-auto", "YOUTUBE_DECIDED_BY": "GATE_POLICY"}):
+                vision.apply_review_action(action="ACCEPT_FRAME", video_id="v1", frame_id=frame_id, observation="A tyre.")
+            lines = vision.history_file().read_text(encoding="utf-8").splitlines()
+            event = json.loads(lines[-1])
+        self.assertEqual((event["reviewer"], event["decided_by"]), ("gate-policy-auto", "GATE_POLICY"))
+
     def test_combined_notes_bind_scene_observation_to_image(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)

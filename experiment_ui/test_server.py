@@ -2103,3 +2103,55 @@ class JobProgressTests(unittest.TestCase):
         self.assertIsNone(server.job_with_progress(None))
         missing = server.job_progress({"status": "RUNNING", "log_path": "/nonexistent/x.log"})
         self.assertEqual(missing["step_number"], 0)
+
+
+class PostBodyHardeningTests(unittest.TestCase):
+    """Malformed POST bodies get a 400/413, not a crashed handler thread (D-160)."""
+
+    def setUp(self):
+        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        self.port = self.httpd.server_address[1]
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.addCleanup(self.httpd.server_close)
+        self.addCleanup(self.httpd.shutdown)
+
+    def post(self, raw: bytes, content_length: str | None = None) -> tuple[int, dict]:
+        headers = {
+            "Content-Type": "application/json",
+            "Origin": f"http://127.0.0.1:{self.port}",
+            "X-CSRF-Token": server.CSRF_TOKEN,
+        }
+        if content_length is not None:
+            headers["Content-Length"] = content_length
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/run", data=raw, method="POST", headers=headers
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read() or b"{}")
+
+    def test_non_object_json_values_are_400(self):
+        for raw in (b"[]", b'"x"', b"null", b"3"):
+            with self.subTest(raw=raw):
+                status, payload = self.post(raw)
+                self.assertEqual(status, 400)
+                self.assertIn("object", payload["error"])
+
+    def test_invalid_utf8_and_deep_nesting_are_400(self):
+        self.assertEqual(self.post(b"\xff\xfe{}")[0], 400)
+        self.assertEqual(self.post(b"[" * 50000 + b"]" * 50000)[0], 400)
+
+    def test_bad_or_oversized_content_length_is_refused(self):
+        self.assertEqual(self.post(b"{}", content_length="abc")[0], 400)
+        self.assertEqual(self.post(b"{}", content_length="-5")[0], 400)
+        status, payload = self.post(b"{}", content_length=str(server.MAX_POST_BYTES + 1))
+        self.assertEqual(status, 413)
+        # The server keeps answering afterwards.
+        self.assertEqual(self.post(b'{"action_id": "nope"}')[0], 409)
+
+    def test_handler_has_a_socket_timeout(self):
+        # A body shorter than its Content-Length must not hold the thread forever.
+        self.assertGreater(server.Handler.timeout, 0)
+        self.assertLessEqual(server.Handler.timeout, 120)

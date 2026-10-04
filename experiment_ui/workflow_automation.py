@@ -210,7 +210,7 @@ def _with_stuck(result: dict[str, Any], stuck: dict[str, dict[str, Any]]) -> dic
     """
     if not stuck:
         return result
-    if result.get("status") in {"FAILED", "NO_PROGRESS"}:
+    if result.get("status") in {"FAILED", "NO_PROGRESS", "SAFETY_STOP"}:
         # A real failure later on stays the headline; the stuck step is listed.
         return {**result, "stuck_actions": list(stuck)}
     action_id, first = next(iter(stuck.items()))

@@ -82,9 +82,25 @@ class GateAutopilotTests(unittest.TestCase):
     def test_reviewer_id_is_restored_after_deciding(self):
         os.environ[autopilot.REVIEWER_ENV] = "me"
         self.addCleanup(os.environ.pop, autopilot.REVIEWER_ENV, None)
-        control = Recorder(vision_review_snapshot={"packets": [{"video_id": "v", "frames": [frame("f1")]}]})
+        os.environ.pop(autopilot.DECIDED_BY_ENV, None)
+        seen = {}
+
+        class Watching(Recorder):
+            def __getattr__(self, name):
+                target = super().__getattr__(name)
+                if name.startswith("apply_"):
+                    def apply(**kwargs):
+                        seen["decided_by"] = os.environ.get(autopilot.DECIDED_BY_ENV)
+                        return target(**kwargs)
+                    return apply
+                return target
+
+        control = Watching(vision_review_snapshot={"packets": [{"video_id": "v", "frames": [frame("f1")]}]})
         autopilot.decide("HUMAN_VISION_GATE", control, AUTO_ALL)
+        # Gate modules see the policy as the decider while it decides, not after.
+        self.assertEqual(seen["decided_by"], "GATE_POLICY")
         self.assertEqual(os.environ[autopilot.REVIEWER_ENV], "me")
+        self.assertNotIn(autopilot.DECIDED_BY_ENV, os.environ)
 
     def test_analysis_holds_low_confidence_and_unresolved_evidence(self):
         good = {"item_id": "a", "video_id": "v", "decision": "PENDING", "confidence": "HIGH",

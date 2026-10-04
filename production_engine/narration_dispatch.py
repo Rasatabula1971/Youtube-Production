@@ -190,6 +190,18 @@ def dispatch(
         return _dispatch(concept_id, fmt, segment_ids, reviewer, adapters)
 
 
+def _reported_cost(value: Any, *, fallback: float) -> float:
+    """A provider-reported cost, or the estimate when the figure is not a usable amount.
+
+    bool is an int subclass and NaN compares false with everything, so a plain
+    isinstance check let both through (audit 2026-10-04).
+    """
+    try:
+        return video_budget.money(value, label="Reported cost")
+    except ValueError:
+        return float(fallback)
+
+
 def _paid_so_far(key: str, approval_sha256: str) -> tuple[float, dict[str, int]]:
     """Money and per-segment calls already paid under the current spend approval.
 
@@ -271,20 +283,26 @@ def _dispatch(
     cost = 0.0
     job_ids = []
     budget_ledger = video_budget.ledger_in(OUTPUT_DIR)
+    price = float(settings["price_per_1000_characters_usd"])
     try:
         for segment in targets:
             segment_id = str(segment["segment_id"])
+            # The provider's own figures so far plus this segment's estimate
+            # must stay under the approved worst case before each paid call
+            # (audit 2026-10-04): a provider that bills more than estimated
+            # cannot run the whole batch past the ceiling.
+            next_estimate = estimate_usd([segment], price)
+            if round(spent_before + cost + next_estimate, 4) > ceiling:
+                raise ValueError(
+                    f"Stopping before {segment_id}: ${spent_before + cost:.2f} already spent plus about "
+                    f"${next_estimate:.2f} would pass the approved worst case ${ceiling:.2f}"
+                )
             audio = adapter(segment, settings=settings, endpoint=endpoint, voice=voice)
             suffix = str(audio.get("suffix") or ".wav")
             path = staging / f"{safe_slug(segment_id)}{suffix}"
             path.write_bytes(audio["bytes"])
             rendered[segment_id] = path
-            reported = audio.get("cost_usd")
-            cost += (
-                float(reported)
-                if isinstance(reported, (int, float))
-                else estimate_usd([segment], float(settings["price_per_1000_characters_usd"]))
-            )
+            cost += _reported_cost(audio.get("cost_usd"), fallback=next_estimate)
             if audio.get("job_id"):
                 job_ids.append(str(audio["job_id"]))
     except Exception as exc:
@@ -314,8 +332,22 @@ def _dispatch(
     job_id = ",".join(job_ids) or f"{config.get('provider')}-{stamp}"
     try:
         register(concept_id=concept_id, format=fmt, provider_job_id=job_id, actual_cost_usd=total, segments=segments)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    except Exception as exc:
+        # The provider was paid. Keep the audio on disk and record the spend
+        # before failing, so the ledger and history never under-state it.
+        append_jsonl(HISTORY_FILE, {
+            "recorded_at": now(), "key": key, "concept_id": concept_id, "format": fmt,
+            "event": "FAILED", "rendered": sorted(rendered), "cost_usd": round(cost, 4),
+            "spend_approval_sha256": approval_sha256, "staging_dir": str(staging),
+            "error": f"Rendered audio could not be registered: {exc}", "reviewer": reviewer,
+        })
+        if cost:
+            video_budget.record_actual(
+                video=video_budget.video_id(concept_id, fmt), category="narration", ref="narration",
+                total_usd=total, actor=reviewer, note="Narration rendered but not registered", ledger=budget_ledger,
+            )
+        raise
+    shutil.rmtree(staging, ignore_errors=True)
     registered = current_result(concept_id, fmt)
     result = registered[1] if registered else {}
     append_jsonl(HISTORY_FILE, {

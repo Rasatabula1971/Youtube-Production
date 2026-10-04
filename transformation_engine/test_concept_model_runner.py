@@ -406,6 +406,14 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(len(self.sleeps), 1)
         self.assertTrue(60 < self.sleeps[0] <= 65)
 
+    def test_direct_gemini_429_counts_as_rate_limited(self):
+        # The direct route reports HTTP_429 rather than FAIR's RATE_LIMITED (audit 2026-10-04).
+        result = {"status": "MODEL_ESCALATION_REQUIRED", "attempts": [
+            {"error_type": "HTTP_ERROR", "error_detail": "HTTP_429: RESOURCE_EXHAUSTED: quota"}]}
+        self.assertTrue(runner._rate_limited(result))
+        self.assertFalse(runner._rate_limited({"status": "MODEL_ESCALATION_REQUIRED", "attempts": [
+            {"error_type": "HTTP_ERROR", "error_detail": "HTTP_404: not found"}]}))
+
     def test_a_rate_limited_call_waits_and_retries_once(self):
         limited = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
                    "paid_inference_executed": False,

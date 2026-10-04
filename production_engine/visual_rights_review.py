@@ -208,6 +208,7 @@ def snapshot() -> dict[str, Any]:
     approved_total = 0
     stale_total = 0
     stale_reviews = 0
+    stale_ignored = 0
     paths = (
         sorted(
             CANDIDATE_REVIEW_DIR.glob("*.visual_candidate_review.json")
@@ -219,9 +220,13 @@ def snapshot() -> dict[str, Any]:
         review = load_json(review_path)
         rights_path = _path(review_path)
         if _current_review_result(review_path, review) is None:
+            # Stale rights decisions are ignored, never deleted here: this runs
+            # on every status poll, including while a job is rewriting the
+            # upstream files, and a human decision must not vanish in that
+            # window (audit 2026-10-04). Currency checks make the file inert.
             stale_reviews += 1
             if rights_path.exists():
-                rights_path.unlink()
+                stale_ignored += 1
             continue
         stored = (
             load_json(rights_path)
@@ -282,6 +287,7 @@ def snapshot() -> dict[str, Any]:
         "decided": decided_total,
         "approved": approved_total,
         "stale_removed": stale_total,
+        "stale_ignored": stale_ignored,
         "stale_reviews": stale_reviews,
         "items": items,
     }

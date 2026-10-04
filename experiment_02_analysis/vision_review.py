@@ -716,6 +716,15 @@ def finalize_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return packet
 
 
+def reviewer_id() -> str:
+    return os.getenv("YOUTUBE_REVIEWER_ID", "local-operator").strip() or "local-operator"
+
+
+def decided_by() -> str:
+    """HUMAN unless the gate policy is deciding (it sets YOUTUBE_DECIDED_BY, D-156)."""
+    return os.getenv("YOUTUBE_DECIDED_BY", "HUMAN").strip().upper() or "HUMAN"
+
+
 def apply_review_action(
     *,
     action: str,
@@ -761,6 +770,8 @@ def apply_review_action(
         target["final_observation"] = final
 
     target["reviewed_at"] = utc_now()
+    target["reviewer"] = reviewer_id()
+    target["decided_by"] = decided_by()
     packet["updated_at"] = utc_now()
     append_jsonl(
         history_file(),
@@ -770,7 +781,8 @@ def apply_review_action(
             "video_id": video_id,
             "frame_id": frame_id,
             "decision": target["decision"],
-            "decided_by": "HUMAN",
+            "decided_by": target["decided_by"],
+            "reviewer": target["reviewer"],
             "final_observation": target.get("final_observation"),
             "prepared_profile_sha256": (packet.get("source_provenance") or {}).get("prepared_profile_sha256"),
             "visual_report_sha256": (packet.get("source_provenance") or {}).get("visual_report_sha256"),
