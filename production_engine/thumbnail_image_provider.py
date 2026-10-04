@@ -30,6 +30,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -137,6 +138,8 @@ def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     for key, label in (("endpoint", "endpoint"), ("model", "model"), ("license", "licence terms")):
         if not str(settings.get(key) or "").strip():
             problems.append(f"The provider {label} is not set.")
+    if str(settings.get("endpoint") or "").strip() and not str(settings.get("endpoint")).startswith("https://"):
+        problems.append("The provider endpoint must be an https:// URL.")
     price = settings.get("price_per_image_usd")
     if not isinstance(price, (int, float)) or price < 0:
         problems.append("The price per image is not set; it is never guessed.")
@@ -191,7 +194,12 @@ def openai_compatible_images(
         if item.get("b64_json"):
             data = base64.b64decode(item["b64_json"])
         elif item.get("url"):
-            with urllib.request.urlopen(str(item["url"]), timeout=timeout) as response:  # noqa: S310
+            # The URL comes from the provider's response: fetch only https,
+            # never file:, ftp: or plain http.
+            url = str(item["url"])
+            if urllib.parse.urlparse(url).scheme != "https":
+                raise ValueError("Image provider returned a non-https image URL; refusing to fetch it")
+            with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310
                 data = response.read()
         else:
             continue
@@ -297,8 +305,8 @@ def generate(
     count = int(config["candidates_per_thumbnail"])
     estimated = round(float(settings["price_per_image_usd"]) * count, 4)
     try:
-        authorized = round(float(max_cost_usd), 4)
-    except (TypeError, ValueError) as exc:
+        authorized = video_budget.money(max_cost_usd, label="The maximum cost")
+    except ValueError as exc:
         raise ValueError("Generating images needs a maximum cost in US dollars") from exc
     if authorized < estimated:
         raise ValueError(f"The maximum cost ${authorized} is below the estimate ${estimated}")
@@ -397,8 +405,8 @@ def import_candidate(
     if tier != "OWN_LIBRARY" and not str(license or "").strip():
         raise ValueError("A licence is required unless the image is from your own library")
     try:
-        cost = round(float(cost_usd or 0), 4)
-    except (TypeError, ValueError) as exc:
+        cost = video_budget.money(cost_usd or 0, label="Cost")
+    except ValueError as exc:
         raise ValueError("Cost must be a number of US dollars") from exc
     label = str(provider or "").strip() or "external tool"
     record = _store(
