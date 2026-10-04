@@ -251,25 +251,21 @@ class ConceptModelRunnerTests(unittest.TestCase):
             "Keep This Sibling",
         )
 
-    def test_provider_schema_is_shape_only(self):
+    def test_provider_schema_keeps_field_bounds_but_not_the_concept_count(self):
         authoritative = runner.response_schema(self.request())
         shaped = runner.provider_schema(authoritative)
-        text = json.dumps(shaped)
-        for keyword in ("minItems", "maxItems", "minimum", "maximum", "minLength", "maxLength"):
-            with self.subTest(keyword=keyword):
-                self.assertNotIn(f'"{keyword}"', text)
-        concept = shaped["properties"]["concepts"]["items"]
-        self.assertEqual(concept["required"], authoritative["properties"]["concepts"]["items"]["required"])
-        self.assertFalse(concept["additionalProperties"])
-        dependency = concept["properties"]["source_dependency_test"]["properties"]
-        self.assertEqual(dependency["passes"], {"type": "boolean"})
-        self.assertEqual(concept["properties"]["source_specific_elements_used"], {"type": "array", "items": {"type": "string"}})
-        self.assertIn("HYPOTHESIS", concept["properties"]["viewer_need_evidence"]["properties"]["status"]["enum"])
+        self.assertNotIn("maxItems", shaped["properties"]["concepts"])
+        self.assertIn("maxItems", authoritative["properties"]["concepts"])
+        drama = shaped["properties"]["concepts"]["items"]["properties"]["human_framing"]["properties"]["drama"]["properties"]
+        self.assertEqual((drama["hook_level"]["minimum"], drama["hook_level"]["maximum"]), (4, 10))
+        moments = shaped["properties"]["concepts"]["items"]["properties"]["human_framing"]["properties"]["visual_opening_plan"]["properties"]["moments"]
+        self.assertEqual((moments["minItems"], moments["maxItems"]), (3, 5))
         self.assertEqual(shaped["properties"]["mechanism_id"]["const"], "curiosity_gap")
-        # The authoritative contract is unchanged.
-        self.assertTrue(
-            authoritative["properties"]["concepts"]["items"]["properties"]["source_dependency_test"]["properties"]["passes"]["const"]
-        )
+
+    def test_prompt_states_the_drama_number_rules(self):
+        prompt = runner.build_prompt(self.request(), maximum_chars=95000)
+        self.assertIn("target may not exceed capacity", prompt)
+        self.assertIn("3 to 5 moments", prompt)
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
@@ -294,7 +290,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
             ):
                 result = runner.run_one(request_path, force=False, runner_config=self.runner_config())
             sent = call_bridge.call_args.args[0]["expected_schema"]
-        self.assertNotIn('"maxItems"', json.dumps(sent))
+        self.assertNotIn("maxItems", sent["properties"]["concepts"])
         self.assertEqual(result["status"], "VALIDATED")
         self.assertEqual(result["concepts_beyond_request_dropped"], 2)
         self.assertEqual(result["structurally_rejected"], 1)
@@ -350,7 +346,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
             with patch.object(runner, "ROUTE_FILE", bad), self.assertRaisesRegex(ValueError, "route must be one of"):
                 runner.concept_route()
 
-    def run_in_calls(self, outputs, *, total=5, per_call=2):
+    def run_in_calls(self, outputs, *, total=5, per_call=2, pause=0):
         """Run one mechanism with concepts_per_call set; outputs feed each FAIR call in turn."""
         results = []
         for item in outputs:
@@ -364,7 +360,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             route_file = root / "route.json"
-            route_file.write_text(json.dumps({"route": "fair", "concepts_per_call": per_call}), encoding="utf-8")
+            route_file.write_text(json.dumps({"route": "fair", "concepts_per_call": per_call,
+                                              "pause_between_calls_seconds": pause}), encoding="utf-8")
             request_path = root / "curiosity_gap.concept_request.json"
             request_path.write_text(json.dumps(dict(self.request(), concept_count_requested=total)), encoding="utf-8")
             with (
@@ -374,8 +371,10 @@ class ConceptModelRunnerTests(unittest.TestCase):
                 patch.object(runner, "RESPONSES_DIR", root / "responses"),
                 patch.object(runner, "resolve_fair_paths", return_value={"repo": root, "env_file": root / ".env", "python": root / "py"}),
                 patch.object(runner, "call_fair_bridge", side_effect=results) as fair,
+                patch.object(runner.time, "sleep") as sleep,
             ):
                 report = runner.run_one(request_path, force=False, runner_config=self.runner_config())
+                self.sleeps = [c.args[0] for c in sleep.call_args_list]
                 response_file = root / "responses" / "curiosity_gap.json"
                 response = json.loads(response_file.read_text()) if response_file.exists() else None
         prompts = [c.args[0]["prompt"] for c in fair.call_args_list]
@@ -401,6 +400,10 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertIn("Title c2", prompts[1])
         self.assertEqual(response["response_provenance"]["calls"], 3)
 
+    def test_calls_after_the_first_wait_for_the_rate_limit(self):
+        self.run_in_calls([[self.concept("c1"), self.concept("c2")], [self.concept("c3")]], total=3, pause=65)
+        self.assertEqual(self.sleeps, [65.0])
+
     def test_a_failed_later_call_keeps_the_concepts_already_made(self):
         escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
                      "paid_inference_executed": False, "attempts": []}
@@ -421,7 +424,7 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(report["structurally_accepted"], 2)
         self.assertEqual(report["structurally_rejected"], 1)
         self.assertEqual(report["concepts_beyond_request_dropped"], 1)
-        self.assertNotIn('"maxItems"', json.dumps(schemas[0]))
+        self.assertNotIn("maxItems", schemas[0]["properties"]["concepts"])
 
     def test_a_first_call_failure_writes_no_response(self):
         escalated = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",

@@ -186,9 +186,9 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
-### Concept generation settings (D-146, D-147)
+### Concept generation settings (D-146, D-147, D-148)
 
-`transformation_engine/concept_model_route.json` holds two settings:
+`transformation_engine/concept_model_route.json` holds three settings:
 
 - **`concepts_per_call`** (currently 2). A mechanism's concepts are generated in
   several calls of at most this many concepts. Each call sees the working
@@ -205,7 +205,17 @@ before the human gate.
   has no billing enabled, and it departs from vision §101, so it is a manual
   override rather than the default.
 
-Both settings are outside the validation contract, so changing them does not
+- **`pause_between_calls_seconds`** (currently 65). The wait between one
+  mechanism's calls. Groq's free tier limits tokens per minute, and a second
+  call in the same minute was refused as rate limited (D-148).
+
+The schema sent to the provider keeps every field bound (drama levels 4–10,
+3–5 opening moments and so on). The prompt also states the cross-field drama
+rules a schema cannot express: target no higher than capacity, and the story
+curve reaching the target. Only the number of concepts in one answer is left
+to the runner.
+
+These settings are outside the validation contract, so changing them does not
 regenerate mechanisms that already validated. Every concept still goes through
 `validate_response()`.
 

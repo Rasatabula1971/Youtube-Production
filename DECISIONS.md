@@ -4390,7 +4390,8 @@ not documented anywhere available to this build.
 
 ## D-145 — Providers get a shape-only concept schema
 
-**Status:** Accepted; it did not fix the failure it targeted (see Result)
+**Status:** Revised by D-148. Field bounds are sent to providers again; only
+the concept count is left out.
 
 **Context.** On the laptop, two concept mechanisms (progressive reveal and
 specificity) failed on every free route while three passed:
@@ -4514,3 +4515,41 @@ of D-146.
 - If two concepts per call still come back incomplete, the next step is
   two-stage generation: the concept first, then its framing sections in a
   second small call.
+
+## D-148 — Field bounds go back into the provider schema, and calls are paced
+
+**Status:** Accepted
+
+**Context.** The first laptop run of D-147 showed real progress. With two
+concepts per call, Groq's gpt-oss-120b returned complete concepts that passed
+FAIR's schema check, `human_framing` included. The app's validator then
+rejected every one on bounds the D-145 provider schema had removed:
+- hook level and story-curve values outside 4–10;
+- a target above capacity;
+- a story curve that never reaches the target;
+- fewer than 3 opening moments.
+
+Separately, each mechanism's second call came within the same minute. Groq's
+free per-minute token limit refused it as `RATE_LIMITED`, and FAIR fell back
+to Cloudflare models that fail the schema.
+
+**Decision.**
+- **Bounds restored.** `provider_schema` sends the full authoritative schema
+  again, leaving out only the maximum number of concepts. The runner already
+  keeps at most the requested number.
+- **Prompt.** Rule 23 states the drama-number rules a schema cannot express:
+  whole numbers 4–10, target no higher than capacity, the highest
+  story-curve value reaching the target, tempo 1–10, curve lengths, and 3–5
+  opening moments.
+- **Pacing.** `concept_model_route.json` sets
+  `pause_between_calls_seconds: 65`. Calls after a mechanism's first wait
+  that long.
+
+**Consequences.**
+- A mechanism with five concepts takes about four minutes: three or four
+  calls a minute apart.
+- With only two concepts per call, the provider rejecting a whole answer for
+  one bound loses at most two concepts. The bounds guide the model more than
+  that costs.
+- None of this touches the validation contract, so validated mechanisms are
+  kept.
