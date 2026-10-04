@@ -97,7 +97,7 @@ def local_check(text: str, request: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float) -> dict[str, Any]:
+def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float, strict: bool = False) -> dict[str, Any]:
     request_path = REQUESTS_DIR / f"{safe_slug(mechanism)}.concept_request.json"
     request = json.loads(request_path.read_text(encoding="utf-8"))
     config = runner.load_runner_config()
@@ -107,16 +107,20 @@ def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float) -> dic
     if not key:
         raise SystemExit("No GROQ_API_KEY in the environment or in FAIR's .env")
 
+    json_schema: dict[str, Any] = {"name": "concepts", "schema": schema}
+    if strict:
+        # Constrained decoding: the model cannot leave the schema while writing.
+        json_schema["strict"] = True
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "max_completion_tokens": max_tokens,
-        "response_format": {"type": "json_schema", "json_schema": {"name": "concepts", "schema": schema}},
+        "response_format": {"type": "json_schema", "json_schema": json_schema},
     }
     started = time.monotonic()
     status, payload = post(body, key, timeout)
     report: dict[str, Any] = {
-        "mechanism_id": mechanism, "model": model, "http_status": status,
+        "mechanism_id": mechanism, "model": model, "strict": strict, "http_status": status,
         "seconds": round(time.monotonic() - started, 1),
         "prompt_chars": len(prompt), "schema_chars": len(json.dumps(schema, separators=(",", ":"))),
         "concept_count_requested": request.get("concept_count_requested"),
@@ -142,7 +146,7 @@ def diagnose(mechanism: str, model: str, max_tokens: int, timeout: float) -> dic
         report["answer_check"] = local_check(text, request)
 
     DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
-    stem = f"{safe_slug(mechanism)}.{safe_slug(model)}"
+    stem = f"{safe_slug(mechanism)}.{safe_slug(model)}" + (".strict" if strict else "")
     (DIAGNOSTICS_DIR / f"{stem}.txt").write_text(text, encoding="utf-8")
     report["text_file"] = str(DIAGNOSTICS_DIR / f"{stem}.txt")
     (DIAGNOSTICS_DIR / f"{stem}.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -155,8 +159,9 @@ def main() -> None:
     parser.add_argument("--model", default="openai/gpt-oss-120b")
     parser.add_argument("--max-tokens", type=int, default=32768)
     parser.add_argument("--timeout", type=float, default=300)
+    parser.add_argument("--strict", action="store_true", help="ask Groq for constrained (strict) decoding")
     args = parser.parse_args()
-    report = diagnose(args.mechanism, args.model, args.max_tokens, args.timeout)
+    report = diagnose(args.mechanism, args.model, args.max_tokens, args.timeout, strict=args.strict)
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
 
