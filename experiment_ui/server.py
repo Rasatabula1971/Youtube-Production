@@ -83,6 +83,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/thumbnail-gate",
     "/api/thumbnail-spec",
     "/api/thumbnail-images",
+    "/api/final-audio-gate",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -401,6 +402,7 @@ from production_engine.thumbnail_review import (
 )
 from production_engine import thumbnail_image_provider
 from production_engine import video_budget
+from production_engine import narration_final_review
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -1676,6 +1678,15 @@ IMAGE_CONTENT_TYPES = {
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".webp": "image/webp",
+}
+
+
+AUDIO_CONTENT_TYPES = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
 }
 
 
@@ -3105,6 +3116,8 @@ def narration_artifact_state() -> dict[str, Any]:
                 "items": [],
             },
             "audio_ready": False,
+            "audio_qc_passed": False,
+            "final_audio": {"status": "WAITING_FOR_AUDIO_QC", "complete": False, "items": []},
         }
 
     render = narration_render_snapshot()
@@ -3116,20 +3129,36 @@ def narration_artifact_state() -> dict[str, Any]:
     render_results_present = bool(
         expected_returns > 0 and current_returns == expected_returns
     )
-    audio_ready = bool(
+    audio_qc_passed = bool(
         render_results_present
         and audio_qc.get("status") == "PASS"
         and int(audio_qc.get("processed") or 0) == expected_returns
         and int(audio_qc.get("passed") or 0) == expected_returns
     )
+    # QC is automatic; the exact paid audio is ready only once a human has
+    # listened and approved it at the Final Audio Gate (D-137).
+    final_audio = final_audio_gate_state() if audio_qc_passed else {
+        "status": "WAITING_FOR_AUDIO_QC", "complete": False, "items": []
+    }
+    audio_ready = bool(audio_qc_passed and final_audio.get("complete"))
     return {
         "render": render,
         "spend_gate": spend_gate,
         "render_return": render_return,
         "render_results_present": render_results_present,
         "audio_qc": audio_qc,
+        "audio_qc_passed": audio_qc_passed,
+        "final_audio": final_audio,
         "audio_ready": audio_ready,
     }
+
+
+def final_audio_gate_state() -> dict[str, Any]:
+    """Final Audio Gate snapshot that degrades to an error status instead of raising."""
+    try:
+        return narration_final_review.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "complete": False, "items": []}
 
 
 def production_visual_artifact_state() -> dict[str, Any]:
@@ -7495,6 +7524,36 @@ def workflow_guidance(
                 "next_action_id": None,
                 "next_title": "Re-import corrected narration audio",
             }
+        final_audio = narration_state.get("final_audio") or {}
+        if narration_state.get("audio_qc_passed") and not narration_state.get("audio_ready"):
+            reworked = [
+                item for item in final_audio.get("items", [])
+                if item.get("decision") in {"REWORK_SEGMENTS", "REJECT_AUDIO"}
+            ]
+            if reworked:
+                return {
+                    "state": "FINAL_AUDIO_REWORK_REQUIRED",
+                    "current_action_id": None,
+                    "current_title": "Re-record the Narration",
+                    "current_detail": (
+                        "You sent the paid narration back. Have the provider re-record "
+                        "the named segments and register the new return; Audio QC and "
+                        "the Final Audio Gate run again."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Register corrected narration audio",
+                }
+            return {
+                "state": "HUMAN_FINAL_AUDIO_GATE",
+                "current_action_id": None,
+                "current_title": "Approve the Final Narration",
+                "current_detail": (
+                    "Audio QC passed. Listen to the exact paid narration and approve "
+                    "it before any visual work uses its timing."
+                ),
+                "next_action_id": "auto_continue",
+                "next_title": "Prepare narration-bound visual plan",
+            }
         if not narration_state.get("audio_ready"):
             return {
                 "state": "ACTION_REQUIRED",
@@ -8291,6 +8350,7 @@ def status_payload() -> dict[str, Any]:
         "final_export_gate": final_export_review_snapshot(),
         "thumbnail_gate": thumbnail_gate_state(),
         "video_budget": video_budget_state(),
+        "final_audio_gate": final_audio_gate_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -8615,6 +8675,22 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/thumbnail-gate":
             self._send_json(thumbnail_gate_state())
+            return
+        if route == "/api/final-audio-gate":
+            self._send_json(final_audio_gate_state())
+            return
+        if route == "/api/final-audio-file":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                path = narration_final_review.audio_file_path(
+                    str((query.get("concept_id") or [""])[0]),
+                    str((query.get("format") or [""])[0]),
+                    str((query.get("segment_id") or [""])[0]),
+                )
+            except (ValueError, OSError, KeyError) as exc:
+                self._send_json({"error": str(exc)}, 404)
+                return
+            self._send_static(path, AUDIO_CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
             return
         if route in {"/api/thumbnail-file", "/api/thumbnail-competitor"}:
             query = parse_qs(urlparse(self.path).query)
@@ -9341,6 +9417,20 @@ class Handler(BaseHTTPRequestHandler):
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                 )
+                self._send_json(payload)
+                return
+
+            if route == "/api/final-audio-gate":
+                payload = narration_final_review.apply_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                    segment_ids=body.get("segment_ids"),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
                 return
 

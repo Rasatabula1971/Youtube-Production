@@ -4050,3 +4050,50 @@ The US$5 target was advisory only.
 - Spend from before this change is not in the ledger.
 - Changing the budget is a config edit; `confirmed_by_human` records that you
   have confirmed it.
+
+
+## D-137 — A human approves the exact final narration audio
+
+**Status:** Accepted (vision: approval of the final audio itself; correction
+named in D-128; completes the NARRATION_AUDIO_READY stop of D-082)
+
+**Context.**
+- **Before the change.** The human approved the free local preview and then
+  the spend for a quoted provider render. The returned paid audio passed
+  only automatic Audio QC (duration, silence, clipping, missing files), and
+  visual planning started from its timing without anyone listening.
+- **Why that falls short.** QC cannot hear a mispronunciation, a wrong
+  emphasis or a flat read.
+
+**Decision.**
+- **Gate.** `production_engine/narration_final_review.py` adds the Human
+  Final Audio Gate after Audio QC passes. Per video it lists every segment,
+  with:
+  - its audio;
+  - its planned and actual duration;
+  - its start time and take.
+- **Decisions.**
+  - APPROVE_FINAL_AUDIO.
+  - REWORK_SEGMENTS: named segments plus a note; the next provider return
+    replaces them.
+  - REJECT_AUDIO: needs a note.
+- **Binding.** An approval is bound to the QC report and timing-map hashes,
+  and decisions are appended to a history log.
+- **Server.**
+  - `narration_artifact_state` now separates `audio_qc_passed` from
+    `audio_ready`; `audio_ready` also requires the approval. Everything that
+    started from QC-passed audio (visual manifest, storyboard, edit
+    manifest) now waits for the human.
+  - New workflow stops: `HUMAN_FINAL_AUDIO_GATE` and
+    `FINAL_AUDIO_REWORK_REQUIRED`.
+  - Routes: `/api/final-audio-gate` (locked during jobs) and
+    `/api/final-audio-file`, which serves only managed narration files.
+- **UI.** `/produce` gains a "Final audio" tab with a player per segment and
+  "Re-record this segment" ticks.
+
+**Consequences.**
+- One more human decision per video, at the point where re-recording is
+  still cheap: before any visual is timed to the audio.
+- Approval is per video; a partial approval is not offered. Re-recording
+  goes through the provider and the existing return registration, so spend
+  stays inside the approved ceiling and the per-video budget (D-136).

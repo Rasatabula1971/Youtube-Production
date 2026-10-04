@@ -1,5 +1,5 @@
 /* Produce workspace (UI-14, D-122).
-   /produce#<tab>: the seven production gates on the shared review
+   /produce#<tab>: the production gates on the shared review
    workspace — Narration spend, Choose visuals, Footage rights, Rough cut,
    Visual spend, Edit preview, Final export. Every decision posts exactly what
    the classic panel posts. Asset registration (final narration audio,
@@ -10,6 +10,7 @@
 
   const TABS = [
     ["narration", "Narration spend"],
+    ["audio", "Final audio"],
     ["visuals", "Choose visuals"],
     ["rights", "Footage rights"],
     ["roughcut", "Rough cut"],
@@ -27,6 +28,7 @@
   const visualChoice = Object.create(null);    // shot key -> candidate_id
   const rightsContext = Object.create(null);   // rights key -> context note
   const maxCost = Object.create(null);         // spend key -> number
+  const reworkSegments = Object.create(null);  // final audio key -> {segment_id: bool}
   let paintedTabs = "";
 
   function yp() { return window.YP; }
@@ -150,6 +152,67 @@
         concept_id: item.concept_id, format: item.format, decision: decision,
         criteria: Object.assign({}, this.ticks(item)), note: note
       }, decision === "ACCEPT" ? "Narration spend authorized." : decision === "REWORK" ? "Narration spend sent for rework." : "Narration spend rejected.");
+    }
+  };
+
+  // ----------------------------------------------------------- Final audio
+  // The exact paid narration, after automatic Audio QC, approved by ear
+  // before any visual work uses its timing (D-137).
+  function seconds(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(1) + " s" : "—";
+  }
+
+  const finalAudio = {
+    kicker: "FINAL AUDIO",
+    gate: function () { return status().final_audio_gate || {}; },
+    all: function () { return (this.gate().items || []).filter(Boolean); },
+    pending: function (item) { return String(item.decision || "PENDING").toUpperCase() === "PENDING"; },
+    key: function (item) { return item.concept_id + "::" + item.format; },
+    title: function (item) { return item.concept_id + " · " + words(item.format); },
+    meta: function (item) {
+      return '<span class="source-chip">paid narration</span><span class="rw-meta-text">' + esc((item.segments || []).length) + " segments</span>" +
+        (this.pending(item) ? "" : decidedBadge(item.decision, item.decision === "APPROVE_FINAL_AUDIO" ? "complete" : "blocked"));
+    },
+    evidence: function (item) {
+      const key = this.key(item);
+      const marked = reworkSegments[key] || {};
+      const rows = (item.segments || []).map(function (segment) {
+        const url = "/api/final-audio-file?" + new URLSearchParams({ concept_id: item.concept_id, format: item.format, segment_id: segment.segment_id }).toString();
+        return '<li class="pd-audio-row"><strong>' + esc(segment.segment_id) + "</strong> " +
+          '<span class="muted">' + esc(seconds(segment.actual_duration_seconds)) + " (planned " + esc(seconds(segment.expected_duration_seconds)) +
+          ") · starts " + esc(seconds(segment.audio_start_seconds)) + " · take " + esc(segment.attempt) + "</span>" +
+          '<audio controls preload="none" src="' + esc(url) + '"></audio>' +
+          '<label><input type="checkbox" data-pd-segment="' + esc(segment.segment_id) + '" data-key="' + esc(key) + '"' +
+          (marked[segment.segment_id] ? " checked" : "") + "> Re-record this segment</label></li>";
+      }).join("");
+      return '<p class="muted">Audio QC passed (duration, silence, clipping). Listen to every segment: approving makes this exact audio the narration, and its timing drives the visuals.</p>' +
+        section("Segments", rows ? '<ul class="rw-list pd-audio-list">' + rows + "</ul>" : '<p class="muted">No segments.</p>') +
+        (item.note ? '<p class="muted">Last note: ' + esc(item.note) + "</p>" : "");
+    },
+    decisions: function (item) {
+      const key = this.key(item);
+      return [
+        { value: "APPROVE_FINAL_AUDIO", label: "Approve final audio", hint: "This exact audio becomes the narration; visual planning follows.", tone: "complete" },
+        Object.assign(noteRework("REWORK_SEGMENTS", "Re-record segments", "Tick the segments to re-record, then say what is wrong."), {
+          validate: function () {
+            const marked = reworkSegments[key] || {};
+            return Object.keys(marked).some(function (id) { return marked[id]; }) ? "" : "Tick at least one segment to re-record.";
+          }
+        }),
+        noteRework("REJECT_AUDIO", "Reject audio", "The whole return is unusable.", "say what is wrong")
+      ];
+    },
+    decide: function (item, decision, note) {
+      const key = this.key(item);
+      const marked = reworkSegments[key] || {};
+      return post("/api/final-audio-gate", {
+        concept_id: item.concept_id, format: item.format, decision: decision, note: note,
+        segment_ids: Object.keys(marked).filter(function (id) { return marked[id]; })
+      }, decision === "APPROVE_FINAL_AUDIO" ? "Final narration approved." : decision === "REWORK_SEGMENTS" ? "Segments sent for re-recording." : "Narration audio rejected.").then(function (ok) {
+        if (ok) delete reworkSegments[key];
+        return ok;
+      });
     }
   };
 
@@ -454,7 +517,7 @@
     }
   });
 
-  const CONFIGS = { narration: narration, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, edit: edit, export: exportGate };
+  const CONFIGS = { narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, edit: edit, export: exportGate };
 
   // ------------------------------------------------------------ Page shell
   function items(tab) {
@@ -600,6 +663,8 @@
       showDecided = t.checked;
       Object.keys(workspaces).forEach(function (k) { workspaces[k].refresh(); });
       render();
+    } else if (t.dataset.pdSegment) {
+      (reworkSegments[t.dataset.key] = reworkSegments[t.dataset.key] || {})[t.dataset.pdSegment] = t.checked;
     } else if (t.dataset.pdTick) {
       (spendTicks[t.dataset.key] = spendTicks[t.dataset.key] || {})[t.dataset.pdTick] = t.checked;
     } else if (t.dataset.pdVisual) {

@@ -287,6 +287,27 @@ PASS result. Partial branch coverage cannot report a global PASS.
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
 
+## Human Final Audio Gate (D-137)
+
+Audio QC is automatic: it checks duration, silence, clipping and missing
+files. After it passes, `narration_final_review.py` holds the exact paid
+narration for a human to listen to, segment by segment, on `/produce#audio`.
+
+| Decision | Effect |
+|---|---|
+| `APPROVE_FINAL_AUDIO` | Makes this audio the narration. |
+| `REWORK_SEGMENTS` | Names segments to re-record, with a note; the next provider return replaces them. |
+| `REJECT_AUDIO` | The whole return is unusable; needs a note. |
+
+- **Binding.** An approval is bound to the hashes of the QC report and the
+  timing map, so a new return or a re-run of QC reopens it.
+- **Ready means approved.** The server treats narration audio as ready only
+  once it is approved, so the visual manifest, storyboard and everything
+  timed from the audio wait for it.
+- **Stops.** The workflow stops at `HUMAN_FINAL_AUDIO_GATE`, or at
+  `FINAL_AUDIO_REWORK_REQUIRED` after a rework or reject.
+- **History.** Decisions are appended to `final_narration_history.jsonl`.
+
 ## Slice 13 — narration-bound visual manifest, storyboard and search request
 
 Visual production now begins only after final narration has passed deterministic

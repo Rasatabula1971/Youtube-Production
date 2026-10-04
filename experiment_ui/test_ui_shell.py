@@ -293,7 +293,7 @@ class ShellMarkupTests(unittest.TestCase):
 
         script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
         tabs = re.findall(r'\["([a-z]+)", "[^"]+"\]', script.split("let activeTab")[0])
-        self.assertEqual(len(tabs), 7)
+        self.assertEqual(len(tabs), 8)
         for tab in tabs:
             with self.subTest(tab=tab):
                 self.assertIn(f'id="produce-{tab}"', self.html)
@@ -305,7 +305,10 @@ class ShellMarkupTests(unittest.TestCase):
             return {a or b for a, b in found}
 
         # Server-side decision sets, copied from each gate module's validation.
-        self.assertEqual(values("const narration = {", "const visuals = {"), {"ACCEPT", "REWORK", "REJECT"})
+        import narration_final_review
+
+        self.assertEqual(values("const narration = {", "const finalAudio = {"), {"ACCEPT", "REWORK", "REJECT"})
+        self.assertEqual(values("const finalAudio = {", "const visuals = {"), set(narration_final_review.DECISIONS))
         self.assertEqual(values("const visuals = {", "const rights = {"), {"SELECT", "NEEDS_BETTER_VISUAL", "REJECT_ALL"})
         self.assertEqual(values("const rights = {", "const roughcut = {"), {"APPROVE_CONTEXT_USE", "REJECT_USE"})
         self.assertEqual(
@@ -322,6 +325,7 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertEqual(values("function videoGate", "const edit = "), returns)
         for endpoint in [
             "/api/narration-spend-gate",
+            "/api/final-audio-gate",
             "/api/visual-candidate-review",
             "/api/visual-rights-review",
             "/api/visual-rough-cut-review",
