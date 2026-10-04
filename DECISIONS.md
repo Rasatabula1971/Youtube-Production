@@ -4613,3 +4613,35 @@ splitting calls further does not fix this mechanism.
 - A mechanism that needs it takes about twice as many calls.
 - None of this touches the validation contract, so validated mechanisms are
   kept.
+
+## D-151 — Concept generation switches to the direct Gemini route
+
+**Status:** Accepted (human decision, 4 October 2026). This amends Master
+Product Vision §101 for concept generation only.
+
+**Context.** After D-147 to D-150, four of the five mechanisms validated
+through FAIR and the pool reached 15. `specificity` still failed: Groq's
+gpt-oss models leave out `human_framing` and `viewer_need_evidence` for this
+mechanism, and Groq's own schema check then rejects the whole answer inside
+FAIR. The D-150 follow-up call therefore never receives the incomplete
+concepts. The human chose to bypass FAIR for concept generation.
+
+**Decision.**
+- **Route.** `concept_model_route.json` sets `"route": "direct_gemini"`. The
+  project's `DIRECT_GEMINI_API_KEY` is the only route for concept
+  generation, with no FAIR and no fallback.
+- **Settings.** It keeps two concepts per call and the section-completion
+  follow-up, and lowers the pause between calls to 10 seconds.
+- **Unchanged.** Every concept still goes through `validate_response()`, and
+  the settings stay outside the validation contract, so the four validated
+  mechanisms are kept. Every other stage keeps FAIR first, as §100–101 say.
+
+**Consequences.**
+- §101's rule (direct Gemini only after quota exhaustion, never to hide
+  defects) no longer applies to concept generation. This is a deliberate,
+  recorded change, as the roadmap's versioning rule requires. The defect it
+  works around (free models omitting nested sections) is documented in
+  D-145 to D-150.
+- Cost depends on the key's Google Cloud project: free with no billing
+  enabled, billed otherwise. The app cannot tell which.
+- Setting `"route": "fair"` and a 65-second pause restores the FAIR route.
