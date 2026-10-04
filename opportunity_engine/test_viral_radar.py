@@ -307,6 +307,16 @@ class OverviewTests(RadarTestCase):
         self.assertEqual(theme["first_detected_at"], at(58))
         self.assertEqual([v["video_id"] for v in theme["videos"]], [vid(2), vid(1)])
 
+    def test_overview_rows_and_themes_carry_a_lane(self):
+        overview = vr.radar_overview(now=NOW)
+        for row in overview["tracked"]:
+            self.assertIn(row["lane"], ("ON_LANE", "UNCLEAR", "OFF_LANE", "OTHER_LANGUAGE"))
+        for theme in overview["themes"]:
+            self.assertIn(theme["lane"], ("ON_LANE", "UNCLEAR", "OFF_LANE", "OTHER_LANGUAGE"))
+            for video in theme["videos"]:
+                self.assertIn("lane", video)
+                self.assertIn("day", video)
+
     def test_overview_tracked_rows_carry_day_in_window_and_inbox_id(self):
         self.write_fixture()
         tracked = vr.radar_overview(now=NOW)["tracked"]

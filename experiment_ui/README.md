@@ -279,6 +279,9 @@ to match the redesign's navigation:
   direction, and "All tracked videos" lists the rest. A format filter (All,
   Long-form, Shorts) filters what is shown. Topic and region filters are not
   offered because the radar does not support them yet.
+  - **Shortlist filters (D-162):** lane (my lane / everything, from
+    `opportunity_engine/radar_lane_config.json`), minimum outlier, freshness
+    and format; replicated themes pinned first; the bar counts what it hides.
 - `/opportunity/review` — **Opportunity Review** (D-116): the Human Opportunity
   Gate on the shared review workspace. The inbox's "Needs review" items are
   shown one at a time. Evidence is on the left: summary, rule-backed "why this

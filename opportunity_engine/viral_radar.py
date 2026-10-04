@@ -44,7 +44,7 @@ from experiment_01_discovery.market_intelligence import (  # noqa: E402
     calculate_snapshot_velocity,
     load_snapshot_history,
 )
-from opportunity_engine import channel_scope, historical_adapter, models, viral_cluster  # noqa: E402
+from opportunity_engine import channel_scope, historical_adapter, models, radar_lane, viral_cluster  # noqa: E402
 from opportunity_engine.human_video_intake import (  # noqa: E402
     VIDEO_ID_PATTERN,
     _iso8601_seconds,
@@ -1047,8 +1047,11 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
         metrics = record.get("metrics") or {}
         published = _parse_time(video.get("published_at"))
         age = (now - published).total_seconds() / 3600 if published else _float(metrics.get("age_hours"))
+        lane = radar_lane.classify(video.get("title"), video.get("channel_title"))
         return {
             "video_id": video_id,
+            "lane": lane["lane"],
+            "lane_hits": lane["hits"],
             "opportunity_id": opportunity_id(models.SOURCE_VIRAL_RADAR, video_id),
             "title": video.get("title"),
             "channel_title": video.get("channel_title"),
@@ -1089,6 +1092,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
                 "replication_rule_id": cluster.get("replication_rule_id"),
                 "independent_channel_count": cluster.get("independent_channel_count"),
                 "member_count": cluster.get("member_count", len(members)),
+                "lane": radar_lane.theme_lane([row["lane"] for row in rows]),
                 "strongest_ratio": ratios_[-1] if ratios_ else None,
                 "median_ratio": _median(ratios_),
                 "direction": top.get("trajectory") if top else None,
@@ -1098,7 +1102,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
                 "top_opportunity_id": top.get("opportunity_id") if top else None,
                 "momentum": top.get("series") if top else [],
                 "videos": [
-                    {k: row[k] for k in ("video_id", "opportunity_id", "title", "channel_title", "lifetime_ratio", "trajectory")}
+                    {k: row[k] for k in ("video_id", "opportunity_id", "title", "channel_title", "lifetime_ratio", "trajectory", "lane", "day")}
                     for row in sorted(rows, key=lambda row: -(row["lifetime_ratio"] or 0))
                 ],
             }
