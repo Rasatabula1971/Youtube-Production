@@ -4678,3 +4678,38 @@ however, said no usable source pages were found.
   evidence is skipped.
 - Stage policy is unchanged: research still waits until every question has
   a source.
+
+## D-153 — Research evidence: real independence, whole-word risk terms, rework searches
+
+**Status:** Accepted
+
+**Context.** The first Research Gate with Exa evidence showed three defects:
+- **A mirrored source counted twice.** `clm_speed_threshold` was supported
+  by "2 independent websites" that were one paper: Exa's library copy and
+  its DOI page, with the same title and quote. Sources were counted by
+  website only.
+- **A false risk flag.** The same claim was flagged as elevated risk
+  ("invest") because the word "investigations" begins with "invest". Risk
+  terms matched any word they prefixed, so "diesel" also tripped "die".
+- **A rework note searched as a question.** The human rework note "find the
+  answer elsewhere or discontinue" became a research question and was
+  searched on the web word for word. It also counted as a question the
+  search had to answer, although the gate never requires rework
+  instructions to be answered.
+
+**Decision.**
+- **Independent sources.** Supporting sources form independent works:
+  links sharing a website, a title of at least four words, or the same
+  quoted text count as one. Automatic clearing still needs two.
+- **Risk terms.** They match whole words. A term ending in `*` matches as a
+  stem (`pregnan*`), and explicit forms are listed (`legally`, `investor`
+  and so on).
+- **Rework searches.** For a rework question, acquisition searches the
+  reworked claim's statement rather than the note's text. Rework questions
+  no longer count towards the questions acquisition must cover.
+
+**Consequences.**
+- Automatic decisions are recomputed on every Research Gate prepare. A
+  claim that cleared only on a mirrored source returns to human review;
+  one flagged only by a false risk match may now clear.
+- Human decisions are never replaced.

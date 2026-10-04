@@ -88,6 +88,27 @@ class PolicyTests(unittest.TestCase):
         self.assert_review(item("The fringe cuts noise by 25 dB."), "not in any quoted evidence: 25")
         self.assert_review(item("Owl feathers can cause injuries to handlers."), "Elevated risk (injur")
 
+    def test_one_work_mirrored_on_two_sites_counts_once(self):
+        quote = "The highest increase in vibration amplitude occurred on the steering wheel."
+        mirror = link("https://exa.ai/library/publication/x", quote)
+        doi = link("https://doi.org/10.14669/AM.VOL94.ART5", quote)
+        self.assert_review(item(evidence=[mirror, doi]), "Weak evidence: supported by 1")
+        title = "Assessment of the effect of passenger car wheel unbalance on driving comfort"
+        a = link("https://exa.ai/a", "Quote one.")
+        b = link("https://doi.org/b", "Quote two.")
+        a["source"]["title"] = b["source"]["title"] = title
+        self.assert_review(item(evidence=[a, b]), "Weak evidence: supported by 1")
+
+    def test_risk_terms_match_whole_words(self):
+        for statement in (
+            "Experimental investigations show the steering wheel shakes at speed.",
+            "A diesel engine idles with a steady vibration.",
+        ):
+            with self.subTest(statement=statement):
+                self.assertEqual(self.classify(item(statement))["classification"], AUTO_CLEARED)
+        self.assert_review(item("Owls do not affect pregnancy outcomes."), "Elevated risk (pregnan")
+        self.assert_review(item("Investors watch tyre makers closely."), "Elevated risk (investors")
+
     def test_quoted_figures_are_fine(self):
         self.assertEqual(self.classify(item("The fringe reduces noise by 18 dB."))["classification"], AUTO_CLEARED)
 
