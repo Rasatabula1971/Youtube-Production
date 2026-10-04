@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -74,6 +75,43 @@ def load_config() -> dict[str, Any]:
     }
 
 
+_QUERY_STOPWORDS = frozenset(
+    "a an and are as at be been by can could do does did for from has have how if in into is it its "
+    "of on or so than that the their them then there these they this to was were what when where "
+    "which while who whom whose why will with would most more exact exactly actually really just "
+    "about many much some any each every your you our we".split()
+)
+
+
+def keyword_query(question: str, *, max_words: int = 8) -> str:
+    """A short keyword version of a research question (D-152).
+
+    Search engines often return nothing for a long, specific question; the
+    same question as a few keywords usually finds pages.
+    """
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9.%/+-]*", question)
+    kept = [w.rstrip(".") for w in words if w.lower().rstrip(".") not in _QUERY_STOPWORDS]
+    return " ".join(kept[:max_words])
+
+
+def _search(query: str, config: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Search the question; if every backend finds nothing, retry as keywords."""
+    try:
+        return search_web_with_fallback(
+            query, limit=config["search_results_per_question"], backends=config["search_backends"]
+        ), query
+    except Exception as first:
+        short = keyword_query(query)
+        if not short or short.lower() == query.lower():
+            raise
+        try:
+            return search_web_with_fallback(
+                short, limit=config["search_results_per_question"], backends=config["search_backends"]
+            ), short
+        except Exception as second:
+            raise RuntimeError(f"{first}; keyword retry \"{short}\": {second}") from second
+
+
 def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
     plan = load_json(plan_path)
     concept_id = str(plan.get("concept_id", "")).strip()
@@ -116,16 +154,13 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
             continue
 
         try:
-            search = search_web_with_fallback(
-                query,
-                limit=config["search_results_per_question"],
-                backends=config["search_backends"],
-            )
+            search, query_used = _search(query, config)
             urls = list(search.get("result_urls", []))
             question_searches.append(
                 {
                     "question_id": question_id,
                     "query": query,
+                    "query_used": query_used,
                     "backend": search.get("backend"),
                     "attempts": search.get("attempts", []),
                     "result_urls": urls,

@@ -74,6 +74,47 @@ class ResearchAcquisitionTests(unittest.TestCase):
         self.assertEqual(result["errors"], 2)
         self.assertIn("search: Every web search backend failed", result["first_error"])
 
+    def test_keyword_query_drops_question_words(self):
+        self.assertEqual(
+            module.keyword_query(
+                "At what exact gram threshold do most drivers begin to perceive steering wheel vibration at 100 km/h?"
+            ),
+            "gram threshold drivers begin perceive steering wheel vibration",
+        )
+        self.assertEqual(module.keyword_query("Why are aircraft tyres filled with nitrogen?"),
+                         "aircraft tyres filled nitrogen")
+
+    def test_a_question_with_no_results_is_retried_as_keywords(self):
+        queries = []
+
+        def search(query, *, limit, backends):
+            queries.append(query)
+            if query.endswith("?"):
+                raise RuntimeError("Every web search backend failed: duckduckgo: no results")
+            return {"backend": "duckduckgo", "result_urls": [f"https://example.org/{len(queries)}"], "attempts": []}
+
+        def read(url, *, backends):
+            return {"backend": "direct", "content": "Evidence text for " + url}
+
+        with (
+            patch.object(module, "search_web_with_fallback", side_effect=search),
+            patch.object(module, "read_web_page_with_fallback", side_effect=read),
+        ):
+            result = module.acquire_plan(plan(self.root))
+        self.assertEqual(result["status"], "COMPLETE")
+        evidence = json.loads(Path(result["evidence"]).read_text())
+        self.assertEqual(evidence["question_searches"][0]["query_used"], "aircraft tyres filled nitrogen")
+        self.assertEqual(len(queries), 4)
+
+    def test_a_failed_keyword_retry_reports_both_errors(self):
+        def search(query, *, limit, backends):
+            raise RuntimeError(f"no results for {query}")
+
+        with patch.object(module, "search_web_with_fallback", side_effect=search):
+            result = module.acquire_plan(plan(self.root))
+        self.assertEqual(result["status"], "FAILED")
+        self.assertIn('keyword retry "aircraft tyres filled nitrogen"', result["first_error"])
+
 
 if __name__ == "__main__":
     unittest.main()

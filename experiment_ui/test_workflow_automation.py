@@ -1367,6 +1367,25 @@ class PartialMessageTests(unittest.TestCase):
         self.assertIn("mcporter is not available on PATH", message)
         self.assertIn("--mode doctor", message)
 
+    def test_research_acquisition_message_when_pages_exist_but_questions_lack_sources(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            summary.write_text(json.dumps({"status": "PARTIAL", "usable": 3, "results": [
+                {"status": "SKIPPED_CURRENT", "concept_id": "c1"},
+                {"status": "PARTIAL", "concept_id": "c_spec_tyres_04", "pages": 6, "errors": 1,
+                 "first_error": "search: Every web search backend failed: duckduckgo: no results"},
+            ]}), encoding="utf-8")
+            with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", summary):
+                message = automation.partial_message("research_acquire")
+        self.assertNotIn("no usable source pages", message)
+        self.assertIn("c_spec_tyres_04 (6 pages, 1 question search(es) failed)", message)
+        self.assertIn("duckduckgo: no results", message)
+        self.assertIn("short keywords", message)
+
     def test_research_acquisition_message_without_summary(self):
         from pathlib import Path
 

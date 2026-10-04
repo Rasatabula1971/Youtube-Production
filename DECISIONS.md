@@ -4645,3 +4645,36 @@ concepts. The human chose to bypass FAIR for concept generation.
 - Cost depends on the key's Google Cloud project: free with no billing
   enabled, billed otherwise. The app cannot tell which.
 - Setting `"route": "fair"` and a 65-second pause restores the FAIR route.
+
+## D-152 — Research searches retry a question as keywords
+
+**Status:** Accepted
+
+**Context.** The first research run on the laptop found pages for all three
+plans. For `c_spec_tyres_04`, though, one question found nothing on any
+backend:
+- Exa was unavailable, because Agent Reach's `mcporter` was not on PATH;
+- DuckDuckGo and Wikipedia returned no results for the full question,
+  "At what exact gram threshold do most drivers begin to perceive steering
+  wheel vibration at 100 km/h?".
+
+The stage correctly stopped as PARTIAL (D-129). The workflow message,
+however, said no usable source pages were found.
+
+**Decision.**
+- **Keyword retry.** When every search backend finds nothing for a research
+  question, the question is retried once as keywords, with question words
+  and filler removed and at most eight words kept. The evidence file
+  records `query_used`.
+- **Failure reporting.** If the keyword retry also fails, the error carries
+  both attempts.
+- **Clearer message.** When pages were found but some questions still lack a
+  source, the workflow message names each such concept, its page count and
+  its failed searches. It says research stops because every question must
+  be covered, and points to the search-backend check.
+
+**Consequences.**
+- A PARTIAL evidence file is acquired again on the next run. Only COMPLETE
+  evidence is skipped.
+- Stage policy is unchanged: research still waits until every question has
+  a source.
