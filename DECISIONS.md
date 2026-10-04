@@ -4442,3 +4442,35 @@ provider schema straight to Groq and saves:
 
 The fix waits for that evidence. The shape-only schema stays, because one
 bad concept should still not sink a batch.
+
+## D-146 — Concept generation runs on Gemini only
+
+**Status:** Accepted (human decision, 4 October 2026)
+
+**Context.** Two concept mechanisms failed on every free FAIR route. Direct
+calls showed why: Groq's gpt-oss-120b returned all 5 concepts without
+`human_framing` and `viewer_need_evidence`, even with Groq's strict flag,
+because Groq validates after generation rather than constraining it. Until
+now, direct Gemini replaced exhausted free capacity only (D-068, D-129).
+
+**Decision.** At the human's request, concept generation uses the project's
+direct Gemini key as its only route.
+- `transformation_engine/concept_model_route.json` holds
+  `"route": "direct_gemini"`.
+- The runner calls Gemini with the provider schema (Flash-Lite, then Flash;
+  structured output, then JSON-only) and never calls FAIR.
+- Without a key the mechanism stops with `DIRECT_GEMINI_NOT_CONFIGURED`; it
+  does not fall back.
+- Setting the route to `"fair"` restores the previous behaviour.
+- Every other stage keeps FAIR first, with Gemini only for exhausted
+  capacity.
+
+**Consequences.**
+- Gemini's structured output constrains generation, so required sections
+  should no longer be dropped. The app's validator still checks every
+  concept.
+- The route is outside the validation contract, so the three mechanisms
+  already validated through FAIR are kept.
+- Cost depends on the key's Google Cloud project: free with no billing
+  enabled, billed otherwise. The app cannot tell which, so this is the
+  human's to confirm.

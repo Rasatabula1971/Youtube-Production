@@ -1,0 +1,4 @@
+{
+  "route": "direct_gemini",
+  "note": "Concept generation route (D-146). direct_gemini: the project's DIRECT_GEMINI_API_KEY only, no FAIR and no fallback. fair: free models through FAIR. Gemini is free only while the key's Google Cloud project has no billing enabled."
+}

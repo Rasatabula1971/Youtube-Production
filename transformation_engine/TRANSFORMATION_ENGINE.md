@@ -186,6 +186,21 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
+### Concept route (D-146)
+
+`transformation_engine/concept_model_route.json` chooses who generates concepts:
+
+- `"route": "direct_gemini"` (current): the project's `DIRECT_GEMINI_API_KEY`
+  only, Flash-Lite then Flash, with Gemini's structured output. FAIR is not
+  called and nothing falls back to it. Without a key the mechanism stops with
+  `DIRECT_GEMINI_NOT_CONFIGURED`.
+- `"route": "fair"`: free models through FAIR, as described above.
+
+The route is outside the validation contract, so switching it does not
+regenerate mechanisms that already validated. Every concept still goes through
+`validate_response()`. Gemini calls are free only while the key's Google Cloud
+project has no billing enabled; the app cannot see that.
+
 ### Mechanism coverage (D-129)
 
 The system prepares one concept request per transferable mechanism. A batch can
