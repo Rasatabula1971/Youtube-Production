@@ -86,6 +86,7 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/final-audio-gate",
     "/api/visual-plan-gate",
     "/api/narration-dispatch",
+    "/api/visual-dispatch",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
@@ -407,6 +408,7 @@ from production_engine import video_budget
 from production_engine import narration_final_review
 from production_engine import visual_plan_review
 from production_engine import narration_dispatch
+from production_engine import visual_dispatch
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -3200,6 +3202,14 @@ def narration_dispatch_state() -> dict[str, Any]:
         return narration_dispatch.snapshot()
     except (OSError, ValueError, KeyError) as exc:
         return {"ready": False, "problems": [str(exc)], "history": []}
+
+
+def visual_dispatch_state() -> dict[str, Any]:
+    """Premium visual provider readiness and authorized shots (D-140); never raises."""
+    try:
+        return visual_dispatch.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"ready": False, "problems": [str(exc)], "shots": []}
 
 
 def final_audio_gate_state() -> dict[str, Any]:
@@ -8429,6 +8439,7 @@ def status_payload() -> dict[str, Any]:
         "final_audio_gate": final_audio_gate_state(),
         "visual_plan_gate": visual_plan_gate_state(),
         "narration_dispatch": narration_dispatch_state(),
+        "visual_dispatch": visual_dispatch_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -8759,6 +8770,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/visual-plan-gate":
             self._send_json(visual_plan_gate_state())
+            return
+        if route == "/api/visual-dispatch-file":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                path = visual_dispatch.candidate_file_path(
+                    str((query.get("request_file") or [""])[0]),
+                    str((query.get("candidate_id") or [""])[0]),
+                )
+            except (ValueError, OSError, KeyError) as exc:
+                self._send_json({"error": str(exc)}, 404)
+                return
+            self._send_static(path, image_content_type(path))
             return
         if route == "/api/final-audio-file":
             query = parse_qs(urlparse(self.path).query)
@@ -9453,6 +9476,29 @@ class Handler(BaseHTTPRequestHandler):
                     **rough_payload,
                     "rework_routed_to": routed_to,
                 }
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-dispatch":
+                # Paid generation for an authorized shot (D-140); the human
+                # then chooses one variant, which is registered as the asset.
+                action = str(body.get("action", "")).strip().upper()
+                if action == "GENERATE":
+                    visual_dispatch.generate(
+                        request_file=body.get("request_file"),
+                        reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    )
+                elif action == "CHOOSE":
+                    visual_dispatch.choose(
+                        request_file=body.get("request_file"),
+                        candidate_id=str(body.get("candidate_id", "")),
+                    )
+                else:
+                    raise ValueError("Action must be GENERATE or CHOOSE")
+                payload = {"visual_dispatch": visual_dispatch_state()}
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}

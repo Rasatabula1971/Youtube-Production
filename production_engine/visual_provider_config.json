@@ -1,0 +1,19 @@
+{
+  "active_provider": "",
+  "variants_per_shot": 2,
+  "providers": {
+    "openai_compatible": {
+      "kind": "OPENAI_COMPATIBLE_IMAGES",
+      "label": "OpenAI-compatible images endpoint",
+      "endpoint": "",
+      "model": "",
+      "api_key_env": "VISUAL_PROVIDER_API_KEY",
+      "size": "1792x1024",
+      "price_per_image_usd": null,
+      "license": "",
+      "contract_verified": false,
+      "documentation_url": "",
+      "timeout_seconds": 180
+    }
+  }
+}

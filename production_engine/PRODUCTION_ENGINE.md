@@ -287,6 +287,30 @@ PASS result. Partial branch coverage cannot report a global PASS.
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
 
+## Paid premium-visual dispatch (D-140)
+
+`visual_dispatch.py` generates variants for a shot that was authorized at
+the Visual Spend Gate. It works from the current generation request and that
+request's brief, and you choose one variant on `/produce#generate`. Choosing
+registers it through `visual_generated_asset_import.register`, marked
+`APP_PROVIDER_DISPATCH`, so assembly and everything after are unchanged.
+
+**When it is allowed.** All of these must hold:
+
+- `active_provider` is set in `visual_provider_config.json`;
+- the provider's endpoint, model, licence and price per image (never
+  guessed) are set;
+- `contract_verified: true`;
+- `VISUAL_PROVIDER_API_KEY` is set;
+- what is already spent on the shot, plus the estimate for
+  `variants_per_shot` variants, stays within the shot's authorized maximum.
+
+**Spend.** Recorded in the per-video budget as soon as it happens, whether
+or not a variant is chosen.
+
+**The built-in adapter** makes still images through the OpenAI-compatible
+images request. A video model needs its own adapter in `ADAPTERS`.
+
 ## Paid narration dispatch (D-139)
 
 `narration_dispatch.py` makes the paid provider call itself and hands the

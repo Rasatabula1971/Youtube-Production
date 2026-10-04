@@ -16,6 +16,7 @@
     ["rights", "Footage rights"],
     ["roughcut", "Rough cut"],
     ["spend", "Visual spend"],
+    ["generate", "Generate visuals"],
     ["edit", "Edit preview"],
     ["export", "Final export"]
   ];
@@ -29,6 +30,7 @@
   const visualChoice = Object.create(null);    // shot key -> candidate_id
   const rightsContext = Object.create(null);   // rights key -> context note
   const maxCost = Object.create(null);         // spend key -> number
+  const generatedChoice = Object.create(null); // request file -> candidate_id
   const reworkSegments = Object.create(null);  // final audio key -> {segment_id: bool}
   let paintedTabs = "";
 
@@ -526,6 +528,68 @@
   };
 
   // ------------------------------------------- Edit preview and final export
+  // ------------------------------------------------------- Generate visuals
+  // Paid generation for shots authorized at Visual spend (D-140): generate
+  // variants, then choose the one that becomes the shot's asset.
+  const generate = {
+    kicker: "GENERATE VISUAL",
+    gate: function () { return status().visual_dispatch || {}; },
+    all: function () { return (this.gate().shots || []).filter(Boolean); },
+    pending: function (item) { return !item.registered; },
+    key: function (item) { return item.request_file; },
+    title: function (item) { return item.concept_id + " · " + words(item.format) + " · " + item.shot_id; },
+    meta: function (item) {
+      return '<span class="source-chip">authorized ' + esc(money(item.max_cost_usd)) + '</span><span class="rw-meta-text">spent ' +
+        esc(money(item.spent_usd)) + "</span>" + (item.registered ? decidedBadge("REGISTERED", "complete") : "");
+    },
+    evidence: function (item) {
+      const provider = this.gate();
+      const key = item.request_file;
+      const cards = (item.candidates || []).map(function (c) {
+        const url = "/api/visual-dispatch-file?" + new URLSearchParams({ request_file: item.request_file, candidate_id: c.candidate_id }).toString();
+        return '<article class="pk-package' + (generatedChoice[key] === c.candidate_id ? " chosen" : "") + '">' +
+          '<img class="pk-thumb" src="' + esc(url) + '" alt="Generated variant ' + esc(c.candidate_id) + '" loading="lazy">' +
+          '<div class="pk-package-body"><p class="muted">' + esc(c.provider || "") + "</p>" +
+          '<label class="pk-choose"><input type="radio" name="pd-gen-' + esc(key) + '" data-pd-generated="' + esc(c.candidate_id) + '" data-key="' + esc(key) + '"' +
+          (generatedChoice[key] === c.candidate_id ? " checked" : "") + "> Use this variant</label></div></article>";
+      }).join("");
+      return facts([
+        ["Desired visual", item.desired_visual],
+        ["Authorized maximum", money(item.max_cost_usd)],
+        ["Spent on this shot", money(item.spent_usd)],
+        ["Provider", provider.ready ? (provider.label || provider.active_provider) + " · " + (provider.model || "") : "off"]
+      ]) +
+        (provider.ready ? "" : '<p class="muted">Generation is off: ' + esc((provider.problems || []).join(" ")) + " Register an asset made elsewhere in the classic view instead.</p>") +
+        section("Variants", cards ? '<div class="pk-packages">' + cards + "</div>" : '<p class="muted">No variants generated yet.</p>') +
+        (item.prompt ? '<details><summary>Prompt</summary><p class="muted">' + esc(item.prompt) + "</p></details>" : "");
+    },
+    decisions: function (item) {
+      const provider = this.gate();
+      const key = item.request_file;
+      const options = [];
+      if (provider.ready) {
+        options.push({
+          value: "GENERATE", label: "Generate variants", tone: "running",
+          hint: (provider.variants_per_shot || 2) + " variants, a paid call within this shot's authorized maximum.",
+          confirm: function () { return "Generate " + (provider.variants_per_shot || 2) + " variants with the paid provider?"; }
+        });
+      }
+      if ((item.candidates || []).length) {
+        options.push({
+          value: "CHOOSE", label: "Use the chosen variant", tone: "complete", hint: "Registers it as this shot's asset.",
+          validate: function () { return generatedChoice[key] ? "" : "Choose a variant first."; }
+        });
+      }
+      return options;
+    },
+    decide: function (item, decision) {
+      const key = item.request_file;
+      return post("/api/visual-dispatch", {
+        action: decision, request_file: item.request_file, candidate_id: decision === "CHOOSE" ? generatedChoice[key] : null
+      }, decision === "GENERATE" ? "Variants generated." : "Variant registered as the shot's asset.");
+    }
+  };
+
   function videoGate(config) {
     return {
       kicker: config.kicker,
@@ -587,7 +651,7 @@
     }
   });
 
-  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, edit: edit, export: exportGate };
+  const CONFIGS = { plan: plan, narration: narration, audio: finalAudio, visuals: visuals, rights: rights, roughcut: roughcut, spend: spend, generate: generate, edit: edit, export: exportGate };
 
   // ------------------------------------------------------------ Page shell
   function items(tab) {
@@ -750,6 +814,8 @@
       (reworkSegments[t.dataset.key] = reworkSegments[t.dataset.key] || {})[t.dataset.pdSegment] = t.checked;
     } else if (t.dataset.pdTick) {
       (spendTicks[t.dataset.key] = spendTicks[t.dataset.key] || {})[t.dataset.pdTick] = t.checked;
+    } else if (t.dataset.pdGenerated) {
+      generatedChoice[t.dataset.key] = t.dataset.pdGenerated;
     } else if (t.dataset.pdVisual) {
       visualChoice[t.dataset.key] = t.dataset.pdVisual;
       t.closest(".pk-packages").querySelectorAll(".pk-package").forEach(function (card) { card.classList.toggle("chosen", card.contains(t)); });

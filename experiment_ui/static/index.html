@@ -930,7 +930,10 @@
                 <h2 id="generatedVisualImportTitle">Register generated visual</h2>
                 <p class="muted" id="generatedVisualImportSummary"></p>
               </div>
-              <span class="status-chip running" id="generatedVisualImportStatus">WAITING FOR ASSET</span>
+              <div class="panel-head-actions">
+                <a href="/produce#generate" class="button-link compact" data-route="/produce" data-subroute="generate">Generate with provider →</a>
+                <span class="status-chip running" id="generatedVisualImportStatus">WAITING FOR ASSET</span>
+              </div>
             </div>
             <div class="concept-review-layout">
               <div class="concept-detail" id="generatedVisualImportDetail"></div>
@@ -1208,6 +1211,7 @@
           <div class="review-workspace" id="produce-rights" hidden></div>
           <div class="review-workspace" id="produce-roughcut" hidden></div>
           <div class="review-workspace" id="produce-spend" hidden></div>
+          <div class="review-workspace" id="produce-generate" hidden></div>
           <div class="review-workspace" id="produce-edit" hidden></div>
           <div class="review-workspace" id="produce-export" hidden></div>
         </section>
