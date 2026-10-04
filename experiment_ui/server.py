@@ -2038,6 +2038,17 @@ def analyze_explored_topic(
     return opportunity_inbox_snapshot()
 
 
+def vision_review_satisfied(vision_review: dict[str, Any]) -> bool:
+    """Every video with retained frames has a completed human visual review.
+
+    Vision review covers exactly the videos whose visual run kept frames, so a
+    partial visual run (3 of 5 videos sampled) still reviews those 3 before
+    analysis; videos without frames continue on transcript evidence. Before
+    A2 a partial run skipped the review entirely (D-129).
+    """
+    return str(vision_review.get("status") or "") in {"NOT_APPLICABLE", "COMPLETE"}
+
+
 def exp2_artifact_state() -> dict[str, Any]:
     prepared_ids = json_stems(EXP2_PREPARED_DIR)
     approved_ids = approved_study_video_ids()
@@ -2251,10 +2262,17 @@ def transformation_artifact_state() -> dict[str, Any]:
         and bool(candidate_provenance)
         and candidate_provenance == current_response_hashes
     )
+    # Older candidate files may predate the coverage rule: check it here too.
+    mechanism_coverage_complete = (
+        bool(candidates.get("mechanism_coverage_complete"))
+        if isinstance(candidates, dict)
+        else False
+    )
     candidates_ready = (
         candidate_pool_ready
         and candidate_count >= minimum_candidates
         and candidates_current
+        and mechanism_coverage_complete
     )
     gate = (
         concept_gate_snapshot()
@@ -4244,12 +4262,11 @@ def stage_statuses() -> list[dict[str, Any]]:
     visual_ready = bool(exp2_artifacts["visual_complete"])
     visual_attempted = bool(exp2_artifacts["visual_attempted"])
     vision_review = vision_review_snapshot()
-    vision_complete = bool(vision_review.get("complete"))
     visual_available = (
         shutil.which("yt-dlp") is not None and shutil.which("ffmpeg") is not None
     )
     visual_satisfied = visual_ready or visual_attempted or not visual_available
-    vision_satisfied = (not visual_ready) or vision_complete
+    vision_satisfied = vision_review_satisfied(vision_review)
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     analyzed_count = exp2_artifacts["analyzed_current_count"]
     request_count = len(exp2_artifacts["analysis_request_ids"])
@@ -4774,7 +4791,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                 {
                     "label": (
                         "Visual observations reviewed"
-                        if visual_ready
+                        if vision_review.get("video_ids")
                         else "Visual observations not required"
                     ),
                     "done": vision_satisfied,
@@ -5275,7 +5292,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     ffmpeg_installed = shutil.which("ffmpeg") is not None
     visual_available = yt_dlp_installed and ffmpeg_installed
     visual_satisfied = visual_complete or visual_attempted or not visual_available
-    vision_satisfied = (not visual_complete) or vision_complete
+    vision_satisfied = vision_review_satisfied(vision_review)
+    vision_frames_ready = bool(vision_review.get("video_ids")) and (visual_complete or visual_attempted)
     thumbnail_items = thumbnail_gate_state().get("items", [])
     thumbnail_units_ready = bool(thumbnail_items)
     thumbnail_subjects_ready = any(
@@ -5465,7 +5483,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     "Visual structure evidence is already ready."
                     if visual_complete
                     else (
-                        "Visual structure was attempted; transcript-only analysis may continue. "
+                        "Visual structure was attempted; videos with frames get a visual review, the rest continue on transcripts. "
                         "Use Tools & Diagnostics to force a retry."
                         if visual_attempted
                         else (
@@ -5508,7 +5526,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "enabled": (
                 human_gate_ready
                 and evidence_complete
-                and visual_complete
+                and vision_frames_ready
                 and not vision_complete
                 and not vision_awaiting
             ),
@@ -5517,7 +5535,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 if (
                     human_gate_ready
                     and evidence_complete
-                    and visual_complete
+                    and vision_frames_ready
                     and not vision_complete
                     and not vision_awaiting
                 )
@@ -5529,7 +5547,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                         if vision_complete
                         else (
                             "Successful visual structure evidence is required first."
-                            if human_gate_ready and not visual_complete
+                            if human_gate_ready and not vision_frames_ready
                             else "Human opportunity approval is required first."
                         )
                     )

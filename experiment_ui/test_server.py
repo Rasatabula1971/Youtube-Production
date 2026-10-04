@@ -20,6 +20,15 @@ class ExperimentUiTests(unittest.TestCase):
         # tests (vision audit 2026-10-03: 8 failures on a populated laptop).
         isolate_outputs(self, server)
 
+    def test_vision_review_covers_videos_with_frames_even_after_a_partial_visual_run(self):
+        # D-129: 3 of 5 videos kept frames -> those 3 need review before
+        # analysis; with no frames at all, transcripts alone continue.
+        self.assertTrue(server.vision_review_satisfied({"status": "NOT_APPLICABLE"}))
+        self.assertTrue(server.vision_review_satisfied({"status": "COMPLETE"}))
+        for status in ("READY_TO_PREPARE", "AWAITING_HUMAN_REVIEW", ""):
+            with self.subTest(status=status):
+                self.assertFalse(server.vision_review_satisfied({"status": status}))
+
     def test_tests_never_see_real_pipeline_outputs(self):
         # The approved study set and prepared profiles leaked into fixtures on
         # a populated laptop; every output path must point at the test mirror.
@@ -886,6 +895,20 @@ class ExperimentUiTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
+                # The visual run kept frames for v1, which therefore needs a
+                # human visual review before analysis (D-129).
+                stack.enter_context(
+                    patch.object(
+                        server,
+                        "vision_review_snapshot",
+                        return_value={
+                            "status": "READY_TO_PREPARE",
+                            "video_ids": ["v1"],
+                            "complete": False,
+                            "awaiting_human_review": False,
+                        },
+                    )
+                )
                 readiness = server.action_readiness()
                 self.assertFalse(readiness["exp2_visual"]["enabled"])
                 self.assertTrue(readiness["exp2_vision_prepare"]["enabled"])

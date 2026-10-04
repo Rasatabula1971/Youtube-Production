@@ -186,20 +186,23 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
-### Degraded provider coverage
+### Mechanism coverage (D-129)
 
-Concept generation is artifact-driven rather than provider-count-driven.
+The system prepares one concept request per transferable mechanism. A batch can
+stop part-way and resume later: validated responses are kept and only missing
+mechanisms are retried.
 
-The system still prepares one request per transferable mechanism, but it no
-longer blocks the entire workflow solely because every provider-backed request
-did not succeed. If the deterministic merge produces a current,
-provenance-valid pool that meets `minimum_candidates_for_triage`, the pool may
-advance to Concept Triage while the batch report records partial mechanism
-coverage and the missing mechanism IDs.
+Concept Triage starts only when the merged pool is current, meets
+`minimum_candidates_for_triage` (default five), **and every requested mechanism
+has contributed at least one validated concept**. Until then:
+- the merge reports `INCOMPLETE_MECHANISM_COVERAGE` with the missing mechanism
+  IDs;
+- concept generation stays the next step;
+- the automatic runner stops with an explanation rather than handing an
+  incomplete pool to the Concept Gate.
 
-The default minimum is five candidates, matching one full
-`concepts_per_mechanism` response. Fewer than the minimum remains blocked and
-generation continues.
+A mechanism whose output fails validation is reported with its validation errors
+and rerun on the free route; it is never "repaired" through direct Gemini.
 
 Provider failures remain visible in the batch report; degraded readiness does
 not convert failed model calls into successful ones.

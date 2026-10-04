@@ -62,12 +62,31 @@ DEFAULT_DIRECT_GEMINI_MODELS = (
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
 )
+# Direct Gemini replaces exhausted free capacity only (vision §101, D-068,
+# D-129). It never covers output that failed quality or validation, a missing
+# verifier, or a request no free route can serve: those are repairable errors.
 DIRECT_GEMINI_FAIR_FALLBACK_REASONS = {
-    "NO_ELIGIBLE_FREE_MODELS",
     "ALL_FREE_MODELS_UNAVAILABLE",
-    "ALL_FREE_MODELS_FAILED_QUALITY",
-    "QUALITY_VERIFICATION_UNAVAILABLE",
-    "INDEPENDENT_VERIFIER_UNAVAILABLE",
+}
+DIRECT_GEMINI_REFUSED_REASONS = {
+    "ALL_FREE_MODELS_FAILED_QUALITY": (
+        "Free models answered but their output failed quality checks. Repair the "
+        "prompt, schema or request and rerun on the free route; a paid fallback "
+        "would hide the defect."
+    ),
+    "QUALITY_VERIFICATION_UNAVAILABLE": (
+        "Quality verification was unavailable. Retry when the verifier is back; "
+        "a paid fallback would skip verification rather than replace capacity."
+    ),
+    "INDEPENDENT_VERIFIER_UNAVAILABLE": (
+        "The independent verifier was unavailable. Retry when it is back; a paid "
+        "fallback would skip verification rather than replace capacity."
+    ),
+    "NO_ELIGIBLE_FREE_MODELS": (
+        "No free route fits this request (schema, size or output floor), which "
+        "is not proven provider exhaustion. Repair the request or the route "
+        "configuration (run FAIR Doctor)."
+    ),
 }
 
 
@@ -553,12 +572,38 @@ def direct_gemini_available() -> bool:
     return bool(settings["api_key"] and settings["models"])
 
 
+def direct_gemini_fallback_decision(result: dict[str, Any]) -> dict[str, Any]:
+    """Whether a FAIR result may fall back to direct Gemini, and why (D-129).
+
+    The only shared gate: allowed only when FAIR escalated because the free
+    pool was exhausted and nothing paid has run yet.
+    """
+    reason = str(result.get("reason_code") or "")
+    if result.get("status") != "ESCALATION_REQUIRED":
+        return {"eligible": False, "reason_code": reason, "explanation": "FAIR did not escalate."}
+    if result.get("paid_inference_executed") is not False:
+        return {
+            "eligible": False,
+            "reason_code": reason,
+            "explanation": "Paid inference state is unknown or already used; no fallback.",
+        }
+    if reason in DIRECT_GEMINI_FAIR_FALLBACK_REASONS:
+        return {
+            "eligible": True,
+            "reason_code": reason,
+            "explanation": "Free-model capacity is exhausted; direct Gemini may replace it.",
+        }
+    return {
+        "eligible": False,
+        "reason_code": reason,
+        "explanation": DIRECT_GEMINI_REFUSED_REASONS.get(
+            reason, "Unrecognised escalation reason; no paid fallback without proof of exhaustion."
+        ),
+    }
+
+
 def fair_allows_direct_gemini_fallback(result: dict[str, Any]) -> bool:
-    return (
-        result.get("status") == "ESCALATION_REQUIRED"
-        and result.get("paid_inference_executed") is False
-        and str(result.get("reason_code") or "") in DIRECT_GEMINI_FAIR_FALLBACK_REASONS
-    )
+    return bool(direct_gemini_fallback_decision(result)["eligible"])
 
 
 def inference_cost_authorized(result: dict[str, Any]) -> bool:
@@ -957,12 +1002,16 @@ def call_fair_bridge(
         result = load_json(output_path)
         if not isinstance(result, dict):
             raise RuntimeError("FAIR bridge result must be a JSON object")
-        if fair_allows_direct_gemini_fallback(result) and direct_gemini_available():
+        decision = direct_gemini_fallback_decision(result)
+        if decision["eligible"] and direct_gemini_available():
             return call_direct_gemini_backup(
                 payload,
                 timeout_seconds=timeout_seconds,
                 fair_result=result,
             )
+        if result.get("status") == "ESCALATION_REQUIRED":
+            # Record why no paid fallback ran, for the run report and the UI.
+            result = {**result, "direct_gemini_fallback": decision}
         return result
 
 def resolve_profile_path(

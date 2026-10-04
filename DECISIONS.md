@@ -3655,3 +3655,69 @@ yet built.
   (pre-script flow) and `production_engine/PRODUCTION_ENGINE.md` (two slices
   only) still describe older states; they are updated with the corrections
   that touch them.
+
+## D-129 — A resumable batch is not a complete stage; Gemini replaces only exhausted free capacity
+
+**Status:** Accepted (vision §§101, 104–105; correction A2 of D-128)
+
+**Investigation.**
+- **Stage readiness.** I mapped every automatic machine step: what
+  "complete" means and what each downstream readiness check accepts. The
+  runner continues after a partial exit (code 2) whenever a different action
+  becomes ready, so readiness checks alone decide whether partial work is
+  promoted. Almost every stage already requires full coverage
+  (`expected ⊆ current`). Two did not:
+  - **Concept pool.** Triage opened as soon as five concepts validated. With
+    six mechanisms and a first batch of four, the remaining two were never
+    generated, and the Concept Gate saw an incomplete pool without being told.
+  - **Visual review.** A partial visual run (frames for 3 of 5 videos) skipped
+    the human visual review entirely, so the sampled frames went unreviewed
+    and analysis ran on transcripts alone.
+- **Fallback.** One shared function decides direct-Gemini eligibility for all
+  14 FAIR runners. It admitted:
+  - quality failure (`ALL_FREE_MODELS_FAILED_QUALITY`);
+  - missing verifiers (`QUALITY_VERIFICATION_UNAVAILABLE`,
+    `INDEPENDENT_VERIFIER_UNAVAILABLE`);
+  - `NO_ELIGIBLE_FREE_MODELS`.
+
+  The concept runner also bypassed that gate altogether. When every concept
+  failed deterministic validation, it called Gemini to "repair" the
+  response. This contradicted D-068.
+
+**Decision.**
+- **Concept coverage.** Triage requires every requested mechanism to
+  contribute at least one current, validated concept.
+  - The merge reports `INCOMPLETE_MECHANISM_COVERAGE` with the missing IDs.
+  - The batch exits as partial.
+  - Generation stays the next step and retries only the missing mechanisms.
+  - The server re-checks coverage, so older candidate files cannot slip
+    through.
+- **Visual review.** It covers every video whose visual run kept frames, so a
+  partial run still reviews the sampled videos before analysis. Videos
+  without frames continue on transcript evidence. The shared check is
+  `vision_review_satisfied()`.
+- **Fallback.** `direct_gemini_fallback_decision()` is the only gate, and it
+  allows only `ALL_FREE_MODELS_UNAVAILABLE` with `paid_inference_executed`
+  false. Every other reason is refused, and the refusal and its repair
+  explanation are recorded on the result. The concept runner's validation
+  repair is removed.
+- **Unchanged.** Intentional partial releases stay as they are:
+  - per-concept research release (D-104);
+  - the analysis one-then-remaining chain;
+  - batch-progress loops;
+  - visual `manual_required` items handled by gap plans.
+
+  The runner's exit-code handling is also unchanged: the readiness checks
+  are the gate, and the investigation found no other stage that promotes
+  partial work.
+
+**Consequence.** A run that previously fell back to Gemini on quality,
+verifier or no-eligible-route escalations now stops with an explanation, and
+the request, prompt, schema or route has to be repaired on the free path.
+`NO_ELIGIBLE_FREE_MODELS` is refused because it can mean the request fits no
+route as well as quota loss. If FAIR's attempt records later prove
+exhaustion, this can be widened per attempt.
+
+**Not verified here.** The external FAIR repository is not in this
+workspace, so the meaning of its reason codes is taken from their names and
+the bridge code.

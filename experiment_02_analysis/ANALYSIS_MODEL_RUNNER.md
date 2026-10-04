@@ -288,10 +288,18 @@ all unavailable/rate-limited -> PARTIAL / retry later
 ~~~
 
 Direct Gemini is eligible only when FAIR returns `ESCALATION_REQUIRED`,
-confirms `paid_inference_executed: false`, and reports an accepted free-route
-exhaustion/unavailability reason. FAIR quality failures, bridge errors,
-validation-service failures, system stops, disagreement, and unknown
-post-dispatch cost states do not bypass to Gemini.
+confirms `paid_inference_executed: false`, and reports
+`ALL_FREE_MODELS_UNAVAILABLE`, meaning the free pool is exhausted (D-129).
+`direct_gemini_fallback_decision()` is the only gate.
+
+These reasons are refused, and each is recorded on the result as
+`direct_gemini_fallback` with a repair explanation:
+- `ALL_FREE_MODELS_FAILED_QUALITY`;
+- `QUALITY_VERIFICATION_UNAVAILABLE` and `INDEPENDENT_VERIFIER_UNAVAILABLE`;
+- `NO_ELIGIBLE_FREE_MODELS`, which is not proven exhaustion;
+- bridge errors, unknown codes and unknown cost states.
+
+No runner uses Gemini to "repair" output that failed deterministic validation.
 
 Configure the YouTube repo's root `.env`, not FAIR's `.env`:
 

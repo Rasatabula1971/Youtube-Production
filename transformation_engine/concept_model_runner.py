@@ -33,9 +33,7 @@ if str(EXP2_DIR) not in sys.path:
 
 from analysis_model_runner import (
     bridge_payload,
-    call_direct_gemini_backup,
     call_fair_bridge,
-    direct_gemini_available,
     inference_cost_authorized,
     load_runner_config,
     parse_model_json,
@@ -330,16 +328,6 @@ def _rejection_error_summary(validation: dict[str, Any]) -> list[dict[str, Any]]
     ]
 
 
-def _repair_prompt(original_prompt: str, validation: dict[str, Any]) -> str:
-    feedback = _rejection_error_summary(validation)
-    return (
-        original_prompt
-        + "\n\nDETERMINISTIC VALIDATOR FEEDBACK FROM THE PREVIOUS RESPONSE:\n"
-        + json.dumps(feedback, ensure_ascii=False, separators=(",", ":"))
-        + "\nRegenerate the ENTIRE response. Fix every listed validator error. "
-        "Do not weaken, reinterpret, or bypass any rule. Return JSON only."
-    )
-
 def run_one(
     request_path: Path,
     *,
@@ -491,56 +479,12 @@ def run_one(
         return report
 
     initial_validation_errors = _rejection_error_summary(validation)
+    # No paid "validation repair": direct Gemini replaces exhausted free
+    # capacity only (vision §101, D-068, D-129). A batch where every concept
+    # fails validation is reported with its errors so the request or prompt
+    # can be repaired and the batch rerun on the free route.
     repair_result: dict[str, Any] | None = None
     repair_raw_path: Path | None = None
-    if (
-        len(validation["accepted"]) == 0
-        and direct_gemini_available()
-        and bridge_result.get("direct_backup_may_bill") is False
-    ):
-        repair_payload = dict(payload)
-        repair_payload["prompt"] = _repair_prompt(prompt, validation)
-        repair_result = call_direct_gemini_backup(
-            repair_payload,
-            timeout_seconds=float(
-                runner_config["runner"].get("subprocess_timeout_seconds", 300)
-            ),
-            fair_result={
-                "status": "ESCALATION_REQUIRED",
-                "reason_code": "DETERMINISTIC_VALIDATION_REPAIR",
-                "paid_inference_executed": False,
-                "attempts": safe_attempts(bridge_result),
-            },
-        )
-        if repair_result.get("status") == "ACCEPTED" and inference_cost_authorized(repair_result):
-            repaired_raw = str(repair_result.get("output") or "")
-            repair_raw_path = RAW_OUTPUTS_DIR / f"{slug}.repair.txt"
-            atomic_write_text(repair_raw_path, repaired_raw)
-            try:
-                repaired_response = parse_model_json(repaired_raw)
-                repaired_response = _merge_human_rework_response(
-                    request, repaired_response
-                )
-                repaired_validation = validate_response(
-                    repaired_response,
-                    request,
-                    load_config(),
-                )
-                response = repaired_response
-                validation = repaired_validation
-                bridge_result = repair_result
-                base_report = {
-                    **base_report,
-                    "provider_id": repair_result.get("provider_id"),
-                    "model_id": repair_result.get("model_id"),
-                    "fair_reason_code": repair_result.get("reason_code"),
-                    "direct_backup_used": repair_result.get("direct_backup_used", False),
-                    "direct_backup_may_bill": repair_result.get("direct_backup_may_bill", False),
-                    "billing_authorization": repair_result.get("billing_authorization"),
-                    "attempts": safe_attempts(repair_result),
-                }
-            except (ValueError, TypeError, KeyError, json.JSONDecodeError):
-                pass
 
     response["response_provenance"] = {
         "request_source": str(request_path),
@@ -635,6 +579,10 @@ def run_batch(
         if merge_status == "CONCEPT_CANDIDATES_READY"
         else provider_batch_status
     )
+    if status == "COMPLETE" and merge_status == "INCOMPLETE_MECHANISM_COVERAGE":
+        # Every request ran, yet a mechanism has no valid concept: the stage is
+        # not complete and triage must not start (D-129). Exit as partial.
+        status = "INCOMPLETE_MECHANISM_COVERAGE"
 
     summary = {
         "status": status,

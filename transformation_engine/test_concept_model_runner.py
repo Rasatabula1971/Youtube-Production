@@ -313,17 +313,19 @@ class ConceptModelRunnerTests(unittest.TestCase):
             engine.validation_contract_sha256(),
         )
 
-    @patch("concept_model_runner.call_direct_gemini_backup")
-    @patch("concept_model_runner.direct_gemini_available", return_value=True)
+    @patch("analysis_model_runner.call_direct_gemini_backup")
+    @patch("analysis_model_runner.direct_gemini_available", return_value=True)
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
-    def test_all_rejected_batch_gets_one_free_validation_repair(
+    def test_all_rejected_batch_is_reported_not_repaired_by_gemini(
         self,
         call_bridge,
         resolve_paths,
         _direct_available,
         call_repair,
     ):
+        # D-129: direct Gemini replaces exhausted free capacity only; it never
+        # "repairs" output that failed deterministic validation.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             request_path = root / "curiosity_gap.concept_request.json"
@@ -385,11 +387,11 @@ class ConceptModelRunnerTests(unittest.TestCase):
                 runner.RAW_OUTPUTS_DIR = old_raw
                 runner.RESPONSES_DIR = old_responses
 
-        self.assertEqual(result["status"], "VALIDATED")
-        self.assertEqual(result["structurally_accepted"], 1)
-        self.assertTrue(result["validation_repair_attempted"])
+        self.assertNotEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["structurally_accepted"], 0)
+        self.assertFalse(result["validation_repair_attempted"])
         self.assertTrue(result["initial_validation_rejection_summary"])
-        call_repair.assert_called_once()
+        call_repair.assert_not_called()
 
     @patch("concept_model_runner.resolve_fair_paths")
     @patch("concept_model_runner.call_fair_bridge")
