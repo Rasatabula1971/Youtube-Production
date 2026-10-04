@@ -344,17 +344,26 @@
     return items;
   }
 
+  // Status polls arrive every few seconds; only touch the DOM when the markup
+  // changed, so keyboard focus and hover survive a poll (UI-19).
+  const lastHtml = new WeakMap();
+  function paint(element, html) {
+    if (lastHtml.get(element) === html) return;
+    lastHtml.set(element, html);
+    element.innerHTML = html;
+  }
+
   function renderRunning(items) {
     const list = $("runningAutomatically");
     if (!list) return;
-    list.innerHTML = items.map(function (item) {
+    paint(list, items.map(function (item) {
       return '<li class="running-item">' +
         '<span class="status-dot tone-' + esc(item.tone) + '" aria-hidden="true"></span>' +
         "<div><strong>" + esc(item.title) + "</strong>" +
         '<p class="muted">' + esc(item.detail) + "</p></div>" +
         (item.drawer ? '<button type="button" class="ghost compact" data-job-drawer>Log</button>' : "") +
       "</li>";
-    }).join("");
+    }).join(""));
   }
 
   function setCount(id, count) {
@@ -464,7 +473,7 @@
     if (!tabs || !list || !latest) return;
     const productions = ((latest.productions || {}).productions || []);
     const queue = reviewQueue(latest);
-    tabs.innerHTML = PRODUCTION_FILTERS.map(function (tab) {
+    paint(tabs, PRODUCTION_FILTERS.map(function (tab) {
       const count = tab[0] === "review"
         ? queue.reduce(function (sum, entry) { return sum + (entry.count || 1); }, 0)
         : filterProductions(productions, tab[0]).length;
@@ -472,15 +481,15 @@
       return '<button type="button" role="tab" class="inbox-tab' + (active ? " active" : "") +
         '" aria-selected="' + active + '" data-production-filter="' + tab[0] + '">' +
         esc(tab[1]) + ' <span class="tab-count">' + count + "</span></button>";
-    }).join("");
+    }).join(""));
     if (productionFilter === "review") {
-      list.innerHTML = reviewQueueHtml(queue);
+      paint(list, reviewQueueHtml(queue));
       return;
     }
     const shown = filterProductions(productions, productionFilter);
-    list.innerHTML = shown.length
+    paint(list, shown.length
       ? shown.map(productionRow).join("")
-      : '<p class="empty-state">' + esc(PRODUCTION_EMPTY[productionFilter]) + "</p>";
+      : '<p class="empty-state">' + esc(PRODUCTION_EMPTY[productionFilter]) + "</p>");
   }
 
   function render(data) {
@@ -489,9 +498,9 @@
     const attention = attentionItems(data);
     const queue = $("attentionQueue");
     if (queue) {
-      queue.innerHTML = attention.cards.length
+      paint(queue, attention.cards.length
         ? attention.cards.map(attentionCard).join("")
-        : '<p class="empty-state">Nothing is waiting on you. New breakouts and review steps will appear here.</p>';
+        : '<p class="empty-state">Nothing is waiting on you. New breakouts and review steps will appear here.</p>');
     }
     const count = $("attentionCount");
     if (count) count.textContent = attention.total ? "· " + attention.total + " remaining" : "· all clear";
@@ -500,9 +509,9 @@
     const active = $("activeProductions");
     if (active) {
       const rows = filterProductions(productions.productions || [], "active");
-      active.innerHTML = rows.length
+      paint(active, rows.length
         ? rows.map(productionRow).join("")
-        : '<p class="empty-state">' + esc(PRODUCTION_EMPTY.active) + "</p>";
+        : '<p class="empty-state">' + esc(PRODUCTION_EMPTY.active) + "</p>");
     }
 
     const scheduler = schedulerState(data, now);

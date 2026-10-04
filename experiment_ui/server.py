@@ -3982,6 +3982,7 @@ PRODUCTION_ARTIFACT_DIRS = (
 def production_updated_at(concept_ids: list[str]) -> dict[str, str]:
     """Newest modification time of each concept's artifacts (files named <slug>.…)."""
     prefixes = {transformation_safe_slug(cid) + ".": cid for cid in concept_ids if cid}
+    ordered = sorted(prefixes, key=len, reverse=True)
     newest: dict[str, float] = {}
     for directory in PRODUCTION_ARTIFACT_DIRS:
         try:
@@ -3989,13 +3990,17 @@ def production_updated_at(concept_ids: list[str]) -> dict[str, str]:
         except OSError:
             continue
         for entry in entries:
-            for prefix, cid in prefixes.items():
+            # Slugs may contain dots ("foo" and "foo.v2"): a file belongs to
+            # the longest matching prefix only (UI-19).
+            for prefix in ordered:
                 if entry.name.startswith(prefix):
                     try:
                         mtime = entry.stat().st_mtime
                     except OSError:
-                        continue
+                        break
+                    cid = prefixes[prefix]
                     newest[cid] = max(newest.get(cid, 0.0), mtime)
+                    break
     return {
         cid: datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat()
         for cid, stamp in newest.items()
@@ -6877,7 +6882,13 @@ def job_log_text(job_id: str, max_chars: int = 60000) -> str:
     path = (JOB_LOG_DIR / f"{job_id}.log").resolve()
     if path.parent != JOB_LOG_DIR.resolve() or not path.is_file():
         raise ValueError("Unknown job log.")
-    return path.read_text(encoding="utf-8", errors="replace")[-max_chars:]
+    # Read only the tail: a runaway job log must not be loaded whole (UI-19).
+    # UTF-8 is at most 4 bytes per character.
+    with path.open("rb") as handle:
+        size = handle.seek(0, os.SEEK_END)
+        handle.seek(max(0, size - max_chars * 4))
+        tail = handle.read()
+    return tail.decode("utf-8", errors="replace")[-max_chars:]
 
 
 SCHEDULER_STALE_HOURS = 6
@@ -8326,6 +8337,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         route = urlparse(self.path).path
+        # API reads carry job logs, pipeline state and the CSRF token: a page
+        # on another origin must not read them through DNS rebinding (UI-19).
+        if route.startswith("/api/") and not self._host_allowed():
+            self._send_json({"error": "Invalid Host for local control UI."}, 403)
+            return
 
         if route in APP_ROUTES:
             self._send_static(STATIC_DIR / "index.html", "text/html; charset=utf-8")
@@ -8599,6 +8615,11 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    def _host_allowed(self) -> bool:
+        port = int(getattr(self.server, "server_port", 0))
+        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        return str(self.headers.get("Host", "")).strip().lower() in allowed_hosts
+
     def _post_security_error(self) -> str | None:
         content_type = (
             str(self.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
@@ -8606,12 +8627,10 @@ class Handler(BaseHTTPRequestHandler):
         if content_type != "application/json":
             return "POST requests require Content-Type: application/json."
 
-        port = int(getattr(self.server, "server_port", 0))
-        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        host = str(self.headers.get("Host", "")).strip().lower()
-        if host not in allowed_hosts:
+        if not self._host_allowed():
             return "Invalid Host for local control UI."
 
+        port = int(getattr(self.server, "server_port", 0))
         origin = str(self.headers.get("Origin", "")).strip().lower()
         if origin and origin not in {
             f"http://127.0.0.1:{port}",

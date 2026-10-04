@@ -171,7 +171,7 @@
         '<a href="/radar" class="button-link ghost compact" data-route="/radar">Open Viral Radar</a></div>'
     });
     if (window.location.pathname === "/opportunity/review" && window.location.hash) {
-      workspace.focus(decodeURIComponent(window.location.hash.slice(1)));
+      workspace.focus(window.YPUtil.decode(window.location.hash.slice(1)));
     }
     root.addEventListener("click", function (event) {
       const button = event.target.closest("[data-rw-evidence]");

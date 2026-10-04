@@ -398,6 +398,20 @@ view can be refreshed or bookmarked directly without returning a 404.
 - **Tidy text.** Headings are balanced across lines, and counts use
   fixed-width digits so they don't shift as they change.
 
+### Adversarial regression audit (D-127)
+
+The redesign was attacked, not just tested.
+- **Code review.** Three independent reviews compared every gate's request
+  with the classic panel and the server, every HTML template with its
+  escaping, and every route with the old behaviour.
+- **Browser harness.** The pages were fed real-shaped data carrying script
+  payloads, malicious URL hashes, failing APIs, a slow refusing server and
+  very long titles.
+- **Result.** No payload executes. A refused decision keeps the reviewer's
+  choices and note. Decided gates stay locked as in the classic panels.
+  Pending rough cuts are listed. API reads refuse foreign Host headers.
+  `test_regression_audit.py` pins each fix.
+
 ### Web Interface Guidelines (D-126)
 
 The UI is checked against Vercel's Web Interface Guidelines; the

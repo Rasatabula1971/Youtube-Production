@@ -20,13 +20,13 @@
 
   let activeTab = "narration";
   let showDecided = false;
-  const workspaces = {};
-  const pendingFocus = {};
+  const workspaces = Object.create(null);
+  const pendingFocus = Object.create(null);
   // Per-item inputs that live in the evidence panel (kept across repaints).
-  const spendTicks = {};      // narration key -> {criterion: bool}
-  const visualChoice = {};    // shot key -> candidate_id
-  const rightsContext = {};   // rights key -> context note
-  const maxCost = {};         // spend key -> number
+  const spendTicks = Object.create(null);      // narration key -> {criterion: bool}
+  const visualChoice = Object.create(null);    // shot key -> candidate_id
+  const rightsContext = Object.create(null);   // rights key -> context note
+  const maxCost = Object.create(null);         // spend key -> number
   let paintedTabs = "";
 
   function yp() { return window.YP; }
@@ -64,14 +64,18 @@
     return "";
   }
 
+  // Resolves true on success and false when the server refused, so callers
+  // keep the reviewer's choices after a failure (UI-19).
   async function post(url, body, okMessage) {
     try {
       const payload = await yp().api(url, { method: "POST", body: JSON.stringify(body) });
       const routed = payload && payload.rework_routed_to ? " Routed to " + words(payload.rework_routed_to) + "." : "";
       yp().showToast(okMessage + routed, false);
       await yp().refresh();
+      return true;
     } catch (error) {
       yp().showToast(error.message, true);
+      return false;
     }
   }
 
@@ -118,6 +122,11 @@
       ]) +
         '<p class="muted">Accepting authorizes up to the worst-case figure for this exact quote. It does not call the provider; a changed quote invalidates it.</p>' +
         section("Accepting confirms", checks ? '<ul class="pk-criteria">' + checks + "</ul>" : "");
+    },
+    locked: function (item) {
+      return String(item.decision || "").toUpperCase() === "ACCEPT"
+        ? "Spend is authorized for this exact quote. The decision is locked, as in the classic panel; a changed quote reopens it."
+        : "";
     },
     decisions: function (item) {
       const self = this;
@@ -217,7 +226,7 @@
         result_file: item.packet.result_file, shot_id: item.shot.shot_id, action: decision,
         candidate_id: candidate || null, note: note
       }, decision === "SELECT" ? "Visual chosen." : decision === "REJECT_ALL" ? "Candidates rejected." : "Marked as needing a better visual.")
-        .then(function () { delete visualChoice[key]; });
+        .then(function (ok) { if (ok) delete visualChoice[key]; return ok; });
     }
   };
 
@@ -267,7 +276,7 @@
         transformative_purpose: decision === "APPROVE_CONTEXT_USE" ? note : "",
         context_note: decision === "APPROVE_CONTEXT_USE" ? context : (note || context)
       }, decision === "APPROVE_CONTEXT_USE" ? "Footage approved for the rough cut." : "Footage use rejected.")
-        .then(function () { delete rightsContext[key]; });
+        .then(function (ok) { if (ok) delete rightsContext[key]; return ok; });
     }
   };
 
@@ -275,7 +284,7 @@
   const roughcut = {
     kicker: "ROUGH CUT",
     gate: function () { return status().visual_rough_cut_gate || {}; },
-    all: function () { return (this.gate().items || []).filter(function (i) { return i && i.review_current !== false; }); },
+    all: function () { return (this.gate().items || []).filter(Boolean); },
     pending: function (item) { return !item.decision; },
     key: function (item) { return item.rough_cut_file || (item.concept_id + "::" + item.format); },
     title: function (item) { return item.concept_id + " · " + words(item.format); },
@@ -379,7 +388,7 @@
         gap_plan_file: item.packet.gap_plan_file, shot_id: item.gap.shot_id, decision: decision,
         max_cost_usd: Number(this.cost(item) || 0), note: note
       }, decision === "AUTHORIZE_GENERATION" ? "Generation authorized." : decision === "KEEP_PLACEHOLDER" ? "Placeholder kept." : "Retry requested.")
-        .then(function () { delete maxCost[key]; });
+        .then(function (ok) { if (ok) delete maxCost[key]; return ok; });
     }
   };
 
@@ -401,6 +410,11 @@
         const src = config.video + "?concept_id=" + encodeURIComponent(item.concept_id || "") + "&format=" + encodeURIComponent(item.format || "");
         return '<video class="pd-video" controls preload="metadata" src="' + esc(src) + '">Your browser cannot play this video.</video>' +
           facts(config.facts(item)) + '<p class="muted">' + esc(config.note) + "</p>";
+      },
+      locked: function (item) {
+        return String(item.decision || "PENDING").toUpperCase() !== "PENDING"
+          ? "Already decided. The decision is locked, as in the classic panel; a new render reopens it."
+          : "";
       },
       decisions: function () {
         return [
@@ -475,7 +489,9 @@
       title: function (item) { return config.title(item); },
       meta: function (item) { return config.meta(item); },
       renderEvidence: function (item) { return config.evidence(item); },
-      decisions: function (item) { return config.decisions(item); },
+      // Decided items the classic panel locks stay locked here (UI-19).
+      decisions: function (item) { return config.locked && config.locked(item) ? [] : config.decisions(item); },
+      locked: function (item) { return config.locked ? config.locked(item) : ""; },
       initialNote: function (item) {
         const d = item.decision;
         return (d && typeof d === "object" ? d.note : item.note) || "";
@@ -545,7 +561,7 @@
     const tab = slash === -1 ? raw : raw.slice(0, slash);
     if (CONFIGS[tab]) {
       activeTab = tab;
-      if (slash !== -1) pendingFocus[tab] = decodeURIComponent(raw.slice(slash + 1));
+      if (slash !== -1) pendingFocus[tab] = window.YPUtil.decode(raw.slice(slash + 1));
     }
     render();
   }

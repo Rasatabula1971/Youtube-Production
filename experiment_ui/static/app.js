@@ -769,9 +769,9 @@ function applySubroute(path, subroute) {
   } else if (path === "/productions" && window.CommandCenter) {
     window.CommandCenter.setProductionFilter(subroute);
   } else if (path === "/opportunity/review" && window.OpportunityReview) {
-    window.OpportunityReview.focus(decodeURIComponent(subroute));
+    window.OpportunityReview.focus(window.YPUtil.decode(subroute));
   } else if (path === "/production" && window.ProductionWorkspace) {
-    window.ProductionWorkspace.open(decodeURIComponent(subroute));
+    window.ProductionWorkspace.open(window.YPUtil.decode(subroute));
   } else if (path === "/review" && window.GateReviews) {
     window.GateReviews.open(subroute);
   } else if (path === "/packaging" && window.Packaging) {
@@ -918,9 +918,13 @@ function primaryTargetForWorkflow(workflow) {
   };
   const packagingStates = {
     HUMAN_TITLE_DIRECTION_GATE: ["titles", "Select title directions"],
-    TITLE_DIRECTION_REJECTED: ["titles", "Rework title directions"],
-    HUMAN_FINAL_PACKAGING_GATE: ["final", "Choose final package"],
-    FINAL_PACKAGING_REJECTED: ["final", "Revisit final package"]
+    HUMAN_FINAL_PACKAGING_GATE: ["final", "Choose final package"]
+  };
+  // A rejection leaves nothing pending on /packaging; the rework controls
+  // live in the classic panels, where this led before the redesign (UI-19).
+  const classicRework = {
+    TITLE_DIRECTION_REJECTED: "Rework title directions",
+    FINAL_PACKAGING_REJECTED: "Revisit final package"
   };
   const produceStates = {
     HUMAN_NARRATION_SPEND_GATE: ["narration", "Review narration spend"],
@@ -938,6 +942,9 @@ function primaryTargetForWorkflow(workflow) {
       subroute: produceStates[workflow.state][0],
       label: produceStates[workflow.state][1]
     };
+  }
+  if (classicRework[workflow.state]) {
+    return { type: "route", value: "/analysis", label: classicRework[workflow.state] };
   }
   if (packagingStates[workflow.state]) {
     return {
@@ -1674,8 +1681,10 @@ async function submitInboxAction(opportunityId, action, note) {
       REWORK: "Reworked with fresh evidence."
     };
     showToast(messages[action] || "Updated.", false);
+    return true;
   } catch (error) {
     showToast(error.message, true);
+    return false;
   }
 }
 
@@ -5539,9 +5548,10 @@ async function registerManagedVisualAsset() {
 }
 
 function visualRoughCutItems(snapshot) {
-  return (snapshot && snapshot.items || []).filter(function (item) {
-    return item && item.review_current !== false;
-  });
+  // A rough cut with no review yet has review_current false and is exactly
+  // what needs deciding; the server already drops stale reviews (decision
+  // null), so every item is listed (UI-19).
+  return (snapshot && snapshot.items || []).filter(Boolean);
 }
 
 function renderVisualRoughCutReview(snapshot) {
@@ -7089,24 +7099,41 @@ function renderAll(data) {
   latestStatus = data;
   renderSidebarStatus(data.workflow || {});
   renderHomeWorkflow(data);
-  if (window.CommandCenter) window.CommandCenter.render(data);
+  // A failure in one page module must not stop the classic panels and the
+  // live job from updating (UI-19).
+  isolated("CommandCenter", function (m) { m.render(data); });
   renderProgress(data);
   renderHomeOpportunity(data.opportunity_gate || {});
   renderHomeActivity(data.job || {}, data.opportunity_research || {});
   renderOpportunityGate(data.opportunity_gate || {});
   renderInbox(data.opportunity_inbox || {});
-  if (window.RadarPage) window.RadarPage.render(data);
-  if (window.ProductionWorkspace) window.ProductionWorkspace.refresh(data);
-  if (window.GateReviews) window.GateReviews.render();
-  if (window.Packaging) window.Packaging.render();
-  if (window.Produce) window.Produce.render();
-  if (window.Tools) window.Tools.render();
+  isolated("RadarPage", function (m) { m.render(data); });
+  isolated("ProductionWorkspace", function (m) { m.refresh(data); });
+  isolated("GateReviews", function (m) { m.render(); });
+  isolated("Packaging", function (m) { m.render(); });
+  isolated("Produce", function (m) { m.render(); });
+  isolated("Tools", function (m) { m.render(); });
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});
   renderRoute({ scroll: false, poll: true });
+}
+
+const moduleFailures = {};
+
+function isolated(name, call) {
+  const module = window[name];
+  if (!module) return;
+  try {
+    call(module);
+    moduleFailures[name] = false;
+  } catch (error) {
+    console.error(name + " failed to render", error);
+    if (!moduleFailures[name]) showToast(name + " could not refresh: " + error.message, true);
+    moduleFailures[name] = true;
+  }
 }
 
 async function loadStatus() {
@@ -7855,5 +7882,10 @@ finalPackagingAccept.addEventListener("click", function () {
 });
 
 renderRoute({ scroll: true });
+// Deep links (/opportunity#watching, /productions#review) apply on first load
+// too; the other pages read their hash when they open (UI-19).
+if (currentSubroute() && (normalizedPath() === "/opportunity" || normalizedPath() === "/productions")) {
+  applySubroute(normalizedPath(), currentSubroute());
+}
 loadStatus();
 setInterval(loadStatus, 5000);

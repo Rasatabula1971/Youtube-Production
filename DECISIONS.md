@@ -3490,3 +3490,102 @@ A live audit found no interactive element under 24 px on desktop or 44 px
 on a phone, and no phone input under 16 px. All five tab bars restore their
 tab from the URL after a reload. A plain click on a link navigates in place,
 and a Ctrl/Cmd-click opens a new tab. A contract test pins these rules.
+
+## D-127 — UI Patch 13: adversarial regression audit
+
+**Status:** Accepted
+
+**Method.**
+- **Code review.** Three independent read-only reviews covered the redesign
+  range 8d0e80d..HEAD:
+  - payload fidelity: every gate against the classic panel and the server
+    validation;
+  - injection and server endpoints;
+  - behaviour regressions: DOM contracts, handlers, polling, navigation and
+    job locks.
+- **Browser harness.** Inbox, radar and production data came from the real
+  modules (`inbox.build_inbox`, `viral_radar.radar_overview`,
+  `productions.derive`) with HTML/JS payloads in titles, channel names and
+  labels, served by intercepting the API. It attacked:
+  - every route, drawer and job log;
+  - URL hashes: script, selector, traversal, malformed and 5,000-character
+    payloads;
+  - failing status, radar and production endpoints;
+  - a slow server that refuses decisions, with a double submit;
+  - 240-character titles at phone width.
+
+**Found and fixed.**
+- **Pending rough cuts were never shown (high, inherited).** A rough cut
+  with no review yet has `review_current: false`, and both the classic panel
+  and Produce filtered those out, so the gate could not be decided from any
+  UI. The filter is gone; the server already discards stale reviews.
+- **Decided gates could be re-decided (medium).** With "Include decided
+  items" ticked, the new pages offered decisions the classic panels lock:
+  - an approved narration preview;
+  - authorized narration spend;
+  - a decided edit preview or final export.
+
+  The server would accept them and revoke the approval with no
+  confirmation. Those items now offer no decisions and say why.
+- **Refused decisions wiped the reviewer's work (medium).** Each module's
+  `post()` swallowed the error, so its cleanup ran anyway. That cleared
+  title picks and edits, the chosen package and criteria, the chosen
+  visual, context notes and the max cost, and dropped the unsaved-note
+  warning. `post()` now reports success, and every cleanup runs only on
+  success. The inbox and script-section actions report failure the same
+  way.
+- **Malformed hash crashed the app (low).** A URL such as
+  `/production#%E0` threw `URIError` out of routing, so polling never
+  started. All hash decoding now goes through `YPUtil.decode`, which cannot
+  throw.
+- **Prototype pollution through a generated id (medium).** A `concept_id`
+  of `__proto__` (concept ids are model output) wrote title picks onto
+  `Object.prototype`, where they could be submitted for another concept. All
+  id-keyed state maps now use `Object.create(null)`.
+- **The skip link broke the Production Workspace (medium).** It set
+  `#mainContent`, which routing read as a production id. The skip link now
+  moves focus without touching the URL.
+- **Media keys moved the review item (medium).** ←/→ on an audio or video
+  player switched to another item and stopped playback. Media elements now
+  keep their own keys.
+- **Keyboard focus was lost on every poll (medium).** The Command Center
+  rewrote its lists every 5 seconds. It now repaints only when the markup
+  changes.
+- **Rejected packaging led to an empty page (high).** The Home link went to
+  `/packaging`, which lists only pending items. It goes to the classic
+  panels again, which hold the rework controls, and the Packaging empty
+  state now links there too.
+- **Dead end on an unknown production.** The error now offers a link back
+  to Productions.
+- **Deep links on first load.** `/opportunity#watching` and
+  `/productions#review` were ignored on a fresh load. They now apply.
+- **Script note limits.** Section rework, manual edit and whole-script
+  rework notes now use the classic limits: 1,200, 5,000 and 1,400
+  characters.
+- **One failing module froze everything.** `renderAll` now isolates each
+  page module, so the classic panels and the live job keep updating.
+- **API reads were open to DNS rebinding (low).** `/api/` GETs, which carry
+  job logs, pipeline state and the CSRF token, now require the same
+  127.0.0.1/localhost Host header as POST.
+- **Smaller server fixes.**
+  - Production "updated" times match files by the longest slug prefix, so
+    `foo` no longer takes `foo.v2.*` files.
+  - The job-log endpoint reads only the tail of a log.
+
+**Not changed.**
+- **Server-side `concept_id` validation.** This belongs in the
+  transformation engine; the UI no longer trusts ids as object keys either
+  way.
+- **Same-path links without a hash.** These keep the current tab.
+- **Review panel repaint.** A panel can still repaint while a note is being
+  typed, if that item's data changes; the draft text is preserved.
+
+**Verified.**
+- The harness's 22 checks pass: no payload executes on any route, drawer,
+  log, error message or hash, and there are no uncaught errors.
+- One request is sent per decision, even when submitted twice.
+- Server errors are shown as text, and the page recovers.
+- Nothing overflows on a phone.
+- A `__proto__` id leaves `Object.prototype` clean.
+- The D-124 axe audit, the keyboard walkthrough and the D-126 guideline
+  checks still pass.

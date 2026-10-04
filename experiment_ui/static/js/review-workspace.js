@@ -18,15 +18,17 @@
 
   function isTyping(target) {
     const tag = String((target && target.tagName) || "").toLowerCase();
-    return tag === "textarea" || (tag === "input" && target.type !== "radio") || tag === "select";
+    // Media players keep their own arrow keys (seek) and space (play).
+    return tag === "textarea" || (tag === "input" && target.type !== "radio") || tag === "select" ||
+      tag === "audio" || tag === "video";
   }
 
   function create(options) {
     const root = options.root;
     let currentKey = null;
     let renderedKey = null; // the item whose decision panel is on screen
-    const drafts = {}; // unsaved choice and note per item, kept while moving around
-    const typed = {};  // items whose note the user typed and has not sent yet (UI-18)
+    const drafts = Object.create(null); // unsaved choice and note per item, kept while moving around
+    const typed = Object.create(null);  // items whose note the user typed and has not sent yet (UI-18)
     let currentIndex = 0;
     let lastSignature = "";
     let busy = false;
@@ -60,7 +62,8 @@
     function decisionPanel(item, draft) {
       const decisions = options.decisions(item) || [];
       if (!decisions.length) {
-        return '<p class="muted">No decision is available for this item here.</p>';
+        const locked = options.locked ? options.locked(item) : "";
+        return '<p class="muted rw-locked">' + esc(locked || "No decision is available for this item here.") + "</p>";
       }
       const selected = decisions.find(function (d) { return d.value === draft.value; }) || null;
       const radios = decisions.map(function (decision, index) {
@@ -200,13 +203,14 @@
       busy = true;
       render(true);
       try {
-        await options.decide(
+        const outcome = await options.decide(
           item,
           decision.value,
           decision.takesNote === false ? "" : draft.note.trim(),
           { select: draft.select }
         );
-        delete typed[draft.key];
+        // A refused decision (false) keeps the unsaved-note warning.
+        if (outcome !== false) delete typed[draft.key];
         const still = list().find(function (entry) { return options.key(entry) === draft.key; });
         const stillOffered = still && (options.decisions(still) || []).some(function (d) { return d.value === draft.value; });
         if (!still || !stillOffered) {
