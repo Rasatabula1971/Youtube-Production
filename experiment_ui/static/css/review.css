@@ -203,7 +203,8 @@
   margin-bottom: var(--space-4);
 }
 
-.gate-switcher > button { margin-left: auto; font-size: 13px; padding: 6px 11px; }
+.gate-switcher > button,
+.gate-switcher > .button-link { margin-left: auto; font-size: 13px; padding: 6px 11px; }
 
 .gate-toggle {
   display: inline-flex;

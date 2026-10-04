@@ -110,7 +110,15 @@
 .health-pill.tone-running { border-color: rgba(121, 192, 255, .45); }
 
 @media (max-width: 860px) {
-  .health-pill #healthLabel { display: none; }
+  /* Hidden visually, still read out: the dot is never the only cue (UI-18). */
+  .health-pill #healthLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
   .health-pill { padding: 0 11px; }
 }
 

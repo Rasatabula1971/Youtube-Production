@@ -372,7 +372,7 @@ class ShellMarkupTests(unittest.TestCase):
         assert fill is not None and text is not None
         light, dark = sorted([luminance(text.group(1)), luminance(fill.group(1))], reverse=True)
         self.assertGreaterEqual((light + 0.05) / (dark + 0.05), 4.5)
-        self.assertIn("button { background: var(--accent-fill); }", css)
+        self.assertIn("button,\n.button-link { background: var(--accent-fill); }", css)
         self.assertIn("prefers-reduced-motion: reduce", css)
 
     def test_app_does_not_hide_focusable_drawers_with_aria_hidden(self) -> None:
@@ -389,7 +389,7 @@ class ShellMarkupTests(unittest.TestCase):
                 self.assertNotIn('class="inbox-tab', script)
         # Buttons have one base size; empty states have one style.
         legacy = (STATIC / "styles.css").read_text(encoding="utf-8")
-        button = legacy.split("\nbutton {", 1)[1].split("}", 1)[0]
+        button = legacy.split("\nbutton,\n.button-link {", 1)[1].split("}", 1)[0]
         self.assertIn("font-size: var(--text-sm);", button)
         empty = legacy.split("\n.empty-state {", 1)[1].split("}", 1)[0]
         self.assertIn("font-size: var(--text-sm);", empty)
@@ -400,6 +400,38 @@ class ShellMarkupTests(unittest.TestCase):
         for text in sources:
             self.assertNotIn("Analyze & Create", text)
             self.assertNotIn("Analyze &amp; Create", text)
+
+    def test_web_interface_guidelines_contract(self) -> None:
+        sources = {"index.html": self.html}
+        for name in ["app.js", "js/command-center.js", "js/gate-reviews.js", "js/opportunity-review.js",
+                     "js/packaging.js", "js/produce.js", "js/production-workspace.js", "js/radar.js"]:
+            sources[name] = (STATIC / name).read_text(encoding="utf-8")
+        # Links are links: nothing that navigates is a <button>.
+        for name, text in sources.items():
+            with self.subTest(source=name):
+                self.assertIsNone(re.search(r"<button[^>]*data-route=", text))
+        self.assertGreaterEqual(sum(text.count('class="button-link') for text in sources.values()), 40)
+        app = sources["app.js"]
+        self.assertIn('routeTarget.tagName === "A" && (event.metaKey || event.ctrlKey', app)
+        # Never transition: all (a bare duration animates every property).
+        for name in ["styles.css", "css/shell.css", "css/a11y.css", "css/tokens.css"]:
+            css = (STATIC / name).read_text(encoding="utf-8")
+            with self.subTest(css=name):
+                self.assertIsNone(re.search(r"transition:\s*(all\b|[.0-9])", css))
+        a11y = (STATIC / "css" / "a11y.css").read_text(encoding="utf-8")
+        for rule in ["overscroll-behavior: contain", "touch-action: manipulation", "min-height: 44px",
+                     "textarea { font-size: 16px; }", "select { background-color:"]:
+            with self.subTest(rule=rule):
+                self.assertIn(rule, a11y)
+        self.assertIn('<meta name="theme-color" content="#0d1117">', self.html)
+        # Placeholders that describe (not exemplify) end with an ellipsis.
+        self.assertIn('placeholder="What made you think of it…"', self.html)
+        self.assertIn('placeholder="What caught your eye…"', self.html)
+        # Unsaved review notes warn before the tab closes.
+        workspace = (STATIC / "js" / "review-workspace.js").read_text(encoding="utf-8")
+        self.assertIn('window.addEventListener("beforeunload"', workspace)
+        # Inbox tabs are deep-linkable.
+        self.assertIn('history.replaceState({}, "", "/opportunity#" + subroute)', app)
 
     def test_every_app_route_has_a_view(self) -> None:
         script = (STATIC / "app.js").read_text(encoding="utf-8")

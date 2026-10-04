@@ -692,7 +692,7 @@
           '<p class="muted">Free local preview of the approved performance. Approving unlocks the paid narration quote; nothing is spent yet.</p>'
         : '<p class="muted">The preview has not rendered yet. It must exist before it can be approved.</p>') +
         section("Fine-tune one segment", '<p class="muted">Revising a single segment and re-rendering stays in the classic panel. ' +
-          '<button type="button" class="ghost compact" data-route="/analysis">Open classic view</button></p>');
+          '<a href="/analysis" class="button-link ghost compact" data-route="/analysis">Open classic view</a></p>');
     },
     decisions: function (item) {
       return [
@@ -740,7 +740,7 @@
     }
     return "<h2>Nothing to review at the " + esc(config.label) + " Gate</h2>" +
       '<p class="muted">Gate status: ' + esc(state) + ". Items appear here when the pipeline reaches this gate.</p>" +
-      '<div class="rw-empty-actions"><button type="button" class="ghost compact" data-route="/">Command Center</button></div>';
+      '<div class="rw-empty-actions"><a href="/" class="button-link ghost compact" data-route="/">Command Center</a></div>';
   }
 
   function ensure(gate) {
@@ -792,7 +792,7 @@
     }).join("") + "</div>" +
       '<div class="gate-switcher"><label class="gate-toggle"><input type="checkbox" data-gate-show-decided' + (showDecided ? " checked" : "") +
       "> Include decided items</label>" +
-      '<button type="button" class="ghost compact" data-route="/analysis" title="The original panels, with every option">Classic view</button></div>';
+      '<a href="/analysis" class="button-link ghost compact" data-route="/analysis" title="The original panels, with every option">Classic view</a></div>';
     if (html === switcherHtml && bar.innerHTML) return;
     switcherHtml = html;
     bar.innerHTML = html;

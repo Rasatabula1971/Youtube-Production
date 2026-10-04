@@ -3423,3 +3423,70 @@ unchanged: axe still reports no violations at 320, 640, 768 and 1280 px, and
 the tab-bar arrow keys still work on every gate page. A test pins the
 shared tab style, the base button and empty-state sizes, and the retired
 page name.
+
+## D-126 — UI Patch 12: Web Interface Guidelines QA
+
+**Status:** Accepted
+
+**Source.** The audit used Vercel's Web Interface Guidelines, fetched from
+`vercel-labs/web-interface-guidelines` on 2026-10-03.
+- **Applied:** every universal rule (interactions, animations, layout,
+  content, forms, design).
+- **Not applicable:** rules specific to React or Next.js (hydration,
+  Suspense, re-render tracking), font and image loading rules (the app ships
+  no web fonts or content images), and the Vercel-specific copywriting
+  section.
+
+**Found and fixed.**
+- **Links are links.** 45 navigation controls were `<button data-route>`,
+  which breaks Ctrl/Cmd-click and "open in new tab". They are now
+  `<a class="button-link" href>` that look identical. The router still
+  handles a plain click in place but lets modified clicks through to the
+  browser.
+- **Deep links.** The inbox tabs were remembered in local storage only. They
+  are now in the URL (`/opportunity#saved` and so on), like the
+  gate-review, packaging, produce and productions tabs.
+- **Phones.**
+  - Buttons, tabs and inputs were 26–37 px tall; they are now at least
+    44 px on phones and touch screens.
+  - Inputs were 12 px, which makes iOS Safari zoom on focus; they are now
+    16 px.
+  - The "include decided items" labels were 19 px; they are now 32 px
+    (44 px on phones).
+  - Controls get `touch-action: manipulation`.
+- **No `transition: all`.** Three rules used a bare duration, which
+  animates every property. Each now lists only the properties it changes.
+- **Overscroll.** Drawers, the phone menu and log panes use
+  `overscroll-behavior: contain`.
+- **Unsaved changes.** A typed review note that has not been sent now
+  triggers the browser's leave-page confirmation. Pre-filled notes and sent
+  notes do not.
+- **Forms.**
+  - Inputs have meaningful `name`s.
+  - URL and path fields have spellcheck and auto-capitalisation off.
+  - Descriptive placeholders end with "…".
+  - Native `<select>` elements set explicit colours for Windows dark mode.
+- **Colour is never the only cue.** On phones, the health pill's label was
+  `display: none`, leaving only a coloured dot. It is now visually hidden
+  but still read out.
+- **Smaller fixes.**
+  - A `theme-color` meta tag matches the background.
+  - In-page anchors clear the sticky top bar with `scroll-margin-top`.
+  - Tools job times use the viewer's locale.
+  - The brand is marked `translate="no"`.
+
+**Already met (D-124 and D-125).**
+- Keyboard operation and WAI-ARIA tab and dialog patterns.
+- Visible focus, focus traps and focus return.
+- Reduced motion, polite live regions, the skip link and heading
+  hierarchy.
+- Tabular numbers, labelled icon-only buttons, confirmation for stopping a
+  job, Enter and Ctrl+Enter submission.
+- Accurate page titles.
+- Designed empty states that each offer a next step.
+
+**Verified.** axe still reports no violations at 320, 640, 768 and 1280 px.
+A live audit found no interactive element under 24 px on desktop or 44 px
+on a phone, and no phone input under 16 px. All five tab bars restore their
+tab from the URL after a reload. A plain click on a link navigates in place,
+and a Ctrl/Cmd-click opens a new tab. A contract test pins these rules.

@@ -730,8 +730,26 @@ function focusViewAfterNavigation() {
 const OPPORTUNITY_INBOX_SUBROUTES = {
   review: "NEEDS_REVIEW",
   watching: "WATCHING",
-  approved: "APPROVED"
+  approved: "APPROVED",
+  saved: "SAVED",
+  rejected: "REJECTED"
 };
+
+// Inbox tabs are deep-linkable (UI-18): the hash follows the selected tab.
+function selectInboxTab(tab) {
+  inboxTab = tab;
+  try {
+    window.localStorage.setItem("opportunityInboxTab", inboxTab);
+  } catch (_) {}
+  renderInbox(latestInbox);
+  const subroute = Object.keys(OPPORTUNITY_INBOX_SUBROUTES).find(function (key) {
+    return OPPORTUNITY_INBOX_SUBROUTES[key] === tab;
+  });
+  if (subroute && window.location.pathname === "/opportunity") {
+    history.replaceState({}, "", "/opportunity#" + subroute);
+    renderRoute({ scroll: false, poll: true });
+  }
+}
 
 function applySubroute(path, subroute) {
   let anchor = null;
@@ -1022,9 +1040,10 @@ function renderHomeWorkflow(data) {
       escapeHtml(target.label) + '</button>';
   } else if (target.type === "route") {
     homePrimaryAction.innerHTML =
-      '<button class="primary-cta" data-route="' + escapeHtml(target.value) + '"' +
+      '<a class="button-link primary-cta" href="' + escapeHtml(target.value + (target.subroute ? "#" + target.subroute : "")) +
+      '" data-route="' + escapeHtml(target.value) + '"' +
       (target.subroute ? ' data-subroute="' + escapeHtml(target.subroute) + '"' : "") + '>' +
-      escapeHtml(target.label) + '</button>';
+      escapeHtml(target.label) + '</a>';
   } else {
     homePrimaryAction.innerHTML =
       '<button class="primary-cta" disabled>' + escapeHtml(target.label) + '</button>';
@@ -1479,8 +1498,8 @@ function renderOpportunityCounts(counts) {
       escapeHtml(entry[1]) + '</span></button>';
   }).join("") +
     (waiting
-      ? '<button type="button" class="primary-cta opp-review-all" data-route="/opportunity/review">Review ' +
-        waiting + (waiting === 1 ? " idea" : " ideas") + ' one by one →</button>'
+      ? '<a href="/opportunity/review" class="button-link primary-cta opp-review-all" data-route="/opportunity/review">Review ' +
+        waiting + (waiting === 1 ? " idea" : " ideas") + ' one by one →</a>'
       : "");
 }
 
@@ -1558,8 +1577,9 @@ function inboxCard(item) {
       '<button type="button" class="ghost compact inbox-open-evidence" data-inbox-evidence="' +
         escapeHtml(item.opportunity_id) + '">Open evidence</button>' +
       (item.status === "NEEDS_REVIEW"
-        ? '<button type="button" class="compact" data-route="/opportunity/review" data-subroute="' +
-          escapeHtml(encodeURIComponent(item.opportunity_id)) + '">Review opportunity →</button>'
+        ? '<a href="/opportunity/review#' +
+          escapeHtml(encodeURIComponent(item.opportunity_id)) + '" class="button-link compact" data-route="/opportunity/review" data-subroute="' +
+          escapeHtml(encodeURIComponent(item.opportunity_id)) + '">Review opportunity →</a>'
         : "") +
       '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
     '</div>' +
@@ -1839,21 +1859,11 @@ if (opportunityInbox) {
   });
   document.getElementById("opportunityCounts").addEventListener("click", function (event) {
     const tab = event.target.closest("[data-inbox-tab]");
-    if (!tab) return;
-    inboxTab = tab.dataset.inboxTab;
-    try {
-      window.localStorage.setItem("opportunityInboxTab", inboxTab);
-    } catch (_) {}
-    renderInbox(latestInbox);
+    if (tab) selectInboxTab(tab.dataset.inboxTab);
   });
   opportunityInboxTabs.addEventListener("click", function (event) {
     const tab = event.target.closest("[data-inbox-tab]");
-    if (!tab) return;
-    inboxTab = tab.dataset.inboxTab;
-    try {
-      window.localStorage.setItem("opportunityInboxTab", inboxTab);
-    } catch (_) {}
-    renderInbox(latestInbox);
+    if (tab) selectInboxTab(tab.dataset.inboxTab);
   });
   opportunityInbox.addEventListener("click", function (event) {
     const analyzeButton = event.target.closest("[data-inbox-analyze]");
@@ -1903,7 +1913,7 @@ function activeHumanVideoBanner(gate) {
       ? " — " + escapeHtml(String(video.video_count || 0)) + " video(s)"
       : (video.channel_title ? " — " + escapeHtml(video.channel_title) : "")) +
     '</span><span class="muted">Your idea is the active study set. Approving a historical topic below replaces it.</span>' +
-    '</div><button data-route="/analysis">Continue to Analyze →</button></div>';
+    '</div><a href="/analysis" class="button-link" data-route="/analysis">Continue to Analyze →</a></div>';
 }
 
 function renderOpportunityGate(gate) {
@@ -1929,7 +1939,7 @@ function renderOpportunityGate(gate) {
       : "Keep or replace the examples, then make the topic decision.") +
     '</span></div>' +
     (gate.ready_for_experiment_02
-      ? '<button data-route="/analysis">Continue to Analyze →</button>'
+      ? '<a href="/analysis" class="button-link" data-route="/analysis">Continue to Analyze →</a>'
       : '') +
     '</div>' +
     '<div class="gate-summary"><div class="gate-summary-copy">' +
@@ -7203,6 +7213,9 @@ function stopJobPolling() {
 document.addEventListener("click", function (event) {
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget) {
+    // Links keep their browser behaviour: Ctrl/Cmd/Shift-click open a new
+    // tab or window instead of navigating in place.
+    if (routeTarget.tagName === "A" && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
     event.preventDefault();
     navigate(routeTarget.dataset.route, routeTarget.dataset.subroute || "");
     return;

@@ -167,8 +167,8 @@
       },
       emptyHtml: "<h2>Nothing waiting for review</h2>" +
         '<p class="muted">New ideas from every lane land here: proven demand, your topics and videos, and radar breakouts.</p>' +
-        '<div class="rw-empty-actions"><button type="button" class="ghost compact" data-route="/opportunity">Find opportunities</button>' +
-        '<button type="button" class="ghost compact" data-route="/radar">Open Viral Radar</button></div>'
+        '<div class="rw-empty-actions"><a href="/opportunity" class="button-link ghost compact" data-route="/opportunity">Find opportunities</a>' +
+        '<a href="/radar" class="button-link ghost compact" data-route="/radar">Open Viral Radar</a></div>'
     });
     if (window.location.pathname === "/opportunity/review" && window.location.hash) {
       workspace.focus(decodeURIComponent(window.location.hash.slice(1)));

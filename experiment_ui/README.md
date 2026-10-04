@@ -398,6 +398,25 @@ view can be refreshed or bookmarked directly without returning a 404.
 - **Tidy text.** Headings are balanced across lines, and counts use
   fixed-width digits so they don't shift as they change.
 
+### Web Interface Guidelines (D-126)
+
+The UI is checked against Vercel's Web Interface Guidelines; the
+universal rules apply here.
+- **Links are links.** Anything that navigates is an `<a href>`, so
+  Ctrl/Cmd-click and "open in new tab" work. Every tab, including the
+  inbox tabs, is in the URL, so refresh, Back and shared links restore it.
+- **Phones.** Every control is at least 44 px tall, and inputs use 16 px
+  text so iOS does not zoom in. Drawers and logs keep their scroll inside.
+- **Forms.**
+  - Inputs have names, and URL and path fields have spellcheck off.
+  - Descriptive placeholders end with an ellipsis.
+  - Closing or reloading the tab with a typed but unsent review note asks
+    for confirmation first.
+- **Details.**
+  - Every transition lists its properties (no `transition: all`).
+  - The browser chrome matches the dark background.
+  - Job times follow your locale.
+
 ### Keyboard, screen readers and small screens (D-124)
 
 Every route is checked with axe-core at 320, 640 (1280 at 200% zoom), 768
