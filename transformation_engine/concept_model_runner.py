@@ -296,6 +296,38 @@ def pause_between_calls() -> float:
     return float(value)
 
 
+CALL_CLOCK_FILE = OUTPUT_DIR / "concept_call_clock.json"
+
+
+def _wait_for_pacing(pause: float) -> None:
+    """Keep ``pause`` seconds between concept calls, across mechanisms and runs.
+
+    Each automatic step is a separate process, so the time of the last call
+    is kept in a small file rather than in memory.
+    """
+    if not pause:
+        return
+    try:
+        last = float(load_json(CALL_CLOCK_FILE).get("last_call_at") or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        last = 0.0
+    wait = last + pause - time.time()
+    if 0 < wait <= pause:
+        time.sleep(wait)
+
+
+def _record_call() -> None:
+    atomic_write_json(CALL_CLOCK_FILE, {"last_call_at": time.time()})
+
+
+def _rate_limited(result: dict[str, Any]) -> bool:
+    return result.get("status") == "ESCALATION_REQUIRED" and any(
+        str(attempt.get("error_type") or "") == "RATE_LIMITED"
+        for attempt in result.get("attempts") or []
+        if isinstance(attempt, dict)
+    )
+
+
 def call_gemini_only(payload: dict[str, Any], *, timeout_seconds: float) -> dict[str, Any]:
     """Generate on the project's Gemini key alone; FAIR is not called."""
     not_run = {
@@ -665,8 +697,6 @@ def _run_in_calls(
     pause = pause_between_calls()
     while len(accepted_titles) < total and len(calls) < max_calls:
         number = len(calls) + 1
-        if number > 1 and pause:
-            time.sleep(pause)
         chunk = dict(request)
         chunk["concept_count_requested"] = min(per_call, total - len(accepted_titles))
         if accepted_titles:
@@ -680,7 +710,16 @@ def _run_in_calls(
         call: dict[str, Any] = {"call": number, "concepts_requested": chunk["concept_count_requested"]}
         calls.append(call)
         try:
+            _wait_for_pacing(pause)
             result = _call_route(payload, paths, timeout)
+            _record_call()
+            if pause and _rate_limited(result):
+                # A free per-minute limit, not a quality failure: wait it out once.
+                attempts.extend(safe_attempts(result))
+                call["rate_limited_retry"] = True
+                time.sleep(pause)
+                result = _call_route(payload, paths, timeout)
+                _record_call()
         except Exception as exc:
             call.update(status="RUNNER_ERROR", error_type=type(exc).__name__)
             stop = {"status": "RUNNER_ERROR", "error_type": type(exc).__name__}
