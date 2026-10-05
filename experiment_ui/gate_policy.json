@@ -1,5 +1,5 @@
 {
-  "note": "How each human gate is decided (D-156, D-158). HUMAN: you decide every item. AUTO_IF_CLEAN: Continue Automatically decides the items that pass the gate's machine checks and leaves anything flagged for you. Spend gates approve automatically only on a confirmed per-video budget while the video stays at or under its target. Concept, Research flags, Script, Final Packaging, visual rights, Final Export and Publish are not listed here and always stay with you.",
+  "note": "How each human gate is decided (D-156, D-158, D-172). HUMAN: you decide every item. AUTO_IF_CLEAN: Continue Automatically decides the items that pass the gate's machine checks and leaves anything flagged for you. Spend gates approve automatically only on a confirmed per-video budget while the video stays at or under its target. Narration Preview and Rough Cut are HUMAN so you hear the narration after the script and over the storyboard (D-172). Concept, Research flags, Script, Final Packaging, visual rights, Final Export and Publish are not listed here and always stay with you.",
   "reviewer_id": "gate-policy-auto",
   "gates": {
     "vision": "AUTO_IF_CLEAN",
@@ -7,12 +7,12 @@
     "title_direction": "AUTO_IF_CLEAN",
     "format": "AUTO_IF_CLEAN",
     "performance": "AUTO_IF_CLEAN",
-    "narration_preview": "AUTO_IF_CLEAN",
+    "narration_preview": "HUMAN",
     "visual_plan": "AUTO_IF_CLEAN",
     "narration_spend": "AUTO_IF_CLEAN",
     "final_audio": "AUTO_IF_CLEAN",
     "visual_candidate": "AUTO_IF_CLEAN",
-    "rough_cut": "AUTO_IF_CLEAN",
+    "rough_cut": "HUMAN",
     "visual_spend": "AUTO_IF_CLEAN",
     "edit_preview": "AUTO_IF_CLEAN"
   }

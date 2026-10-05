@@ -5298,3 +5298,26 @@ Windows path of startup recovery stops only the job's own process tree
 (no group scan), and the auto-waiver with evidence-policy acceptance means
 research can reach the script with no person after the Concept Gate,
 which is what the gate policy you chose allows.
+
+## D-172 — Three listening points: preview after the script, rough cut over the storyboard, final export
+
+**Context.** D-156 and D-158 set the Narration Preview, Rough Cut and Edit
+Preview gates to decide themselves when their machine checks pass, so a run
+went from script to final render without anyone hearing the narration
+(noted in audit 2, D-171). The operator wants to hear it three times: the
+free read after the script, the read over the storyboard, and the final
+production.
+
+**Decision.** `narration_preview` and `rough_cut` are `HUMAN` in the
+shipped `gate_policy.json`; `edit_preview` stays `AUTO_IF_CLEAN`; Final
+Export was already human. The Narration Preview gate plays the free Kokoro
+read, which since D-168 is the voice that ships; the Rough Cut gate plays
+it over the storyboard, real shots where they exist and placeholders where
+not; Final Export plays the full render. A test pins the two human gates
+and checks the policy never decides a HUMAN gate.
+
+**Consequences.** A run stops twice more, both at free renders. Rework at
+the preview goes to the performance spec; at the rough cut to pacing,
+visuals or audio. If a paid narration provider is ever configured again,
+Final Audio should be made HUMAN as well, since the preview stays the free
+read.
