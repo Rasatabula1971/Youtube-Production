@@ -618,6 +618,8 @@ class SpendAndUploadContractTests(unittest.TestCase):
         self.assertIn('{ value: "NOTHING", label: "It cost nothing"', text)
         self.assertIn('kind: "unconfirmed"', text)
         self.assertIn('"Resume upload to YouTube"', text)
+        self.assertIn('value: "DISCARD_PENDING"', text)
+        self.assertIn('"Record the uploaded video"', text)
         self.assertIn("item.pending_upload", text)
 
 

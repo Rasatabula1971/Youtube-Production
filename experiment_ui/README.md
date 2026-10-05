@@ -427,10 +427,13 @@ to match the redesign's navigation:
     committed and appears first on the Budget tab as "Confirm spend", with
     the error and a cost field: "It cost this much" records the amount,
     "It cost nothing" releases it. The per-video list counts such calls.
-  - **Resumable upload (D-167):** the Publish tab saves the YouTube upload
-    session before sending bytes; after an interruption the button reads
-    "Resume upload to YouTube" and continues the same session, so one video
-    is never uploaded twice.
+  - **Resumable upload (D-167, D-171):** the Publish tab saves the YouTube
+    upload session before sending bytes; after an interruption the button
+    reads "Resume upload to YouTube" and continues the same session, so one
+    video is never uploaded twice. Once YouTube has the video, a failure in a
+    later step leaves "Record the uploaded video", which uploads nothing. The
+    publish decision cannot change while an upload is unfinished; "Discard
+    the interrupted upload" (after checking YouTube Studio) releases it.
 - `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
   reachable under Productions. Its stage strip is a progress indicator, not
   navigation.
@@ -446,9 +449,12 @@ to match the redesign's navigation:
     FFmpeg, FFprobe, yt-dlp, the search backends, Kokoro with espeak-ng, the
     narration and image providers, the upload OAuth values and free disk.
     Each row shows its result and how long it took; secrets are never shown.
-  - **Orphaned jobs (D-169):** when the UI starts it settles a job the last
-    run left RUNNING: a live process is stopped and recorded ORPHANED, a gone
-    one INTERRUPTED, both with a note in Recent Jobs.
+  - **Orphaned jobs (D-169, D-171):** when the UI starts it settles a job the
+    last run left RUNNING. It stops only processes proven to be that job (same
+    boot and start time, run from this project, or a step the job left
+    running) and records ORPHANED; anything else, including a stranger that
+    inherited the pid after a reboot, is never signalled and the job is
+    recorded INTERRUPTED.
   - **Recent Jobs:** the last 30 jobs with status, times and exit code.
     *Logs* opens the saved log (the last 60,000 characters).
   - **Advanced:** raw output shortcuts, then collapsible sections for the

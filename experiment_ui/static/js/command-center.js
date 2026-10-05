@@ -595,7 +595,15 @@
       if (go.disabled || typeof window.runAction !== "function") return;
       go.disabled = true;
       go.textContent = "Starting…";
-      window.runAction("auto_continue");
+      // runAction shows its own message when the run is refused; then the
+      // rows are repainted so no button stays on "Starting…" (audit 2).
+      Promise.resolve(window.runAction("auto_continue")).finally(function () {
+        ["activeProductions", "productionsList"].forEach(function (id) {
+          const node = $(id);
+          if (node) lastHtml.delete(node);
+        });
+        if (latest) render(latest);
+      });
       return;
     }
     const tab = event.target.closest("[data-production-filter]");

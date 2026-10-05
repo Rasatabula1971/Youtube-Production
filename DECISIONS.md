@@ -5179,8 +5179,12 @@ approved. No full video had gone end to end.
 **Consequences.** A video can go from script to final render with no paid
 narration call and no provider decision; the first full video is the
 test of whether the voice is good enough to ship. Every gate stays: the
-preview is approved by a person, the spend gate still runs (at $0), Audio
-QC and the Final Audio Gate are unchanged. Changing `voice_performance_config`
+spend gate still runs (at $0), Audio QC and the Final Audio Gate are
+unchanged. Correction (audit 2, D-171): under the shipped gate policy the
+narration preview and final audio gates are decided automatically when
+clean, so a person first hears the narration at the Final Export gate,
+which stays with you; set `narration_preview` to `HUMAN` in
+`experiment_ui/gate_policy.json` to listen earlier. Changing `voice_performance_config`
 changes its validation contract hash, so specs approved before this
 change are stale and regenerate.
 
@@ -5238,3 +5242,59 @@ waiting for draft research packages", and radar themes were keyword stems
 the API, where they are stable identifiers; only the words on the page
 changed. Adding a code to a gate means adding a sentence to one file, and
 the test says so when it is missing.
+
+## D-171 — Audit 2: fixes to changes D-163 to D-170
+
+**Context.** An adversarial audit of the nine changes (D-163 to D-170) ran
+the two audit documents again on the diff 7dba9ac..1925d2e: six focused
+reviews (money, upload, process control and doctor, narration, research,
+front end), static scans, coverage, and a live fuzz of the new routes.
+Two container restarts and an API usage limit cut the reviews short; the
+findings they saved were reproduced and the unfinished areas were checked
+by hand. The report is AUDIT_REPORT_2026-10-05.
+
+**Decision.** Fixed, each with a regression test:
+- **Upload could create a second video.** The pending record is now kept
+  until the publish record holds the video id; once YouTube returns the
+  id it is saved, and a retry records it without uploading. An upload in
+  progress pins its approval: the decision cannot change until it is
+  resumed or discarded. A session opened for another file or other
+  metadata is never resumed or silently replaced. Connection-level errors
+  (RemoteDisconnected, IncompleteRead, resets) reach the caller as errors
+  the UI can show. The Publish tab offers "Discard the interrupted upload"
+  (only while YouTube has no video id) and "Record the uploaded video".
+- **Startup recovery could kill an unrelated process or the UI itself.**
+  A job now records who it is (Linux: boot id and start time; Windows:
+  creation time and command line). Recovery stops only processes proven
+  to be that job or its leftover steps, run from this project; never pid
+  0/1, the UI or its parent. The record is written before any signal.
+  A step left running after its job died is now found and stopped.
+- **Unconfirmed spend escaped the per-call caps.** A shot's authorization
+  and the per-video thumbnail cap count unconfirmed calls; every premium
+  visual call reserves against the whole-video ceiling first. Settling a
+  still-live authorization is refused. The status code of a failed call
+  is read from the HTTP error, not from numbers in its text.
+- **Doctor died on a bad key.** The YouTube check makes its own single
+  request with a time limit and reports quota, invalid key or a disabled
+  API in words; a check that exits still reports.
+- **Every research prepare rewrote unchanged automatic waivers**, which
+  changed the verified package and marked scripts stale. An unchanged
+  waiver now keeps its original record.
+- **A concept with no source for any question** stayed FAILED and searched
+  again on every run. It now settles as NO_SOURCES and the run says to
+  rework or reject the concept.
+- **Narration:** a local provider without a price crashed the dispatch; a
+  NaN price passed every ceiling check. Both fixed.
+- **Strict JSON:** a corrupt ledger's infinite amount made the status
+  response unparsable; non-finite numbers are now sent as null.
+- **Smaller:** a "#" inside a radar title no longer cuts the headline and
+  hostile titles stay fast; the Continue button no longer sticks on
+  "Starting…" after a refused run; fresh start archives the last-run
+  record.
+
+**Consequences.** The money, upload and process paths hold the
+invariants the decisions claimed. Not fixed and listed in the report: the
+Windows path of startup recovery stops only the job's own process tree
+(no group scan), and the auto-waiver with evidence-policy acceptance means
+research can reach the script with no person after the Concept Gate,
+which is what the gate policy you chose allows.

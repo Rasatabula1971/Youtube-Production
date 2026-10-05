@@ -1645,6 +1645,17 @@ OPEN_TARGETS = {
 }
 
 
+def json_safe(value: Any) -> Any:
+    """The same data with non-finite floats as None, for strict JSON."""
+    if isinstance(value, float):
+        return value if value == value and value not in (float("inf"), float("-inf")) else None
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return value
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -6819,10 +6830,11 @@ class JobManager:
         """Settle a job the previous UI run left RUNNING in job_state.json (D-169).
 
         After a crash or a closed launcher window the saved state still says
-        RUNNING. If that process is still alive it is an orphan nobody
-        supervises: it is stopped and recorded ORPHANED. If it is gone, the
-        job is recorded INTERRUPTED. Either way the Tools page and the job
-        drawer say what happened instead of showing a run that never ends.
+        RUNNING. A process is stopped only when it is provably that job: same
+        boot, same start time, run from this project (audit 2). Anything else
+        with the same pid is a stranger and is never signalled; the job is
+        recorded INTERRUPTED. The record is written before any signal, so a
+        crash during recovery cannot repeat it.
         """
         try:
             saved = json.loads(JOB_STATE_FILE.read_text(encoding="utf-8"))
@@ -6832,20 +6844,25 @@ class JobManager:
             return None
         pid_value = saved.get("pid")
         pid = pid_value if isinstance(pid_value, int) and not isinstance(pid_value, bool) and pid_value > 0 else 0
-        alive = pid > 0 and pid_alive(pid)
-        if alive:
-            terminate_pid(pid)
-            saved["status"] = "ORPHANED"
-            saved["note"] = "The UI exited while this job ran; the job was stopped when the UI started again."
-        else:
-            saved["status"] = "INTERRUPTED"
-            saved["note"] = "The UI exited while this job ran and the job did not finish."
+        saved["status"] = "INTERRUPTED"
+        saved["note"] = "The UI exited while this job ran and the job did not finish."
         saved["finished_at"] = utc_now()
         saved["return_code"] = None
+        self._save_state(saved)
+        targets = leftover_job_processes(saved) if pid else []
+        if targets:
+            stopped = stop_processes(targets)
+            saved["status"] = "ORPHANED"
+            saved["note"] = (
+                "The UI exited while this job ran; its leftover process"
+                + ("es were" if len(targets) > 1 else " was")
+                + (" stopped" if stopped else " signalled but may still be running")
+                + " when the UI started again."
+            )
+            self._save_state(saved)
         with self._lock:
             if self._process is None:
                 self._job = dict(saved)
-        self._save_state(saved)
         record_job_history(saved)
         return saved
 
@@ -6922,6 +6939,10 @@ class JobManager:
                 "label": action["label"],
                 "status": "RUNNING",
                 "pid": process.pid,
+                # Who this pid is, so a later UI start never stops a stranger
+                # that inherited the number after a crash or reboot (audit 2).
+                "identity": process_identity(process.pid),
+                "command": [str(part) for part in action["command"]],
                 "started_at": utc_now(),
                 "finished_at": None,
                 "return_code": None,
@@ -7038,43 +7059,161 @@ def job_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-def pid_alive(pid: int) -> bool:
-    """Whether a process id is still running (never signals it)."""
-    if os.name == "nt":
-        try:
-            completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-                ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
-                capture_output=True, text=True, check=False, timeout=15,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return False
-        return f'"{pid}"' in (completed.stdout or "")
+PROTECTED_PIDS_NOTE = "pid 0/1, the UI itself and its parent are never signalled"
+
+
+def _protected_pid(pid: int) -> bool:
+    return pid <= 1 or pid in {os.getpid(), os.getppid()}
+
+
+def _linux_boot_id() -> str | None:
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
 
 
-def terminate_pid(pid: int) -> None:
-    """Stop a process (and its children) the UI started in an earlier run."""
-    if os.name == "nt":
-        subprocess.run(  # noqa: S603 - fixed argument list, no shell
-            ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, timeout=15,
+def _linux_process(pid: int) -> dict[str, Any] | None:
+    """Start time (clock ticks since boot), process group and working folder of a pid."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        cwd = os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        return None
+    fields = stat.rsplit(")", 1)[-1].split()
+    try:
+        return {"start": int(fields[19]), "pgrp": int(fields[2]), "cwd": cwd}
+    except (IndexError, ValueError):
+        return None
+
+
+def _windows_process(pid: int) -> dict[str, Any] | None:
+    """Command line and creation time of a pid, from CIM (never tasklist substrings)."""
+    script = (
+        f"Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}' | "
+        "Select-Object CommandLine,@{n='Created';e={$_.CreationDate.ToUniversalTime().ToString('o')}} | "
+        "ConvertTo-Json -Compress"
+    )
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, check=False, timeout=20,
         )
-        return
+        data = json.loads(completed.stdout or "null")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {"command_line": str(data.get("CommandLine") or ""), "created": str(data.get("Created") or "")}
+
+
+def process_identity(pid: int) -> dict[str, Any] | None:
+    """What identifies a job process later: boot and start time (Linux), or creation time (Windows)."""
+    if os.name == "nt":
+        return None  # recorded from started_at; checked against CIM at recovery
+    info = _linux_process(pid)
+    if info is None:
+        return None
+    return {"boot_id": _linux_boot_id(), "start": info["start"]}
+
+
+def _script_marker(saved: dict[str, Any]) -> str:
+    command_value = saved.get("command")
+    command: list[Any] = command_value if isinstance(command_value, list) else []
+    scripts = [Path(str(part)).name for part in command if str(part).endswith(".py")]
+    return scripts[0] if scripts else "workflow_automation.py"
+
+
+def leftover_job_processes(saved: dict[str, Any]) -> list[int]:
+    """Processes that are provably the saved job or the steps it spawned (audit 2).
+
+    Linux: same boot, run from this project's folder, and either the saved
+    leader with its recorded start time or a member of its process group
+    (the leader may already have exited and left its step running).
+    Windows: the saved pid only, when its command line names the job's script
+    and it was created within two minutes of the job's start. Any other
+    system: nothing is stopped, because nothing can be verified.
+    """
+    pid = int(saved.get("pid") or 0)
+    if _protected_pid(pid):
+        return []
+    identity_value = saved.get("identity")
+    identity: dict[str, Any] = identity_value if isinstance(identity_value, dict) else {}
+    if os.name == "nt":
+        info = _windows_process(pid)
+        if not info or _script_marker(saved) not in info["command_line"]:
+            return []
+        try:
+            created = datetime.fromisoformat(info["created"].replace("Z", "+00:00"))
+            started = datetime.fromisoformat(str(saved.get("started_at")).replace("Z", "+00:00"))
+        except ValueError:
+            return []
+        return [pid] if abs((created - started).total_seconds()) <= 120 else []
+    if not Path("/proc").is_dir():
+        return []
+    boot = _linux_boot_id()
+    if not boot or identity.get("boot_id") != boot:
+        return []
+    root = str(PROJECT_ROOT.resolve())
+    found: list[int] = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        candidate = int(entry.name)
+        if _protected_pid(candidate) or candidate == os.getpgrp():
+            continue
+        info = _linux_process(candidate)
+        if not info or os.path.realpath(info["cwd"]) != root:
+            continue
+        if candidate == pid and info["start"] == identity.get("start"):
+            found.append(candidate)
+        elif candidate != pid and info["pgrp"] == pid and info["pgrp"] != os.getpgrp():
+            found.append(candidate)
+    return sorted(found)
+
+
+def stop_processes(pids: list[int], grace_seconds: float = 5.0) -> bool:
+    """Stop verified job processes; True when none is left running."""
+    import time as _time
+
+    if os.name == "nt":
+        for pid in pids:
+            subprocess.run(  # noqa: S603 - fixed argument list, no shell
+                ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, timeout=15,
+            )
+        return all(_windows_process(pid) is None for pid in pids)
     import signal
 
-    for target in (lambda: os.killpg(pid, signal.SIGTERM), lambda: os.kill(pid, signal.SIGTERM)):
+    def alive(pid: int) -> bool:
         try:
-            target()
-            return
+            os.kill(pid, 0)
         except ProcessLookupError:
-            return
+            return False
         except PermissionError:
-            continue
+            return True
+        return Path(f"/proc/{pid}").exists() and "Z" not in _proc_state(pid)
+
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except (ProcessLookupError, PermissionError):
+                continue
+        deadline = _time.monotonic() + grace_seconds
+        while _time.monotonic() < deadline and any(alive(pid) for pid in pids):
+            _time.sleep(0.05)
+        if not any(alive(pid) for pid in pids):
+            return True
+    return False
+
+
+def _proc_state(pid: int) -> str:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    fields = stat.rsplit(")", 1)[-1].split()
+    return fields[0] if fields else ""
 
 
 def terminate_process_tree(process: "subprocess.Popen[str]") -> None:
@@ -8722,7 +8861,13 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     def _send_json(self, payload: Any, status: int = 200) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        try:
+            text = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+        except ValueError:
+            # A corrupt budget ledger reads as an infinite amount (it blocks
+            # spending); browsers cannot parse Infinity, so send null (audit 2).
+            text = json.dumps(json_safe(payload), ensure_ascii=False, allow_nan=False)
+        body = text.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -9766,8 +9911,10 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 elif action == "UPLOAD":
                     youtube_upload.upload(concept_id=concept_id, format=fmt)
+                elif action == "DISCARD_PENDING":
+                    publish_review.discard_pending_upload(concept_id, fmt)
                 else:
-                    raise ValueError("Action must be APPROVE_PUBLISH, HOLD, RECORD_UPLOAD or UPLOAD")
+                    raise ValueError("Action must be APPROVE_PUBLISH, HOLD, RECORD_UPLOAD, UPLOAD or DISCARD_PENDING")
                 self._send_json({"publish_gate": publish_gate_state()})
                 return
 

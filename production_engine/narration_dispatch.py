@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import shutil
 import urllib.error
@@ -201,7 +202,13 @@ def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     price = settings.get("price_per_1000_characters_usd")
     if local and price is None:
         price = 0.0
-    if not isinstance(price, (int, float)) or isinstance(price, bool) or price < 0:
+    if (
+        not isinstance(price, (int, float))
+        or isinstance(price, bool)
+        or not math.isfinite(float(price))
+        or price < 0
+    ):
+        # NaN would pass every later "estimate > ceiling" check (audit 2).
         problems.append("The price per 1,000 characters is not set; it is never guessed.")
     if local:
         if not local_renderer_installed():
@@ -325,8 +332,10 @@ def _dispatch(
         attempts[str(segment["segment_id"])] = prior + 1
 
     settings = config["provider_adapter"]
+    # The validated price: a local provider with no price set renders at 0 (audit 2).
+    price = float(status["price_per_1000_characters_usd"])
     spent_before = max(paid, float((previous_result or {}).get("actual_cost_usd") or 0))
-    estimate = estimate_usd(targets, float(settings["price_per_1000_characters_usd"]))
+    estimate = estimate_usd(targets, price)
     if spent_before + estimate > ceiling:
         raise ValueError(
             f"Rendering these segments (about ${estimate:.2f}) on top of ${spent_before:.2f} already "
@@ -343,7 +352,6 @@ def _dispatch(
     cost = 0.0
     job_ids = []
     budget_ledger = video_budget.ledger_in(OUTPUT_DIR)
-    price = float(settings["price_per_1000_characters_usd"])
     try:
         for segment in targets:
             segment_id = str(segment["segment_id"])

@@ -131,9 +131,13 @@ def research_acquisition_message() -> str:
     """Explain a research evidence failure with the real backend error."""
     first_error = ""
     incomplete: list[str] = []
+    no_sources: list[str] = []
     try:
         summary = json.loads(RESEARCH_ACQUISITION_SUMMARY.read_text(encoding="utf-8"))
         for item in summary.get("results", []):
+            if isinstance(item, dict) and item.get("status") == "NO_SOURCES":
+                no_sources.append(str(item.get("concept_id")))
+                continue
             if isinstance(item, dict) and (item.get("first_error") or item.get("message")):
                 first_error = first_error or str(item.get("first_error") or item.get("message"))
             if isinstance(item, dict) and item.get("status") == "PARTIAL" and int(item.get("pages") or 0) > 0:
@@ -143,9 +147,19 @@ def research_acquisition_message() -> str:
                 )
     except (OSError, ValueError, AttributeError, TypeError):
         pass
+    lead = (
+        "No source page was found for any research question of "
+        + ", ".join(no_sources[:3])
+        + " after the configured search rounds, so its research cannot go on. Send the concept back "
+        "at the Concept Gate with narrower questions, or reject it."
+        if no_sources
+        else ""
+    )
+    if no_sources and not incomplete:
+        return lead
     if incomplete:
         # Pages were found; only some questions have no source yet (D-152).
-        return (
+        return (lead + " Separately: " if lead else "") + (
             "Source pages were found, but some research questions still have no source: "
             + "; ".join(incomplete[:3])
             + ". The Research Gate needs every question covered, so research stops here (D-129)."

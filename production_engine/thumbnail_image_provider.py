@@ -313,10 +313,17 @@ def generate(
     if authorized > float(config["per_thumbnail_cap_usd"]):
         raise ValueError(f"The maximum cost exceeds the per-thumbnail cap ${config['per_thumbnail_cap_usd']}")
     spent = video_spend(str(unit["video_id"]))
-    if spent + estimated > float(config["per_video_cap_usd"]):
+    # Calls that failed with an unknown outcome may have billed: they count
+    # against the cap until you settle them on the Budget tab (audit 2).
+    unsettled = video_budget.unconfirmed_total(
+        str(unit["video_id"]), category="thumbnail_image",
+        ledger=video_budget.ledger_in(render.THUMBNAILS_DIR.parent),
+    )
+    if spent + unsettled + estimated > float(config["per_video_cap_usd"]):
         raise ValueError(
-            f"This video has spent ${spent} on thumbnail images; ${estimated} more would pass "
-            f"the per-video cap ${config['per_video_cap_usd']}"
+            f"This video has spent ${spent} on thumbnail images"
+            + (f" and has ${unsettled} in unconfirmed calls to settle on the Budget tab" if unsettled else "")
+            + f"; ${estimated} more would pass the per-video cap ${config['per_video_cap_usd']}"
         )
 
     budget_video = str(unit["video_id"])

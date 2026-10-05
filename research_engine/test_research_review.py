@@ -170,6 +170,20 @@ class ResearchReviewTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["decided_by"], review.POLICY_DECIDER)
 
+    def test_an_unchanged_automatic_waiver_leaves_the_verified_package_unchanged(self):
+        """Audit 2: a new waived_at on every prepare made every downstream script stale."""
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.two_question_package(weak_claim=False)), encoding="utf-8")
+            review.prepare_state()
+            review.apply_action(concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note="")
+            verified = review.VERIFIED_DIR / "c1.verified_research_package.json"
+            first = verified.read_bytes()
+            review.prepare_state()
+            review.prepare_state()
+            self.assertEqual(verified.read_bytes(), first)
+
     def test_removing_an_automatic_waiver_sticks_across_prepares(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             self.patch_paths(stack, Path(tmp))

@@ -267,3 +267,20 @@ class LocalKokoroDispatchTests(unittest.TestCase):
         self.assertEqual(shipped["provider_adapter"]["price_per_1000_characters_usd"], 0.0)
         self.assertTrue(dispatch.provider_contract_verified(shipped))
         self.assertIn("paid_provider_example", shipped)
+
+    def test_a_local_provider_without_a_price_renders_at_zero(self):
+        """Audit 2: status said ready, then dispatch crashed on float(None)."""
+        self.config["provider_adapter"]["price_per_1000_characters_usd"] = None
+        result = dispatch.dispatch(
+            concept_id="concept-1", format="long_form", reviewer="me",
+            adapters={"LOCAL_KOKORO": self.fake_local},
+        )
+        self.assertEqual(result["actual_cost_usd"], 0.0)
+
+    def test_a_nan_price_is_never_ready(self):
+        """Audit 2: NaN passed every estimate-versus-ceiling check."""
+        paid = config(price_per_1000_characters_usd=float("nan"))
+        with patch.dict("os.environ", {"NARRATION_PROVIDER_API_KEY": "secret"}):
+            status = dispatch.provider_status(paid)
+        self.assertFalse(status["ready"])
+        self.assertIn("never guessed", " ".join(status["problems"]))

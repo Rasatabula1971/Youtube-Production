@@ -156,3 +156,28 @@ class UnconfirmedSpendTests(VideoBudgetTests):
         self.assertTrue(budget.outcome_unknown(ValueError("Image provider refused the request (HTTP 503)")))
         self.assertTrue(budget.outcome_unknown(ValueError("Image provider call failed: TimeoutError")))
         self.assertTrue(budget.outcome_unknown(RuntimeError("boom")))
+
+    def test_a_live_authorization_cannot_be_settled_away(self):
+        """Audit 2: settling it at 0 would let another stage spend the same money."""
+        budget.reserve(video="v:f", category="visual", ref="shot:a", amount_usd=2.5)
+        with self.assertRaisesRegex(ValueError, "still authorized"):
+            budget.reconcile(video="v:f", category="visual", ref="shot:a", total_usd=0)
+        self.assertEqual(budget.summary("v:f")["committed_usd"], 2.5)
+
+    def test_a_new_reservation_keeps_unconfirmed_money_visible(self):
+        budget.mark_unconfirmed(video="v:f", category="visual", ref="r", amount_usd=3.0)
+        snap = budget.reserve(video="v:f", category="visual", ref="r", amount_usd=1.0)
+        self.assertEqual(snap["committed_usd"], 3.0)
+        self.assertEqual(len(snap["unconfirmed"]), 1)
+
+    def test_outcome_unknown_reads_the_status_code_not_stray_numbers(self):
+        import urllib.error
+
+        refused = urllib.error.HTTPError("https://x", 401, "Unauthorized", {}, None)
+        self.assertFalse(budget.outcome_unknown(refused))
+        self.assertTrue(budget.outcome_unknown(urllib.error.HTTPError("https://x", 503, "busy", {}, None)))
+        wrapped = ValueError("Image provider call failed")
+        wrapped.__cause__ = refused
+        self.assertFalse(budget.outcome_unknown(wrapped))
+        self.assertTrue(budget.outcome_unknown(ValueError("call failed: see HTTP 404 docs")))
+        self.assertTrue(budget.outcome_unknown(KeyError("model")))

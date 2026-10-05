@@ -38,6 +38,7 @@ OUTPUT_DIR = HERE / "output" / "acquired_evidence"
 SUMMARY_FILE = HERE / "output" / "research_acquisition_summary.json"
 CONFIG_FILE = HERE / "research_acquisition_config.json"
 DEFAULT_MAX_SEARCH_ROUNDS = 2
+NO_SOURCES = "NO_SOURCES"
 
 
 def load_json(path: Path) -> Any:
@@ -138,6 +139,15 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
                     "status": "SKIPPED_CURRENT",
                     "concept_id": concept_id,
                     "evidence": str(destination),
+                }
+            if existing.get("status") == NO_SOURCES and not force:
+                # Every question was already searched to the limit with no
+                # page: searching again only repeats it (audit 2).
+                return {
+                    "status": NO_SOURCES,
+                    "concept_id": concept_id,
+                    "evidence": str(destination),
+                    "unsourced_questions": len(existing.get("unsourced_question_ids") or []),
                 }
             # The same plan was searched before: count those rounds (D-163).
             rounds = existing.get("search_rounds")
@@ -286,7 +296,11 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
     status = (
         "COMPLETE"
         if pages and not blocking_errors and not unresolved_question_ids
-        else "PARTIAL" if pages else "FAILED"
+        else "PARTIAL" if pages
+        # No page for any question after the rounds: research cannot proceed
+        # on this concept, and saying so beats retrying forever (audit 2).
+        else NO_SOURCES if required_question_ids and set(unsourced_question_ids) == required_question_ids
+        else "FAILED"
     )
     payload = {
         "artifact": "research_acquired_evidence",
@@ -341,7 +355,9 @@ def run_batch(*, force: bool = False) -> dict[str, Any]:
             )
 
     usable = sum(
-        item.get("status") in {"COMPLETE", "PARTIAL", "SKIPPED_CURRENT"}
+        # NO_SOURCES is a settled answer, not a failure of this run: the batch
+        # ends PARTIAL so the run names it and goes on with other work.
+        item.get("status") in {"COMPLETE", "PARTIAL", "SKIPPED_CURRENT", NO_SOURCES}
         for item in results
     )
     complete = sum(
