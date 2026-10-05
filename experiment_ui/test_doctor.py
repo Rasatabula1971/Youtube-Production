@@ -49,18 +49,71 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(status, doctor.WARN)
         self.assertIn("38 characters", detail)
 
-    def test_youtube_key_check_reads_the_live_answer(self) -> None:
-        import experiment_01_discovery.youtube_discovery as discovery
+    class Answer:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self) -> bytes:
+            return self.body
+
+    def test_youtube_key_check_reads_the_live_answer(self) -> None:
         key = "AIza" + "y" * 35
+        answer = self.Answer(json.dumps({"items": [{"id": doctor.YOUTUBE_PROBE_VIDEO}]}).encode())
         with (
             patch.object(doctor, "env_value", return_value=key),
-            patch.object(discovery, "api_get", return_value={"items": [{"id": doctor.YOUTUBE_PROBE_VIDEO}]}) as call,
+            patch.object(doctor.urllib.request, "urlopen", return_value=answer) as call,
         ):
             status, detail = doctor.check_youtube_key()
         self.assertEqual(status, doctor.READY)
         self.assertIn("1 quota unit", detail)
-        self.assertEqual(call.call_args.args[:2], ("videos", key))
+        request = call.call_args.args[0]
+        self.assertTrue(request.full_url.startswith("https://www.googleapis.com/youtube/v3/videos?"))
+        self.assertEqual(call.call_args.kwargs["timeout"], doctor.CHECK_TIMEOUT_SECONDS)
+
+    def test_a_refused_key_is_reported_not_fatal(self) -> None:
+        """Audit 2 F1: a bad key used to end the whole request with no answer."""
+        import io
+        import urllib.error
+
+        key = "AIza" + "z" * 35
+        cases = {
+            b'{"error":{"errors":[{"reason":"keyInvalid"}],"message":"API key not valid"}}': "not valid",
+            b'{"error":{"errors":[{"reason":"quotaExceeded"}]}}': "quota exceeded",
+            b'{"error":{"errors":[{"reason":"accessNotConfigured"}]}}': "not enabled",
+        }
+        for body, words in cases.items():
+            with self.subTest(words=words):
+                error = urllib.error.HTTPError("https://x", 403, "Forbidden", {}, io.BytesIO(body))
+                with (
+                    patch.object(doctor, "env_value", return_value=key),
+                    patch.object(doctor.urllib.request, "urlopen", side_effect=error),
+                ):
+                    status, detail = doctor.check_youtube_key()
+                self.assertEqual(status, doctor.MISSING)
+                self.assertIn(words, detail)
+                self.assertNotIn(key, detail)
+        with (
+            patch.object(doctor, "env_value", return_value=key),
+            patch.object(doctor.urllib.request, "urlopen", side_effect=urllib.error.URLError("https://x?key=" + key)),
+        ):
+            status, detail = doctor.check_youtube_key()
+        self.assertEqual(status, doctor.WARN)
+        self.assertNotIn(key, detail)
+
+    def test_a_check_that_exits_still_reports(self) -> None:
+        def exits() -> tuple[str, str]:
+            raise SystemExit("fatal")
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(doctor, "RESULT_FILE", Path(tmp) / "d.json"):
+            report = doctor.run([("x", "X", exits)])
+        self.assertEqual(report["checks"][0]["status"], doctor.MISSING)
+        self.assertIn("SystemExit", report["checks"][0]["detail"])
 
     def test_binary_check_reports_missing_binaries(self) -> None:
         with patch.object(doctor.shutil, "which", return_value=None):

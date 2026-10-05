@@ -28,6 +28,7 @@ therefore never becomes two private videos on the channel.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import urllib.error
@@ -126,7 +127,9 @@ def _http(request: urllib.request.Request, timeout: float) -> tuple[dict[str, st
         raise UploadHttpError(
             f"YouTube refused the request (HTTP {exc.code}): {detail}", code=int(exc.code), headers=headers
         ) from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException) as exc:
+        # Connection-level failures (RemoteDisconnected, IncompleteRead, a reset)
+        # are not URLError; they must still reach the caller as ValueError (audit 2).
         raise ValueError(f"YouTube request failed: {type(exc).__name__}") from exc
 
 
@@ -154,6 +157,11 @@ def upload(
         return _upload(str(concept_id), str(format), http)
 
 
+def metadata_sha256(metadata: dict[str, Any]) -> str:
+    """Hash of exactly what YouTube is sent for this video's snippet and status."""
+    return hashlib.sha256(json.dumps(body_for(metadata), sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str], bytes]]) -> dict[str, Any]:
     state = status()
     if not state["ready"]:
@@ -161,12 +169,26 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
     if publish_review.publish_record(concept_id, fmt):
         raise ValueError("This video is already published; it will not be uploaded twice")
     approval = publish_review.current_approval(concept_id, fmt)
+    pending = publish_review.pending_upload(concept_id, fmt)
+    known_id = str((pending or {}).get("video_id") or "")
     if approval is None:
+        if known_id:
+            raise ValueError(
+                f"YouTube already has this video as {known_id}, but its publish approval is no longer "
+                "current. Approve the publish package again, then choose Upload to YouTube: it records "
+                f"{known_id} and uploads nothing."
+            )
+        if pending:
+            raise ValueError(
+                "An upload of this video was started under an approval that is no longer current. Check "
+                "YouTube Studio for a half-uploaded private video, discard the interrupted upload, then approve again."
+            )
         raise ValueError("Approve the publish package before uploading")
     video = Path(str(approval["video_file"]))
     thumbnail = Path(str(approval["thumbnail_file"]))
-    if video.suffix.lower() not in VIDEO_TYPES or not video.is_file() or _sha256(video) != approval["video_sha256"]:
-        raise ValueError("The approved video file is missing or changed since approval")
+    if not known_id:
+        if video.suffix.lower() not in VIDEO_TYPES or not video.is_file() or _sha256(video) != approval["video_sha256"]:
+            raise ValueError("The approved video file is missing or changed since approval")
     if thumbnail.suffix.lower() not in IMAGE_TYPES or not thumbnail.is_file() or _sha256(thumbnail) != approval["thumbnail_sha256"]:
         raise ValueError("The approved thumbnail file is missing or changed since approval")
 
@@ -174,59 +196,79 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
     timeout = float(config.get("timeout_seconds") or 600)
     token = access_token(config, http)
     auth = {"Authorization": f"Bearer {token}"}
-    size = video.stat().st_size
-    content_type = VIDEO_TYPES[video.suffix.lower()]
+    meta_hash = metadata_sha256(approval["metadata"])
 
-    video_id = ""
-    resumed = False
-    pending = publish_review.pending_upload(concept_id, fmt)
-    if pending:
-        session = str(pending.get("session") or "")
-        current = (
-            pending.get("video_sha256") == approval["video_sha256"]
-            and int(pending.get("size") or -1) == size
-            and session.startswith("https://www.googleapis.com/")
-        )
-        found = _resume(session, video, size, content_type, auth, http, timeout) if current else None
-        if found:
-            video_id, resumed = found, True
-        else:
-            # Stale (another video) or dead session: it cannot hold our bytes.
-            publish_review.clear_pending_upload(concept_id, fmt)
-
+    video_id = known_id
+    resumed = bool(known_id)
     if not video_id:
-        start = urllib.request.Request(  # noqa: S310 - fixed https URL
-            UPLOAD_URL,
-            data=json.dumps(body_for(approval["metadata"])).encode("utf-8"),
-            headers={**auth, "Content-Type": "application/json; charset=UTF-8",
-                     "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": content_type},
-            method="POST",
-        )
-        headers, _ = http(start, 60)
-        session = headers.get("Location") or headers.get("location") or ""
-        if not session or not session.startswith("https://www.googleapis.com/"):
-            raise ValueError("YouTube did not return an upload session")
-        # Saved before any byte goes out: a retry resumes this session (D-167).
-        publish_review.save_pending_upload(
-            {
+        size = video.stat().st_size
+        content_type = VIDEO_TYPES[video.suffix.lower()]
+        session = str((pending or {}).get("session") or "")
+        if pending and session:
+            current = (
+                pending.get("video_sha256") == approval["video_sha256"]
+                and int(pending.get("size") or -1) == size
+                and pending.get("metadata_sha256") == meta_hash
+                and session.startswith("https://www.googleapis.com/")
+            )
+            if not current:
+                # The session was opened for other bytes or other metadata.
+                # It may hold a finished private video: never resume it under
+                # this approval and never silently start a second one (audit 2).
+                raise ValueError(
+                    "An earlier upload session of this video was opened for a different file or different "
+                    "metadata. Check YouTube Studio for a private video from "
+                    f"{pending.get('started_at') or 'that attempt'}, then discard the interrupted upload and upload again."
+                )
+            found = _resume(session, video, size, content_type, auth, http, timeout)
+            if found:
+                video_id, resumed = found, True
+        if not video_id:
+            base = {
                 "artifact": "pending_upload",
                 "concept_id": concept_id,
                 "format": fmt,
-                "session": session,
                 "size": size,
                 "content_type": content_type,
                 "video_sha256": approval["video_sha256"],
+                "metadata_sha256": meta_hash,
+                "approval_reviewed_at": approval.get("reviewed_at"),
                 "started_at": publish_review.now(),
             }
+            # Written before the session exists, so a decision change cannot
+            # slip in between opening the session and saving it (audit 2).
+            publish_review.save_pending_upload({**base, "session": None})
+            start = urllib.request.Request(  # noqa: S310 - fixed https URL
+                UPLOAD_URL,
+                data=json.dumps(body_for(approval["metadata"])).encode("utf-8"),
+                headers={**auth, "Content-Type": "application/json; charset=UTF-8",
+                         "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": content_type},
+                method="POST",
+            )
+            try:
+                headers, _ = http(start, 60)
+            except ValueError:
+                publish_review.clear_pending_upload(concept_id, fmt)  # no session, so no video
+                raise
+            session = headers.get("Location") or headers.get("location") or ""
+            if not session or not session.startswith("https://www.googleapis.com/"):
+                publish_review.clear_pending_upload(concept_id, fmt)
+                raise ValueError("YouTube did not return an upload session")
+            # Saved before any byte goes out: a retry resumes this session (D-167).
+            publish_review.save_pending_upload({**base, "session": session})
+            try:
+                video_id = _put_from(session, video, 0, size, content_type, auth, http, timeout)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{exc} The upload session is saved: choose Upload to YouTube again and it resumes "
+                    "where it stopped instead of starting a second video."
+                ) from exc
+        # The id is kept until the publish record holds it: a failure from here
+        # on is retried by recording this id, never by uploading again (audit 2).
+        publish_review.save_pending_upload(
+            {**(publish_review.pending_upload(concept_id, fmt) or {}), "concept_id": concept_id, "format": fmt,
+             "video_id": video_id, "metadata_sha256": meta_hash, "uploaded_at": publish_review.now()}
         )
-        try:
-            video_id = _put_from(session, video, 0, size, content_type, auth, http, timeout)
-        except ValueError as exc:
-            raise ValueError(
-                f"{exc} The upload session is saved: choose Upload to YouTube again and it resumes "
-                "where it stopped instead of starting a second video."
-            ) from exc
-    publish_review.clear_pending_upload(concept_id, fmt)
 
     thumbnail_error = None
     try:
@@ -237,12 +279,20 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
             ),
             120,
         )
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         # The video exists on YouTube: record it so a retry never uploads it again.
         thumbnail_error = str(exc)
+    uploaded_with = str((publish_review.pending_upload(concept_id, fmt) or {}).get("metadata_sha256") or meta_hash)
     return publish_review.record_upload(
         concept_id=concept_id, format=fmt, youtube_video_id=video_id, method="YOUTUBE_DATA_API",
-        details={"thumbnail_set": thumbnail_error is None, "thumbnail_error": thumbnail_error, "resumed": resumed},
+        details={
+            "thumbnail_set": thumbnail_error is None,
+            "thumbnail_error": thumbnail_error,
+            "resumed": resumed,
+            # False when the approval changed after YouTube received the video:
+            # YouTube then shows the earlier metadata until you edit it in Studio.
+            "metadata_matches_upload": uploaded_with == meta_hash,
+        },
     )
 
 

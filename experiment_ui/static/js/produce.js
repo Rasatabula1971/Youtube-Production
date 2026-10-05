@@ -920,8 +920,11 @@
         (item.status === "APPROVED_FOR_UPLOAD"
           ? section("Upload",
             (item.pending_upload
-              ? '<p class="radar-error">An earlier upload was interrupted' + (item.pending_upload.started_at ? " (started " + esc(item.pending_upload.started_at) + ")" : "") +
-                ". Upload to YouTube resumes that session where it stopped; it will not create a second video.</p>"
+              ? (item.pending_upload.video_id
+                ? '<p class="radar-error">YouTube already has this video as ' + esc(item.pending_upload.video_id) +
+                  ", but it was not recorded here. Record the uploaded video: nothing is uploaded again.</p>"
+                : '<p class="radar-error">An earlier upload was interrupted' + (item.pending_upload.started_at ? " (started " + esc(item.pending_upload.started_at) + ")" : "") +
+                  ". Resume upload continues that session where it stopped; it will not create a second video.</p>")
               : "") +
             ((this.gate().uploader || {}).ready
               ? '<p class="muted">Upload sends this exact video, thumbnail and metadata to YouTube.</p>'
@@ -931,17 +934,30 @@
     },
     decisions: function (item) {
       const key = item.key;
+      const pending = item.pending_upload || null;
+      // An interrupted upload with no video id yet can be given up, after
+      // checking YouTube Studio; once YouTube has the video it must be
+      // recorded instead (audit 2).
+      const discard = pending && !pending.video_id
+        ? [{ value: "DISCARD_PENDING", label: "Discard the interrupted upload", tone: "blocked",
+            hint: "Only after checking YouTube Studio for a half-uploaded private video.",
+            confirm: function () { return "Have you checked YouTube Studio? A private video from the interrupted upload may exist. Discard the saved session?"; } }]
+        : [];
       if (item.status === "PENDING" || item.status === "HELD") {
+        if (pending && !pending.video_id) return discard;
         return [
           { value: "APPROVE_PUBLISH", label: "Approve publish package", hint: "Binds this exact video, thumbnail and metadata.", tone: "complete" },
           noteRework("HOLD", "Hold", "Keep it unpublished for now.", "say why it is held")
         ];
       }
       if (item.status === "APPROVED_FOR_UPLOAD") {
-        const options = [];
+        const options = discard.slice();
         if ((this.gate().uploader || {}).ready) {
-          options.push({ value: "UPLOAD", label: item.pending_upload ? "Resume upload to YouTube" : "Upload to YouTube", tone: "complete",
-            hint: (item.pending_upload ? "Continues the interrupted session. " : "") + "Privacy: " + ((item.metadata || {}).privacy_status || "private") + ".",
+          options.unshift({ value: "UPLOAD",
+            label: pending && pending.video_id ? "Record the uploaded video" : pending ? "Resume upload to YouTube" : "Upload to YouTube",
+            tone: "complete",
+            hint: (pending && pending.video_id ? "YouTube already has it as " + pending.video_id + "; nothing is uploaded again. "
+              : pending ? "Continues the interrupted session. " : "") + "Privacy: " + ((item.metadata || {}).privacy_status || "private") + ".",
             confirm: function () { return "Upload this video to YouTube now as " + ((item.metadata || {}).privacy_status || "private") + "?"; } });
         }
         options.push({ value: "RECORD_UPLOAD", label: "Record a manual upload", tone: "running", hint: "You uploaded it in YouTube Studio.",
@@ -960,7 +976,7 @@
         body.metadata = edits;
       }
       if (decision === "RECORD_UPLOAD") body.youtube_video_id = edits.youtube_video_id;
-      const messages = { APPROVE_PUBLISH: "Publish package approved.", HOLD: "Video held.", UPLOAD: "Uploaded to YouTube.", RECORD_UPLOAD: "Upload recorded." };
+      const messages = { APPROVE_PUBLISH: "Publish package approved.", HOLD: "Video held.", UPLOAD: "Uploaded to YouTube.", RECORD_UPLOAD: "Upload recorded.", DISCARD_PENDING: "Interrupted upload discarded." };
       return post("/api/publish-gate", body, messages[decision] || "Saved.").then(function (ok) {
         if (ok) delete pubEdits[item.key];
         return ok;

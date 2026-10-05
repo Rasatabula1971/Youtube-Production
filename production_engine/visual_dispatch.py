@@ -185,25 +185,45 @@ def _generate(
     estimate = round(float(settings["price_per_image_usd"]) * count, 4)
     authorized = round(float(request["spend_authorization"]["max_cost_usd"]), 4)
     spent = spent_on_shot(key)
-    if spent + estimate > authorized:
+    budget_video = video_budget.video_id(request.get("concept_id"), request.get("format"))
+    ledger = video_budget.ledger_in(OUTPUT)
+    shot_ref = f"shot:{request.get('shot_id')}"
+    # Unconfirmed calls on this shot may have billed: they count against its
+    # authorization until you settle them on the Budget tab (audit 2).
+    unsettled = video_budget.unconfirmed_total(
+        budget_video, category="visual", ref_prefix=shot_ref + ":", ledger=ledger
+    )
+    if spent + unsettled + estimate > authorized:
         raise ValueError(
-            f"{count} variants (about ${estimate:.2f}) on top of ${spent:.2f} already spent would pass "
-            f"this shot's authorized ${authorized:.2f}"
+            f"{count} variants (about ${estimate:.2f}) on top of ${spent:.2f} already spent"
+            + (f" and ${unsettled:.2f} in unconfirmed calls" if unsettled else "")
+            + f" would pass this shot's authorized ${authorized:.2f}"
         )
     prompt = build_prompt(request)
+    adapter = (adapters or ADAPTERS)[str(settings["kind"])]  # a missing adapter is not a paid call
+    # The call itself is reserved against the whole-video ceiling first, so
+    # no paid call goes out once the video's budget is committed (audit 2).
+    call_ref = f"{shot_ref}:call:{now()}"
+    video_budget.reserve(
+        video=budget_video, category="visual", ref=call_ref, amount_usd=estimate,
+        actor=reviewer, note="Premium visual generation call", ledger=ledger,
+    )
     try:
-        images = (adapters or ADAPTERS)[str(settings["kind"])](prompt, count=count, settings=settings)
+        images = adapter(prompt, count=count, settings=settings)
     except Exception as exc:
         if video_budget.outcome_unknown(exc):
             # The call may have run and billed: keep the estimate committed
             # until you confirm the cost on the Budget tab (D-166).
             video_budget.mark_unconfirmed(
-                video=video_budget.video_id(request.get("concept_id"), request.get("format")),
-                category="visual", ref=f"shot:{request.get('shot_id')}:unconfirmed:{now()}", amount_usd=estimate,
+                video=budget_video, category="visual", ref=call_ref, amount_usd=estimate,
                 actor=reviewer, note=f"Visual generation call failed with an unknown outcome: {str(exc)[:200]}",
-                ledger=video_budget.ledger_in(OUTPUT),
+                ledger=ledger,
             )
+        else:
+            video_budget.release(video=budget_video, category="visual", ref=call_ref,
+                                 note="provider refused the call; nothing charged", ledger=ledger)
         raise
+    video_budget.release(video=budget_video, category="visual", ref=call_ref, note="spent", ledger=ledger)
     cost = round(float(settings["price_per_image_usd"]) * len(images), 4)
     directory = CANDIDATES_DIR / key
     directory.mkdir(parents=True, exist_ok=True)
@@ -223,9 +243,8 @@ def _generate(
         "prompt": prompt, "cost_usd": cost, "candidates": stored, "reviewer": reviewer,
     })
     video_budget.record_actual(
-        video=video_budget.video_id(request.get("concept_id"), request.get("format")),
-        category="visual", ref=f"shot:{request.get('shot_id')}", total_usd=spent + cost,
-        actor=reviewer, note="Premium visual variants generated", ledger=video_budget.ledger_in(OUTPUT),
+        video=budget_video, category="visual", ref=shot_ref, total_usd=spent + cost,
+        actor=reviewer, note="Premium visual variants generated", ledger=ledger,
     )
     return shot_view(path)
 

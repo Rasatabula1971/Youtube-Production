@@ -1141,16 +1141,25 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
     }
 
 
-_HEADLINE_NOISE = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]\s*|\s*[|#]\s*.*$|\s+(?:#\w+\s*)+$", re.IGNORECASE)
+_HEADLINE_BRACKETS = re.compile(r"[\(\[][^\)\]]{0,80}[\)\]]")
+_HEADLINE_TRAILING_TAGS = re.compile(r"(?:\s#\w+)+$")
 
 
 def theme_headline(title: str, limit: int = 90) -> str:
-    """A video title trimmed to the question it asks: no bracketed tags, no hashtags."""
-    text = _HEADLINE_NOISE.sub(" ", str(title or "")).strip(" -–—:·")
-    text = re.sub(r"\s+", " ", text)
+    """A video title trimmed to the question it asks (D-170).
+
+    Drops bracketed tags, a trailing run of hashtags and a "| Channel"
+    suffix. A "#" inside the title ("Price #1 in the world", "C# tutorial")
+    is part of it (audit 2). Input is capped first, so no pattern can be
+    slow on a hostile title.
+    """
+    text = str(title or "")[:300]
+    text = text.split("|", 1)[0]
+    text = _HEADLINE_BRACKETS.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = _HEADLINE_TRAILING_TAGS.sub("", text).strip(" -–—:·")
     if len(text) > limit:
-        cut = text[:limit].rsplit(" ", 1)[0]
-        text = cut + "…"
+        text = text[:limit].rsplit(" ", 1)[0] + "…"
     return text
 
 

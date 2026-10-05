@@ -56,6 +56,7 @@ SENTENCES: dict[str, str] = {
     "WAITING_FOR_ACQUIRED_EVIDENCE": "Waiting for web evidence to be collected.",
     "WAITING_FOR_COMPLETE_EVIDENCE": "Some research questions still have no source page.",
     "WAITING_FOR_RESEARCH_RESPONSES": "Waiting for the model's research claims.",
+    "NO_SOURCES": "No source page was found for any research question; rework or reject the concept.",
     "RESEARCH_INCOMPLETE": "Not ready for the script: a question is unanswered or no claim was accepted.",
     "READY_FOR_STORY_SCRIPT": "Research verified; the story and script can be written.",
     "RESEARCH_GATE_READY": "Research claims are ready for your review.",

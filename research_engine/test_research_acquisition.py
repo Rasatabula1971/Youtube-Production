@@ -216,3 +216,19 @@ class SearchRoundTests(unittest.TestCase):
         self.assertEqual(again["status"], "PARTIAL")
         evidence = json.loads(Path(again["evidence"]).read_text(encoding="utf-8"))
         self.assertEqual(evidence["search_rounds"]["rq002"], 1)
+
+    def test_a_concept_with_no_source_for_any_question_settles_as_no_sources(self):
+        """Audit 2: it used to stay FAILED and search the web again on every run."""
+        path = self.two_question_plan()
+
+        def nothing(query, *, limit, backends):
+            return {"backend": "duckduckgo", "result_urls": [], "attempts": []}
+
+        with patch.object(module, "search_web_with_fallback", side_effect=nothing):
+            first = module.acquire_plan(path)
+            second = module.acquire_plan(path)
+        self.assertEqual(first["status"], "FAILED")
+        self.assertEqual(second["status"], module.NO_SOURCES)
+        with patch.object(module, "search_web_with_fallback", side_effect=AssertionError("searched again")):
+            third = module.acquire_plan(path)
+        self.assertEqual(third["status"], module.NO_SOURCES)

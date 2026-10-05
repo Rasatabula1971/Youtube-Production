@@ -45,6 +45,9 @@ PRODUCTION_OUTPUTS = (
     "story_script_engine/output",
     "format_engine/output",
     "production_engine/output",
+    # The last automatic run describes productions that no longer exist; a
+    # new production must not inherit its blocker line (audit 2).
+    ".experiment_ui/last_auto_run.json",
 )
 
 TARGETS = OPPORTUNITY_CHOICE + PRODUCTION_OUTPUTS

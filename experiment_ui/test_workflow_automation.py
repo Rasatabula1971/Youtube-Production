@@ -1503,6 +1503,19 @@ class LastRunFileTests(unittest.TestCase):
 
 
 class PartialMessageTests(unittest.TestCase):
+    def test_research_acquisition_message_names_a_concept_with_no_sources(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "s.json"
+            summary.write_text(json.dumps({"results": [{"status": "NO_SOURCES", "concept_id": "c9"}]}))
+            with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", summary):
+                message = automation.research_acquisition_message()
+        self.assertIn("No source page was found for any research question of c9", message)
+        self.assertIn("Concept Gate", message)
+
     def test_research_acquisition_message_names_real_error_not_model(self):
         import json
         import tempfile

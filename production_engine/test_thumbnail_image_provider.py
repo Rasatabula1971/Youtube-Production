@@ -117,6 +117,18 @@ class ProviderTests(PipelineTestCase):
         events = [e["event"] for e in video_budget.read_jsonl(ledger)]
         self.assertEqual(events[-2:], ["RESERVE", "RELEASE"])
 
+    def test_unconfirmed_calls_count_against_the_per_video_cap(self):
+        """Audit 2: timeouts cannot keep paying past the thumbnail cap."""
+        self.config["per_video_cap_usd"] = 0.2
+
+        def timed_out(prompt, *, count, settings):
+            raise ValueError("Image provider call failed: TimeoutError")
+
+        with self.assertRaisesRegex(ValueError, "TimeoutError"):
+            images.generate(render_id=RID, max_cost_usd="0.12", reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": timed_out})
+        with self.assertRaisesRegex(ValueError, "unconfirmed calls"):
+            images.generate(render_id=RID, max_cost_usd="0.12", reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": timed_out})
+
     def test_choosing_a_candidate_sets_the_subject_image(self):
         view = self.generate()
         chosen = view["candidates"][1]["candidate_id"]

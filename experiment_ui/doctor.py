@@ -19,6 +19,8 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -30,6 +32,7 @@ CHECK_TIMEOUT_SECONDS = 20
 LOW_DISK_GB = 2.0
 # One public video, one quota unit: proves the key, the project and the quota.
 YOUTUBE_PROBE_VIDEO = "jNQXAC9IVRw"
+YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
 
 READY, WARN, MISSING = "READY", "WARN", "MISSING"
 
@@ -69,14 +72,27 @@ def check_youtube_key() -> tuple[str, str]:
         return MISSING, "YOUTUBE_API_KEY is not set (environment or .env)."
     if len(key) != 39 or not key.startswith("AIza"):
         return WARN, f"The key is {len(key)} characters; a Google API key is 39 and starts with AIza."
-    from experiment_01_discovery.youtube_discovery import api_get
-
+    # Its own single request with a time limit: the discovery helper retries
+    # and exits the process on a refused key, which would take the whole
+    # doctor down exactly when the key is the problem (audit 2).
+    query = urllib.parse.urlencode({"part": "id", "id": YOUTUBE_PROBE_VIDEO, "fields": "items/id", "key": key})
+    request = urllib.request.Request(f"{YOUTUBE_API}/videos?{query}")  # noqa: S310 - fixed https URL
     try:
-        payload = api_get("videos", key, part="id", id=YOUTUBE_PROBE_VIDEO, fields="items/id")
+        with urllib.request.urlopen(request, timeout=CHECK_TIMEOUT_SECONDS) as response:  # noqa: S310 - fixed https URL
+            payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        body = exc.read()[:300].decode("utf-8", "replace") if hasattr(exc, "read") else ""
-        reason = "quota exceeded" if "quotaExceeded" in body else "key refused" if exc.code in {400, 403} else f"HTTP {exc.code}"
-        return MISSING, f"YouTube answered {reason} (HTTP {exc.code})."
+        body = exc.read()[:2000].decode("utf-8", "replace") if hasattr(exc, "read") else ""
+        reason = (
+            "quota exceeded for today" if "quotaExceeded" in body
+            else "the key is not valid" if "keyInvalid" in body or "API key not valid" in body
+            else "the YouTube Data API is not enabled for this key's project" if "accessNotConfigured" in body
+            else "the key is restricted from this API or address" if exc.code == 403
+            else f"HTTP {exc.code}"
+        )
+        return MISSING, f"YouTube refused the key: {reason} (HTTP {exc.code})."
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        # The URL holds the key: report only the error type, never its text.
+        return WARN, f"YouTube could not be reached ({type(exc).__name__}); check the network or proxy."
     items = payload.get("items") if isinstance(payload, dict) else None
     if not items:
         return WARN, "The key works but the probe video was not returned; check the Data API is enabled."
@@ -200,7 +216,9 @@ def run(checks: list[tuple[str, str, Callable[[], tuple[str, str]]]] | None = No
             status, detail = func()
         except subprocess.TimeoutExpired:
             status, detail = MISSING, f"Timed out after {CHECK_TIMEOUT_SECONDS}s."
-        except Exception as exc:  # noqa: BLE001 - every check must report, never crash the page
+        except KeyboardInterrupt:
+            raise
+        except BaseException as exc:  # noqa: BLE001 - SystemExit too: every check must report (audit 2)
             status, detail = MISSING, f"{type(exc).__name__}: {str(exc)[:300]}"
         rows.append(
             {

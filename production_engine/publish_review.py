@@ -241,6 +241,27 @@ def clear_pending_upload(concept_id: str, fmt: str) -> None:
         path.unlink()
 
 
+def discard_pending_upload(concept_id: str, fmt: str) -> dict[str, Any]:
+    """The operator gives up an interrupted upload after checking YouTube Studio (audit 2).
+
+    Refused when the video id is already known: that video is on YouTube and
+    must be recorded, not forgotten.
+    """
+    pending = pending_upload(concept_id, fmt)
+    if pending is None:
+        raise ValueError("There is no interrupted upload for this video")
+    if pending.get("video_id"):
+        raise ValueError(
+            f"YouTube already has this video as {pending['video_id']}: choose Upload to YouTube "
+            "to record it (nothing is uploaded again), or record it as a manual upload."
+        )
+    clear_pending_upload(concept_id, fmt)
+    append_jsonl(HISTORY_FILE, {"recorded_at": now(), "gate": "publish", "key": _key(concept_id, fmt),
+                                "decision": "UPLOAD_DISCARDED", "session_started_at": pending.get("started_at"),
+                                "reviewer": reviewer()})
+    return snapshot()
+
+
 def current_approval(concept_id: str, fmt: str) -> dict[str, Any] | None:
     key = _key(concept_id, fmt)
     draft = next((d for d in build_drafts() if d["key"] == key), None)
@@ -306,6 +327,16 @@ def apply_action(
         raise ValueError("No approved final export for this video")
     if publish_record(draft["concept_id"], draft["format"]):
         raise ValueError("This video is already published; its record is final")
+    pending = pending_upload(draft["concept_id"], draft["format"])
+    if pending and not pending.get("video_id"):
+        # An upload in progress pins the approval it started with (audit 2):
+        # changing it now would resume the old session under new metadata.
+        raise ValueError(
+            "An upload of this video was started"
+            + (f" at {pending.get('started_at')}" if pending.get("started_at") else "")
+            + " and not finished. Resume it with Upload to YouTube, or discard it (after checking "
+            "YouTube Studio for a half-uploaded private video) before changing this decision."
+        )
     clean_note = str(note or "").strip()
     record: dict[str, Any] = {
         "artifact": "publish_decision",
@@ -352,6 +383,11 @@ def record_upload(
     video_id = str(youtube_video_id or "").strip()
     if not VIDEO_ID.match(video_id):
         raise ValueError("A YouTube video id is 11 letters, digits, - or _")
+    pending = pending_upload(str(concept_id), str(format))
+    if pending and pending.get("video_id") and str(pending["video_id"]) != video_id:
+        raise ValueError(
+            f"YouTube already has this video as {pending['video_id']}; record that id, not {video_id}"
+        )
     record = {
         "artifact": "publish_record",
         "key": approval["key"],
@@ -369,6 +405,8 @@ def record_upload(
         **(details or {}),
     }
     atomic_write_json(_published_path(approval["key"]), record)
+    # The publish record now holds the id: the pending upload has done its job.
+    clear_pending_upload(str(concept_id), str(format))
     append_jsonl(HISTORY_FILE, {"recorded_at": record["recorded_at"], "gate": "publish", "key": approval["key"],
                                 "decision": "UPLOADED", "method": method, "youtube_video_id": video_id})
     return snapshot()

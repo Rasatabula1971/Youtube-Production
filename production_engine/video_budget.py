@@ -132,7 +132,9 @@ def _items(video: str, ledger: Path | None = None) -> dict[tuple[str, str], dict
             # A corrupt line must never loosen the budget: it blocks instead.
             amount = math.inf
         if kind == "RESERVE":
-            item["reserved"] = amount
+            # A new authorization never hides money that may already be gone
+            # on the same item (audit 2).
+            item["reserved"] = max(amount, float(item["reserved"])) if item.get("unconfirmed") else amount
         elif kind == "UNCONFIRMED":
             # A paid call whose outcome is unknown (timeout, provider error
             # after dispatch): the money may be gone, so it stays committed
@@ -268,12 +270,41 @@ def outcome_unknown(exc: BaseException) -> bool:
     A provider that refused the request before doing any work answers with
     HTTP 4xx (bad key, bad request, quota): nothing was charged. Everything
     else (timeout, connection lost, 5xx, a bad answer after the call) may
-    have run and billed, so the operator must say what it cost.
+    have run and billed, so the operator must say what it cost. The status
+    code is read from the HTTP error itself where there is one, else from
+    the adapters' own "(HTTP nnn)" wording, never from any number that
+    happens to appear in a message (audit 2).
     """
-    match = re.search(r"HTTP (\d{3})", str(exc))
-    if match and match.group(1).startswith("4"):
-        return False
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = getattr(current, "code", None)
+        if isinstance(code, int) and not isinstance(code, bool) and 100 <= code <= 599:
+            return not 400 <= code <= 499
+        current = current.__cause__ or current.__context__
+    match = re.search(r"\(HTTP (\d{3})\)|HTTP Error (\d{3}):", str(exc))
+    if match:
+        return not (match.group(1) or match.group(2)).startswith("4")
     return True
+
+
+def unconfirmed_total(
+    video: str, *, category: str, ref_prefix: str = "", ledger: Path | None = None
+) -> float:
+    """What unconfirmed calls of one kind may already have cost (audit 2).
+
+    Per-call caps (a shot's authorization, a thumbnail's per-video cap) count
+    this with confirmed spend, so repeated timeouts cannot keep paying.
+    """
+    return round(
+        sum(
+            float(item["reserved"])
+            for (item_category, ref), item in _items(video, ledger).items()
+            if item.get("unconfirmed") and item_category == category and ref.startswith(ref_prefix)
+        ),
+        4,
+    )
 
 
 def mark_unconfirmed(
@@ -299,8 +330,16 @@ def reconcile(
     """
     with _LOCK:
         amount = money(total_usd, label="The confirmed cost")
-        if (category, ref) not in _items(video, ledger):
+        item = _items(video, ledger).get((category, ref))
+        if item is None:
             raise ValueError("Unknown budget item: nothing was recorded for it")
+        if float(item["reserved"]) > 0 and not item.get("unconfirmed"):
+            # Settling would release an authorization a paid step may still
+            # be using, and let another stage spend the same money (audit 2).
+            raise ValueError(
+                "This item is still authorized for a paid step; it can be corrected once that step "
+                "has finished and recorded what it cost"
+            )
         _record("ACTUAL", video=video, category=category, ref=ref, amount=amount, actor=actor, note=note or "Confirmed by you", ledger=ledger)
         _record("RELEASE", video=video, category=category, ref=ref, amount=0, actor=actor, note="settled", ledger=ledger)
         return summary(video, ledger=ledger)

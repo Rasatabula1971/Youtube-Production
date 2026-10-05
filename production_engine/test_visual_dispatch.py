@@ -103,7 +103,35 @@ class VisualDispatchTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "HTTP 400"):
             dispatch.generate(request_file=self.request_path, reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": refused})
-        self.assertEqual(len(video_budget.read_jsonl(self.root / "video_budget_ledger.jsonl")), len(ledger))
+        after = video_budget.read_jsonl(self.root / "video_budget_ledger.jsonl")
+        self.assertEqual([e["event"] for e in after[len(ledger):]], ["RESERVE", "RELEASE"])
+        self.assertEqual(video_budget.summary(ledger[-1]["video_id"], ledger=self.root / "video_budget_ledger.jsonl")["committed_usd"], 1.0)
+
+    def test_unconfirmed_calls_count_against_the_shots_authorization(self):
+        """Audit 2: repeated timeouts cannot keep paying past what you authorized."""
+        def lost(prompt, *, count, settings):
+            raise ValueError("Image provider call failed: TimeoutError")
+
+        for _ in range(2):
+            with self.assertRaisesRegex(ValueError, "TimeoutError"):
+                dispatch.generate(request_file=self.request_path, reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": lost})
+        with self.assertRaisesRegex(ValueError, "unconfirmed calls"):
+            dispatch.generate(request_file=self.request_path, reviewer="me", adapters={"OPENAI_COMPATIBLE_IMAGES": lost})
+
+    def test_no_paid_call_goes_out_once_the_video_budget_is_committed(self):
+        ledger = self.root / "video_budget_ledger.jsonl"
+        request = json.loads(Path(self.request_path).read_text())
+        video = video_budget.video_id(request.get("concept_id"), request.get("format"))
+        video_budget.reserve(video=video, category="narration", ref="narration", amount_usd=9.5, ledger=ledger)
+        with self.assertRaisesRegex(ValueError, "ceiling"):
+            self.generate()
+        self.assertEqual(self.calls, [])
+
+    def test_a_missing_adapter_is_not_recorded_as_spend(self):
+        with self.assertRaises(KeyError):
+            dispatch.generate(request_file=self.request_path, reviewer="me", adapters={"OTHER": self.fake})
+        path = self.root / "video_budget_ledger.jsonl"
+        self.assertEqual(video_budget.read_jsonl(path) if path.exists() else [], [])
 
     def test_generation_stops_at_the_shots_authorized_maximum(self):
         self.generate()

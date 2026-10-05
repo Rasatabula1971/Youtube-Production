@@ -215,14 +215,86 @@ class UploadTests(PublishTests):
         self.assertFalse(snap["items"][0]["published"]["resumed"])
         self.assertIsNone(gate.pending_upload("c1", "long_form"))
 
-    def test_a_pending_record_for_other_bytes_is_discarded(self):
+    def test_a_session_opened_for_other_bytes_is_never_resumed_or_replaced_silently(self):
+        """Audit 2: it may hold a finished private video; a person decides after checking Studio."""
         self.approve()
         gate.save_pending_upload({"concept_id": "c1", "format": "long_form", "session": "https://www.googleapis.com/x",
                                   "size": 1, "video_sha256": "other"})
+        with self.assertRaisesRegex(ValueError, "Check YouTube Studio"):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        self.assertEqual((self.starts(), self.puts()), ([], []))
+        gate.discard_pending_upload("c1", "long_form")
         snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
         self.assertEqual(len(self.starts()), 1)
-        self.assertEqual(len(self.puts()), 1)
         self.assertEqual(snap["items"][0]["published"]["youtube_video_id"], "VIDEOid_001")
+        history = [json.loads(line) for line in (self.root / "history.jsonl").read_text().splitlines()]
+        self.assertIn("UPLOAD_DISCARDED", [e["decision"] for e in history])
+
+    def test_a_failure_after_youtube_has_the_video_is_retried_by_recording_never_by_uploading(self):
+        """Audit 2 F1: the id is kept until the publish record holds it."""
+        self.approve()
+        real_record = gate.record_upload
+        with patch.object(gate, "record_upload", side_effect=ValueError("disk full")):
+            with self.assertRaisesRegex(ValueError, "disk full"):
+                uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        pending = gate.pending_upload("c1", "long_form")
+        self.assertEqual(pending["video_id"], "VIDEOid_001")
+        with self.assertRaisesRegex(ValueError, "record it"):
+            gate.discard_pending_upload("c1", "long_form")
+        self.requests = []
+        with patch.object(gate, "record_upload", side_effect=real_record):
+            snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        self.assertEqual((self.starts(), self.puts()), ([], []))  # nothing uploaded again
+        published = snap["items"][0]["published"]
+        self.assertEqual((published["youtube_video_id"], published["resumed"]), ("VIDEOid_001", True))
+        self.assertIsNone(gate.pending_upload("c1", "long_form"))
+
+    def test_a_thumbnail_step_crash_still_records_the_video(self):
+        self.approve()
+        base = self.fake_http()
+
+        def http(request, timeout):
+            if "thumbnails/set" in request.full_url:
+                raise OSError("connection reset")
+            return base(request, timeout)
+
+        snap = uploader.upload(concept_id="c1", format="long_form", http=http)
+        published = snap["items"][0]["published"]
+        self.assertEqual(published["youtube_video_id"], "VIDEOid_001")
+        self.assertFalse(published["thumbnail_set"])
+        self.assertIn("connection reset", published["thumbnail_error"])
+
+    def test_an_upload_in_progress_pins_its_approval(self):
+        """Audit 2 F2: no decision change while a session may be resumed."""
+        self.approve()
+        with self.assertRaises(ValueError):
+            uploader.upload(concept_id="c1", format="long_form", http=self.fake_http(interrupt_put=True))
+        with self.assertRaisesRegex(ValueError, "not finished"):
+            self.approve(privacy_status="public")
+        with self.assertRaisesRegex(ValueError, "not finished"):
+            gate.apply_action(concept_id="c1", format="long_form", decision="HOLD", note="wait")
+
+    def test_a_changed_approval_after_youtube_has_the_video_records_it_and_flags_the_metadata(self):
+        self.approve()
+        with patch.object(gate, "record_upload", side_effect=ValueError("approval moved")):
+            with self.assertRaises(ValueError):
+                uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        self.approve(tags=["changed"])  # allowed: the video id is known
+        self.requests = []
+        snap = uploader.upload(concept_id="c1", format="long_form", http=self.fake_http())
+        published = snap["items"][0]["published"]
+        self.assertEqual(published["youtube_video_id"], "VIDEOid_001")
+        self.assertFalse(published["metadata_matches_upload"])
+        self.assertEqual(self.starts(), [])
+
+    def test_connection_level_errors_reach_the_caller_as_value_errors(self):
+        import http.client
+
+        for exc in (http.client.RemoteDisconnected("gone"), http.client.IncompleteRead(b"x"), ConnectionResetError()):
+            with self.subTest(exc=type(exc).__name__):
+                with patch.object(uploader.urllib.request, "urlopen", side_effect=exc):
+                    with self.assertRaisesRegex(ValueError, "YouTube request failed"):
+                        uploader._http(uploader.urllib.request.Request("https://www.googleapis.com/x"), 5)
 
     def test_upload_is_off_until_enabled_and_authorized(self):
         self.config["youtube_upload"]["enabled"] = False

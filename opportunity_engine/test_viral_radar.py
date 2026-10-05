@@ -340,6 +340,15 @@ class OverviewTests(RadarTestCase):
         self.assertLessEqual(len(long), 92)
         self.assertTrue(long.endswith("…"))
         self.assertEqual(vr.theme_headline(""), "")
+        # Audit 2: a "#" inside the title belongs to it; hostile input stays fast.
+        self.assertEqual(vr.theme_headline("Price #1 in the world"), "Price #1 in the world")
+        self.assertEqual(vr.theme_headline("C# tutorial for beginners #code #learn"), "C# tutorial for beginners")
+        import time as _time
+        started = _time.monotonic()
+        vr.theme_headline(" " * 50_000 + "x")
+        vr.theme_headline("(" * 50_000)
+        vr.theme_headline("#a " * 20_000)
+        self.assertLess(_time.monotonic() - started, 0.5)
 
     def test_overview_without_files_is_empty(self):
         overview = vr.radar_overview(now=NOW)

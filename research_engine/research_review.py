@@ -341,6 +341,7 @@ def _auto_waivers(
     waivers: dict[str, Any],
     holds: dict[str, Any],
     config: dict[str, Any],
+    previous: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Waive the original questions the research could not answer (D-163).
 
@@ -384,13 +385,25 @@ def _auto_waivers(
                 )
             else:
                 continue
-            concept_waivers[question_id] = {
+            record = {
                 "question": text,
                 "note": note,
                 "reviewer": POLICY_REVIEWER,
                 "decided_by": POLICY_DECIDER,
                 "waived_at": now,
             }
+            prior = (((previous or {}).get("waived_questions") or {}).get(concept_id) or {}).get(question_id)
+            if (
+                isinstance(prior, dict)
+                and prior.get("decided_by") == POLICY_DECIDER
+                and prior.get("question") == text
+                and prior.get("note") == note
+            ):
+                # The same waiver as last time, byte for byte: a new timestamp
+                # would change the verified package and mark every script
+                # built on it stale (audit 2).
+                record = dict(prior)
+            concept_waivers[question_id] = record
             waivers[concept_id] = concept_waivers
             events.append(
                 {
@@ -793,7 +806,7 @@ def prepare_state() -> dict[str, Any]:
         record_history(event)
     waivers = _preserved_waivers(requests, previous)
     holds = _preserved_holds(requests, previous)
-    for event in _auto_waivers(requests, waivers, holds, load_config()):
+    for event in _auto_waivers(requests, waivers, holds, load_config(), previous):
         if not _already_recorded(previous, event):
             record_history(event)
     state = {
