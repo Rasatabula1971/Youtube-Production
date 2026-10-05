@@ -2040,7 +2040,9 @@ def analyze_submitted_video(
     if active and active.get("video_id") == video_id:
         return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this video")
-    record = opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    record = opportunity_active_source.set_active(
+        video_id, allow_excluded=allow_excluded, with_context=True
+    )
     opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
 
@@ -2071,6 +2073,7 @@ def analyze_viral_candidate(
         video_id,
         allow_excluded=allow_excluded,
         source_type=opportunity_models.SOURCE_VIRAL_RADAR,
+        with_context=True,
     )
     opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()

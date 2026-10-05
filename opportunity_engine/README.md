@@ -195,7 +195,13 @@ Science Inside, a future-channel shelf or an exclusion, and saved under
 `output/opportunities/human_video/`.
 
 *Analyze why it worked* freezes that video as the approved study set and the
-automatic workflow continues into Experiment 02. If Experiment 02 work already
+automatic workflow continues into Experiment 02. Because synthesis only hands
+over mechanisms seen on at least two channels, the same click also searches
+the video's title (the Explore-my-topic search, nothing saved to the inbox)
+and adds up to three of the strongest relevant videos from *other* channels as
+replication context (D-174); the submitted video stays first. The inbox says
+how many came along, or that none were found, in which case synthesis will
+have nothing replicated and *Explore my topic* is the way to add context. If Experiment 02 work already
 exists for another study set, the UI asks first: the switch restarts
 Experiment 02 and everything after it. *Stop analyzing* hands the study set
 back to the historical gate; approving a historical topic does the same.

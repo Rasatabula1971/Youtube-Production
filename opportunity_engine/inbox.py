@@ -205,6 +205,23 @@ def _is_active(packet: dict[str, Any], active: dict[str, Any] | None) -> bool:
     return False
 
 
+def _active_reason(active: dict[str, Any] | None) -> str:
+    """The active-set sentence, with the replication context when it was searched (D-174)."""
+    reason = "The active study set: Experiment 02 is analysing it."
+    search = (active or {}).get("context_search") or {}
+    status = search.get("status")
+    count = int(search.get("companion_count") or 0)
+    if status == active_source.CONTEXT_FOUND and count:
+        plural = "s" if count != 1 else ""
+        return f"{reason} {count} video{plural} from other channels came along as replication context."
+    if status in (active_source.CONTEXT_NONE, active_source.CONTEXT_FAILED):
+        return (
+            f"{reason} No video from another channel was found for replication context, so "
+            "synthesis will have nothing replicated; add context with Explore my topic."
+        )
+    return reason
+
+
 def _human_item(
     packet: dict[str, Any],
     state_items: dict[str, Any],
@@ -230,7 +247,7 @@ def _human_item(
         item.update(
             status=APPROVED,
             is_active=True,
-            status_reason="The active study set: Experiment 02 is analysing it.",
+            status_reason=_active_reason(active),
             actions=["STOP"],
         )
         return item
