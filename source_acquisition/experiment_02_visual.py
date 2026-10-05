@@ -61,12 +61,19 @@ def info_duration(path: Path | None) -> float | None:
         return None
 
 
+# Frames only: ffmpeg runs with -an, so a video-only stream is enough. YouTube
+# often serves no muxed (video+audio) file any more, so a plain "best" fails with
+# "Requested format is not available"; prefer a video-only low-res stream and
+# fall back to anything that plays.
+VIDEO_FORMAT = "bestvideo[height<=360]/best[height<=360]/bestvideo/best"
+
+
 def stream_url_command(yt_dlp: str, url: str) -> list[str]:
     return [
         yt_dlp,
         "--no-playlist",
         "--format",
-        "best[height<=360]/best",
+        VIDEO_FORMAT,
         "--get-url",
         url,
     ]
@@ -103,7 +110,7 @@ def temp_video_command(
         yt_dlp,
         "--no-playlist",
         "--format",
-        "best[height<=360]/best",
+        VIDEO_FORMAT,
         "--output",
         str(destination),
         url,

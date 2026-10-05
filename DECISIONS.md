@@ -5321,3 +5321,21 @@ the preview goes to the performance spec; at the rough cut to pacing,
 visuals or audio. If a paid narration provider is ever configured again,
 Final Audio should be made HUMAN as well, since the preview stays the free
 read.
+
+## D-173 — Visual structure takes a video-only stream
+
+**Context.** The first live run after D-172 failed visual structure
+acquisition with yt-dlp's "Requested format is not available" on both the
+stream-URL and the temporary-download paths. The selector was
+`best[height<=360]/best`, which matches only files that carry video and
+audio together; YouTube now often serves none of those, only separate
+video and audio streams.
+
+**Decision.** Both yt-dlp calls use
+`bestvideo[height<=360]/best[height<=360]/bestvideo/best`. The frames and
+scene detection run ffmpeg with `-an`, so audio was never used; a video-only
+stream is smaller and always offered. The evidence collector (captions,
+thumbnail, audio for transcription) is unchanged.
+
+**Consequences.** Visual structure acquires again on current YouTube. If a
+video offers no video-only stream the last fallback is the old `best`.
