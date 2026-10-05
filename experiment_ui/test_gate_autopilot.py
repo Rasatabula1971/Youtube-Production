@@ -199,10 +199,20 @@ class GateAutopilotTests(unittest.TestCase):
         self.assertEqual(len(outcome["held"]), 2)
         self.assertIn("not decided automatically", outcome["held"][0])
 
-    def test_shipped_policy_is_auto_for_every_runner(self):
+    def test_shipped_policy_keeps_the_listening_gates_human(self):
+        """Every runner has a policy; the two listening gates stay with a person (D-172)."""
         policy = autopilot.load_policy()
         self.assertEqual(set(policy["gates"]), set(autopilot.RUNNERS))
-        self.assertTrue(all(mode == "AUTO_IF_CLEAN" for mode in policy["gates"].values()))
+        human = {gate for gate, mode in policy["gates"].items() if mode == "HUMAN"}
+        self.assertEqual(human, {"narration_preview", "rough_cut"})
+        self.assertTrue(all(mode in {"AUTO_IF_CLEAN", "HUMAN"} for mode in policy["gates"].values()))
+
+    def test_a_human_gate_is_never_decided_by_the_policy(self):
+        control = Recorder(narration_preview_gate_snapshot={"items": [
+            {"concept_id": "c1", "format": "short", "decision": "PENDING", "audio_ready": True}]})
+        outcome = autopilot.decide("HUMAN_NARRATION_PREVIEW_GATE", control, autopilot.load_policy())
+        self.assertEqual(outcome["decided"], 0)
+        self.assertEqual(control.calls, [])
 
     def test_missing_policy_file_means_every_gate_is_human(self):
         policy = autopilot.load_policy(Path("/nonexistent/gate_policy.json"))

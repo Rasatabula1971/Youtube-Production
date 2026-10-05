@@ -134,14 +134,16 @@ amber when the log has been quiet for two minutes (D-155).
   you. The run log and the PARTIAL/stop message name each held item.
 
 Shipped as `AUTO_IF_CLEAN`:
-- Vision, Analysis, Title Direction, Format, Voice Performance and Narration
-  Preview (D-156);
-- Visual Plan, Visual Candidates, Rough Cut, Edit Preview and Final Audio
-  (D-158);
+- Vision, Analysis, Title Direction, Format and Voice Performance (D-156);
+- Visual Plan, Visual Candidates, Edit Preview and Final Audio (D-158);
 - Narration Spend and Visual Spend (D-158). These approve only on the
   confirmed per-video budget ($5 target, $10 ceiling), only while the video
   stays at or under the target, and only with a known price from a verified
   provider.
+
+Shipped as `HUMAN` so you hear the narration (D-172): Narration Preview (the
+free read, right after the script) and Rough Cut (the narration over the
+storyboard). Final Export, the third listening point, is always yours.
 
 Concept, Research (which already clears claims with two independent sources,
 D-153), Script, Final Packaging, Visual Rights (editorial footage), Final
