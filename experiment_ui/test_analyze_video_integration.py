@@ -58,6 +58,8 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
         self.exp15.mkdir()
         for item in (
             patch.object(active_source, "ACTIVE_FILE", self.root / "active.json"),
+            # D-174 searches the video's title for context; never the web in tests.
+            patch.object(active_source, "DEFAULT_SEARCHER", lambda q, l, t: []),
             patch.object(hvi, "PACKETS_DIR", self.root / "human_video"),
             patch.object(hts, "PACKETS_DIR", self.root / "human_topic"),
             patch.object(inbox, "STATE_FILE", self.root / "inbox_state.json"),
@@ -146,6 +148,52 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["active"]["video_id"], VID)
         # Re-selecting the active video is a no-op, not another confirmation.
         server.analyze_submitted_video(video_id=VID, confirm_replace=False, allow_excluded=False)
+
+    def test_analyze_brings_replication_context_from_other_channels(self):
+        """D-174: the submitted video arrives with other channels' videos on its topic."""
+        save_packet()
+
+        def found(query, limit, timeout):
+            return [
+                {"video_id": VID, "title": "How hummingbirds hover", "channel_id": "UC9", "channel_title": "Nature Lab", "duration_seconds": 400, "views": 9_000_000},
+                {"video_id": "samechan001", "title": "Hummingbirds hover again", "channel_id": "UC9", "channel_title": "Nature Lab", "duration_seconds": 400, "views": 8_000_000},
+                {"video_id": "otherchan01", "title": "How hummingbirds hover in place", "channel_id": "UC2", "channel_title": "Bird Lab", "duration_seconds": 300, "views": 700_000},
+                {"video_id": "otherchan02", "title": "Hummingbirds hover: the physics", "channel_id": "UC3", "channel_title": "Physics Now", "duration_seconds": 60, "views": 500_000},
+                {"video_id": "otherchan03", "title": "Why hummingbirds can hover", "channel_id": "UC3", "channel_title": "Physics Now", "duration_seconds": 90, "views": 400_000},
+                {"video_id": "otherchan04", "title": "Hover like a hummingbird", "channel_id": "UC4", "channel_title": "Wings", "duration_seconds": 120, "views": 300_000},
+                {"video_id": "otherchan05", "title": "Hummingbird hover slow motion", "channel_id": "UC5", "channel_title": "Slow", "duration_seconds": 120, "views": 200_000},
+                {"video_id": "unrelated01", "title": "Best pizza in town", "channel_id": "UC6", "channel_title": "Food", "duration_seconds": 120, "views": 9_900_000},
+            ]
+
+        with patch.object(active_source, "DEFAULT_SEARCHER", found):
+            payload = server.analyze_submitted_video(video_id=VID, confirm_replace=False, allow_excluded=False)
+        self.assertEqual(payload["active"]["video_count"], 4)
+        self.assertEqual(payload["active"]["context_search"]["status"], "FOUND")
+        rows = active_source.load_active()["study_set"]
+        self.assertEqual([r["video_id"] for r in rows], [VID, "otherchan01", "otherchan02", "otherchan04"])
+        self.assertEqual([r["study_role"] for r in rows], ["SEED", "REPLICATION_CONTEXT", "REPLICATION_CONTEXT", "REPLICATION_CONTEXT"])
+        self.assertEqual(len({r["channel_id"] for r in rows}), 4)
+        self.assertEqual(rows[1]["handoff_id"], f"human_video:{VID}:context:otherchan01")
+        self.assertEqual(rows[1]["human_opportunity_gate"]["opportunity_id"], rows[0]["human_opportunity_gate"]["opportunity_id"])
+        self.assertEqual(rows[1]["opportunity_context"]["seed_video_id"], VID)
+        self.assertEqual([r["study_set_sequence"] for r in rows], [1, 2, 3, 4])
+        # Nothing was saved to the topic inbox: the search was context, not an idea.
+        self.assertEqual([i["video_id"] for i in payload["items"]], [VID])
+        self.assertIn("3 videos from other channels", payload["items"][0]["status_reason"])
+        # The gate materialises all four as the approved study set.
+        from experiment_01_discovery import opportunity_gate as gate
+
+        with patch.object(gate, "APPROVED_STUDY_SET_FILE", self.root / "approved_study_set.json"):
+            self.assertEqual(gate._human_video_override()["video_id"], VID)
+            approved = json.loads((self.root / "approved_study_set.json").read_text(encoding="utf-8"))
+        self.assertEqual([r["video_id"] for r in approved], [VID, "otherchan01", "otherchan02", "otherchan04"])
+
+    def test_analyze_without_context_still_works_and_says_so(self):
+        save_packet()
+        payload = server.analyze_submitted_video(video_id=VID, confirm_replace=False, allow_excluded=False)
+        self.assertEqual(payload["active"]["video_count"], 1)
+        self.assertEqual(payload["active"]["context_search"]["status"], "NONE")
+        self.assertIn("No video from another channel", payload["items"][0]["status_reason"])
 
     def test_no_existing_work_needs_no_confirmation(self):
         save_packet()

@@ -5339,3 +5339,31 @@ thumbnail, audio for transcription) is unchanged.
 
 **Consequences.** Visual structure acquires again on current YouTube. If a
 video offers no video-only stream the last fallback is the old `best`.
+
+## D-174 — A single analysed video brings replication context from other channels
+
+**Context.** Synthesis hands the Transformation Engine replicated mechanisms
+only: seen in at least two videos on at least two channels
+(`experiment_02_config.json`). *Analyze why it worked* on one pasted video or
+one radar breakout (D-109) therefore always ended in `NO_REPLICATED_PATTERNS`
+with no concept to make, which the first live run after D-172 hit.
+
+**Decision.** When the UI makes a single video the study set, `set_active`
+also searches the video's title with the Explore-my-topic search (hashtags and
+links stripped, within the seed limit; nothing is saved to the topic inbox)
+and adds the strongest relevant videos from other channels as study rows:
+never the seed video or its channel, one per channel, at most
+`max_study_videos - 1`, the seed first. Context rows carry
+`study_role: REPLICATION_CONTEXT`, a handoff id under the seed
+(`human_video:<seed>:context:<id>`) and the seed's opportunity id, so the gate,
+the inbox and the stale checks treat them as part of the one decision. The
+active record stores the search outcome (`FOUND`, `NONE`, `SEARCH_FAILED`,
+`SKIPPED`) and the inbox says how many videos came along or that none did.
+Library callers get no search unless they ask (`with_context`), and tests
+point the default searcher at a fake.
+
+**Consequences.** A pasted video reaches the Concept Gate on its own. A
+failed or empty search leaves the single-video behaviour exactly as before
+and says so; replication can then be added with *Explore my topic*. Context
+videos are analysed like any study video, so a single video now costs up to
+four analysis calls on the free routes.

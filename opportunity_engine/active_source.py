@@ -14,6 +14,7 @@ itself clears the decision.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,6 +40,15 @@ SCHEMA_VERSION = 1
 
 
 HUMAN_HANDOFF_PREFIXES = ("human_video:", "human_topic:", "viral_radar:", "viral_cluster:")
+
+# A single video can never show replication (two videos on two channels), so
+# "Analyze why it worked" also searches the video's title and adds the
+# strongest videos from other channels as replication context (D-174).
+ROLE_SEED = "SEED"
+ROLE_CONTEXT = "REPLICATION_CONTEXT"
+CONTEXT_FOUND, CONTEXT_NONE, CONTEXT_FAILED, CONTEXT_SKIPPED = "FOUND", "NONE", "SEARCH_FAILED", "SKIPPED"
+# Tests point this at a fake so no search leaves the machine.
+DEFAULT_SEARCHER: human_topic_search.Searcher | None = None
 
 
 def opportunity_context(packet: dict[str, Any]) -> dict[str, Any]:
@@ -132,6 +142,102 @@ def study_row(
     }
 
 
+def context_seed_text(title: Any, settings: dict[str, Any]) -> str:
+    """The title as a topic seed: no hashtags, no link-like text, within the seed limit."""
+    text = re.sub(r"#\S+", " ", str(title or ""))
+    text = re.sub(r"https?://\S+|www\.\S+|youtu\.?be\S*", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip(" -|:")
+    limit = int(settings["max_seed_chars"])
+    if len(text) > limit:
+        text = text[:limit].rsplit(" ", 1)[0].strip(" -|:") or text[:limit]
+    return text
+
+
+def companion_rows(
+    packet: dict[str, Any],
+    activated_at: str,
+    *,
+    searcher: human_topic_search.Searcher | None = None,
+    measurer: human_topic_search.Measurer | None = None,
+    config: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Study rows from other channels found by searching the seed video's title.
+
+    Never the seed video or its channel, one video per channel, at most
+    ``max_study_videos - 1`` so the seed stays first. A failed search leaves
+    the seed alone and says so; nothing is saved to the topic inbox.
+    """
+    config = config or channel_scope.load_config()
+    settings = dict(human_topic_search.topic_config(config))
+    seed_video = packet["candidate_videos"][0]
+    seed_id = str(seed_video["video_id"])
+    seed_channel = str(seed_video.get("channel_id") or "")
+    seed_channel_title = str(seed_video.get("channel_title") or "")
+    text = context_seed_text(seed_video.get("title"), settings)
+    report: dict[str, Any] = {"status": CONTEXT_NONE, "seed_text": text, "companion_count": 0}
+    limit = int(settings["max_study_videos"]) - 1
+    if limit < 1 or not text:
+        report.update(status=CONTEXT_SKIPPED, reason="No title to search." if not text else "Study set holds one video.")
+        return [], report
+    try:
+        topic = human_topic_search.explore(
+            text,
+            searcher=searcher or DEFAULT_SEARCHER,
+            measurer=measurer,
+            config=config,
+            now=now,
+            save=False,
+        )
+    except human_topic_search.IntakeError as exc:
+        report.update(status=CONTEXT_FAILED, reason=str(exc))
+        return [], report
+    others = [
+        video
+        for video in topic.get("candidate_videos") or []
+        if str(video.get("video_id")) != seed_id
+        and not (seed_channel and str(video.get("channel_id") or "") == seed_channel)
+        and not (
+            not seed_channel
+            and seed_channel_title
+            and str(video.get("channel_title") or "") == seed_channel_title
+        )
+    ]
+    settings["max_study_videos"] = limit
+    settings["max_study_videos_per_channel"] = 1
+    chosen = select_topic_videos({"candidate_videos": others}, settings)
+    prefix = "viral_radar" if packet["source_type"] == models.SOURCE_VIRAL_RADAR else "human_video"
+    rows: list[dict[str, Any]] = []
+    for index, video in enumerate(chosen, start=2):
+        row = study_row(
+            topic,
+            activated_at,
+            video=video,
+            sequence=index,
+            handoff_override=f"{prefix}:{seed_id}:context:{video['video_id']}",
+            context_packet=packet,
+        )
+        row["experiment_id"] = packet["source_type"]
+        row["topic"] = packet.get("topic") or row["topic"]
+        row["study_role"] = ROLE_CONTEXT
+        row["gate_reasons"] = [
+            f"found by searching the title of {seed_id}; another channel, kept for replication context"
+        ]
+        row["selection_basis"] = ["replication context for the submitted video (D-174)"]
+        row["human_opportunity_gate"]["opportunity_id"] = packet["opportunity_id"]
+        row["opportunity_context"]["study_role"] = ROLE_CONTEXT
+        row["opportunity_context"]["seed_video_id"] = seed_id
+        rows.append(row)
+    report.update(
+        status=CONTEXT_FOUND if rows else CONTEXT_NONE,
+        searched=len(topic.get("candidate_videos") or []),
+        companion_count=len(rows),
+    )
+    if not rows:
+        report["reason"] = "The search found no relevant video on another channel."
+    return rows, report
+
+
 def _check_route(packet: dict[str, Any], allow_excluded: bool) -> str | None:
     route = (packet.get("channel") or {}).get("route")
     if route == models.ROUTE_EXCLUDED and not allow_excluded:
@@ -143,9 +249,20 @@ def _check_route(packet: dict[str, Any], allow_excluded: bool) -> str | None:
 
 
 def set_active(
-    video_id: str, *, allow_excluded: bool = False, source_type: str = models.SOURCE_HUMAN_VIDEO
+    video_id: str,
+    *,
+    allow_excluded: bool = False,
+    source_type: str = models.SOURCE_HUMAN_VIDEO,
+    with_context: bool = False,
+    searcher: human_topic_search.Searcher | None = None,
+    measurer: human_topic_search.Measurer | None = None,
+    config: dict[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
-    """A single video (submitted by the human, or a radar breakout) as the study set."""
+    """A single video (submitted by the human, or a radar breakout) as the study set.
+
+    ``with_context`` adds replication-context videos from other channels (D-174).
+    """
     if source_type == models.SOURCE_VIRAL_RADAR:
         packet = viral_radar.load_packet(video_id)
         missing = "Run the viral radar first; no saved packet was found for this video."
@@ -156,6 +273,16 @@ def set_active(
         raise ValueError(missing)
     route = _check_route(packet, allow_excluded)
     activated_at = datetime.now(timezone.utc).isoformat()
+    seed = study_row(packet, activated_at)
+    seed["study_role"] = ROLE_SEED
+    seed["opportunity_context"]["study_role"] = ROLE_SEED
+    rows = [seed]
+    report: dict[str, Any] = {"status": CONTEXT_SKIPPED, "companion_count": 0, "reason": "Not requested."}
+    if with_context:
+        companions, report = companion_rows(
+            packet, activated_at, searcher=searcher, measurer=measurer, config=config, now=now
+        )
+        rows.extend(companions)
     record = {
         "schema_version": SCHEMA_VERSION,
         "source_type": source_type,
@@ -164,7 +291,8 @@ def set_active(
         "title": packet.get("title"),
         "channel_route": route,
         "activated_at": activated_at,
-        "study_set": [study_row(packet, activated_at)],
+        "context_search": report,
+        "study_set": rows,
     }
     atomic_write_json(ACTIVE_FILE, record)
     return record
@@ -282,7 +410,10 @@ def load_active() -> dict[str, Any] | None:
         return record
     if source in (models.SOURCE_HUMAN_VIDEO, models.SOURCE_VIRAL_RADAR):
         video_id = str(record.get("video_id") or "")
-        if len(rows) != 1 or rows[0].get("video_id") != video_id:
+        # The seed comes first; any further row is replication context (D-174).
+        if rows[0].get("video_id") != video_id or any(
+            row.get("study_role") != ROLE_CONTEXT for row in rows[1:]
+        ):
             return None
         loader = (
             viral_radar.load_packet
@@ -313,5 +444,6 @@ def summary(record: dict[str, Any] | None) -> dict[str, Any] | None:
         "channel_title": row.get("channel_title"),
         "youtube_url": row.get("youtube_url"),
         "video_count": len(record["study_set"]),
+        "context_search": record.get("context_search"),
         "activated_at": record.get("activated_at"),
     }
