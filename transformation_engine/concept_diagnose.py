@@ -62,7 +62,7 @@ def post(body: dict[str, Any], key: str, timeout: float) -> tuple[int, dict[str,
                  "Accept": "application/json", "User-Agent": "youtube-production-concept-diagnose/1.0"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https Groq endpoint
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https Groq endpoint  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             return response.status, json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", "replace")

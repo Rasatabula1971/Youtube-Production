@@ -33,6 +33,7 @@ import math
 import os
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -101,6 +102,8 @@ def http_tts_json(
             "format": settings.get("audio_format") or "wav",
         }
     ).encode("utf-8")
+    if urllib.parse.urlparse(str(endpoint)).scheme != "https":
+        raise ValueError("The narration provider endpoint must be an https:// URL")
     request = urllib.request.Request(  # noqa: S310 - endpoint comes from the verified contract
         endpoint,
         data=payload,
@@ -112,7 +115,7 @@ def http_tts_json(
     )
     timeout = float(settings.get("timeout_seconds") or 120)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - https checked above  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             content_type = str(response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             body = response.read()
     except urllib.error.HTTPError as exc:

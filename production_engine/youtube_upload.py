@@ -118,8 +118,12 @@ class UploadHttpError(ValueError):
 
 
 def _http(request: urllib.request.Request, timeout: float) -> tuple[dict[str, str], bytes]:
+    # Every URL here is Google's (fixed endpoints, or the session address
+    # Google returned); refuse anything that is not https all the same.
+    if urllib.parse.urlparse(request.full_url).scheme != "https":
+        raise ValueError("YouTube upload URLs must be https://")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed Google https URLs
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - https checked above  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             return dict(response.headers.items()), response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read()[:300].decode("utf-8", "replace") if hasattr(exc, "read") else ""

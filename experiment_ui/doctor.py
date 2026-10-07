@@ -78,7 +78,7 @@ def check_youtube_key() -> tuple[str, str]:
     query = urllib.parse.urlencode({"part": "id", "id": YOUTUBE_PROBE_VIDEO, "fields": "items/id", "key": key})
     request = urllib.request.Request(f"{YOUTUBE_API}/videos?{query}")  # noqa: S310 - fixed https URL
     try:
-        with urllib.request.urlopen(request, timeout=CHECK_TIMEOUT_SECONDS) as response:  # noqa: S310 - fixed https URL
+        with urllib.request.urlopen(request, timeout=CHECK_TIMEOUT_SECONDS) as response:  # noqa: S310 - fixed https URL  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read()[:2000].decode("utf-8", "replace") if hasattr(exc, "read") else ""

@@ -170,6 +170,8 @@ def openai_compatible_images(
             "response_format": "b64_json",
         }
     ).encode("utf-8")
+    if urllib.parse.urlparse(str(settings["endpoint"])).scheme != "https":
+        raise ValueError("The image provider endpoint must be an https:// URL")
     request = urllib.request.Request(  # noqa: S310 - endpoint is human-configured https
         str(settings["endpoint"]),
         data=payload,
@@ -181,7 +183,7 @@ def openai_compatible_images(
     )
     timeout = float(settings.get("timeout_seconds") or 120)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - https checked above  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raise ValueError(f"Image provider refused the request (HTTP {exc.code})") from exc
@@ -199,7 +201,7 @@ def openai_compatible_images(
             url = str(item["url"])
             if urllib.parse.urlparse(url).scheme != "https":
                 raise ValueError("Image provider returned a non-https image URL; refusing to fetch it")
-            with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310
+            with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310 - https checked above  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 data = response.read()
         else:
             continue
