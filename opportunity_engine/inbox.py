@@ -175,6 +175,17 @@ def _base_item(packet: dict[str, Any]) -> dict[str, Any]:
         ),
         "search_count": len(intake.get("search_log") or []),
         "excluded_result_count": len(intake.get("excluded_videos") or []),
+        "seed": packet.get("seed") or {},
+        "historical_evidence": packet.get("historical_evidence"),
+        "provenance": {
+            "generator": (packet.get("provenance") or {}).get("generator"),
+            "source_artifacts": [
+                {"role": a.get("role"), "path": a.get("path"), "sha256": str(a.get("sha256") or "")[:12]}
+                for a in (packet.get("provenance") or {}).get("source_artifacts") or []
+            ],
+            "packet_sha256": str(packet.get("packet_sha256") or "")[:12],
+            "created_at": packet.get("created_at"),
+        },
         "is_active": False,
         "status": NEEDS_REVIEW,
         "status_reason": "",
@@ -192,6 +203,23 @@ def _is_active(packet: dict[str, Any], active: dict[str, Any] | None) -> bool:
         video_id = (packet.get("candidate_videos") or [{}])[0].get("video_id")
         return any(row.get("video_id") == video_id for row in active.get("study_set") or [])
     return False
+
+
+def _active_reason(active: dict[str, Any] | None) -> str:
+    """The active-set sentence, with the replication context when it was searched (D-174)."""
+    reason = "The active study set: Experiment 02 is analysing it."
+    search = (active or {}).get("context_search") or {}
+    status = search.get("status")
+    count = int(search.get("companion_count") or 0)
+    if status == active_source.CONTEXT_FOUND and count:
+        plural = "s" if count != 1 else ""
+        return f"{reason} {count} video{plural} from other channels came along as replication context."
+    if status in (active_source.CONTEXT_NONE, active_source.CONTEXT_FAILED):
+        return (
+            f"{reason} No video from another channel was found for replication context, so "
+            "synthesis will have nothing replicated; add context with Explore my topic."
+        )
+    return reason
 
 
 def _human_item(
@@ -219,7 +247,7 @@ def _human_item(
         item.update(
             status=APPROVED,
             is_active=True,
-            status_reason="The active study set: Experiment 02 is analysing it.",
+            status_reason=_active_reason(active),
             actions=["STOP"],
         )
         return item
@@ -274,6 +302,14 @@ def _viral_summary(packet: dict[str, Any]) -> dict[str, Any]:
         "lifetime_vph": metrics.get("lifetime_vph"),
         "ratio_basis": metrics.get("ratio_basis") or [],
         "views_per_follower": metrics.get("views_per_follower"),
+        "likes_per_view": metrics.get("likes_per_view"),
+        "comments_per_view": metrics.get("comments_per_view"),
+        "subscriber_outlier": metrics.get("subscriber_outlier"),
+        "baseline_median_vph": baseline.get("median_lifetime_vph"),
+        "baseline_rule": baseline.get("rule"),
+        "baseline_age_days": baseline.get("sample_age_days"),
+        "published_at": ((packet.get("candidate_videos") or [{}])[0]).get("published_at"),
+        "classification_history": viral.get("classification_history") or [],
         "baseline_median_views": baseline.get("median_views"),
         "baseline_sample_size": baseline.get("sample_size"),
         "cluster": viral.get("cluster"),

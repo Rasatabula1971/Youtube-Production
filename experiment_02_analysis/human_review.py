@@ -24,7 +24,7 @@ _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
-from pipeline_integrity import atomic_write_json
+from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
 from evidence_ingest import sha256_file
 from experiment_02 import (
@@ -502,6 +502,19 @@ def run_apply(
     return report
 
 
+def history_file() -> Path:
+    """Append-only log of every Analysis Gate decision (D-133)."""
+    return REVIEW_RESPONSES_DIR.parent / "human_review_history.jsonl"
+
+
+def history_by_item() -> dict[tuple[str, str], list[dict[str, Any]]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for event in read_jsonl(history_file()):
+        key = (str(event.get("video_id") or ""), str(event.get("item_id") or ""))
+        grouped.setdefault(key, []).append(event)
+    return grouped
+
+
 def _response_path(video_id: str) -> Path:
     return REVIEW_RESPONSES_DIR / f"{safe_filename(video_id)}.review_response.json"
 
@@ -550,6 +563,7 @@ def review_snapshot() -> dict[str, Any]:
 
     total_pending = total_accepted = total_rejected = 0
     flattened: list[dict[str, Any]] = []
+    history = history_by_item()
 
     for request_path in sorted(REVIEW_REQUESTS_DIR.glob("*.review_request.json")):
         request = load_json(request_path)
@@ -589,6 +603,7 @@ def review_snapshot() -> dict[str, Any]:
                 "video_id": video_id,
                 "decision": decision,
                 "note": str(saved.get("note") or ""),
+                "decision_history": history.get((video_id, item_id), []),
             }
             packet_items.append(row)
             flattened.append(row)
@@ -699,11 +714,35 @@ def apply_review_action(
         for item in response.get("decisions", [])
         if isinstance(item, dict) and item.get("item_id")
     }
+    previous = mapped.get(item_id) or {}
+    # Who decided this item, not who opened the response file: the gate
+    # policy and a person can decide items of the same video (D-156).
+    reviewer = reviewer_id()
+    decider = os.getenv("YOUTUBE_DECIDED_BY", "HUMAN").strip().upper() or "HUMAN"
     mapped[item_id] = {
         "item_id": item_id,
         "decision": decision,
         "note": str(note or ""),
+        "reviewer": reviewer,
+        "decided_by": decider,
     }
+    append_jsonl(
+        history_file(),
+        {
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "gate": "analysis",
+            "video_id": video_id,
+            "item_id": item_id,
+            "decision": decision,
+            "decided_by": decider,
+            "reviewer": reviewer,
+            "previous_decision": previous.get("decision"),
+            "note": str(note or ""),
+            "profile_content_sha256": request.get("request_provenance", {}).get(
+                "profile_content_sha256"
+            ),
+        },
+    )
     response["video_id"] = video_id
     response["reviewer"] = str(response.get("reviewer") or reviewer_id())
     response["decisions"] = [mapped[key] for key in sorted(mapped)]

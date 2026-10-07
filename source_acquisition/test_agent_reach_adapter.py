@@ -1,6 +1,7 @@
 import json
 import subprocess
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 import agent_reach_adapter as adapter
@@ -323,3 +324,45 @@ class AgentReachAdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrivateHostRefusalTests(unittest.TestCase):
+    """The page reader never fetches this machine or a private network (audit 2026-10-04)."""
+
+    def test_loopback_private_link_local_and_odd_ports_are_refused(self):
+        for url in (
+            "http://127.0.0.1:8765/api/status",
+            "http://localhost/",
+            "http://10.0.0.5/page",
+            "http://192.168.1.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::1]/",
+            "https://example.com:8443/",
+        ):
+            with self.subTest(url=url):
+                with self.assertRaises(adapter.AcquisitionError):
+                    adapter.refuse_private_host(url)
+
+    def test_public_address_passes(self):
+        adapter.refuse_private_host("https://93.184.216.34/")
+
+    def test_redirect_to_a_private_host_is_refused_after_the_fetch(self):
+        class Completed:
+            returncode = 0
+            stderr = ""
+            stdout = "<html>x</html>" + adapter._URL_EFFECTIVE_MARKER + "http://127.0.0.1:8765/api/status"
+
+        with mock.patch.object(adapter, "curl_path", return_value="/usr/bin/curl"), \
+             mock.patch.object(adapter.subprocess, "run", return_value=Completed()):
+            with self.assertRaisesRegex(adapter.AcquisitionError, "after redirect"):
+                adapter._curl_get("https://93.184.216.34/", timeout_seconds=5, label="read")
+
+    def test_effective_url_marker_is_stripped_from_the_body(self):
+        class Completed:
+            returncode = 0
+            stderr = ""
+            stdout = "<html>body</html>" + adapter._URL_EFFECTIVE_MARKER + "https://93.184.216.34/"
+
+        with mock.patch.object(adapter, "curl_path", return_value="/usr/bin/curl"), \
+             mock.patch.object(adapter.subprocess, "run", return_value=Completed()):
+            self.assertEqual(adapter._curl_get("https://93.184.216.34/", timeout_seconds=5, label="read"), "<html>body</html>")

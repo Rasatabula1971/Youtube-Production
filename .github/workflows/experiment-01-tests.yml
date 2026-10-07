@@ -54,7 +54,7 @@ jobs:
         run: python -m unittest discover -s experiment_ui -p "test_*.py" -v
       - name: Check Experiment UI JavaScript syntax
         if: always()
-        run: node --check experiment_ui/static/app.js
+        run: node --check experiment_ui/static/app.js && for f in experiment_ui/static/js/*.js; do node --check "$f"; done
       - name: Run Transformation Engine tests
         if: always()
         run: python -m unittest discover -s transformation_engine -p "test_*.py" -v

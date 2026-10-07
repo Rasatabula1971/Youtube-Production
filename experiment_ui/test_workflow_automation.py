@@ -7,6 +7,15 @@ import workflow_automation as automation
 
 
 class WorkflowAutomationTests(unittest.TestCase):
+    def setUp(self):
+        # Gate policy decisions are tested in test_gate_autopilot; keep these
+        # runs off the real review files.
+        patcher = patch.object(
+            automation.gate_autopilot, "decide", return_value={"gate": None, "decided": 0, "held": []}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_next_enabled_action_uses_pipeline_order(self):
         readiness = {
             "package_generate": {"enabled": True},
@@ -1317,6 +1326,62 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["failed_action"], "concept_generate")
         self.assertIn("Retry Continue Automatically later", result["message"])
 
+    def test_stuck_partial_step_does_not_hold_later_allowed_steps(self):
+        # Research for two concepts stays partial, but the script of the
+        # concept whose research is verified must still be drafted (D-154).
+        state = {"script": False}
+
+        def readiness():
+            ready = {"research_acquire": {"enabled": True, "reason": "evidence 1/3"}}
+            if not state["script"]:
+                ready["script_generate"] = {"enabled": True, "reason": "drafts 0/1"}
+            return ready
+
+        def fake_run(action_id):
+            if action_id == "script_generate":
+                state["script"] = True
+                return 0
+            return 2
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(
+                automation.control,
+                "workflow_guidance",
+                return_value={"state": "HUMAN_SCRIPT_GATE", "current_title": "Review the script"},
+            ),
+            patch.object(automation, "run_action", side_effect=fake_run) as run,
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual([c.args[0] for c in run.call_args_list], ["research_acquire", "script_generate"])
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["failed_action"], "research_acquire")
+        self.assertEqual(result["completed_actions"], ["script_generate"])
+        self.assertEqual(result["stuck_actions"], ["research_acquire"])
+        self.assertIn("Review the script", result["message"])
+
+    def test_later_failure_stays_failed_when_a_step_is_stuck(self):
+        def readiness():
+            return {
+                "research_acquire": {"enabled": True, "reason": "evidence 1/3"},
+                "script_generate": {"enabled": True, "reason": "drafts 0/1"},
+            }
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(automation.control, "workflow_guidance", return_value={"state": "ACTION_REQUIRED"}),
+            patch.object(
+                automation, "run_action",
+                side_effect=lambda a: 2 if a == "research_acquire" else 1,
+            ),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "FAILED")
+        self.assertEqual(result["failed_action"], "script_generate")
+        self.assertEqual(result["stuck_actions"], ["research_acquire"])
+
     def test_stops_if_successful_command_makes_no_progress(self):
         readiness = {
             "exp2_prepare": {
@@ -1338,7 +1403,119 @@ class WorkflowAutomationTests(unittest.TestCase):
         self.assertEqual(result["failed_action"], "exp2_prepare")
 
 
+class GatePolicyRunTests(unittest.TestCase):
+    def test_automatic_gate_decisions_continue_the_run_then_name_held_items(self):
+        outcomes = iter([
+            {"gate": "format", "decided": 2, "held": ["c3: wording overlaps the source video"]},
+            {"gate": "format", "decided": 0, "held": ["c3: wording overlaps the source video"]},
+        ])
+        with (
+            patch.object(automation.control, "action_readiness", return_value={}),
+            patch.object(
+                automation.control, "workflow_guidance",
+                return_value={"state": "HUMAN_FORMAT_GATE", "current_title": "Review the format plan"},
+            ),
+            patch.object(automation.gate_autopilot, "decide", side_effect=lambda *a, **k: next(outcomes)),
+        ):
+            result = automation.run_until_human_gate()
+
+        self.assertEqual(result["status"], "STOPPED_AT_BOUNDARY")
+        self.assertEqual(result["completed_actions"], ["gate_policy:format"])
+        self.assertEqual(result["auto_held"], {"format": ["c3: wording overlaps the source video"]})
+        self.assertIn("Held for you by the gate policy", result["message"])
+        self.assertIn("overlaps the source", result["message"])
+
+
+class StuckStatusTests(unittest.TestCase):
+    def test_safety_stop_is_not_downgraded_to_partial_by_a_stuck_step(self):
+        stuck = {"research_acquire": {"status": "PARTIAL", "message": "stuck", "completed_actions": []}}
+        result = automation._with_stuck({"status": "SAFETY_STOP", "completed_actions": ["x"]}, stuck)
+        self.assertEqual(result["status"], "SAFETY_STOP")
+        self.assertEqual(result["stuck_actions"], ["research_acquire"])
+
+
+class ConceptMessageTests(unittest.TestCase):
+    def test_unconfirmed_gemini_billing_is_named_instead_of_retry_advice(self):
+        import json as _json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "s.json"
+            summary.write_text(_json.dumps({"results": [{"fair_reason_code": "DIRECT_GEMINI_BILLING_UNCONFIRMED"}]}))
+            with patch.object(automation, "CONCEPT_BATCH_SUMMARY", summary):
+                message = automation.partial_message("concept_generate")
+            self.assertIn("direct_gemini_billing.json", message)
+            summary.write_text(_json.dumps({"results": [{"fair_reason_code": "OTHER"}]}))
+            with patch.object(automation, "CONCEPT_BATCH_SUMMARY", summary):
+                self.assertIn("Retry Continue Automatically", automation.partial_message("concept_generate"))
+
+
+class LastRunFileTests(unittest.TestCase):
+    """The runner leaves its outcome for the Productions page (D-163)."""
+
+    def test_record_last_run_writes_status_stuck_and_held(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        result = {
+            "status": "PARTIAL",
+            "failed_action": "research_acquire",
+            "return_code": 2,
+            "message": "Source pages were found, but some questions have no source.",
+            "completed_actions": ["research_prepare"],
+            "stuck_messages": {"research_acquire": "Source pages were found, but some questions have no source."},
+            "auto_held": {"research_gate": ["c1/clm002: single source"]},
+            "workflow_state": "HUMAN_RESEARCH_GATE",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "ui" / "last_auto_run.json"
+            with patch.object(automation, "LAST_RUN_FILE", target):
+                automation.record_last_run(result)
+            payload = json.loads(target.read_text(encoding="utf-8"))
+        self.assertEqual(payload["status"], "PARTIAL")
+        self.assertEqual(payload["failed_action"], "research_acquire")
+        self.assertEqual(payload["stuck"], result["stuck_messages"])
+        self.assertEqual(payload["auto_held"], result["auto_held"])
+        self.assertEqual(payload["completed_actions"], ["research_prepare"])
+        self.assertTrue(payload["finished_at"])
+
+    def test_run_result_carries_each_stuck_message(self):
+        state = {"runs": 0}
+
+        def readiness():
+            return {"research_acquire": {"enabled": True, "reason": "ready"}}
+
+        def fake_run(action_id):
+            state["runs"] += 1
+            return 2
+
+        with (
+            patch.object(automation.control, "action_readiness", side_effect=readiness),
+            patch.object(automation.control, "workflow_guidance", return_value={"state": "AUTO"}),
+            patch.object(automation, "run_action", side_effect=fake_run),
+            patch.object(automation, "partial_message", return_value="no source"),
+        ):
+            result = automation.run_until_human_gate()
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["stuck_messages"], {"research_acquire": "no source"})
+
+
 class PartialMessageTests(unittest.TestCase):
+    def test_research_acquisition_message_names_a_concept_with_no_sources(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "s.json"
+            summary.write_text(json.dumps({"results": [{"status": "NO_SOURCES", "concept_id": "c9"}]}))
+            with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", summary):
+                message = automation.research_acquisition_message()
+        self.assertIn("No source page was found for any research question of c9", message)
+        self.assertIn("Concept Gate", message)
+
     def test_research_acquisition_message_names_real_error_not_model(self):
         import json
         import tempfile
@@ -1366,6 +1543,25 @@ class PartialMessageTests(unittest.TestCase):
         self.assertIn("not an AI model problem", message)
         self.assertIn("mcporter is not available on PATH", message)
         self.assertIn("--mode doctor", message)
+
+    def test_research_acquisition_message_when_pages_exist_but_questions_lack_sources(self):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            summary.write_text(json.dumps({"status": "PARTIAL", "usable": 3, "results": [
+                {"status": "SKIPPED_CURRENT", "concept_id": "c1"},
+                {"status": "PARTIAL", "concept_id": "c_spec_tyres_04", "pages": 6, "errors": 1,
+                 "first_error": "search: Every web search backend failed: duckduckgo: no results"},
+            ]}), encoding="utf-8")
+            with patch.object(automation, "RESEARCH_ACQUISITION_SUMMARY", summary):
+                message = automation.partial_message("research_acquire")
+        self.assertNotIn("no usable source pages", message)
+        self.assertIn("c_spec_tyres_04 (6 pages, 1 question search(es) failed)", message)
+        self.assertIn("duckduckgo: no results", message)
+        self.assertIn("short keywords", message)
 
     def test_research_acquisition_message_without_summary(self):
         from pathlib import Path

@@ -9,6 +9,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 import server
+from testing_isolation import ModuleIsolation  # noqa: E402
+
+_ISOLATION = ModuleIsolation(server)
+
+
+def setUpModule() -> None:
+    # Never read the real pipeline outputs of the machine running the tests.
+    _ISOLATION.start()
+
+
+def tearDownModule() -> None:
+    _ISOLATION.stop()
 
 
 def write_json(path: Path, payload: dict) -> Path:
@@ -185,7 +197,9 @@ class StalePipelineRegressionTests(unittest.TestCase):
         self.assertFalse(state["candidate_provenance_current"])
         self.assertFalse(state["candidates_ready"])
 
-    def test_partial_mechanism_coverage_can_still_produce_ready_candidate_pool(self):
+    def test_partial_mechanism_coverage_never_reaches_triage(self):
+        # D-129: a candidate file written before the coverage rule may still say
+        # ready_for_triage; the server refuses it while a mechanism is missing.
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             synthesis = write_json(root / "synthesis.json", {"v": 2})
@@ -260,7 +274,7 @@ class StalePipelineRegressionTests(unittest.TestCase):
         self.assertFalse(state["responses_complete"])
         self.assertTrue(state["candidate_provenance_current"])
         self.assertTrue(state["candidate_pool_ready"])
-        self.assertTrue(state["candidates_ready"])
+        self.assertFalse(state["candidates_ready"])
         self.assertFalse(state["mechanism_coverage_complete"])
         self.assertEqual(state["missing_mechanism_ids"], ["m2"])
 

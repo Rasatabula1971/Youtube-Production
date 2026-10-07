@@ -11,10 +11,12 @@ are implemented here.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 from html.parser import HTMLParser
 from typing import Any, Callable
@@ -489,11 +491,42 @@ def read_web_page(
 # ---------------------------------------------------------------- free fallbacks
 
 
+_URL_EFFECTIVE_MARKER = "\n__URL_EFFECTIVE__:"
+MAX_PAGE_BYTES = 5_000_000
+
+
+def refuse_private_host(url: str, *, label: str = "URL") -> None:
+    """Refuse URLs whose host is loopback, private, link-local or not a web port.
+
+    Search results are untrusted: one pointing at 127.0.0.1 (this machine's
+    own control UI) or a cloud metadata address must never be fetched and
+    stored as research evidence (audit 2026-10-04).
+    """
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise AcquisitionError(f"{label} has no host")
+    port = parsed.port
+    if port not in (None, 80, 443):
+        raise AcquisitionError(f"{label} uses a non-web port ({port})")
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+        raise AcquisitionError(f"{label} points at this machine ({host})")
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(host, port or 80, proto=socket.IPPROTO_TCP)}
+    except socket.gaierror as exc:
+        raise AcquisitionError(f"{label} host could not be resolved ({host})") from exc
+    for address in addresses:
+        ip = ipaddress.ip_address(str(address).split("%", 1)[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            raise AcquisitionError(f"{label} resolves to a non-public address ({host} -> {ip})")
+
+
 def _curl_get(url: str, *, timeout_seconds: int, label: str) -> str:
-    """GET one fixed-host HTTPS URL through curl, matching the Jina Reader path."""
+    """GET one HTTP(S) URL through curl; public hosts only, redirects re-checked."""
     executable = curl_path()
     if not executable:
         raise AcquisitionError(f"curl is not available on PATH; {label} is unavailable")
+    refuse_private_host(url, label=label)
     try:
         completed = subprocess.run(
             [
@@ -503,12 +536,18 @@ def _curl_get(url: str, *, timeout_seconds: int, label: str) -> str:
                 "--fail",
                 "--max-time",
                 str(int(timeout_seconds)),
+                "--max-redirs",
+                "5",
+                "--max-filesize",
+                str(MAX_PAGE_BYTES),
                 "--proto",
                 "=http,https",
                 "--proto-redir",
                 "=http,https",
                 "-A",
                 FREE_BACKEND_USER_AGENT,
+                "-w",
+                _URL_EFFECTIVE_MARKER + "%{url_effective}",
                 url,
             ],
             capture_output=True,
@@ -529,7 +568,11 @@ def _curl_get(url: str, *, timeout_seconds: int, label: str) -> str:
             or f"HTTP request failed with curl exit {completed.returncode}"
         )
         raise AcquisitionError(f"{label}: {detail}"[:1600])
-    return completed.stdout
+    body, marker, effective = completed.stdout.rpartition(_URL_EFFECTIVE_MARKER)
+    if marker and effective.strip() and effective.strip() != url:
+        # A redirect may land anywhere; the final host gets the same check.
+        refuse_private_host(effective.strip(), label=f"{label} (after redirect)")
+    return body if marker else completed.stdout
 
 
 class _DuckDuckGoResults(HTMLParser):

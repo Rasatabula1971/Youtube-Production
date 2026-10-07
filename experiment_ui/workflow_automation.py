@@ -11,9 +11,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import datetime, timezone
 from typing import Any
 
+import gate_autopilot
 import server as control
+from pipeline_integrity import atomic_write_json
+
+LAST_RUN_FILE = control.UI_OUTPUT_DIR / "last_auto_run.json"
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -95,6 +100,14 @@ PARTIAL_MESSAGES = {
         "provider/model did not produce new validated output. "
         "Retry Continue Automatically later."
     ),
+    "concept_generate": (
+        "Concept generation is not complete: at least one mechanism has no valid "
+        "concept yet, either because the active provider/model did not answer or "
+        "because its output failed validation. Validated concepts were kept and "
+        "triage waits for every mechanism (D-129). Retry Continue Automatically "
+        "later; it reruns only the missing mechanisms. If one keeps failing, its "
+        "model run report lists the validation errors."
+    ),
     "narration_preview_render": (
         "The zero-cost local narration preview could not be rendered. "
         "Install/configure the local Kokoro preview dependencies and "
@@ -117,14 +130,47 @@ PARTIAL_MESSAGES = {
 def research_acquisition_message() -> str:
     """Explain a research evidence failure with the real backend error."""
     first_error = ""
+    incomplete: list[str] = []
+    no_sources: list[str] = []
     try:
         summary = json.loads(RESEARCH_ACQUISITION_SUMMARY.read_text(encoding="utf-8"))
         for item in summary.get("results", []):
+            if isinstance(item, dict) and item.get("status") == "NO_SOURCES":
+                no_sources.append(str(item.get("concept_id")))
+                continue
             if isinstance(item, dict) and (item.get("first_error") or item.get("message")):
-                first_error = str(item.get("first_error") or item.get("message"))
-                break
-    except (OSError, ValueError, AttributeError):
+                first_error = first_error or str(item.get("first_error") or item.get("message"))
+            if isinstance(item, dict) and item.get("status") == "PARTIAL" and int(item.get("pages") or 0) > 0:
+                incomplete.append(
+                    f"{item.get('concept_id')} ({item.get('pages')} pages, "
+                    f"{item.get('errors')} question search(es) failed)"
+                )
+    except (OSError, ValueError, AttributeError, TypeError):
         pass
+    lead = (
+        "No source page was found for any research question of "
+        + ", ".join(no_sources[:3])
+        + " after the configured search rounds, so its research cannot go on. Send the concept back "
+        "at the Concept Gate with narrower questions, or reject it."
+        if no_sources
+        else ""
+    )
+    if no_sources and not incomplete:
+        return lead
+    if incomplete:
+        # Pages were found; only some questions have no source yet (D-152).
+        return (lead + " Separately: " if lead else "") + (
+            "Source pages were found, but some research questions still have no source: "
+            + "; ".join(incomplete[:3])
+            + ". The Research Gate needs every question covered, so research stops here (D-129)."
+            + (f" First error: {first_error[:400]}" if first_error else "")
+            + " Retry Continue Automatically: those questions are searched again, also as short "
+            "keywords; a question still without a source after the configured rounds is set "
+            "aside and waived at the Research Gate with a note (D-163). If it keeps failing, "
+            "check the search backends with: python "
+            "source_acquisition/agent_reach_adapter.py --mode doctor (Exa needs Agent Reach's "
+            "mcporter on PATH)."
+        )
     return (
         "Research web search and page reading returned no usable source pages, so "
         "there is nothing for the Research Gate yet. This is a network/search "
@@ -156,7 +202,29 @@ def research_claims_message() -> str:
     )
 
 
+CONCEPT_BATCH_SUMMARY = control.PROJECT_ROOT / "transformation_engine" / "output" / "concept_model_batch_summary.json"
+
+
+def concept_generation_message() -> str:
+    """Name the one setup problem a retry cannot fix: the Gemini billing attestation (D-161)."""
+    try:
+        text = CONCEPT_BATCH_SUMMARY.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    if "DIRECT_GEMINI_BILLING_UNCONFIRMED" in text:
+        return (
+            "Concept generation made no model call: the direct Gemini route is off until you "
+            "confirm that the Google Cloud project behind DIRECT_GEMINI_API_KEY has no billing "
+            "account. Check Billing for that project in Google Cloud Console, then set "
+            "billing_disabled_confirmed to true (and confirmed_on to today) in "
+            "experiment_02_analysis/direct_gemini_billing.json and retry Continue Automatically."
+        )
+    return PARTIAL_MESSAGES["concept_generate"]
+
+
 def partial_message(action_id: str) -> str:
+    if action_id == "concept_generate":
+        return concept_generation_message()
     if action_id == "research_acquire":
         return research_acquisition_message()
     if action_id == "research_generate":
@@ -166,11 +234,39 @@ def partial_message(action_id: str) -> str:
 
 def next_enabled_action(
     readiness: dict[str, dict[str, Any]],
+    skip: set[str] | frozenset[str] = frozenset(),
 ) -> str | None:
     for action_id in AUTO_MACHINE_ACTION_ORDER:
-        if readiness.get(action_id, {}).get("enabled"):
+        if action_id not in skip and readiness.get(action_id, {}).get("enabled"):
             return action_id
     return None
+
+
+def _with_stuck(result: dict[str, Any], stuck: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Report a stuck step as PARTIAL even when later work went ahead (D-154).
+
+    A step that keeps returning partial (for example research for one concept
+    whose questions have no source yet) is set aside so later steps that are
+    already allowed (for example the script of a concept whose research is
+    verified) still run. The run still ends PARTIAL and names the stuck step.
+    """
+    if not stuck:
+        return result
+    if result.get("status") in {"FAILED", "NO_PROGRESS", "SAFETY_STOP"}:
+        # A real failure later on stays the headline; the stuck step is listed.
+        return {**result, "stuck_actions": list(stuck)}
+    action_id, first = next(iter(stuck.items()))
+    combined = dict(first)
+    combined["completed_actions"] = result.get("completed_actions", [])
+    combined["stuck_actions"] = list(stuck)
+    if result.get("workflow_state"):
+        combined["workflow_state"] = result["workflow_state"]
+    if result.get("message") and result.get("status") != "PARTIAL":
+        combined["message"] = (
+            f"{first['message']} Other work went ahead and stopped at: {result['message']}"
+        )
+    combined["failed_action"] = action_id
+    return combined
 
 
 def run_action(action_id: str) -> int:
@@ -189,10 +285,56 @@ def run_action(action_id: str) -> int:
 
 def run_until_human_gate() -> dict[str, Any]:
     completed_actions: list[str] = []
+    stuck: dict[str, dict[str, Any]] = {}
+    held: dict[str, list[str]] = {}
+    result = _with_stuck(_run_steps(completed_actions, stuck, held), stuck)
+    if stuck:
+        result["stuck_messages"] = {
+            action_id: str(item.get("message") or "") for action_id, item in stuck.items()
+        }
+    return _with_held(result, held)
 
+
+def _with_held(result: dict[str, Any], held: dict[str, list[str]]) -> dict[str, Any]:
+    """Name the items an automatic gate left for a person (D-156)."""
+    held = {gate: items for gate, items in held.items() if items}
+    if not held:
+        return result
+    lines = [f"{gate.replace('_', ' ')}: " + "; ".join(items[:3]) for gate, items in held.items()]
+    return {
+        **result,
+        "auto_held": held,
+        "message": (str(result.get("message") or "") + " Held for you by the gate policy: "
+                    + " | ".join(lines)).strip(),
+    }
+
+
+def run_gate_policy(state: str | None, completed_actions: list[str], held: dict[str, list[str]]) -> bool:
+    """Decide the clean items of an automatic gate; True when anything was decided."""
+    outcome = gate_autopilot.decide(state, control)
+    if outcome.get("gate"):
+        held[outcome["gate"]] = list(outcome.get("held") or [])
+    if not outcome.get("decided"):
+        return False
+    print()
+    print("=" * 72)
+    print(f"AUTOMATIC MACHINE STEP — Gate policy: {outcome['gate'].replace('_', ' ')}")
+    print("=" * 72)
+    print(f"Decided automatically: {outcome['decided']}; left for you: {len(outcome.get('held') or [])}")
+    for line in outcome.get("held") or []:
+        print(f"  held: {line}")
+    completed_actions.append(f"gate_policy:{outcome['gate']}")
+    return True
+
+
+def _run_steps(
+    completed_actions: list[str], stuck: dict[str, dict[str, Any]], held: dict[str, list[str]]
+) -> dict[str, Any]:
     for _ in range(MAX_STEPS_PER_RUN):
         readiness = control.action_readiness()
         guidance = control.workflow_guidance(readiness)
+        if run_gate_policy(guidance.get("state"), completed_actions, held):
+            continue
         preview_machine_pending = any(
             readiness.get(action_id, {}).get("enabled")
             for action_id in (
@@ -250,6 +392,10 @@ def run_until_human_gate() -> dict[str, Any]:
             "WAITING_NARRATION_RENDER_RETURN",
             "NARRATION_AUDIO_QC_FAILED",
             "NARRATION_AUDIO_READY",
+            "HUMAN_FINAL_AUDIO_GATE",
+            "HUMAN_VISUAL_PLAN_GATE",
+            "VISUAL_PLAN_REWORK_REQUIRED",
+            "FINAL_AUDIO_REWORK_REQUIRED",
             "HUMAN_VISUAL_CANDIDATE_GATE",
             "HUMAN_VISUAL_RIGHTS_GATE",
             "HUMAN_ROUGH_CUT_GATE",
@@ -272,6 +418,9 @@ def run_until_human_gate() -> dict[str, Any]:
             "HUMAN_FINAL_EXPORT_GATE",
             "FINAL_EXPORT_REWORK_REQUIRED",
             "FINAL_EXPORT_APPROVED",
+            "HUMAN_PUBLISH_GATE",
+            "WAITING_FOR_UPLOAD",
+            "PUBLISHED",
             "HUMAN_FINAL_PACKAGING_GATE",
             "FINAL_PACKAGING_REJECTED",
         }:
@@ -283,7 +432,7 @@ def run_until_human_gate() -> dict[str, Any]:
                 or "Workflow reached the current production boundary.",
             }
 
-        action_id = next_enabled_action(readiness)
+        action_id = next_enabled_action(readiness, skip=set(stuck))
         if action_id is None:
             return {
                 "status": "STOPPED_AT_BOUNDARY",
@@ -304,21 +453,23 @@ def run_until_human_gate() -> dict[str, Any]:
             }
 
         after = control.action_readiness()
-        next_id = next_enabled_action(after)
+        next_id = next_enabled_action(after, skip=set(stuck))
         if next_id == action_id:
             after_reason = str(after[action_id].get("reason") or "")
             if after_reason == before_reason:
                 if code == 2:
-                    message = partial_message(action_id)
-                    return {
+                    # Set it aside and let later steps that are already
+                    # allowed run; the run still ends PARTIAL (D-154).
+                    stuck[action_id] = {
                         "status": "PARTIAL",
                         "failed_action": action_id,
                         "return_code": code,
                         "completed_actions": completed_actions,
                         "before_reason": before_reason,
                         "after_reason": after_reason,
-                        "message": message,
+                        "message": partial_message(action_id),
                     }
+                    continue
                 return {
                     "status": "NO_PROGRESS",
                     "failed_action": action_id,
@@ -346,8 +497,35 @@ def run_until_human_gate() -> dict[str, Any]:
     }
 
 
+def record_last_run(result: dict[str, Any]) -> None:
+    """Keep the outcome of the latest run for the Productions page (D-163).
+
+    Each production shows the step that stopped the last run and why, so
+    the reason a concept is not moving is on its own row, not only in the
+    job log. Best effort: a failed write never fails the run.
+    """
+    stuck_value = result.get("stuck_messages")
+    stuck: dict[str, Any] = stuck_value if isinstance(stuck_value, dict) else {}
+    payload = {
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "status": str(result.get("status") or ""),
+        "workflow_state": result.get("workflow_state"),
+        "message": str(result.get("message") or ""),
+        "failed_action": result.get("failed_action"),
+        "return_code": result.get("return_code"),
+        "completed_actions": list(result.get("completed_actions") or []),
+        "stuck": {str(action_id): str(message) for action_id, message in stuck.items()},
+        "auto_held": result.get("auto_held") or {},
+    }
+    try:
+        atomic_write_json(LAST_RUN_FILE, payload)
+    except OSError:
+        pass
+
+
 def main() -> None:
     result = run_until_human_gate()
+    record_last_run(result)
     print()
     print("=" * 72)
     print("AUTOMATIC WORKFLOW")

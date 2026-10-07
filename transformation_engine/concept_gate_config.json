@@ -15,5 +15,6 @@
     "human_framing_compelling",
     "drama_truthful"
   ],
-  "require_reviewer_name": true
+  "require_reviewer_name": true,
+  "either_default_format": "long_form"
 }

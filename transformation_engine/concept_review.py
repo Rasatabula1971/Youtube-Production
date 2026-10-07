@@ -29,6 +29,7 @@ from concept_gate import (
     load_json,
 )
 
+from format_resolution import normalize_choice
 from transformation_engine import OUTPUT_DIR, REQUESTS_DIR, RESPONSES_DIR, sha256_file
 
 STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
@@ -294,6 +295,7 @@ def public_item(
         "decision": decision.get("decision", "PENDING"),
         "criteria_decisions": decision.get("criteria", {}),
         "note": decision.get("note", ""),
+        "chosen_format": decision.get("format"),
         "idea_id": idea_id,
         "idea_saved": idea_id in (saved_ids or set()),
     }
@@ -375,6 +377,8 @@ def snapshot() -> dict[str, Any]:
         "override_concepts": override_items,
         "saved_idea_count": len(saved_ideas),
         "saved_ideas": saved_ideas,
+        # Pool size against the 15–25 target, and any finalist shortfall (D-130).
+        "selection": candidates.get("selection"),
     }
 
 
@@ -443,6 +447,7 @@ def apply_action(
     decision: str,
     criteria: Any,
     note: str | None,
+    format_choice: Any = None,
 ) -> dict[str, Any]:
     state = current_state()
     if not state:
@@ -507,14 +512,20 @@ def apply_action(
     )
     if value == "REWORK" and not clean_note:
         raise ValueError("REWORK requires a note explaining what must change")
+    chosen_format = normalize_choice(format_choice)
+    if chosen_format and value != "ACCEPT":
+        raise ValueError("A format can only be chosen when accepting a concept")
 
-    state.setdefault("decisions", {})[concept_id] = {
+    saved = {
         "concept_id": concept_id,
         "decision": value,
         "criteria": normalized,
         "note": clean_note,
         "concept_fingerprint": concept_fingerprint(item),
     }
+    if chosen_format:
+        saved["format"] = chosen_format
+    state.setdefault("decisions", {})[concept_id] = saved
 
     if value == "REWORK":
         # Gate review items omit response_source, so take it from the

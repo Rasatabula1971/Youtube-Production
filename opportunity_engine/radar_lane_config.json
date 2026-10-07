@@ -1,0 +1,28 @@
+{
+  "note": "Lane filter for the Viral Radar page (D-162). A video whose title or channel matches an off_lane term is OFF_LANE; a non-Latin title is OTHER_LANGUAGE; an on_lane term makes it ON_LANE; anything else is UNCLEAR. The page shows on-lane and unclear videos by default and folds the rest away. Terms are matched on whole words, case-insensitive; a term ending in * matches as a stem.",
+  "on_lane": [
+    "how", "why", "work*", "explain*", "science", "scientific", "physics", "engineer*", "mechanism*",
+    "inside", "material*", "engine*", "machine*", "built", "build", "made", "manufactur*", "process",
+    "energy", "electric*", "gravity", "light", "sound", "heat", "cold", "pressure", "water", "air",
+    "tyre*", "tire*", "car", "cars", "plane*", "aircraft", "jet", "rocket*", "animal*", "weather",
+    "speed", "force", "magnet*", "chem*", "quantum", "photon*", "electron*", "atom*", "planet*",
+    "space", "molecul*", "temperature", "fridge", "refrigerator", "microwave", "airbag*", "brake*",
+    "hydraulic*", "turbine*", "windmill*", "glass", "bullet*", "popcorn", "kernel", "cooling",
+    "lock*", "key", "pendulum*", "balance", "bridge*", "tower", "skyscraper*", "concrete", "steel"
+  ],
+  "off_lane": [
+    "tax", "taxes", "social security", "congress", "senior", "seniors", "irs", "medicare", "pension*",
+    "finance", "stock*", "crypto*", "bitcoin", "invest*", "money", "laws", "bracket*", "retire*",
+    "workout*", "muscle*", "fat", "lifter*", "hypertrophy", "exercise*", "testosterone", "training",
+    "athlete*", "chest", "leg day", "reps", "isometric*", "torso", "v-shaped", "lymphatic",
+    "history for sleep", "bloodline*", "templar*", "atlantis", "tartaria", "nefertiti", "merovingian*",
+    "grail", "kingdom*", "nimrod", "noah", "magdalene", "sundaland", "piri reis",
+    "battle simulator", "simulator", "epic kick", "spike trap", "arbs", "infernal*", "primate*",
+    "exam", "revision", "class-9", "class 9", "ncert", "syllabus", "requirements analysis",
+    "podcast", "marvel", "galactus", "overblown", "logan", "amazon", "listing*", "gpt-*", "openai",
+    "prompt*", "app plays", "hair loss", "prolactin", "biological age", "billionaire",
+    "rupert spira", "consciousness", "mind", "career advice", "nascar", "crash", "knocks out",
+    "gt3rs", "celica", "totaled", "charger"
+  ],
+  "other_language_non_latin_share": 0.3
+}

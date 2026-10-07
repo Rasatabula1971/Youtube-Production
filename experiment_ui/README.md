@@ -120,6 +120,35 @@ The panel shows:
 
 The **Stop** button terminates the current child process.
 
+While a job runs, a banner under the page header on every page shows the
+current automatic step, a ticking clock and the latest log line; it turns
+amber when the log has been quiet for two minutes (D-155).
+
+## Gate policy (D-156)
+
+`gate_policy.json` says how each human gate is decided:
+
+- `HUMAN`: you decide every item.
+- `AUTO_IF_CLEAN`: Continue Automatically decides the items that pass the
+  gate's machine checks (`gate_autopilot.py`) and leaves anything flagged for
+  you. The run log and the PARTIAL/stop message name each held item.
+
+Shipped as `AUTO_IF_CLEAN`:
+- Vision, Analysis, Title Direction, Format and Voice Performance (D-156);
+- Visual Plan, Visual Candidates, Edit Preview and Final Audio (D-158);
+- Narration Spend and Visual Spend (D-158). These approve only on the
+  confirmed per-video budget ($5 target, $10 ceiling), only while the video
+  stays at or under the target, and only with a known price from a verified
+  provider.
+
+Shipped as `HUMAN` so you hear the narration (D-172): Narration Preview (the
+free read, right after the script) and Rough Cut (the narration over the
+storyboard). Final Export, the third listening point, is always yours.
+
+Concept, Research (which already clears claims with two independent sources,
+D-153), Script, Final Packaging, Visual Rights (editorial footage), Final
+Export and Publish stay with you. Set a gate to `HUMAN` to get it back.
+
 Logs are retained under:
 
 ~~~text
@@ -228,24 +257,337 @@ Opportunity Gate still opens on canonical project evidence.
 
 ## UI v3 — multi-view workspace
 
-The working interface is split into four routes so routine work no longer shares
-one vertically long page:
+The working interface is split into five routes so routine work no longer
+shares one vertically long page. UI Patch 1 (D-115) renamed and regrouped them
+to match the redesign's navigation:
 
-- `/` — **Home**: current step, next step, compact progress, opportunity summary
-  and last activity.
-- `/opportunity` — **Opportunity**: human review of the selected topic and source
-  examples.
-- `/analysis` — **Analyze & Create**: Experiment 02 and downstream creative work.
-- `/tools` — **Tools & Diagnostics**: Doctors, manual experiment actions, raw
-  outputs, logs and technical status.
+- `/` — **Command Center**: the current step ("Needs your attention"), an
+  attention queue (productions waiting on a review or blocked, new radar
+  breakouts, inbox ideas, a failed job), active productions, what is running
+  automatically, then the compact progress, opportunity and last-activity
+  panels.
+- `/opportunity` — **Opportunities**: the four entry cards in one row, a counts
+  strip (need review, watching, approved, saved) with "Review N ideas one by
+  one", and the inbox. Inbox cards show the lane, a meta line (independent
+  channels, when detected, direction), an outlier figure and the six evidence
+  levels, with "Review opportunity" as the one primary button. Sidebar
+  sub-items: Discover, Viral Radar, Review, Watching, Approved.
+- `/radar` — **Viral Radar** (D-116): monitoring status (automatic or manual
+  only), last scan, next discovery, next snapshots, videos and channels
+  tracked, and "Run scan now". "Emerging now" shows themes, replicated ones
+  first, each with a momentum sparkline of its strongest video, strongest and
+  median outlier, current direction and historical demand. "Watching" lists the
+  breakouts you chose to watch, with Day N / 15, outlier, sparkline and
+  direction, and "All tracked videos" lists the rest. A format filter (All,
+  Long-form, Shorts) filters what is shown. Topic and region filters are not
+  offered because the radar does not support them yet.
+  - **Headlines (D-170):** a theme is titled by its strongest on-lane
+    video's title (tags, hashtags and channel suffixes trimmed); the keyword
+    stems appear under it as "Shared words".
+  - **Shortlist filters (D-162):** lane (my lane / everything, from
+    `opportunity_engine/radar_lane_config.json`), minimum outlier, freshness
+    and format; replicated themes pinned first; the bar counts what it hides.
+  - **What I pick (D-165):** after 20 Approve / Watch / Save / Reject
+    decisions on radar candidates (at least 5 each way) the page learns a
+    word model from them, shows "like your picks" / "unlike your picks"
+    beside each video, names the strongest words for and against, and
+    offers an Order pill: strongest outlier, or what you pick. Nothing is
+    hidden by it. Until then the filter bar says how many decisions it has.
+- `/opportunity/review` — **Opportunity Review** (D-116): the Human Opportunity
+  Gate on the shared review workspace. The inbox's "Needs review" items are
+  shown one at a time. Evidence is on the left: summary, rule-backed "why this
+  is interesting", the six evidence levels, videos and "Open full evidence".
+  The decision is on the right: only the actions that item allows, a note, and
+  "Save decision". Keys: ← → move, 1–9 choose, Ctrl+Enter save. Investigate
+  (rework) requires a note. A decided item leaves the queue, and a failed
+  decision keeps your draft. `#<opportunity_id>` links to one item.
+- `/productions` — **Productions** (D-117): one row per accepted concept with
+  its stage, status, what it waits on, when its files last changed, and a stage
+  bar. "Open →" goes to the Production Workspace. The tabs are Active, Review
+  Queue and Completed. **Review Queue** (D-164) lists every pending item of
+  every gate, with the gate as a label: your decisions first (Concept,
+  Research, Script, Final package, Format, Voice, Budget, Footage rights,
+  Final export, Publish…), then a production waiting on you without a gate
+  item, then the ideas inbox, then what the gate policy held. Each row opens
+  that item on its page; "Start review queue →" opens the first. The nav
+  item carries the count. "+ New"
+  goes to Opportunities, because a production starts from an accepted concept.
+  - **One Continue per row (D-163).** Each production row (and
+    the Production Workspace) shows a blocker line when the last automatic
+    run stopped at its stage, with the step and the reason, and offers its
+    own Continue. The runner records its outcome in
+    `.experiment_ui/last_auto_run.json`. A concept whose research claims are
+    all decided but not ready says why in plain words ("1 question
+    unanswered: mark it Not needed for script, or Rework a claim"); the
+    Research Gate waives a question automatically when no source or claim
+    covers it, and the operator can undo that waiver.
+- `/production#<concept_id>` — **Production Workspace** (D-117): one video. The
+  header shows title, premise, stage · status and last update. Eight tabs are
+  real sections: Evidence, Analysis, Concept, Research, Script, Package,
+  Format, Produce. Each is marked done, current or not started, and the
+  current stage opens by default.
+  - **Current step.** The current stage starts with a "Current step" card;
+    "Continue review →" opens the existing review panel in Workspace
+    (`/analysis`) until that gate moves onto the shared review workspace.
+  - **What each tab shows.** Evidence, Analysis and Concept show the accepted
+    concept's own fields. Research shows its progress and each claim's
+    decision. Script shows each branch and every section's decision, lock,
+    rework reason and ready alternatives. Package and Format show progress and
+    decisions. Produce shows each version's voice, narration and final render.
+  - **Keys.** Tabs follow the WAI-ARIA pattern: ← → move, Home/End jump.
+- `/review#<gate>` — **Gate Reviews** (D-118, D-119, D-121): the Analysis,
+  Concept, Research, Script, Format, Voice and Narration Preview gates on the shared review workspace, one item at a time, with a
+  gate switcher showing pending counts and "Include decided items" for
+  revisiting.
+  - **Same requests.** Each decision posts exactly what the classic panel
+    posts: `/api/human-analysis-review`, `/api/concept-gate` and
+    `/api/research-gate`, with empty criteria (the server fills them in from
+    the decision).
+  - **Notes.** Rework needs a note. Accepting a claim whose sources conflict
+    needs a resolution note.
+  - **Research.** Claims show their sources with stance, locator and quote,
+    the concept's research questions with answered/waived status, and
+    Waive / Remove waiver.
+  - **Revisiting.** A decided item opens with its decision and note
+    pre-filled. Unsaved drafts stay with their item while you move around.
+  - **Links in.** `/review#concept/<concept_id>` links to one item. The
+    Command Center hero, its attention cards, the Review Queue, a production's
+    "Continue review" (research) and a "Review one at a time" button on each
+    classic panel all open it.
+  - **Script (D-119).** A script branch is reviewed part by part (opening
+    hook, each section, closing), then as a whole.
+    - *Each part* shows its text, why it exists (purpose, psychology,
+      reward) and the claims it uses.
+    - *Part decisions:* Accept and lock; Rework (reason plus instruction),
+      then "Generate A / B / C", which calls the model once, and pick an
+      option or keep the original; Edit by hand (starts from the current
+      text); Unlock; Cancel rework.
+    - *Whole script:* accept, rework or reject. Accepting with parts still
+      open asks first, then accepts them too.
+    - *Requests:* the same as the classic panel, and section editing is
+      prepared automatically before the first part action.
+  - **Format, Voice, Preview (D-121).**
+    - *Format:* each branch with its duration, promise delivery, payoff and
+      beats, claims used per branch, unused claims and source overlap.
+    - *Voice:* every beat's fixed narration with its delivery (emotion,
+      intensity, speed, pauses, stressed words).
+    - *Preview:* an audio player for the free prototype. Approving it unlocks
+      the paid narration quote, and it cannot be approved before the audio
+      exists. The three rework choices (performance, script, music/SFX) each
+      need a note.
+    - *Per-segment revision* and re-rendering stay in the classic panel.
+  - **Classic view.** It stays in Workspace with every option, including the
+    concept override bank, saved ideas, the bounded rework request without a
+    model call, and restoring a saved script version.
+- `/packaging#<tab>` — **Packaging** (D-120): five tabs as in the redesign.
+  - **Title Direction:** one concept at a time. Pick one Short and one
+    Long-form title (editing the wording selects it), then Accept, Rework
+    (note required) or Reject. An accepted selection only changes through
+    Rework.
+  - **Brief & angles:** read-only, the brief and the psychological angles.
+  - **Thumbnail concepts:** read-only.
+  - **Pairing:** read-only, the title × thumbnail validation matrix.
+  - **Final package:** one format at a time.
+    - *Finalists* are cards with the rendered image, title, thumbnail text,
+      concept and the validation, promise, hook and redundancy checks.
+      Non-acceptable packages are folded away.
+    - *Accept* needs a chosen package and every "Accepting confirms" check.
+      *Rework* needs a target (title directions, thumbnail concepts or script
+      branch) and an instruction, with the classic confirmation.
+  - **Same requests.** Both gates post exactly what the classic panels post.
+  - **Image approval.** Approving rendered thumbnail images (subject photo,
+    accent and render) stays in the classic Thumbnail panel, and the Final
+    package tab says when an image still needs approval.
+- `/produce#<tab>` — **Produce** (D-122, D-159): the production gates on the
+  shared review workspace, posting exactly what the classic panels post. The
+  tab strip is grouped by who decides: **Your decisions** (Budget, Footage
+  rights, Final export, Publish), **Held by gate policy** (Visual plan, Final
+  audio, Choose visuals, Rough cut, Edit preview; shown only while one holds
+  an item for you, or with "Include decided items and empty gates"), and
+  **Tools** (Generate visuals, Tesseract). Gate Reviews and Packaging use
+  the same grouping. **Budget** lists every paid decision (narration spend
+  and visual spend) with the video's committed spend against its target and
+  ceiling; `#narration` and `#spend` links land there.
+  - **Narration spend:** quote, initial estimate and worst-case ceiling.
+    Accepting needs every spend check and confirms the amount.
+  - **Choose visuals:** candidate cards per shot. Blocked candidates cannot
+    be picked, and a shot whose storyboard changed waits for re-search.
+  - **Footage rights:** approving needs a documented editorial purpose, plus
+    an optional context note.
+  - **Rough cut:** scenes with their assignments. Rework is routed to one
+    shot's visual, to pacing (format) or to audio (voice).
+  - **Visual spend:** a per-shot maximum that must be above zero and within
+    the hard cap, with a confirmation; or keep the placeholder, or retry
+    existing footage with an instruction.
+  - **Edit preview** and **Final export:** video players, approve or return
+    to visuals, narration or sound (returns need a note). Final approval
+    binds the rendered bytes and publishes nothing.
+  - **Kept in the classic view:** asset registration (final narration audio,
+    managed and generated visuals, final sound) and storyboard shot editing.
+  - **Confirm spend (D-166):** a thumbnail or visual generation call that
+    failed after it was sent (timeout, provider error) keeps its estimate
+    committed and appears first on the Budget tab as "Confirm spend", with
+    the error and a cost field: "It cost this much" records the amount,
+    "It cost nothing" releases it. The per-video list counts such calls.
+  - **Resumable upload (D-167, D-171):** the Publish tab saves the YouTube
+    upload session before sending bytes; after an interruption the button
+    reads "Resume upload to YouTube" and continues the same session, so one
+    video is never uploaded twice. Once YouTube has the video, a failure in a
+    later step leaves "Record the uploaded video", which uploads nothing. The
+    publish decision cannot change while an upload is unfinished; "Discard
+    the interrupted upload" (after checking YouTube Studio) releases it.
+- `/analysis` — **Workspace** (formerly Analyze & Create): every review panel,
+  reachable under Productions. Its stage strip is a progress indicator, not
+  navigation.
+- `/tools` — **Tools & Diagnostics** (D-123), refreshed every 15 seconds and
+  whenever a job changes:
+  - **System Health:** yt-dlp, FFmpeg, the YouTube Data API key (present or
+    not, never its value), Kokoro, agent-reach, the radar scheduler, and the
+    FAIR, Vision and vidIQ Doctors. Each check has a status and a reason.
+    Where an action fixes it, a Run Doctor or Install button runs that
+    predefined action.
+  - **Doctor (D-169):** one click tests every key and binary for real: the
+    YouTube key with a live Data API call, the Gemini key and billing flag,
+    FFmpeg, FFprobe, yt-dlp, the search backends, Kokoro with espeak-ng, the
+    narration and image providers, the upload OAuth values and free disk.
+    Each row shows its result and how long it took; secrets are never shown.
+  - **Orphaned jobs (D-169, D-171):** when the UI starts it settles a job the
+    last run left RUNNING. It stops only processes proven to be that job (same
+    boot and start time, run from this project, or a step the job left
+    running) and records ORPHANED; anything else, including a stranger that
+    inherited the pid after a reboot, is never signalled and the job is
+    recorded INTERRUPTED.
+  - **Recent Jobs:** the last 30 jobs with status, times and exit code.
+    *Logs* opens the saved log (the last 60,000 characters).
+  - **Advanced:** raw output shortcuts, then collapsible sections for the
+    manual pipeline controls and scheduler, the pipeline state, and the
+    safeguards.
 
-The Live Job console is global. The top-bar job indicator opens a slide-out
-drawer from any view, and background polling continues while navigating between
-views.
+The Live Job console is global. The top bar shows a health pill (failed job or
+a radar scheduler that has missed three wakes) next to the job indicator,
+which opens a slide-out drawer from any view; the sidebar footer shows the
+workflow and scheduler state. Background polling continues while navigating.
 
-The local server serves the same application shell at all four routes, so a
+The local server serves the same application shell at every route, so a
 view can be refreshed or bookmarked directly without returning a 404.
 
+### Visual consistency (D-125)
+
+- **One style per element.**
+  - Buttons default to the small text size; only the Command Center's main
+    action is larger.
+  - Empty states share one quiet, full-width style.
+  - Gate reviews, Packaging and Produce share the same underline tab bar.
+  - Filters (inbox, productions, radar formats) keep the pill style.
+- **No repeated titles.** A page's title and subtitle appear once, in the
+  top bar.
+- **Tidy text.** Headings are balanced across lines, and counts use
+  fixed-width digits so they don't shift as they change.
+
+### Adversarial regression audit (D-127)
+
+The redesign was attacked, not just tested.
+- **Code review.** Three independent reviews compared every gate's request
+  with the classic panel and the server, every HTML template with its
+  escaping, and every route with the old behaviour.
+- **Browser harness.** The pages were fed real-shaped data carrying script
+  payloads, malicious URL hashes, failing APIs, a slow refusing server and
+  very long titles.
+- **Result.** No payload executes. A refused decision keeps the reviewer's
+  choices and note. Decided gates stay locked as in the classic panels.
+  Pending rough cuts are listed. API reads refuse foreign Host headers.
+  `test_regression_audit.py` pins each fix.
+
+### Web Interface Guidelines (D-126)
+
+The UI is checked against Vercel's Web Interface Guidelines; the
+universal rules apply here.
+- **Links are links.** Anything that navigates is an `<a href>`, so
+  Ctrl/Cmd-click and "open in new tab" work. Every tab, including the
+  inbox tabs, is in the URL, so refresh, Back and shared links restore it.
+- **Phones.** Every control is at least 44 px tall, and inputs use 16 px
+  text so iOS does not zoom in. Drawers and logs keep their scroll inside.
+- **Forms.**
+  - Inputs have names, and URL and path fields have spellcheck off.
+  - Descriptive placeholders end with an ellipsis.
+  - Closing or reloading the tab with a typed but unsent review note asks
+    for confirmation first.
+- **Details.**
+  - Every transition lists its properties (no `transition: all`).
+  - The browser chrome matches the dark background.
+  - Job times follow your locale.
+
+### Keyboard, screen readers and small screens (D-124)
+
+Every route is checked with axe-core at 320, 640 (1280 at 200% zoom), 768
+and 1280 px, with no violations and no horizontal scrolling.
+- **Moving around.**
+  - *Skip to content* is the first Tab stop.
+  - After a navigation, focus moves to the page title.
+  - In every tab bar, ← and → switch tabs, and Home and End jump to the
+    first or last.
+- **Overlays.** The live job drawer, the evidence drawer and the phone menu:
+  - take focus when they open;
+  - keep Tab inside;
+  - close with Escape and return focus to the control that opened them.
+
+  While closed they are `inert`, so off-screen controls never take focus.
+- **Screen readers.**
+  - Toasts are announced; errors interrupt, other messages wait their turn.
+  - The job indicator announces the job's status and name, even on phones
+    where its text is hidden.
+- **Visuals.**
+  - Primary buttons use a darker blue fill, giving 5.2:1 text contrast
+    (previously 3.4:1).
+  - With *reduce motion* set, animations, transitions and smooth scrolling
+    are turned off.
+  - In forced-colors (Windows high contrast) mode, the focus ring and status
+    badges stay visible.
+
+### Productions derived from files
+
+`GET /api/productions` (also `productions` in `/api/status`) is computed by
+`experiment_ui/productions.py` from the artifact state the server already
+builds; nothing is stored. A production is a concept with an ACCEPT decision at
+the Concept Gate. Its stage is the first of Research → Script → Package →
+Format → Produce whose output is not yet current for that concept, and Done
+when every branch has a current final render. Its status is:
+
+- **Needs your review** — a decision for this concept is pending at that
+  stage's gate (research claims, scripts, title direction, format plan, voice
+  performance).
+- **Blocked** — the gate sent it for rework or rejected it.
+- **Ready to run** — the next automatic step can run.
+- **Complete** — all branches rendered.
+
+Gates that are still global rather than per concept (narration spend, visual
+candidates and rights, rough cut, edit preview, final export) are not yet
+attributed to a single production; they stay on the Command Center hero.
+
+`GET /api/production?concept_id=…` returns one production with its eight
+workspace sections (404 when the concept is no longer accepted). Each
+production's `updated_at` is the newest modification time of its artifacts.
+Every engine names per-concept files `<slug>.…`, so one directory scan per
+stage folder finds them without reading any file.
+
+### Front-end files
+
+`static/css/tokens.css` holds every design token (surfaces, text, accent, the
+four state colours `--status-human|running|blocked|complete`, spacing, type,
+radius, shadow, motion, z-index) and aliases the old variable names so
+`styles.css` keeps working while later patches move its rules across.
+Split-out files so far: `static/css/shell.css`, `command-center.css`,
+`opportunity.css`, `review.css`, `production.css` and `packaging.css`; `static/js/production-workspace.js`, `gate-reviews.js`, `packaging.js`, `produce.js`, `static/js/command-center.js`,
+`review-workspace.js` (the shared review workspace), `opportunity-review.js`
+and `radar.js`. Modules talk to `app.js` only through the small `window.YP`
+API (inbox data, the shared decision dispatcher, the evidence drawer). The server serves
+`/css/*.css` and `/js/*.js` only: one directory level, an allowlisted extension
+per folder, no dotfiles, and a resolved path that must stay inside that folder.
+
+Status codes on every page are shown as sentences (D-170): the catalogue in
+`experiment_ui/plain_language.py` is served once per page load and any code it
+does not carry is turned into a sentence by shape, so nothing like
+`WAITING_FOR_DRAFT_RESEARCH_PACKAGES` reaches the screen.
 
 ## Experiment 02 evidence step
 
@@ -509,10 +851,14 @@ confirmation of the displayed worst-case amount.
 The gate itself makes no paid call. An accepted gate records authorization for
 the exact current quote only.
 
-The current repository configuration deliberately keeps the Higgsfield
-narration contract unverified until a documented endpoint/schema, licensed
-voice identity, licence reference and calibration are configured. Therefore a
-normal live run must stop safely rather than fabricate provider pricing.
+The shipped configuration uses the free local Kokoro voice as the narration
+provider (D-168): the contract is the model's Apache-2.0 licence and voice
+list, the quote is written by the system at $0 and bound to the request, and
+the spend gate runs as usual. A paid HTTP provider stays supported: copy
+`paid_provider_example` over the provider keys in
+`production_engine/narration_render_config.json`, verify its contract, set
+the price and API key variable, and match `voice_performance_config.json`;
+the system still never guesses a price.
 
 The provenance chain is:
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
+import video_budget
 from visual_acquisition import load_json, sha256_file
 from visual_gap_planner import gap_plan_is_current
 
@@ -289,6 +290,7 @@ def snapshot() -> dict[str, Any]:
     decided_total = 0
     authorized = 0
     stale_removed = 0
+    stale_ignored = 0
     authorized_max_total = 0.0
     current_spend_paths: set[Path] = set()
 
@@ -352,10 +354,13 @@ def snapshot() -> dict[str, Any]:
         )
 
     if SPEND.exists():
+        # Stale spend reviews are counted, never deleted on a status poll: a
+        # rough-cut change mid-job must not erase authorizations in the window
+        # before the gap plan is rebuilt (audit 2026-10-04). They are inert
+        # because every consumer checks the gap-plan hash.
         for stale_path in SPEND.glob("*.visual_spend_review.json"):
             if stale_path.resolve() not in current_spend_paths:
-                stale_path.unlink()
-                stale_removed += 1
+                stale_ignored += 1
 
     workflow_cap = float(config["workflow_hard_cap_usd"])
     authorized_max_total = round(authorized_max_total, 2)
@@ -382,6 +387,7 @@ def snapshot() -> dict[str, Any]:
         "authorized": authorized,
         "authorized_max_total_usd": authorized_max_total,
         "stale_removed": stale_removed,
+        "stale_ignored": stale_ignored,
         "currency": config["currency"],
         "per_shot_hard_cap_usd": config["per_shot_hard_cap_usd"],
         "workflow_hard_cap_usd": workflow_cap,
@@ -498,6 +504,24 @@ def apply_action(
             raise ValueError(
                 "Visual authorization total would exceed the configured $"
                 + f"{workflow_cap:.2f} USD hard cap"
+            )
+
+        # One budget per video (D-136): the authorization is a reservation
+        # against this video's ceiling; anything else releases it.
+        budget_video = video_budget.video_id(plan.get("concept_id"), plan.get("format"))
+        if decision == "AUTHORIZE_GENERATION":
+            video_budget.reserve(
+                video=budget_video,
+                category="visual",
+                ref=f"shot:{shot_id}",
+                amount_usd=round(requested_cost, 2),
+                note=note.strip(),
+                ledger=video_budget.ledger_in(GAPS.parent),
+            )
+        else:
+            video_budget.release(
+                video=budget_video, category="visual", ref=f"shot:{shot_id}", note=decision,
+                ledger=video_budget.ledger_in(GAPS.parent),
             )
 
         atomic_write_json(spend_path, review)

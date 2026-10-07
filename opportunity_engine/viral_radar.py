@@ -44,7 +44,14 @@ from experiment_01_discovery.market_intelligence import (  # noqa: E402
     calculate_snapshot_velocity,
     load_snapshot_history,
 )
-from opportunity_engine import channel_scope, historical_adapter, models, viral_cluster  # noqa: E402
+from opportunity_engine import (  # noqa: E402
+    channel_scope,
+    historical_adapter,
+    models,
+    radar_lane,
+    radar_learning,
+    viral_cluster,
+)
 from opportunity_engine.human_video_intake import (  # noqa: E402
     VIDEO_ID_PATTERN,
     _iso8601_seconds,
@@ -543,12 +550,27 @@ def snapshot_due(record: dict[str, Any] | None, hours: float, settings: dict[str
     last = _parse_time(record["last_snapshot_at"])
     if last is None:
         return True
-    cadence = settings["snapshot_cadence_hours"][-1][1]
+    return (now - last).total_seconds() / 3600 >= cadence_hours(hours, settings)
+
+
+def cadence_hours(age: float, settings: dict[str, Any]) -> float:
     for max_age, every in settings["snapshot_cadence_hours"]:
-        if hours <= float(max_age):
-            cadence = every
-            break
-    return (now - last).total_seconds() / 3600 >= float(cadence)
+        if age <= float(max_age):
+            return float(every)
+    return float(settings["snapshot_cadence_hours"][-1][1])
+
+
+def next_snapshot_due(state: dict[str, Any], settings: dict[str, Any], now: datetime) -> datetime | None:
+    """When the earliest tracked video next needs a snapshot (None if none tracked)."""
+    due: list[datetime] = []
+    for record in state["tracked"].values():
+        last = _parse_time(record.get("last_snapshot_at"))
+        hours = age_hours(record.get("video") or {}, now)
+        if last is None or hours is None:
+            due.append(now)
+            continue
+        due.append(last + timedelta(hours=cadence_hours(hours, settings)))
+    return min(due) if due else None
 
 
 def append_snapshot(video: dict[str, Any], hours: float, observed_at: str) -> None:
@@ -711,13 +733,26 @@ def save_packet(packet: dict[str, Any]) -> None:
 # --------------------------------------------------------------------------
 
 
+MODE_FULL = "full"
+MODE_SNAPSHOTS = "snapshots"
+
+
 def run(
     *,
     api: Api | None = None,
     searcher: Searcher | None = None,
     config: dict[str, Any] | None = None,
     now: datetime | None = None,
+    mode: str = MODE_FULL,
 ) -> dict[str, Any]:
+    """One radar pass.
+
+    ``full`` discovers (watchlist crawl and bucket searches) and measures;
+    ``snapshots`` (O13) only re-measures already-tracked videos, which costs
+    one API unit per 50 videos and never searches.
+    """
+    if mode not in (MODE_FULL, MODE_SNAPSHOTS):
+        raise ValueError(f"Unknown radar mode: {mode}")
     config = config or channel_scope.load_config()
     settings = radar_config(config)
     now = now or datetime.now(timezone.utc)
@@ -725,6 +760,7 @@ def run(
     state = load_state()
     summary: dict[str, Any] = {
         "run_at": observed_at,
+        "mode": mode,
         "status": STATUS_COMPLETE,
         "errors": [],
         "api_calls": 0,
@@ -750,18 +786,21 @@ def run(
         return api_call(resource, **params)
 
     before = len(state["watchlist"])
-    seed_watchlist_from_system(state, settings, now)
-    discovery = bucket_discovery(state, searcher or search_url_flat, settings, now)
-    summary["bucket_discovery"] = discovery
-    if discovery["status"] in (THROTTLED, YT_DLP_FAILED):
-        summary["status"] = STATUS_PARTIAL
-        summary["errors"].append(f"bucket discovery: {discovery['status']}")
-    state["last_discovery_run"] = observed_at
+    if mode == MODE_FULL:
+        seed_watchlist_from_system(state, settings, now)
+        discovery = bucket_discovery(state, searcher or search_url_flat, settings, now)
+        summary["bucket_discovery"] = discovery
+        if discovery["status"] in (THROTTLED, YT_DLP_FAILED):
+            summary["status"] = STATUS_PARTIAL
+            summary["errors"].append(f"bucket discovery: {discovery['status']}")
+        state["last_discovery_run"] = observed_at
 
     try:
-        summary["errors"].extend(resolve_handles(state, counted, settings, now))
-        refresh_channels(state, counted)
-        uploads = crawl_uploads(state, counted, settings)
+        uploads: dict[str, list[str]] = {}
+        if mode == MODE_FULL:
+            summary["errors"].extend(resolve_handles(state, counted, settings, now))
+            refresh_channels(state, counted)
+            uploads = crawl_uploads(state, counted, settings)
         tracked_ids = list(state["tracked"])
         measured = measure_videos([v for ids in uploads.values() for v in ids] + tracked_ids, counted)
     except RadarError as exc:
@@ -773,7 +812,7 @@ def run(
 
     summary["watchlist_size"] = len(state["watchlist"])
     summary["new_channels"] = len(state["watchlist"]) - before
-    if not state["watchlist"]:
+    if mode == MODE_FULL and not state["watchlist"]:
         summary["status"] = STATUS_PARTIAL
         summary["errors"].append(
             "The watchlist is empty: no seed handle resolved and no channel has been seen yet."
@@ -909,6 +948,34 @@ def _write_summary(summary: dict[str, Any]) -> None:
     atomic_write_json(SUMMARY_FILE, summary)
 
 
+def snapshots_for(video_id: str) -> list[dict[str, Any]]:
+    """The stored snapshots of one video, oldest first, for the trajectory chart (O14)."""
+    if not VIDEO_ID_PATTERN.fullmatch(str(video_id or "")):
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        lines = SNAPSHOT_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("video_id") == video_id and row.get("views") is not None:
+            rows.append(
+                {
+                    "observed_at": row.get("observed_at"),
+                    "views": int(row["views"]),
+                    "video_age_hours": row.get("video_age_hours"),
+                    "likes": row.get("likes"),
+                    "comments": row.get("comments"),
+                }
+            )
+    rows.sort(key=lambda r: str(r.get("observed_at") or ""))
+    return rows
+
+
 def load_clusters() -> list[dict[str, Any]]:
     try:
         payload = json.loads(CLUSTERS_FILE.read_text(encoding="utf-8"))
@@ -920,6 +987,191 @@ def load_clusters() -> list[dict[str, Any]]:
 
 def load_cluster(cluster_id: str) -> dict[str, Any] | None:
     return next((c for c in load_clusters() if c.get("cluster_id") == cluster_id), None)
+
+
+SPARKLINE_MAX_POINTS = 24
+
+
+def _snapshot_series(video_ids: set[str]) -> dict[str, list[list[float]]]:
+    """[age_hours, views] per video from the append-only snapshot log, one pass."""
+    series: dict[str, list[list[float]]] = {video_id: [] for video_id in video_ids}
+    if not video_ids:
+        return series
+    try:
+        lines = SNAPSHOT_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return series
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict) or row.get("video_id") not in series:
+            continue
+        try:
+            point = [float(row["video_age_hours"]), float(row["views"])]
+        except (KeyError, TypeError, ValueError):
+            continue
+        series[str(row["video_id"])].append(point)
+    for points in series.values():
+        points.sort(key=lambda point: point[0])
+        if len(points) > SPARKLINE_MAX_POINTS:
+            step = (len(points) - 1) / (SPARKLINE_MAX_POINTS - 1)
+            kept = [points[round(i * step)] for i in range(SPARKLINE_MAX_POINTS)]
+            points[:] = kept
+    return series
+
+
+def _float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def radar_overview(now: datetime | None = None) -> dict[str, Any]:
+    """Everything the Viral Radar page shows, read from the radar's own files (UI-04).
+
+    Themes come from the last clustering pass; tracked videos from the radar
+    state; sparkline points from the snapshot log. Nothing is re-measured.
+    """
+    now = now or datetime.now(timezone.utc)
+    settings = radar_config()
+    window_days = int(settings.get("active_window_days") or 15)
+    state = load_state()
+    tracked: dict[str, dict[str, Any]] = state.get("tracked") or {}
+    clusters = load_clusters()
+    ids = set(tracked) | {
+        str(member.get("video_id"))
+        for cluster in clusters
+        for member in cluster.get("members") or []
+        if member.get("video_id")
+    }
+    series = _snapshot_series(ids)
+    taste = taste_model()
+
+    def video_row(video_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        video = record.get("video") or {}
+        metrics = record.get("metrics") or {}
+        published = _parse_time(video.get("published_at"))
+        age = (now - published).total_seconds() / 3600 if published else _float(metrics.get("age_hours"))
+        lane = radar_lane.classify(video.get("title"), video.get("channel_title"))
+        score = taste.score(video.get("title"), video.get("channel_id"))
+        return {
+            "video_id": video_id,
+            "lane": lane["lane"],
+            "lane_hits": lane["hits"],
+            "taste": score,
+            "taste_label": radar_learning.taste_label(score),
+            "opportunity_id": opportunity_id(models.SOURCE_VIRAL_RADAR, video_id),
+            "title": video.get("title"),
+            "channel_title": video.get("channel_title"),
+            "format": record.get("format"),
+            "strength": record.get("strength"),
+            "trajectory": record.get("trajectory"),
+            "breadth": record.get("breadth"),
+            "historical_alignment": record.get("historical_alignment"),
+            "lifetime_ratio": _float(metrics.get("lifetime_ratio")),
+            "views": metrics.get("views", video.get("views")),
+            "age_hours": round(age, 1) if age is not None else None,
+            "day": min(window_days, int(age // 24) + 1) if age is not None and age >= 0 else None,
+            "window_days": window_days,
+            "first_seen_at": record.get("first_seen_at"),
+            "cluster_id": (record.get("cluster") or {}).get("cluster_id"),
+            "series": series.get(video_id, []),
+        }
+
+    videos = [video_row(video_id, record) for video_id, record in tracked.items() if isinstance(record, dict)]
+    videos.sort(key=lambda row: -(row["lifetime_ratio"] or 0))
+    by_id = {row["video_id"]: row for row in videos}
+
+    themes = []
+    for cluster in clusters:
+        members = [m for m in cluster.get("members") or [] if isinstance(m, dict)]
+        rows = [by_id[str(m.get("video_id"))] for m in members if str(m.get("video_id")) in by_id]
+        ratios_ = sorted(
+            r for r in (_float(m.get("lifetime_ratio")) for m in members) if r is not None
+        )
+        top = max(rows, key=lambda row: row["lifetime_ratio"] or 0) if rows else None
+        seen = [str(row.get("first_seen_at")) for row in rows if row.get("first_seen_at")]
+        # The theme reads as the viewer's question, not keyword stems (D-170):
+        # the strongest on-lane member's title, else the strongest member's.
+        on_lane = [row for row in rows if row.get("lane") == radar_lane.ON_LANE and row.get("title")]
+        headline_row = max(on_lane, key=lambda row: row["lifetime_ratio"] or 0) if on_lane else top
+        headline = theme_headline(str((headline_row or {}).get("title") or ""))
+        themes.append(
+            {
+                "cluster_id": cluster.get("cluster_id"),
+                "label": cluster.get("label"),
+                "headline": headline or cluster.get("label"),
+                "kind": cluster.get("kind"),
+                "breadth": cluster.get("breadth"),
+                "replication_rule_id": cluster.get("replication_rule_id"),
+                "independent_channel_count": cluster.get("independent_channel_count"),
+                "member_count": cluster.get("member_count", len(members)),
+                "lane": radar_lane.theme_lane([row["lane"] for row in rows]),
+                "taste": max((r["taste"] for r in rows if r.get("taste") is not None), default=None),
+                "strongest_ratio": ratios_[-1] if ratios_ else None,
+                "median_ratio": _median(ratios_),
+                "direction": top.get("trajectory") if top else None,
+                "historical_alignment": top.get("historical_alignment") if top else None,
+                "first_detected_at": min(seen) if seen else None,
+                "top_video_id": top.get("video_id") if top else None,
+                "top_opportunity_id": top.get("opportunity_id") if top else None,
+                "momentum": top.get("series") if top else [],
+                "videos": [
+                    {k: row[k] for k in ("video_id", "opportunity_id", "title", "channel_title", "lifetime_ratio", "trajectory", "lane", "day", "taste", "taste_label")}
+                    for row in sorted(rows, key=lambda row: -(row["lifetime_ratio"] or 0))
+                ],
+            }
+        )
+    themes.sort(
+        key=lambda theme: (
+            theme["breadth"] != "REPLICATED",
+            -(theme["strongest_ratio"] or 0),
+        )
+    )
+    return {
+        "generated_at": now.isoformat(),
+        "window_days": window_days,
+        "themes": themes,
+        "tracked": videos,
+        "learning": taste.status(),
+        "status": status_snapshot(),
+    }
+
+
+_HEADLINE_BRACKETS = re.compile(r"[\(\[][^\)\]]{0,80}[\)\]]")
+_HEADLINE_TRAILING_TAGS = re.compile(r"(?:\s#\w+)+$")
+
+
+def theme_headline(title: str, limit: int = 90) -> str:
+    """A video title trimmed to the question it asks (D-170).
+
+    Drops bracketed tags, a trailing run of hashtags and a "| Channel"
+    suffix. A "#" inside the title ("Price #1 in the world", "C# tutorial")
+    is part of it (audit 2). Input is capped first, so no pattern can be
+    slow on a hostile title.
+    """
+    text = str(title or "")[:300]
+    text = text.split("|", 1)[0]
+    text = _HEADLINE_BRACKETS.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = _HEADLINE_TRAILING_TAGS.sub("", text).strip(" -–—:·")
+    if len(text) > limit:
+        text = text[:limit].rsplit(" ", 1)[0] + "…"
+    return text
+
+
+def taste_model() -> radar_learning.TasteModel:
+    """What the operator picks, learned from inbox decisions on radar packets (D-165)."""
+    from opportunity_engine import inbox  # the inbox imports this module
+
+    try:
+        items = inbox.load_state().get("items") or {}
+    except (OSError, ValueError, AttributeError):
+        items = {}
+    return radar_learning.TasteModel(radar_learning.examples(items, list_packets()))
 
 
 def status_snapshot() -> dict[str, Any]:
@@ -940,12 +1192,12 @@ def status_snapshot() -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("mode", choices=["run", "status"])
+    parser.add_argument("mode", choices=["run", "snapshots", "status"])
     args = parser.parse_args()
     if args.mode == "status":
         print(json.dumps(status_snapshot(), indent=2))
         return
-    summary = run()
+    summary = run(mode=MODE_SNAPSHOTS if args.mode == "snapshots" else MODE_FULL)
     print(f"Viral radar: {summary['status']}  ({summary['api_calls']} API calls)")
     print(f"  Watchlist {summary['watchlist_size']} channels (+{summary['new_channels']} new)")
     print(f"  Recent uploads checked {summary['recent_videos']}: {summary['classified']}")

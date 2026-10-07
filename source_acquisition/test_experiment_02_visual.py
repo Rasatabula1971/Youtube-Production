@@ -57,7 +57,8 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
 
         self.assertIn("--get-url", command)
         self.assertIn("--format", command)
-        self.assertIn("best[height<=360]/best", command)
+        self.assertIn(visual.VIDEO_FORMAT, command)
+        self.assertTrue(visual.VIDEO_FORMAT.startswith("bestvideo[height<=360]/"))
         self.assertNotIn("--output", command)
         self.assertNotIn("--write-video", command)
 
@@ -68,7 +69,8 @@ class Experiment02VisualEvidenceTests(unittest.TestCase):
             destination=Path("fallback.mp4"),
         )
 
-        self.assertIn("best[height<=360]/best", command)
+        self.assertIn(visual.VIDEO_FORMAT, command)
+        self.assertTrue(visual.VIDEO_FORMAT.startswith("bestvideo[height<=360]/"))
         self.assertIn("--output", command)
         self.assertEqual(command[-1], "https://www.youtube.com/watch?v=abc123")
 

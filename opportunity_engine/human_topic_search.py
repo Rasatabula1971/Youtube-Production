@@ -334,7 +334,9 @@ def explore(
     measurer: Measurer | None = None,
     config: dict[str, Any] | None = None,
     now: datetime | None = None,
+    save: bool = True,
 ) -> dict[str, Any]:
+    """Search a topic and build its packet; ``save=False`` only returns it (D-174)."""
     config = config or channel_scope.load_config()
     settings = topic_config(config)
     now = now or datetime.now(timezone.utc)
@@ -429,7 +431,8 @@ def explore(
             for v in excluded
         ],
     }
-    save_packet(packet)
+    if save:
+        save_packet(packet)
     return packet
 
 

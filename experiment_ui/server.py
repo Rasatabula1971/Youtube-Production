@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import os
 import secrets
 import shutil
@@ -27,12 +28,30 @@ PROJECT_ROOT = HERE.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline_integrity import atomic_write_json
+from pipeline_integrity import append_jsonl, atomic_write_json, atomic_write_text
+
+import doctor as doctor_module
+import plain_language
+import productions as productions_model
 
 STATIC_DIR = HERE / "static"
-APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
+APP_ROUTES = {
+    "/",
+    "/opportunity",
+    "/opportunity/review",
+    "/radar",
+    "/production",
+    "/review",
+    "/packaging",
+    "/produce",
+    "/analysis",
+    "/productions",
+    "/tools",
+}
 IS_WINDOWS = os.name == "nt"
 CSRF_TOKEN = secrets.token_urlsafe(32)
+# Every POST body is a small JSON object (ids, decisions, notes, paths).
+MAX_POST_BYTES = 4_000_000
 HUMAN_GATE_MUTATION_ROUTES = {
     "/api/opportunity-gate",
     "/api/opportunity/video/analyze",
@@ -67,11 +86,22 @@ HUMAN_GATE_MUTATION_ROUTES = {
     "/api/narration-performance-review",
     "/api/thumbnail-gate",
     "/api/thumbnail-spec",
+    "/api/thumbnail-images",
+    "/api/final-audio-gate",
+    "/api/visual-plan-gate",
+    "/api/narration-dispatch",
+    "/api/visual-dispatch",
+    "/api/publish-gate",
+    "/api/editor-exchange",
+    "/api/budget-reconcile",
 }
 
 UI_OUTPUT_DIR = PROJECT_ROOT / ".experiment_ui"
 JOB_LOG_DIR = UI_OUTPUT_DIR / "jobs"
 JOB_STATE_FILE = UI_OUTPUT_DIR / "job_state.json"
+JOB_HISTORY_FILE = UI_OUTPUT_DIR / "job_history.jsonl"
+LAST_AUTO_RUN_FILE = UI_OUTPUT_DIR / "last_auto_run.json"
+JOB_HISTORY_KEEP = 300
 
 EXP1_OUTPUT = PROJECT_ROOT / "experiment_01_discovery" / "output"
 EXP13_DIR = EXP1_OUTPUT / "experiment_01_3"
@@ -97,7 +127,7 @@ from opportunity_engine import active_source as opportunity_active_source
 from opportunity_engine import human_topic_search, human_video_intake
 from opportunity_engine import inbox as opportunity_inbox
 from opportunity_engine import models as opportunity_models
-from opportunity_engine import viral_radar
+from opportunity_engine import radar_scheduler, viral_radar
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 if str(EXP2_DIR) not in sys.path:
@@ -381,6 +411,16 @@ from production_engine.thumbnail_review import (
 from production_engine.thumbnail_review import (
     thumbnail_file_path,
 )
+from production_engine import thumbnail_image_provider
+from production_engine import video_budget
+from production_engine import narration_final_review
+from production_engine import visual_plan_review
+from production_engine import narration_dispatch
+from production_engine import visual_dispatch
+from production_engine import publish_review
+from production_engine import youtube_upload
+# The same module object final_export_review uses (bare import from PRODUCTION_DIR).
+import tesseract_exchange
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
@@ -657,7 +697,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "description": "Fetches current view counts for the same frozen video IDs. No new search discovery.",
     },
     "exp13_auto_refresh_install": {
-        "label": "Install Opportunity Auto-Continue",
+        "label": "Install Opportunity Automation (research + viral radar)",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -672,12 +712,13 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             sys.executable,
         ],
         "description": (
-            "Registers the Windows continuation task used by automatic "
-            "Opportunity Research while velocity evidence is pending."
+            "Registers the one Windows task (every 2 hours): Opportunity Research "
+            "continuation while velocity evidence is pending, then a viral radar tick "
+            "(discovery every 8 hours, snapshots of tracked breakouts when due)."
         ),
     },
     "exp13_auto_refresh_remove": {
-        "label": "Remove Opportunity Auto-Continue",
+        "label": "Remove Opportunity Automation",
         "stage": "01.3",
         "command": [
             "powershell.exe",
@@ -687,7 +728,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "-File",
             "scripts/remove_experiment_01_3_auto_refresh.ps1",
         ],
-        "description": "Removes the Windows Opportunity Research continuation task.",
+        "description": "Removes the Windows task (research continuation and viral radar ticks).",
     },
     "exp14_plan": {
         "label": "Build 01.4 Expansion Plan",
@@ -1604,6 +1645,17 @@ OPEN_TARGETS = {
 }
 
 
+def json_safe(value: Any) -> Any:
+    """The same data with non-finite floats as None, for strict JSON."""
+    if isinstance(value, float):
+        return value if value == value and value not in (float("inf"), float("-inf")) else None
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return value
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1634,6 +1686,14 @@ def final_packaging_gate_state() -> dict[str, Any]:
         }
 
 
+def video_budget_state() -> dict[str, Any]:
+    """Per-video budget (D-136) that degrades to an error status instead of raising."""
+    try:
+        return video_budget.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"error": str(exc), "videos": []}
+
+
 def thumbnail_gate_state() -> dict[str, Any]:
     """Thumbnail Gate snapshot that degrades to an error status instead of raising."""
     try:
@@ -1647,6 +1707,15 @@ IMAGE_CONTENT_TYPES = {
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".webp": "image/webp",
+}
+
+
+AUDIO_CONTENT_TYPES = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
 }
 
 
@@ -1971,7 +2040,9 @@ def analyze_submitted_video(
     if active and active.get("video_id") == video_id:
         return opportunity_inbox_snapshot()
     _confirm_replacing_study_set(confirm_replace, "this video")
-    record = opportunity_active_source.set_active(video_id, allow_excluded=allow_excluded)
+    record = opportunity_active_source.set_active(
+        video_id, allow_excluded=allow_excluded, with_context=True
+    )
     opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
 
@@ -2002,6 +2073,7 @@ def analyze_viral_candidate(
         video_id,
         allow_excluded=allow_excluded,
         source_type=opportunity_models.SOURCE_VIRAL_RADAR,
+        with_context=True,
     )
     opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
@@ -2018,6 +2090,17 @@ def analyze_explored_topic(
     record = opportunity_active_source.set_active_topic(topic_key, allow_excluded=allow_excluded)
     opportunity_inbox.record_decision(str(record["opportunity_id"]), "APPROVE")
     return opportunity_inbox_snapshot()
+
+
+def vision_review_satisfied(vision_review: dict[str, Any]) -> bool:
+    """Every video with retained frames has a completed human visual review.
+
+    Vision review covers exactly the videos whose visual run kept frames, so a
+    partial visual run (3 of 5 videos sampled) still reviews those 3 before
+    analysis; videos without frames continue on transcript evidence. Before
+    A2 a partial run skipped the review entirely (D-129).
+    """
+    return str(vision_review.get("status") or "") in {"NOT_APPLICABLE", "COMPLETE"}
 
 
 def exp2_artifact_state() -> dict[str, Any]:
@@ -2233,10 +2316,17 @@ def transformation_artifact_state() -> dict[str, Any]:
         and bool(candidate_provenance)
         and candidate_provenance == current_response_hashes
     )
+    # Older candidate files may predate the coverage rule: check it here too.
+    mechanism_coverage_complete = (
+        bool(candidates.get("mechanism_coverage_complete"))
+        if isinstance(candidates, dict)
+        else False
+    )
     candidates_ready = (
         candidate_pool_ready
         and candidate_count >= minimum_candidates
         and candidates_current
+        and mechanism_coverage_complete
     )
     gate = (
         concept_gate_snapshot()
@@ -3058,6 +3148,8 @@ def narration_artifact_state() -> dict[str, Any]:
                 "items": [],
             },
             "audio_ready": False,
+            "audio_qc_passed": False,
+            "final_audio": {"status": "WAITING_FOR_AUDIO_QC", "complete": False, "items": []},
         }
 
     render = narration_render_snapshot()
@@ -3069,20 +3161,105 @@ def narration_artifact_state() -> dict[str, Any]:
     render_results_present = bool(
         expected_returns > 0 and current_returns == expected_returns
     )
-    audio_ready = bool(
+    audio_qc_passed = bool(
         render_results_present
         and audio_qc.get("status") == "PASS"
         and int(audio_qc.get("processed") or 0) == expected_returns
         and int(audio_qc.get("passed") or 0) == expected_returns
     )
+    # QC is automatic; the exact paid audio is ready only once a human has
+    # listened and approved it at the Final Audio Gate (D-137).
+    final_audio = final_audio_gate_state() if audio_qc_passed else {
+        "status": "WAITING_FOR_AUDIO_QC", "complete": False, "items": []
+    }
+    audio_ready = bool(audio_qc_passed and final_audio.get("complete"))
     return {
         "render": render,
         "spend_gate": spend_gate,
         "render_return": render_return,
         "render_results_present": render_results_present,
         "audio_qc": audio_qc,
+        "audio_qc_passed": audio_qc_passed,
+        "final_audio": final_audio,
         "audio_ready": audio_ready,
     }
+
+
+def visual_plan_blocking_items(
+    narration_spend_state: dict[str, Any], plan_gate: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Visual plans that still hold narration spend (D-138).
+
+    Videos whose narration spend was already authorized before this gate
+    existed are not pulled back to it.
+    """
+    spent_videos = {
+        (str(item.get("concept_id")), str(item.get("format")))
+        for item in narration_spend_state.get("items", []) or []
+        if isinstance(item, dict) and str(item.get("decision") or "").upper() == "ACCEPT"
+    }
+    return [
+        item
+        for item in plan_gate.get("items", []) or []
+        if isinstance(item, dict)
+        and (str(item.get("concept_id")), str(item.get("format"))) not in spent_videos
+    ]
+
+
+def require_visual_plan_for_spend(body: dict[str, Any]) -> None:
+    """Refuse narration spend authorization until the visual plan is approved."""
+    if str(body.get("decision", "")).strip().upper() != "ACCEPT":
+        return
+    if not visual_plan_review.is_approved(str(body.get("concept_id", "")), str(body.get("format", ""))):
+        raise ValueError("Approve the visual plan for this video before authorizing narration spend")
+
+
+def visual_plan_gate_state() -> dict[str, Any]:
+    """Visual Plan Gate snapshot that degrades to an error status instead of raising."""
+    try:
+        return visual_plan_review.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "complete": False, "items": []}
+
+
+def narration_dispatch_state() -> dict[str, Any]:
+    """Paid narration provider readiness (D-139); never raises."""
+    try:
+        return narration_dispatch.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"ready": False, "problems": [str(exc)], "history": []}
+
+
+def visual_dispatch_state() -> dict[str, Any]:
+    """Premium visual provider readiness and authorized shots (D-140); never raises."""
+    try:
+        return visual_dispatch.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"ready": False, "problems": [str(exc)], "shots": []}
+
+
+def publish_gate_state() -> dict[str, Any]:
+    """Publish packages and the YouTube uploader's readiness (D-142, D-143); never raises."""
+    try:
+        return {**publish_review.snapshot(), "uploader": youtube_upload.status()}
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "items": [], "uploader": {"ready": False, "problems": [str(exc)]}}
+
+
+def editor_exchange_state() -> dict[str, Any]:
+    """Tesseract project exchange (D-144): exports and returned edits; never raises."""
+    try:
+        return tesseract_exchange.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "items": []}
+
+
+def final_audio_gate_state() -> dict[str, Any]:
+    """Final Audio Gate snapshot that degrades to an error status instead of raising."""
+    try:
+        return narration_final_review.snapshot()
+    except (OSError, ValueError, KeyError) as exc:
+        return {"status": "ERROR", "error": str(exc), "complete": False, "items": []}
 
 
 def production_visual_artifact_state() -> dict[str, Any]:
@@ -3926,6 +4103,168 @@ def current_action_id() -> str | None:
     return str(value) if value else None
 
 
+def final_render_current_keys() -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    if not PRODUCTION_FINAL_RENDER_RESULT_DIR.exists():
+        return keys
+    for path in PRODUCTION_FINAL_RENDER_RESULT_DIR.glob("*.final_render_result.json"):
+        payload = final_render_result_is_current(path)
+        if payload is not None:
+            keys.add(
+                (str(payload.get("concept_id") or ""), str(payload.get("format") or ""))
+            )
+    return keys
+
+
+PRODUCTION_ARTIFACT_DIRS = (
+    RESEARCH_PLANS_DIR,
+    RESEARCH_EVIDENCE_DIR,
+    RESEARCH_RESPONSES_DIR,
+    RESEARCH_DRAFTS_DIR,
+    RESEARCH_VERIFIED_DIR,
+    STORY_PLANS_DIR,
+    SCRIPT_REQUESTS_DIR,
+    SCRIPT_DRAFTS_DIR,
+    SCRIPT_APPROVED_DIR,
+    TITLE_DIRECTION_REQUESTS_DIR,
+    TITLE_DIRECTION_RESPONSES_DIR,
+    FORMAT_REQUESTS_DIR,
+    FORMAT_PLANS_DIR,
+    FORMAT_APPROVED_DIR,
+    PRODUCTION_VOICE_REQUESTS_DIR,
+    PRODUCTION_VOICE_SPECS_DIR,
+    PRODUCTION_NARRATION_RENDER_RESULTS_DIR,
+    PRODUCTION_FINAL_RENDER_RESULT_DIR,
+)
+
+
+def production_updated_at(concept_ids: list[str]) -> dict[str, str]:
+    """Newest modification time of each concept's artifacts (files named <slug>.…)."""
+    prefixes = {transformation_safe_slug(cid) + ".": cid for cid in concept_ids if cid}
+    ordered = sorted(prefixes, key=len, reverse=True)
+    newest: dict[str, float] = {}
+    for directory in PRODUCTION_ARTIFACT_DIRS:
+        try:
+            entries = list(os.scandir(directory))
+        except OSError:
+            continue
+        for entry in entries:
+            # Slugs may contain dots ("foo" and "foo.v2"): a file belongs to
+            # the longest matching prefix only (UI-19).
+            for prefix in ordered:
+                if entry.name.startswith(prefix):
+                    try:
+                        mtime = entry.stat().st_mtime
+                    except OSError:
+                        break
+                    cid = prefixes[prefix]
+                    newest[cid] = max(newest.get(cid, 0.0), mtime)
+                    break
+    return {
+        cid: datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat()
+        for cid, stamp in newest.items()
+    }
+
+
+def production_detail(concept_id: str) -> dict[str, Any] | None:
+    """One production with its eight workspace sections (UI-08)."""
+    transformation = transformation_artifact_state()
+    research = research_artifact_state()
+    story = story_script_artifact_state()
+    title_direction = title_direction_artifact_state()
+    fmt = format_artifact_state()
+    voice = voice_performance_artifact_state()
+    snapshot = productions_snapshot(
+        transformation=transformation,
+        research=research,
+        story=story,
+        title_direction=title_direction,
+        fmt=fmt,
+        voice=voice,
+    )
+    production = next(
+        (p for p in snapshot["productions"] if p["concept_id"] == concept_id), None
+    )
+    if production is None:
+        return None
+    concept = next(
+        (
+            c
+            for c in transformation.get("concept_gate", {}).get("concepts", [])
+            if isinstance(c, dict) and str(c.get("concept_id")) == concept_id
+        ),
+        {},
+    )
+    formats = sorted(
+        {
+            str(item.get("format") or "")
+            for item in story.get("script_gate", {}).get("scripts", [])
+            if isinstance(item, dict)
+            and str(item.get("concept_id")) == concept_id
+            and item.get("format")
+        }
+    )
+    script_sections = []
+    for branch_format in formats:
+        try:
+            script_sections.append(script_section_review_snapshot(concept_id, branch_format))
+        except (OSError, ValueError):
+            continue
+    plan = safe_load_json(
+        FORMAT_APPROVED_DIR
+        / f"{transformation_safe_slug(concept_id)}.approved_format_plan.json"
+    )
+    branches = plan.get("branches", []) if isinstance(plan, dict) else []
+    return productions_model.detail(
+        production,
+        concept=concept,
+        research=research,
+        story=story,
+        title_direction=title_direction,
+        fmt=fmt,
+        voice=voice,
+        script_sections=script_sections,
+        format_branches=[b for b in branches if isinstance(b, dict)],
+    )
+
+
+def productions_snapshot(
+    *,
+    transformation: dict[str, Any] | None = None,
+    research: dict[str, Any] | None = None,
+    story: dict[str, Any] | None = None,
+    title_direction: dict[str, Any] | None = None,
+    fmt: dict[str, Any] | None = None,
+    voice: dict[str, Any] | None = None,
+    narration: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Per-concept productions derived from the artifacts on disk (D-115)."""
+    if transformation is None:
+        transformation = transformation_artifact_state()
+    last_run = safe_load_json(LAST_AUTO_RUN_FILE)
+    snapshot = productions_model.derive(
+        concept_gate=transformation.get("concept_gate", {}),
+        research=research if research is not None else research_artifact_state(),
+        story=story if story is not None else story_script_artifact_state(),
+        title_direction=title_direction if title_direction is not None else title_direction_artifact_state(),
+        fmt=fmt if fmt is not None else format_artifact_state(),
+        voice=voice if voice is not None else voice_performance_artifact_state(),
+        narration=narration if narration is not None else narration_artifact_state(),
+        final_render_keys=final_render_current_keys(),
+        last_run=last_run if isinstance(last_run, dict) else None,
+        action_labels={
+            action_id: str(definition.get("label") or action_id)
+            for action_id, definition in ACTION_DEFS.items()
+        },
+    )
+    updated = production_updated_at(
+        [p["concept_id"] for p in snapshot["productions"]]
+    )
+    for production in snapshot["productions"]:
+        production["updated_at"] = updated.get(production["concept_id"])
+    return snapshot
+
+
 def stage_statuses() -> list[dict[str, Any]]:
     exp13_manifest = EXP13_DIR / "cohort_manifest.json"
     exp13_summary = EXP13_DIR / "summary.json"
@@ -4070,12 +4409,11 @@ def stage_statuses() -> list[dict[str, Any]]:
     visual_ready = bool(exp2_artifacts["visual_complete"])
     visual_attempted = bool(exp2_artifacts["visual_attempted"])
     vision_review = vision_review_snapshot()
-    vision_complete = bool(vision_review.get("complete"))
     visual_available = (
         shutil.which("yt-dlp") is not None and shutil.which("ffmpeg") is not None
     )
     visual_satisfied = visual_ready or visual_attempted or not visual_available
-    vision_satisfied = (not visual_ready) or vision_complete
+    vision_satisfied = vision_review_satisfied(vision_review)
     synthesis_ready = bool(exp2_artifacts["synthesis_ready"])
     analyzed_count = exp2_artifacts["analyzed_current_count"]
     request_count = len(exp2_artifacts["analysis_request_ids"])
@@ -4130,7 +4468,7 @@ def stage_statuses() -> list[dict[str, Any]]:
         if vision_review.get("awaiting_human_review"):
             exp2_human = "VISUAL REVIEW NEEDED"
             exp2_tone = "action"
-            exp2_next = "Review the retained visual frames in Analyze & Create."
+            exp2_next = "Review the retained visual frames in the Workspace."
         else:
             exp2_human = "PREPARE VISUAL REVIEW"
             exp2_tone = "action"
@@ -4248,7 +4586,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif concept_gate_status == "AWAITING_HUMAN_DECISION":
         transform_human = "HUMAN CONCEPT DECISION NEEDED"
         transform_tone = "action"
-        transform_next = "Review concept candidates in Analyze & Create."
+        transform_next = "Review concept candidates in Gate reviews."
     elif concept_gate_complete:
         transform_human = "NO ACCEPTED CONCEPT"
         transform_tone = "action"
@@ -4382,7 +4720,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif research_gate_status == "AWAITING_HUMAN_DECISION":
         research_human = "HUMAN RESEARCH DECISION NEEDED"
         research_tone = "action"
-        research_next = "Review claims in Analyze & Create."
+        research_next = "Review claims in Gate reviews."
     elif research_gate_complete:
         research_human = "RESEARCH INCOMPLETE"
         research_tone = "action"
@@ -4433,7 +4771,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     elif script_gate_status == "AWAITING_HUMAN_DECISION":
         script_human = "HUMAN SCRIPT DECISION NEEDED"
         script_tone = "action"
-        script_next = "Review script drafts in Analyze & Create."
+        script_next = "Review script drafts in Gate reviews."
     elif script_gate_complete:
         script_human = "NO APPROVED SCRIPT"
         script_tone = "action"
@@ -4600,7 +4938,7 @@ def stage_statuses() -> list[dict[str, Any]]:
                 {
                     "label": (
                         "Visual observations reviewed"
-                        if visual_ready
+                        if vision_review.get("video_ids")
                         else "Visual observations not required"
                     ),
                     "done": vision_satisfied,
@@ -4667,8 +5005,9 @@ def stage_statuses() -> list[dict[str, Any]]:
             "tone": research_tone,
             "detail": (
                 "Starts directly from the accepted Concept Gate handoff, acquires "
-                "real web evidence, structures traceable claims, and stops for "
-                "human claim approval before Story / Script."
+                "real web evidence, structures traceable claims, clears strongly "
+                "supported claims automatically and stops only for the claims that "
+                "need a human before Story / Script."
             ),
             "next_action": research_next,
             "criteria": [
@@ -5101,7 +5440,8 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     ffmpeg_installed = shutil.which("ffmpeg") is not None
     visual_available = yt_dlp_installed and ffmpeg_installed
     visual_satisfied = visual_complete or visual_attempted or not visual_available
-    vision_satisfied = (not visual_complete) or vision_complete
+    vision_satisfied = vision_review_satisfied(vision_review)
+    vision_frames_ready = bool(vision_review.get("video_ids")) and (visual_complete or visual_attempted)
     thumbnail_items = thumbnail_gate_state().get("items", [])
     thumbnail_units_ready = bool(thumbnail_items)
     thumbnail_subjects_ready = any(
@@ -5291,7 +5631,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                     "Visual structure evidence is already ready."
                     if visual_complete
                     else (
-                        "Visual structure was attempted; transcript-only analysis may continue. "
+                        "Visual structure was attempted; videos with frames get a visual review, the rest continue on transcripts. "
                         "Use Tools & Diagnostics to force a retry."
                         if visual_attempted
                         else (
@@ -5334,7 +5674,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             "enabled": (
                 human_gate_ready
                 and evidence_complete
-                and visual_complete
+                and vision_frames_ready
                 and not vision_complete
                 and not vision_awaiting
             ),
@@ -5343,7 +5683,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                 if (
                     human_gate_ready
                     and evidence_complete
-                    and visual_complete
+                    and vision_frames_ready
                     and not vision_complete
                     and not vision_awaiting
                 )
@@ -5355,7 +5695,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
                         if vision_complete
                         else (
                             "Successful visual structure evidence is required first."
-                            if human_gate_ready and not visual_complete
+                            if human_gate_ready and not vision_frames_ready
                             else "Human opportunity approval is required first."
                         )
                     )
@@ -6489,6 +6829,46 @@ class JobManager:
         self._process: subprocess.Popen[str] | None = None
         self._job: dict[str, Any] | None = None
 
+    def recover(self) -> dict[str, Any] | None:
+        """Settle a job the previous UI run left RUNNING in job_state.json (D-169).
+
+        After a crash or a closed launcher window the saved state still says
+        RUNNING. A process is stopped only when it is provably that job: same
+        boot, same start time, run from this project (audit 2). Anything else
+        with the same pid is a stranger and is never signalled; the job is
+        recorded INTERRUPTED. The record is written before any signal, so a
+        crash during recovery cannot repeat it.
+        """
+        try:
+            saved = json.loads(JOB_STATE_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(saved, dict) or saved.get("status") not in {"RUNNING", "STOPPING"}:
+            return None
+        pid_value = saved.get("pid")
+        pid = pid_value if isinstance(pid_value, int) and not isinstance(pid_value, bool) and pid_value > 0 else 0
+        saved["status"] = "INTERRUPTED"
+        saved["note"] = "The UI exited while this job ran and the job did not finish."
+        saved["finished_at"] = utc_now()
+        saved["return_code"] = None
+        self._save_state(saved)
+        targets = leftover_job_processes(saved) if pid else []
+        if targets:
+            stopped = stop_processes(targets)
+            saved["status"] = "ORPHANED"
+            saved["note"] = (
+                "The UI exited while this job ran; its leftover process"
+                + ("es were" if len(targets) > 1 else " was")
+                + (" stopped" if stopped else " signalled but may still be running")
+                + " when the UI started again."
+            )
+            self._save_state(saved)
+        with self._lock:
+            if self._process is None:
+                self._job = dict(saved)
+        record_job_history(saved)
+        return saved
+
     def running(self) -> bool:
         with self._lock:
             return self._process is not None and self._process.poll() is None
@@ -6538,16 +6918,22 @@ class JobManager:
             child_env["PYTHONUTF8"] = "1"
             child_env["PYTHONIOENCODING"] = "utf-8"
 
-            process = subprocess.Popen(
-                action["command"],
-                cwd=PROJECT_ROOT,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                text=True,
-                shell=False,
-                creationflags=creationflags,
-                env=child_env,
-            )
+            try:
+                process = subprocess.Popen(
+                    action["command"],
+                    cwd=PROJECT_ROOT,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    shell=False,
+                    creationflags=creationflags,
+                    # Its own process group, so Stop can end the step it spawned too.
+                    start_new_session=(os.name != "nt"),
+                    env=child_env,
+                )
+            except OSError:
+                log_handle.close()
+                raise
 
             self._process = process
             self._job = {
@@ -6556,6 +6942,10 @@ class JobManager:
                 "label": action["label"],
                 "status": "RUNNING",
                 "pid": process.pid,
+                # Who this pid is, so a later UI start never stops a stranger
+                # that inherited the number after a crash or reboot (audit 2).
+                "identity": process_identity(process.pid),
+                "command": [str(part) for part in action["command"]],
                 "started_at": utc_now(),
                 "finished_at": None,
                 "return_code": None,
@@ -6569,7 +6959,8 @@ class JobManager:
 
     def _finalize(self, return_code: int | None) -> None:
         with self._lock:
-            if not self._job:
+            if not self._job or self._job.get("finished_at"):
+                # Two polls can observe the exit at once; record it once.
                 return
             log_handle = self._job.pop("_log_handle", None)
             if log_handle:
@@ -6590,6 +6981,7 @@ class JobManager:
             self._process = None
 
         self._save_state(self.public_job())
+        record_job_history(self.public_job())
 
     def stop(self) -> dict[str, Any]:
         with self._lock:
@@ -6599,12 +6991,7 @@ class JobManager:
             if self._job:
                 self._job["status"] = "STOPPING"
 
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+        terminate_process_tree(process)
         self._finalize(process.returncode)
         return self.public_job()
 
@@ -6622,14 +7009,418 @@ class JobManager:
             return ""
         path = Path(str(job.get("log_path", "")))
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            # Tail only: this is polled every second while a job runs.
+            with path.open("rb") as handle:
+                size = handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, size - max_chars * 4))
+                tail = handle.read()
         except OSError:
             return ""
-        return text[-max_chars:]
+        return tail.decode("utf-8", errors="replace")[-max_chars:]
 
     def _save_state(self, payload: dict[str, Any]) -> None:
         UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         atomic_write_json(JOB_STATE_FILE, payload)
+
+
+JOB_LOG_NAME = re.compile(r"^\d{8}_\d{6}_[a-z0-9_]+$")
+AUTO_STEP_LINE = re.compile(r"^AUTOMATIC MACHINE STEP\s+\S+\s+(.+)$")
+
+
+def job_with_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
+    return {**job, "progress": job_progress(job)} if job else job
+
+
+def job_progress(job: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What a running job is doing now, read from its log (D-155).
+
+    The page shows the current step, how many steps have run and when the
+    log last changed, so a long model call does not look like a frozen screen.
+    """
+    if not job or job.get("status") not in {"RUNNING", "STOPPING"}:
+        return None
+    path = Path(str(job.get("log_path") or ""))
+    try:
+        stat = path.stat()
+        with path.open("rb") as handle:
+            handle.seek(max(0, stat.st_size - 60000))
+            text = handle.read().decode("utf-8", "replace")
+    except OSError:
+        return {"current_step": None, "step_number": 0, "last_line": "", "last_output_at": None}
+    lines = [line.strip() for line in text.splitlines()]
+    steps = [m.group(1).strip() for m in (AUTO_STEP_LINE.match(line) for line in lines) if m]
+    last_line = next(
+        (line for line in reversed(lines) if line and not set(line) <= {"=", "-"}), ""
+    )
+    return {
+        "current_step": steps[-1] if steps else None,
+        # Only the tail is read, so a long run may show a lower count; the
+        # label is what matters.
+        "step_number": len(steps),
+        "last_line": last_line[:200],
+        "last_output_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+    }
+
+
+PROTECTED_PIDS_NOTE = "pid 0/1, the UI itself and its parent are never signalled"
+
+
+def _protected_pid(pid: int) -> bool:
+    return pid <= 1 or pid in {os.getpid(), os.getppid()}
+
+
+def _linux_boot_id() -> str | None:
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def _linux_process(pid: int) -> dict[str, Any] | None:
+    """Start time (clock ticks since boot), process group and working folder of a pid."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        cwd = os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        return None
+    fields = stat.rsplit(")", 1)[-1].split()
+    try:
+        return {"start": int(fields[19]), "pgrp": int(fields[2]), "cwd": cwd}
+    except (IndexError, ValueError):
+        return None
+
+
+def _windows_process(pid: int) -> dict[str, Any] | None:
+    """Command line and creation time of a pid, from CIM (never tasklist substrings)."""
+    script = (
+        f"Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}' | "
+        "Select-Object CommandLine,@{n='Created';e={$_.CreationDate.ToUniversalTime().ToString('o')}} | "
+        "ConvertTo-Json -Compress"
+    )
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, check=False, timeout=20,
+        )
+        data = json.loads(completed.stdout or "null")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {"command_line": str(data.get("CommandLine") or ""), "created": str(data.get("Created") or "")}
+
+
+def process_identity(pid: int) -> dict[str, Any] | None:
+    """What identifies a job process later: boot and start time (Linux), or creation time (Windows)."""
+    if os.name == "nt":
+        return None  # recorded from started_at; checked against CIM at recovery
+    info = _linux_process(pid)
+    if info is None:
+        return None
+    return {"boot_id": _linux_boot_id(), "start": info["start"]}
+
+
+def _script_marker(saved: dict[str, Any]) -> str:
+    command_value = saved.get("command")
+    command: list[Any] = command_value if isinstance(command_value, list) else []
+    scripts = [Path(str(part)).name for part in command if str(part).endswith(".py")]
+    return scripts[0] if scripts else "workflow_automation.py"
+
+
+def leftover_job_processes(saved: dict[str, Any]) -> list[int]:
+    """Processes that are provably the saved job or the steps it spawned (audit 2).
+
+    Linux: same boot, run from this project's folder, and either the saved
+    leader with its recorded start time or a member of its process group
+    (the leader may already have exited and left its step running).
+    Windows: the saved pid only, when its command line names the job's script
+    and it was created within two minutes of the job's start. Any other
+    system: nothing is stopped, because nothing can be verified.
+    """
+    pid = int(saved.get("pid") or 0)
+    if _protected_pid(pid):
+        return []
+    identity_value = saved.get("identity")
+    identity: dict[str, Any] = identity_value if isinstance(identity_value, dict) else {}
+    if os.name == "nt":
+        info = _windows_process(pid)
+        if not info or _script_marker(saved) not in info["command_line"]:
+            return []
+        try:
+            created = datetime.fromisoformat(info["created"].replace("Z", "+00:00"))
+            started = datetime.fromisoformat(str(saved.get("started_at")).replace("Z", "+00:00"))
+        except ValueError:
+            return []
+        return [pid] if abs((created - started).total_seconds()) <= 120 else []
+    if not Path("/proc").is_dir():
+        return []
+    boot = _linux_boot_id()
+    if not boot or identity.get("boot_id") != boot:
+        return []
+    root = str(PROJECT_ROOT.resolve())
+    found: list[int] = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        candidate = int(entry.name)
+        if _protected_pid(candidate) or candidate == os.getpgrp():
+            continue
+        info = _linux_process(candidate)
+        if not info or os.path.realpath(info["cwd"]) != root:
+            continue
+        if candidate == pid and info["start"] == identity.get("start"):
+            found.append(candidate)
+        elif candidate != pid and info["pgrp"] == pid and info["pgrp"] != os.getpgrp():
+            found.append(candidate)
+    return sorted(found)
+
+
+def stop_processes(pids: list[int], grace_seconds: float = 5.0) -> bool:
+    """Stop verified job processes; True when none is left running."""
+    import time as _time
+
+    if os.name == "nt":
+        for pid in pids:
+            subprocess.run(  # noqa: S603 - fixed argument list, no shell
+                ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, timeout=15,
+            )
+        return all(_windows_process(pid) is None for pid in pids)
+    import signal
+
+    def alive(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return Path(f"/proc/{pid}").exists() and "Z" not in _proc_state(pid)
+
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except (ProcessLookupError, PermissionError):
+                continue
+        deadline = _time.monotonic() + grace_seconds
+        while _time.monotonic() < deadline and any(alive(pid) for pid in pids):
+            _time.sleep(0.05)
+        if not any(alive(pid) for pid in pids):
+            return True
+    return False
+
+
+def _proc_state(pid: int) -> str:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    fields = stat.rsplit(")", 1)[-1].split()
+    return fields[0] if fields else ""
+
+
+def terminate_process_tree(process: "subprocess.Popen[str]") -> None:
+    """End a job and the step it spawned (audit 2026-10-04).
+
+    The job runs workflow_automation, which runs each step as its own child;
+    terminating only the job left the step writing artifacts after the UI
+    said STOPPED.
+    """
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True, check=False, timeout=15,
+        )
+    else:
+        import signal
+
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        if os.name != "nt":
+            import signal
+
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        process.kill()
+        process.wait(timeout=5)
+
+
+def record_job_history(job: dict[str, Any]) -> None:
+    """Append one finished job to the history log (UI-15, D-123); best effort."""
+    if not job or not job.get("id"):
+        return
+    entry = {
+        key: job.get(key)
+        for key in ("id", "action_id", "label", "status", "started_at", "finished_at", "return_code")
+    }
+    try:
+        # Append only (one write per job); trimming rewrites nothing in place.
+        append_jsonl(JOB_HISTORY_FILE, entry)
+        lines = JOB_HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+        if len(lines) > JOB_HISTORY_KEEP:
+            atomic_write_text(JOB_HISTORY_FILE, "\n".join(lines[-JOB_HISTORY_KEEP:]) + "\n")
+    except OSError:
+        return
+
+
+def job_history(limit: int = 30) -> list[dict[str, Any]]:
+    """Newest-first finished jobs; logs from before the history file existed are
+    listed from their file names, with an unknown status."""
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    try:
+        lines = JOB_HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in reversed(lines):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("id") and row["id"] not in seen:
+            seen.add(str(row["id"]))
+            rows.append(row)
+    try:
+        logs = sorted(JOB_LOG_DIR.glob("*.log"), key=lambda path: path.name, reverse=True)
+    except OSError:
+        logs = []
+    for path in logs:
+        if len(rows) >= limit:
+            break
+        job_id = path.stem
+        if job_id in seen or not JOB_LOG_NAME.match(job_id):
+            continue
+        seen.add(job_id)
+        action_id = job_id[16:]
+        rows.append(
+            {
+                "id": job_id,
+                "action_id": action_id,
+                "label": ACTION_DEFS.get(action_id, {}).get("label", action_id),
+                "status": "UNKNOWN",
+                "started_at": None,
+                "finished_at": None,
+                "return_code": None,
+            }
+        )
+    rows.sort(key=lambda row: str(row.get("id") or ""), reverse=True)
+    for row in rows:
+        row["has_log"] = (JOB_LOG_DIR / f"{row['id']}.log").is_file()
+    return rows[:limit]
+
+
+def job_log_text(job_id: str, max_chars: int = 60000) -> str:
+    """The log of one job by id; only files named like job logs in JOB_LOG_DIR."""
+    if not JOB_LOG_NAME.match(str(job_id or "")):
+        raise ValueError("Unknown job log.")
+    path = (JOB_LOG_DIR / f"{job_id}.log").resolve()
+    if path.parent != JOB_LOG_DIR.resolve() or not path.is_file():
+        raise ValueError("Unknown job log.")
+    # Read only the tail: a runaway job log must not be loaded whole (UI-19).
+    # UTF-8 is at most 4 bytes per character.
+    with path.open("rb") as handle:
+        size = handle.seek(0, os.SEEK_END)
+        handle.seek(max(0, size - max_chars * 4))
+        tail = handle.read()
+    return tail.decode("utf-8", errors="replace")[-max_chars:]
+
+
+SCHEDULER_STALE_HOURS = 6
+
+
+def system_health() -> list[dict[str, Any]]:
+    """Cheap, local readiness checks for Tools (UI-15). No network, no secrets."""
+    import importlib.util
+
+    def check(check_id: str, label: str, ok: bool | None, ready: str, missing: str, action_id: str | None = None) -> dict[str, Any]:
+        return {
+            "id": check_id,
+            "label": label,
+            "status": "UNKNOWN" if ok is None else "READY" if ok else "MISSING",
+            "detail": ready if ok else missing,
+            "action_id": action_id,
+        }
+
+    checks = [
+        check("yt_dlp", "yt-dlp", shutil.which("yt-dlp") is not None,
+              "Installed: discovery and visual search can run.",
+              "Not installed: topic search, radar discovery and visual search need it."),
+        check("ffmpeg", "FFmpeg", structural_ffmpeg_available(),
+              "The configured binary is available for previews and renders.",
+              "The configured binary is missing: previews and final renders cannot run."),
+        check("youtube_api", "YouTube Data API key", bool(human_video_intake._load_api_key()),
+              "Configured (the key itself is never shown).",
+              "YOUTUBE_API_KEY is not configured: measurement and the radar cannot run."),
+        check("kokoro", "Kokoro preview voice",
+              importlib.util.find_spec("kokoro") is not None and importlib.util.find_spec("soundfile") is not None,
+              "Installed: free narration previews can render locally.",
+              "Not installed: install kokoro, soundfile and espeak-ng for free previews."),
+        check("agent_reach", "agent-reach", shutil.which("agent-reach") is not None,
+              "Installed.", "Not installed: optional research reach is unavailable.", "agent_reach_doctor"),
+    ]
+
+    schedule = radar_scheduler.load_status() or {}
+    checked = schedule.get("checked_at")
+    age = None
+    if checked:
+        try:
+            stamp = datetime.fromisoformat(str(checked).replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - stamp).total_seconds() / 3600
+        except ValueError:
+            age = None
+    checks.append(
+        {
+            "id": "scheduler",
+            "label": "Radar scheduler",
+            "status": "MISSING" if not checked else "WARN" if age is None or age > SCHEDULER_STALE_HOURS else "READY",
+            "detail": (
+                "Not run yet: install Opportunity Automation to run it every 2 hours."
+                if not checked
+                else f"Last tick {checked} ({str(schedule.get('action') or '').lower()})."
+                + (" More than 6 hours ago: the scheduled task may have stopped." if age is None or age > SCHEDULER_STALE_HOURS else "")
+            ),
+            "action_id": None if checked and age is not None and age <= SCHEDULER_STALE_HOURS else "exp13_auto_refresh_install",
+        }
+    )
+
+    history = job_history(limit=200)
+    for doctor_id, label in (("fair_doctor", "FAIR"), ("vision_doctor", "Vision"), ("vidiq_doctor", "vidIQ")):
+        last = next((row for row in history if row.get("action_id") == doctor_id and row.get("status") != "UNKNOWN"), None)
+        status = (last or {}).get("status")
+        checks.append(
+            {
+                "id": doctor_id,
+                "label": label,
+                "status": "READY" if status == "SUCCEEDED" else "WARN" if status in {"FAILED", "PARTIAL", "STOPPED"} else "UNKNOWN",
+                "detail": (
+                    f"Doctor {str(status).lower()} at {last.get('finished_at')}."
+                    if last
+                    else "Not checked yet: run the doctor."
+                ),
+                "action_id": doctor_id,
+            }
+        )
+    return checks
+
+
+def tools_snapshot() -> dict[str, Any]:
+    return {
+        "health": system_health(),
+        "jobs": job_history(),
+        "doctor": doctor_module.last_report(),
+        "updated_at": utc_now(),
+    }
 
 
 JOB_MANAGER = JobManager()
@@ -6766,7 +7557,8 @@ def workflow_guidance(
             "current_action_id": None,
             "current_title": "Review Research Claims",
             "current_detail": (
-                "Check each claim against its cited acquired source evidence. "
+                "Strongly supported claims were cleared automatically; check the "
+                "ones left against their cited acquired source evidence. "
                 "Accept only wording safe to carry into the script."
             ),
             "next_action_id": "auto_continue",
@@ -7068,6 +7860,32 @@ def workflow_guidance(
     narration_state = narration_artifact_state()
     narration_render_state = narration_state.get("render", {})
     narration_spend_state = narration_state.get("spend_gate", {})
+    # The complete visual plan is approved before any narration spend (D-138).
+    plan_items = visual_plan_blocking_items(narration_spend_state, visual_plan_gate_state())
+    if any(item.get("decision") == "REWORK_VISUAL_PLAN" for item in plan_items):
+        return {
+            "state": "VISUAL_PLAN_REWORK_REQUIRED",
+            "current_action_id": None,
+            "current_title": "Rework the Visual Plan",
+            "current_detail": (
+                "You sent the visual plan back. Rework the format plan at the Format "
+                "Gate; the visual plan is rebuilt from it and comes back for approval."
+            ),
+            "next_action_id": None,
+            "next_title": "Rework at the Format Gate",
+        }
+    if any(item.get("decision") in {"PENDING", "BLOCKED"} for item in plan_items):
+        return {
+            "state": "HUMAN_VISUAL_PLAN_GATE",
+            "current_action_id": None,
+            "current_title": "Approve the Visual Plan",
+            "current_detail": (
+                "Review every shot, its timing from the approved free preview and its "
+                "visual source before any paid narration is authorized."
+            ),
+            "next_action_id": "auto_continue",
+            "next_title": "Prepare Final Narration Quote",
+        }
     if (
         narration_spend_state.get("status") == "AWAITING_HUMAN_DECISION"
         and narration_spend_state.get("items")
@@ -7100,10 +7918,11 @@ def workflow_guidance(
                 "current_action_id": None,
                 "current_title": "Register Final Narration Audio",
                 "current_detail": (
-                    "Spend is authorized for the exact current quote. Supply the "
-                    "provider job/reference, actual cumulative cost, and one local "
-                    "audio file for every narration segment. The repository does "
-                    "not call an unverified paid provider."
+                    "Spend is authorized for the exact current quote. Generate the "
+                    "narration with the configured provider on the Narration spend "
+                    "tab, or supply the provider job/reference, actual cumulative "
+                    "cost and one local audio file for every segment. The app never "
+                    "calls an unverified provider."
                 ),
                 "next_action_id": None,
                 "next_title": "Automatic local Audio QC",
@@ -7120,6 +7939,36 @@ def workflow_guidance(
                 ),
                 "next_action_id": None,
                 "next_title": "Re-import corrected narration audio",
+            }
+        final_audio = narration_state.get("final_audio") or {}
+        if narration_state.get("audio_qc_passed") and not narration_state.get("audio_ready"):
+            reworked = [
+                item for item in final_audio.get("items", [])
+                if item.get("decision") in {"REWORK_SEGMENTS", "REJECT_AUDIO"}
+            ]
+            if reworked:
+                return {
+                    "state": "FINAL_AUDIO_REWORK_REQUIRED",
+                    "current_action_id": None,
+                    "current_title": "Re-record the Narration",
+                    "current_detail": (
+                        "You sent the paid narration back. Have the provider re-record "
+                        "the named segments and register the new return; Audio QC and "
+                        "the Final Audio Gate run again."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Register corrected narration audio",
+                }
+            return {
+                "state": "HUMAN_FINAL_AUDIO_GATE",
+                "current_action_id": None,
+                "current_title": "Approve the Final Narration",
+                "current_detail": (
+                    "Audio QC passed. Listen to the exact paid narration and approve "
+                    "it before any visual work uses its timing."
+                ),
+                "next_action_id": "auto_continue",
+                "next_title": "Prepare narration-bound visual plan",
             }
         if not narration_state.get("audio_ready"):
             return {
@@ -7668,7 +8517,9 @@ def workflow_guidance(
                 "current_detail": (
                     "Watch the exact local final candidate with final visuals, "
                     "narration and licensed/omitted sound decisions. Approve export "
-                    "or return visuals, narration or sound for rework."
+                    "or return visuals, narration or sound for rework. To polish it "
+                    "by hand, export the editable project to Tesseract first; the "
+                    "returned edit then becomes the candidate."
                 ),
                 "next_action_id": None,
                 "next_title": "Approve export or return a creative layer",
@@ -7706,6 +8557,41 @@ def workflow_guidance(
                 "next_title": "Approve the exact current final render",
             }
 
+        publish = publish_gate_state()
+        publish_items = [item for item in publish.get("items", []) if isinstance(item, dict)]
+        if any(item.get("status") in {"PENDING", "HELD"} for item in publish_items):
+            return {
+                "state": "HUMAN_PUBLISH_GATE",
+                "current_action_id": None,
+                "current_title": "Approve the Publish Package",
+                "current_detail": (
+                    "Check the title, thumbnail, description with sources, privacy, "
+                    "schedule and the AI-content disclosure, then approve or hold."
+                ),
+                "next_action_id": None,
+                "next_title": "Upload to YouTube",
+            }
+        if any(item.get("status") == "APPROVED_FOR_UPLOAD" for item in publish_items):
+            return {
+                "state": "WAITING_FOR_UPLOAD",
+                "current_action_id": None,
+                "current_title": "Upload to YouTube",
+                "current_detail": (
+                    "The publish package is approved. Upload it from the Publish tab, "
+                    "or upload it by hand in YouTube Studio and record the video id."
+                ),
+                "next_action_id": None,
+                "next_title": "Record the published video",
+            }
+        if publish_items and all(item.get("status") == "PUBLISHED" for item in publish_items):
+            return {
+                "state": "PUBLISHED",
+                "current_action_id": None,
+                "current_title": "Published",
+                "current_detail": "Every approved video has a YouTube video id recorded.",
+                "next_action_id": None,
+                "next_title": "Learning from channel analytics",
+            }
         return {
             "state": "FINAL_EXPORT_APPROVED",
             "current_action_id": None,
@@ -7751,8 +8637,10 @@ def workflow_guidance(
                 "current_title": ACTION_DEFS[action_id]["label"],
                 "current_detail": gate_info.get("reason"),
                 "next_action_id": next_id,
+                # Continue Automatically ends at the next human gate, not at
+                # the end of the workflow.
                 "next_title": (
-                    ACTION_DEFS[next_id]["label"] if next_id else "Workflow complete"
+                    ACTION_DEFS[next_id]["label"] if next_id else "Next human gate"
                 ),
             }
 
@@ -7793,6 +8681,7 @@ def status_payload() -> dict[str, Any]:
     preview_gate = narration_preview_gate_snapshot()
     narration = narration_artifact_state()
     production_visual = production_visual_artifact_state()
+    title_direction = title_direction_artifact_state()
     actions = []
     for action_id, definition in ACTION_DEFS.items():
         gate = readiness[action_id]
@@ -7825,14 +8714,17 @@ def status_payload() -> dict[str, Any]:
         "project_root": str(PROJECT_ROOT),
         "stages": stage_statuses(),
         "actions": actions,
-        "job": JOB_MANAGER.current(),
+        "job": job_with_progress(JOB_MANAGER.current()),
         "checkpoint": {
             "exists": EXP13_CHECKPOINT.exists(),
             "status": checkpoint_status(),
         },
         "opportunity_gate": opportunity_gate,
         "opportunity_inbox": opportunity_inbox_snapshot(opportunity_gate),
-        "viral_radar": viral_radar.status_snapshot(),
+        "viral_radar": {
+            **viral_radar.status_snapshot(),
+            "schedule": radar_scheduler.load_status(),
+        },
         "workflow": workflow,
         "opportunity_research": opportunity_research_state(),
         "experiment_02_artifacts": exp2_artifact_state(),
@@ -7846,7 +8738,16 @@ def status_payload() -> dict[str, Any]:
         "research_gate": research["research_gate"],
         "story_script": story,
         "script_gate": story["script_gate"],
-        "title_direction": title_direction_artifact_state(),
+        "title_direction": title_direction,
+        "productions": productions_snapshot(
+            transformation=transformation,
+            research=research,
+            story=story,
+            title_direction=title_direction,
+            fmt=fmt,
+            voice=voice,
+            narration=narration,
+        ),
         "packaging_brief": packaging_brief_snapshot(),
         "psychological_angle_requests": psychological_angle_request_snapshot(),
         "psychological_angles": psychological_angle_snapshot(),
@@ -7903,6 +8804,13 @@ def status_payload() -> dict[str, Any]:
         ),
         "final_export_gate": final_export_review_snapshot(),
         "thumbnail_gate": thumbnail_gate_state(),
+        "video_budget": video_budget_state(),
+        "final_audio_gate": final_audio_gate_state(),
+        "visual_plan_gate": visual_plan_gate_state(),
+        "narration_dispatch": narration_dispatch_state(),
+        "visual_dispatch": visual_dispatch_state(),
+        "publish_gate": publish_gate_state(),
+        "editor_exchange": editor_exchange_state(),
         "outputs": {
             "experiment_01": str(EXP1_OUTPUT),
             "experiment_02": str(EXP2_OUTPUT),
@@ -7912,14 +8820,57 @@ def status_payload() -> dict[str, Any]:
     }
 
 
+STATIC_ASSET_DIRS = {"css": ".css", "js": ".js"}
+STATIC_ASSET_TYPES = {
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+}
+
+
+def static_asset_path(route: str) -> Path | None:
+    """Resolve /css/<name>.css or /js/<name>.js inside STATIC_DIR, else None.
+
+    Only one flat directory level, an allowlisted extension per directory, and
+    a resolved path that stays inside that directory (no traversal, no
+    symlink escape, no dotfiles).
+    """
+    parts = route.strip("/").split("/")
+    if len(parts) != 2:
+        return None
+    folder, name = parts
+    suffix = STATIC_ASSET_DIRS.get(folder)
+    if (
+        suffix is None
+        or not name
+        or name.startswith(".")
+        or "\\" in name
+        or not name.endswith(suffix)
+    ):
+        return None
+    base = (STATIC_DIR / folder).resolve()
+    candidate = (base / name).resolve()
+    if candidate.parent != base or not candidate.is_file():
+        return None
+    return candidate
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ExperimentControlUI/1.0"
+    # A request that stops sending (a body shorter than its Content-Length)
+    # used to hold its handler thread forever (D-160).
+    timeout = 60
 
     def log_message(self, format: str, *args: Any) -> None:
         return
 
     def _send_json(self, payload: Any, status: int = 200) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        try:
+            text = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+        except ValueError:
+            # A corrupt budget ledger reads as an infinite amount (it blocks
+            # spending); browsers cannot parse Infinity, so send null (audit 2).
+            text = json.dumps(json_safe(payload), ensure_ascii=False, allow_nan=False)
+        body = text.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -7947,6 +8898,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         route = urlparse(self.path).path
+        # API reads carry job logs, pipeline state and the CSRF token: a page
+        # on another origin must not read them through DNS rebinding (UI-19).
+        if route.startswith("/api/") and not self._host_allowed():
+            self._send_json({"error": "Invalid Host for local control UI."}, 403)
+            return
 
         if route in APP_ROUTES:
             self._send_static(STATIC_DIR / "index.html", "text/html; charset=utf-8")
@@ -7956,6 +8912,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/styles.css":
             self._send_static(STATIC_DIR / "styles.css", "text/css; charset=utf-8")
+            return
+        if route.startswith(("/css/", "/js/")):
+            asset = static_asset_path(route)
+            if asset is None:
+                self.send_error(404)
+                return
+            self._send_static(asset, STATIC_ASSET_TYPES[asset.suffix])
             return
         if route == "/api/status":
             self._send_json(status_payload())
@@ -7971,8 +8934,43 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/opportunity-gate":
             self._send_json(opportunity_gate_snapshot())
             return
+        if route == "/api/tools":
+            self._send_json(tools_snapshot())
+            return
+        if route == "/api/plain-language":
+            # Status codes as sentences (D-170); fetched once per page load.
+            self._send_json({"sentences": plain_language.catalogue()})
+            return
+        if route == "/api/job-log":
+            query = parse_qs(urlparse(self.path).query)
+            job_id = str((query.get("id") or [""])[0])
+            try:
+                self._send_json({"id": job_id, "text": job_log_text(job_id)})
+            except (ValueError, OSError):
+                self._send_json({"error": "Unknown job log."}, 404)
+            return
+        if route == "/api/productions":
+            self._send_json(productions_snapshot())
+            return
+        if route == "/api/production":
+            query = parse_qs(urlparse(self.path).query)
+            concept_id = str((query.get("concept_id") or [""])[0]).strip()
+            payload = production_detail(concept_id) if concept_id else None
+            if payload is None:
+                self._send_json({"error": "Unknown production."}, 404)
+                return
+            self._send_json(payload)
+            return
         if route == "/api/opportunity/inbox":
             self._send_json(opportunity_inbox_snapshot())
+            return
+        if route == "/api/opportunity/viral/overview":
+            self._send_json(viral_radar.radar_overview())
+            return
+        if route == "/api/opportunity/viral/snapshots":
+            query = parse_qs(urlparse(self.path).query)
+            video_id = str((query.get("video_id") or [""])[0])
+            self._send_json({"video_id": video_id, "snapshots": viral_radar.snapshots_for(video_id)})
             return
         if route == "/api/vision-review":
             self._send_json(vision_review_snapshot())
@@ -8101,16 +9099,22 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             render_path = Path(str(match["render_file"])).resolve()
+            # The automated render, or an edit returned from Tesseract (D-144).
             if (
                 render_path.parent.resolve()
                 != PRODUCTION_FINAL_RENDER_DIR.resolve()
+                and render_path.parent.parent.resolve()
+                != tesseract_exchange.RETURN_DIR.resolve()
             ):
                 self._send_json(
                     {"error": "Invalid final render path."},
                     403,
                 )
                 return
-            self._send_static(render_path, "video/mp4")
+            self._send_static(
+                render_path,
+                "video/quicktime" if render_path.suffix.lower() == ".mov" else "video/mp4",
+            )
             return
         if route == "/api/edit-preview-video":
             query = parse_qs(urlparse(self.path).query)
@@ -8151,6 +9155,37 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/thumbnail-gate":
             self._send_json(thumbnail_gate_state())
             return
+        if route == "/api/final-audio-gate":
+            self._send_json(final_audio_gate_state())
+            return
+        if route == "/api/visual-plan-gate":
+            self._send_json(visual_plan_gate_state())
+            return
+        if route == "/api/visual-dispatch-file":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                path = visual_dispatch.candidate_file_path(
+                    str((query.get("request_file") or [""])[0]),
+                    str((query.get("candidate_id") or [""])[0]),
+                )
+            except (ValueError, OSError, KeyError) as exc:
+                self._send_json({"error": str(exc)}, 404)
+                return
+            self._send_static(path, image_content_type(path))
+            return
+        if route == "/api/final-audio-file":
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                path = narration_final_review.audio_file_path(
+                    str((query.get("concept_id") or [""])[0]),
+                    str((query.get("format") or [""])[0]),
+                    str((query.get("segment_id") or [""])[0]),
+                )
+            except (ValueError, OSError, KeyError) as exc:
+                self._send_json({"error": str(exc)}, 404)
+                return
+            self._send_static(path, AUDIO_CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))
+            return
         if route in {"/api/thumbnail-file", "/api/thumbnail-competitor"}:
             query = parse_qs(urlparse(self.path).query)
             render_id = str((query.get("render_id") or [""])[0])
@@ -8182,6 +9217,11 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    def _host_allowed(self) -> bool:
+        port = int(getattr(self.server, "server_port", 0))
+        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        return str(self.headers.get("Host", "")).strip().lower() in allowed_hosts
+
     def _post_security_error(self) -> str | None:
         content_type = (
             str(self.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
@@ -8189,12 +9229,10 @@ class Handler(BaseHTTPRequestHandler):
         if content_type != "application/json":
             return "POST requests require Content-Type: application/json."
 
-        port = int(getattr(self.server, "server_port", 0))
-        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        host = str(self.headers.get("Host", "")).strip().lower()
-        if host not in allowed_hosts:
+        if not self._host_allowed():
             return "Invalid Host for local control UI."
 
+        port = int(getattr(self.server, "server_port", 0))
         origin = str(self.headers.get("Origin", "")).strip().lower()
         if origin and origin not in {
             f"http://127.0.0.1:{port}",
@@ -8210,15 +9248,38 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         security_error = self._post_security_error()
         if security_error:
+            # Read (and discard) a small body before refusing. On Windows,
+            # closing a socket with unread data resets the connection, so the
+            # client would see "connection aborted" instead of the 403.
+            try:
+                pending = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                pending = 0
+            if 0 < pending <= 1_000_000:
+                self.rfile.read(pending)
+            self.close_connection = True
             self._send_json({"error": security_error}, 403)
             return
 
-        length = int(self.headers.get("Content-Length", "0") or 0)
+        # The body is untrusted even on a same-origin request: a bad length,
+        # invalid UTF-8, a non-object JSON value or a deeply nested one used
+        # to crash this handler thread (D-160).
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_POST_BYTES:
+            self.close_connection = True
+            self._send_json({"error": "Invalid or oversized request body."}, 413 if length > 0 else 400)
+            return
         raw = self.rfile.read(length) if length else b"{}"
         try:
             body = json.loads(raw.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             self._send_json({"error": "Invalid JSON body."}, 400)
+            return
+        if not isinstance(body, dict):
+            self._send_json({"error": "The JSON body must be an object."}, 400)
             return
 
         gate_lock_error = human_gate_mutation_block_reason(route)
@@ -8363,6 +9424,7 @@ class Handler(BaseHTTPRequestHandler):
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
+                    format_choice=body.get("format"),
                 )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
@@ -8833,7 +9895,129 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(payload)
                 return
 
+            if route == "/api/publish-gate":
+                # Publishing (D-142, D-143): approve or hold the package, record
+                # a manual upload, or upload through the YouTube Data API.
+                action = str(body.get("action", "")).strip().upper()
+                concept_id = str(body.get("concept_id", ""))
+                fmt = str(body.get("format", ""))
+                if action in {"APPROVE_PUBLISH", "HOLD"}:
+                    publish_review.apply_action(
+                        concept_id=concept_id, format=fmt, decision=action,
+                        metadata=body.get("metadata"),
+                        note=(str(body["note"]) if body.get("note") is not None else None),
+                    )
+                elif action == "RECORD_UPLOAD":
+                    publish_review.record_upload(
+                        concept_id=concept_id, format=fmt,
+                        youtube_video_id=str(body.get("youtube_video_id", "")), method="MANUAL",
+                    )
+                elif action == "UPLOAD":
+                    youtube_upload.upload(concept_id=concept_id, format=fmt)
+                elif action == "DISCARD_PENDING":
+                    publish_review.discard_pending_upload(concept_id, fmt)
+                else:
+                    raise ValueError("Action must be APPROVE_PUBLISH, HOLD, RECORD_UPLOAD, UPLOAD or DISCARD_PENDING")
+                self._send_json({"publish_gate": publish_gate_state()})
+                return
+
+            if route == "/api/editor-exchange":
+                # Tesseract project exchange (D-144): export the editable
+                # project, import the finished edit, or discard it.
+                action = str(body.get("action", "")).strip().upper()
+                concept_id = str(body.get("concept_id", ""))
+                fmt = str(body.get("format", ""))
+                if action == "EXPORT":
+                    tesseract_exchange.export(concept_id=concept_id, format=fmt)
+                elif action == "IMPORT_EDIT":
+                    tesseract_exchange.import_edit(
+                        concept_id=concept_id, format=fmt,
+                        video_path=str(body.get("video_path") or ""),
+                        timeline_path=str(body.get("timeline_path") or "") or None,
+                        note=str(body.get("note") or ""),
+                    )
+                elif action == "DISCARD_EDIT":
+                    tesseract_exchange.discard_edit(
+                        concept_id=concept_id, format=fmt, note=str(body.get("note") or "")
+                    )
+                else:
+                    raise ValueError("Action must be EXPORT, IMPORT_EDIT or DISCARD_EDIT")
+                self._send_json({"editor_exchange": editor_exchange_state()})
+                return
+
+            if route == "/api/doctor":
+                # One click, every key and binary tested for real (D-169).
+                self._send_json({"doctor": doctor_module.run()})
+                return
+
+            if route == "/api/budget-reconcile":
+                # The operator settles what a paid call really cost (D-166):
+                # an unconfirmed call, or a correction to any ledger item.
+                video_budget.reconcile(
+                    video=str(body.get("video_id", "")),
+                    category=str(body.get("category", "")),
+                    ref=str(body.get("ref", "")),
+                    total_usd=body.get("total_usd"),
+                    actor=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    note=str(body.get("note") or ""),
+                )
+                self._send_json({"video_budget": video_budget_state()})
+                return
+
+            if route == "/api/visual-dispatch":
+                # Paid generation for an authorized shot (D-140); the human
+                # then chooses one variant, which is registered as the asset.
+                action = str(body.get("action", "")).strip().upper()
+                if action == "GENERATE":
+                    visual_dispatch.generate(
+                        request_file=body.get("request_file"),
+                        reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    )
+                elif action == "CHOOSE":
+                    visual_dispatch.choose(
+                        request_file=body.get("request_file"),
+                        candidate_id=str(body.get("candidate_id", "")),
+                    )
+                else:
+                    raise ValueError("Action must be GENERATE or CHOOSE")
+                payload = {"visual_dispatch": visual_dispatch_state()}
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/narration-dispatch":
+                # A paid provider call (D-139): only after spend approval,
+                # within the approved worst case, by an explicit human click.
+                result = narration_dispatch.dispatch(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    segment_ids=body.get("segment_ids"),
+                    reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                )
+                payload = {"result": result, "narration_dispatch": narration_dispatch_state()}
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/visual-plan-gate":
+                payload = visual_plan_review.apply_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
             if route == "/api/narration-spend-gate":
+                require_visual_plan_for_spend(body)
                 payload = apply_narration_spend_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     format=str(body.get("format", "")),
@@ -8875,6 +10059,51 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(payload)
                 return
 
+            if route == "/api/final-audio-gate":
+                payload = narration_final_review.apply_action(
+                    concept_id=str(body.get("concept_id", "")),
+                    format=str(body.get("format", "")),
+                    decision=str(body.get("decision", "")),
+                    note=(str(body["note"]) if body.get("note") is not None else None),
+                    segment_ids=body.get("segment_ids"),
+                )
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/thumbnail-images":
+                # Candidate subject images (D-135). GENERATE is a paid provider
+                # call the human authorizes with an explicit maximum cost.
+                render_id = str(body.get("render_id", ""))
+                action = str(body.get("action", "")).strip().upper()
+                if action == "GENERATE":
+                    thumbnail_image_provider.generate(
+                        render_id=render_id,
+                        max_cost_usd=body.get("max_cost_usd"),
+                        reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    )
+                elif action == "IMPORT":
+                    thumbnail_image_provider.import_candidate(
+                        render_id=render_id,
+                        path=body.get("path"),
+                        provider=body.get("provider"),
+                        source_tier=body.get("source_tier"),
+                        license=body.get("license"),
+                        cost_usd=body.get("cost_usd"),
+                        reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                    )
+                elif action == "CHOOSE":
+                    thumbnail_image_provider.choose(
+                        render_id=render_id,
+                        candidate_id=str(body.get("candidate_id", "")),
+                    )
+                else:
+                    raise ValueError("Action must be GENERATE, IMPORT or CHOOSE")
+                self._send_json(thumbnail_gate_state())
+                return
+
             if route == "/api/thumbnail-spec":
                 payload = update_thumbnail_spec(
                     render_id=str(body.get("render_id", "")),
@@ -8906,6 +10135,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def run_server(host: str, port: int, open_browser: bool) -> None:
     UI_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    recovered = JOB_MANAGER.recover()
+    if recovered:
+        print(f"Previous job {recovered.get('id')} was {str(recovered.get('status')).lower()}: {recovered.get('note')}")
     server = ThreadingHTTPServer((host, port), Handler)
     url = f"http://{host}:{port}/"
 
@@ -8925,6 +10157,12 @@ def run_server(host: str, port: int, open_browser: bool) -> None:
         pass
     finally:
         server.server_close()
+        # A job must not outlive the UI that supervises it (audit 2026-10-04).
+        try:
+            if JOB_MANAGER.running():
+                JOB_MANAGER.stop()
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            pass
 
 
 def main() -> None:

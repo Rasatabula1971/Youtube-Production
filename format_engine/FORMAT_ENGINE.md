@@ -35,9 +35,12 @@ The approved concept `format_intent` decides which branches must be planned:
 | --------------- | ------------------------- |
 | `long_form`     | `long_form`               |
 | `short`         | `short`                   |
-| `either`        | `long_form` **and** `short` |
+| `either`        | `long_form` **and** `short` (legacy only) |
 
-An unknown `format_intent` fails deterministic validation rather than defaulting to a
+Since D-132 the Concept Gate resolves every accepted concept to one format, so
+new productions reach Format with `long_form` or `short` and plan one branch.
+The `either` row remains only so productions accepted before that change can
+finish. An unknown `format_intent` fails deterministic validation rather than defaulting to a
 branch. Branch duration bounds, beat minimums and aspect ratios live in
 `format_config.json`; they are configurable project constraints, not proven rules.
 

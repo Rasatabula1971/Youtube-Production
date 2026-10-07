@@ -163,6 +163,11 @@ class RunTests(RadarTestCase):
         self.assertEqual(packet["trajectory"], "ACCELERATING")
         self.assertTrue(packet["trajectory_history_available"])
         self.assertEqual(len(vr.SNAPSHOT_FILE.read_text().splitlines()), 3)
+        series = vr.snapshots_for(vid(10))
+        self.assertEqual([row["views"] for row in series], [60_000, 70_000, 90_000])
+        self.assertEqual([row["video_age_hours"] for row in series], [30.0, 36.0, 42.0])
+        self.assertEqual(vr.snapshots_for("../../etc"), [])
+        self.assertEqual(vr.snapshots_for(vid(99)), [])
 
         # Re-running inside the cadence does not add a snapshot.
         self.run_radar(api, now=NOW + timedelta(hours=13))
@@ -247,6 +252,153 @@ class RunTests(RadarTestCase):
         self.assertIsNone(vr.load_packet(vid(10)))
 
 
+class OverviewTests(RadarTestCase):
+    """UI-04: the radar page reads themes, tracked videos and sparklines from files."""
+
+    def write_fixture(self):
+        def record(n, ratio, trajectory, hours_old, channel=CH):
+            return {
+                "first_seen_at": at(hours_old - 2),
+                "video": {
+                    "video_id": vid(n),
+                    "title": f"Brake cooling {n}",
+                    "channel_id": channel,
+                    "channel_title": "Lab",
+                    "published_at": at(hours_old),
+                },
+                "format": "long",
+                "metrics": {"lifetime_ratio": ratio, "views": 1000 * n},
+                "strength": "BREAKOUT",
+                "trajectory": trajectory,
+                "breadth": "REPLICATED",
+                "historical_alignment": "ALIGNED",
+                "cluster": {"cluster_id": "cl_x"},
+            }
+
+        state = vr.empty_state()
+        state["tracked"] = {
+            vid(1): record(1, 8.0, "STABLE_HIGH", 30),
+            vid(2): record(2, 14.0, "ACCELERATING", 60, channel=CH2),
+            vid(3): record(3, 3.0, "DECELERATING", 400),
+        }
+        vr.save_state(state)
+        vr.CLUSTERS_FILE.write_text(json.dumps({"clusters": [
+            {"cluster_id": "cl_solo", "label": "solo", "breadth": "ONE_OFF", "members": [
+                {"video_id": vid(3), "lifetime_ratio": 3.0}]},
+            {"cluster_id": "cl_x", "label": "brake cooling", "breadth": "REPLICATED",
+             "independent_channel_count": 2, "member_count": 2, "replication_rule_id": "CL-REPLICATED",
+             "members": [{"video_id": vid(1), "lifetime_ratio": 8.0}, {"video_id": vid(2), "lifetime_ratio": 14.0}]},
+        ]}))
+        rows = [{"video_id": vid(2), "views": v, "video_age_hours": h} for h, v in ((24, 5000), (6, 1000), (12, 2500))]
+        rows += [{"video_id": vid(1), "views": 10, "video_age_hours": 3}, {"video_id": "other", "views": 1, "video_age_hours": 1}]
+        vr.SNAPSHOT_FILE.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n")
+
+    def test_overview_ranks_replicated_themes_and_sorts_series(self):
+        self.write_fixture()
+        overview = vr.radar_overview(now=NOW)
+        self.assertEqual(overview["window_days"], 15)
+        self.assertEqual([t["cluster_id"] for t in overview["themes"]], ["cl_x", "cl_solo"])
+        theme = overview["themes"][0]
+        self.assertEqual(theme["strongest_ratio"], 14.0)
+        self.assertEqual(theme["median_ratio"], 11.0)
+        self.assertEqual(theme["direction"], "ACCELERATING")
+        self.assertEqual(theme["top_video_id"], vid(2))
+        self.assertEqual(theme["momentum"], [[6.0, 1000.0], [12.0, 2500.0], [24.0, 5000.0]])
+        self.assertEqual(theme["first_detected_at"], at(58))
+        self.assertEqual([v["video_id"] for v in theme["videos"]], [vid(2), vid(1)])
+
+    def test_overview_rows_and_themes_carry_a_lane(self):
+        overview = vr.radar_overview(now=NOW)
+        for row in overview["tracked"]:
+            self.assertIn(row["lane"], ("ON_LANE", "UNCLEAR", "OFF_LANE", "OTHER_LANGUAGE"))
+        for theme in overview["themes"]:
+            self.assertIn(theme["lane"], ("ON_LANE", "UNCLEAR", "OFF_LANE", "OTHER_LANGUAGE"))
+            for video in theme["videos"]:
+                self.assertIn("lane", video)
+                self.assertIn("day", video)
+
+    def test_overview_tracked_rows_carry_day_in_window_and_inbox_id(self):
+        self.write_fixture()
+        tracked = vr.radar_overview(now=NOW)["tracked"]
+        self.assertEqual([row["video_id"] for row in tracked], [vid(2), vid(1), vid(3)])
+        by_id = {row["video_id"]: row for row in tracked}
+        self.assertEqual(by_id[vid(1)]["day"], 2)
+        self.assertEqual(by_id[vid(2)]["day"], 3)
+        self.assertEqual(by_id[vid(3)]["day"], 15)  # capped at the window
+        self.assertEqual(by_id[vid(1)]["opportunity_id"], "opp_viral_radar__" + vid(1))
+        self.assertEqual(by_id[vid(3)]["series"], [])
+
+    def test_theme_headline_is_the_strongest_members_title_trimmed(self):
+        self.write_fixture()
+        overview = vr.radar_overview(now=NOW)
+        theme = next(t for t in overview["themes"] if t["cluster_id"] == "cl_x")
+        self.assertEqual(theme["headline"], "Brake cooling 2")
+        self.assertEqual(theme["label"], "brake cooling")
+        self.assertEqual(vr.theme_headline("Why F1 brakes GLOW (4K) [Part 2] #shorts #f1"), "Why F1 brakes GLOW")
+        self.assertEqual(vr.theme_headline("How a jet engine works | Explained"), "How a jet engine works")
+        long = vr.theme_headline("word " * 40)
+        self.assertLessEqual(len(long), 92)
+        self.assertTrue(long.endswith("…"))
+        self.assertEqual(vr.theme_headline(""), "")
+        # Audit 2: a "#" inside the title belongs to it; hostile input stays fast.
+        self.assertEqual(vr.theme_headline("Price #1 in the world"), "Price #1 in the world")
+        self.assertEqual(vr.theme_headline("C# tutorial for beginners #code #learn"), "C# tutorial for beginners")
+        import time as _time
+        started = _time.monotonic()
+        vr.theme_headline(" " * 50_000 + "x")
+        vr.theme_headline("(" * 50_000)
+        vr.theme_headline("#a " * 20_000)
+        self.assertLess(_time.monotonic() - started, 0.5)
+
+    def test_overview_without_files_is_empty(self):
+        overview = vr.radar_overview(now=NOW)
+        self.assertEqual((overview["themes"], overview["tracked"]), ([], []))
+        self.assertFalse(overview["learning"]["active"])
+        self.assertEqual(overview["learning"]["decisions"], 0)
+
+    def test_overview_learns_taste_from_inbox_decisions(self):
+        """D-165: enough Save/Reject decisions on radar packets rank the tracked rows."""
+        from opportunity_engine import inbox
+
+        self.write_fixture()
+        picks = ["How brakes stop a car", "Why tyres do not burst", "How a jet engine works",
+                 "How glass stops a bullet", "Why bridges sway", "How a fridge makes cold",
+                 "How airbags fire", "Why magnets stick", "How turbines spin", "How popcorn pops"]
+        rejects = ["Social security for seniors", "Chest workout for muscle", "Crypto crash",
+                   "Atlantis history for sleep", "Tax brackets 2026", "Leg day for lifters",
+                   "Bitcoin news", "Hypertrophy tips", "Medicare guide", "Templar bloodline"]
+        items = {}
+        vr.PACKETS_DIR.mkdir(parents=True, exist_ok=True)
+        for n, title in enumerate(picks + rejects):
+            video_id = f"L{n:010d}"
+            packet = {"opportunity_id": "opp_viral_radar__" + video_id, "source_type": "VIRAL_RADAR",
+                      "title": title, "candidate_videos": [{"video_id": video_id, "title": title, "channel_id": CH2 if n >= len(picks) else CH}]}
+            (vr.PACKETS_DIR / f"{video_id}.json").write_text(json.dumps(packet), encoding="utf-8")
+            items[packet["opportunity_id"]] = {"status": "SAVED" if n < len(picks) else "REJECTED"}
+        state_file = self.root / "inbox_state.json"
+        state_file.write_text(json.dumps({"schema_version": 1, "items": items}), encoding="utf-8")
+        with patch.object(inbox, "STATE_FILE", state_file):
+            overview = vr.radar_overview(now=NOW)
+        self.assertTrue(overview["learning"]["active"])
+        self.assertEqual(overview["learning"]["decisions"], 20)
+        by_id = {row["video_id"]: row for row in overview["tracked"]}
+        self.assertIn(by_id[vid(1)]["taste_label"], ("LIKELY", "UNSURE", "UNLIKELY"))
+        self.assertIsNotNone(by_id[vid(1)]["taste"])
+        # The brake-cooling fixture is on the picked channel and uses no rejected words.
+        self.assertGreater(by_id[vid(1)]["taste"], 0)
+        theme = next(t for t in overview["themes"] if t["cluster_id"] == "cl_x")
+        self.assertIsNotNone(theme["taste"])
+        self.assertIn("taste_label", theme["videos"][0])
+
+    def test_sparkline_series_is_downsampled(self):
+        vr.RADAR_DIR.mkdir(parents=True, exist_ok=True)
+        rows = [{"video_id": vid(1), "views": i, "video_age_hours": i} for i in range(100)]
+        vr.SNAPSHOT_FILE.write_text("\n".join(json.dumps(r) for r in rows))
+        points = vr._snapshot_series({vid(1)})[vid(1)]
+        self.assertEqual(len(points), vr.SPARKLINE_MAX_POINTS)
+        self.assertEqual((points[0], points[-1]), ([0.0, 0.0], [99.0, 99.0]))
+
+
 class UnitTests(unittest.TestCase):
     settings = channel_scope.load_config()["viral_radar"]
 
@@ -308,3 +460,20 @@ class UnitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RadarJobImportTests(unittest.TestCase):
+    """The radar job runs as a plain script, without the test runner's path setup."""
+
+    def test_default_api_imports_youtube_discovery_outside_pytest(self):
+        import os
+        import subprocess
+
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env["YOUTUBE_API_KEY"] = "test"
+        completed = subprocess.run(
+            [sys.executable, "-c", "import opportunity_engine.viral_radar as v; v.default_api()"],
+            cwd=str(Path(__file__).resolve().parent.parent), env=env,
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr[-800:])

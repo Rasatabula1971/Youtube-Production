@@ -2882,3 +2882,2488 @@ Save and Reject (R11).
   `POST /api/opportunity/inbox` waits for running jobs like the other gate
   routes.
 
+## D-114 — The radar runs on the existing task; evidence opens in a drawer
+
+**Status:** Accepted
+
+**O13: one scheduler.** The Windows task from D-052 / D-054 (every 2 hours,
+installed from Tools) now runs `opportunity_engine/scheduled_tick.py` (R1). Each
+wake runs the existing Opportunity Research continuation unchanged, then one
+radar tick (`radar_scheduler.py`):
+
+- **Full discovery** when the last one is at least
+  `radar_schedule.discovery_every_hours` old (8 by default; the spec allows
+  6–12).
+- **Otherwise a snapshot-only pass** when a tracked video is due on its
+  age-based cadence. This mode only re-measures tracked videos (1 API unit per
+  50) and never searches or crawls.
+- **Otherwise nothing.**
+
+A lock file prevents overlapping ticks, and the existing scheduler's lock
+helpers are reused. State stays in the radar's own files, so ticks are
+resumable. One step failing never skips the other. A status file feeds the
+radar card: last check, next snapshot due, next discovery due. Users who
+installed the earlier task re-run the install so the task uses the new
+runner; the task name is unchanged.
+
+**O14: the evidence drawer.** Inbox cards open a side drawer with the spec's
+sections (§25) instead of an inline expander.
+- **Chart.** The trajectory chart (§26) plots views against hours since
+  publishing from the radar's own append-only snapshots, never from
+  reconstructed history. It is a single 2 px series in the validated dark-mode
+  mark colour #4493f8, with 8 px markers, a hairline grid and one axis.
+- **Interaction.** A crosshair tooltip responds to both hover and ←/→ on the
+  focused chart. A snapshot table and a views-per-hour table carry the same
+  values without hovering.
+- **Behaviour.** The drawer closes on Esc and returns focus to the card.
+
+
+## D-115 — UI Patch 1: tokens, new shell, Command Center, productions from files
+
+**Status:** Accepted
+
+**Productions are derived, not stored.** The redesign needs a list of
+productions with a stage and a status. The pipeline has no per-video record:
+each engine writes hash-bound artifacts per concept. Rather than add a second
+source of truth that could drift from the files, `experiment_ui/productions.py`
+derives each production on every request from the artifact state the server
+already computes (the `*_artifact_state` functions and their gate snapshots).
+- **What counts.** A production is a concept accepted at the Concept Gate.
+- **Stage.** The stage is the first stage whose output is not current for that
+  concept.
+- **Status.** HUMAN_REVIEW when that stage's gate has a pending decision for it,
+  BLOCKED on rework or reject, READY otherwise, and COMPLETE when every branch
+  has a current final render.
+- **Cost and invalidation.** It reuses the state already built for
+  `/api/status`, so polling costs no extra artifact scans beyond reading the
+  final-render results. Invalidating an artifact moves the production back
+  automatically.
+- **Known limit.** Gates that are still global (narration spend, visual
+  candidates and rights, rough cut, edit preview, final export) are not
+  attributed to one production until the per-production workspace (Patch 3).
+
+**Tokens first.** `css/tokens.css` defines semantic colours, where colour means
+state (human, running, blocked, complete), plus spacing, type, radius, shadow,
+motion and z-index. The previous `:root` variables are now aliases of these
+tokens, so the 2,200-line `styles.css` keeps working unchanged and later patches
+can move it across piece by piece.
+
+**Shell and navigation.** The sidebar follows the redesign's information
+architecture:
+- Command Center.
+- Opportunities: Discover, Viral Radar, Watching, Approved.
+- Productions: Active, Review Queue, Completed, Workspace.
+- Tools & Diagnostics.
+
+Sub-items reuse the existing views (inbox tabs, radar card, `/analysis`) until
+Patches 2 and 3 give them their own pages. The top bar adds a health pill: a
+failed job, a radar scheduler more than 6 hours (three wakes) late, or a failed
+radar run. The sidebar footer shows the workflow and scheduler state.
+
+**Command Center.** It replaces Home. The existing guided-workflow hero is kept
+as "Needs your attention"; below it come the attention queue, active
+productions and "Running automatically".
+
+**Static serving.** The server serves `/css/*.css` and `/js/*.js` with path
+containment: one directory level, an extension allowlist per folder, no
+dotfiles, and a resolved path that must stay inside the folder (which also
+rejects symlink escape). Everything else under those prefixes is a 404. CI now
+syntax-checks every file in `static/js/`.
+
+
+## D-116 — UI Patch 2: Viral Radar page, Opportunity Review workspace, Opportunities restyle
+
+**Status:** Accepted
+
+**Viral Radar page (UI-04).** `viral_radar.radar_overview()` serves
+`GET /api/opportunity/viral/overview`. It reads only the radar's own files:
+themes from the last clustering pass, tracked videos from the radar state, and
+sparkline points from the append-only snapshot log. A video's series is
+downsampled to at most 24 points, and nothing is re-measured or reconstructed.
+- **Themes.** Each theme carries strongest and median outlier, the direction
+  and historical alignment of its strongest video, when it was first detected,
+  and that video's views series as "momentum".
+- **Tracked videos.** Each carries its day within the 15-day window.
+- **Page.** It polls the overview only while open (on a new scan, or every
+  30 s) and repaints only when the content changes, so open panels and focus
+  survive the 5-second status poll.
+- **Filters.** The spec's topic and region filters are not shown because the
+  radar has neither (it scans its watchlist and rotating queries). The page
+  says so instead of offering controls that would do nothing. The format
+  filter only filters what is displayed.
+
+**Shared review workspace (UI-06).** `js/review-workspace.js` owns what every
+human gate will share:
+- the header and "N of M";
+- previous/next;
+- keyboard behaviour (← →, 1–9, Ctrl+Enter, active anywhere on the page
+  except in text fields and drawers);
+- the decision panel, notes and status.
+
+A gate supplies items, evidence HTML, decisions and a submit function.
+
+**The Opportunity Gate is its first user.**
+- **Decisions.** It offers exactly the actions the inbox already allows for
+  each item.
+- **One dispatcher.** All decisions go through one dispatcher in `app.js`
+  (`performInboxDecision`), which the inbox cards and the radar page also use,
+  so every surface makes the same API calls.
+- **Notes.** Investigate requires a note. Approve records none, since it
+  starts analysis rather than writing a decision note, and the panel says so.
+- **Drafts.** A failed decision keeps the draft.
+- **Historical topics.** They still route to Historical review, because their
+  examples must be kept or replaced first.
+
+**Opportunities restyle (UI-03).**
+- The entry cards sit in one row.
+- A counts strip leads into the review workspace.
+- Inbox cards follow the spec: kicker, title, meta line, outlier figure, the
+  six evidence levels, and one primary action ("Review opportunity"); the
+  other decisions are secondary.
+- The Command Center's breakout and inbox cards now open Opportunity Review on
+  the exact item.
+
+**Evidence drawer (UI-05).** It is unchanged from O14 and opens from every new
+surface. Its "Viewer questions" section stays "not yet evidenced" until
+Experiment 02 answers it, rather than showing invented questions.
+
+
+## D-117 — UI Patch 3: Productions list, Review Queue, Production Workspace
+
+**Status:** Accepted
+
+**The workspace owns the context.** `/production#<concept_id>` shows one video:
+title, premise, stage · status, when its files last changed, and eight tabs
+(Evidence, Analysis, Concept, Research, Script, Package, Format, Produce). The
+user no longer has to work out which concept they are on or where it is.
+- **Real sections.** The tabs are real sections, not headings. Each comes from
+  `productions.detail()`, which reads the same artifact state as the list, so
+  the two cannot disagree.
+- **What is shown.** Concept fields, research progress and per-claim decisions,
+  script branches with per-section decision, lock, rework reason and ready
+  alternatives, packaging and format progress, and per-version
+  voice/narration/render state.
+- **Behaviour.** The current stage opens by default with a "Current step" card.
+  Tabs follow the WAI-ARIA tabs pattern, and the page refetches when the
+  status poll shows the production moved, or every 10 s.
+
+**Decisions still happen in the existing panels.** "Continue review" opens
+Workspace (`/analysis`), where every gate panel still lives. Moving each gate
+onto the shared review workspace (D-116) is UI-09 onward. This patch does not
+duplicate those decision forms, so there is still exactly one place to make
+each decision.
+
+**Updated time from file times.** Engines name per-concept artifacts
+`<slug>.…`. A production's "updated" time is therefore the newest
+modification time among its files, found with one directory scan per stage
+folder and no file reads. It reflects the files, not who changed them.
+
+**Review Queue.** Section 14 of the redesign: one numbered list of every
+decision waiting, covering productions needing review or blocked, and inbox
+ideas needing review. "Start review queue" opens the first one. Opportunity
+entries open Opportunity Review on that idea; production entries open its
+workspace.
+
+**Known limits.**
+- **Global gates.** The Produce tab cannot yet name the narration-spend,
+  visual, rough-cut, edit-preview and final-export decisions per video,
+  because those gates are still global (D-115).
+- **Evidence tab.** It shows the evidence recorded on the concept, not the
+  original opportunity packet, because concepts do not yet record which inbox
+  opportunity they came from.
+
+
+## D-118 — UI Patch 4: Analysis, Concept and Research gates on the shared review workspace
+
+**Status:** Accepted
+
+**One review experience, same decisions.** The Analysis, Concept and Research
+gates now run on the review workspace from D-116, at `/review#<gate>`. Each
+gate keeps its domain content:
+- the analysis finding with its supporting evidence;
+- the concept's idea, audience evidence, mechanism, research questions and
+  checks;
+- the research claim's sources (stance, locator, quote), its concept's
+  research questions, and what accepting confirms.
+
+The header, "N of M", previous/next, keys, decision panel and notes are
+shared.
+
+**Same requests as the classic panels.** Decisions post the same bodies to the
+same endpoints, with `criteria: {}` because the gates derive criteria from the
+decision. The server's job lock and mutation routes are unchanged. The UI adds
+only stricter guidance; it never adds a rule the server lacks:
+- Rework needs a note (the server already requires it).
+- Accepting a CONFLICTED claim asks for a resolution note, matching the
+  research gate's `require_conflict_resolution_note`.
+
+**Revisiting and drafts.**
+- "Include decided items" puts decided items back in the queue with their
+  decision and note pre-filled.
+- Unsaved drafts are kept per item, so moving between items never carries one
+  item's note to another. This fixes a carry-over bug in the Patch 2 workspace.
+- A research claim's question panel refreshes when a waiver or another claim
+  changes coverage.
+
+**Entry points.** These open the matching gate:
+- the Command Center hero for HUMAN_ANALYSIS_GATE, HUMAN_CONCEPT_GATE and
+  HUMAN_RESEARCH_GATE;
+- attention cards and Review Queue rows for pending analysis findings and
+  concepts (research is counted per production);
+- a production's "Continue review" at the research stage, which opens its
+  first pending claim;
+- a "Review one at a time" button on each classic panel.
+
+**The classic panels stay.** Workspace keeps every original option, including
+the concept override bank (bringing a non-shortlisted concept in) and saved
+ideas, until the remaining gates move across (UI-11 onward: Script,
+Packaging, Format, Voice, then the production gates).
+
+
+## D-119 — UI Patch 5: the Script gate on the shared review workspace
+
+**Status:** Accepted
+
+**Part by part, then the whole.** `/review#script` lists, for each script
+branch awaiting a decision, its opening hook, every section and its closing,
+then a "Whole script" item. Each part shows:
+- its live text;
+- why it exists (purpose, psychology mechanism, reward type);
+- the accepted research claims it uses, with their statements.
+
+The whole-script item shows each part's state, the live hook and closing,
+validation errors, and the approved claims.
+
+**Decisions map one-to-one onto the existing section actions.**
+- Accept and lock → `ACCEPT`.
+- Rework → `REWORK` with the server's reason list (a test keeps the two in
+  step) and an optional instruction. Like the classic panel, it needs a
+  reason or an instruction, and CUSTOM needs an instruction.
+- Edit by hand → `MANUAL_EDIT`. It starts from the current text and refuses
+  an unchanged edit.
+- Unlock → `UNLOCK`; Cancel rework → `CANCEL_REWORK`.
+- Whole script → `/api/script-gate`.
+
+Accepting with parts still open shows the classic panel's confirmation and
+sends `accept_open_sections: true`.
+
+**Spending stays explicit.** Requesting a rework never calls the model.
+"Generate A / B / C" is a separate button that says it calls the model once.
+The alternatives then appear beside the original, and picking one, or keeping
+the original, applies `SELECT_ALTERNATIVE`, which locks the part.
+
+**Behaviour fixes in the shared workspace.**
+- A gate can add a choice list and its own note label to a decision.
+- A text-editing decision starts from the current text, and switching away
+  clears it.
+- A draft whose decision no longer applies, such as a rework instruction once
+  the rework is pending, is cleared.
+- Script items appear only once a branch's sections have loaded, so review
+  starts at the opening hook.
+- Section data reloads whenever the Script Gate changes from anywhere.
+
+**Kept in the classic view.** Preparing a bounded rework request without
+calling the model, and restoring a saved script version. Both are rare, and
+restoring needs the version picker.
+
+
+## D-120 — UI Patch 6: the Packaging workspace
+
+**Status:** Accepted
+
+**Five tabs, two decisions.** `/packaging` follows the redesign's packaging
+page:
+- **Title Direction** and **Final package** are the two human gates in the
+  live workflow, on the shared review workspace.
+- **Brief & angles**, **Thumbnail concepts** and **Pairing** show what the
+  automatic steps produced. They have no decisions because the pipeline has
+  none there.
+
+**Choices live with the item, not the form.** Both gates need more than one
+choice:
+- Title Direction: a Short and a Long-form title, each with editable wording.
+- Final package: a package plus the required checks.
+
+These are kept per item in the page module, so the 5-second status poll and
+any repaint never lose a pick, an edited title or a ticked check. Editing a
+title's wording selects that title.
+
+**Same requests and rules as the classic panels.**
+- **Title Direction** posts `{concept_id, decision, selected_titles, note}`:
+  - Accept needs both formats chosen with non-blank wording.
+  - Rework needs a note.
+  - A decided item offers only Rework, matching the gate's rule that a
+    finalized decision changes only through rework.
+- **Final package** posts `{video_id, decision, package_id, criteria, note,
+  rework_target}`:
+  - Accept needs a chosen package and every required check, which the server
+    also enforces.
+  - Rework needs a target from the gate config and an instruction, and shows
+    the classic confirmation.
+- A test keeps the page's check and rework labels in step with
+  `final_packaging_gate_config.json`.
+
+**Thumbnail image approval stays classic.** Approving a rendered thumbnail
+means choosing a subject photo and accent and re-rendering, a different job
+from a decision. The Final package tab therefore shows which packages wait on
+an approved image and links to the classic panel. A package whose image is
+approved but has no preview is labelled as such, never as unapproved.
+
+**Entry points.** These open the matching tab:
+- the Command Center hero for HUMAN_TITLE_DIRECTION_GATE,
+  TITLE_DIRECTION_REJECTED, HUMAN_FINAL_PACKAGING_GATE and
+  FINAL_PACKAGING_REJECTED;
+- a production's "Continue review" at the Package stage;
+- the classic panels' "Open packaging workspace" buttons;
+- Productions → Packaging in the sidebar.
+
+
+## D-121 — UI Patch 7: Format, Voice and Narration Preview gates on the shared review workspace
+
+**Status:** Accepted
+
+**Three more gates, same requests.** `/review#format`, `#voice` and
+`#preview` post exactly what the classic panels post:
+- `/api/format-gate` `{concept_id, decision, criteria: {}, note}`.
+- `/api/performance-gate` `{concept_id, format, decision, criteria: {}, note}`.
+- `/api/narration-preview-gate` `{concept_id, format, decision, note}`.
+
+Rework needs a note on each. The preview offers exactly the server's four
+decisions (APPROVE_FINAL, REWORK_PERFORMANCE, REWORK_SCRIPT,
+REWORK_MUSIC_SFX), and a test keeps them in step.
+
+**What each review shows.**
+- **Format:** every branch's duration, promise delivery, payoff and beats,
+  the claims each branch uses, unused accepted claims, branch separation and
+  source overlap.
+- **Voice:** each beat's fixed narration beside its delivery direction
+  (emotion, intensity, speed, pauses, stressed words), so the performance is
+  judged against the words it will be spoken over.
+- **Preview:** a player for the free local prototype (the existing audio
+  endpoint).
+
+**Listen before spending.** The preview cannot be approved until its audio
+has rendered, a rule the server also enforces. Approving only unlocks the
+paid narration quote; nothing is spent at this step.
+
+**Entry points.**
+- The Command Center hero for HUMAN_FORMAT_GATE, HUMAN_PERFORMANCE_GATE and
+  HUMAN_NARRATION_PREVIEW_GATE.
+- A production's "Continue review" at the Format and Produce stages.
+- An attention card and Review Queue row for previews that can be heard.
+  Previews are decided per format but are not part of the production status,
+  so they are counted on their own.
+- The classic panels' "Review one at a time" buttons.
+
+**Kept in the classic panel.** Revising one narration segment and
+re-rendering the preview: a targeted edit tool, not a gate decision.
+
+
+## D-122 — UI Patch 8: the Produce workspace
+
+**Status:** Accepted
+
+**One page for the production gates.** `/produce` follows the redesign's
+Produce page, with one tab per human gate between narration and export:
+- Narration spend;
+- Choose visuals;
+- Footage rights;
+- Rough cut;
+- Visual spend;
+- Edit preview;
+- Final export.
+
+They run on the shared review workspace rather than `/review`, so production
+decisions sit together and the gate-review tab bar stays readable.
+
+**Same requests, same rules.** Every tab posts exactly the classic panel's
+body to the same endpoint, and the server's decision sets are mirrored and
+pinned by a test. The page adds guidance, never a rule the server lacks:
+- **Narration spend:** accept needs every spend check and confirms the
+  worst-case amount.
+- **Choose visuals:** a candidate must be chosen to use it, and blocked
+  candidates cannot be picked.
+- **Footage rights:** approval needs the editorial purpose.
+- **Rough cut:** a visual rework needs a shot, and every rework needs a note.
+- **Visual spend:** authorizing needs a ceiling above zero and within the
+  per-shot hard cap, and confirms the amount.
+- **Edit preview and final export:** returns need a note.
+
+The server still routes rough-cut and spend reworks (to the storyboard, the
+Format Gate or the Voice Performance Gate) and reports where they went.
+
+**Spending stays explicit.**
+- Both paid steps state their ceiling and ask for confirmation.
+- "Authorize" sets a ceiling only; nothing is generated or charged on this
+  page.
+- Final export approval binds the rendered bytes and publishes nothing.
+
+**Not waiting on you.** A shot whose storyboard changed must be re-searched by
+the workflow before anyone can choose for it, so it is not counted as pending.
+It shows as stale when you include decided items.
+
+**Kept in the classic view.** Registering asset files (final narration audio,
+managed and generated visuals, final sound) and editing a storyboard shot.
+These are data entry and editing, not decisions. The Produce page and the
+classic panels link to each other.
+
+**Entry points.**
+- The Command Center hero for each production gate state.
+- One combined Command Center card and Review Queue row counting every
+  pending production decision, which opens the first gate with work.
+- The classic panels' "Open produce workspace" buttons.
+- Productions → Produce in the sidebar.
+
+## D-123 — UI Patch 9: Tools & Diagnostics
+
+**Status:** Accepted
+
+**Health first.** `/tools` now opens with System Health, then Recent Jobs.
+The manual action list, pipeline state and safeguards move under Advanced.
+- `GET /api/tools` returns `{health, jobs, updated_at}`.
+- `GET /api/job-log?id=` returns one saved log.
+- Both are read-only. Fix buttons run existing predefined actions through
+  `/api/run`, so the one-job-at-a-time rule and the action gating still
+  apply. The buttons are disabled while a job runs.
+
+**What each health check means.**
+- **Checked locally, nothing run or contacted:** binaries (yt-dlp,
+  agent-reach), the configured FFmpeg, and the Kokoro and soundfile imports.
+- **YouTube API key:** reported as present or missing only. Its value is
+  never returned.
+- **Radar scheduler:** *missing* if it has never run, *warn* if its last
+  wake is older than 6 hours, with an Install Opportunity Automation button.
+- **FAIR, Vision and vidIQ:** taken from the last run of each Doctor
+  (*unknown* until one has run), with a Run Doctor button.
+
+**Job history.** Each finished job appends one line to
+`.experiment_ui/job_history.jsonl`, which keeps the last 300. Logs from
+before this patch appear with status *unknown*. Log ids are checked against
+the job-id pattern and must resolve inside the job log directory, so a
+crafted id cannot read other files.
+
+## D-124 — UI Patch 10: responsive, keyboard and accessibility pass
+
+**Status:** Accepted
+
+**Measured, not eyeballed.** An axe-core audit covered all 11 routes at 320,
+640, 768 and 1280 px; 640 px is a 1280 px screen at 200% zoom. It found five
+problems on every route, all now fixed:
+- **Focusable controls inside closed drawers.** The drawers were hidden with
+  `aria-hidden` but their controls could still take focus. Closed drawers
+  are now `inert` dialogs.
+- **Job indicator with no accessible name on phones.** It now has a label
+  that follows the job's status.
+- **Primary button contrast of 3.35:1.** A new `--accent-fill` (#1960d0)
+  gives 5.2:1. The bright accent stays for dots, borders and focus.
+- **A skipped heading level** on Opportunities.
+- **A scroll strip the keyboard could not reach.**
+
+**Keyboard-only use.**
+- **Skip link and title focus.** A skip link is the first Tab stop. After a
+  navigation, focus goes to the page title so it is not lost on a hidden
+  control.
+- **Overlays.** The two drawers and the phone menu take focus, keep Tab
+  inside, close with Escape and return focus to whatever opened them.
+- **Tab bars.** Every tab bar now follows the Production Workspace pattern:
+  arrow keys, Home and End, with activation following focus. This lives in
+  one shared module, `js/a11y.js`.
+
+**Phone sidebar no longer closes on its own.** Status polls re-render the
+route, and that used to close an open phone menu. Now only a navigation
+closes it.
+
+**Motion and contrast modes.**
+- Reduced motion turns off all animations, transitions and smooth scrolls,
+  including the two scripted smooth scrolls.
+- Forced-colors mode keeps a visible focus ring and outlines status badges.
+
+**Out of scope.** Behaviour and payloads are unchanged. Tests pin the drawer
+semantics, the skip link, the script order and the fill contrast ratio.
+
+## D-125 — UI Patch 11: craft pass
+
+**Status:** Accepted
+
+**Method.** I screenshotted every route at 1280 px and phone width, listed
+each place where the same thing looked different, and fixed the cause
+rather than the symptom.
+- **Button sizes.** Buttons had no base font size, so any button without a
+  size class fell back to the browser's 16px. That accounted for the
+  oversized empty-state actions, the radar scan button and others. Buttons
+  now default to `--text-sm`, and only the Command Center's main action is
+  set larger.
+- **Empty states.** There were two styles. `.empty-state` now uses the small
+  text size, the subtle border and the large radius, and spans the full
+  grid. Before, the Command Center's attention queue showed it squeezed into
+  one card-width column.
+- **Tabs.** A tab bar means "steps of one gate group", so Gate reviews now
+  uses the same underline bar and switcher row as Packaging and Produce.
+  Pills stay for filters. Tab padding is reduced so Produce's seven tabs fit
+  at 1280 px.
+- **Alignment and rhythm.**
+  - Entry-card actions sit on a common baseline.
+  - Adjacent panels get a consistent gap (the inbox and historical review
+    used to touch).
+  - The radar's explanatory note is spaced from its filters.
+  - The Productions "+ New" button lines up with its tabs.
+- **Names and titles.**
+  - `/analysis` is called "Workspace" everywhere. The top bar no longer
+    says "Analyze & Create", and the four server next-step messages that
+    sent users to it now name Gate reviews or the Workspace.
+  - Workspace and Tools no longer repeat their title and subtitle inside
+    the page; the in-page heading is kept for screen readers only.
+- **Stage strip.** The Workspace stage strip looked like buttons but did
+  nothing. It is now a stepper.
+- **Type details.** Headings use `text-wrap: balance` and paragraphs
+  `pretty`; counts use tabular numbers.
+
+**Unchanged.** Behaviour, payloads and the D-124 accessibility results are
+unchanged: axe still reports no violations at 320, 640, 768 and 1280 px, and
+the tab-bar arrow keys still work on every gate page. A test pins the
+shared tab style, the base button and empty-state sizes, and the retired
+page name.
+
+## D-126 — UI Patch 12: Web Interface Guidelines QA
+
+**Status:** Accepted
+
+**Source.** The audit used Vercel's Web Interface Guidelines, fetched from
+`vercel-labs/web-interface-guidelines` on 2026-10-03.
+- **Applied:** every universal rule (interactions, animations, layout,
+  content, forms, design).
+- **Not applicable:** rules specific to React or Next.js (hydration,
+  Suspense, re-render tracking), font and image loading rules (the app ships
+  no web fonts or content images), and the Vercel-specific copywriting
+  section.
+
+**Found and fixed.**
+- **Links are links.** 45 navigation controls were `<button data-route>`,
+  which breaks Ctrl/Cmd-click and "open in new tab". They are now
+  `<a class="button-link" href>` that look identical. The router still
+  handles a plain click in place but lets modified clicks through to the
+  browser.
+- **Deep links.** The inbox tabs were remembered in local storage only. They
+  are now in the URL (`/opportunity#saved` and so on), like the
+  gate-review, packaging, produce and productions tabs.
+- **Phones.**
+  - Buttons, tabs and inputs were 26–37 px tall; they are now at least
+    44 px on phones and touch screens.
+  - Inputs were 12 px, which makes iOS Safari zoom on focus; they are now
+    16 px.
+  - The "include decided items" labels were 19 px; they are now 32 px
+    (44 px on phones).
+  - Controls get `touch-action: manipulation`.
+- **No `transition: all`.** Three rules used a bare duration, which
+  animates every property. Each now lists only the properties it changes.
+- **Overscroll.** Drawers, the phone menu and log panes use
+  `overscroll-behavior: contain`.
+- **Unsaved changes.** A typed review note that has not been sent now
+  triggers the browser's leave-page confirmation. Pre-filled notes and sent
+  notes do not.
+- **Forms.**
+  - Inputs have meaningful `name`s.
+  - URL and path fields have spellcheck and auto-capitalisation off.
+  - Descriptive placeholders end with "…".
+  - Native `<select>` elements set explicit colours for Windows dark mode.
+- **Colour is never the only cue.** On phones, the health pill's label was
+  `display: none`, leaving only a coloured dot. It is now visually hidden
+  but still read out.
+- **Smaller fixes.**
+  - A `theme-color` meta tag matches the background.
+  - In-page anchors clear the sticky top bar with `scroll-margin-top`.
+  - Tools job times use the viewer's locale.
+  - The brand is marked `translate="no"`.
+
+**Already met (D-124 and D-125).**
+- Keyboard operation and WAI-ARIA tab and dialog patterns.
+- Visible focus, focus traps and focus return.
+- Reduced motion, polite live regions, the skip link and heading
+  hierarchy.
+- Tabular numbers, labelled icon-only buttons, confirmation for stopping a
+  job, Enter and Ctrl+Enter submission.
+- Accurate page titles.
+- Designed empty states that each offer a next step.
+
+**Verified.** axe still reports no violations at 320, 640, 768 and 1280 px.
+A live audit found no interactive element under 24 px on desktop or 44 px
+on a phone, and no phone input under 16 px. All five tab bars restore their
+tab from the URL after a reload. A plain click on a link navigates in place,
+and a Ctrl/Cmd-click opens a new tab. A contract test pins these rules.
+
+## D-127 — UI Patch 13: adversarial regression audit
+
+**Status:** Accepted
+
+**Method.**
+- **Code review.** Three independent read-only reviews covered the redesign
+  range 8d0e80d..HEAD:
+  - payload fidelity: every gate against the classic panel and the server
+    validation;
+  - injection and server endpoints;
+  - behaviour regressions: DOM contracts, handlers, polling, navigation and
+    job locks.
+- **Browser harness.** Inbox, radar and production data came from the real
+  modules (`inbox.build_inbox`, `viral_radar.radar_overview`,
+  `productions.derive`) with HTML/JS payloads in titles, channel names and
+  labels, served by intercepting the API. It attacked:
+  - every route, drawer and job log;
+  - URL hashes: script, selector, traversal, malformed and 5,000-character
+    payloads;
+  - failing status, radar and production endpoints;
+  - a slow server that refuses decisions, with a double submit;
+  - 240-character titles at phone width.
+
+**Found and fixed.**
+- **Pending rough cuts were never shown (high, inherited).** A rough cut
+  with no review yet has `review_current: false`, and both the classic panel
+  and Produce filtered those out, so the gate could not be decided from any
+  UI. The filter is gone; the server already discards stale reviews.
+- **Decided gates could be re-decided (medium).** With "Include decided
+  items" ticked, the new pages offered decisions the classic panels lock:
+  - an approved narration preview;
+  - authorized narration spend;
+  - a decided edit preview or final export.
+
+  The server would accept them and revoke the approval with no
+  confirmation. Those items now offer no decisions and say why.
+- **Refused decisions wiped the reviewer's work (medium).** Each module's
+  `post()` swallowed the error, so its cleanup ran anyway. That cleared
+  title picks and edits, the chosen package and criteria, the chosen
+  visual, context notes and the max cost, and dropped the unsaved-note
+  warning. `post()` now reports success, and every cleanup runs only on
+  success. The inbox and script-section actions report failure the same
+  way.
+- **Malformed hash crashed the app (low).** A URL such as
+  `/production#%E0` threw `URIError` out of routing, so polling never
+  started. All hash decoding now goes through `YPUtil.decode`, which cannot
+  throw.
+- **Prototype pollution through a generated id (medium).** A `concept_id`
+  of `__proto__` (concept ids are model output) wrote title picks onto
+  `Object.prototype`, where they could be submitted for another concept. All
+  id-keyed state maps now use `Object.create(null)`.
+- **The skip link broke the Production Workspace (medium).** It set
+  `#mainContent`, which routing read as a production id. The skip link now
+  moves focus without touching the URL.
+- **Media keys moved the review item (medium).** ←/→ on an audio or video
+  player switched to another item and stopped playback. Media elements now
+  keep their own keys.
+- **Keyboard focus was lost on every poll (medium).** The Command Center
+  rewrote its lists every 5 seconds. It now repaints only when the markup
+  changes.
+- **Rejected packaging led to an empty page (high).** The Home link went to
+  `/packaging`, which lists only pending items. It goes to the classic
+  panels again, which hold the rework controls, and the Packaging empty
+  state now links there too.
+- **Dead end on an unknown production.** The error now offers a link back
+  to Productions.
+- **Deep links on first load.** `/opportunity#watching` and
+  `/productions#review` were ignored on a fresh load. They now apply.
+- **Script note limits.** Section rework, manual edit and whole-script
+  rework notes now use the classic limits: 1,200, 5,000 and 1,400
+  characters.
+- **One failing module froze everything.** `renderAll` now isolates each
+  page module, so the classic panels and the live job keep updating.
+- **API reads were open to DNS rebinding (low).** `/api/` GETs, which carry
+  job logs, pipeline state and the CSRF token, now require the same
+  127.0.0.1/localhost Host header as POST.
+- **Smaller server fixes.**
+  - Production "updated" times match files by the longest slug prefix, so
+    `foo` no longer takes `foo.v2.*` files.
+  - The job-log endpoint reads only the tail of a log.
+
+**Not changed.**
+- **Server-side `concept_id` validation.** This belongs in the
+  transformation engine; the UI no longer trusts ids as object keys either
+  way.
+- **Same-path links without a hash.** These keep the current tab.
+- **Review panel repaint.** A panel can still repaint while a note is being
+  typed, if that item's data changes; the draft text is preserved.
+
+**Verified.**
+- The harness's 22 checks pass: no payload executes on any route, drawer,
+  log, error message or hash, and there are no uncaught errors.
+- One request is sent per decision, even when submitted twice.
+- Server errors are shown as text, and the page recovers.
+- Nothing overflows on a phone.
+- A `__proto__` id leaves `Object.prototype` clean.
+- The D-124 axe audit, the keyboard walkthrough and the D-126 guideline
+  checks still pass.
+
+## D-128 — The Master Product Vision governs; its audit sets the correction order
+
+**Status:** Accepted
+
+**Context.** On 3 October 2026 an audit compared the repository (at the
+laptop's `6d561d1`, before UI Patches 9–13) against the Master Product Vision
+and Build Comparison Specification. It found the foundations on track but
+several workflow deviations, and the complete production-to-learning loop not
+yet built.
+
+**Decision.**
+- **What governs.** The Master Product Vision is the governing product
+  definition, with Opportunity Discovery v2.1 for discovery. Older decisions
+  that conflict with it do not override it; the conflicting decisions are
+  superseded case by case, as each correction lands.
+- **Correction order.** Deviations are corrected before new integrations are
+  built, in this order:
+  - **A1:** test isolation, plus README and roadmap status.
+  - **A2:** stage completion policy. A resumable batch is not a complete
+    stage. The Gemini fallback applies only to verified provider or quota
+    failures.
+  - **A3:** a concept pool of 15–25, with semantic de-duplication and five
+    diverse finalists or an explicit shortfall.
+  - **A4:** conditional research review (auto-cleared, review required or
+    blocked).
+  - **A5:** one resolved format.
+  - **A6:** append-only decision history for analysis and research.
+  - **Then:** packaging (a 2–3 title shortlist, an image-provider adapter,
+    three candidate visuals), planning and money (visual-plan approval before
+    narration spend, approval of the final audio, one budget ledger per
+    video), production execution, Tesseract, publishing and performance
+    learning.
+- **Milestone.** One Science Inside video from an approved opportunity to a
+  reviewed, editable near-final production, with complete provenance and a
+  combined cost ledger. Feature slices do not substitute for that run.
+- **Human decisions.** These are not taken by the build: approving the
+  Science Inside channel voice, choosing the image provider, the per-video
+  budget figures (about $5 target and $10 ceiling), and installing the
+  scheduled automation on the laptop.
+
+**A1 in this patch.**
+- **Cause.** The audit's nine failing tests on the populated laptop were test
+  defects, not product defects:
+  - Eight UI tests read the machine's real approved study set or prepared
+    profiles. The server resolves about 90 output paths at import time, and
+    each test patched only some of them.
+  - One acquisition test assumed a single subprocess call, but a machine
+    with whisper and ffmpeg installed runs a second, transcription, call.
+- **Fix.**
+  - `experiment_ui/testing_isolation.py` redirects every server output path
+    to an empty temporary tree: per test in `test_server.py`, per module in
+    every other UI test file.
+  - The acquisition test pins `local_transcription_available` to False.
+  - A guard test fails if the real paths become visible again.
+- **Verified.** I reproduced the failures by planting a study set and
+  prepared profiles in the real output folders, with whisper, agent-reach and
+  mcporter on the PATH: the same nine tests failed. After the fix, all 12
+  suites pass both in that populated state and in a clean checkout.
+- **Docs.** The README's status, pipeline, repository, runtime, Experiment 02,
+  Transformation, Research, Packaging and UI sections now describe what is
+  built. PROJECT.md carries a status note marking its historical parts.
+- **Follow-up.** The module documents `packaging_engine/PACKAGING_ENGINE.md`
+  (pre-script flow) and `production_engine/PRODUCTION_ENGINE.md` (two slices
+  only) still describe older states; they are updated with the corrections
+  that touch them.
+
+## D-129 — A resumable batch is not a complete stage; Gemini replaces only exhausted free capacity
+
+**Status:** Accepted (vision §§101, 104–105; correction A2 of D-128)
+
+**Investigation.**
+- **Stage readiness.** I mapped every automatic machine step: what
+  "complete" means and what each downstream readiness check accepts. The
+  runner continues after a partial exit (code 2) whenever a different action
+  becomes ready, so readiness checks alone decide whether partial work is
+  promoted. Almost every stage already requires full coverage
+  (`expected ⊆ current`). Two did not:
+  - **Concept pool.** Triage opened as soon as five concepts validated. With
+    six mechanisms and a first batch of four, the remaining two were never
+    generated, and the Concept Gate saw an incomplete pool without being told.
+  - **Visual review.** A partial visual run (frames for 3 of 5 videos) skipped
+    the human visual review entirely, so the sampled frames went unreviewed
+    and analysis ran on transcripts alone.
+- **Fallback.** One shared function decides direct-Gemini eligibility for all
+  14 FAIR runners. It admitted:
+  - quality failure (`ALL_FREE_MODELS_FAILED_QUALITY`);
+  - missing verifiers (`QUALITY_VERIFICATION_UNAVAILABLE`,
+    `INDEPENDENT_VERIFIER_UNAVAILABLE`);
+  - `NO_ELIGIBLE_FREE_MODELS`.
+
+  The concept runner also bypassed that gate altogether. When every concept
+  failed deterministic validation, it called Gemini to "repair" the
+  response. This contradicted D-068.
+
+**Decision.**
+- **Concept coverage.** Triage requires every requested mechanism to
+  contribute at least one current, validated concept.
+  - The merge reports `INCOMPLETE_MECHANISM_COVERAGE` with the missing IDs.
+  - The batch exits as partial.
+  - Generation stays the next step and retries only the missing mechanisms.
+  - The server re-checks coverage, so older candidate files cannot slip
+    through.
+- **Visual review.** It covers every video whose visual run kept frames, so a
+  partial run still reviews the sampled videos before analysis. Videos
+  without frames continue on transcript evidence. The shared check is
+  `vision_review_satisfied()`.
+- **Fallback.** `direct_gemini_fallback_decision()` is the only gate, and it
+  allows only `ALL_FREE_MODELS_UNAVAILABLE` with `paid_inference_executed`
+  false. Every other reason is refused, and the refusal and its repair
+  explanation are recorded on the result. The concept runner's validation
+  repair is removed.
+- **Unchanged.** Intentional partial releases stay as they are:
+  - per-concept research release (D-104);
+  - the analysis one-then-remaining chain;
+  - batch-progress loops;
+  - visual `manual_required` items handled by gap plans.
+
+  The runner's exit-code handling is also unchanged: the readiness checks
+  are the gate, and the investigation found no other stage that promotes
+  partial work.
+
+**Consequence.** A run that previously fell back to Gemini on quality,
+verifier or no-eligible-route escalations now stops with an explanation, and
+the request, prompt, schema or route has to be repaired on the free path.
+`NO_ELIGIBLE_FREE_MODELS` is refused because it can mean the request fits no
+route as well as quota loss. If FAIR's attempt records later prove
+exhaustion, this can be widened per attempt.
+
+**Not verified here.** The external FAIR repository is not in this
+workspace, so the meaning of its reason codes is taken from their names and
+the bridge code.
+
+## D-130 — A 15–25 concept pool, five distinct finalists, and a stated shortfall
+
+**Status:** Accepted (vision §§26–28; correction A3 of D-128)
+
+**Context.** Each mechanism produced five concepts, so the pool was simply
+mechanisms × 5. Triage could shortlist 0–6 concepts purely by score, and
+only identical concept IDs were removed. Two restatements of one idea could
+both reach the Concept Gate, and one mechanism could fill every place.
+
+**Decision.**
+- **Pool size.** Requests are sized to put the pool in 15–25: five per
+  mechanism, clamped to that range and spread evenly, with at most eight per
+  request because free models fail on oversized structured output.
+  - One mechanism therefore yields eight, two yield 15 and five yield 25.
+  - The merge records the pool against the target (`pool`).
+  - Triage still opens once every mechanism has contributed (D-129), so a
+    below-target pool is reported rather than blocked.
+- **Similarity.** A deterministic measure,
+  `concept_diversity.concept_similarity`, compares the vision's dimensions:
+  premise, framing, hook, title and payoff, pooled as stemmed content words.
+  - On real-shaped concepts, a paraphrased restatement scored 0.52, a
+    related but different idea from the same domain 0.16, and unrelated
+    ideas 0.03–0.06.
+  - The near-duplicate threshold is 0.35. It is configurable as
+    `near_duplicate_threshold`.
+- **Finalists for the final model comparison** are chosen in rank order
+  without near-duplicates, and while alternatives exist, at most three come
+  from one mechanism or one hook type.
+- **Shortlist.** Up to five distinct concepts scoring 70 or more. A
+  near-duplicate of a higher-ranked concept never takes a place, and no
+  mechanism or hook type takes more than two places while others qualify.
+- **Shortfall.** When fewer than five qualify, the empty places stay empty
+  and the Concept Gate says so. Each excluded concept keeps its reason and
+  stays reachable under View all candidates, where the existing override,
+  rework and save-idea actions are unchanged.
+
+**Consequences.**
+- The final model pass is unchanged: it still only scores, and deterministic
+  code still decides.
+- The validation contract fingerprint covers the engine and its config, so
+  this patch invalidates cached concept responses. Existing pools regenerate
+  once at the new size.
+- Requests can now ask for up to eight concepts. If a free model fails on
+  that size, A2's partial handling retries the mechanism, and the per-request
+  cap can be lowered in `transformation_config.json`.
+
+**Not done here.** A targeted top-up that generates more concepts when the
+pool is under 15 needs more than one request per mechanism, a larger change
+to request identity. Until then the shortfall is visible, and the Concept
+Gate's rework action is the way to ask for more.
+
+
+## D-131 — Conditional research review
+
+**Status:** Accepted (vision §32; correction A4 of D-128)
+
+**Context.** Every research claim waited for a human decision, even when two
+independent sources quoted it verbatim. Vision §32 locks research review as
+conditional: a claim may progress automatically when the evidence is strong,
+the sources are reliable, nothing meaningful conflicts and the claim is not
+high-risk. Human review is required when evidence conflicts or is weak, the
+wording needs care, or risk is elevated.
+
+**Decision.**
+- **Policy.** `research_engine/evidence_policy.py` classifies each claim, on
+  top of the existing verbatim quote verification, as AUTO_CLEARED,
+  REVIEW_REQUIRED or BLOCKED.
+  - It auto-clears only with supporting quotes from at least two independent
+    websites and only primary, secondary, dataset or documentation sources.
+  - Any of these sends the claim to a human: a contradicting or qualifying
+    source, CONFLICTED coverage, absolute wording, a figure missing from
+    every supporting quote, or an elevated-risk subject (health, safety,
+    death, legal, money).
+  - BLOCKED means no traceable supporting quote; such a claim can only be
+    reworked or rejected.
+- **Wiring.** Prepare records an automatic ACCEPT, with
+  `decided_by: EVIDENCE_POLICY` and the reasons, for each cleared claim.
+  - It never replaces a human or carried-forward decision, and drops and
+    recomputes its own decisions on every prepare.
+  - The gate re-checks each automatic acceptance before writing the verified
+    package, and records `decided_by` and `policy_reasons` on the claim.
+- **Review UI.** Cleared claims leave the pending list. Shown with decided
+  items, they carry a "Cleared automatically" badge and their reasons. Every
+  remaining claim shows "Why this needs you".
+- **Configuration.** Thresholds are in `research_gate_config.json` under
+  `evidence_policy`; `enabled: false` restores human review of every claim.
+
+**Consequences.**
+- When every claim clears and every research question is answered, research
+  completes without stopping, and automation continues to Story / Script.
+- The decision fingerprint adds `decided_by` only for automatic decisions, so
+  packages a human decided before this change keep their fingerprints and
+  their downstream work stays current.
+- The policy is deliberately lexical and conservative. A wrong automatic
+  clearance costs more than one extra human decision, so the thresholds lean
+  towards review. They can be loosened in config once real runs show how
+  often strong claims are held back.
+
+
+## D-132 — One resolved format per production
+
+**Status:** Accepted (vision: early Short / long-form decision; correction A5 of D-128)
+
+**Context.** A concept could be generated with `format_intent: either`, and
+that value travelled unchanged to Story / Script and Format, which expanded it
+into two script branches and two production branches. One accepted concept
+therefore became two videos to write, review and produce, although the vision
+makes the Short / long-form decision early and each production makes one
+video.
+
+**Decision.**
+- **Resolution at the Concept Gate.** `transformation_engine/format_resolution.py`
+  resolves every accepted concept to `long_form` or `short`, in this order:
+  - the format the human chose when accepting;
+  - the concept's own single format;
+  - for `either`, `either_default_format` in `concept_gate_config.json`
+    (long-form).
+- **Record.** The research handoff carries the resolved `format_intent` and a
+  `format_resolution` record: the format, what was requested, `decided_by`
+  (HUMAN, CONCEPT or DEFAULT) and the reason. A format can only accompany
+  ACCEPT.
+- **Review UI.** An `either` concept shows "Accept as long-form" and "Accept
+  as Short" in place of a single Accept.
+- **Packaging.** A packaging request for a resolved concept allows only that
+  format, and a package naming another format is rejected.
+- **Downstream.** Story / Script and Format are unchanged. They now receive
+  one format and so write and plan one branch.
+
+**Consequences.**
+- A new production makes exactly one video, and the second script, its review
+  and its production work are no longer spent on a format nobody chose.
+- Generation is unchanged. Concepts may still be marked `either`, which
+  records that the idea fits both formats; the choice happens at acceptance.
+- Productions accepted before this change keep `either` in their handoff and
+  can finish with two branches. The `either` mappings remain in the script and
+  format configs for them only.
+- Making the other format from the same idea is a separate decision: accept
+  the concept again or save the idea, rather than an automatic second branch.
+
+
+## D-133 — Append-only decision history for analysis and research
+
+**Status:** Accepted (vision: append-only reviewed history; correction A6 of D-128)
+
+**Context.** The newer script and packaging gates keep versions and archived
+decisions, but the Analysis Gate, vision review and Research Gate kept only
+the latest decision. Changing a decision overwrote it, an automatic research
+acceptance left no trace once withdrawn, and waivers vanished when removed.
+Nobody could tell later what had been decided before, by whom, or why.
+
+**Decision.**
+- **Shared helper.** `pipeline_integrity.append_jsonl` appends one JSON
+  record per line and syncs it to disk; earlier lines are never rewritten.
+  `read_jsonl` skips a torn final line left by a crash.
+- **Research Gate** (`research_gate_history.jsonl`) logs:
+  - every human ACCEPT, REWORK and REJECT, with the reviewer, note and the
+    decision it replaced;
+  - each automatic acceptance once;
+  - the withdrawal of an automatic acceptance when its claim or the policy
+    changes, logged before any new acceptance;
+  - waivers and their removal.
+- **Analysis Gate** (`human_review_history.jsonl`) logs every finding
+  decision, with the profile hash it was made against.
+- **Vision review** (`vision_review_history.jsonl`) logs every frame
+  decision, with the accepted observation and the source hashes.
+- **Review UI.** Snapshots attach each item's `decision_history`, and the
+  Analysis and Research review pages show it newest first.
+
+**Consequences.**
+- The live state files are unchanged and still hold only the current
+  decision, so every reader of them keeps working. The logs are a record,
+  not a second source of truth.
+- The logs live under the gitignored output folders beside the state they
+  describe. They grow by one line per decision, so no rotation is needed.
+- Decisions made before this change have no history lines; their current
+  state is still in the review files.
+- The Opportunity, Script and Packaging gates already keep their own history
+  or versions and are unchanged. The Concept Gate was outside the audit's
+  finding and is unchanged; it can use the same helper if needed.
+
+
+## D-134 — A 2–3 title shortlist at the Final Packaging Gate
+
+**Status:** Accepted (vision: 5 Short + 5 Long titles, a 2–3 title shortlist;
+amends D-096 and D-099)
+
+**Context.** Five titles per format were generated, one direction was picked
+at the Title Direction Gate, and the Final Packaging Gate then listed all 25
+title × thumbnail pairs. Nothing narrowed the list to the 2–3 titles the
+vision asks the human to choose between. D-096 forbade any ranking because a
+winner score would invent a prediction the system cannot make.
+
+**Decision.**
+- **Shortlist.** `packaging_engine/title_shortlist.py` builds a 2–3 title
+  shortlist per format from the validated pair matrix. It calls no model and
+  predicts no clicks. The ordering is explained:
+  - the human's chosen title direction first;
+  - then PASS-pair count;
+  - then the mean title-quality diagnostics over PASS pairs;
+  - then `title_id`.
+- **Eligibility and diversity.** A title needs at least one PASS pair, and a
+  near-duplicate of a shortlisted title (content-word Jaccard of 0.5 or more)
+  never takes a place.
+- **Shortfall.** When fewer than two titles qualify, the shortfall is stated
+  and not filled.
+- **Gate.**
+  - Packages for shortlisted titles are listed first, and every package is
+    marked `in_title_shortlist`.
+  - Titles outside the shortlist stay reachable.
+  - Accepting one needs a note, and the decision records
+    `title_in_shortlist`.
+- **Review UI.** The `/packaging` Final tab shows the shortlist with each
+  title's reason. It places acceptable packages with titles outside the
+  shortlist in their own collapsed group.
+- **Fix in passing.** The package view now carries `semantic_redundancy`, so
+  the Redundancy badge appears.
+
+**Consequences.**
+- D-096's rule stands in substance: there is still no viral score, CTR
+  prediction or hidden winner. The ordering uses only validation results
+  already shown on each package, and every entry states its reason.
+- Rework targets, staleness and the final bundle are unchanged (D-099).
+- The thresholds are configurable under `title_shortlist` in
+  `final_packaging_gate_config.json`.
+
+
+## D-135 — Candidate thumbnail images through a provider-agnostic adapter
+
+**Status:** Accepted (vision: AI image router producing three candidate
+visuals; the provider choice remains the human's)
+
+**Context.** The renderer composed thumbnails only from an image the human
+supplied by typing a file path. The vision has an image router produce three
+candidate visuals for the human to choose from. No image provider has been
+chosen, and no app code had yet made a paid provider call.
+
+**Decision.**
+- **Candidate step.** `production_engine/thumbnail_image_provider.py` adds a
+  candidate step in front of the existing subject image:
+  - a text-free prompt built from the Slice 25 concept;
+  - GENERATE: three candidates from the configured provider;
+  - IMPORT: an image made in any other tool, with its provenance;
+  - CHOOSE: the candidate becomes the subject image through
+    `thumbnail_review.update_spec`.
+- **Spend.** A generation is a paid call the human authorizes with an
+  explicit maximum cost. The maximum must cover the estimate and stay within
+  the per-thumbnail cap (US$0.50). The video's generated-image spend must
+  stay within the per-video cap (US$2.00). Every generation is appended to a
+  spend ledger.
+- **Provider.** The one adapter speaks the common OpenAI-compatible images
+  request. It is off until the human sets:
+  - the provider, endpoint and model;
+  - the licence terms;
+  - the price per image;
+  - a verified contract;
+  - the API key.
+
+  Until then the UI says what is missing, and imports still work.
+- **Unchanged.** Rights validation, rendering, staleness, the Human
+  Thumbnail Gate and final packaging. A chosen candidate is an ordinary
+  subject image with source tier `CHEAP_AI` and the provider's licence.
+- **UI.** The classic Thumbnail panel shows the candidates with "Use this
+  image", the generation form (only when a provider is ready, with a confirm
+  step), an import form, the prompt and the video's spend so far.
+
+**Consequences.**
+- Choosing the provider, its licence and its price is still the human's
+  decision. Configuring one turns generation on with no code change, unless
+  it needs a different request shape (one adapter function).
+- The caps are placeholders inside the proposed US$5 target / US$10 ceiling
+  per video, which is also still to be confirmed. They live in
+  `thumbnail_image_config.json`.
+- Candidates are bound to the concept version, so a reworked concept cannot
+  silently reuse an image made for the old one.
+
+
+## D-136 — One budget per video
+
+**Status:** Accepted (vision: one combined budget for the whole video; the
+US$5 target and US$10 ceiling remain to be confirmed by the human)
+
+**Context.** Every paid step kept its own money rules, and none of them
+added up spend per video:
+- the Visual Spend Gate capped authorizations across all productions
+  together;
+- narration was approved at a quoted worst case with no dollar ceiling;
+- thumbnail images had their own small caps;
+- final sound recorded costs with no cap.
+
+The US$5 target was advisory only.
+
+**Decision.**
+- **Ledger.** `production_engine/video_budget.py` keeps one append-only
+  ledger keyed by video (`concept:format`). It has three event kinds:
+  - RESERVE: the most authorized for an item;
+  - RELEASE: that authorization withdrawn;
+  - ACTUAL: the total spent on the item so far.
+
+  An item counts at the larger of its reservation and its actual spend.
+- **Rules.**
+  - A reservation that would take a video above its ceiling is refused, in
+    every category.
+  - Above the target, a reservation is allowed and flagged.
+  - Actual spend is always recorded, because it has already happened.
+- **Who records what.**
+  - Narration Spend Gate ACCEPT reserves the worst case.
+  - Visual Spend Gate AUTHORIZE reserves the shot's maximum.
+  - Thumbnail generation reserves before the paid call.
+  - Narration return, generated-visual import, thumbnail import and
+    final-sound import record actual costs.
+- **Concurrency.** One process-wide lock covers every
+  check-then-record, so two simultaneous authorizations cannot both pass
+  the ceiling. It is held in `pipeline_integrity.named_lock` so it is shared
+  however the module is imported.
+- **Location.** Each stage writes the ledger beside its own output folders,
+  which in use is always `production_engine/output`. Tests that move a
+  stage's folders therefore move its ledger too.
+- **Visibility.** The `/produce` page shows each video's committed and spent
+  totals against the target and ceiling, and states that the budget is
+  still a proposal.
+
+**Consequences.**
+- A narration worst case, visual authorizations and thumbnail generations
+  can no longer add up past US$10 for one video.
+- Existing stage caps still apply on top of the budget.
+- Spend from before this change is not in the ledger.
+- Changing the budget is a config edit; `confirmed_by_human` records that you
+  have confirmed it.
+
+
+## D-137 — A human approves the exact final narration audio
+
+**Status:** Accepted (vision: approval of the final audio itself; correction
+named in D-128; completes the NARRATION_AUDIO_READY stop of D-082)
+
+**Context.**
+- **Before the change.** The human approved the free local preview and then
+  the spend for a quoted provider render. The returned paid audio passed
+  only automatic Audio QC (duration, silence, clipping, missing files), and
+  visual planning started from its timing without anyone listening.
+- **Why that falls short.** QC cannot hear a mispronunciation, a wrong
+  emphasis or a flat read.
+
+**Decision.**
+- **Gate.** `production_engine/narration_final_review.py` adds the Human
+  Final Audio Gate after Audio QC passes. Per video it lists every segment,
+  with:
+  - its audio;
+  - its planned and actual duration;
+  - its start time and take.
+- **Decisions.**
+  - APPROVE_FINAL_AUDIO.
+  - REWORK_SEGMENTS: named segments plus a note; the next provider return
+    replaces them.
+  - REJECT_AUDIO: needs a note.
+- **Binding.** An approval is bound to the QC report and timing-map hashes,
+  and decisions are appended to a history log.
+- **Server.**
+  - `narration_artifact_state` now separates `audio_qc_passed` from
+    `audio_ready`; `audio_ready` also requires the approval. Everything that
+    started from QC-passed audio (visual manifest, storyboard, edit
+    manifest) now waits for the human.
+  - New workflow stops: `HUMAN_FINAL_AUDIO_GATE` and
+    `FINAL_AUDIO_REWORK_REQUIRED`.
+  - Routes: `/api/final-audio-gate` (locked during jobs) and
+    `/api/final-audio-file`, which serves only managed narration files.
+- **UI.** `/produce` gains a "Final audio" tab with a player per segment and
+  "Re-record this segment" ticks.
+
+**Consequences.**
+- One more human decision per video, at the point where re-recording is
+  still cheap: before any visual is timed to the audio.
+- Approval is per video; a partial approval is not offered. Re-recording
+  goes through the provider and the existing return registration, so spend
+  stays inside the approved ceiling and the per-video budget (D-136).
+
+
+## D-138 — The complete visual plan is approved before narration spend
+
+**Status:** Accepted (vision: visual plan approval before expensive
+generation; correction named in D-128; amends the order fixed by D-083)
+
+**Context.** The visual manifest and storyboard were built only after the
+paid narration had been quoted, authorized, returned and QC-checked, because
+they took their timing from the returned audio (D-083). Money was committed
+to narration before anyone had seen the visual plan, and nothing approved
+the plan as a whole.
+
+**Decision.**
+- **Gate.** `production_engine/visual_plan_review.py` adds the Human Visual
+  Plan Gate between the approved free preview and the Narration Spend Gate.
+  Per video it builds the complete plan from the approved format plan, using
+  `visual_acquisition.build_manifest` with no timing, so it is the same
+  requirements as the later manifest.
+- **What the plan shows.**
+  - Each shot's window in the approved free preview, read from the
+    preview's per-beat WAV files.
+  - Each shot's first source tier.
+  - The paid-visual share policy and the video's budget.
+- **Decisions.**
+  - APPROVE_VISUAL_PLAN: bound to the approved format plan, the approved
+    preview audio and the plan content.
+  - REWORK_VISUAL_PLAN: needs a note and holds spend; the format plan is
+    reworked at the Format Gate.
+
+  Decisions are appended to a history log.
+- **Server.**
+  - Refuses narration spend ACCEPT for a video without an approved plan.
+  - Workflow stops: `HUMAN_VISUAL_PLAN_GATE` and
+    `VISUAL_PLAN_REWORK_REQUIRED`.
+  - Route: `/api/visual-plan-gate` (locked during jobs).
+  - Videos already past narration spend are not pulled back.
+- **UI.** `/produce` opens on a "Visual plan" tab with the shot table.
+
+**Consequences.**
+- No paid narration is authorized for a video whose visual plan was not
+  approved.
+- The storyboard is still timed from the paid audio after the Final Audio
+  Gate (D-137); the approved plan fixes its shots and their order. Real
+  durations may differ slightly from the preview, which is why shot-level
+  storyboard editing stays after the paid audio.
+- Rework goes through the Format Gate, the plan's source of truth, rather
+  than a second editable copy of the plan.
+
+
+## D-139 — The app calls the paid narration provider itself, within approved spend
+
+**Status:** Accepted (vision: real production execution; the provider
+choice and contract remain the human's)
+
+**Context.** The paid narration was produced outside the app and its audio
+registered by hand: provider job, cumulative cost and one file per segment.
+Everything up to the spend approval and after the return was automated, but
+the call itself was manual. The configured provider (Higgsfield) has no
+verified contract, endpoint or price.
+
+**Decision.**
+- **Dispatch.** `production_engine/narration_dispatch.py` renders segments
+  with the configured adapter and registers them through
+  `narration_render_import.register`, so Audio QC, the Final Audio Gate
+  (D-137) and the per-video budget (D-136) are unchanged.
+- **Conditions.** A dispatch needs all of these:
+  - a verified provider contract;
+  - a configured adapter;
+  - an API key;
+  - a price per 1,000 characters (never guessed);
+  - a current spend approval;
+  - an estimate within the approved worst case after what was already
+    spent.
+- **Re-recording.** It covers only named segments, as the next attempt
+  within the approved regeneration policy; the other segments keep their
+  audio.
+- **Failures.** Partial spend on a provider failure is recorded in the
+  history and the budget.
+- **Adapter.** The one adapter, `HTTP_TTS_JSON`, posts the segment text and
+  delivery as JSON and accepts audio, or JSON with base64 audio.
+- **UI.** `/produce` has "Generate narration with the provider" and
+  "Re-record N segments" buttons, each with a confirmation step. The server
+  route `/api/narration-dispatch` is locked during jobs.
+
+**Consequences.**
+- With a verified provider configured, a video's narration goes from spend
+  approval to the Final Audio Gate without manual file handling.
+- Until then nothing changes: the request stays BLOCKED, the UI says what
+  is missing, and manual registration still works.
+- Choosing the provider, verifying its contract and setting its price stay
+  the human's decisions.
+
+
+## D-140 — The app generates premium visuals for authorized shots; the human chooses
+
+**Status:** Accepted (vision: real production execution; the provider
+choice and contract remain the human's)
+
+**Context.** A shot reaches premium generation only after free and existing
+sources failed and the human authorized a maximum at the Visual Spend Gate.
+The handoff wrote a provider-neutral request, but the asset was then made
+outside the app and registered by hand. The request's policy says the human
+must choose the final generated asset.
+
+**Decision.**
+- **Generation.** `production_engine/visual_dispatch.py` generates
+  `variants_per_shot` variants (default 2) for a current, authorized request.
+  The prompt is the request's generation brief and negative constraints.
+- **Conditions.** A generation needs all of these:
+  - a chosen provider with endpoint, model, licence and price (never
+    guessed);
+  - a verified contract;
+  - an API key;
+  - the shot's spend so far plus the estimate within its authorized
+    maximum.
+- **Choice.** Variants are kept as candidates, and the human chooses one on
+  `/produce#generate`. The choice is registered through the existing import
+  with the shot's total spend, as `APP_PROVIDER_DISPATCH`.
+- **Records.** Spend goes into the per-video budget immediately (D-136), and
+  every generation is appended to a history log.
+- **Adapter.** The one built-in adapter makes still images through the
+  OpenAI-compatible images request.
+- **Server.** The route `/api/visual-dispatch` (GENERATE or CHOOSE) is
+  locked during jobs; `/api/visual-dispatch-file` serves only stored
+  variants.
+
+**Consequences.**
+- With a configured provider, an authorized shot goes from spend approval to
+  a registered asset without manual file handling. Assembly, the edit
+  preview and export are unchanged.
+- Video generation is not covered by the built-in adapter. Until a video
+  provider is chosen and given an adapter, moving shots are still made
+  outside and registered by hand.
+- Nothing is called until the human chooses and configures a provider.
+
+
+## D-141 — Paid dispatch hardening
+
+**Status:** Accepted (fixes found by offline reproduction probes against
+D-135 to D-140)
+
+**Context.** Offline probes reproduced five ways the paid steps could spend
+more than authorized, or trust input they should not:
+1. After failed narration dispatches, a retry forgot the money already paid
+   and restarted attempt counts. Segment b1 was paid five times against
+   three approved attempts, and the ledger understated spend.
+2. Two simultaneous visual generations both passed the shot's authorized
+   maximum check, spending US$2.00 against US$1.50.
+3. A variant generated for an earlier version of a request (a different
+   brief) could still be chosen as the shot's asset.
+4. A NaN amount made every later budget comparison false. One NaN
+   reservation let a US$100 reservation through a US$10 ceiling.
+5. The images adapter fetched any `url` in the provider's response,
+   including `file://`, which reads local files.
+
+**Decision.**
+1. **Narration accounting.** Narration dispatch counts every dispatch under
+   the current spend approval: money paid and per-segment calls, failed
+   batches included. The worst-case check and attempt policy use those
+   totals.
+2. **Locks.** Narration dispatch (per video) and visual generation (per
+   shot) run under a named lock, so check, pay and record are atomic.
+3. **Variant binding.** Generated variants are bound to the request's hash.
+   Only variants of the current request are shown or can be chosen.
+4. **Money values.** `video_budget.money` accepts only finite, non-negative
+   numbers, and every budget call and thumbnail cost input uses it. A
+   corrupt ledger amount counts as infinite, so it blocks further spend
+   instead of loosening the budget.
+5. **URLs.** Provider image URLs are fetched only over `https`. Every
+   configured provider endpoint (thumbnail, visual, narration) must be
+   `https://` before the provider is ready.
+
+**Consequences.**
+- Each probe is now a regression test that fails on the old code.
+- A narration whose segments used up their attempts in failed batches needs
+  a new spend approval, which resets the count, rather than paying again
+  silently.
+
+
+## D-142 — A publish package and a Human Publish Gate
+
+**Status:** Accepted (vision: publishing)
+
+**Context.** The Final Export Gate approves the exact rendered bytes and
+records `upload_authorized: false`. Nothing assembled what YouTube needs,
+and nothing recorded which video id an approved export became.
+
+**Decision.**
+- **Package.** `production_engine/publish_review.py` builds a publish
+  package for every current approved final export:
+  - the render file and hash;
+  - the exact title, approved thumbnail and viewer promise from the final
+    package bundle;
+  - a description with the verified research sources and an AI-voice
+    disclosure;
+  - category, language, made-for-kids, privacy (private by default),
+    optional schedule, tags, and the altered/synthetic content flag (on by
+    default).
+- **Edits.** The human may edit everything except the title. The title stays
+  the one approved at the Final Packaging Gate.
+- **Approval.** APPROVE_PUBLISH validates YouTube's limits and binds the
+  approval to the export approval, bundle and research hashes. HOLD needs a
+  note.
+- **Publish record.** The YouTube video id is recorded once, either by the
+  uploader (D-143) or by hand. A published video cannot be approved or
+  uploaded again.
+- **Workflow.** New stops: `HUMAN_PUBLISH_GATE`, `WAITING_FOR_UPLOAD` and
+  `PUBLISHED`. The UI is the `/produce#publish` tab, and the route
+  `/api/publish-gate` is locked during jobs.
+
+**Consequences.**
+- The pipeline now ends at a recorded YouTube video id, which the learning
+  phase needs to fetch the video's analytics.
+- The synthetic-content flag defaults to on because the narration is an AI
+  voice. Turning it off is a deliberate human choice, recorded with the
+  approval.
+
+
+## D-143 — Direct YouTube upload with the owner's OAuth credentials
+
+**Status:** Accepted (off until the human configures OAuth)
+
+**Context.** Even with an approved publish package, the video, thumbnail and
+metadata had to be uploaded by hand.
+
+**Decision.**
+- **Upload.** `production_engine/youtube_upload.py` uploads an approved
+  package through the YouTube Data API v3:
+  - a refresh-token exchange;
+  - a resumable `videos.insert` with the exact approved snippet and status,
+    including `containsSyntheticMedia` and `publishAt`;
+  - then `thumbnails.set`.
+- **Safeguards.**
+  - Before uploading it re-checks the approval and the exact video and
+    thumbnail bytes.
+  - It runs once per video, under a lock.
+  - It records the video id even if setting the thumbnail fails, so a retry
+    never creates a duplicate.
+- **Setup.** Off until `youtube_upload.enabled` is true and the client id,
+  client secret and refresh token are set in `.env`.
+- **UI.** The Publish tab offers "Upload to YouTube" (with a confirmation
+  step) when the uploader is ready, and "Record a manual upload" always.
+
+**Consequences.**
+- Credentials stay in `.env` on the laptop. The app never stores an access
+  token.
+- Uploads default to private. A scheduled video stays private until YouTube
+  publishes it at `publishAt`.
+
+## D-144 — An editable project for Tesseract, and the finished edit back
+
+**Status:** Accepted (round trip with Tesseract itself still to be confirmed)
+
+**Context.** The vision makes Tesseract the final editable production
+environment: automation builds the near-final video, and the human moves
+clips, changes timing, replaces scenes and polishes it there. The audit
+found no project exchange: only the rendered MP4 left the pipeline, and
+scene ids had no mapping into an editor. Tesseract's own project format is
+not documented anywhere available to this build.
+
+**Decision.**
+- **Export.** `production_engine/tesseract_exchange.py` turns the current
+  local final render into one project folder:
+  - copies of the exact media;
+  - the timeline as OpenTimelineIO and as Final Cut Pro 7 XML;
+  - the automated render for reference;
+  - the thumbnail's editable source;
+  - `exchange.json` listing every clip.
+- **Stable ids.** Each clip is named `V-<shot>`, `N-<segment>` or
+  `S-<sound requirement>`, so a returned `.otio` maps back to scenes
+  (kept, moved, retimed, removed, added).
+- **Import.** The finished video is probed (video at the format's frame
+  size, audio present), copied into managed storage and bound to its hash,
+  the export and the automated render.
+- **Final Export Gate.** A current returned edit replaces the automated
+  render as the candidate. An approval of the automated render stops
+  counting. `RETURN_TO_EDITOR` sends an edit back; discarding it (with a
+  note) restores the automated render.
+- **Unverified contract.** The config records `round_trip_verified: false`,
+  and the UI shows the contract note, until one project has been through
+  Tesseract and back.
+
+**Consequences.**
+- Publishing uses whichever version passed the Final Export Gate, so a hand
+  edit reaches YouTube only after the human approves its exact bytes.
+- A new automated render makes the export and any returned edit stale.
+- If Tesseract turns out to need its own project format, an adapter for it
+  replaces or joins the two open formats; the ids, import and gate binding
+  stay as they are.
+
+## D-145 — Providers get a shape-only concept schema
+
+**Status:** Revised by D-148. Field bounds are sent to providers again; only
+the concept count is left out.
+
+**Context.** On the laptop, two concept mechanisms (progressive reveal and
+specificity) failed on every free route while three passed:
+- Groq answered `PROVIDER_REJECTED_GENERATED_SCHEMA`;
+- the Cloudflare models failed FAIR's schema check.
+
+The schema sent to providers carried the same per-concept policy bounds the
+app's own validator already enforces:
+- an empty `source_specific_elements_used`;
+- fixed `passes: true` and `source_assets_required: false`;
+- item counts and number ranges;
+- the maximum number of concepts.
+
+Under strict structured output, one concept breaking one bound makes the
+provider reject the whole generation, so every concept in the batch was lost.
+The specificity mechanism invites exactly that, such as one listed source
+element. A second run also lost a mechanism to the 300-second runner timeout,
+because Cloudflare attempts took 120–140 s each.
+
+**Decision.**
+- **Shape-only schema.** Providers receive the schema's shape only: types,
+  required fields, `additionalProperties: false`, enums, and the mechanism id
+  (`concept_model_runner.provider_schema`).
+- **Authoritative contract unchanged.** `response_schema` and the validator
+  still apply every bound to each concept and reject only the concepts that
+  break one.
+- **Concept count.** The runner keeps at most the requested number of
+  concepts and records how many extras it dropped.
+- **Timeout.** The model-runner subprocess timeout is 900 s.
+
+**Consequences.**
+- One bad concept no longer costs the four good ones beside it.
+- The validator and its fingerprint are unchanged, so already-validated
+  mechanisms are not regenerated.
+- If a mechanism still fails, its model-run report now carries the
+  validator's per-concept errors instead of a provider's whole-batch refusal.
+
+**Result.** On the laptop both mechanisms still failed the same way after
+this change, so the policy bounds were not the cause. The real cause is not
+yet known: FAIR keeps neither the refused text nor Groq's reason.
+`transformation_engine/concept_diagnose.py` sends the same prompt and
+provider schema straight to Groq and saves:
+- the error code and message;
+- the refused text (`failed_generation`);
+- the finish reason and token use;
+- the app's own validation of the text, including fields the schema does
+  not allow (the validator ignores extra fields, but the provider schema
+  forbids them).
+
+The fix waits for that evidence. The shape-only schema stays, because one
+bad concept should still not sink a batch.
+
+## D-146 — Concept generation runs on Gemini only
+
+**Status:** Superseded by D-147. The Gemini-only route remains available as a
+manual switch, but the default is FAIR again.
+
+**Context.** Two concept mechanisms failed on every free FAIR route. Direct
+calls showed why: Groq's gpt-oss-120b returned all 5 concepts without
+`human_framing` and `viewer_need_evidence`, even with Groq's strict flag,
+because Groq validates after generation rather than constraining it. Until
+now, direct Gemini replaced exhausted free capacity only (D-068, D-129).
+
+**Decision.** At the human's request, concept generation uses the project's
+direct Gemini key as its only route.
+- `transformation_engine/concept_model_route.json` holds
+  `"route": "direct_gemini"`.
+- The runner calls Gemini with the provider schema (Flash-Lite, then Flash;
+  structured output, then JSON-only) and never calls FAIR.
+- Without a key the mechanism stops with `DIRECT_GEMINI_NOT_CONFIGURED`; it
+  does not fall back.
+- Setting the route to `"fair"` restores the previous behaviour.
+- Every other stage keeps FAIR first, with Gemini only for exhausted
+  capacity.
+
+**Consequences.**
+- Gemini's structured output constrains generation, so required sections
+  should no longer be dropped. The app's validator still checks every
+  concept.
+- The route is outside the validation contract, so the three mechanisms
+  already validated through FAIR are kept.
+- Cost depends on the key's Google Cloud project: free with no billing
+  enabled, billed otherwise. The app cannot tell which, so this is the
+  human's to confirm.
+
+## D-147 — Concepts are generated in small FAIR calls
+
+**Status:** Accepted (human decision, 4 October 2026)
+
+**Context.** The Build Roadmap and Master Product Vision §100–101 keep FAIR as
+the preferred text route, with direct Gemini only for genuine quota
+exhaustion, never to hide schema or prompt defects. The two failing concept
+mechanisms were such a defect: asked for five full concepts in one answer,
+Groq's gpt-oss-120b dropped `human_framing` and `viewer_need_evidence` from
+every concept. The human chose smaller FAIR calls over the Gemini-only route
+of D-146.
+
+**Decision.**
+- `concept_model_route.json` sets `"route": "fair"` and
+  `"concepts_per_call": 2`.
+- A mechanism's concepts are generated in calls of at most two. Each call is
+  given the working titles and premises of concepts already accepted
+  (`already_generated_concepts`) and asked for different ones.
+- **Counting.** Only validated concepts count towards the requested number.
+  One spare call covers a call that returns nothing usable. A repeated
+  concept id gets a call suffix.
+- **Failures.** Concepts from successful calls are kept if a later call
+  fails, and the report records where it stopped.
+- **The prompt.** Two rules are added: build on, but don't repeat,
+  `already_generated_concepts`; include every field, including the full
+  `human_framing` and `viewer_need_evidence`.
+- **Already validated mechanisms are kept.** The settings live outside the
+  validation contract, so mechanisms that already validated are not
+  regenerated.
+
+**Consequences.**
+- A mechanism takes three or four free calls instead of one. Each answer is
+  about 40% of the old size.
+- The model-run report lists every call: what was asked, what came back,
+  what was accepted, and the rejection reasons.
+- If two concepts per call still come back incomplete, the next step is
+  two-stage generation: the concept first, then its framing sections in a
+  second small call.
+
+## D-148 — Field bounds go back into the provider schema, and calls are paced
+
+**Status:** Accepted
+
+**Context.** The first laptop run of D-147 showed real progress. With two
+concepts per call, Groq's gpt-oss-120b returned complete concepts that passed
+FAIR's schema check, `human_framing` included. The app's validator then
+rejected every one on bounds the D-145 provider schema had removed:
+- hook level and story-curve values outside 4–10;
+- a target above capacity;
+- a story curve that never reaches the target;
+- fewer than 3 opening moments.
+
+Separately, each mechanism's second call came within the same minute. Groq's
+free per-minute token limit refused it as `RATE_LIMITED`, and FAIR fell back
+to Cloudflare models that fail the schema.
+
+**Decision.**
+- **Bounds restored.** `provider_schema` sends the full authoritative schema
+  again, leaving out only the maximum number of concepts. The runner already
+  keeps at most the requested number.
+- **Prompt.** Rule 23 states the drama-number rules a schema cannot express:
+  whole numbers 4–10, target no higher than capacity, the highest
+  story-curve value reaching the target, tempo 1–10, curve lengths, and 3–5
+  opening moments.
+- **Pacing.** `concept_model_route.json` sets
+  `pause_between_calls_seconds: 65`. Calls after a mechanism's first wait
+  that long.
+
+**Consequences.**
+- A mechanism with five concepts takes about four minutes: three or four
+  calls a minute apart.
+- With only two concepts per call, the provider rejecting a whole answer for
+  one bound loses at most two concepts. The bounds guide the model more than
+  that costs.
+- None of this touches the validation contract, so validated mechanisms are
+  kept.
+
+## D-149 — Concept calls are paced across mechanisms and runs
+
+**Status:** Accepted
+
+**Context.** With D-148 in place, `progressive_reveal` validated: two calls
+each returned two accepted concepts, and the pool reached 15. `specificity`
+still failed, partly on pacing:
+- D-148's pause applied only between calls of the same mechanism, so
+  `specificity` started straight after `progressive_reveal`'s calls;
+- the automation's second round began at once;
+- Groq refused both as `RATE_LIMITED`, and FAIR fell to Cloudflare models
+  that fail the schema.
+
+**Decision.**
+- `pause_between_calls_seconds` is the minimum gap between any two concept
+  calls. Every automatic step runs as its own process, so the time of the
+  last call is kept in `transformation_engine/output/concept_call_clock.json`.
+- A call that FAIR returns as escalated because Groq was rate limited waits
+  the pause and is retried once. The report marks it `rate_limited_retry`.
+
+**Consequences.**
+- Free per-minute limits no longer turn into schema failures on the
+  fallback models.
+- Groq also refused the format of `specificity`'s first call. Which rule it
+  broke is not in FAIR's report; `concept_diagnose.py --mechanism
+  specificity --count 2` shows Groq's own error naming the field.
+
+## D-150 — Missing framing sections are completed by a follow-up call
+
+**Status:** Accepted
+
+**Context.** After D-149 only the `specificity` mechanism was missing. The
+diagnostic showed Groq's gpt-oss-120b returning two otherwise complete
+specificity concepts without `human_framing` and `viewer_need_evidence`, even
+at two concepts per call. Progressive reveal includes them at that size, so
+splitting calls further does not fix this mechanism.
+
+**Decision.**
+- **When it runs.** A call can return concepts that lack either section. For
+  those concepts, one follow-up call on the same route asks for only the
+  missing sections.
+- **What the follow-up asks.** It uses the same request context, lists the
+  concept ids, and shows the concepts' other fields. Its schema allows only
+  those ids and those two sections, with their full bounds.
+- **Merging.** The answers are merged by concept id, and nothing else in a
+  concept changes. Every concept is then validated as usual.
+- **Rules kept.** The follow-up is paced and rate-limit-retried like any
+  other call. A paid result fails closed.
+- **If it fails.** The concepts stay incomplete and are rejected by the
+  validator, as before.
+- **Reporting.** The report records the follow-up under the call's
+  `section_completion`, with its status, concept ids and provider.
+
+**Consequences.**
+- This is the two-stage generation named in D-147: free, through FAIR, and
+  fixing the actual gap rather than routing around it (vision §101).
+- A mechanism that needs it takes about twice as many calls.
+- None of this touches the validation contract, so validated mechanisms are
+  kept.
+
+## D-151 — Concept generation switches to the direct Gemini route
+
+**Status:** Accepted (human decision, 4 October 2026). This amends Master
+Product Vision §101 for concept generation only.
+
+**Context.** After D-147 to D-150, four of the five mechanisms validated
+through FAIR and the pool reached 15. `specificity` still failed: Groq's
+gpt-oss models leave out `human_framing` and `viewer_need_evidence` for this
+mechanism, and Groq's own schema check then rejects the whole answer inside
+FAIR. The D-150 follow-up call therefore never receives the incomplete
+concepts. The human chose to bypass FAIR for concept generation.
+
+**Decision.**
+- **Route.** `concept_model_route.json` sets `"route": "direct_gemini"`. The
+  project's `DIRECT_GEMINI_API_KEY` is the only route for concept
+  generation, with no FAIR and no fallback.
+- **Settings.** It keeps two concepts per call and the section-completion
+  follow-up, and lowers the pause between calls to 10 seconds.
+- **Unchanged.** Every concept still goes through `validate_response()`, and
+  the settings stay outside the validation contract, so the four validated
+  mechanisms are kept. Every other stage keeps FAIR first, as §100–101 say.
+
+**Consequences.**
+- §101's rule (direct Gemini only after quota exhaustion, never to hide
+  defects) no longer applies to concept generation. This is a deliberate,
+  recorded change, as the roadmap's versioning rule requires. The defect it
+  works around (free models omitting nested sections) is documented in
+  D-145 to D-150.
+- Cost depends on the key's Google Cloud project: free with no billing
+  enabled, billed otherwise. The app cannot tell which.
+- Setting `"route": "fair"` and a 65-second pause restores the FAIR route.
+
+## D-152 — Research searches retry a question as keywords
+
+**Status:** Accepted
+
+**Context.** The first research run on the laptop found pages for all three
+plans. For `c_spec_tyres_04`, though, one question found nothing on any
+backend:
+- Exa was unavailable, because Agent Reach's `mcporter` was not on PATH;
+- DuckDuckGo and Wikipedia returned no results for the full question,
+  "At what exact gram threshold do most drivers begin to perceive steering
+  wheel vibration at 100 km/h?".
+
+The stage correctly stopped as PARTIAL (D-129). The workflow message,
+however, said no usable source pages were found.
+
+**Decision.**
+- **Keyword retry.** When every search backend finds nothing for a research
+  question, the question is retried once as keywords, with question words
+  and filler removed and at most eight words kept. The evidence file
+  records `query_used`.
+- **Failure reporting.** If the keyword retry also fails, the error carries
+  both attempts.
+- **Clearer message.** When pages were found but some questions still lack a
+  source, the workflow message names each such concept, its page count and
+  its failed searches. It says research stops because every question must
+  be covered, and points to the search-backend check.
+
+**Consequences.**
+- A PARTIAL evidence file is acquired again on the next run. Only COMPLETE
+  evidence is skipped.
+- Stage policy is unchanged: research still waits until every question has
+  a source.
+
+## D-153 — Research evidence: real independence, whole-word risk terms, rework searches
+
+**Status:** Accepted
+
+**Context.** The first Research Gate with Exa evidence showed three defects:
+- **A mirrored source counted twice.** `clm_speed_threshold` was supported
+  by "2 independent websites" that were one paper: Exa's library copy and
+  its DOI page, with the same title and quote. Sources were counted by
+  website only.
+- **A false risk flag.** The same claim was flagged as elevated risk
+  ("invest") because the word "investigations" begins with "invest". Risk
+  terms matched any word they prefixed, so "diesel" also tripped "die".
+- **A rework note searched as a question.** The human rework note "find the
+  answer elsewhere or discontinue" became a research question and was
+  searched on the web word for word. It also counted as a question the
+  search had to answer, although the gate never requires rework
+  instructions to be answered.
+
+**Decision.**
+- **Independent sources.** Supporting sources form independent works:
+  links sharing a website, a title of at least four words, or the same
+  quoted text count as one. Automatic clearing still needs two.
+- **Risk terms.** They match whole words. A term ending in `*` matches as a
+  stem (`pregnan*`), and explicit forms are listed (`legally`, `investor`
+  and so on).
+- **Rework searches.** For a rework question, acquisition searches the
+  reworked claim's statement rather than the note's text. Rework questions
+  no longer count towards the questions acquisition must cover.
+
+**Consequences.**
+- Automatic decisions are recomputed on every Research Gate prepare. A
+  claim that cleared only on a mirrored source returns to human review;
+  one flagged only by a false risk match may now clear.
+- Human decisions are never replaced.
+
+## D-154 — A stuck automatic step no longer holds back later allowed steps
+
+**Context.** With three accepted concepts, research for two still had
+unanswered questions while "The 4-Gram Wheel Balance Margin" had verified
+research and a story plan. Continue Automatically ran research acquisition
+first (it comes earlier in the pipeline order), got a partial result with no
+progress, and stopped. The 4-Gram script was never drafted, although D-104
+lets each concept move on as soon as its own research is verified.
+
+**Decision.** When a step returns partial without progress, Continue
+Automatically sets it aside for the rest of that run and goes on with the
+next step that is already allowed. Readiness rules decide what is allowed,
+so nothing runs early. The run still ends PARTIAL, names the stuck step and
+its message, and says where the other work stopped. A later step that fails
+stays the headline failure, with the stuck step listed.
+
+**Consequences.** One concept's missing sources no longer stall the
+others. Each run retries the stuck step first, as before.
+
+## D-155 — A live run banner shows that a job is working
+
+**Context.** Continue Automatically can run for many minutes, and a single
+model or web call can take up to 15 minutes. The top-right job button showed
+only "RUNNING" and the job name, so a long call looked like a frozen screen.
+
+**Decision.** While a job runs, a banner is shown under the page header on
+every page. It names the current automatic step (read from the job log's
+"AUTOMATIC MACHINE STEP" lines) and the step number. A clock ticks every
+second, a moving bar runs across the banner, and the latest log line is
+shown. If the log has not changed for two minutes, the banner turns amber and
+says the job is still working and how long it has been quiet. The job button
+shows the same step and clock. The status payload carries this as
+`job.progress` (`current_step`, `step_number`, `last_line`, `last_output_at`).
+
+**Consequences.** Only the log tail is read on each status poll, so a very
+long run may show a lower step number; the step name stays correct.
+
+## D-156 — Gate policy: clean items at six gates are decided automatically
+
+**Context.** A video stopped at about 17 human gates. The operator chose to
+keep six decisions: Pick (opportunity and concepts), Script, Packaging
+(title and thumbnail), Budget, Final cut and Publish. Every other gate is to
+be decided automatically when its checks pass, with anything flagged still
+coming to a person. This is Phase A; the visual gates, a single Budget
+approval and the merged review screens follow.
+
+**Decision.** `experiment_ui/gate_policy.json` sets each gate to `HUMAN` or
+`AUTO_IF_CLEAN`. When Continue Automatically stops at an `AUTO_IF_CLEAN`
+gate, `gate_autopilot.py` decides, through the same functions the review
+pages call, every pending item that passes the gate's checks, and the run
+continues. The checks are:
+
+- **Vision:** a machine observation exists, with HIGH or MODERATE
+  confidence and no uncertainty noted.
+- **Analysis:** confidence is not LOW and every evidence reference resolves.
+- **Title Direction:** for each format, the first title in the configured
+  angle order that fits the length contract and cites evidence. The final
+  title is still chosen with the thumbnail at the Final Packaging Gate.
+- **Format:** no source overlap, and the Short and Long-form branches are
+  separate.
+- **Voice Performance:** the spec reached the gate, which means it passed
+  deterministic validation.
+- **Narration Preview:** the audio is rendered and the engagement check
+  passed with no warnings.
+
+An item that fails a check, or whose decision the gate refuses, stays
+pending. The run then stops at that gate as before, and its message lists
+each held item and why.
+
+**Consequences.**
+- Automatic decisions are made as reviewer `gate-policy-auto`, with a note
+  beginning "Automatic (gate policy D-156)" where the gate keeps notes.
+  Vision frame decisions have no note field and are identified only by the
+  reviewer.
+- A person can still change any automatic decision from the review page,
+  as with their own.
+- Research is unchanged: D-153 already clears claims backed by two
+  independent sources, and the rest come to a person.
+- Setting a gate to `HUMAN`, or deleting the policy file, restores the
+  previous behaviour.
+
+## D-157 — Fresh start from the Opportunity stage archives, never deletes
+
+**Context.** The operator wanted to drop the current productions and choose
+new subjects at the Opportunity stage, without losing discovery and radar
+history.
+
+**Decision.** `scripts/fresh_start.py` moves into
+`.archive/fresh_start_<time>/`:
+- the Opportunity Gate's choice (the decision, the approved study set and
+  the active study source);
+- every output after it: Experiment 02 output and evidence, and the outputs
+  of the transformation, research, packaging, story/script, format and
+  production engines.
+
+It keeps discovery and radar data, the opportunity inbox (saved, rejected
+and watched items stay as they are), saved ideas, job logs, and all code and
+configuration. Without `--yes` it only lists what would move. It refuses
+while the UI is running on its port.
+
+**Consequences.**
+- Approved opportunities return to "needs review".
+- The next Continue Automatically starts after a new Opportunity Gate
+  decision.
+- To undo, move the archived folders back.
+
+## D-158 — Gate policy Phase B: visual gates and spend under the confirmed budget
+
+**Context.** The operator confirmed the per-video budget: a $5 target and a
+$10 ceiling. Phase B of D-156 applies the gate policy to the visual and
+spend gates.
+
+**Decision.**
+- **Budget.** `video_budget_config.json` is marked `confirmed_by_human`.
+- **Gates now `AUTO_IF_CLEAN`, and their checks:**
+  - **Visual Plan:** the plan builds, every shot is timed, and the video is
+    not over its target.
+  - **Visual Candidates:** each shot gets the first `ELIGIBLE` candidate.
+    Results are sorted best first, and only verified-licence footage is
+    `ELIGIBLE`. A shot with nothing usable is marked as a gap. A shot whose
+    only finds are editorial or unverified footage is held for a person.
+    Stale search results are held.
+  - **Rough Cut:** approve with gaps. This authorizes no spend; the gaps go
+    on to gap planning.
+  - **Edit Preview:** approve when the preview video exists. The note gives
+    the number of placeholder segments. The finished video is still reviewed
+    at the Final Export Gate.
+  - **Final Audio:** approve, because only videos whose audio QC passed are
+    listed.
+  - **Narration Spend:** approve, with every criterion recorded, only when
+    all of these hold:
+    - the provider contract is verified;
+    - a voice id and licence reference are set;
+    - the visual plan is approved;
+    - the worst-case cost keeps the video's committed spend at or under the
+      $5 target.
+  - **Visual Spend:** authorize a shot only when the active image provider
+    is verified and priced, with cost = price × variants, and only if that
+    cost keeps the video at or under the target.
+- **Spend above the target, an unknown price, or an unconfirmed budget is
+  held for a person.** Nothing can be authorized above the ceiling, which
+  `video_budget.reserve` enforces as before.
+- **Visual Rights stays human.** Licensed footage is already approved
+  automatically before that gate, so only editorial footage reaches it, and
+  editorial footage is never approved automatically.
+
+**Consequences.**
+- No narration provider, voice licence or image provider is configured yet,
+  so both spend gates hold every item, with that reason, until they are.
+- `human_authorization_required` in the visual spend config stays true: the
+  operator's budget confirmation and this policy are that authorization, and
+  each decision is still recorded.
+- One combined Budget screen per video and the merged review screens follow
+  as Phase C.
+
+## D-159 — Gate policy Phase C: the review pages are organised by who decides
+
+**Context.** After D-156 and D-158 most gates decide themselves, but the
+Gate Reviews, Packaging and Produce pages still showed every gate as an
+equal tab, so the operator could not see at a glance which decisions were
+theirs. The two spend gates were also on separate tabs although they are one
+question: what this video may cost.
+
+**Decision.**
+- **Grouped tab strips.** Each page's strip has a **Your decisions** group
+  first (Gate Reviews: Concept, Research, Script; Packaging: Final package;
+  Produce: Budget, Footage rights, Final export, Publish), then a **Held by
+  gate policy** group whose tabs appear only while that gate holds an item
+  for a person, is open, or "Include decided items and empty gates" is
+  ticked. Produce adds a **Tools** group (Generate visuals, Tesseract) and
+  Packaging a reference group for what the automatic steps made.
+- **Budget tab.** Narration spend and visual spend items are listed together
+  per video, each with the video's committed spend against its target and
+  ceiling. The decisions, requests, checks and locks are the existing ones;
+  `/produce#narration` and `/produce#spend` open Budget.
+- **Defaults.** Gate Reviews opens on Concept, Packaging on Final package and
+  Produce on Budget. The Command Center's production card and the workflow
+  links point at the same tabs.
+
+**Consequences.**
+- The six decisions the operator chose to keep are the first thing on each
+  page; the automatic gates stay reachable and still show what they held.
+- The script-gate and research-gate screens are unchanged: a concept's
+  research is decided before its script exists (D-104), so research flags
+  cannot sit inside the Script Gate.
+
+## D-160 — Audit 2026-10-04: request hardening, spend accounting, decision integrity
+
+**Context.** A structured adversarial audit (static checks, dependency and
+security scans, live request fuzzing, five targeted reviews and a
+reproduction of each serious finding) of the build at D-159.
+
+**Decision.** The confirmed defects are fixed in one change:
+
+- **Requests.** A POST with a bad or oversized `Content-Length`, invalid
+  UTF-8, a non-object JSON value or deeply nested JSON used to crash the
+  handler thread; a body shorter than its length held the thread forever.
+  Bodies are capped (4 MB), parsed defensively (400/413), and the handler
+  has a 60-second socket timeout.
+- **Narration spend.** The provider's reported cost is validated as money
+  (bool and NaN no longer pass), the approved worst case is checked before
+  every segment call, and if the rendered audio cannot be registered the
+  spend is still recorded and the audio kept. Narration spend decisions are
+  serialised per video. A torn budget-ledger line now blocks reservations
+  instead of silently loosening the ceiling.
+- **Decision integrity.** A claim a person sent back for REWORK is no longer
+  re-accepted by the evidence policy when the regenerated claim comes back
+  unchanged. Vision and analysis decisions record the reviewer and
+  `decided_by` per decision; the gate policy sets `YOUTUBE_DECIDED_BY=GATE_POLICY`
+  while it decides, so automatic decisions are never logged as HUMAN.
+- **State on polls.** The rights and visual-spend snapshots no longer delete
+  stale review files during a status poll; stale files are ignored
+  (`stale_ignored`) and inert. This removes a window in which a running
+  job's rewrite of an upstream file erased human decisions.
+- **Jobs.** Stop ends the job's whole process tree; the UI stops a running
+  job on exit; a job is finalised once even when two polls see it end; the
+  history log is append-only; the live log is read as a tail. The page
+  never overlaps its own status polls.
+- **Providers.** A Gemini HTTP 429 counts as rate limiting on the direct
+  route, and a batch stops once the quota is exhausted. The direct page
+  reader refuses loopback, private and link-local hosts before and after
+  redirects, caps page size at 5 MB and redirects at 5. Provider JSON must
+  be an object. `SAFETY_STOP` is reported as such, not as PARTIAL.
+
+**Consequences.** Findings not fixed here, recorded for the operator:
+- The direct-Gemini route asserts "free tier" from configuration alone;
+  nothing verifies the key's project has no billing.
+- A YouTube upload whose final response is lost can leave an unrecorded
+  (private) video; a retry would upload it again.
+- A job orphaned by a UI crash (not a normal exit) is not re-adopted on
+  restart.
+- Thumbnail and visual generation treat a failure after dispatch as $0
+  spent; narration already records partial spend.
+- The gate policy only runs inside an automatic run; at a held gate with no
+  machine step ready, Continue Automatically stays disabled.
+
+## D-161 — Direct Gemini runs only on a dated billing attestation
+
+**Context.** The direct Gemini route (D-151) is free only while the Google
+Cloud project behind `DIRECT_GEMINI_API_KEY` has no billing account. The
+code recorded that belief as a constant (`direct_backup_free_tier_only:
+true`, `paid_inference_executed: null`) and the cost check accepted it. The
+audit (D-160) flagged this: unknown cost was treated as zero.
+
+**Decision.** `experiment_02_analysis/direct_gemini_billing.json` holds the
+operator's attestation: `billing_disabled_confirmed` and `confirmed_on`.
+While it is false, no direct Gemini call is made anywhere: concept
+generation on the `direct_gemini` route and the FAIR exhaustion fallback
+both return `DIRECT_GEMINI_BILLING_UNCONFIRMED` without an HTTP request, and
+Continue Automatically's message says exactly what to check and set. When
+it is true, a direct call records `paid_inference_executed: false` and the
+attestation date.
+
+**Consequences.** The file ships as `false`: the operator checks Billing
+for that project in Google Cloud Console, then sets it to true with the
+date. If billing is ever attached to the project, set it back to false.
+
+## D-162 — Viral Radar shortlist: lane, minimum outlier, freshness, replication first
+
+**Context.** The first full radar scan tracked 136 videos. Most were off the
+channel's lane (finance, fitness, history-for-sleep, game simulators) or
+below a ratio worth reading, and the page listed them all.
+
+**Decision.**
+- **Lane.** `opportunity_engine/radar_lane.py` sorts each tracked video
+  into ON_LANE, UNCLEAR, OFF_LANE or OTHER_LANGUAGE from its title and
+  channel, using the word lists in `radar_lane_config.json` (an off-lane
+  term wins; a `*` term matches as a stem; a title that is mostly non-Latin
+  is another language). A theme takes the best lane of its members. No
+  model call; the operator edits the lists.
+- **Filters on the page.** Lane (my lane = on lane + unclear, or
+  everything), minimum outlier (any, 3×, 5×, 10×), freshness (any, ≤ 7
+  days, ≤ 3 days) and format. Default: my lane, ≥ 3×. The choice is kept in
+  the browser; the bar says how many items it hides and offers a reset.
+  Watched videos always show.
+- **Replication first.** Themes with two or more independent channels are
+  pinned above the rest regardless of ratio.
+
+**Consequences.** Lane is a reading aid, not a gate: an off-lane video can
+still be reviewed by switching to "Everything". Wrong lane calls are fixed
+by editing the word lists.
+
+## D-163 — One Continue per production, and research that cannot dead-end on a question
+
+**Context.** Continue Automatically was one global button whose result
+landed in a job log; a production that was not moving showed "Ready to
+run" with no reason on its row. At the Research Gate, a concept whose
+claims were all accepted still could not go to the script when one of its
+original questions had no accepted claim, and the only way out was a
+Waive button the operator had to find.
+
+**Decision.**
+- **Per-production status and Continue.** `workflow_automation` writes its
+  outcome to `.experiment_ui/last_auto_run.json` (status, message, the
+  step that was stuck or failed and its message, held gate items). The
+  productions model maps each automatic step to a stage by its action id
+  prefix and gives every READY production a `blocker` line: what stopped
+  the last run at its stage. The Productions rows and the Production
+  Workspace show that line and carry their own Continue, which starts
+  the same automatic runner (the pipeline is one; the row is where the
+  result is read). While a job runs the button says Running.
+- **A decided concept says why it is not ready.** `question_coverage`
+  rows now carry `pending_claims`, `accepted_claims`, `ready` and a plain
+  `summary` ("2 claims to decide", "Not ready for the script: 1 question
+  unanswered. Mark it Not needed for script, or Rework a claim…", "Ready
+  for the script. 1 question was waived."). A production whose claims
+  are all decided but whose verified package is RESEARCH_INCOMPLETE is
+  "Needs your review" with that summary, no longer "Ready to run".
+- **Automatic waivers.** On every prepare the Research Gate waives an
+  original question automatically, with a note and a history event
+  (`decided_by: EVIDENCE_POLICY`), when the acquisition gave it up or no
+  claim in the draft refers to it. A human waiver is never replaced; a
+  person can remove an automatic waiver (recorded in
+  `unwaived_questions`) and it does not come back; the script may not
+  state anything about a waived question, as before. Off switch:
+  `auto_waive_questions.enabled` in `research_gate_config.json`.
+- **Acquisition gives a question up after N rounds.** The evidence file
+  counts `search_rounds` per question across runs of the same plan. A
+  question still without a page after
+  `max_search_rounds_per_question` (default 2, `research_acquisition_config.json`)
+  is listed in `unsourced_question_ids` and no longer blocks COMPLETE
+  evidence; its search errors stop counting against the run.
+
+**Consequences.** A concept with one unanswerable question reaches the
+script after at most two acquisition rounds without a person waiving
+anything; the gate line and the production row say what was waived. A
+question a claim does refer to but no claim answers (the claim was
+rejected or reworked) stays with the person, and the row says so. The
+research summary in the Command Center and the Review Queue reads the
+same text.
+
+## D-164 — One Review Queue of every pending item, with the gate as a label
+
+**Context.** The decisions waiting on the operator were spread over about
+twenty tabs on three pages (Gate reviews, Packaging, Produce), grouped in
+D-159 but still tabs. The Review Queue listed productions and gate counts,
+not the items.
+
+**Decision.** Each gate page module exposes `queueItems()`: every pending
+item it would render, with its gate label, its group (yours / held by
+policy), a title, the concept it belongs to, and the deep link that opens
+that item on its page. The Command Center's `reviewQueue()` merges them
+into one list: your own decisions first, then a production that waits on
+you without a gate item (research decided but not ready, a blocked
+concept), then the ideas inbox, then what the gate policy held. Within a
+group the order is the pipeline order, because an upstream decision
+unblocks the most. The Review Queue nav item carries the count. Script
+branches are listed whole; their sections load on the Script page. A page
+that cannot list yet (its data not loaded) leaves the queue to the others.
+The tabs stay as the place where a decision is made; the queue is the one
+place to see what is waiting.
+
+**Consequences.** "What do I have to decide?" has one answer. Items have no
+timestamp of their own, so the order is pipeline order, not newest first;
+a per-item "waiting since" needs the gates to record it and is not done
+here.
+
+## D-165 — The radar learns what the operator picks
+
+**Context.** The lane filter (D-162) is a word list the operator edits. The
+operator's own Approve, Watch, Save and Reject decisions on radar
+candidates are labels of the same thing and were unused.
+
+**Decision.** `opportunity_engine/radar_learning.py` builds a log-odds word
+model from the inbox decisions on radar packets: tokens are the title's
+words (how, why and what kept: for an explainer channel they are the
+signal) plus one token for the channel; a picked candidate (SAVED,
+APPROVED, WATCHING, or an APPROVE/SAVE/WATCH in its history) counts for,
+a REJECTED one against. Each tracked video gets a `taste` score in -1..1
+and a label (LIKELY / UNSURE / UNLIKELY); a theme takes its best member's.
+The model stays inactive until 20 decisions with at least 5 on each side;
+until then the radar page says how many it has. When active the page
+offers an Order pill ("Strongest outlier" / "What I pick"), shows the
+label beside each video, and names the strongest words for and against.
+Nothing is hidden by the score: it orders, the filters decide what shows.
+Replicated themes stay pinned first.
+
+**Consequences.** After a few dozen decisions the list reads in the
+operator's taste without editing word lists. The model is recomputed from
+the files on every overview, so a changed decision changes the ranking at
+once. It is a ranking aid, not a gate, and the lane word lists remain.
+
+## D-166 — Unconfirmed spend: a failed image call keeps its money committed until you settle it
+
+**Context.** The audit (2026-10-04, N-3) found that thumbnail and premium
+visual generation treated any failed provider call as costing nothing:
+the thumbnail path released its reservation, the visual path had none. A
+timeout or a 5xx after the request was sent may still have billed, and
+nothing in the app let the operator correct the ledger afterwards.
+
+**Decision.**
+- **A new ledger event, UNCONFIRMED.** It keeps the estimated amount
+  committed (counted like a reservation) and marks the item as needing a
+  person. `video_budget.outcome_unknown(exc)` decides: an HTTP 4xx answer
+  means the provider refused before doing work, so the reservation is
+  released; anything else (timeout, lost connection, 5xx, a bad answer
+  after the call) is marked unconfirmed with the error in the note. Both
+  image paths use it; narration already records partial spend.
+- **Reconcile.** `video_budget.reconcile(video, category, ref, total_usd)`
+  records what the item really cost (0 for nothing) and releases what was
+  held, so nothing stays committed by guess. It works on any ledger item,
+  not only an unconfirmed one, so an invoice can correct a recorded cost.
+- **Budget tab.** Unconfirmed calls appear first on the Budget tab as
+  "Confirm spend" items with the error, the held amount, a cost field and
+  two choices: "It cost this much" and "It cost nothing". The per-video
+  budget list counts unconfirmed calls. Route: `/api/budget-reconcile`.
+
+**Consequences.** The ceiling is trustworthy again: money that may be gone
+is counted until a person says otherwise, and a wrong guess is corrected
+on the same tab. The provider's usage page remains the source of truth
+for the amount; the app records the operator's answer with a note.
+
+## D-167 — The YouTube upload resumes instead of uploading twice
+
+**Context.** The audit (N-2) found the YouTube upload not resumable: a
+timeout after the video bytes were sent could leave a private, unrecorded
+video on the channel, and a retry would upload it again.
+
+**Decision.** The session URI YouTube returns is saved to
+`production_engine/output/pending_uploads/<key>.pending_upload.json`
+(with the file size and the approved video hash) before any byte is sent.
+A retry first asks the saved session what it holds
+(`PUT` with `Content-Range: bytes */size`): a finished session answers
+with the video id, which is recorded without sending anything; a 308 with
+a `Range` header is continued from the next byte with a proper
+`Content-Range`; a 400/404/410 means the session is dead, the record is
+discarded and one new upload starts. A record for other bytes (the video
+was re-rendered) is discarded. The record is removed when the id is
+recorded. The Publish tab shows an interrupted upload and the button reads
+"Resume upload to YouTube". The publish record carries `resumed`.
+
+**Consequences.** One approved video never becomes two private videos. A
+retry after any network failure is safe to click. The pending record is
+plain JSON the operator can delete to force a fresh upload.
+
+## D-168 — The free local Kokoro voice ships the narration
+
+**Context.** Paid narration had waited on a provider decision since D-061:
+the Higgsfield contract was unverified by design, so every live run
+stopped at "provider setup required". Meanwhile the free preview (Kokoro,
+D-128) was already producing the narration the operator listened to and
+approved. No full video had gone end to end.
+
+**Decision.** The local renderer becomes a first-class narration provider.
+- `narration_dispatch` gains a `LOCAL_KOKORO` adapter: the same engine,
+  voice and delivery handling as the preview, rendering each segment to
+  WAV at $0 with no network call. `provider_status` asks a local provider
+  for no API key or endpoint; it asks that Kokoro be installed and treats
+  a missing price as 0.
+- `narration_render.provider_contract_verified` accepts a local contract
+  without an endpoint (the documented model licence and voice list are the
+  contract). `prepare()` writes the $0 provider quote itself, bound to the
+  request hash like any quote, and refreshes it when the request changes;
+  the spend gate's "quote is current" rule therefore still holds and the
+  gate policy can accept a $0 worst case.
+- The shipped configuration is now the local voice: provider
+  `kokoro_local`, model `hexgrad/Kokoro-82M` (Apache-2.0 weights), voice
+  `af_heart`, price 0, and a matching `voice_identity` with a licence
+  reference. The previous Higgsfield block is kept under
+  `paid_provider_example` in `narration_render_config.json` for switching
+  back; the paid path is unchanged.
+
+**Consequences.** A video can go from script to final render with no paid
+narration call and no provider decision; the first full video is the
+test of whether the voice is good enough to ship. Every gate stays: the
+spend gate still runs (at $0), Audio QC and the Final Audio Gate are
+unchanged. Correction (audit 2, D-171): under the shipped gate policy the
+narration preview and final audio gates are decided automatically when
+clean, so a person first hears the narration at the Final Export gate,
+which stays with you; set `narration_preview` to `HUMAN` in
+`experiment_ui/gate_policy.json` to listen earlier. Changing `voice_performance_config`
+changes its validation contract hash, so specs approved before this
+change are stale and regenerate.
+
+## D-169 — A doctor page, and a job orphaned by a crash is settled at startup
+
+**Context.** An hour of the 2026-10-04 session went into things a single
+check would have shown: a 38-character API key, an environment the UI did
+not inherit, a search backend not on PATH. System Health only said whether
+a key was set. And after a crash or a closed launcher window the saved
+job state said RUNNING forever while the child kept writing artifacts.
+
+**Decision.**
+- **Doctor.** `experiment_ui/doctor.py` runs twelve checks on one click
+  from the Tools page (`POST /api/doctor`): the YouTube key with one real
+  Data API call (1 quota unit), the direct Gemini key and its billing
+  flag, FFmpeg, FFprobe and yt-dlp versions, the search backends (mcporter
+  for Exa, curl for DuckDuckGo and Wikipedia, agent-reach doctor if
+  installed), Kokoro with espeak-ng, the narration provider, the image
+  providers, the upload OAuth values and free disk. Each check runs on its
+  own with a time limit and reports its own failure; secrets are never
+  shown. The report is saved to `.experiment_ui/doctor.json` and shown
+  with timings.
+- **Orphaned jobs.** `JobManager.recover()` runs when the UI starts. If
+  `job_state.json` says RUNNING and the process is still alive, the
+  process tree is stopped and the job recorded ORPHANED; if it is gone,
+  INTERRUPTED. Both land in the job history and the job drawer with a
+  note, instead of a run that never ends.
+
+**Consequences.** "Why does nothing work?" has a ten-second answer. A
+restarted UI never runs beside a ghost of its last job.
+
+## D-170 — Fewer, better words: status codes become sentences, themes become questions
+
+**Context.** The pages leaked internals: gate panels said "Gate status:
+waiting for draft research packages", and radar themes were keyword stems
+("bullet bulletproof glas material").
+
+**Decision.**
+- **One translation table.** `experiment_ui/plain_language.py` holds a
+  written sentence for every status code a page shows and builds one by
+  shape for any other (WAITING_FOR_X, READY_FOR_X, HUMAN_X_GATE,
+  X_REWORK_REQUIRED, NO_X, SKIPPED_X …), so a new code never appears raw.
+  A test runs every code the engines emit through it. The catalogue is
+  served once per page load (`/api/plain-language`) and `YP.plain(code)`
+  applies it; the same shape rules exist in app.js for a code the
+  catalogue does not carry. The gate pages, Packaging, Produce, the radar
+  and the research coverage line use it where they showed codes.
+- **Theme headline.** The radar theme reads as the strongest on-lane
+  member's title, trimmed of bracketed tags, hashtags and "| Channel"
+  suffixes (`theme_headline`), with the stem label shown under it as
+  "Shared words". No model call: a creator's title already states the
+  viewer's question better than a stem list does.
+
+**Consequences.** The app reads like a tool. Codes stay in the files and
+the API, where they are stable identifiers; only the words on the page
+changed. Adding a code to a gate means adding a sentence to one file, and
+the test says so when it is missing.
+
+## D-171 — Audit 2: fixes to changes D-163 to D-170
+
+**Context.** An adversarial audit of the nine changes (D-163 to D-170) ran
+the two audit documents again on the diff 7dba9ac..1925d2e: six focused
+reviews (money, upload, process control and doctor, narration, research,
+front end), static scans, coverage, and a live fuzz of the new routes.
+Two container restarts and an API usage limit cut the reviews short; the
+findings they saved were reproduced and the unfinished areas were checked
+by hand. The report is AUDIT_REPORT_2026-10-05.
+
+**Decision.** Fixed, each with a regression test:
+- **Upload could create a second video.** The pending record is now kept
+  until the publish record holds the video id; once YouTube returns the
+  id it is saved, and a retry records it without uploading. An upload in
+  progress pins its approval: the decision cannot change until it is
+  resumed or discarded. A session opened for another file or other
+  metadata is never resumed or silently replaced. Connection-level errors
+  (RemoteDisconnected, IncompleteRead, resets) reach the caller as errors
+  the UI can show. The Publish tab offers "Discard the interrupted upload"
+  (only while YouTube has no video id) and "Record the uploaded video".
+- **Startup recovery could kill an unrelated process or the UI itself.**
+  A job now records who it is (Linux: boot id and start time; Windows:
+  creation time and command line). Recovery stops only processes proven
+  to be that job or its leftover steps, run from this project; never pid
+  0/1, the UI or its parent. The record is written before any signal.
+  A step left running after its job died is now found and stopped.
+- **Unconfirmed spend escaped the per-call caps.** A shot's authorization
+  and the per-video thumbnail cap count unconfirmed calls; every premium
+  visual call reserves against the whole-video ceiling first. Settling a
+  still-live authorization is refused. The status code of a failed call
+  is read from the HTTP error, not from numbers in its text.
+- **Doctor died on a bad key.** The YouTube check makes its own single
+  request with a time limit and reports quota, invalid key or a disabled
+  API in words; a check that exits still reports.
+- **Every research prepare rewrote unchanged automatic waivers**, which
+  changed the verified package and marked scripts stale. An unchanged
+  waiver now keeps its original record.
+- **A concept with no source for any question** stayed FAILED and searched
+  again on every run. It now settles as NO_SOURCES and the run says to
+  rework or reject the concept.
+- **Narration:** a local provider without a price crashed the dispatch; a
+  NaN price passed every ceiling check. Both fixed.
+- **Strict JSON:** a corrupt ledger's infinite amount made the status
+  response unparsable; non-finite numbers are now sent as null.
+- **Smaller:** a "#" inside a radar title no longer cuts the headline and
+  hostile titles stay fast; the Continue button no longer sticks on
+  "Starting…" after a refused run; fresh start archives the last-run
+  record.
+
+**Consequences.** The money, upload and process paths hold the
+invariants the decisions claimed. Not fixed and listed in the report: the
+Windows path of startup recovery stops only the job's own process tree
+(no group scan), and the auto-waiver with evidence-policy acceptance means
+research can reach the script with no person after the Concept Gate,
+which is what the gate policy you chose allows.
+
+## D-172 — Three listening points: preview after the script, rough cut over the storyboard, final export
+
+**Context.** D-156 and D-158 set the Narration Preview, Rough Cut and Edit
+Preview gates to decide themselves when their machine checks pass, so a run
+went from script to final render without anyone hearing the narration
+(noted in audit 2, D-171). The operator wants to hear it three times: the
+free read after the script, the read over the storyboard, and the final
+production.
+
+**Decision.** `narration_preview` and `rough_cut` are `HUMAN` in the
+shipped `gate_policy.json`; `edit_preview` stays `AUTO_IF_CLEAN`; Final
+Export was already human. The Narration Preview gate plays the free Kokoro
+read, which since D-168 is the voice that ships; the Rough Cut gate plays
+it over the storyboard, real shots where they exist and placeholders where
+not; Final Export plays the full render. A test pins the two human gates
+and checks the policy never decides a HUMAN gate.
+
+**Consequences.** A run stops twice more, both at free renders. Rework at
+the preview goes to the performance spec; at the rough cut to pacing,
+visuals or audio. If a paid narration provider is ever configured again,
+Final Audio should be made HUMAN as well, since the preview stays the free
+read.
+
+## D-173 — Visual structure takes a video-only stream
+
+**Context.** The first live run after D-172 failed visual structure
+acquisition with yt-dlp's "Requested format is not available" on both the
+stream-URL and the temporary-download paths. The selector was
+`best[height<=360]/best`, which matches only files that carry video and
+audio together; YouTube now often serves none of those, only separate
+video and audio streams.
+
+**Decision.** Both yt-dlp calls use
+`bestvideo[height<=360]/best[height<=360]/bestvideo/best`. The frames and
+scene detection run ffmpeg with `-an`, so audio was never used; a video-only
+stream is smaller and always offered. The evidence collector (captions,
+thumbnail, audio for transcription) is unchanged.
+
+**Consequences.** Visual structure acquires again on current YouTube. If a
+video offers no video-only stream the last fallback is the old `best`.
+
+## D-174 — A single analysed video brings replication context from other channels
+
+**Context.** Synthesis hands the Transformation Engine replicated mechanisms
+only: seen in at least two videos on at least two channels
+(`experiment_02_config.json`). *Analyze why it worked* on one pasted video or
+one radar breakout (D-109) therefore always ended in `NO_REPLICATED_PATTERNS`
+with no concept to make, which the first live run after D-172 hit.
+
+**Decision.** When the UI makes a single video the study set, `set_active`
+also searches the video's title with the Explore-my-topic search (hashtags and
+links stripped, within the seed limit; nothing is saved to the topic inbox)
+and adds the strongest relevant videos from other channels as study rows:
+never the seed video or its channel, one per channel, at most
+`max_study_videos - 1`, the seed first. Context rows carry
+`study_role: REPLICATION_CONTEXT`, a handoff id under the seed
+(`human_video:<seed>:context:<id>`) and the seed's opportunity id, so the gate,
+the inbox and the stale checks treat them as part of the one decision. The
+active record stores the search outcome (`FOUND`, `NONE`, `SEARCH_FAILED`,
+`SKIPPED`) and the inbox says how many videos came along or that none did.
+Library callers get no search unless they ask (`with_context`), and tests
+point the default searcher at a fake.
+
+**Consequences.** A pasted video reaches the Concept Gate on its own. A
+failed or empty search leaves the single-video behaviour exactly as before
+and says so; replication can then be added with *Explore my topic*. Context
+videos are analysed like any study video, so a single video now costs up to
+four analysis calls on the free routes.

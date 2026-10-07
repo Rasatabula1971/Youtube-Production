@@ -101,21 +101,141 @@ class ResearchReviewTests(unittest.TestCase):
         self.assertEqual(snapshot["pending"], 1)
         self.assertEqual(snapshot["claims"][0]["claim_id"], "clm001")
 
-    def two_question_package(self):
+    def two_question_package(self, *, weak_claim=True):
         package = self.package()
         package["research_questions"].append(
             {"question_id": "rq002", "question": "How long does it last?", "origin": "concept"}
         )
+        if weak_claim:
+            package["claims"].append(
+                {
+                    **package["claims"][0],
+                    "claim_id": "clm002",
+                    "statement": "A weak claim about how long it lasts.",
+                    "question_ids": ["rq002"],
+                }
+            )
         return package
 
     def prepared_with_unanswered_question(self, stack, root):
+        """One accepted claim, and a rejected claim on the second question."""
         self.patch_paths(stack, root)
         path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
         path.write_text(json.dumps(self.two_question_package()), encoding="utf-8")
         review.prepare_state()
+        review.apply_action(
+            concept_id="c1", claim_id="clm002", decision="REJECT", criteria={}, note="Too weak."
+        )
         return review.apply_action(
             concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note=""
         )
+
+    def test_coverage_says_in_plain_words_why_the_concept_is_not_ready(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            final = self.prepared_with_unanswered_question(stack, Path(tmp))
+        coverage = final["question_coverage"][0]
+        self.assertFalse(coverage["ready"])
+        self.assertEqual(coverage["pending_claims"], 0)
+        self.assertEqual(coverage["accepted_claims"], 1)
+        self.assertIn("1 question unanswered", coverage["summary"])
+        self.assertIn("Not needed for script", coverage["summary"])
+
+    def test_question_no_claim_refers_to_is_waived_automatically(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.two_question_package(weak_claim=False)), encoding="utf-8")
+            prepared = review.prepare_state()
+            self.assertIn("1 claim to decide", prepared["question_coverage"][0]["summary"])
+            final = review.apply_action(
+                concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note=""
+            )
+            verified = json.loads(
+                (review.VERIFIED_DIR / "c1.verified_research_package.json").read_text()
+            )
+            history = [
+                json.loads(line)
+                for line in review.history_file().read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        question = next(q for q in final["question_coverage"][0]["questions"] if q["question_id"] == "rq002")
+        self.assertEqual(question["status"], "WAIVED")
+        self.assertEqual(question["waiver"]["decided_by"], review.POLICY_DECIDER)
+        self.assertIn("no claim", question["waiver"]["note"])
+        self.assertEqual(final["ready_for_story_script"], 1)
+        self.assertEqual(verified["status"], "READY_FOR_STORY_SCRIPT")
+        self.assertEqual(verified["waived_question_ids"], ["rq002"])
+        self.assertEqual(final["question_coverage"][0]["summary"], "Ready for the script. 1 question was waived.")
+        events = [e for e in history if e.get("decision") == "WAIVE_QUESTION"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["decided_by"], review.POLICY_DECIDER)
+
+    def test_an_unchanged_automatic_waiver_leaves_the_verified_package_unchanged(self):
+        """Audit 2: a new waived_at on every prepare made every downstream script stale."""
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.two_question_package(weak_claim=False)), encoding="utf-8")
+            review.prepare_state()
+            review.apply_action(concept_id="c1", claim_id="clm001", decision="ACCEPT", criteria={}, note="")
+            verified = review.VERIFIED_DIR / "c1.verified_research_package.json"
+            first = verified.read_bytes()
+            review.prepare_state()
+            review.prepare_state()
+            self.assertEqual(verified.read_bytes(), first)
+
+    def test_removing_an_automatic_waiver_sticks_across_prepares(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.two_question_package(weak_claim=False)), encoding="utf-8")
+            review.prepare_state()
+            undone = review.apply_question_waiver(
+                concept_id="c1", question_id="rq002", waive=False, note=None
+            )
+            again = review.prepare_state()
+            rewaived = review.apply_question_waiver(
+                concept_id="c1", question_id="rq002", waive=True, note="Fine after all."
+            )
+        for snapshot in (undone, again):
+            statuses = {q["question_id"]: q["status"] for q in snapshot["question_coverage"][0]["questions"]}
+            self.assertEqual(statuses["rq002"], "UNANSWERED")
+        question = next(q for q in rewaived["question_coverage"][0]["questions"] if q["question_id"] == "rq002")
+        self.assertEqual(question["waiver"]["decided_by"], "HUMAN")
+
+    def test_unsourced_question_from_acquisition_is_waived_with_the_rounds(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.two_question_package()), encoding="utf-8")
+            evidence = review.evidence_file("c1")
+            evidence.parent.mkdir(parents=True, exist_ok=True)
+            evidence.write_text(
+                json.dumps(
+                    {
+                        "concept_id": "c1",
+                        "status": "COMPLETE",
+                        "unsourced_question_ids": ["rq002"],
+                        "search_rounds": {"rq001": 2, "rq002": 2},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            prepared = review.prepare_state()
+        question = next(q for q in prepared["question_coverage"][0]["questions"] if q["question_id"] == "rq002")
+        self.assertEqual(question["status"], "WAIVED")
+        self.assertIn("after 2 search rounds", question["waiver"]["note"])
+
+    def test_automatic_waivers_can_be_switched_off(self):
+        config = {**self.config(), "auto_waive_questions": {"enabled": False}}
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            stack.enter_context(patch.object(review, "load_config", return_value=config))
+            path = review.DEFAULT_DRAFTS_DIR / "c1.draft_research_package.json"
+            path.write_text(json.dumps(self.two_question_package(weak_claim=False)), encoding="utf-8")
+            prepared = review.prepare_state()
+        statuses = {q["question_id"]: q["status"] for q in prepared["question_coverage"][0]["questions"]}
+        self.assertEqual(statuses["rq002"], "UNANSWERED")
 
     def test_coverage_names_unanswered_question(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:

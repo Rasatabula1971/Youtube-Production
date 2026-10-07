@@ -1,0 +1,23 @@
+{
+  "candidates_per_thumbnail": 3,
+  "active_provider": "",
+  "per_thumbnail_cap_usd": 0.5,
+  "per_video_cap_usd": 2.0,
+  "generated_source_tier": "CHEAP_AI",
+  "import_max_bytes": 20000000,
+  "providers": {
+    "openai_compatible": {
+      "kind": "OPENAI_COMPATIBLE_IMAGES",
+      "label": "OpenAI-compatible images endpoint",
+      "endpoint": "",
+      "model": "",
+      "api_key_env": "THUMBNAIL_IMAGE_API_KEY",
+      "size": "1024x1024",
+      "price_per_image_usd": null,
+      "license": "",
+      "contract_verified": false,
+      "documentation_url": "",
+      "timeout_seconds": 120
+    }
+  }
+}

@@ -411,6 +411,9 @@ const narrationReturnNext = document.getElementById("narrationReturnNext");
 const jobSummaryButton = document.getElementById("jobSummaryButton");
 const jobSummaryStatus = document.getElementById("jobSummaryStatus");
 const jobSummaryLabel = document.getElementById("jobSummaryLabel");
+const runBanner = document.getElementById("runBanner");
+const runBannerTitle = document.getElementById("runBannerTitle");
+const runBannerDetail = document.getElementById("runBannerDetail");
 const jobDrawer = document.getElementById("jobDrawer");
 const drawerScrim = document.getElementById("drawerScrim");
 const closeJobDrawer = document.getElementById("closeJobDrawer");
@@ -502,8 +505,8 @@ let finalExportCursor = 0;
 const ROUTES = {
   "/": {
     view: "home",
-    kicker: "WORKFLOW",
-    title: "Home",
+    kicker: "TODAY",
+    title: "Command Center",
     subtitle: "What needs your attention now."
   },
   "/opportunity": {
@@ -512,17 +515,59 @@ const ROUTES = {
     title: "Find the next video",
     subtitle: "From proven demand, your own idea, or what is breaking out right now."
   },
+  "/opportunity/review": {
+    view: "opportunity-review",
+    kicker: "OPPORTUNITIES",
+    title: "Opportunity Review",
+    subtitle: "One idea at a time: the evidence on the left, your decision on the right."
+  },
+  "/radar": {
+    view: "radar",
+    kicker: "OPPORTUNITIES",
+    title: "Viral Radar",
+    subtitle: "Recent channel-relative outliers, tracked for up to 15 days."
+  },
+  "/review": {
+    view: "gate-review",
+    kicker: "PRODUCTIONS",
+    title: "Gate Reviews",
+    subtitle: "Concepts, research flags and scripts, one item at a time; the automatic gates appear when they hold something for you."
+  },
+  "/packaging": {
+    view: "packaging",
+    kicker: "PRODUCTIONS",
+    title: "Packaging",
+    subtitle: "Titles, angles, thumbnails, pairing and the final package."
+  },
+  "/produce": {
+    view: "produce",
+    kicker: "PRODUCTIONS",
+    title: "Produce",
+    subtitle: "Budget, footage rights, final export and publish; the other gates appear when the gate policy holds something for you."
+  },
+  "/production": {
+    view: "production",
+    kicker: "PRODUCTION",
+    title: "Production Workspace",
+    subtitle: "One video: where it is, what it is waiting on, and everything decided so far."
+  },
   "/analysis": {
     view: "analysis",
-    kicker: "ANALYZE & CREATE",
-    title: "Analyze & Create",
-    subtitle: "Turn approved evidence into an original video."
+    kicker: "PRODUCTIONS",
+    title: "Workspace",
+    subtitle: "Every original panel, for anything the focused pages do not cover."
+  },
+  "/productions": {
+    view: "productions",
+    kicker: "PRODUCTIONS",
+    title: "Productions",
+    subtitle: "Every accepted concept, its stage and what it is waiting on."
   },
   "/tools": {
     view: "tools",
     kicker: "MAINTENANCE",
     title: "Tools & Diagnostics",
-    subtitle: "Manual controls, Doctors, logs and technical state."
+    subtitle: "Is everything installed and healthy, what ran recently, and the manual controls."
   }
 };
 
@@ -550,6 +595,56 @@ function humanizeToken(value) {
     .replace(/\b\w/g, function (match) { return match.toUpperCase(); });
 }
 
+// Status codes as sentences (D-170). The written catalogue comes from the
+// server once; a code it does not carry is built by shape here, so a new
+// code never shows up raw.
+let plainSentences = {};
+const PLAIN_GATES = {
+  VISION: "visual evidence", ANALYSIS: "analysis", CONCEPT: "concept", RESEARCH: "research", SCRIPT: "script",
+  TITLE_DIRECTION: "title direction", FINAL_PACKAGING: "final package", FORMAT: "format",
+  PERFORMANCE: "voice performance", NARRATION_PREVIEW: "narration preview", NARRATION_SPEND: "narration spend",
+  FINAL_AUDIO: "final audio", VISUAL_PLAN: "visual plan", VISUAL_CANDIDATE: "visual candidate",
+  VISUAL_RIGHTS: "footage rights", ROUGH_CUT: "rough cut", VISUAL_SPEND: "visual spend",
+  EDIT_PREVIEW: "edit preview", FINAL_EXPORT: "final export", PUBLISH: "publish"
+};
+
+function plainWords(code) {
+  return code.replace(/_/g, " ").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function plainSentence(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return "";
+  const key = text.toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(plainSentences, key)) return plainSentences[key];
+  if (!/^[A-Z0-9_]+$/.test(key)) return text;
+  const gate = key.match(/^HUMAN_([A-Z_]+)_GATE$/);
+  if (gate) return "Waiting for your decision at the " + (PLAIN_GATES[gate[1]] || plainWords(gate[1])) + " gate.";
+  const prefixes = [["WAITING_FOR_", "Waiting for {}."], ["WAITING_", "Waiting for {}."], ["READY_FOR_", "Ready for {}."],
+    ["READY_TO_", "Ready to {}."], ["NO_", "No {} yet."], ["SKIPPED_", "Skipped: {}."], ["FAIL_CLOSED_", "Stopped safely: {}."]];
+  for (const [prefix, template] of prefixes) {
+    if (key.startsWith(prefix) && key.length > prefix.length) return template.replace("{}", plainWords(key.slice(prefix.length)));
+  }
+  const suffixes = [["_REWORK_REQUIRED", "{} was sent back for rework."], ["_REQUIRED", "{} is required."],
+    ["_APPROVED", "{} is approved."], ["_REJECTED", "{} was rejected."], ["_READY", "{} is ready."],
+    ["_FAILED", "{} failed."], ["_COMPLETE", "{} is done."], ["_UNAVAILABLE", "{} is not available."], ["_ERROR", "{} hit an error."]];
+  for (const [suffix, template] of suffixes) {
+    if (key.endsWith(suffix) && key.length > suffix.length) {
+      const body = plainWords(key.slice(0, -suffix.length));
+      return template.replace("{}", body.charAt(0).toUpperCase() + body.slice(1));
+    }
+  }
+  const body = plainWords(key);
+  return body.charAt(0).toUpperCase() + body.slice(1) + ".";
+}
+
+async function loadPlainLanguage() {
+  try {
+    const data = await api("/api/plain-language");
+    if (data && data.sentences && typeof data.sentences === "object") plainSentences = data.sentences;
+  } catch (_) { /* the shape rules above still apply */ }
+}
+
 function safeYoutubeUrl(value) {
   try {
     const url = new URL(String(value || ""));
@@ -565,6 +660,7 @@ function safeYoutubeUrl(value) {
 }
 
 function showToast(message, error) {
+  toast.setAttribute("aria-live", error ? "assertive" : "polite");
   toast.textContent = message;
   toast.classList.toggle("error", Boolean(error));
   toast.classList.add("show");
@@ -615,52 +711,185 @@ function renderRoute(options) {
     view.hidden = view.dataset.view !== route.view;
   });
 
+  const subroute = currentSubroute();
   document.querySelectorAll(".nav-item").forEach(function (item) {
-    item.classList.toggle("active", item.dataset.route === path);
+    const active = item.dataset.route === path ||
+      String(item.dataset.alsoRoutes || "").split(" ").indexOf(path) !== -1;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
+  document.querySelectorAll(".nav-subitem").forEach(function (item) {
+    const active = item.dataset.route === path &&
+      (item.dataset.subroute ? item.dataset.subroute === subroute : true);
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "location");
+    else item.removeAttribute("aria-current");
   });
 
   pageKicker.textContent = route.kicker;
   pageTitle.textContent = route.title;
   pageSubtitle.textContent = route.subtitle;
-  document.title = route.title === "Home"
+  document.title = path === "/"
     ? "YouTube Production"
     : route.title + " — YouTube Production";
 
-  closeSidebar();
+  if (renderedPath !== path) {
+    if (path === "/radar" && window.RadarPage) window.RadarPage.show();
+    if (path === "/opportunity/review" && window.OpportunityReview) window.OpportunityReview.render();
+    if (path === "/production" && window.ProductionWorkspace) window.ProductionWorkspace.show();
+    if (path === "/review" && window.GateReviews) window.GateReviews.show();
+    if (path === "/packaging" && window.Packaging) window.Packaging.show();
+    if (path === "/produce" && window.Produce) window.Produce.show();
+    if (path === "/tools" && window.Tools) window.Tools.show();
+  }
+  // Status polls re-render the route; only a navigation closes the phone menu.
+  if (!(options && options.poll)) closeSidebar();
   if (shouldScroll && renderedPath !== path) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }
   renderedPath = path;
 }
 
-function navigate(path) {
+function currentSubroute() {
+  return window.location.hash.replace(/^#/, "");
+}
+
+function navigate(path, subroute) {
   const target = Object.prototype.hasOwnProperty.call(ROUTES, path) ? path : "/";
-  if (window.location.pathname !== target) {
-    history.pushState({}, "", target);
+  const url = target + (subroute ? "#" + subroute : "");
+  if (window.location.pathname + window.location.hash !== url) {
+    history.pushState({}, "", url);
   }
-  renderRoute({ scroll: true });
+  renderRoute({ scroll: !subroute });
+  if (subroute) applySubroute(target, subroute);
+  focusViewAfterNavigation();
+}
+
+// After a navigation the old control is usually hidden, which would drop
+// keyboard focus to <body>. Move it to the page title unless the new view
+// already placed focus (for example on the first review item).
+function focusViewAfterNavigation() {
+  window.requestAnimationFrame(function () {
+    const active = document.activeElement;
+    const view = document.querySelector(".app-view:not([hidden])");
+    if (active && active !== document.body && active.offsetParent !== null && view && view.contains(active)) return;
+    pageTitle.focus({ preventScroll: true });
+  });
+}
+
+// Sidebar sub-items (Patch 1): Opportunities sub-items reuse the existing
+// workspace (inbox tab or radar card); Productions sub-items filter the list.
+const OPPORTUNITY_INBOX_SUBROUTES = {
+  review: "NEEDS_REVIEW",
+  watching: "WATCHING",
+  approved: "APPROVED",
+  saved: "SAVED",
+  rejected: "REJECTED"
+};
+
+// Inbox tabs are deep-linkable (UI-18): the hash follows the selected tab.
+function selectInboxTab(tab) {
+  inboxTab = tab;
+  try {
+    window.localStorage.setItem("opportunityInboxTab", inboxTab);
+  } catch (_) {}
+  renderInbox(latestInbox);
+  const subroute = Object.keys(OPPORTUNITY_INBOX_SUBROUTES).find(function (key) {
+    return OPPORTUNITY_INBOX_SUBROUTES[key] === tab;
+  });
+  if (subroute && window.location.pathname === "/opportunity") {
+    history.replaceState({}, "", "/opportunity#" + subroute);
+    renderRoute({ scroll: false, poll: true });
+  }
+}
+
+function applySubroute(path, subroute) {
+  let anchor = null;
+  if (path === "/opportunity") {
+    if (OPPORTUNITY_INBOX_SUBROUTES[subroute]) {
+      inboxTab = OPPORTUNITY_INBOX_SUBROUTES[subroute];
+      try {
+        window.localStorage.setItem("opportunityInboxTab", inboxTab);
+      } catch (_) {}
+      renderInbox(latestInbox);
+      anchor = document.getElementById("opportunityInboxPanel");
+    } else if (subroute === "historical") {
+      anchor = document.getElementById("historicalReviewPanel");
+    } else {
+      anchor = document.getElementById("viewOpportunity");
+    }
+  } else if (path === "/productions" && window.CommandCenter) {
+    window.CommandCenter.setProductionFilter(subroute);
+  } else if (path === "/opportunity/review" && window.OpportunityReview) {
+    window.OpportunityReview.focus(window.YPUtil.decode(subroute));
+  } else if (path === "/production" && window.ProductionWorkspace) {
+    window.ProductionWorkspace.open(window.YPUtil.decode(subroute));
+  } else if (path === "/review" && window.GateReviews) {
+    window.GateReviews.open(subroute);
+  } else if (path === "/packaging" && window.Packaging) {
+    window.Packaging.open(subroute);
+  } else if (path === "/produce" && window.Produce) {
+    window.Produce.open(subroute);
+  }
+  if (anchor) {
+    anchor.scrollIntoView({ block: "start", behavior: "auto" });
+  } else {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+}
+
+// Phone layout (UI-16): the off-canvas sidebar is inert while closed so Tab
+// never lands on links that are off screen.
+const phoneLayout = window.matchMedia("(max-width: 860px)");
+
+function syncSidebar() {
+  const open = sidebar.classList.contains("open");
+  sidebar.inert = phoneLayout.matches && !open;
+  mobileMenu.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
 function openSidebar() {
   sidebar.classList.add("open");
   sidebarScrim.classList.add("open");
+  syncSidebar();
+  const current = sidebar.querySelector('[aria-current="page"]') || sidebar.querySelector("a[href]");
+  if (current) current.focus();
 }
 
 function closeSidebar() {
+  const wasOpen = sidebar.classList.contains("open");
+  const hadFocus = sidebar.contains(document.activeElement);
   sidebar.classList.remove("open");
   sidebarScrim.classList.remove("open");
+  syncSidebar();
+  if (wasOpen && hadFocus && phoneLayout.matches) mobileMenu.focus();
 }
 
+if (phoneLayout.addEventListener) phoneLayout.addEventListener("change", syncSidebar);
+
+let jobDrawerReturnFocus = null;
+
 function openJobDrawer() {
+  if (!jobDrawer.classList.contains("open")) {
+    jobDrawerReturnFocus = document.activeElement;
+  }
   jobDrawer.classList.add("open");
-  jobDrawer.setAttribute("aria-hidden", "false");
+  jobDrawer.inert = false;
   drawerScrim.classList.add("open");
+  closeJobDrawer.focus();
 }
 
 function closeJob() {
+  if (!jobDrawer.classList.contains("open")) return;
+  const hadFocus = jobDrawer.contains(document.activeElement);
   jobDrawer.classList.remove("open");
-  jobDrawer.setAttribute("aria-hidden", "true");
+  jobDrawer.inert = true;
   drawerScrim.classList.remove("open");
+  const target = jobDrawerReturnFocus && document.body.contains(jobDrawerReturnFocus) &&
+    jobDrawerReturnFocus.offsetParent !== null ? jobDrawerReturnFocus : jobSummaryButton;
+  if (hadFocus) target.focus();
+  jobDrawerReturnFocus = null;
 }
 
 function statusTone(workflow) {
@@ -731,8 +960,60 @@ function primaryTargetForWorkflow(workflow) {
   if (workflow.state === "HUMAN_VISION_GATE") {
     return { type: "route", value: "/analysis", label: "Review visual evidence" };
   }
-  if (workflow.state === "HUMAN_ANALYSIS_GATE") {
-    return { type: "route", value: "/analysis", label: "Review analysis findings" };
+  const gateReviews = {
+    HUMAN_ANALYSIS_GATE: ["analysis", "Review analysis findings"],
+    HUMAN_CONCEPT_GATE: ["concept", "Review concepts"],
+    HUMAN_RESEARCH_GATE: ["research", "Review research"],
+    HUMAN_SCRIPT_GATE: ["script", "Review script"],
+    HUMAN_FORMAT_GATE: ["format", "Review format"],
+    HUMAN_PERFORMANCE_GATE: ["voice", "Review performance"],
+    HUMAN_NARRATION_PREVIEW_GATE: ["preview", "Listen to prototype"]
+  };
+  const packagingStates = {
+    HUMAN_TITLE_DIRECTION_GATE: ["titles", "Select title directions"],
+    HUMAN_FINAL_PACKAGING_GATE: ["final", "Choose final package"]
+  };
+  // A rejection leaves nothing pending on /packaging; the rework controls
+  // live in the classic panels, where this led before the redesign (UI-19).
+  const classicRework = {
+    TITLE_DIRECTION_REJECTED: "Rework title directions",
+    FINAL_PACKAGING_REJECTED: "Revisit final package"
+  };
+  const produceStates = {
+    HUMAN_NARRATION_SPEND_GATE: ["budget", "Review narration spend"],
+    HUMAN_VISUAL_CANDIDATE_GATE: ["visuals", "Choose visuals"],
+    HUMAN_VISUAL_RIGHTS_GATE: ["rights", "Review footage context"],
+    HUMAN_ROUGH_CUT_GATE: ["roughcut", "Review rough cut"],
+    HUMAN_VISUAL_SPEND_GATE: ["budget", "Review visual spend"],
+    HUMAN_EDIT_PREVIEW_GATE: ["edit", "Review edit preview"],
+    HUMAN_FINAL_EXPORT_GATE: ["export", "Review final render"]
+  };
+  if (produceStates[workflow.state]) {
+    return {
+      type: "route",
+      value: "/produce",
+      subroute: produceStates[workflow.state][0],
+      label: produceStates[workflow.state][1]
+    };
+  }
+  if (classicRework[workflow.state]) {
+    return { type: "route", value: "/analysis", label: classicRework[workflow.state] };
+  }
+  if (packagingStates[workflow.state]) {
+    return {
+      type: "route",
+      value: "/packaging",
+      subroute: packagingStates[workflow.state][0],
+      label: packagingStates[workflow.state][1]
+    };
+  }
+  if (gateReviews[workflow.state]) {
+    return {
+      type: "route",
+      value: "/review",
+      subroute: gateReviews[workflow.state][0],
+      label: gateReviews[workflow.state][1]
+    };
   }
   const analysisHumanGateLabels = {
     HUMAN_ANALYSIS_GATE: "Review analysis findings",
@@ -819,8 +1100,10 @@ function renderHomeWorkflow(data) {
       escapeHtml(target.label) + '</button>';
   } else if (target.type === "route") {
     homePrimaryAction.innerHTML =
-      '<button class="primary-cta" data-route="' + escapeHtml(target.value) + '">' +
-      escapeHtml(target.label) + '</button>';
+      '<a class="button-link primary-cta" href="' + escapeHtml(target.value + (target.subroute ? "#" + target.subroute : "")) +
+      '" data-route="' + escapeHtml(target.value) + '"' +
+      (target.subroute ? ' data-subroute="' + escapeHtml(target.subroute) + '"' : "") + '>' +
+      escapeHtml(target.label) + '</a>';
   } else {
     homePrimaryAction.innerHTML =
       '<button class="primary-cta" disabled>' + escapeHtml(target.label) + '</button>';
@@ -959,14 +1242,6 @@ function formatCount(value) {
   return value == null ? "unknown" : Number(value).toLocaleString();
 }
 
-function evidenceChip(label, item) {
-  const level = (item && item.level) || "UNASSESSED";
-  const tone = level === "STRONG" || level === "EVIDENCED" ? "success" : level === "MODERATE" ? "running" : "neutral";
-  return '<span class="status-chip ' + tone + '" title="' +
-    escapeHtml(((item && item.rule_id) || "no rule") + ": " + ((item && item.basis) || []).join("; ")) + '">' +
-    escapeHtml(label + ": " + level) + '</span>';
-}
-
 function routeChip(item) {
   const route = item.route || "UNSCOPED";
   const detail = route === "FUTURE_CHANNEL"
@@ -984,14 +1259,15 @@ function inboxActionButtons(item) {
     if (action === "APPROVE") {
       const isTopic = item.source_type === "HUMAN_TOPIC";
       const kind = isTopic ? "topic" : item.source_type === "VIRAL_RADAR" ? "viral" : "video";
-      return '<button data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
+      return '<button class="ghost" data-inbox-analyze="' + escapeHtml(isTopic ? item.topic_key : item.video_id) + '"' +
+        ' data-inbox-id="' + escapeHtml(item.opportunity_id) + '"' +
         ' data-inbox-kind="' + kind + '" data-inbox-excluded="' + excluded + '"' +
         ' title="Approve: this becomes the study set for Experiment 02">' +
         (isTopic ? "Approve these videos" : "Approve") + '</button>';
     }
     if (action === "APPROVE_THEME") {
       const cluster = (viral.cluster || {});
-      return '<button data-inbox-theme="' + escapeHtml(cluster.cluster_id || "") + '"' +
+      return '<button class="ghost" data-inbox-theme="' + escapeHtml(cluster.cluster_id || "") + '"' +
         ' title="Approve the whole theme: one video per independent channel">' +
         'Approve theme (' + escapeHtml(String(cluster.independent_channel_count || "?")) + ' channels)</button>';
     }
@@ -1032,78 +1308,350 @@ function formatRate(value) {
   return number >= 1000 ? (number / 1000).toFixed(1) + "K" : number.toFixed(number < 10 ? 1 : 0);
 }
 
-function viralChips(viral) {
-  if (!viral) return "";
-  const strengthTone = viral.strength === "BREAKOUT" ? "success" : viral.strength === "NORMAL" ? "neutral" : "running";
-  const trajectoryTone = viral.trajectory === "ACCELERATING" ? "success" : viral.trajectory === "DECELERATING" ? "failed" : "neutral";
-  return '<span class="status-chip ' + strengthTone + '" title="' + escapeHtml(viral.strength_rule_id || "") + '">' +
-      escapeHtml((viral.strength || "").replace(/_/g, " ")) + '</span>' +
-    '<span class="status-chip ' + trajectoryTone + '">' + escapeHtml((viral.trajectory || "").replace(/_/g, " ")) + '</span>' +
-    (viral.lifetime_ratio == null ? "" : '<span class="status-chip neutral" title="' +
-      escapeHtml("basis: " + (viral.ratio_basis || []).join(", ")) + '">' +
-      escapeHtml(viral.lifetime_ratio + "× channel") + '</span>') +
-    (viral.breadth === "REPLICATED" && viral.cluster
-      ? '<span class="status-chip success" title="' + escapeHtml(viral.cluster.replication_rule_id || "") + '">' +
-        escapeHtml("Replicated · " + viral.cluster.independent_channel_count + " channels") + '</span>'
-      : "") +
-    (viral.tracking_status && viral.tracking_status !== "TRACKING"
-      ? '<span class="status-chip neutral">' + escapeHtml(viral.tracking_status.replace(/_/g, " ")) + '</span>'
+function drawerSection(title, html) {
+  return html ? '<section class="drawer-section"><h4>' + escapeHtml(title) + '</h4>' + html + '</section>' : "";
+}
+
+function factTable(rows) {
+  const kept = rows.filter(function (row) { return row[1] !== null && row[1] !== undefined && row[1] !== ""; });
+  if (!kept.length) return "";
+  return '<dl class="viral-facts">' + kept.map(function (row) {
+    return '<dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(String(row[1])) + '</dd>';
+  }).join("") + '</dl>';
+}
+
+function formatHours(hours) {
+  if (hours == null) return "—";
+  return hours < 48 ? Math.round(hours) + " h" : (hours / 24).toFixed(1) + " d";
+}
+
+function renderTrajectory(container, snapshots) {
+  const points = (snapshots || [])
+    .filter(function (row) { return row.video_age_hours != null && row.views != null; })
+    .map(function (row) { return { x: Number(row.video_age_hours), y: Number(row.views), at: row.observed_at }; });
+  if (!points.length) {
+    container.innerHTML = '<p class="muted">No snapshots yet. The radar measures this video from its next run; earlier views are never reconstructed.</p>';
+    return;
+  }
+  // Drawn at the container's real width so axis text stays 11px on phones.
+  const width = Math.max(280, Math.round(container.clientWidth || 600));
+  const height = width < 420 ? 180 : 220;
+  const left = 48, right = 12, top = 12, bottom = 28;
+  const xMax = Math.max(points[points.length - 1].x, 24);
+  const yMax = Math.max.apply(null, points.map(function (p) { return p.y; })) * 1.1 || 1;
+  const sx = function (x) { return left + (x / xMax) * (width - left - right); };
+  const sy = function (y) { return top + (1 - y / yMax) * (height - top - bottom); };
+  const yTicks = [0, 0.5, 1].map(function (f) { return Math.round(yMax * f / 1.1); });
+  const xTicks = [0, xMax / 2, xMax];
+  const svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" tabindex="0" aria-label="Views over time since publication. Use left and right arrow keys to step through snapshots.">' +
+    '<g class="grid">' + yTicks.map(function (t) {
+      return '<line x1="' + left + '" x2="' + (width - right) + '" y1="' + sy(t) + '" y2="' + sy(t) + '"/>';
+    }).join("") + '</g>' +
+    yTicks.map(function (t) {
+      return '<text class="axis-label" x="' + (left - 8) + '" y="' + (sy(t) + 4) + '" text-anchor="end">' + escapeHtml(t === 0 ? "0" : formatRate(t)) + '</text>';
+    }).join("") +
+    xTicks.map(function (t) {
+      return '<text class="axis-label" x="' + sx(t) + '" y="' + (height - 8) + '" text-anchor="middle">' + escapeHtml(formatHours(t)) + '</text>';
+    }).join("") +
+    '<polyline class="series-line" points="' + points.map(function (p) { return sx(p.x) + "," + sy(p.y); }).join(" ") + '"/>' +
+    points.map(function (p) { return '<circle class="series-point" r="4" cx="' + sx(p.x) + '" cy="' + sy(p.y) + '"/>'; }).join("") +
+    '<line class="crosshair" x1="0" x2="0" y1="' + top + '" y2="' + (height - bottom) + '" visibility="hidden"/>' +
+    '</svg>';
+  container.innerHTML = svg;
+  const svgElement = container.querySelector("svg");
+  const crosshair = svgElement.querySelector(".crosshair");
+  const tooltip = document.createElement("div");
+  tooltip.className = "trajectory-tooltip";
+  tooltip.hidden = true;
+  const value = document.createElement("strong");
+  const label = document.createElement("span");
+  tooltip.appendChild(value);
+  tooltip.appendChild(label);
+  container.appendChild(tooltip);
+  let current = points.length - 1;
+  function show(index) {
+    current = Math.max(0, Math.min(points.length - 1, index));
+    const point = points[current];
+    const scale = svgElement.getBoundingClientRect().width / width;
+    crosshair.setAttribute("x1", sx(point.x));
+    crosshair.setAttribute("x2", sx(point.x));
+    crosshair.setAttribute("visibility", "visible");
+    value.textContent = formatCount(point.y) + " views";
+    label.textContent = formatHours(point.x) + " after publishing · " + String(point.at || "").slice(5, 16).replace("T", " ") + " UTC";
+    tooltip.hidden = false;
+    // Keep the whole tooltip inside the chart, even at the first and last points.
+    const half = tooltip.offsetWidth / 2;
+    const boxWidth = container.clientWidth;
+    const x = Math.min(Math.max(sx(point.x) * scale, half), Math.max(half, boxWidth - half));
+    tooltip.style.left = x + "px";
+    tooltip.style.top = (sy(point.y) * scale) + "px";
+  }
+  function hide() {
+    crosshair.setAttribute("visibility", "hidden");
+    tooltip.hidden = true;
+  }
+  svgElement.addEventListener("pointermove", function (event) {
+    const rect = svgElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / (rect.width / width);
+    let best = 0;
+    points.forEach(function (p, i) { if (Math.abs(sx(p.x) - x) < Math.abs(sx(points[best].x) - x)) best = i; });
+    show(best);
+  });
+  svgElement.addEventListener("pointerleave", hide);
+  svgElement.addEventListener("focus", function () { show(current); });
+  svgElement.addEventListener("blur", hide);
+  svgElement.addEventListener("keydown", function (event) {
+    if (event.key === "ArrowLeft") { event.preventDefault(); show(current - 1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); show(current + 1); }
+  });
+}
+
+function snapshotTable(snapshots, intervals) {
+  const rows = (snapshots || []).map(function (row) {
+    return '<tr><td>' + escapeHtml(String(row.observed_at || "").slice(5, 16).replace("T", " ")) + '</td><td class="num">' +
+      escapeHtml(formatHours(row.video_age_hours)) + '</td><td class="num">' + escapeHtml(formatCount(row.views)) + '</td></tr>';
+  }).join("");
+  const velocity = (intervals || []).map(function (interval) {
+    return '<tr><td>' + escapeHtml(String(interval.from).slice(5, 16).replace("T", " ") + " → " + String(interval.to).slice(5, 16).replace("T", " ")) +
+      '</td><td class="num">' + escapeHtml(formatRate(interval.vph)) + '</td></tr>';
+  }).join("");
+  return (rows ? '<table class="data-table"><thead><tr><th>Snapshot (UTC)</th><th class="num">Age</th><th class="num">Views</th></tr></thead><tbody>' + rows + '</tbody></table>' : "") +
+    (velocity ? '<table class="data-table"><thead><tr><th>Interval</th><th class="num">Views/hour</th></tr></thead><tbody>' + velocity + '</tbody></table>' : "");
+}
+
+function evidenceDrawerHtml(item) {
+  const viral = item.viral;
+  const matrix = item.matrix || [];
+  const gaps = matrix.filter(function (row) { return row.level === "UNASSESSED" || row.level === "HYPOTHESIS"; });
+  const byDimension = {};
+  matrix.forEach(function (row) { byDimension[row.dimension] = row; });
+  function dimension(name) {
+    const row = byDimension[name] || {};
+    const assessed = row.level && row.level !== "UNASSESSED" && row.level !== "HYPOTHESIS";
+    return '<p><strong>' + escapeHtml(row.level || "UNASSESSED") + '</strong> ' +
+      escapeHtml(assessed ? (row.rule_id || "") + " — " + (row.basis || []).join("; ") : "Not evidenced yet: Experiment 02 and research answer this.") + '</p>';
+  }
+  const seed = item.seed || {};
+  const historical = item.historical_evidence;
+  const provenance = item.provenance || {};
+  const videos = (item.videos || []).map(function (video) {
+    return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
+      escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' + escapeHtml(video.channel_title || "") +
+      ' · ' + escapeHtml(formatCount(video.views)) + ' views' +
+      (video.age_days == null ? "" : " · " + escapeHtml(String(video.age_days)) + " days old") + '</span></li>';
+  }).join("");
+  return drawerSection("Summary", '<p>' + escapeHtml(item.summary || "") + '</p>' +
+      (item.status_reason ? '<p class="muted">' + escapeHtml(item.status_reason) + '</p>' : "") +
+      (item.evidence_moved ? '<p class="evidence-moved">Evidence has moved since your decision — the decision stands.</p>' : "")) +
+    drawerSection("Source", factTable([
+      ["Lane", item.source_label],
+      ["Channel", (ROUTE_LABELS[item.route] || item.route) + (item.route_channel_id ? " · " + item.route_channel_id : "")],
+      ["Scope rule", item.route_rule_id],
+      ["Why", item.route_reason],
+      ["Your question", seed.question],
+      ["Your topic", seed.topic],
+      ["Link", seed.video_url],
+      ["Your note", (item.notes || [])[0]]
+    ])) +
+    drawerSection("Evidence matrix", evidenceMatrix(item)) +
+    (viral ? drawerSection("Viral evidence", factTable([
+      ["Strength", (viral.strength || "").replace(/_/g, " ") + (viral.strength_rule_id ? " (" + viral.strength_rule_id + ")" : "")],
+      ["Trajectory", (viral.trajectory || "").replace(/_/g, " ")],
+      ["Breadth", (viral.breadth || "").replace(/_/g, " ")],
+      ["Theme", viral.cluster ? viral.cluster.label + " · " + String(viral.cluster.kind || "").replace(/_/g, " ").toLowerCase() + " · " + viral.cluster.independent_channel_count + " independent channel(s)" : null],
+      ["Channel outlier", viral.lifetime_ratio == null ? null : viral.lifetime_ratio + "× median views (lifetime vs lifetime)"],
+      ["Views/hour vs normal", viral.vph_ratio == null ? null : viral.vph_ratio + "× (" + formatRate(viral.lifetime_vph) + " VPH)"],
+      ["Views per follower", viral.views_per_follower == null ? (viral.subscriber_outlier === "UNAVAILABLE" ? "follower count hidden" : null) : viral.views_per_follower],
+      ["Likes per view", viral.likes_per_view],
+      ["Comments per view", viral.comments_per_view],
+      ["Not observable", "CTR, retention and viewed-vs-swiped are never estimated"]
+    ])) +
+      drawerSection("Trajectory", '<p class="muted">Views since publishing, from the radar’s own snapshots.</p><div class="trajectory" data-trajectory-for="' +
+        escapeHtml(item.video_id || "") + '"><p class="muted">Loading snapshots…</p></div><div data-trajectory-table></div>') +
+      drawerSection("Channel baseline", factTable([
+        ["Median views", formatCount(viral.baseline_median_views)],
+        ["Median views/hour", formatRate(viral.baseline_median_vph)],
+        ["Sample", (viral.baseline_sample_size || 0) + " uploads" + (viral.baseline_age_days ? " aged " + viral.baseline_age_days.min + "–" + viral.baseline_age_days.max + " days" : "")],
+        ["Rule", viral.baseline_rule]
+      ])) : "") +
+    (historical ? drawerSection("Historical evidence", factTable([
+      ["Age-matched velocity index", historical.age_matched_velocity_index],
+      ["Independent channels", historical.topic_unique_channels],
+      ["Replicated families", (historical.replicated_families || []).join(", ")],
+      ["01.5 gate status", (historical.gate_statuses || []).join(", ")]
+    ])) : "") +
+    drawerSection("Viewer questions", dimension("viewer_need")) +
+    drawerSection("Mechanisms", dimension("mechanism_evidence")) +
+    drawerSection("Content gaps", dimension("content_gap")) +
+    drawerSection("Research gaps", gaps.length
+      ? '<ul>' + gaps.map(function (row) { return '<li>' + escapeHtml(row.label) + ": " + escapeHtml(row.level.toLowerCase()) + '</li>'; }).join("") + '</ul>'
+      : '<p>Every dimension has rule-backed evidence.</p>') +
+    drawerSection("Candidate videos", videos ? '<ol>' + videos + '</ol>' : "") +
+    drawerSection("Decisions", decisionHistory(item) || '<p class="muted">No decisions yet.</p>') +
+    drawerSection("Provenance", factTable([
+      ["Generator", provenance.generator],
+      ["Packet", provenance.packet_sha256],
+      ["Created", provenance.created_at],
+      ["Measured via", item.measurement_source],
+      ["Measurement note", item.measurement_error],
+      ["Inputs", (provenance.source_artifacts || []).map(function (a) { return a.role + " " + a.sha256; }).join("; ")]
+    ]));
+}
+
+async function openEvidenceDrawer(opportunityId, trigger) {
+  const item = (latestInbox.items || []).find(function (entry) { return entry.opportunity_id === opportunityId; });
+  if (!item) return;
+  evidenceDrawerReturnFocus = trigger || null;
+  document.getElementById("evidenceDrawerKicker").textContent = (item.source_label || "EVIDENCE") + " · " + String(item.status || "").replace(/_/g, " ");
+  document.getElementById("evidenceDrawerTitle").textContent = item.title || item.opportunity_id;
+  evidenceDrawerBody.innerHTML = evidenceDrawerHtml(item);
+  evidenceDrawer.classList.add("open");
+  evidenceDrawer.inert = false;
+  evidenceScrim.classList.add("open");
+  document.getElementById("closeEvidenceDrawer").focus();
+  const chart = evidenceDrawerBody.querySelector("[data-trajectory-for]");
+  if (chart && item.video_id) {
+    try {
+      const data = await api("/api/opportunity/viral/snapshots?video_id=" + encodeURIComponent(item.video_id));
+      renderTrajectory(chart, data.snapshots || []);
+      evidenceDrawerBody.querySelector("[data-trajectory-table]").innerHTML =
+        snapshotTable(data.snapshots || [], (item.viral || {}).intervals || []);
+    } catch (error) {
+      chart.innerHTML = '<p class="muted">' + escapeHtml("Snapshots could not be loaded: " + error.message) + '</p>';
+    }
+  }
+}
+
+function closeEvidenceDrawer() {
+  if (!evidenceDrawer.classList.contains("open")) return;
+  evidenceDrawer.classList.remove("open");
+  evidenceDrawer.inert = true;
+  evidenceScrim.classList.remove("open");
+  if (evidenceDrawerReturnFocus && document.body.contains(evidenceDrawerReturnFocus)) evidenceDrawerReturnFocus.focus();
+}
+
+document.getElementById("closeEvidenceDrawer").addEventListener("click", closeEvidenceDrawer);
+evidenceScrim.addEventListener("click", closeEvidenceDrawer);
+// Escape closes the topmost overlay: evidence drawer, live job, then the
+// phone sidebar.
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Escape") return;
+  if (evidenceDrawer.classList.contains("open")) closeEvidenceDrawer();
+  else if (jobDrawer.classList.contains("open")) closeJob();
+  else if (sidebar.classList.contains("open")) closeSidebar();
+});
+
+const OPPORTUNITY_COUNTS = [
+  ["NEEDS_REVIEW", "Need review"],
+  ["WATCHING", "Watching"],
+  ["APPROVED", "Approved"],
+  ["SAVED", "Saved"]
+];
+
+function renderOpportunityCounts(counts) {
+  const strip = document.getElementById("opportunityCounts");
+  if (!strip) return;
+  const waiting = counts.NEEDS_REVIEW || 0;
+  strip.innerHTML = OPPORTUNITY_COUNTS.map(function (entry) {
+    return '<button type="button" class="opp-count' + (entry[0] === inboxTab ? " active" : "") +
+      '" data-inbox-tab="' + entry[0] + '"><strong>' + (counts[entry[0]] || 0) + '</strong><span>' +
+      escapeHtml(entry[1]) + '</span></button>';
+  }).join("") +
+    (waiting
+      ? '<a href="/opportunity/review" class="button-link primary-cta opp-review-all" data-route="/opportunity/review">Review ' +
+        waiting + (waiting === 1 ? " idea" : " ideas") + ' one by one →</a>'
       : "");
 }
 
-function viralDetails(viral) {
-  if (!viral) return "";
-  const rows = [
-    ["Age", viral.age_hours == null ? "—" : (viral.age_hours / 24).toFixed(1) + " days"],
-    ["Views", formatCount(viral.views)],
-    ["Channel normal (median)", formatCount(viral.baseline_median_views) + " from " + (viral.baseline_sample_size || 0) + " mature uploads"],
-    ["Channel outlier", viral.lifetime_ratio == null ? "—" : viral.lifetime_ratio + "× (lifetime vs lifetime)"],
-    ["Views/hour vs normal", viral.vph_ratio == null ? "—" : viral.vph_ratio + "× (" + formatRate(viral.lifetime_vph) + " VPH)"],
-    ["Views per follower", viral.views_per_follower == null ? "hidden or unknown" : String(viral.views_per_follower)],
-    ["Historical demand", (viral.historical_alignment || "").replace(/_/g, " ")],
-    ["Theme", viral.cluster
-      ? viral.cluster.label + " · " + String(viral.cluster.kind || "").replace(/_/g, " ").toLowerCase() +
-        " · " + viral.cluster.independent_channel_count + " independent channel(s)"
-      : "no shared theme yet"]
-  ];
-  const intervals = (viral.intervals || []).map(function (interval) {
-    return "<li>" + escapeHtml(String(interval.from).slice(5, 16).replace("T", " ") + " → " +
-      String(interval.to).slice(5, 16).replace("T", " ") + ": " + formatRate(interval.vph) + " VPH") + "</li>";
-  }).join("");
-  return '<dl class="viral-facts">' + rows.map(function (row) {
-      return '<dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(row[1]) + '</dd>';
-    }).join("") + '</dl>' +
-    (intervals
-      ? '<p class="muted">Snapshot velocity</p><ul class="inbox-evidence">' + intervals + '</ul>'
-      : '<p class="muted">' + (viral.trajectory_history_available ? "" : "No earlier snapshots yet: past views are never reconstructed, only measured from now on.") + '</p>') +
-    '<p class="muted">CTR, retention and viewed-vs-swiped are not publicly observable and are never estimated.</p>';
+function hoursAgoLabel(iso) {
+  const time = Date.parse(iso || "");
+  if (!Number.isFinite(time)) return "";
+  const hours = (Date.now() - time) / 3600000;
+  return hours < 48 ? Math.max(0, Math.round(hours)) + "h ago" : Math.round(hours / 24) + "d ago";
 }
 
-function inboxDetails(item) {
-  const facts = [];
-  if (item.measurement_source) facts.push("measured via " + item.measurement_source);
-  if (item.measurement_error) facts.push("API unavailable: " + item.measurement_error);
-  if (item.failed_searches) facts.push(item.failed_searches + " of " + item.search_count + " searches failed");
-  if (item.excluded_result_count) facts.push(item.excluded_result_count + " result(s) excluded by scope rules");
-  const videos = (item.videos || []).map(function (video) {
-    return '<li><a href="' + escapeHtml(video.youtube_url || "#") + '" target="_blank" rel="noopener noreferrer">' +
-      escapeHtml(video.title || video.video_id) + '</a> <span class="muted">· ' +
-      escapeHtml(video.channel_title || "") + ' · ' + escapeHtml(formatCount(video.views)) + ' views' +
-      (video.age_days == null ? "" : " · " + escapeHtml(String(video.age_days)) + " days old") + '</span></li>';
-  }).join("");
-  return '<details class="inbox-details"><summary>Evidence and videos</summary>' +
-    (item.summary ? '<p class="muted">' + escapeHtml(item.summary) + '</p>' : "") +
-    evidenceMatrix(item) +
-    viralDetails(item.viral) +
-    decisionHistory(item) +
-    (videos ? '<ol class="topic-videos">' + videos + '</ol>' : "") +
-    (facts.length ? '<p class="muted">' + escapeHtml(facts.join(" · ")) + '</p>' : "") +
-    ((item.notes || []).length ? '<p class="muted">Your note: ' + escapeHtml(item.notes[0]) + '</p>' : "") +
-    (item.route_reason ? '<p class="muted">Scope: ' + escapeHtml(item.route_reason) + '</p>' : "") +
-    '</details>';
+function inboxCardKicker(item) {
+  const viral = item.viral;
+  if (viral) {
+    if (viral.breadth === "REPLICATED") return "Replicated breakout";
+    return String(viral.strength || "Radar find").replace(/_/g, " ").toLowerCase();
+  }
+  return item.source_label || "Opportunity";
+}
+
+function inboxCardMeta(item) {
+  const parts = [];
+  const viral = item.viral;
+  if (viral) {
+    if (viral.cluster && viral.cluster.independent_channel_count) {
+      parts.push(viral.cluster.independent_channel_count + " independent channel" + (viral.cluster.independent_channel_count === 1 ? "" : "s"));
+    }
+    if (item.created_at) parts.push("detected " + hoursAgoLabel(item.created_at));
+    if (viral.trajectory && viral.trajectory !== "INSUFFICIENT_SNAPSHOTS") {
+      parts.push("direction " + viral.trajectory.replace(/_/g, " ").toLowerCase());
+    }
+  } else {
+    if (item.video_count) parts.push(item.video_count + " video" + (item.video_count === 1 ? "" : "s"));
+    if (item.created_at) parts.push("added " + hoursAgoLabel(item.created_at));
+  }
+  return parts.join(" · ");
+}
+
+function inboxCardMetrics(item) {
+  const cells = [];
+  const viral = item.viral;
+  if (viral && viral.lifetime_ratio != null) {
+    cells.push(["Outlier", viral.lifetime_ratio + "×", "running"]);
+  }
+  (item.matrix || []).forEach(function (row) {
+    const level = row.level || "UNASSESSED";
+    const open = level === "UNASSESSED" || level === "HYPOTHESIS";
+    const tone = level === "STRONG" || level === "EVIDENCED" ? "complete" : level === "MODERATE" ? "running" : level === "WEAK" ? "human" : "ready";
+    cells.push([row.label, open ? "open" : level.toLowerCase(), tone, (row.rule_id || "") + " " + (row.basis || []).join("; ")]);
+  });
+  if (!cells.length) return "";
+  return '<dl class="opp-metrics">' + cells.map(function (cell) {
+    return '<div><dt>' + escapeHtml(cell[0]) + '</dt><dd><span class="status-badge status-' + cell[2] + '"' +
+      (cell[3] ? ' title="' + escapeHtml(cell[3].trim() || "Not yet evidenced") + '"' : "") + '>' +
+      escapeHtml(cell[1]) + '</span></dd></div>';
+  }).join("") + '</dl>';
+}
+
+function inboxCard(item) {
+  const tone = item.is_active ? "complete" : item.viral ? "running" : item.status === "NEEDS_REVIEW" ? "human" : "ready";
+  return '<article class="inbox-item opp-card tone-' + tone + (item.is_active ? " active" : "") + '">' +
+    '<div class="opp-card-head">' +
+      '<p class="attention-kicker">' + escapeHtml(inboxCardKicker(item)) + '</p>' +
+      '<span class="source-chip">' + escapeHtml(item.source_label || "") + '</span>' +
+    '</div>' +
+    '<h3 class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</h3>' +
+    '<p class="opp-meta muted">' + escapeHtml(inboxCardMeta(item)) + '</p>' +
+    '<div class="inbox-item-chips">' +
+      (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
+      routeChip(item) +
+    '</div>' +
+    inboxCardMetrics(item) +
+    (item.evidence_moved ? '<p class="evidence-moved">Evidence has moved since your decision — the decision stands; review it if you like.</p>' : "") +
+    (item.status_reason ? '<p class="muted opp-reason">' + escapeHtml(item.status_reason) + '</p>' : "") +
+    '<div class="opp-actions">' +
+      '<button type="button" class="ghost compact inbox-open-evidence" data-inbox-evidence="' +
+        escapeHtml(item.opportunity_id) + '">Open evidence</button>' +
+      (item.status === "NEEDS_REVIEW"
+        ? '<a href="/opportunity/review#' +
+          escapeHtml(encodeURIComponent(item.opportunity_id)) + '" class="button-link compact" data-route="/opportunity/review" data-subroute="' +
+          escapeHtml(encodeURIComponent(item.opportunity_id)) + '">Review opportunity →</a>'
+        : "") +
+      '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
+    '</div>' +
+  '</article>';
 }
 
 function renderInbox(inbox) {
+  renderInboxList(inbox);
+  if (window.OpportunityReview) window.OpportunityReview.render();
+}
+
+function renderInboxList(inbox) {
   if (!opportunityInbox) return;
   latestInbox = inbox || {};
   const counts = latestInbox.counts || {};
@@ -1113,6 +1661,7 @@ function renderInbox(inbox) {
       '" aria-selected="' + (tab[0] === inboxTab) + '" data-inbox-tab="' + tab[0] + '">' +
       escapeHtml(tab[1]) + ' <span class="inbox-count">' + (counts[tab[0]] || 0) + '</span></button>';
   }).join("");
+  renderOpportunityCounts(counts);
   const items = (latestInbox.items || []).filter(function (item) { return item.status === inboxTab; });
   let html = latestInbox.historical_error
     ? '<p class="muted">' + escapeHtml(latestInbox.historical_error) + '</p>'
@@ -1121,23 +1670,7 @@ function renderInbox(inbox) {
     opportunityInbox.innerHTML = html + '<p class="empty-state">' + escapeHtml(INBOX_EMPTY[inboxTab]) + '</p>';
     return;
   }
-  html += items.map(function (item) {
-    const evidence = (item.evidence || []).map(function (chip) {
-      return evidenceChip(chip.label, chip);
-    }).join("");
-    return '<article class="inbox-item' + (item.is_active ? " active" : "") + '">' +
-      '<div class="inbox-item-main">' +
-        '<div class="inbox-item-chips"><span class="source-chip">' + escapeHtml(item.source_label || "") + '</span>' +
-          (item.is_active ? '<span class="status-chip success">ACTIVE STUDY SET</span>' : "") +
-          routeChip(item) + viralChips(item.viral) + (item.viral ? "" : evidence) + '</div>' +
-        '<strong class="inbox-item-title">' + escapeHtml(item.title || item.opportunity_id) + '</strong>' +
-        (item.evidence_moved ? '<span class="evidence-moved">Evidence has moved since your decision — the decision stands; review it if you like.</span>' : "") +
-        (item.status_reason ? '<span class="muted">' + escapeHtml(item.status_reason) + '</span>' : "") +
-        inboxDetails(item) +
-      '</div>' +
-      '<div class="submitted-video-actions">' + inboxActionButtons(item) + '</div>' +
-    '</article>';
-  }).join("");
+  html += items.map(inboxCard).join("");
   opportunityInbox.innerHTML = html;
 }
 
@@ -1171,6 +1704,15 @@ function renderViralEntry(data) {
       ((last.errors || []).length ? " · " + last.errors[0] : "");
   }
   if (radar.throttled_until) status += " · YouTube search backing off until " + String(radar.throttled_until).slice(0, 16).replace("T", " ");
+  const schedule = radar.schedule;
+  if (schedule && schedule.checked_at) {
+    status += " · Automatic: last check " + String(schedule.checked_at).slice(5, 16).replace("T", " ") +
+      " (" + String(schedule.action || "").replace(/_/g, " ").toLowerCase() + ")" +
+      (schedule.next_snapshot_due ? ", next snapshot " + String(schedule.next_snapshot_due).slice(5, 16).replace("T", " ") : "") +
+      (schedule.next_discovery_due ? ", next discovery " + String(schedule.next_discovery_due).slice(5, 16).replace("T", " ") : "") + " UTC";
+  } else {
+    status += " · Not automatic yet: install Opportunity Automation in Tools to run it every few hours.";
+  }
   viralEntryStatus.textContent = status;
   runViralRadar.disabled = !action.enabled;
   runViralRadar.title = action.reason || "";
@@ -1192,8 +1734,10 @@ async function submitInboxAction(opportunityId, action, note) {
       REWORK: "Reworked with fresh evidence."
     };
     showToast(messages[action] || "Updated.", false);
+    return true;
   } catch (error) {
     showToast(error.message, true);
+    return false;
   }
 }
 
@@ -1309,6 +1853,65 @@ async function stopAnalyzingVideo() {
   }
 }
 
+function inboxItemById(opportunityId) {
+  return (latestInbox.items || []).find(function (entry) { return entry.opportunity_id === opportunityId; }) || null;
+}
+
+// One place that turns an inbox decision into the right API call, shared by
+// the inbox cards, the Opportunity Review workspace and the Viral Radar page.
+function performInboxDecision(item, action, note) {
+  const excluded = item.route === "EXCLUDED";
+  if (action === "APPROVE") {
+    if (item.source_type === "HUMAN_TOPIC") return analyzeExploredTopic(item.topic_key, excluded);
+    if (item.source_type === "VIRAL_RADAR") {
+      return analyzeHumanSource(
+        "/api/opportunity/viral/analyze",
+        { video_id: item.video_id },
+        excluded,
+        "This breakout is now the study set. Analysis continues automatically."
+      );
+    }
+    return analyzeSubmittedVideo(item.video_id, excluded);
+  }
+  if (action === "APPROVE_THEME") {
+    return analyzeTheme(((item.viral || {}).cluster || {}).cluster_id || "");
+  }
+  if (action === "STOP") return stopAnalyzingVideo();
+  if (action === "REVIEW_BELOW") {
+    navigate("/opportunity", "historical");
+    return Promise.resolve();
+  }
+  return submitInboxAction(item.opportunity_id, action, note);
+}
+
+function analyzeTheme(clusterId) {
+  return analyzeHumanSource(
+    "/api/opportunity/viral/analyze",
+    { cluster_id: clusterId },
+    false,
+    "This theme's videos are now the study set. Analysis continues automatically."
+  );
+}
+
+window.YP = {
+  api: function (url, options) { return api(url, options); },
+  escapeHtml: escapeHtml,
+  formatCount: formatCount,
+  formatRate: formatRate,
+  showToast: showToast,
+  navigate: navigate,
+  inbox: function () { return latestInbox; },
+  inboxItem: inboxItemById,
+  decide: performInboxDecision,
+  analyzeTheme: analyzeTheme,
+  openEvidence: function (opportunityId, trigger) { return openEvidenceDrawer(opportunityId, trigger); },
+  routeLabel: function (route) { return ROUTE_LABELS[route] || route; },
+  status: function () { return latestStatus; },
+  refresh: function () { return loadStatus(); },
+  plain: plainSentence
+};
+loadPlainLanguage();
+
 if (opportunityInbox) {
   exploreTopicForm.addEventListener("submit", exploreTopic);
   analyzeVideoForm.addEventListener("submit", submitVideoForAnalysis);
@@ -1318,31 +1921,19 @@ if (opportunityInbox) {
   runViralRadar.addEventListener("click", function () {
     runAction("viral_radar");
   });
+  document.getElementById("opportunityCounts").addEventListener("click", function (event) {
+    const tab = event.target.closest("[data-inbox-tab]");
+    if (tab) selectInboxTab(tab.dataset.inboxTab);
+  });
   opportunityInboxTabs.addEventListener("click", function (event) {
     const tab = event.target.closest("[data-inbox-tab]");
-    if (!tab) return;
-    inboxTab = tab.dataset.inboxTab;
-    try {
-      window.localStorage.setItem("opportunityInboxTab", inboxTab);
-    } catch (_) {}
-    renderInbox(latestInbox);
+    if (tab) selectInboxTab(tab.dataset.inboxTab);
   });
   opportunityInbox.addEventListener("click", function (event) {
     const analyzeButton = event.target.closest("[data-inbox-analyze]");
     if (analyzeButton) {
-      const excluded = Boolean(analyzeButton.dataset.inboxExcluded);
-      if (analyzeButton.dataset.inboxKind === "topic") {
-        analyzeExploredTopic(analyzeButton.dataset.inboxAnalyze, excluded);
-      } else if (analyzeButton.dataset.inboxKind === "viral") {
-        analyzeHumanSource(
-          "/api/opportunity/viral/analyze",
-          { video_id: analyzeButton.dataset.inboxAnalyze },
-          excluded,
-          "This breakout is now the study set. Analysis continues automatically."
-        );
-      } else {
-        analyzeSubmittedVideo(analyzeButton.dataset.inboxAnalyze, excluded);
-      }
+      const item = inboxItemById(analyzeButton.dataset.inboxId);
+      if (item) performInboxDecision(item, "APPROVE", "");
       return;
     }
     if (event.target.closest("[data-video-stop]")) {
@@ -1350,17 +1941,17 @@ if (opportunityInbox) {
       return;
     }
     if (event.target.closest("[data-inbox-review]")) {
-      document.getElementById("historicalReviewPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      navigate("/opportunity", "historical");
+      return;
+    }
+    const evidenceButton = event.target.closest("[data-inbox-evidence]");
+    if (evidenceButton) {
+      openEvidenceDrawer(evidenceButton.dataset.inboxEvidence, evidenceButton);
       return;
     }
     const themeButton = event.target.closest("[data-inbox-theme]");
     if (themeButton) {
-      analyzeHumanSource(
-        "/api/opportunity/viral/analyze",
-        { cluster_id: themeButton.dataset.inboxTheme },
-        false,
-        "This theme's videos are now the study set. Analysis continues automatically."
-      );
+      analyzeTheme(themeButton.dataset.inboxTheme);
       return;
     }
     const actionButton = event.target.closest("[data-inbox-action]");
@@ -1386,7 +1977,7 @@ function activeHumanVideoBanner(gate) {
       ? " — " + escapeHtml(String(video.video_count || 0)) + " video(s)"
       : (video.channel_title ? " — " + escapeHtml(video.channel_title) : "")) +
     '</span><span class="muted">Your idea is the active study set. Approving a historical topic below replaces it.</span>' +
-    '</div><button data-route="/analysis">Continue to Analyze →</button></div>';
+    '</div><a href="/analysis" class="button-link" data-route="/analysis">Continue to Analyze →</a></div>';
 }
 
 function renderOpportunityGate(gate) {
@@ -1412,7 +2003,7 @@ function renderOpportunityGate(gate) {
       : "Keep or replace the examples, then make the topic decision.") +
     '</span></div>' +
     (gate.ready_for_experiment_02
-      ? '<button data-route="/analysis">Continue to Analyze →</button>'
+      ? '<a href="/analysis" class="button-link" data-route="/analysis">Continue to Analyze →</a>'
       : '') +
     '</div>' +
     '<div class="gate-summary"><div class="gate-summary-copy">' +
@@ -2270,7 +2861,7 @@ async function submitConceptDecision(decision) {
     );
     await loadStatus();
     if (payload.complete) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: window.YPA11y && window.YPA11y.reducedMotion() ? "auto" : "smooth" });
     }
   } catch (error) {
     showToast(error.message, true);
@@ -3039,7 +3630,7 @@ function renderResearchReview(snapshot, force) {
     '<div class="concept-detail-card"><h4>CLAIM</h4><h3>' +
       escapeHtml(claim.statement || claim.claim_id) + '</h3>' +
       '<div class="concept-meta"><span>' + escapeHtml(humanizeToken(claim.role)) +
-      '</span><span>' + escapeHtml(humanizeToken(coverage.state)) +
+      '</span><span>' + escapeHtml(plainSentence(coverage.state)) +
       '</span><span>Concept ' + escapeHtml(claim.concept_id || "") +
       '</span></div></div>' +
     '<div class="concept-detail-card"><h4>RESEARCH QUESTIONS</h4><p>' +
@@ -5012,9 +5603,10 @@ async function registerManagedVisualAsset() {
 }
 
 function visualRoughCutItems(snapshot) {
-  return (snapshot && snapshot.items || []).filter(function (item) {
-    return item && item.review_current !== false;
-  });
+  // A rough cut with no review yet has review_current false and is exactly
+  // what needs deciding; the server already drops stale reviews (decision
+  // null), so every item is listed (UI-19).
+  return (snapshot && snapshot.items || []).filter(Boolean);
 }
 
 function renderVisualRoughCutReview(snapshot) {
@@ -5890,6 +6482,7 @@ function renderThumbnailReview(snapshot, force) {
 
   thumbnailDetail.innerHTML =
     visual +
+    thumbnailCandidatesHtml(item) +
     '<div class="concept-detail-card"><h4>THUMBNAIL CONCEPT · ' + escapeHtml(humanizeToken(item.format || "")) + '</h4>' +
       '<h3>' + escapeHtml(item.text_overlay || "(no text)") + '</h3>' +
       '<p><strong>Hero subject:</strong> ' + escapeHtml(item.hero_subject || "") +
@@ -5955,6 +6548,66 @@ function renderThumbnailReview(snapshot, force) {
   thumbnailAccept.disabled = item.render_status !== "RENDERED" ||
     Boolean(item.stale_reasons && item.stale_reasons.length);
   thumbnailEditing = false;
+}
+
+// Candidate subject images (D-135): generate three with the configured
+// provider (an explicit maximum cost authorizes the spend), or import images
+// made elsewhere, then pick one as the subject image.
+function thumbnailCandidatesHtml(item) {
+  const view = item.image_candidates || {};
+  const provider = latestThumbnailSnapshot.image_provider || {};
+  const tiers = latestThumbnailSnapshot.allowed_source_tiers || [];
+  const rows = (view.candidates || []).filter(function (c) { return c && c.current; });
+  const grid = rows.length
+    ? '<div class="thumbnail-candidates">' + rows.map(function (c) {
+        return '<figure class="thumbnail-candidate' + (c.chosen ? " chosen" : "") + '">' +
+          '<img src="' + escapeHtml(c.image_url || "") + '" alt="Candidate image ' + escapeHtml(c.candidate_id || "") + '" loading="lazy">' +
+          '<figcaption>' + escapeHtml(c.provider || "") + " · " + escapeHtml(humanizeToken(c.source_tier || "")) +
+          (typeof c.cost_usd === "number" ? " · $" + escapeHtml(c.cost_usd.toFixed(2)) : "") +
+          (c.chosen
+            ? ' <strong>In use</strong>'
+            : ' <button type="button" class="ghost compact" data-thumb-candidate="' + escapeHtml(c.candidate_id || "") + '">Use this image</button>') +
+          '</figcaption></figure>';
+      }).join("") + '</div>'
+    : '<p>No candidate images yet.</p>';
+  const generate = provider.ready
+    ? '<form class="thumbnail-generate" data-thumb-generate>' +
+        '<label>Maximum cost (US$) <input type="number" min="0" step="0.01" name="max_cost_usd" required' +
+        (typeof provider.price_per_image_usd === "number" ? ' placeholder="estimate ' + escapeHtml((provider.price_per_image_usd * 3).toFixed(2)) + '"' : "") +
+        '></label> <button type="submit">Generate 3 candidates</button>' +
+        '<p class="muted">Uses ' + escapeHtml(provider.label || provider.active_provider || "") + " (" + escapeHtml(provider.model || "") + "). This is a paid call.</p></form>"
+    : '<p class="muted">Generation is off: ' + escapeHtml((provider.problems || []).join(" ")) + "</p>";
+  const importForm =
+    '<details><summary>Import an image made elsewhere</summary><form class="thumbnail-import" data-thumb-import>' +
+      '<label>Image file path <input name="path" required placeholder="C:\\images\\subject.png"></label>' +
+      '<label>Made with <input name="provider" placeholder="tool or site"></label>' +
+      '<label>Source tier <select name="source_tier" required><option value="">Choose…</option>' +
+        tiers.map(function (tier) { return '<option value="' + escapeHtml(tier) + '">' + escapeHtml(humanizeToken(tier)) + "</option>"; }).join("") +
+      '</select></label>' +
+      '<label>Licence <input name="license" placeholder="licence or terms"></label>' +
+      '<label>Cost (US$) <input type="number" min="0" step="0.01" name="cost_usd" value="0"></label>' +
+      '<button type="submit">Import</button></form></details>';
+  return '<div class="concept-detail-card"><h4>CANDIDATE IMAGES</h4>' + grid + generate + importForm +
+    (view.prompt ? '<details><summary>Image prompt</summary><p>' + escapeHtml(view.prompt) + "</p></details>" : "") +
+    (typeof view.video_spend_usd === "number" ? '<p class="muted">Spent on generated images for this video: $' + escapeHtml(view.video_spend_usd.toFixed(2)) + "</p>" : "") +
+    "</div>";
+}
+
+async function thumbnailImageAction(body, message) {
+  const current = currentThumbnailItem();
+  if (!current) return;
+  try {
+    const payload = await api("/api/thumbnail-images", {
+      method: "POST",
+      body: JSON.stringify(Object.assign({ render_id: current.item.render_id }, body))
+    });
+    thumbnailEditing = false;
+    showToast(message, false);
+    await loadStatus();
+    renderThumbnailReview(payload, true);
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 function moveThumbnailCursor(delta) {
@@ -6504,13 +7157,61 @@ function renderTools(data) {
   renderStages(data.stages || []);
 }
 
+// Live run banner (D-155): the current step and a ticking clock on every
+// page, so a long model call never looks like a frozen screen.
+const RUN_QUIET_AFTER_MS = 120000;
+let runBannerJob = null;
+let runBannerTimer = null;
+
+function paintRunBanner() {
+  const job = runBannerJob;
+  if (!job) return;
+  const now = Date.now();
+  const started = Date.parse(job.started_at || "");
+  const elapsed = formatElapsed(now - (Number.isFinite(started) ? started : now));
+  const progress = job.progress || {};
+  const step = progress.current_step;
+  const name = job.label || job.action_id || "Job";
+  const stopping = job.status === "STOPPING";
+  runBannerTitle.textContent =
+    (stopping ? "Stopping: " : "Working: ") +
+    (step ? "step " + (progress.step_number || 1) + " — " + step : name) + " · " + elapsed;
+  const lastOutput = Date.parse(progress.last_output_at || "");
+  const quietFor = Number.isFinite(lastOutput) ? now - lastOutput : 0;
+  const quiet = quietFor > RUN_QUIET_AFTER_MS;
+  runBanner.classList.toggle("quiet", quiet);
+  runBannerDetail.textContent = quiet
+    ? "Still working: no new output for " + formatElapsed(quietFor) +
+      ". AI and web calls can take up to 15 minutes; the log shows the last line."
+    : (step ? name + ". " : "") + (progress.last_line ? "Latest: " + progress.last_line : "Starting…");
+  jobSummaryStatus.textContent = (stopping ? "STOPPING" : "RUNNING") + " · " + elapsed;
+  jobSummaryLabel.textContent = step || name;
+}
+
+function updateRunBanner(job) {
+  const running = Boolean(job && (job.status === "RUNNING" || job.status === "STOPPING"));
+  runBanner.hidden = !running;
+  runBannerJob = running ? job : null;
+  if (!running) {
+    if (runBannerTimer) {
+      clearInterval(runBannerTimer);
+      runBannerTimer = null;
+    }
+    return;
+  }
+  paintRunBanner();
+  if (!runBannerTimer) runBannerTimer = setInterval(paintRunBanner, 1000);
+}
+
 function renderJob(job, log) {
   const hasJob = job && Object.keys(job).length;
   noteJobLogActivity(job, log);
   updateRunningActivity(job);
   if (!hasJob) {
     updateRunningActivity(null);
+    updateRunBanner(null);
     jobSummaryButton.className = "job-summary neutral";
+    jobSummaryButton.setAttribute("aria-label", "Live job: idle");
     jobSummaryStatus.textContent = "IDLE";
     jobSummaryLabel.textContent = "No job running";
     jobTitle.textContent = "No job running";
@@ -6531,8 +7232,13 @@ function renderJob(job, log) {
   else if (running) statusClass = "running";
 
   jobSummaryButton.className = "job-summary " + statusClass;
+  jobSummaryButton.setAttribute(
+    "aria-label",
+    "Live job: " + String(job.status || "unknown").toLowerCase() + ", " + (job.label || job.action_id || "job")
+  );
   jobSummaryStatus.textContent = job.status || "UNKNOWN";
   jobSummaryLabel.textContent = job.label || job.action_id || "Job";
+  updateRunBanner(job);
 
   jobTitle.textContent = job.label || job.action_id || "Job";
   let meta =
@@ -6557,20 +7263,51 @@ function renderAll(data) {
   latestStatus = data;
   renderSidebarStatus(data.workflow || {});
   renderHomeWorkflow(data);
+  // A failure in one page module must not stop the classic panels and the
+  // live job from updating (UI-19).
+  isolated("CommandCenter", function (m) { m.render(data); });
   renderProgress(data);
   renderHomeOpportunity(data.opportunity_gate || {});
   renderHomeActivity(data.job || {}, data.opportunity_research || {});
   renderOpportunityGate(data.opportunity_gate || {});
   renderInbox(data.opportunity_inbox || {});
+  isolated("RadarPage", function (m) { m.render(data); });
+  isolated("ProductionWorkspace", function (m) { m.refresh(data); });
+  isolated("GateReviews", function (m) { m.render(); });
+  isolated("Packaging", function (m) { m.render(); });
+  isolated("Produce", function (m) { m.render(); });
+  isolated("Tools", function (m) { m.render(); });
   renderHistoricalEntry(data);
   renderViralEntry(data);
   renderAnalysis(data);
   renderTools(data);
   renderJob(data.job || {});
-  renderRoute({ scroll: false });
+  renderRoute({ scroll: false, poll: true });
 }
 
+const moduleFailures = {};
+
+function isolated(name, call) {
+  const module = window[name];
+  if (!module) return;
+  try {
+    call(module);
+    moduleFailures[name] = false;
+  } catch (error) {
+    console.error(name + " failed to render", error);
+    if (!moduleFailures[name]) showToast(name + " could not refresh: " + error.message, true);
+    moduleFailures[name] = true;
+  }
+}
+
+// One status request at a time (audit 2026-10-04): a slow server must not
+// get a pile of overlapping polls, each running the same snapshots.
+let statusInFlight = false;
+let jobInFlight = false;
+
 async function loadStatus() {
+  if (statusInFlight) return;
+  statusInFlight = true;
   try {
     const data = await api("/api/status");
     csrfToken = String(data.csrf_token || "");
@@ -6580,10 +7317,14 @@ async function loadStatus() {
     }
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    statusInFlight = false;
   }
 }
 
 async function loadJob() {
+  if (jobInFlight) return;
+  jobInFlight = true;
   try {
     const data = await api("/api/job");
     renderJob(data.job, data.log);
@@ -6591,10 +7332,13 @@ async function loadJob() {
       (data.job.status === "RUNNING" || data.job.status === "STOPPING");
     if (!running) {
       stopJobPolling();
+      jobInFlight = false;
       await loadStatus();
     }
   } catch (error) {
     showToast(error.message, true);
+  } finally {
+    jobInFlight = false;
   }
 }
 
@@ -6674,8 +7418,11 @@ function stopJobPolling() {
 document.addEventListener("click", function (event) {
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget) {
+    // Links keep their browser behaviour: Ctrl/Cmd/Shift-click open a new
+    // tab or window instead of navigating in place.
+    if (routeTarget.tagName === "A" && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
     event.preventDefault();
-    navigate(routeTarget.dataset.route);
+    navigate(routeTarget.dataset.route, routeTarget.dataset.subroute || "");
     return;
   }
 
@@ -6751,14 +7498,20 @@ document.addEventListener("click", function (event) {
 });
 
 window.addEventListener("popstate", function () {
-  renderRoute({ scroll: true });
+  const subroute = currentSubroute();
+  renderRoute({ scroll: !subroute });
+  if (subroute) applySubroute(normalizedPath(), subroute);
 });
 refreshStatus.addEventListener("click", loadStatus);
 jobSummaryButton.addEventListener("click", openJobDrawer);
 closeJobDrawer.addEventListener("click", closeJob);
 drawerScrim.addEventListener("click", closeJob);
 stopJob.addEventListener("click", stopCurrentJob);
-mobileMenu.addEventListener("click", openSidebar);
+mobileMenu.addEventListener("click", function () {
+  if (sidebar.classList.contains("open")) closeSidebar();
+  else openSidebar();
+});
+syncSidebar();
 sidebarScrim.addEventListener("click", closeSidebar);
 visionObservation.addEventListener("input", function () {
   visionEditing = true;
@@ -6913,7 +7666,10 @@ async function editScriptTarget(targetId) {
   renderScriptSectionReview(latestScriptSectionSnapshot || {});
   const manualEditor = document.getElementById("scriptSectionManualEditor");
   if (manualEditor) manualEditor.open = true;
-  scriptSectionManualText.scrollIntoView({ behavior: "smooth", block: "center" });
+  scriptSectionManualText.scrollIntoView({
+    behavior: window.YPA11y && window.YPA11y.reducedMotion() ? "auto" : "smooth",
+    block: "center"
+  });
   scriptSectionManualText.focus();
 }
 
@@ -7246,6 +8002,34 @@ thumbnailCriteria.addEventListener("change", function () {
   thumbnailEditing = true;
 });
 thumbnailSubjectForm.addEventListener("submit", saveThumbnailSubject);
+thumbnailDetail.addEventListener("input", function () {
+  thumbnailEditing = true;
+});
+thumbnailDetail.addEventListener("click", function (event) {
+  const button = event.target.closest("[data-thumb-candidate]");
+  if (!button) return;
+  thumbnailImageAction({ action: "CHOOSE", candidate_id: button.dataset.thumbCandidate },
+    "Candidate set as the subject image. Render to update the thumbnail.");
+});
+thumbnailDetail.addEventListener("submit", function (event) {
+  const form = event.target;
+  if (form.matches("[data-thumb-generate]")) {
+    event.preventDefault();
+    const max = form.elements.max_cost_usd.value;
+    if (!window.confirm("Generate 3 candidate images? This is a paid provider call, up to $" + max + ".")) return;
+    thumbnailImageAction({ action: "GENERATE", max_cost_usd: Number(max) }, "Candidate images generated.");
+  } else if (form.matches("[data-thumb-import]")) {
+    event.preventDefault();
+    thumbnailImageAction({
+      action: "IMPORT",
+      path: form.elements.path.value,
+      provider: form.elements.provider.value,
+      source_tier: form.elements.source_tier.value,
+      license: form.elements.license.value,
+      cost_usd: Number(form.elements.cost_usd.value || 0)
+    }, "Image imported as a candidate.");
+  }
+});
 thumbnailRender.addEventListener("click", function () {
   runAction("thumbnail_render");
 });
@@ -7304,5 +8088,10 @@ finalPackagingAccept.addEventListener("click", function () {
 });
 
 renderRoute({ scroll: true });
+// Deep links (/opportunity#watching, /productions#review) apply on first load
+// too; the other pages read their hash when they open (UI-19).
+if (currentSubroute() && (normalizedPath() === "/opportunity" || normalizedPath() === "/productions")) {
+  applySubroute(normalizedPath(), currentSubroute());
+}
 loadStatus();
 setInterval(loadStatus, 5000);

@@ -1,0 +1,9 @@
+{
+  "editor_name": "Tesseract",
+  "interchange_formats": ["otio", "fcp7_xml"],
+  "native_project_format_known": false,
+  "round_trip_verified": false,
+  "contract_note": "Tesseract's own project format has not been confirmed. Projects are exported as OpenTimelineIO (.otio) and Final Cut Pro 7 XML (.xml), the open timeline formats most editors import. Set round_trip_verified to true once one project has gone into Tesseract and come back.",
+  "accepted_edit_extensions": [".mp4", ".mov"],
+  "copy_reference_render": true
+}

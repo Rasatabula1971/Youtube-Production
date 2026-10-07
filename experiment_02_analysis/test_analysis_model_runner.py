@@ -12,6 +12,7 @@ from analysis_model_runner import (
     call_fair_bridge,
     confirmed_free_providers,
     gemini_compatible_schema,
+    direct_gemini_fallback_decision,
     fair_allows_direct_gemini_fallback,
     inference_cost_authorized,
     parse_model_json,
@@ -22,6 +23,13 @@ from analysis_model_runner import (
 
 
 class AnalysisModelRunnerTests(unittest.TestCase):
+    def setUp(self):
+        # These tests exercise the free-tier route; the attestation is a
+        # separate decision (D-161) tested below.
+        patcher = patch("analysis_model_runner.direct_gemini_billing_confirmed", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def request(self):
         return {
             "video_id": "v1",
@@ -435,13 +443,30 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertNotIn("uniqueItems", tags)
         self.assertNotIn("maxLength", tags["items"])
 
-    def test_quality_exhaustion_allows_direct_gemini_fallback(self):
-        result = {
-            "status": "ESCALATION_REQUIRED",
-            "reason_code": "ALL_FREE_MODELS_FAILED_QUALITY",
-            "paid_inference_executed": False,
-        }
-        self.assertTrue(fair_allows_direct_gemini_fallback(result))
+    def test_only_free_pool_exhaustion_allows_direct_gemini_fallback(self):
+        # D-129 (vision §101, D-068): Gemini replaces exhausted free capacity
+        # only, never failed quality, a missing verifier or an unfit request.
+        def escalation(reason):
+            return {
+                "status": "ESCALATION_REQUIRED",
+                "reason_code": reason,
+                "paid_inference_executed": False,
+            }
+
+        self.assertTrue(fair_allows_direct_gemini_fallback(escalation("ALL_FREE_MODELS_UNAVAILABLE")))
+        for reason in (
+            "ALL_FREE_MODELS_FAILED_QUALITY",
+            "QUALITY_VERIFICATION_UNAVAILABLE",
+            "INDEPENDENT_VERIFIER_UNAVAILABLE",
+            "NO_ELIGIBLE_FREE_MODELS",
+            "SOMETHING_NEW",
+        ):
+            with self.subTest(reason=reason):
+                decision = direct_gemini_fallback_decision(escalation(reason))
+                self.assertFalse(decision["eligible"])
+                self.assertTrue(decision["explanation"])
+        unknown_cost = {**escalation("ALL_FREE_MODELS_UNAVAILABLE"), "paid_inference_executed": None}
+        self.assertFalse(fair_allows_direct_gemini_fallback(unknown_cost))
 
     def test_direct_gemini_backup_is_free_tier_authorized_and_tracks_usage(self):
         class FakeResponse:
@@ -518,7 +543,8 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertTrue(result["direct_backup_free_tier_only"])
         self.assertFalse(result["direct_backup_may_bill"])
         self.assertEqual(result["direct_backup_usage"]["total_token_count"], 150)
-        self.assertIsNone(result["paid_inference_executed"])
+        # With the billing attestation (D-161) the call is known not to bill.
+        self.assertIs(result["paid_inference_executed"], False)
         self.assertTrue(inference_cost_authorized(result))
 
     def test_direct_gemini_falls_back_from_flash_lite_to_flash(self):
@@ -835,7 +861,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["provider_id"], "direct_gemini_backup")
         direct_backup.assert_called_once()
 
-    def test_shared_bridge_uses_direct_backup_after_free_quality_exhaustion(self):
+    def test_shared_bridge_refuses_direct_backup_after_free_quality_exhaustion(self):
         class Completed:
             returncode = 0
 
@@ -888,8 +914,12 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     timeout_seconds=30,
                 )
 
-        self.assertEqual(result["provider_id"], "direct_gemini_backup")
-        direct_backup.assert_called_once()
+        # The escalation is returned as a repairable error with the reason the
+        # paid fallback was refused (D-129).
+        self.assertEqual(result["status"], "ESCALATION_REQUIRED")
+        self.assertFalse(result["direct_gemini_fallback"]["eligible"])
+        self.assertIn("quality", result["direct_gemini_fallback"]["explanation"])
+        direct_backup.assert_not_called()
 
     def test_shared_bridge_does_not_backup_unknown_fair_cost(self):
         class Completed:
@@ -995,3 +1025,34 @@ class AnalysisModelRunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DirectGeminiBillingAttestationTests(unittest.TestCase):
+    """No direct Gemini call without the operator's billing attestation (D-161)."""
+
+    def test_unconfirmed_billing_makes_no_call_and_names_the_reason(self):
+        import analysis_model_runner as runner
+
+        fair_result = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_UNAVAILABLE",
+                       "paid_inference_executed": False, "attempts": []}
+        with (
+            patch.dict("os.environ", {"DIRECT_GEMINI_API_KEY": "k", "DIRECT_GEMINI_MODELS": "m"}, clear=False),
+            patch("analysis_model_runner.direct_gemini_billing_confirmed", return_value=False),
+            patch("analysis_model_runner.urllib.request.urlopen") as urlopen,
+        ):
+            self.assertEqual(runner.direct_gemini_unavailable_reason(), runner.DIRECT_GEMINI_BILLING_UNCONFIRMED)
+            self.assertFalse(runner.direct_gemini_available())
+            result = runner.call_direct_gemini_backup(
+                {"prompt": "x", "expected_schema": {"type": "object"}}, timeout_seconds=5, fair_result=fair_result,
+            )
+        urlopen.assert_not_called()
+        self.assertEqual(result["reason_code"], runner.DIRECT_GEMINI_BILLING_UNCONFIRMED)
+        self.assertFalse(result["direct_backup_used"])
+        self.assertFalse(runner.inference_cost_authorized({**result, "paid_inference_executed": None}))
+
+    def test_shipped_attestation_defaults_to_unconfirmed(self):
+        import analysis_model_runner as runner
+
+        payload = json.loads(runner.DIRECT_GEMINI_BILLING_FILE.read_text(encoding="utf-8"))
+        self.assertIs(payload["billing_disabled_confirmed"], False)
+        self.assertIn("Google Cloud", payload["note"])

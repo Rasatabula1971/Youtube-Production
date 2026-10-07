@@ -25,7 +25,7 @@ _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
 if str(_INTEGRITY_ROOT) not in sys.path:
     sys.path.insert(0, str(_INTEGRITY_ROOT))
 
-from pipeline_integrity import atomic_write_json
+from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 from urllib.parse import urlparse
 
 from evidence_ingest import run_ingest, sha256_file
@@ -79,6 +79,19 @@ def load_env_file(path: Path) -> None:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def history_file() -> Path:
+    """Append-only log of every vision frame decision (D-133)."""
+    return VISION_REVIEW_DIR.parent / "vision_review_history.jsonl"
+
+
+def frame_history(video_id: str) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for event in read_jsonl(history_file()):
+        if str(event.get("video_id") or "") == video_id:
+            grouped.setdefault(str(event.get("frame_id") or ""), []).append(event)
+    return grouped
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -568,9 +581,11 @@ def review_snapshot() -> dict[str, Any]:
             if key not in {"source_provenance"}
         }
         public["counts"] = packet_counts(packet)
+        history = frame_history(video_id)
         for item in public.get("frames", []):
             item.pop("path", None)
             item.pop("source_sha256", None)
+            item["decision_history"] = history.get(str(item.get("frame_id") or ""), [])
         packets.append(public)
 
     complete = (
@@ -701,6 +716,15 @@ def finalize_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return packet
 
 
+def reviewer_id() -> str:
+    return os.getenv("YOUTUBE_REVIEWER_ID", "local-operator").strip() or "local-operator"
+
+
+def decided_by() -> str:
+    """HUMAN unless the gate policy is deciding (it sets YOUTUBE_DECIDED_BY, D-156)."""
+    return os.getenv("YOUTUBE_DECIDED_BY", "HUMAN").strip().upper() or "HUMAN"
+
+
 def apply_review_action(
     *,
     action: str,
@@ -746,7 +770,24 @@ def apply_review_action(
         target["final_observation"] = final
 
     target["reviewed_at"] = utc_now()
+    target["reviewer"] = reviewer_id()
+    target["decided_by"] = decided_by()
     packet["updated_at"] = utc_now()
+    append_jsonl(
+        history_file(),
+        {
+            "recorded_at": target["reviewed_at"],
+            "gate": "vision",
+            "video_id": video_id,
+            "frame_id": frame_id,
+            "decision": target["decision"],
+            "decided_by": target["decided_by"],
+            "reviewer": target["reviewer"],
+            "final_observation": target.get("final_observation"),
+            "prepared_profile_sha256": (packet.get("source_provenance") or {}).get("prepared_profile_sha256"),
+            "visual_report_sha256": (packet.get("source_provenance") or {}).get("visual_report_sha256"),
+        },
+    )
 
     counts = packet_counts(packet)
     if counts["pending"] == 0:

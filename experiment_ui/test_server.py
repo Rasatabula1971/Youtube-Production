@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -11,9 +13,33 @@ from pathlib import Path
 from unittest.mock import patch
 
 import server
+from testing_isolation import isolate_outputs
 
 
 class ExperimentUiTests(unittest.TestCase):
+    def setUp(self):
+        # Never read the real pipeline outputs of the machine running the
+        # tests (vision audit 2026-10-03: 8 failures on a populated laptop).
+        isolate_outputs(self, server)
+
+    def test_vision_review_covers_videos_with_frames_even_after_a_partial_visual_run(self):
+        # D-129: 3 of 5 videos kept frames -> those 3 need review before
+        # analysis; with no frames at all, transcripts alone continue.
+        self.assertTrue(server.vision_review_satisfied({"status": "NOT_APPLICABLE"}))
+        self.assertTrue(server.vision_review_satisfied({"status": "COMPLETE"}))
+        for status in ("READY_TO_PREPARE", "AWAITING_HUMAN_REVIEW", ""):
+            with self.subTest(status=status):
+                self.assertFalse(server.vision_review_satisfied({"status": status}))
+
+    def test_tests_never_see_real_pipeline_outputs(self):
+        # The approved study set and prepared profiles leaked into fixtures on
+        # a populated laptop; every output path must point at the test mirror.
+        root = server.PROJECT_ROOT.resolve()
+        for name in ("EXP15_DIR", "EXP2_PREPARED_DIR", "EXP2_ENRICHED_DIR", "JOB_LOG_DIR"):
+            with self.subTest(constant=name):
+                path = getattr(server, name).resolve()
+                self.assertFalse(path.is_relative_to(root), f"{name} still points at {path}")
+
     def test_send_json_ignores_client_disconnect(self):
         class DisconnectingWriter:
             def write(self, _body):
@@ -46,7 +72,19 @@ class ExperimentUiTests(unittest.TestCase):
     def test_ui_v3_routes_are_registered(self):
         self.assertEqual(
             server.APP_ROUTES,
-            {"/", "/opportunity", "/analysis", "/tools"},
+            {
+                "/",
+                "/opportunity",
+                "/opportunity/review",
+                "/radar",
+                "/production",
+                "/review",
+                "/packaging",
+                "/produce",
+                "/analysis",
+                "/productions",
+                "/tools",
+            },
         )
 
 
@@ -859,6 +897,20 @@ class ExperimentUiTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
+                # The visual run kept frames for v1, which therefore needs a
+                # human visual review before analysis (D-129).
+                stack.enter_context(
+                    patch.object(
+                        server,
+                        "vision_review_snapshot",
+                        return_value={
+                            "status": "READY_TO_PREPARE",
+                            "video_ids": ["v1"],
+                            "complete": False,
+                            "awaiting_human_review": False,
+                        },
+                    )
+                )
                 readiness = server.action_readiness()
                 self.assertFalse(readiness["exp2_visual"]["enabled"])
                 self.assertTrue(readiness["exp2_vision_prepare"]["enabled"])
@@ -1407,6 +1459,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 manager.start("test_action")
                 deadline = time.time() + 5
@@ -1477,6 +1530,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 manager.start("test_utf8")
                 deadline = time.time() + 5
@@ -1523,6 +1577,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 job = manager.start("test_action")
                 self.assertEqual(job["status"], "RUNNING")
@@ -1570,6 +1625,7 @@ class ExperimentUiTests(unittest.TestCase):
                 patch.object(server, "JOB_LOG_DIR", jobs),
                 patch.object(server, "UI_OUTPUT_DIR", root),
                 patch.object(server, "JOB_STATE_FILE", state),
+                patch.object(server, "JOB_HISTORY_FILE", state.with_name("job_history.jsonl")),
             ):
                 manager.start("test_action")
                 current = manager.current()
@@ -2014,3 +2070,234 @@ class ExperimentUiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JobProgressTests(unittest.TestCase):
+    """The live run banner reads the current step from the job log (D-155)."""
+
+    def test_reports_current_step_count_and_last_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "job.log"
+            log.write_text(
+                "=" * 72 + "\nAUTOMATIC MACHINE STEP — Acquire research evidence\n" + "=" * 72 + "\n"
+                "searching rq001\n"
+                "=" * 72 + "\nAUTOMATIC MACHINE STEP — Draft scripts\n" + "=" * 72 + "\n"
+                "calling model for c1.long\n\n",
+                encoding="utf-8",
+            )
+            progress = server.job_progress({"status": "RUNNING", "log_path": str(log)})
+        self.assertEqual(progress["current_step"], "Draft scripts")
+        self.assertEqual(progress["step_number"], 2)
+        self.assertEqual(progress["last_line"], "calling model for c1.long")
+        self.assertTrue(progress["last_output_at"])
+
+    def test_single_action_job_has_no_step_but_still_reports_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "job.log"
+            log.write_text("working\n", encoding="utf-8")
+            progress = server.job_progress({"status": "RUNNING", "log_path": str(log)})
+        self.assertIsNone(progress["current_step"])
+        self.assertEqual(progress["last_line"], "working")
+
+    def test_finished_or_missing_job_has_no_progress(self):
+        self.assertIsNone(server.job_progress({"status": "SUCCEEDED", "log_path": "x"}))
+        self.assertIsNone(server.job_progress(None))
+        self.assertIsNone(server.job_with_progress(None))
+        missing = server.job_progress({"status": "RUNNING", "log_path": "/nonexistent/x.log"})
+        self.assertEqual(missing["step_number"], 0)
+
+
+class PostBodyHardeningTests(unittest.TestCase):
+    """Malformed POST bodies get a 400/413, not a crashed handler thread (D-160)."""
+
+    def setUp(self):
+        self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        self.port = self.httpd.server_address[1]
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.addCleanup(self.httpd.server_close)
+        self.addCleanup(self.httpd.shutdown)
+
+    def post(self, raw: bytes, content_length: str | None = None) -> tuple[int, dict]:
+        headers = {
+            "Content-Type": "application/json",
+            "Origin": f"http://127.0.0.1:{self.port}",
+            "X-CSRF-Token": server.CSRF_TOKEN,
+        }
+        if content_length is not None:
+            headers["Content-Length"] = content_length
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/run", data=raw, method="POST", headers=headers
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read() or b"{}")
+
+    def test_non_object_json_values_are_400(self):
+        for raw in (b"[]", b'"x"', b"null", b"3"):
+            with self.subTest(raw=raw):
+                status, payload = self.post(raw)
+                self.assertEqual(status, 400)
+                self.assertIn("object", payload["error"])
+
+    def test_invalid_utf8_and_deep_nesting_are_400(self):
+        self.assertEqual(self.post(b"\xff\xfe{}")[0], 400)
+        self.assertEqual(self.post(b"[" * 50000 + b"]" * 50000)[0], 400)
+
+    def test_bad_or_oversized_content_length_is_refused(self):
+        self.assertEqual(self.post(b"{}", content_length="abc")[0], 400)
+        self.assertEqual(self.post(b"{}", content_length="-5")[0], 400)
+        status, payload = self.post(b"{}", content_length=str(server.MAX_POST_BYTES + 1))
+        self.assertEqual(status, 413)
+        # The server keeps answering afterwards.
+        self.assertEqual(self.post(b'{"action_id": "nope"}')[0], 409)
+
+    def test_handler_has_a_socket_timeout(self):
+        # A body shorter than its Content-Length must not hold the thread forever.
+        self.assertGreater(server.Handler.timeout, 0)
+        self.assertLessEqual(server.Handler.timeout, 120)
+
+
+class JobRecoveryTests(unittest.TestCase):
+    """A job the previous UI run left RUNNING is settled at startup (D-169, audit 2)."""
+
+    def saved(self, root: Path, pid: int, identity: dict | None = None) -> Path:
+        state = root / "job_state.json"
+        state.write_text(json.dumps({
+            "id": "20260101_000000_auto_continue", "action_id": "auto_continue", "label": "Continue",
+            "status": "RUNNING", "pid": pid, "identity": identity,
+            "command": [sys.executable, "experiment_ui/workflow_automation.py"],
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "finished_at": None, "return_code": None, "log_path": str(root / "x.log"),
+        }), encoding="utf-8")
+        return state
+
+    def recover(self, root: Path, state: Path, project: Path | None = None):
+        manager = server.JobManager()
+        with (
+            patch.object(server, "JOB_STATE_FILE", state),
+            patch.object(server, "UI_OUTPUT_DIR", root),
+            patch.object(server, "JOB_HISTORY_FILE", root / "job_history.jsonl"),
+            patch.object(server, "PROJECT_ROOT", project or root),
+        ):
+            recovered = manager.recover()
+            history = (root / "job_history.jsonl").read_text(encoding="utf-8")
+        return manager, recovered, history
+
+    def spawn(self, cwd: Path, code: str = "import time; time.sleep(60)") -> subprocess.Popen:
+        child = subprocess.Popen(  # noqa: S603 - fixed argument list
+            [sys.executable, "-c", code], cwd=cwd, start_new_session=True,
+        )
+        self.addCleanup(lambda: (child.poll() is None) and (child.kill(), child.wait(timeout=5)))
+        return child
+
+    def wait_exit(self, child: subprocess.Popen, seconds: float = 10) -> None:
+        deadline = time.time() + seconds
+        while child.poll() is None and time.time() < deadline:
+            time.sleep(0.05)
+
+    def test_a_dead_pid_is_recorded_interrupted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = self.saved(root, 2_000_000_000)
+            manager, recovered, history = self.recover(root, state)
+            rewritten = json.loads(state.read_text(encoding="utf-8"))
+        self.assertEqual(recovered["status"], "INTERRUPTED")
+        self.assertEqual(manager.current()["status"], "INTERRUPTED")
+        self.assertFalse(manager.running())
+        self.assertIn("INTERRUPTED", history)
+        self.assertEqual(rewritten["status"], "INTERRUPTED")
+        self.assertTrue(rewritten["finished_at"])
+
+    @unittest.skipUnless(Path("/proc/self/stat").exists(), "Linux process identity")
+    def test_a_stranger_that_inherited_the_pid_is_never_signalled(self) -> None:
+        """Audit 2 F2: after a reboot the pid can belong to any process."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as elsewhere:
+            root = Path(tmp)
+            stranger = self.spawn(Path(elsewhere))
+            state = self.saved(root, stranger.pid, identity=server.process_identity(stranger.pid))
+            _, recovered, _ = self.recover(root, state)
+            time.sleep(0.3)
+            self.assertIsNone(stranger.poll(), "an unrelated process was killed")
+        self.assertEqual(recovered["status"], "INTERRUPTED")
+
+    @unittest.skipUnless(Path("/proc/self/stat").exists(), "Linux process identity")
+    def test_a_reused_pid_with_another_start_time_is_never_signalled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            child = self.spawn(root)
+            identity = server.process_identity(child.pid)
+            identity["start"] -= 1  # the saved job started at another moment
+            state = self.saved(root, child.pid, identity=identity)
+            _, recovered, _ = self.recover(root, state)
+            time.sleep(0.3)
+            self.assertIsNone(child.poll())
+        self.assertEqual(recovered["status"], "INTERRUPTED")
+
+    @unittest.skipUnless(Path("/proc/self/stat").exists(), "Linux process identity")
+    def test_the_job_itself_is_stopped_and_recorded_orphaned(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            child = self.spawn(root)
+            state = self.saved(root, child.pid, identity=server.process_identity(child.pid))
+            _, recovered, history = self.recover(root, state)
+            self.wait_exit(child)
+            self.assertIsNotNone(child.poll(), "the orphaned job was not stopped")
+        self.assertEqual(recovered["status"], "ORPHANED")
+        self.assertIn("was stopped", recovered["note"])
+        self.assertEqual(history.count("ORPHANED"), 1)
+
+    @unittest.skipUnless(Path("/proc/self/stat").exists(), "Linux process identity")
+    def test_a_step_left_running_by_a_dead_job_is_stopped(self) -> None:
+        """Audit 2 F4: the leader exited; its step kept running in the job's group."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / "step.pid"
+            leader = self.spawn(root, (
+                "import subprocess, sys, time\n"
+                f"p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                f"open({str(marker)!r}, 'w').write(str(p.pid))\n"
+                "time.sleep(0.5)\n"
+            ))
+            identity = server.process_identity(leader.pid)
+            self.wait_exit(leader)
+            step = int(marker.read_text())
+            self.addCleanup(lambda: subprocess.run(["kill", "-9", str(step)], capture_output=True, check=False))
+            state = self.saved(root, leader.pid, identity=identity)
+            _, recovered, _ = self.recover(root, state)
+            deadline = time.time() + 10
+            while time.time() < deadline and server._proc_state(step) not in ("", "Z"):
+                time.sleep(0.05)
+            self.assertIn(server._proc_state(step), ("", "Z"), "the leftover step is still running")
+        self.assertEqual(recovered["status"], "ORPHANED")
+
+    def test_the_ui_never_signals_itself_or_its_parent(self) -> None:
+        """Audit 2 F3."""
+        for pid in (os.getpid(), os.getppid(), 1):
+            with self.subTest(pid=pid), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                state = self.saved(root, pid, identity=server.process_identity(pid) if pid != 1 else None)
+                _, recovered, _ = self.recover(root, state, project=Path.cwd())
+                self.assertEqual(recovered["status"], "INTERRUPTED")
+
+    def test_a_finished_state_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = self.saved(root, 1)
+            payload = json.loads(state.read_text(encoding="utf-8"))
+            payload["status"] = "SUCCEEDED"
+            state.write_text(json.dumps(payload), encoding="utf-8")
+            manager = server.JobManager()
+            with patch.object(server, "JOB_STATE_FILE", state):
+                self.assertIsNone(manager.recover())
+            self.assertIsNone(manager.current())
+
+
+class StrictJsonTests(unittest.TestCase):
+    """Audit 2: a corrupt ledger's infinite amount must not break the page's JSON."""
+
+    def test_non_finite_numbers_become_null(self) -> None:
+        payload = {"a": float("inf"), "b": [1.5, float("nan"), {"c": float("-inf")}], "d": "x"}
+        self.assertEqual(server.json_safe(payload), {"a": None, "b": [1.5, None, {"c": None}], "d": "x"})
+        json.dumps(server.json_safe(payload), allow_nan=False)

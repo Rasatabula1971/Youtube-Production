@@ -11,7 +11,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from opportunity_engine import active_source, human_video_intake as hvi  # noqa: E402
+from opportunity_engine import active_source, human_topic_search as hts, human_video_intake as hvi  # noqa: E402
 from opportunity_engine.packet_schema import validate_packet  # noqa: E402
 
 VID = "dQw4w9WgXcQ"
@@ -252,6 +252,57 @@ class PacketAndStorageTests(unittest.TestCase):
         self.assertIsNone(active_source.load_active())
         self.assertTrue(active_source.clear_active())
         self.assertFalse(active_source.clear_active())
+
+    def test_replication_context_rules(self):
+        """D-174: title search, never the seed or its channel, one per channel, seed stays first."""
+        self.save()
+        settings = hts.topic_config()
+
+        def searcher(query, limit, timeout):
+            self.assertIn("hummingbirds hover", query.lower())
+            return [
+                {"video_id": "samechan001", "title": "Hummingbirds hover again", "channel_id": "UC1", "channel_title": "Nature Lab", "duration_seconds": 400, "views": 8_000_000},
+                {"video_id": "otherchan01", "title": "How hummingbirds hover", "channel_id": "UC2", "channel_title": "Bird Lab", "duration_seconds": 300, "views": 700_000},
+            ]
+
+        record = active_source.set_active(VID, with_context=True, searcher=searcher, measurer=lambda ids: {})
+        self.assertEqual([r["video_id"] for r in record["study_set"]], [VID, "otherchan01"])
+        self.assertEqual(record["context_search"]["status"], "FOUND")
+        self.assertEqual(record["context_search"]["companion_count"], 1)
+        self.assertEqual(active_source.load_active(), record)
+        self.assertEqual(active_source.summary(record)["video_count"], 2)
+        self.assertEqual(int(settings["max_study_videos"]) - 1, 3)
+
+        # A failed search leaves the seed alone and says why; the record stays valid.
+        def broken(query, limit, timeout):
+            raise hts.IntakeError("yt-dlp is not installed")
+
+        record = active_source.set_active(VID, with_context=True, searcher=broken)
+        self.assertEqual(len(record["study_set"]), 1)
+        self.assertEqual(record["context_search"]["status"], "SEARCH_FAILED")
+        self.assertIn("yt-dlp", record["context_search"]["reason"])
+        self.assertEqual(active_source.load_active(), record)
+
+        # Without the flag nothing is searched (the default for library callers).
+        record = active_source.set_active(VID, searcher=broken)
+        self.assertEqual(record["context_search"]["status"], "SKIPPED")
+
+        # A context row that lost its role marks the record as not ours.
+        tampered = dict(record, study_set=record["study_set"] + [dict(record["study_set"][0], video_id="x" * 11)])
+        active_source.ACTIVE_FILE.write_text(json.dumps(tampered), encoding="utf-8")
+        self.assertIsNone(active_source.load_active())
+
+    def test_context_seed_text_strips_hashtags_and_links(self):
+        settings = {"max_seed_chars": 40}
+        self.assertEqual(
+            active_source.context_seed_text("Why tyres squeal #shorts #physics https://x.y/z", settings),
+            "Why tyres squeal",
+        )
+        long = "a very long title that keeps going on and on past the limit"
+        text = active_source.context_seed_text(long, settings)
+        self.assertLessEqual(len(text), 40)
+        self.assertEqual(text, "a very long title that keeps going on")
+        self.assertEqual(active_source.context_seed_text(None, settings), "")
 
     def test_excluded_video_needs_explicit_override(self):
         self.save(made_for_kids=True)

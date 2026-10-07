@@ -6,7 +6,7 @@ Human Opportunity Gate reviews evidence the same way whatever the source.
 Spec: [`OPPORTUNITY_DISCOVERY_SPEC.md`](OPPORTUNITY_DISCOVERY_SPEC.md) (v2.1 —
 read the *v2.1 Revisions* section first).
 
-## Built so far (slices O1–O12)
+## Built so far (slices O1–O14: the full v2.1 plan)
 
 | Module | Role |
 |---|---|
@@ -20,6 +20,8 @@ read the *v2.1 Revisions* section first).
 | `active_source.py` | "Analyze why it worked" / "Analyze these videos": makes a submitted video, or a topic's strongest videos, the active study set for Experiment 02 |
 | `inbox.py` | O3: merges every lane into one inbox (Needs review / Watching / Approved / Saved / Rejected) and stores save / reject / restore choices outside the evidence |
 | `viral_radar.py` | O6–O9: watchlist discovery, channel baselines, append-only snapshots and the four-axis breakout classifier |
+| `radar_scheduler.py` | O13: one tick decides discovery (every 8 h), snapshots of tracked breakouts (when due) or nothing; locked and resumable |
+| `scheduled_tick.py` | O13: what the one Windows task runs: the research continuation, then a radar tick |
 | `viral_cluster.py` | O10: groups breakouts into themes, checks the channels are independent, labels each theme (event, question, mechanism, topic) and sets breadth |
 | `config.json` | Active channel, future channels, exclusion rules, written evidence rules, radar thresholds |
 
@@ -55,6 +57,39 @@ Your own ideas are saved, rejected or moved back from the card. Historical
 topics are still decided in **Historical review** under the inbox (the existing
 gate), and the inbox mirrors those decisions. Inbox choices live in
 `output/inbox_state.json`, never in the evidence packets.
+
+## Automatic radar (O13)
+
+Install it once from **Tools → Install Opportunity Automation (research + viral
+radar)**. This is the same Windows task as before (every 2 hours), now running
+`opportunity_engine/scheduled_tick.py`. If you installed the old version,
+install it again so the task picks up the new runner. Each wake:
+
+1. runs the existing Opportunity Research continuation, unchanged;
+2. runs one radar tick:
+   - a **full discovery** pass when the last one is 8+ hours old
+     (`config.json → radar_schedule`);
+   - otherwise a **snapshot-only** pass when a tracked breakout is due on its
+     6 h / 12 h / 24 h cadence (1 API unit per 50 videos, no search);
+   - otherwise nothing.
+
+A lock stops overlapping ticks. One step failing never skips the other. The
+radar card shows the last automatic check and when the next snapshot and
+discovery are due. Log: `output/viral/scheduled_tick.log`. To preview a tick
+without running it: `python opportunity_engine/radar_scheduler.py --dry-run`.
+
+## Evidence drawer and trajectory chart (O14)
+
+**Open evidence** on any inbox card opens a side drawer instead of a long
+page. Its sections are summary, source, evidence matrix, viral evidence,
+trajectory chart, channel baseline, historical evidence, viewer questions,
+mechanisms, content gaps, research gaps, candidate videos, decisions and
+provenance.
+
+The trajectory chart plots views against hours since publishing, using only
+the radar's own snapshots. Hover, or focus the chart and use ←/→, to read each
+snapshot. The same numbers appear in the snapshot and views-per-hour tables
+below it. Esc closes the drawer.
 
 ## The unified gate (O12)
 
@@ -160,7 +195,13 @@ Science Inside, a future-channel shelf or an exclusion, and saved under
 `output/opportunities/human_video/`.
 
 *Analyze why it worked* freezes that video as the approved study set and the
-automatic workflow continues into Experiment 02. If Experiment 02 work already
+automatic workflow continues into Experiment 02. Because synthesis only hands
+over mechanisms seen on at least two channels, the same click also searches
+the video's title (the Explore-my-topic search, nothing saved to the inbox)
+and adds up to three of the strongest relevant videos from *other* channels as
+replication context (D-174); the submitted video stays first. The inbox says
+how many came along, or that none were found, in which case synthesis will
+have nothing replicated and *Explore my topic* is the way to add context. If Experiment 02 work already
 exists for another study set, the UI asks first: the switch restarts
 Experiment 02 and everything after it. *Stop analyzing* hands the study set
 back to the historical gate; approving a historical topic does the same.

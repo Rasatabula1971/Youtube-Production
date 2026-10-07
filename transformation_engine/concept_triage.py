@@ -43,12 +43,18 @@ from analysis_model_runner import (
     safe_attempts,
 )
 
-from transformation_engine import (
+from concept_diversity import (  # noqa: E402
+    DEFAULT_NEAR_DUPLICATE_THRESHOLD,
+    near_duplicate_groups,
+    select_diverse,
+)
+from transformation_engine import (  # noqa: E402
     CANDIDATES_FILE,
     OUTPUT_DIR,
     load_json,
     sha256_file,
 )
+from transformation_engine import load_config as load_transformation_config  # noqa: E402
 
 TRIAGE_OUTPUT_FILE = OUTPUT_DIR / "concept_triage.json"
 SHORTLIST_FILE = OUTPUT_DIR / "concept_candidates_triaged.json"
@@ -60,6 +66,8 @@ FINAL_RESPONSE_FILE = OUTPUT_DIR / "concept_triage_final.json"
 CHUNK_SIZE = 5
 FINALISTS_PER_CHUNK = 2
 MAX_FINALISTS = 10
+# Five distinct finalists reach the Concept Gate (vision §26, D-130).
+FINALIST_TARGET = 5
 MIN_SHORTLIST = 0
 MAX_SHORTLIST = 6
 ALLOWED_DECISIONS = {"SHORTLIST", "REWORK", "DROP"}
@@ -448,7 +456,32 @@ def select_finalist_ids(
     *,
     per_chunk: int = FINALISTS_PER_CHUNK,
     maximum: int = MAX_FINALISTS,
+    concepts_by_id: dict[str, dict[str, Any]] | None = None,
+    threshold: float = DEFAULT_NEAR_DUPLICATE_THRESHOLD,
 ) -> list[str]:
+    if concepts_by_id is not None:
+        # The final comparison sees distinct ideas only: every first-pass
+        # decision in rank order, no near-duplicates, and no single mechanism
+        # or hook type filling the list while others are available (D-130).
+        ranked = sorted(
+            (item for triage in chunk_triages for item in triage.get("decisions", [])),
+            key=decision_rank,
+            reverse=True,
+        )
+        ids: list[str] = []
+        for item in ranked:
+            concept_id = str(item.get("concept_id", ""))
+            if concept_id and concept_id not in ids:
+                ids.append(concept_id)
+        return select_diverse(
+            ids,
+            concepts_by_id,
+            limit=maximum,
+            threshold=threshold,
+            max_per_mechanism=3,
+            max_per_archetype=3,
+        )["selected"]
+
     selected: list[dict[str, Any]] = []
     for triage in chunk_triages:
         ranked = sorted(
@@ -470,6 +503,66 @@ def select_finalist_ids(
         if len(finalist_ids) >= maximum:
             break
     return finalist_ids
+
+
+def apply_diverse_shortlist(
+    final_triage: dict[str, Any],
+    concepts_by_id: dict[str, dict[str, Any]],
+    *,
+    target: int = FINALIST_TARGET,
+    threshold: float = DEFAULT_NEAR_DUPLICATE_THRESHOLD,
+) -> dict[str, Any]:
+    """Shortlist up to ``target`` distinct eligible finalists, or state the shortfall.
+
+    Score eligibility (>= 70) is unchanged. Among eligible finalists, a
+    near-duplicate of a higher-ranked one, or a concept repeating an approach
+    already represented while others are available, does not take a slot. It
+    stays reachable as an override with the reason recorded. Slots are never
+    filled with ineligible concepts (vision §27, D-130).
+    """
+    decisions = [dict(item) for item in final_triage.get("decisions", [])]
+    eligible = sorted(
+        (item for item in decisions if int(item.get("overall_score", 0)) >= 70),
+        key=decision_rank,
+        reverse=True,
+    )
+    choice = select_diverse(
+        [str(item["concept_id"]) for item in eligible],
+        concepts_by_id,
+        limit=target,
+        threshold=threshold,
+    )
+    shortlist_ids = choice["selected"]
+    chosen = set(shortlist_ids)
+    for item in decisions:
+        concept_id = str(item.get("concept_id"))
+        if item.get("decision") == "SHORTLIST" and concept_id not in chosen:
+            item["decision"] = "REWORK"
+            item["capped_from_shortlist"] = True
+        if concept_id in choice["excluded"]:
+            item["diversity"] = choice["excluded"][concept_id]
+    shortfall = max(0, target - len(shortlist_ids))
+    if shortfall:
+        note = (
+            f"Only {len(shortlist_ids)} distinct concept(s) reached the shortlist bar; "
+            f"{shortfall} slot(s) are left empty rather than filled with weaker or "
+            "duplicate ideas. Every other candidate is under View all candidates; "
+            "rework or save ideas there, or regenerate concepts."
+        )
+    else:
+        note = f"{target} distinct concepts reached the shortlist bar."
+    return {
+        **final_triage,
+        "decisions": decisions,
+        "shortlist_ids": shortlist_ids,
+        "selection": {
+            "target": target,
+            "selected": len(shortlist_ids),
+            "shortfall": shortfall,
+            "note": note,
+            "excluded": choice["excluded"],
+        },
+    }
 
 
 def build_shortlist_payload(
@@ -499,6 +592,7 @@ def build_shortlist_payload(
         "concepts": concepts,
         "override_concepts": overrides,
         "triage_summary": triage.get("summary"),
+        "selection": triage.get("selection"),
         "notes": [
             "Triage is an LLM prefilter, not human approval.",
             "SHORTLIST concepts enter the Human Concept Gate by default.",
@@ -831,8 +925,15 @@ def run(*, force: bool = False) -> dict[str, Any]:
         atomic_write_json(RUN_REPORT_FILE, report)
         return report
 
-    finalist_ids = select_finalist_ids(chunk_triages)
     by_id = {str(item["concept_id"]): item for item in concepts}
+    transformation_config = load_transformation_config()
+    threshold = float(
+        transformation_config.get("near_duplicate_threshold", DEFAULT_NEAR_DUPLICATE_THRESHOLD)
+    )
+    target = int(transformation_config.get("finalist_count", FINALIST_TARGET))
+    finalist_ids = select_finalist_ids(
+        chunk_triages, concepts_by_id=by_id, threshold=threshold
+    )
     finalists = [by_id[concept_id] for concept_id in finalist_ids]
 
     final_report, final_triage, final_raw = fair_call(
@@ -843,6 +944,10 @@ def run(*, force: bool = False) -> dict[str, Any]:
     )
     if final_raw:
         atomic_write_text(FINAL_RAW_FILE, final_raw)
+    if final_triage is not None:
+        final_triage = apply_diverse_shortlist(
+            final_triage, by_id, target=target, threshold=threshold
+        )
 
     if final_triage is None:
         report = {
@@ -893,6 +998,12 @@ def run(*, force: bool = False) -> dict[str, Any]:
         "decisions": full_decisions,
         "shortlist_ids": final_triage["shortlist_ids"],
         "summary": final_triage["summary"],
+        "selection": {
+            **final_triage["selection"],
+            "pool_size": len(concepts),
+            "pool": candidates_payload.get("pool"),
+            "near_duplicate_groups": near_duplicate_groups(concepts, threshold=threshold),
+        },
         "first_pass": {
             "chunks": [
                 {
@@ -934,6 +1045,7 @@ def run(*, force: bool = False) -> dict[str, Any]:
         "finalist_count": len(finalist_ids),
         "finalists": finalist_ids,
         "shortlisted": len(final_triage["shortlist_ids"]),
+        "shortlist_shortfall": final_triage["selection"]["shortfall"],
         "rework": counts["REWORK"],
         "dropped": counts["DROP"],
         "chunk_results": chunk_results,

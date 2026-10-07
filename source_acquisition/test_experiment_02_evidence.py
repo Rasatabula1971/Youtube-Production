@@ -131,6 +131,11 @@ class Experiment02EvidenceAcquisitionTests(unittest.TestCase):
                 )
             )
             ingest = stack.enter_context(patch.object(acquisition, "run_ingest"))
+            # Pin the machine-dependent fallback: with whisper and ffmpeg
+            # installed, a second (transcription) subprocess call would run.
+            stack.enter_context(
+                patch.object(acquisition, "local_transcription_available", return_value=False)
+            )
 
             result = acquisition.acquire_one(
                 profile,

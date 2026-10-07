@@ -10,7 +10,7 @@ if ($EveryHours -lt 1) {
 }
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Runner = Join-Path $ProjectRoot "experiment_01_discovery\opportunity_research.py"
+$Runner = Join-Path $ProjectRoot "opportunity_engine\scheduled_tick.py"
 
 if (-not (Test-Path $Runner)) {
     throw "Cannot find scheduled refresh runner: $Runner"
@@ -27,7 +27,7 @@ if (-not (Test-Path $PythonPath)) {
 
 $TaskName = "YouTube Production - Opportunity Research Continue"
 $LegacyTaskName = "YouTube Production - Experiment 01.3 Auto Refresh"
-$TaskCommand = "`"$PythonPath`" `"$Runner`" --mode continue"
+$TaskCommand = "`"$PythonPath`" `"$Runner`""
 
 $Arguments = @(
     "/Create",
@@ -51,7 +51,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "Opportunity Research continuation installed."
-Write-Host "The task wakes every $EveryHours hour(s), takes a frozen-cohort snapshot"
-Write-Host "only when due, then automatically advances through 01.4 and 01.5 when"
-Write-Host "velocity evidence becomes ready."
+Write-Host "Opportunity automation installed."
+Write-Host "The task wakes every $EveryHours hour(s). It takes a frozen-cohort snapshot"
+Write-Host "only when due and advances through 01.4 and 01.5 when velocity evidence is"
+Write-Host "ready, then runs one viral radar tick: discovery when due (every 8 hours by"
+Write-Host "default), otherwise snapshots of tracked breakouts when due."
