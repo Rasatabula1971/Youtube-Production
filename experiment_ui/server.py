@@ -24,8 +24,6 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline_integrity import atomic_write_json
 
@@ -83,13 +81,11 @@ EXP15_DIR = EXP1_OUTPUT / "experiment_01_5"
 OPPORTUNITY_RESEARCH_STATE = EXP1_OUTPUT / "opportunity_research_state.json"
 
 EXP1_MODULE_DIR = PROJECT_ROOT / "experiment_01_discovery"
-if str(EXP1_MODULE_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP1_MODULE_DIR))
 
-from opportunity_gate import (
+from experiment_01_discovery.opportunity_gate import (
     apply_gate_action,
 )
-from opportunity_gate import (
+from experiment_01_discovery.opportunity_gate import (
     gate_snapshot as opportunity_gate_snapshot,
 )
 
@@ -100,22 +96,20 @@ from opportunity_engine import models as opportunity_models
 from opportunity_engine import viral_radar
 
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from human_review import (
+from experiment_02_analysis.human_review import (
     apply_review_action as apply_human_analysis_review_action,
 )
-from human_review import (
+from experiment_02_analysis.human_review import (
     review_snapshot as human_analysis_review_snapshot,
 )
-from vision_review import (
+from experiment_02_analysis.vision_review import (
     apply_review_action as apply_vision_review_action,
 )
-from vision_review import (
+from experiment_02_analysis.vision_review import (
     frame_path as vision_frame_path,
 )
-from vision_review import (
+from experiment_02_analysis.vision_review import (
     review_snapshot as vision_review_snapshot,
 )
 
@@ -133,16 +127,14 @@ EXP2_ACQUISITION_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "summary.json"
 EXP2_VISUAL_SUMMARY = SOURCE_ACQ_OUTPUT / "experiment_02" / "visual_summary.json"
 
 TRANSFORM_DIR = PROJECT_ROOT / "transformation_engine"
-if str(TRANSFORM_DIR) not in sys.path:
-    sys.path.insert(0, str(TRANSFORM_DIR))
 
-from concept_review import (
+from transformation_engine.concept_review import (
     apply_action as apply_concept_gate_action,
 )
-from concept_review import (
+from transformation_engine.concept_review import (
     snapshot as concept_gate_snapshot,
 )
-from transformation_engine import (
+from transformation_engine.transformation_engine import (
     safe_slug as transformation_safe_slug,
     validation_contract_sha256 as transformation_validation_contract_sha256,
 )
@@ -157,33 +149,31 @@ TRANSFORM_TRIAGED_CANDIDATES_FILE = TRANSFORM_OUTPUT / "concept_candidates_triag
 TRANSFORM_RESEARCH_HANDOFF = TRANSFORM_OUTPUT / "research_handoff.json"
 
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
-if str(PACKAGING_DIR) not in sys.path:
-    sys.path.insert(0, str(PACKAGING_DIR))
 
-from package_review import (
+from packaging_engine.package_review import (
     apply_action as apply_packaging_gate_action,
 )
-from package_review import (
+from packaging_engine.package_review import (
     snapshot as packaging_gate_snapshot,
 )
-from title_direction_review import (
+from packaging_engine.title_direction_review import (
     apply_action as apply_title_direction_gate_action,
     snapshot as title_direction_gate_snapshot,
 )
-from packaging_brief import snapshot as packaging_brief_snapshot
-from psychological_angles import (
+from packaging_engine.packaging_brief import snapshot as packaging_brief_snapshot
+from packaging_engine.psychological_angles import (
     request_snapshot as psychological_angle_request_snapshot,
     snapshot as psychological_angle_snapshot,
 )
-from thumbnail_concepts import (
+from packaging_engine.thumbnail_concepts import (
     request_snapshot as thumbnail_concept_request_snapshot,
     snapshot as thumbnail_concept_snapshot,
 )
-from package_pairing import (
+from packaging_engine.package_pairing import (
     request_snapshot as package_pairing_request_snapshot,
     snapshot as package_validation_snapshot,
 )
-from final_packaging_review import (
+from packaging_engine.final_packaging_review import (
     apply_action as apply_final_packaging_gate_action,
     current_bundle_hashes as final_package_bundle_hashes,
     public_snapshot as final_packaging_snapshot,
@@ -210,14 +200,12 @@ TITLE_DIRECTION_SELECTED_FILE = (
 PACKAGING_BRIEF_DIR = PACKAGING_OUTPUT / "packaging_briefs"
 
 RESEARCH_DIR = PROJECT_ROOT / "research_engine"
-if str(RESEARCH_DIR) not in sys.path:
-    sys.path.insert(0, str(RESEARCH_DIR))
 
-from research_review import (
+from research_engine.research_review import (
     apply_question_waiver as apply_research_question_waiver,
     apply_action as apply_research_gate_action,
 )
-from research_review import (
+from research_engine.research_review import (
     snapshot as research_gate_snapshot,
 )
 
@@ -229,23 +217,21 @@ RESEARCH_DRAFTS_DIR = RESEARCH_OUTPUT / "draft_packages"
 RESEARCH_VERIFIED_DIR = RESEARCH_OUTPUT / "verified_packages"
 
 STORY_DIR = PROJECT_ROOT / "story_script_engine"
-if str(STORY_DIR) not in sys.path:
-    sys.path.insert(0, str(STORY_DIR))
 
-from script_review import (
+from story_script_engine.script_review import (
     apply_action as apply_script_gate_action,
 )
-from script_review import (
+from story_script_engine.script_review import (
     snapshot as script_gate_snapshot,
 )
-from script_section_service import (
+from story_script_engine.script_section_service import (
     apply_action as apply_script_section_review_action,
     snapshot as script_section_review_snapshot,
 )
-from story_plan_engine import (
+from story_script_engine.story_plan_engine import (
     validation_contract_sha256 as story_plan_validation_contract_sha256,
 )
-from story_script_engine import (
+from story_script_engine.story_script_engine import (
     load_script_psychology_config,
     resolve_script_branches,
     validation_contract_sha256 as script_validation_contract_sha256,
@@ -259,13 +245,11 @@ SCRIPT_DRAFTS_DIR = STORY_OUTPUT / "script_drafts"
 SCRIPT_APPROVED_DIR = STORY_OUTPUT / "approved_scripts"
 
 FORMAT_DIR = PROJECT_ROOT / "format_engine"
-if str(FORMAT_DIR) not in sys.path:
-    sys.path.insert(0, str(FORMAT_DIR))
 
-from format_review import (
+from format_engine.format_review import (
     apply_action as apply_format_gate_action,
 )
-from format_review import (
+from format_engine.format_review import (
     snapshot as format_gate_snapshot,
 )
 
@@ -275,99 +259,97 @@ FORMAT_PLANS_DIR = FORMAT_OUTPUT / "format_plans"
 FORMAT_APPROVED_DIR = FORMAT_OUTPUT / "approved_format_plans"
 
 PRODUCTION_DIR = PROJECT_ROOT / "production_engine"
-if str(PRODUCTION_DIR) not in sys.path:
-    sys.path.insert(0, str(PRODUCTION_DIR))
 
-from voice_performance import (
+from production_engine.voice_performance import (
     validation_contract_sha256 as voice_validation_contract_sha256,
 )
-from voice_review import (
+from production_engine.voice_review import (
     apply_action as apply_performance_gate_action,
 )
-from voice_review import (
+from production_engine.voice_review import (
     snapshot as performance_gate_snapshot,
 )
-from narration_render import snapshot as narration_render_snapshot
-from narration_render_import import (
+from production_engine.narration_render import snapshot as narration_render_snapshot
+from production_engine.narration_render_import import (
     register as register_narration_render_return,
     snapshot as narration_render_return_snapshot,
 )
-from narration_audio_qc import snapshot as narration_audio_qc_snapshot
-from pre_render_engagement import snapshot as pre_render_engagement_snapshot
-from narration_preview import snapshot as narration_preview_prepare_snapshot
-from sound_design_brief import snapshot as sound_design_brief_snapshot
-from narration_performance_review import (
+from production_engine.narration_audio_qc import snapshot as narration_audio_qc_snapshot
+from production_engine.pre_render_engagement import snapshot as pre_render_engagement_snapshot
+from production_engine.narration_preview import snapshot as narration_preview_prepare_snapshot
+from production_engine.sound_design_brief import snapshot as sound_design_brief_snapshot
+from production_engine.narration_performance_review import (
     revise as revise_narration_performance,
     snapshot as narration_performance_revision_snapshot,
 )
-from narration_preview_review import (
+from production_engine.narration_preview_review import (
     apply_action as apply_narration_preview_gate_action,
     snapshot as narration_preview_gate_snapshot,
 )
-from narration_cost_review import (
+from production_engine.narration_cost_review import (
     apply_action as apply_narration_spend_gate_action,
     snapshot as narration_spend_gate_snapshot,
 )
-from visual_candidate_review import (
+from production_engine.visual_candidate_review import (
     apply_action as apply_visual_candidate_review_action,
     snapshot as visual_candidate_review_snapshot,
 )
-from visual_rights_review import (
+from production_engine.visual_rights_review import (
     apply_action as apply_visual_rights_review_action,
     snapshot as visual_rights_review_snapshot,
 )
-from visual_rough_cut_review import (
+from production_engine.visual_rough_cut_review import (
     apply_action as apply_visual_rough_cut_review_action,
     snapshot as visual_rough_cut_review_snapshot,
 )
-from visual_spend_review import (
+from production_engine.visual_spend_review import (
     apply_action as apply_visual_spend_review_action,
     snapshot as visual_spend_review_snapshot,
 )
-from visual_gap_planner import gap_plan_is_current
-from visual_assembly_plan import assembly_plan_is_current
-from edit_manifest import manifest_is_current
-from edit_preview_render import (
+from production_engine.visual_gap_planner import gap_plan_is_current
+from production_engine.visual_assembly_plan import assembly_plan_is_current
+from production_engine.edit_manifest import manifest_is_current
+from production_engine.edit_preview_render import (
     ffmpeg_available as structural_ffmpeg_available,
     preview_result_is_current,
 )
-from visual_generated_asset_import import (
+from production_engine.visual_generated_asset_import import (
     register as register_generated_visual_asset,
     snapshot as generated_visual_asset_snapshot,
 )
-from visual_existing_asset_import import (
+from production_engine.visual_existing_asset_import import (
     register as register_existing_visual_asset,
     snapshot as managed_visual_asset_snapshot,
 )
-from edit_preview_review import (
+from production_engine.edit_preview_review import (
     apply_action as apply_edit_preview_action,
     snapshot as edit_preview_review_snapshot,
 )
-from final_production_handoff import handoff_is_current
-from final_sound_plan import plan_is_current as final_sound_plan_is_current
-from final_sound_asset_import import (
+from production_engine.final_production_handoff import handoff_is_current
+from production_engine.final_sound_plan import plan_is_current as final_sound_plan_is_current
+from production_engine.final_sound_asset_import import (
     omit as omit_final_sound_requirement,
     register as register_final_sound_asset,
     snapshot as final_sound_asset_snapshot,
 )
-from final_render_manifest import (
+from production_engine.final_render_manifest import (
     manifest_is_current as final_render_manifest_is_current,
 )
-from final_render import (
+from production_engine.final_render import (
     ffmpeg_available as final_ffmpeg_available,
     result_is_current as final_render_result_is_current,
 )
-from final_export_review import (
+from production_engine.final_export_review import (
     apply_action as apply_final_export_action,
     snapshot as final_export_review_snapshot,
 )
-from storyboard_review import (
+from production_engine.storyboard_review import (
     revise as revise_storyboard_shot,
     snapshot as storyboard_review_snapshot,
 )
-from storyboard import snapshot as production_storyboard_snapshot
-from visual_search import snapshot as visual_search_prepare_snapshot
-from visual_search_acquire import snapshot as visual_search_acquire_snapshot
+from production_engine.storyboard import snapshot as production_storyboard_snapshot
+from production_engine.visual_search import snapshot as visual_search_prepare_snapshot
+from production_engine.visual_search_acquire import snapshot as visual_search_acquire_snapshot
 
 from production_engine.thumbnail_review import (
     apply_action as apply_thumbnail_gate_action,
@@ -522,7 +504,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "OPPORTUNITY",
         "command": [
             sys.executable,
-            "experiment_01_discovery/opportunity_research.py",
+            "-m",
+            "experiment_01_discovery.opportunity_research",
             "--mode",
             "start",
         ],
@@ -536,7 +519,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "AUTO",
         "command": [
             sys.executable,
-            "experiment_ui/workflow_automation.py",
+            "-m",
+            "experiment_ui.workflow_automation",
         ],
         "description": (
             "Runs every currently ready deterministic machine step in order and "
@@ -548,7 +532,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "OPPORTUNITY",
         "command": [
             sys.executable,
-            "opportunity_engine/viral_radar.py",
+            "-m",
+            "opportunity_engine.viral_radar",
             "run",
         ],
         "description": (
@@ -562,7 +547,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "OPPORTUNITY",
         "command": [
             sys.executable,
-            "experiment_01_discovery/vidiq_opportunity_enrichment.py",
+            "-m",
+            "experiment_01_discovery.vidiq_opportunity_enrichment",
             "--mode",
             "doctor",
         ],
@@ -577,7 +563,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "OPPORTUNITY",
         "command": [
             sys.executable,
-            "experiment_01_discovery/vidiq_opportunity_enrichment.py",
+            "-m",
+            "experiment_01_discovery.vidiq_opportunity_enrichment",
             "--mode",
             "enrich",
         ],
@@ -592,7 +579,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "ACQ",
         "command": [
             sys.executable,
-            "source_acquisition/agent_reach_adapter.py",
+            "-m",
+            "source_acquisition.agent_reach_adapter",
             "--mode",
             "doctor",
         ],
@@ -603,7 +591,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "ACQ",
         "command": [
             sys.executable,
-            "source_acquisition/youtube_discovery_benchmark.py",
+            "-m",
+            "source_acquisition.youtube_discovery_benchmark",
             "--mode",
             "collect",
             "--limit",
@@ -618,7 +607,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "01.3",
         "command": [
             sys.executable,
-            "experiment_01_discovery/experiment_01_3.py",
+            "-m",
+            "experiment_01_discovery.experiment_01_3",
             "--mode",
             "discover",
             "--replace-cohort",
@@ -632,7 +622,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "01.3",
         "command": [
             sys.executable,
-            "experiment_01_discovery/experiment_01_3.py",
+            "-m",
+            "experiment_01_discovery.experiment_01_3",
             "--mode",
             "discover",
             "--replace-cohort",
@@ -650,7 +641,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "01.3",
         "command": [
             sys.executable,
-            "experiment_01_discovery/experiment_01_3.py",
+            "-m",
+            "experiment_01_discovery.experiment_01_3",
             "--mode",
             "refresh",
         ],
@@ -694,7 +686,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "01.4",
         "command": [
             sys.executable,
-            "experiment_01_discovery/experiment_01_4.py",
+            "-m",
+            "experiment_01_discovery.experiment_01_4",
             "--mode",
             "plan",
         ],
@@ -705,7 +698,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "01.4",
         "command": [
             sys.executable,
-            "experiment_01_discovery/experiment_01_4.py",
+            "-m",
+            "experiment_01_discovery.experiment_01_4",
             "--mode",
             "execute",
         ],
@@ -716,7 +710,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "01.5",
         "command": [
             sys.executable,
-            "experiment_01_discovery/experiment_01_5.py",
+            "-m",
+            "experiment_01_discovery.experiment_01_5",
             "--mode",
             "build",
         ],
@@ -727,7 +722,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/experiment_02.py",
+            "-m",
+            "experiment_02_analysis.experiment_02",
             "--mode",
             "prepare",
         ],
@@ -738,7 +734,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "source_acquisition/experiment_02_evidence.py",
+            "-m",
+            "source_acquisition.experiment_02_evidence",
             "--mode",
             "acquire",
         ],
@@ -752,7 +749,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "source_acquisition/experiment_02_visual.py",
+            "-m",
+            "source_acquisition.experiment_02_visual",
             "--mode",
             "acquire",
         ],
@@ -766,7 +764,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/vision_review.py",
+            "-m",
+            "experiment_02_analysis.vision_review",
             "--mode",
             "prepare",
             "--provider",
@@ -782,7 +781,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "ACQ",
         "command": [
             sys.executable,
-            "experiment_02_analysis/vision_review.py",
+            "-m",
+            "experiment_02_analysis.vision_review",
             "--mode",
             "doctor",
         ],
@@ -796,7 +796,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "ACQ",
         "command": [
             sys.executable,
-            "source_acquisition/experiment_02_visual.py",
+            "-m",
+            "source_acquisition.experiment_02_visual",
             "--mode",
             "acquire",
             "--force",
@@ -811,7 +812,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/analysis_model_runner.py",
+            "-m",
+            "experiment_02_analysis.analysis_model_runner",
             "--mode",
             "doctor",
         ],
@@ -822,7 +824,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/analysis_execute.py",
+            "-m",
+            "experiment_02_analysis.analysis_execute",
             "--mode",
             "batch-prepare",
             "--profiles-dir",
@@ -835,7 +838,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/analysis_model_runner.py",
+            "-m",
+            "experiment_02_analysis.analysis_model_runner",
             "--mode",
             "batch",
             "--requests-dir",
@@ -850,7 +854,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/analysis_model_runner.py",
+            "-m",
+            "experiment_02_analysis.analysis_model_runner",
             "--mode",
             "batch",
             "--requests-dir",
@@ -866,7 +871,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/human_review.py",
+            "-m",
+            "experiment_02_analysis.human_review",
             "--mode",
             "batch-prepare",
         ],
@@ -877,7 +883,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "02",
         "command": [
             sys.executable,
-            "experiment_02_analysis/synthesis_handoff.py",
+            "-m",
+            "experiment_02_analysis.synthesis_handoff",
             "--mode",
             "build",
         ],
@@ -888,7 +895,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "04",
         "command": [
             sys.executable,
-            "transformation_engine/transformation_engine.py",
+            "-m",
+            "transformation_engine.transformation_engine",
             "--mode",
             "prepare",
         ],
@@ -902,7 +910,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "04",
         "command": [
             sys.executable,
-            "transformation_engine/concept_model_runner.py",
+            "-m",
+            "transformation_engine.concept_model_runner",
             "--mode",
             "batch",
             "--requests-dir",
@@ -918,7 +927,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "04",
         "command": [
             sys.executable,
-            "transformation_engine/concept_triage.py",
+            "-m",
+            "transformation_engine.concept_triage",
             "--mode",
             "run",
         ],
@@ -932,7 +942,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "04",
         "command": [
             sys.executable,
-            "transformation_engine/concept_review.py",
+            "-m",
+            "transformation_engine.concept_review",
             "--mode",
             "prepare",
         ],
@@ -945,7 +956,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "05",
         "command": [
             sys.executable,
-            "packaging_engine/packaging_engine.py",
+            "-m",
+            "packaging_engine.packaging_engine",
             "--mode",
             "prepare",
         ],
@@ -958,7 +970,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "05",
         "command": [
             sys.executable,
-            "packaging_engine/package_model_runner.py",
+            "-m",
+            "packaging_engine.package_model_runner",
             "--mode",
             "batch",
             "--requests-dir",
@@ -973,7 +986,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "05",
         "command": [
             sys.executable,
-            "packaging_engine/package_review.py",
+            "-m",
+            "packaging_engine.package_review",
             "--mode",
             "prepare",
         ],
@@ -986,7 +1000,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "06",
         "command": [
             sys.executable,
-            "research_engine/research_engine.py",
+            "-m",
+            "research_engine.research_engine",
             "--mode",
             "prepare",
         ],
@@ -1001,7 +1016,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "06",
         "command": [
             sys.executable,
-            "research_engine/research_acquisition.py",
+            "-m",
+            "research_engine.research_acquisition",
             "--mode",
             "batch",
         ],
@@ -1014,7 +1030,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "06",
         "command": [
             sys.executable,
-            "research_engine/research_model_runner.py",
+            "-m",
+            "research_engine.research_model_runner",
             "--mode",
             "batch",
         ],
@@ -1027,7 +1044,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "06",
         "command": [
             sys.executable,
-            "research_engine/research_review.py",
+            "-m",
+            "research_engine.research_review",
             "--mode",
             "prepare",
         ],
@@ -1040,7 +1058,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "07",
         "command": [
             sys.executable,
-            "story_script_engine/story_plan_engine.py",
+            "-m",
+            "story_script_engine.story_plan_engine",
             "--mode",
             "prepare",
         ],
@@ -1054,7 +1073,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "07",
         "command": [
             sys.executable,
-            "story_script_engine/story_plan_model_runner.py",
+            "-m",
+            "story_script_engine.story_plan_model_runner",
             "--mode",
             "batch",
         ],
@@ -1068,7 +1088,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "07",
         "command": [
             sys.executable,
-            "story_script_engine/story_script_engine.py",
+            "-m",
+            "story_script_engine.story_script_engine",
             "--mode",
             "prepare",
         ],
@@ -1081,7 +1102,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "07",
         "command": [
             sys.executable,
-            "story_script_engine/script_model_runner.py",
+            "-m",
+            "story_script_engine.script_model_runner",
             "--mode",
             "batch",
         ],
@@ -1094,7 +1116,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "07",
         "command": [
             sys.executable,
-            "story_script_engine/script_review.py",
+            "-m",
+            "story_script_engine.script_review",
             "--mode",
             "prepare",
         ],
@@ -1105,7 +1128,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/title_direction.py",
+            "-m",
+            "packaging_engine.title_direction",
             "--mode",
             "prepare",
         ],
@@ -1119,7 +1143,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/title_direction_model_runner.py",
+            "-m",
+            "packaging_engine.title_direction_model_runner",
             "--mode",
             "batch",
         ],
@@ -1133,7 +1158,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/title_direction_review.py",
+            "-m",
+            "packaging_engine.title_direction_review",
             "--mode",
             "prepare",
         ],
@@ -1147,7 +1173,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/packaging_brief.py",
+            "-m",
+            "packaging_engine.packaging_brief",
             "--mode",
             "prepare",
         ],
@@ -1163,7 +1190,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/psychological_angles.py",
+            "-m",
+            "packaging_engine.psychological_angles",
             "--mode",
             "prepare",
         ],
@@ -1177,7 +1205,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/psychological_angle_model_runner.py",
+            "-m",
+            "packaging_engine.psychological_angle_model_runner",
             "--mode",
             "batch",
         ],
@@ -1191,7 +1220,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/thumbnail_concepts.py",
+            "-m",
+            "packaging_engine.thumbnail_concepts",
             "--mode",
             "prepare",
         ],
@@ -1205,7 +1235,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/thumbnail_concept_model_runner.py",
+            "-m",
+            "packaging_engine.thumbnail_concept_model_runner",
             "--mode",
             "batch",
         ],
@@ -1219,7 +1250,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/package_pairing.py",
+            "-m",
+            "packaging_engine.package_pairing",
             "--mode",
             "prepare",
         ],
@@ -1234,7 +1266,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "packaging_engine/package_pairing_model_runner.py",
+            "-m",
+            "packaging_engine.package_pairing_model_runner",
             "--mode",
             "batch",
         ],
@@ -1249,7 +1282,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "format_engine/format_engine.py",
+            "-m",
+            "format_engine.format_engine",
             "--mode",
             "prepare",
         ],
@@ -1263,7 +1297,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "format_engine/format_model_runner.py",
+            "-m",
+            "format_engine.format_model_runner",
             "--mode",
             "batch",
         ],
@@ -1277,7 +1312,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "format_engine/format_review.py",
+            "-m",
+            "format_engine.format_review",
             "--mode",
             "prepare",
         ],
@@ -1290,7 +1326,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/voice_performance.py",
+            "-m",
+            "production_engine.voice_performance",
             "--mode",
             "prepare",
         ],
@@ -1304,7 +1341,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/voice_model_runner.py",
+            "-m",
+            "production_engine.voice_model_runner",
             "--mode",
             "batch",
         ],
@@ -1318,7 +1356,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/voice_review.py",
+            "-m",
+            "production_engine.voice_review",
             "--mode",
             "prepare",
         ],
@@ -1330,67 +1369,67 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
     "pre_render_engagement": {
         "label": "Validate Pre-Render Engagement",
         "stage": "09",
-        "command": [sys.executable, "production_engine/pre_render_engagement.py", "--mode", "batch"],
+        "command": [sys.executable, "-m", "production_engine.pre_render_engagement", "--mode", "batch"],
         "description": "Deterministically checks hook, problem/tension, payoff, exposition length and delivery variation before narration spend.",
     },
     "narration_preview_prepare": {
         "label": "Prepare Free Narration Prototype",
         "stage": "09",
-        "command": [sys.executable, "production_engine/narration_preview.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.narration_preview", "--mode", "prepare"],
         "description": "Builds a zero-cost narration prototype with delivery plus music/SFX suggestions; no paid provider is allowed.",
     },
     "prototype_sound_prepare": {
         "label": "Prepare Reference Music + SFX",
         "stage": "09",
-        "command": [sys.executable, "production_engine/prototype_sound.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.prototype_sound", "--mode", "prepare"],
         "description": "Prepares local AudioGen/MusicGen reference prompts only. Generated media is quarantined and forbidden from final export.",
     },
     "narration_preview_render": {
         "label": "Render Free Narration Prototype",
         "stage": "09",
-        "command": [sys.executable, "production_engine/narration_preview_render.py", "--mode", "batch"],
+        "command": [sys.executable, "-m", "production_engine.narration_preview_render", "--mode", "batch"],
         "description": "Renders the listenable prototype locally with Kokoro. Missing local TTS stops fail-closed; there is no paid fallback.",
     },
     "sound_design_brief_prepare": {
         "label": "Build Approved Sound Design Brief",
         "stage": "09",
-        "command": [sys.executable, "production_engine/sound_design_brief.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.sound_design_brief", "--mode", "prepare"],
         "description": "After the free listen gate, transfers descriptive sound intent only; no prototype AudioGen/MusicGen media crosses into final production.",
     },
     "narration_prepare": {
         "label": "Prepare Narration Render + Cost Boundary",
         "stage": "09",
-        "command": [sys.executable, "production_engine/narration_render.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.narration_render", "--mode", "prepare"],
         "description": "Builds immutable narration render requests and quote templates without making a paid provider call.",
     },
     "narration_spend_gate_prepare": {
         "label": "Prepare Narration Spend Gate",
         "stage": "09",
-        "command": [sys.executable, "production_engine/narration_cost_review.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.narration_cost_review", "--mode", "prepare"],
         "description": "Prepares human approval of the current provider quote and worst-case narration cost.",
     },
     "narration_audio_qc": {
         "label": "Run Narration Audio QC + Timing Map",
         "stage": "09",
-        "command": [sys.executable, "production_engine/narration_audio_qc.py", "--mode", "batch"],
+        "command": [sys.executable, "-m", "production_engine.narration_audio_qc", "--mode", "batch"],
         "description": "Runs local deterministic audio checks and writes narration timing maps.",
     },
     "storyboard_prepare": {
         "label": "Build Cinematic Storyboard",
         "stage": "09",
-        "command": [sys.executable, "production_engine/storyboard.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.storyboard", "--mode", "prepare"],
         "description": "Turns final narration timing into search-first shot cards with cinematic direction; no paid generation is authorized.",
     },
     "visual_search_prepare": {
         "label": "Prepare Visual Search",
         "stage": "09",
-        "command": [sys.executable, "production_engine/visual_search.py", "--mode", "prepare"],
+        "command": [sys.executable, "-m", "production_engine.visual_search", "--mode", "prepare"],
         "description": "Builds rights-aware search requests from storyboard shots.",
     },
     "visual_search_acquire": {
         "label": "Search Free / Existing Visuals",
         "stage": "09",
-        "command": [sys.executable, "production_engine/visual_search_acquire.py", "--mode", "acquire"],
+        "command": [sys.executable, "-m", "production_engine.visual_search_acquire", "--mode", "acquire"],
         "description": "Searches configured zero-cost stock and creator-discovery adapters, then stops for human candidate review.",
     },
     "visual_asset_acquire": {
@@ -1398,7 +1437,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/visual_asset_acquire.py",
+            "-m",
+            "production_engine.visual_asset_acquire",
             "--mode",
             "acquire",
         ],
@@ -1411,7 +1451,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
     "visual_rough_cut_prepare": {
         "label": "Build Visual Rough Cut",
         "stage": "09",
-        "command": [sys.executable, "production_engine/visual_rough_cut.py"],
+        "command": [sys.executable, "-m", "production_engine.visual_rough_cut"],
         "description": (
             "Builds a storyboard-aware rough-cut manifest only after current "
             "visual selections and any required rights/context decisions are complete."
@@ -1420,7 +1460,7 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
     "visual_gap_prepare": {
         "label": "Plan Remaining Visual Gaps",
         "stage": "09",
-        "command": [sys.executable, "production_engine/visual_gap_planner.py"],
+        "command": [sys.executable, "-m", "production_engine.visual_gap_planner"],
         "description": (
             "Plans unresolved visual gaps after human rough-cut approval. "
             "This step never authorizes paid generation."
@@ -1431,7 +1471,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/visual_generation_handoff.py",
+            "-m",
+            "production_engine.visual_generation_handoff",
             "--mode",
             "prepare",
         ],
@@ -1446,7 +1487,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/visual_assembly_plan.py",
+            "-m",
+            "production_engine.visual_assembly_plan",
             "--mode",
             "prepare",
         ],
@@ -1461,7 +1503,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "10",
         "command": [
             sys.executable,
-            "production_engine/edit_manifest.py",
+            "-m",
+            "production_engine.edit_manifest",
             "--mode",
             "prepare",
         ],
@@ -1476,7 +1519,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "10",
         "command": [
             sys.executable,
-            "production_engine/edit_preview_render.py",
+            "-m",
+            "production_engine.edit_preview_render",
             "--mode",
             "batch",
         ],
@@ -1491,7 +1535,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "11",
         "command": [
             sys.executable,
-            "production_engine/final_production_handoff.py",
+            "-m",
+            "production_engine.final_production_handoff",
             "--mode",
             "prepare",
         ],
@@ -1506,7 +1551,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "11",
         "command": [
             sys.executable,
-            "production_engine/final_sound_plan.py",
+            "-m",
+            "production_engine.final_sound_plan",
             "--mode",
             "prepare",
         ],
@@ -1521,7 +1567,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "12",
         "command": [
             sys.executable,
-            "production_engine/final_render_manifest.py",
+            "-m",
+            "production_engine.final_render_manifest",
             "--mode",
             "prepare",
         ],
@@ -1535,7 +1582,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "12",
         "command": [
             sys.executable,
-            "production_engine/final_render.py",
+            "-m",
+            "production_engine.final_render",
             "--mode",
             "batch",
         ],
@@ -1549,7 +1597,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "production_engine/thumbnail_render.py",
+            "-m",
+            "production_engine.thumbnail_render",
             "--mode",
             "render",
         ],
@@ -1564,7 +1613,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "08",
         "command": [
             sys.executable,
-            "production_engine/thumbnail_render.py",
+            "-m",
+            "production_engine.thumbnail_render",
             "--mode",
             "render",
             "--placeholder",
@@ -1579,7 +1629,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         "stage": "09",
         "command": [
             sys.executable,
-            "production_engine/visual_acquisition.py",
+            "-m",
+            "production_engine.visual_acquisition",
             "--mode",
             "prepare",
         ],

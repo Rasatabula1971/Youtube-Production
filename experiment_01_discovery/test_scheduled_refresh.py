@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import scheduled_refresh as scheduler
+from experiment_01_discovery import scheduled_refresh as scheduler
 
 
 class ScheduledRefreshTests(unittest.TestCase):

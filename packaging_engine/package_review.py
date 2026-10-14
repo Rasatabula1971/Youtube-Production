@@ -11,12 +11,10 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
 
-from packaging_gate import (
+from packaging_engine.packaging_gate import (
     APPROVED_FILE,
     DEFAULT_CANDIDATES,
     RESEARCH_HANDOFF_FILE,
@@ -29,7 +27,7 @@ from packaging_gate import (
     load_json,
 )
 
-from packaging_engine import OUTPUT_DIR
+from packaging_engine.packaging_engine import OUTPUT_DIR
 
 STATE_FILE = OUTPUT_DIR / "packaging_gate_ui_state.json"
 SAVED_PACKAGES_FILE = OUTPUT_DIR / "saved_package_ideas.json"

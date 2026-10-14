@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import packaging_brief as brief
+from packaging_engine import packaging_brief as brief
 
 
 def write_json(path: Path, payload: dict) -> Path:

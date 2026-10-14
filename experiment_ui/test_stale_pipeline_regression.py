@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import server
+from experiment_ui import server
 
 
 def write_json(path: Path, payload: dict) -> Path:

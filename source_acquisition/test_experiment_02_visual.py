@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import experiment_02_visual as visual
+from source_acquisition import experiment_02_visual as visual
 
 
 class Experiment02VisualEvidenceTests(unittest.TestCase):

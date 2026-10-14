@@ -12,12 +12,10 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
 
-from research_gate import (
+from research_engine.research_gate import (
     DEFAULT_DRAFTS_DIR,
     HUMAN_REWORK_ORIGIN,
     REVIEW_REQUESTS_DIR,

@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import fair_bridge
+from experiment_02_analysis import fair_bridge
 
 
 class FakeFair:

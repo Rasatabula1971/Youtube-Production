@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import package_model_runner as runner
+from packaging_engine import package_model_runner as runner
 
 
 class PackageModelRunnerReworkTests(unittest.TestCase):

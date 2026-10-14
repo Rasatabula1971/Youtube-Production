@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import opportunity_gate as gate
+from experiment_01_discovery import opportunity_gate as gate
 from opportunity_engine import active_source
 from opportunity_engine import human_topic_search as hts
 from opportunity_engine import human_video_intake as hvi

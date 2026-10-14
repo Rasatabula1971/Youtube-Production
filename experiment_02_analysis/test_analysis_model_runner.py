@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     build_model_prompt,
     call_direct_gemini_backup,
     call_fair_bridge,
@@ -256,9 +256,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
             ["google_gemini_api", "groq", "mistral"],
         )
 
-    @patch("analysis_model_runner.load_experiment_config")
-    @patch("analysis_model_runner.resolve_fair_paths")
-    @patch("analysis_model_runner.call_fair_bridge")
+    @patch("experiment_02_analysis.analysis_model_runner.load_experiment_config")
+    @patch("experiment_02_analysis.analysis_model_runner.resolve_fair_paths")
+    @patch("experiment_02_analysis.analysis_model_runner.call_fair_bridge")
     def test_run_one_applies_accepted_response(
         self,
         call_bridge,
@@ -302,7 +302,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "attempts": [],
             }
 
-            import analysis_model_runner as module
+            from experiment_02_analysis import analysis_model_runner as module
 
             old_runs = module.MODEL_RUNS_DIR
             old_responses = module.MODEL_RESPONSES_DIR
@@ -330,9 +330,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["provider_id"], "kilo_free")
         self.assertEqual(result["apply"]["accepted_findings"], 1)
 
-    @patch("analysis_model_runner.load_experiment_config")
-    @patch("analysis_model_runner.resolve_fair_paths")
-    @patch("analysis_model_runner.call_fair_bridge")
+    @patch("experiment_02_analysis.analysis_model_runner.load_experiment_config")
+    @patch("experiment_02_analysis.analysis_model_runner.resolve_fair_paths")
+    @patch("experiment_02_analysis.analysis_model_runner.call_fair_bridge")
     def test_invalid_final_profile_is_not_applied(
         self,
         call_bridge,
@@ -376,7 +376,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "attempts": [],
             }
 
-            import analysis_model_runner as module
+            from experiment_02_analysis import analysis_model_runner as module
 
             old_runs = module.MODEL_RUNS_DIR
             old_responses = module.MODEL_RESPONSES_DIR
@@ -496,7 +496,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "analysis_model_runner.urllib.request.urlopen",
+                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
                 return_value=FakeResponse(),
             ) as urlopen,
         ):
@@ -589,7 +589,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "analysis_model_runner.urllib.request.urlopen",
+                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
                 side_effect=fake_urlopen,
             ) as urlopen,
         ):
@@ -691,7 +691,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "analysis_model_runner.urllib.request.urlopen",
+                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
                 side_effect=fake_urlopen,
             ),
         ):
@@ -762,7 +762,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "analysis_model_runner.urllib.request.urlopen",
+                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
                 side_effect=raise_http_error,
             ),
         ):
@@ -817,9 +817,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
                 patch(
-                    "analysis_model_runner.call_direct_gemini_backup",
+                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup",
                     return_value=backup,
                 ) as direct_backup,
             ):
@@ -873,9 +873,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
                 patch(
-                    "analysis_model_runner.call_direct_gemini_backup",
+                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup",
                     return_value=backup,
                 ) as direct_backup,
             ):
@@ -921,9 +921,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
                 patch(
-                    "analysis_model_runner.call_direct_gemini_backup"
+                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup"
                 ) as direct_backup,
             ):
                 result = call_fair_bridge(
@@ -946,8 +946,8 @@ class AnalysisModelRunnerTests(unittest.TestCase):
         }
         self.assertFalse(inference_cost_authorized(result))
 
-    @patch("analysis_model_runner.resolve_fair_paths")
-    @patch("analysis_model_runner.call_fair_bridge")
+    @patch("experiment_02_analysis.analysis_model_runner.resolve_fair_paths")
+    @patch("experiment_02_analysis.analysis_model_runner.call_fair_bridge")
     def test_paid_inference_fails_closed(
         self,
         call_bridge,
@@ -976,7 +976,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 "paid_inference_executed": True,
             }
 
-            import analysis_model_runner as module
+            from experiment_02_analysis import analysis_model_runner as module
 
             old_runs = module.MODEL_RUNS_DIR
             try:

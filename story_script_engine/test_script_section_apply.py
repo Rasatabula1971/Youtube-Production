@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-import script_section_apply as section_apply
-import script_section_rework_runner as rework_runner
-import script_section_state as section_state
+from story_script_engine import script_section_apply as section_apply
+from story_script_engine import script_section_rework_runner as rework_runner
+from story_script_engine import script_section_state as section_state
 
 
 class ScriptSectionApplyTests(unittest.TestCase):

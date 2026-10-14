@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import packaging_engine as module
+from packaging_engine import packaging_engine as module
 
-from packaging_engine import (
+from packaging_engine.packaging_engine import (
     build_package_request,
     run_apply,
     validate_response,

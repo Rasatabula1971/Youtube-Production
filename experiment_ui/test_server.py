@@ -10,7 +10,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import server
+from experiment_ui import server
 
 
 class ExperimentUiTests(unittest.TestCase):

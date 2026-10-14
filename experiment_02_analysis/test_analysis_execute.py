@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from analysis_execute import (
+from experiment_02_analysis.analysis_execute import (
     build_analysis_request,
     merge_analysis_response,
     objective_metrics,
@@ -122,7 +122,7 @@ class AnalysisExecutionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("analysis_execute.REQUESTS_DIR", requests):
+            with patch("experiment_02_analysis.analysis_execute.REQUESTS_DIR", requests):
                 run_batch_prepare(profiles)
 
             self.assertFalse(stale.exists())

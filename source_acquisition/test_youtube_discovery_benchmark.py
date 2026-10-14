@@ -1,6 +1,6 @@
 import unittest
 
-from youtube_discovery_benchmark import (
+from source_acquisition.youtube_discovery_benchmark import (
     _agent_map,
     _reference_map,
     compare,

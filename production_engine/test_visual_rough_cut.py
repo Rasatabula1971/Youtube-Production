@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import visual_rough_cut
+from production_engine import visual_rough_cut
 
 
 class VisualRoughCutTests(unittest.TestCase):

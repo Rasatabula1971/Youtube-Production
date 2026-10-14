@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import final_packaging_review as fpr
-import script_review
-import thumbnail_concepts
-import title_direction_review
+from packaging_engine import final_packaging_review as fpr
+from story_script_engine import script_review
+from packaging_engine import thumbnail_concepts
+from packaging_engine import title_direction_review
 
 CRITERIA = {
     "title_and_thumbnail_read_as_one_unit": True,

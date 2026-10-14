@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import experiment_02_evidence as acquisition
+from source_acquisition import experiment_02_evidence as acquisition
 
 
 class Experiment02EvidenceAcquisitionTests(unittest.TestCase):

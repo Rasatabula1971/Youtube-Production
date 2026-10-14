@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import server
+from experiment_ui import server
 from opportunity_engine import active_source
 from opportunity_engine import human_topic_search as hts
 from opportunity_engine import historical_adapter

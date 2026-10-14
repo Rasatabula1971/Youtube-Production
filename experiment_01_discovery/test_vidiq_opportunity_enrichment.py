@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import vidiq_opportunity_enrichment as enrich
-import vidiq_mcp
+from experiment_01_discovery import vidiq_opportunity_enrichment as enrich
+from experiment_01_discovery import vidiq_mcp
 
 
 class FakeClient:

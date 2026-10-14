@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from packaging_gate import (
+from packaging_engine.packaging_gate import (
     apply_gate,
     build_review_request,
     validate_decisions,

@@ -10,13 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from story_script_engine import DRAFTS_DIR, load_json, safe_slug, sha256_file
-from script_review import (
+from story_script_engine.story_script_engine import DRAFTS_DIR, load_json, safe_slug, sha256_file
+from story_script_engine.script_review import (
     APPROVED_DIR,
     RESPONSES_DIR as SCRIPT_REVIEW_RESPONSES_DIR,
     reviewer_id,
 )
-from script_section_apply import (
+from story_script_engine.script_section_apply import (
     SCRIPT_VERSIONS_DIR,
     SELECTION_TRANSACTIONS_DIR,
     apply_manual_edit,
@@ -24,7 +24,7 @@ from script_section_apply import (
     list_saved_versions,
     restore_saved_version,
 )
-from script_section_rework_runner import (
+from story_script_engine.script_section_rework_runner import (
     ALTERNATIVES_DIR,
     REWORK_REQUESTS_DIR,
     REWORK_RESPONSES_DIR,
@@ -32,7 +32,7 @@ from script_section_rework_runner import (
     prepare_rework_request,
     run_one as run_section_rework,
 )
-from script_section_state import (
+from story_script_engine.script_section_state import (
     ALLOWED_REWORK_REASONS,
     SECTION_STATE_DIR,
     apply_target_action,
@@ -443,7 +443,7 @@ def apply_action(
         if not state_path.is_file():
             raise ValueError("Section state is not prepared")
         if review_requests_dir is None:
-            from script_review import REVIEW_REQUESTS_DIR
+            from story_script_engine.script_review import REVIEW_REQUESTS_DIR
 
             review_requests_dir = REVIEW_REQUESTS_DIR
         request_path = prepare_rework_request(
@@ -478,7 +478,7 @@ def apply_action(
         if not state_path.is_file():
             raise ValueError("Section state is not prepared")
         if review_requests_dir is None:
-            from script_review import REVIEW_REQUESTS_DIR
+            from story_script_engine.script_review import REVIEW_REQUESTS_DIR
 
             review_requests_dir = REVIEW_REQUESTS_DIR
         request_path = prepare_rework_request(
@@ -523,7 +523,7 @@ def apply_action(
             raise ValueError("Alternatives are not ready for this target")
 
         if review_requests_dir is None:
-            from script_review import REVIEW_REQUESTS_DIR
+            from story_script_engine.script_review import REVIEW_REQUESTS_DIR
 
             review_requests_dir = REVIEW_REQUESTS_DIR
 
@@ -545,7 +545,7 @@ def apply_action(
         if not state_path.is_file():
             raise ValueError("Section state is not prepared")
         if review_requests_dir is None:
-            from script_review import REVIEW_REQUESTS_DIR
+            from story_script_engine.script_review import REVIEW_REQUESTS_DIR
 
             review_requests_dir = REVIEW_REQUESTS_DIR
 
@@ -591,7 +591,7 @@ def apply_action(
         if not str(version_id or "").strip():
             raise ValueError("RESTORE_VERSION requires version_id")
         if review_requests_dir is None:
-            from script_review import REVIEW_REQUESTS_DIR
+            from story_script_engine.script_review import REVIEW_REQUESTS_DIR
 
             review_requests_dir = REVIEW_REQUESTS_DIR
 

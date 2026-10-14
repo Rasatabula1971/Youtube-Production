@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import visual_rough_cut_review as review
+from production_engine import visual_rough_cut_review as review
 
 
 class VisualRoughCutReviewTests(unittest.TestCase):

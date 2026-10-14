@@ -13,7 +13,7 @@ import json
 import subprocess
 from typing import Any
 
-import server as control
+from experiment_ui import server as control
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",

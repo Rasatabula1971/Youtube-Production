@@ -1,7 +1,7 @@
 import unittest
 
-from analysis_execute import OPPORTUNITY_INSTRUCTIONS, build_analysis_request
-from experiment_02 import build_profile_from_study_item, load_config
+from experiment_02_analysis.analysis_execute import OPPORTUNITY_INSTRUCTIONS, build_analysis_request
+from experiment_02_analysis.experiment_02 import build_profile_from_study_item, load_config
 
 CONTEXT = {
     "source_type": "VIRAL_RADAR",

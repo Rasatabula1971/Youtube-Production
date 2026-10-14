@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-import server
+from experiment_ui import server
 
 
 class ThumbnailUiIntegrationTests(unittest.TestCase):

@@ -539,7 +539,7 @@ def validate_annotation(item: dict[str, Any], config: dict[str, Any]) -> list[st
 def ollama_thumbnail_draft(
     image_path: Path, *, model: str, host: str, config: dict[str, Any]
 ) -> dict[str, Any]:
-    from vision_review import normalize_ollama_host
+    from experiment_02_analysis.vision_review import normalize_ollama_host
 
     host = normalize_ollama_host(host)
     payload = {

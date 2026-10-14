@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import narration_render_import as render_import
+from production_engine import narration_render_import as render_import
 
 
 def request_payload() -> dict:

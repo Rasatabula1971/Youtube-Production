@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import visual_asset_acquire as acquire
+from production_engine import visual_asset_acquire as acquire
 
 
 def write_json(path: Path, payload: dict) -> Path:

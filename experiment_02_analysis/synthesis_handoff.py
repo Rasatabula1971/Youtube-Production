@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from experiment_02 import (
+from experiment_02_analysis.experiment_02 import (
     load_config,
     load_json,
     load_study_set_video_ids,

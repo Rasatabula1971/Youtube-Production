@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from agent_reach_adapter import (
+from source_acquisition.agent_reach_adapter import (
     AcquisitionError,
     doctor,
     render_console_json,

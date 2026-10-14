@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import title_direction_model_runner as runner
+from packaging_engine import title_direction_model_runner as runner
 
 
 class TitleDirectionModelRunnerTests(unittest.TestCase):

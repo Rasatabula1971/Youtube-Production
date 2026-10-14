@@ -1,6 +1,6 @@
 import unittest
 
-from human_framing import validate
+from transformation_engine.human_framing import validate
 
 
 def valid_framing():

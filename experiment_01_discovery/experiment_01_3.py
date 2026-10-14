@@ -21,13 +21,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from evidence_quality import classify_outlier_reliability
-from market_intelligence import (
+from experiment_01_discovery.evidence_quality import classify_outlier_reliability
+from experiment_01_discovery.market_intelligence import (
     append_snapshots,
     calculate_snapshot_velocity,
     load_snapshot_history,
 )
-from youtube_discovery import (
+from experiment_01_discovery.youtube_discovery import (
     age_days,
     api_get,
     baseline_confidence,
@@ -43,8 +43,6 @@ from youtube_discovery import (
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from source_acquisition.agent_reach_adapter import (
     AcquisitionError,

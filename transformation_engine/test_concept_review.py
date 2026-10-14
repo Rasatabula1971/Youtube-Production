@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import concept_review as review
+from transformation_engine import concept_review as review
 
 
 class ConceptReviewTests(unittest.TestCase):

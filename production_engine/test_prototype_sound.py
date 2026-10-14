@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import prototype_sound
-import sound_design_brief
+from production_engine import prototype_sound
+from production_engine import sound_design_brief
 
 
 class PrototypeSoundBoundaryTests(unittest.TestCase):

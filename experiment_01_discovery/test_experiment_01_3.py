@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import experiment_01_3 as exp13
-from experiment_01_3 import (
+from experiment_01_discovery import experiment_01_3 as exp13
+from experiment_01_discovery.experiment_01_3 import (
     aggregate_age_matched_velocity,
     calculate_age_window,
     classify_topic_relevance,

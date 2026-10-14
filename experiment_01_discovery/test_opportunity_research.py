@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import opportunity_research as research
+from experiment_01_discovery import opportunity_research as research
 
 
 class OpportunityResearchTests(unittest.TestCase):

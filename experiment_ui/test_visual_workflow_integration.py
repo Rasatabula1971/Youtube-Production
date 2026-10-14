@@ -4,8 +4,8 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import patch
 
-import server
-import workflow_automation
+from experiment_ui import server
+from experiment_ui import workflow_automation
 
 
 class VisualWorkflowIntegrationTests(unittest.TestCase):

@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import final_production_handoff as handoff
+from production_engine import final_production_handoff as handoff
 
 
 def write_json(path: Path, payload: dict) -> Path:

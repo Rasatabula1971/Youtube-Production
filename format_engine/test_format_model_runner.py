@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import format_model_runner as runner
+from format_engine import format_model_runner as runner
 
 
 class FormatModelRunnerFallbackTests(unittest.TestCase):

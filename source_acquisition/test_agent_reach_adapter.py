@@ -3,7 +3,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-import agent_reach_adapter as adapter
+from source_acquisition import agent_reach_adapter as adapter
 
 
 class AgentReachAdapterTests(unittest.TestCase):

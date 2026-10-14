@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 from contextlib import ExitStack
 
-import transformation_engine as module
-from transformation_engine import (
+from transformation_engine import transformation_engine as module
+from transformation_engine.transformation_engine import (
     build_concept_request,
     merge_candidate_files,
     ready_entries,

@@ -16,7 +16,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from experiment_02 import (
+from experiment_02_analysis.experiment_02 import (
     OUTPUT_DIR,
     load_config,
     load_json,

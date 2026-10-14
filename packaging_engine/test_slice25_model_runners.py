@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-import psychological_angle_model_runner as angle_runner
-import thumbnail_concept_model_runner as thumb_runner
+from packaging_engine import psychological_angle_model_runner as angle_runner
+from packaging_engine import thumbnail_concept_model_runner as thumb_runner
 
 
 class Slice25ModelRunnerTests(unittest.TestCase):

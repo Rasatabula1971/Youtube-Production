@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from concept_triage import (
+from transformation_engine.concept_triage import (
     build_prompt,
     build_shortlist_payload,
     compact_concepts,
@@ -273,7 +273,7 @@ class ConceptTriageTests(unittest.TestCase):
             ({"status": "MODEL_ESCALATION_REQUIRED"}, None),
             ({"status": "VALIDATED"}, {"decisions": [{"concept_id": "c3"}]}),
         ]
-        with patch("concept_triage.run_chunk", side_effect=side_effect) as mocked:
+        with patch("transformation_engine.concept_triage.run_chunk", side_effect=side_effect) as mocked:
             results, triages, failed = run_first_pass(
                 chunks,
                 source_hash="abc",
