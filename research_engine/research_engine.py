@@ -15,6 +15,9 @@ import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -32,12 +35,6 @@ REJECTED_FILE = OUTPUT_DIR / "rejected_research_inputs.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
 
 
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def load_config() -> dict[str, Any]:
     config = load_json(CONFIG_FILE)
     required = {
@@ -50,17 +47,6 @@ def load_config() -> dict[str, Any]:
     if missing:
         raise SystemExit("Research config is missing: " + ", ".join(missing))
     return config
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_" for char in value
-    ).strip("._")
-    return cleaned or "unknown"
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def assert_unique_slug_ids(values: list[str], *, label: str) -> None:

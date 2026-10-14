@@ -5,8 +5,9 @@ import unittest
 from pathlib import Path
 
 from production_engine.visual_gap_planner import build as build_gaps
-from production_engine.visual_rough_cut import build, sha256_file
-from production_engine.visual_search import shot_fingerprint
+from production_engine.visual_rough_cut import build
+from core.hashing import sha256_file
+from core.hashing import canonical_sha256 as shot_fingerprint
 
 
 def editorial_board() -> dict:

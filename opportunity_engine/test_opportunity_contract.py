@@ -2,8 +2,6 @@ import copy
 import unittest
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-
 from opportunity_engine import channel_scope, models  # noqa: E402
 from opportunity_engine.packet_schema import build_packet, evidence, validate_packet  # noqa: E402
 from opportunity_engine.provenance import opportunity_id, packet_sha256  # noqa: E402

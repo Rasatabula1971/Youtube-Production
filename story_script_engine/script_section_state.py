@@ -14,10 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
-from story_script_engine.story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from story_script_engine.story_script_engine import OUTPUT_DIR
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as _canonical_sha256
 
 SECTION_STATE_DIR = OUTPUT_DIR / "script_section_states"
 SECTION_STATE_ACTION_LOCK = threading.RLock()
@@ -40,16 +42,6 @@ ALLOWED_REWORK_REASONS = {
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _canonical_sha256(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
 
 
 def _draft_identity(draft: dict[str, Any]) -> tuple[str, str]:

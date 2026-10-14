@@ -16,15 +16,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from packaging_engine.title_direction import (
     CANDIDATES_FILE,
     REQUESTS_DIR,
     RESPONSES_DIR,
-    load_json,
-    safe_slug,
-    sha256_file,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as _content_hash
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -35,17 +36,6 @@ SUMMARY_FILE = OUTPUT_DIR / "title_direction_gate_summary.json"
 
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
-
-
-def _content_hash(value: Any) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-    ).hexdigest()
 
 
 def candidates_hash() -> str | None:

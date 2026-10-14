@@ -19,10 +19,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
-from story_script_engine.story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
+from core.pipeline_integrity import atomic_write_json
+from story_script_engine.story_script_engine import OUTPUT_DIR, validate_script_response
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from story_script_engine.script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     assert_state_matches_draft,

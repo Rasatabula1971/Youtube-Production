@@ -25,10 +25,11 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from packaging_engine import package_pairing
 from packaging_engine.packaging_brief import load_json
-from story_script_engine.story_script_engine import safe_slug
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as content_hash
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "final_packaging_gate_config.json"
@@ -65,14 +66,6 @@ def required_criteria(config: dict[str, Any]) -> list[str]:
     if config["require_approved_thumbnail_image"]:
         criteria.append(str(config["image_criterion"]))
     return criteria
-
-
-def content_hash(value: Any) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode("utf-8")
-    ).hexdigest()
 
 
 def render_id_for(video_id: str, thumbnail_id: str) -> str:

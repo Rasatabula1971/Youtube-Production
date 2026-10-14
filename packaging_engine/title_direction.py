@@ -16,12 +16,15 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from story_script_engine.script_review import (
     APPROVED_DIR as APPROVED_SCRIPTS_DIR,
     _approved_bundle_is_current,
 )
-from story_script_engine.story_script_engine import load_json, safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as _fingerprint
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -46,13 +49,6 @@ def load_config() -> dict[str, Any]:
     if len(angles) != 5 or len(set(angles)) != 5:
         raise ValueError("Slice 23 requires five unique title angles")
     return payload
-
-
-def _fingerprint(value: Any) -> str:
-    raw = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _branch_context(bundle: dict[str, Any]) -> list[dict[str, Any]]:

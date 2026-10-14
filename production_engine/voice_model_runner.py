@@ -13,7 +13,7 @@ from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-from pipeline_integrity import (
+from core.pipeline_integrity import (
     atomic_write_json,
     atomic_write_text,
     batch_status,
@@ -23,7 +23,7 @@ from pipeline_integrity import (
 
 EXP2_DIR = _ROOT / "experiment_02_analysis"
 
-from experiment_02_analysis.analysis_model_runner import (
+from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -39,12 +39,12 @@ from production_engine.voice_performance import (
     REQUESTS_DIR,
     RESPONSES_DIR,
     SPECS_DIR,
-    load_json,
-    safe_slug,
-    sha256_file,
     validate_response,
     validation_contract_sha256,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 BATCH_SUMMARY_FILE = SPECS_DIR.parent / "voice_performance_model_batch_summary.json"
 

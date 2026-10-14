@@ -14,9 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json, exit_code_for_status
+from core.pipeline_integrity import atomic_write_json, exit_code_for_status
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -26,6 +24,8 @@ from source_acquisition.agent_reach_adapter import (
     read_web_page_with_fallback,
     search_web_with_fallback,
 )
+from core.hashing import sha256_file
+from core.slugs import safe_slug
 
 PLANS_DIR = HERE / "output" / "plans"
 OUTPUT_DIR = HERE / "output" / "acquired_evidence"
@@ -35,17 +35,6 @@ CONFIG_FILE = HERE / "research_acquisition_config.json"
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_" for char in value
-    ).strip("._")
-    return cleaned or "unknown"
 
 
 DEFAULT_SEARCH_BACKENDS = ["exa", "duckduckgo", "wikipedia"]

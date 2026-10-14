@@ -20,12 +20,13 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from packaging_engine.title_direction_review import (
     APPROVED_FILE as TITLE_SELECTION_FILE,
     snapshot as title_direction_snapshot,
 )
-from story_script_engine.story_script_engine import safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.slugs import safe_slug
 from story_script_engine.script_review import (
     APPROVED_DIR as APPROVED_SCRIPTS_DIR,
     _approved_bundle_is_current,

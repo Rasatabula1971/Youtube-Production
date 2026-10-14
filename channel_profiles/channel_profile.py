@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+from core.hashing import sha256_file as _sha256
 
 HERE = Path(__file__).resolve().parent
 ACTIVE_SELECTOR = HERE / "active_profile.json"
@@ -42,10 +43,6 @@ _REQUIRED_APPROVED_OBJECTS = {
 
 def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def validate_profile(profile: Any) -> dict[str, Any]:

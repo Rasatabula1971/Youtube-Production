@@ -17,9 +17,12 @@ from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-from pipeline_integrity import atomic_write_json, atomic_write_text
-from source_overlap import check_texts
-from story_script_engine.story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json, atomic_write_text
+from core.source_overlap import check_texts
+from story_script_engine.story_script_engine import OUTPUT_DIR
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from story_script_engine.script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     assert_state_matches_draft,
@@ -27,7 +30,7 @@ from story_script_engine.script_section_state import (
 
 EXP2_DIR = _ROOT / "experiment_02_analysis"
 
-from experiment_02_analysis.analysis_model_runner import (
+from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -90,7 +93,7 @@ def validation_contract_sha256() -> str:
     digest = hashlib.sha256()
     for path in (
         Path(__file__).resolve(),
-        (_ROOT / "source_overlap.py").resolve(),
+        (_ROOT / "core" / "source_overlap.py").resolve(),
     ):
         digest.update(path.read_bytes())
         digest.update(b"\0")

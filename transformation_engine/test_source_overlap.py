@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import source_overlap
+from core import source_overlap
 
 
 class SourceOverlapTests(unittest.TestCase):

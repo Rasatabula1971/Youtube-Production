@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
 from production_engine.visual_candidate_review import candidate_selection_status
 from production_engine.visual_search import search_result_is_current
 

@@ -19,19 +19,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+from core.pipeline_integrity import atomic_write_json
 
-from pipeline_integrity import atomic_write_json
-
-from experiment_02_analysis.evidence_ingest import sha256_file
+from core.hashing import sha256_file
 from experiment_02_analysis.experiment_02 import (
     OUTPUT_DIR,
     evidence_index,
     load_config,
-    load_json,
     safe_filename,
     validate_profile,
 )
+from core.jsonio import load_json_or_exit as load_json
+from core.hashing import canonical_sha256 as content_sha256
 
 HERE = Path(__file__).resolve().parent
 REVIEW_CONFIG_FILE = HERE / "human_review_config.json"
@@ -47,16 +46,6 @@ DEFAULT_REVIEWER = "local-operator"
 
 def reviewer_id() -> str:
     return os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER).strip() or DEFAULT_REVIEWER
-
-
-def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def review_item_id(item: dict[str, Any]) -> str:

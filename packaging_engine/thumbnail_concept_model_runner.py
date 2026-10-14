@@ -11,14 +11,14 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _EXP2 = _ROOT / "experiment_02_analysis"
 
-from pipeline_integrity import (
+from core.pipeline_integrity import (
     atomic_write_json,
     atomic_write_text,
     batch_status,
     exit_code_for_status,
     tolerant_load_json,
 )
-from experiment_02_analysis.analysis_model_runner import (
+from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -36,10 +36,10 @@ from packaging_engine.thumbnail_concepts import (
     load_json,
     request_is_current,
     run_apply,
-    safe_slug,
-    sha256_file,
     validate_response,
 )
+from core.hashing import sha256_file
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"

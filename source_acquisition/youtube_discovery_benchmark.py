@@ -20,6 +20,7 @@ from source_acquisition.agent_reach_adapter import (
     search_youtube,
     youtube_health,
 )
+from core.jsonio import load_json
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -35,12 +36,6 @@ OUTPUT_DIR = HERE / "output" / "youtube_discovery_benchmark"
 RESULTS_FILE = OUTPUT_DIR / "agent_reach_results.json"
 COMPARISON_FILE = OUTPUT_DIR / "comparison.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def query_plan(config: dict[str, Any]) -> list[dict[str, str]]:

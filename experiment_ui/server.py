@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 STATIC_DIR = HERE / "static"
 APP_ROUTES = {"/", "/opportunity", "/analysis", "/tools"}
@@ -135,9 +135,9 @@ from transformation_engine.concept_review import (
     snapshot as concept_gate_snapshot,
 )
 from transformation_engine.transformation_engine import (
-    safe_slug as transformation_safe_slug,
     validation_contract_sha256 as transformation_validation_contract_sha256,
 )
+from core.slugs import safe_slug as transformation_safe_slug
 
 TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
 TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
@@ -366,6 +366,7 @@ from production_engine.thumbnail_review import (
 from production_engine.thumbnail_review import (
     update_spec as update_thumbnail_spec,
 )
+from core.hashing import sha256_file
 
 PRODUCTION_OUTPUT = PRODUCTION_DIR / "output"
 PRODUCTION_VOICE_REQUESTS_DIR = PRODUCTION_OUTPUT / "voice_performance_requests"
@@ -1854,14 +1855,6 @@ def exp15_status() -> str | None:
 
 def exp2_status() -> str | None:
     return json_file_status(EXP2_OUTPUT / "summary.json", "status")
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def json_stems(path: Path) -> set[str]:

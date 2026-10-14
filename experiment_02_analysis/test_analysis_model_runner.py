@@ -8,16 +8,18 @@ from unittest.mock import patch
 
 from experiment_02_analysis.analysis_model_runner import (
     build_model_prompt,
-    call_direct_gemini_backup,
-    call_fair_bridge,
-    confirmed_free_providers,
-    gemini_compatible_schema,
-    fair_allows_direct_gemini_fallback,
-    inference_cost_authorized,
-    parse_model_json,
     response_schema,
     restrict_response_to_request,
     run_one,
+)
+from core.model_bridge import (
+    call_direct_gemini_backup,
+    call_fair_bridge,
+    confirmed_free_providers,
+    fair_allows_direct_gemini_fallback,
+    gemini_compatible_schema,
+    inference_cost_authorized,
+    parse_model_json,
 )
 
 
@@ -496,7 +498,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 return_value=FakeResponse(),
             ) as urlopen,
         ):
@@ -589,7 +591,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 side_effect=fake_urlopen,
             ) as urlopen,
         ):
@@ -691,7 +693,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 side_effect=fake_urlopen,
             ),
         ):
@@ -762,7 +764,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 side_effect=raise_http_error,
             ),
         ):
@@ -817,9 +819,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("core.model_bridge.subprocess.run", side_effect=fake_run),
                 patch(
-                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup",
+                    "core.model_bridge.call_direct_gemini_backup",
                     return_value=backup,
                 ) as direct_backup,
             ):
@@ -873,9 +875,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("core.model_bridge.subprocess.run", side_effect=fake_run),
                 patch(
-                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup",
+                    "core.model_bridge.call_direct_gemini_backup",
                     return_value=backup,
                 ) as direct_backup,
             ):
@@ -921,9 +923,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("core.model_bridge.subprocess.run", side_effect=fake_run),
                 patch(
-                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup"
+                    "core.model_bridge.call_direct_gemini_backup"
                 ) as direct_backup,
             ):
                 result = call_fair_bridge(

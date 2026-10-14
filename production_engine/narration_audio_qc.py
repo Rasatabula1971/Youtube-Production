@@ -15,9 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from production_engine.narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
 from production_engine.narration_render import (
     CONFIG_FILE,
@@ -25,9 +23,9 @@ from production_engine.narration_render import (
     REQUESTS_DIR,
     artifact_key,
     load_config,
-    load_json,
-    sha256_file,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
 from production_engine.narration_render_import import (
     current_result as current_registered_result,
     snapshot as narration_render_return_snapshot,

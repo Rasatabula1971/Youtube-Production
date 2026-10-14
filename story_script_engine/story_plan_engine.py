@@ -13,21 +13,19 @@ import json
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
 from channel_profiles.channel_profile import (
     load_active_profile_binding,
     normalize_binding,
 )
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from story_script_engine.story_script_engine import (
-    RESEARCH_VERIFIED_DIR,
     OUTPUT_DIR,
+    RESEARCH_VERIFIED_DIR,
     assert_unique_slug_ids,
-    load_json,
-    safe_slug,
-    sha256_file,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 STORY_PLAN_REQUESTS_DIR = OUTPUT_DIR / "story_plan_requests"
 STORY_PLAN_RESPONSES_DIR = OUTPUT_DIR / "story_plan_responses"

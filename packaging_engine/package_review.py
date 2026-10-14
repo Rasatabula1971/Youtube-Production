@@ -9,24 +9,23 @@ import os
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 from packaging_engine.packaging_gate import (
     APPROVED_FILE,
     DEFAULT_CANDIDATES,
     RESEARCH_HANDOFF_FILE,
-    REVIEW_REQUEST_FILE,
     REVIEWED_FILE,
+    REVIEW_REQUEST_FILE,
     SUMMARY_FILE,
     apply_gate,
     build_review_request,
     load_config,
-    load_json,
 )
+from core.jsonio import load_json
 
 from packaging_engine.packaging_engine import OUTPUT_DIR
+from core.hashing import sha256_file
 
 STATE_FILE = OUTPUT_DIR / "packaging_gate_ui_state.json"
 SAVED_PACKAGES_FILE = OUTPUT_DIR / "saved_package_ideas.json"
@@ -36,10 +35,6 @@ DEFAULT_REVIEWER = "local-operator"
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     atomic_write_json(path, payload)
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def candidates_hash() -> str | None:

@@ -10,23 +10,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 from research_engine.research_gate import (
     DEFAULT_DRAFTS_DIR,
     HUMAN_REWORK_ORIGIN,
-    REVIEW_REQUESTS_DIR,
     REVIEWED_DIR,
+    REVIEW_REQUESTS_DIR,
     SUMMARY_FILE,
     VERIFIED_DIR,
     apply_gate,
     build_review_request,
     load_config,
-    load_json,
-    safe_slug,
 )
+from core.jsonio import load_json
+from core.slugs import safe_slug
+from core.hashing import sha256_file
 
 OUTPUT_DIR = DEFAULT_DRAFTS_DIR.parent
 STATE_FILE = OUTPUT_DIR / "research_gate_ui_state.json"
@@ -36,10 +35,6 @@ DEFAULT_REVIEWER = "local-operator"
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     atomic_write_json(path, payload)
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def claim_fingerprint(item: dict[str, Any]) -> str:
