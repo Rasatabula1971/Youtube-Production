@@ -365,7 +365,7 @@ def run_one(
             ),
         )
     except Exception as exc:
-        report = {
+        report: dict[str, Any] = {
             "concept_id": concept_id,
             "status": "RUNNER_ERROR",
             "error_type": type(exc).__name__,

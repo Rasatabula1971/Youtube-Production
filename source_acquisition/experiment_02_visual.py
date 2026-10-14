@@ -413,7 +413,7 @@ def acquire_visual_one(
     thumbnail = base.find_thumbnail(output_dir, video_id)
     info_json = base.find_info_json(output_dir, video_id)
     if transcript is None:
-        result = {
+        result: dict[str, Any] = {
             "video_id": video_id,
             "status": "WAITING_FOR_TRANSCRIPT",
             "profile_sha256": prepared_hash,

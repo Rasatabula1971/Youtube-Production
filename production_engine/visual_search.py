@@ -259,7 +259,8 @@ def snapshot() -> dict[str, Any]:
     current_boards = []
     if STORYBOARD_DIR.exists():
         for board_path in sorted(STORYBOARD_DIR.glob("*.storyboard.json")):
-            state = storyboard_is_current(board_path)
+            # `state` holds two differently shaped tuples in this function.
+            state: tuple[Any, ...] | None = storyboard_is_current(board_path)
             if state is not None:
                 current_boards.append(board_path)
 

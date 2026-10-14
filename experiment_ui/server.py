@@ -3030,7 +3030,7 @@ def voice_performance_artifact_state() -> dict[str, Any]:
 
     requests_ready = bool(expected) and expected.issubset(request_hashes)
     specs_ready = requests_ready and expected.issubset(spec_keys)
-    performance_gate = (
+    performance_gate: dict[str, Any] = (
         performance_gate_snapshot()
         if specs_ready
         else {
