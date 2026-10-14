@@ -35,7 +35,7 @@ as `pkgq001`.
 ## Prepare
 
 ~~~powershell
-python .\research_engine\research_engine.py --mode prepare
+python -m research_engine.research_engine --mode prepare
 ~~~
 
 This creates one plan per accepted concept:
@@ -124,7 +124,7 @@ research_engine/output/research_responses/
 Then run:
 
 ~~~powershell
-python .\research_engine\research_engine.py --mode apply
+python -m research_engine.research_engine --mode apply
 ~~~
 
 Draft packages are written to:

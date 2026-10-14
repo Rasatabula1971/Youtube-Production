@@ -98,7 +98,7 @@ Paths are resolved relative to the bundle manifest.
 ## Run
 
 ```powershell
-python .\experiment_02_analysis\evidence_ingest.py --bundle ".\path\to\bundle.json"
+python -m experiment_02_analysis.evidence_ingest --bundle ".\path\to\bundle.json"
 ```
 
 The prepared source profile is not overwritten.
@@ -148,7 +148,7 @@ collector:
 Run:
 
 ~~~powershell
-python .\source_acquisition\experiment_02_evidence.py --mode acquire
+python -m source_acquisition.experiment_02_evidence --mode acquire
 ~~~
 
 The collector uses `yt-dlp` only for:
@@ -186,7 +186,7 @@ stage can add objective pacing evidence:
 Run:
 
 ~~~powershell
-python .\source_acquisition\experiment_02_visual.py --mode acquire
+python -m source_acquisition.experiment_02_visual --mode acquire
 ~~~
 
 Requirements:
@@ -226,7 +226,7 @@ review set from the retained opening/scene frames:
 Prepare:
 
 ~~~powershell
-python .\experiment_02_analysis\vision_review.py --mode prepare --provider auto
+python -m experiment_02_analysis.vision_review --mode prepare --provider auto
 ~~~
 
 The default `auto` mode behaves as follows:

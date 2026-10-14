@@ -38,7 +38,7 @@ Input should normally be an enriched profile produced by
 Run:
 
 ```powershell
-python .\experiment_02_analysis\analysis_execute.py --mode prepare --profile ".\experiment_02_analysis\output\profiles_enriched\VIDEO_ID.json"
+python -m experiment_02_analysis.analysis_execute --mode prepare --profile ".\experiment_02_analysis\output\profiles_enriched\VIDEO_ID.json"
 ```
 
 Output:
@@ -81,7 +81,7 @@ These are descriptive measurements, not retention or virality conclusions.
 ## Batch prepare
 
 ```powershell
-python .\experiment_02_analysis\analysis_execute.py --mode batch-prepare --profiles-dir ".\experiment_02_analysis\output\profiles_enriched"
+python -m experiment_02_analysis.analysis_execute --mode batch-prepare --profiles-dir ".\experiment_02_analysis\output\profiles_enriched"
 ```
 
 This creates one request per enriched profile.
@@ -104,7 +104,7 @@ Unsupported interpretations belong under `working_hypotheses`.
 ## Apply mode
 
 ```powershell
-python .\experiment_02_analysis\analysis_execute.py --mode apply --profile ".\experiment_02_analysis\output\profiles_enriched\VIDEO_ID.json" --response ".\path\to\analysis_response.json"
+python -m experiment_02_analysis.analysis_execute --mode apply --profile ".\experiment_02_analysis\output\profiles_enriched\VIDEO_ID.json" --response ".\path\to\analysis_response.json"
 ```
 
 Output:

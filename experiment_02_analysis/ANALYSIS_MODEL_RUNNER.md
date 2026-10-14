@@ -100,7 +100,7 @@ The value can be placed in FAIR's existing .env or in the process environment.
 Before running a model:
 
 ~~~powershell
-python .\experiment_02_analysis\analysis_model_runner.py --mode doctor
+python -m experiment_02_analysis.analysis_model_runner --mode doctor
 ~~~
 
 Doctor mode performs no inference. It reports:
@@ -119,13 +119,13 @@ Credentials are never printed.
 First prepare the request:
 
 ~~~powershell
-python .\experiment_02_analysis\analysis_execute.py --mode prepare --profile ".\experiment_02_analysis\output\profiles_enriched\VIDEO_ID.json"
+python -m experiment_02_analysis.analysis_execute --mode prepare --profile ".\experiment_02_analysis\output\profiles_enriched\VIDEO_ID.json"
 ~~~
 
 Then run it:
 
 ~~~powershell
-python .\experiment_02_analysis\analysis_model_runner.py --mode run --request ".\experiment_02_analysis\output\analysis_requests\VIDEO_ID.analysis_request.json"
+python -m experiment_02_analysis.analysis_model_runner --mode run --request ".\experiment_02_analysis\output\analysis_requests\VIDEO_ID.analysis_request.json"
 ~~~
 
 The analysis request already contains the source profile path. Use --profile
@@ -134,7 +134,7 @@ only when overriding it is necessary.
 ## Batch
 
 ~~~powershell
-python .\experiment_02_analysis\analysis_model_runner.py --mode batch --requests-dir ".\experiment_02_analysis\output\analysis_requests"
+python -m experiment_02_analysis.analysis_model_runner --mode batch --requests-dir ".\experiment_02_analysis\output\analysis_requests"
 ~~~
 
 The default batch limit is four model runs per invocation.

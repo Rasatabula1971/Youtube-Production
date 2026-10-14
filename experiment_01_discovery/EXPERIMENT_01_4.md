@@ -35,7 +35,7 @@ These are evidence-coverage requirements, not a composite opportunity score.
 ### 1. Plan — zero quota
 
 ```powershell
-python .\experiment_01_discovery\experiment_01_4.py --mode plan
+python -m experiment_01_discovery.experiment_01_4 --mode plan
 ```
 
 Plan mode:
@@ -87,7 +87,7 @@ score.
 When the frozen plan is READY:
 
 ```powershell
-python .\experiment_01_discovery\experiment_01_4.py --mode execute
+python -m experiment_01_discovery.experiment_01_4 --mode execute
 ```
 
 Execution:

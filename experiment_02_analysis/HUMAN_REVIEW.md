@@ -13,7 +13,7 @@ No model or network calls are made.
 ## Prepare one review packet
 
 ~~~powershell
-python .\experiment_02_analysis\human_review.py --mode prepare --profile ".\experiment_02_analysis\output\profiles_analyzed\VIDEO_ID.json"
+python -m experiment_02_analysis.human_review --mode prepare --profile ".\experiment_02_analysis\output\profiles_analyzed\VIDEO_ID.json"
 ~~~
 
 The packet is written under:
@@ -30,7 +30,7 @@ Working hypotheses are shown for context but are not factual review items.
 ## Batch prepare
 
 ~~~powershell
-python .\experiment_02_analysis\human_review.py --mode batch-prepare
+python -m experiment_02_analysis.human_review --mode batch-prepare
 ~~~
 
 This prepares review packets for all analyzed profiles.
@@ -52,7 +52,7 @@ approve it because the source video performed well.
 Create a response from human_review_response_template.json, then run:
 
 ~~~powershell
-python .\experiment_02_analysis\human_review.py --mode apply --profile ".\experiment_02_analysis\output\profiles_analyzed\VIDEO_ID.json" --request ".\experiment_02_analysis\output\human_review_requests\VIDEO_ID.review_request.json" --response ".\path\to\review_response.json"
+python -m experiment_02_analysis.human_review --mode apply --profile ".\experiment_02_analysis\output\profiles_analyzed\VIDEO_ID.json" --request ".\experiment_02_analysis\output\human_review_requests\VIDEO_ID.review_request.json" --response ".\path\to\review_response.json"
 ~~~
 
 Rejected items are removed.

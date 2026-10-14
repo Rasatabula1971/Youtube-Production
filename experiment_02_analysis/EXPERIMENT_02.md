@@ -41,7 +41,7 @@ frames, visual notes, timing notes and audio notes.
 ### Prepare
 
 ```powershell
-python .\experiment_02_analysis\experiment_02.py --mode prepare
+python -m experiment_02_analysis.experiment_02 --mode prepare
 ```
 
 Prepare mode reads the 01.5 study set and creates:
@@ -58,7 +58,7 @@ If the 01.5 study set does not yet exist, the experiment writes a
 After a profile has been completed:
 
 ```powershell
-python .\experiment_02_analysis\experiment_02.py --mode validate --profile ".\path\to\profile.json"
+python -m experiment_02_analysis.experiment_02 --mode validate --profile ".\path\to\profile.json"
 ```
 
 Every supported finding must point to evidence IDs. The validator checks:
@@ -78,7 +78,7 @@ Every supported finding must point to evidence IDs. The validator checks:
 When multiple completed profiles exist:
 
 ```powershell
-python .\experiment_02_analysis\experiment_02.py --mode aggregate --profiles-dir ".\path\to\completed_profiles"
+python -m experiment_02_analysis.experiment_02 --mode aggregate --profiles-dir ".\path\to\completed_profiles"
 ```
 
 Only valid profiles contribute to cross-video patterns.

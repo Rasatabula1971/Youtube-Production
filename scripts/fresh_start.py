@@ -9,8 +9,8 @@ Kept: discovery and radar data, the opportunity inbox (saved, rejected and
 watched items stay as they are), saved ideas (.idea_bank), job logs, and all
 code and configuration.
 
-    python scripts/fresh_start.py          # show what would move
-    python scripts/fresh_start.py --yes    # move it
+    python -m scripts.fresh_start          # show what would move
+    python -m scripts.fresh_start --yes    # move it
 
 Close the UI first; the script refuses while it is running.
 """

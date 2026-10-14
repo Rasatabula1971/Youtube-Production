@@ -52,7 +52,7 @@ The main control is:
 It executes the same checkpoint-aware command previously run from PowerShell:
 
 ~~~text
-experiment_01_3.py --mode discover --replace-cohort
+python -m experiment_01_discovery.experiment_01_3 --mode discover --replace-cohort
 ~~~
 
 If a discovery checkpoint exists, the experiment resumes completed work instead

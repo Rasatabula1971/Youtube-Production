@@ -219,7 +219,7 @@ Automatic steps run between the human gates. On Windows the UI can install the
 scheduled Opportunity Automation, which runs the radar and the 01.3 refresh.
 
 To start again from Opportunities, close the UI and run
-`python scripts/fresh_start.py --yes` (without `--yes` it only lists what
+`python -m scripts.fresh_start --yes` (without `--yes` it only lists what
 would move). It moves every production and the Opportunity Gate's choice
 into `.archive/` and deletes nothing (D-157).
 

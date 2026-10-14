@@ -104,9 +104,9 @@ records which reader produced it. Change the order or drop a backend with
 Check the chain on your machine:
 
 ~~~text
-python source_acquisition/agent_reach_adapter.py --mode doctor
-python source_acquisition/agent_reach_adapter.py --mode web-search --query "aircraft tyre nitrogen"
-python source_acquisition/agent_reach_adapter.py --mode web-read --query "https://en.wikipedia.org/wiki/Aircraft_tire"
+python -m source_acquisition.agent_reach_adapter --mode doctor
+python -m source_acquisition.agent_reach_adapter --mode web-search --query "aircraft tyre nitrogen"
+python -m source_acquisition.agent_reach_adapter --mode web-read --query "https://en.wikipedia.org/wiki/Aircraft_tire"
 ~~~
 
 DuckDuckGo's HTML endpoint is unofficial and may rate-limit or change markup.
@@ -124,7 +124,7 @@ The first use is deliberately experimental.
 Run:
 
 ~~~text
-python source_acquisition/youtube_discovery_benchmark.py --mode collect
+python -m source_acquisition.youtube_discovery_benchmark --mode collect
 ~~~
 
 The benchmark uses the Experiment 01.3 configured topic queries, gathers video

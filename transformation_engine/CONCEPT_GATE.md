@@ -17,7 +17,7 @@ Every active concept receives one explicit decision:
 ## Prepare
 
 ~~~powershell
-python .\transformation_engine\concept_gate.py --mode prepare
+python -m transformation_engine.concept_gate --mode prepare
 ~~~
 
 This creates:
@@ -73,7 +73,7 @@ REJECT records the concept but prevents it from moving forward.
 Complete a response using concept_gate_response_template.json, then run:
 
 ~~~powershell
-python .\transformation_engine\concept_gate.py --mode apply --response ".\path\to\concept_gate_response.json"
+python -m transformation_engine.concept_gate --mode apply --response ".\path\to\concept_gate_response.json"
 ~~~
 
 Outputs:

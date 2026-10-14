@@ -28,7 +28,7 @@ read the *v2.1 Revisions* section first).
 Run the historical adapter:
 
 ```
-python opportunity_engine/historical_adapter.py
+python -m opportunity_engine.historical_adapter
 ```
 
 It reads `experiment_01_discovery/output/experiment_01_5/study_set.json` and
@@ -62,7 +62,8 @@ gate), and the inbox mirrors those decisions. Inbox choices live in
 
 Install it once from **Tools → Install Opportunity Automation (research + viral
 radar)**. This is the same Windows task as before (every 2 hours), now running
-`opportunity_engine/scheduled_tick.py`. If you installed the old version,
+`scripts/run_scheduled_tick.cmd`, which starts `python -m opportunity_engine.scheduled_tick`
+from the project root. If you installed the old version,
 install it again so the task picks up the new runner. Each wake:
 
 1. runs the existing Opportunity Research continuation, unchanged;
@@ -76,7 +77,7 @@ install it again so the task picks up the new runner. Each wake:
 A lock stops overlapping ticks. One step failing never skips the other. The
 radar card shows the last automatic check and when the next snapshot and
 discovery are due. Log: `output/viral/scheduled_tick.log`. To preview a tick
-without running it: `python opportunity_engine/radar_scheduler.py --dry-run`.
+without running it: `python -m opportunity_engine.radar_scheduler --dry-run`.
 
 ## Evidence drawer and trajectory chart (O14)
 
@@ -129,7 +130,7 @@ output fields. Historical topics get exactly the same requests as before.
 ## Viral / breakout radar (O6–O9)
 
 *Run viral radar* on the Opportunity page (or
-`python opportunity_engine/viral_radar.py run`) does one pass:
+`python -m opportunity_engine.viral_radar run`) does one pass:
 
 1. **Watchlist (O6).** The seed handles in `config.json → viral_radar`
    (Veritasium, Steve Mould, Real Engineering, …) plus every channel the
@@ -182,7 +183,7 @@ same handoff as *Analyze why it worked*.
 Command line:
 
 ```
-python opportunity_engine/human_topic_search.py "Why are aircraft windows round?"
+python -m opportunity_engine.human_topic_search "Why are aircraft windows round?"
 ```
 
 ## Analyze a video (O5)
@@ -209,7 +210,7 @@ back to the historical gate; approving a historical topic does the same.
 Command line:
 
 ```
-python opportunity_engine/human_video_intake.py https://youtu.be/<id> --topic "hummingbird flight" --note "why I picked it"
+python -m opportunity_engine.human_video_intake https://youtu.be/<id> --topic "hummingbird flight" --note "why I picked it"
 ```
 
 ## Rules the contract enforces

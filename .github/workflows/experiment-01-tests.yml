@@ -16,6 +16,9 @@ on:
       - "production_engine/**"
       - "opportunity_engine/**"
       - "Start Experiment UI.bat"
+      - "scripts/**"
+      - "*.py"
+      - "pytest.ini"
       - ".github/workflows/experiment-01-tests.yml"
   push:
     branches: [main]
@@ -33,6 +36,9 @@ on:
       - "production_engine/**"
       - "opportunity_engine/**"
       - "Start Experiment UI.bat"
+      - "scripts/**"
+      - "*.py"
+      - "pytest.ini"
       - ".github/workflows/experiment-01-tests.yml"
 
 jobs:
@@ -46,42 +52,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Run Experiment 01 tests
-        run: python -m unittest discover -s experiment_01_discovery -p "test_*.py" -v
-      - name: Run Experiment 02 tests
-        run: python -m unittest discover -s experiment_02_analysis -p "test_*.py" -v
-      - name: Run Experiment UI tests
-        run: python -m unittest discover -s experiment_ui -p "test_*.py" -v
+      # Every folder is a package (D-114), so the whole suite runs once from
+      # the project root under package-qualified names.
+      - name: Run all tests from the project root
+        run: python -m unittest discover -s . -t . -p "test_*.py" -v
       - name: Check Experiment UI JavaScript syntax
         if: always()
         run: node --check experiment_ui/static/app.js && for f in experiment_ui/static/js/*.js; do node --check "$f"; done
-      - name: Run Transformation Engine tests
-        if: always()
-        run: python -m unittest discover -s transformation_engine -p "test_*.py" -v
-      - name: Run Research Engine tests
-        if: always()
-        run: python -m unittest discover -s research_engine -p "test_*.py" -v
-      - name: Run Packaging Engine tests
-        if: always()
-        run: python -m unittest discover -s packaging_engine -p "test_*.py" -v
-      - name: Run Source Acquisition tests
-        if: always()
-        run: python -m unittest discover -s source_acquisition -p "test_*.py" -v
-      - name: Run Channel Profile tests
-        if: always()
-        run: python -m unittest discover -s channel_profiles -p "test_*.py" -v
-      - name: Run Story Script Engine tests
-        if: always()
-        run: python -m unittest discover -s story_script_engine -p "test_*.py" -v
-
-      - name: Run Format Engine tests
-        if: always()
-        run: python -m unittest discover -s format_engine -p "test_*.py" -v
-
-      - name: Run Production Engine tests
-        if: always()
-        run: python -m unittest discover -s production_engine -p "test_*.py" -v
-
-      - name: Run Opportunity Engine tests
-        if: always()
-        run: python -m unittest discover -s opportunity_engine -p "test_*.py" -v

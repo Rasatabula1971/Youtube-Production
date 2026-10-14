@@ -702,7 +702,8 @@ def feed_html(
         f"Compared with {len(competitors)} breakout thumbnails from the {html.escape(niche_name or '')} "
         f"{video_format} study."
         if competitors
-        else "No niche thumbnail study found: set channel_niche and run niche_thumbnail_study.py "
+        else "No niche thumbnail study found: set channel_niche and run "
+        "python -m packaging_engine.niche_thumbnail_study "
         "to compare against real niche thumbnails."
     )
     return f"""<!doctype html>
