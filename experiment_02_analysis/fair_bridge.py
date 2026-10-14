@@ -2,7 +2,7 @@
 
 Executed by FAIR's own Python environment. It never prints secrets or raw
 provider errors. Input and output are temporary local JSON files controlled by
-analysis_model_runner.py.
+core/model_bridge.py (call_fair_bridge).
 """
 
 from __future__ import annotations

@@ -2970,3 +2970,62 @@ correct pattern in one gate was never shared.
 - The Windows scheduled refresh runs through
   `scripts/run_opportunity_research_continue.cmd`. A task registered before this
   change must be registered again once.
+
+## D-115 — What the core package holds, and what stays outside it
+
+**Status:** Accepted (14 Oct 2026). Task 2 of D-114.
+
+**Decision.**
+- `core` holds every rule more than one engine relies on, once:
+  - `core.pipeline_integrity` and `core.source_overlap`, moved from the repo
+    root unchanged. `source_overlap` still reads
+    `source_acquisition/output/experiment_02`.
+  - `core.model_bridge`: the FAIR subprocess call, the free-only cost check
+    (`inference_cost_authorized`) and the direct Gemini backup, moved verbatim
+    from `analysis_model_runner`. Its config file and `fair_bridge.py` stay in
+    `experiment_02_analysis/`, reached by fixed paths.
+  - `core.hashing` (`sha256_file`, `canonical_sha256`, `sha256_text`),
+    `core.jsonio` (`load_json`, `load_json_or_exit`) and `core.slugs`
+    (`safe_slug`). They replace 72 copies in 12 folders.
+- A copy is any function with the same shape as a helper once names,
+  annotations, docstrings and keyword order are ignored. Each copy was merged
+  only after it was run against its replacement on a fixed corpus (files,
+  JSON values, strings, missing, invalid and empty files, unicode slugs) and
+  gave identical results and identical errors: 72 of 72. So the replacements
+  are identical for every input the old copies accepted. `sha256_file` now
+  also accepts a string path, which the old copies rejected.
+- `core/test_core_helpers.py` pins the outputs, because stored provenance
+  hashes depend on them. It also pins every file and folder `core` reads.
+- `core` imports only the standard library and itself.
+- `test_architecture.py` blocks new copies of the replaced helpers under any
+  name or shape variant. It also blocks redefining the helper names outside
+  `core`, except in the places listed below.
+- The stages that fingerprint their own source for `validation_contract_sha256`
+  (transformation, script, voice performance) now also fingerprint
+  `core/hashing.py`, `core/jsonio.py` and `core/slugs.py`. Their helpers used
+  to live in those files, so this keeps their cache invalidation exactly as
+  wide as before.
+
+**Kept separate on purpose** (they behave differently, so merging them
+would be a behaviour change):
+- `load_json` in `experiment_01_4`: it exits with "Required file not found"
+  instead of raising.
+- `load_json` in `vision_review` and `experiment_02_evidence`: they raise
+  `ValueError` when the JSON is not an object.
+- `load_json` in `scheduled_refresh`, `fair_bridge` and
+  `research_acquisition`: they differ only in the missing-file error (the OS
+  message and errno, instead of the bare path).
+- `load_json` in `packaging_brief`: it uses `is_file()`, so it reports a
+  directory as missing.
+- `thumbnail_render.safe_slug`: it is ASCII-only (`'日本語'` becomes
+  `'unknown'`). Settle it with audit #15 (slug collisions).
+
+**Correction.** The D-114 gate document expected the three `canonical_sha256`
+versions to stay separate. They differ only in variable names and keyword
+order, gave identical results, and are merged, along with 19 other
+canonical-JSON hash copies.
+
+**Consequences.**
+- The audit #10 cost fix lands in one place, `core.model_bridge`.
+- The five stages that fingerprint their own source reject their cached
+  model responses once more. This closes the window opened by Task 1.
