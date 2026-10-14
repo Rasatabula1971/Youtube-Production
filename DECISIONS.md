@@ -2902,9 +2902,18 @@ correct pattern in one gate was never shared.
 - **One repository.** A split waits for a concrete trigger: production needs a
   different machine or runtime, or a second contributor joins.
 - **Stable names.** Every code folder is a package and every module is
-  addressed by its package-qualified name. Everything starts with `python -m`
-  from the project root. Only `fair_bridge.py` may change `sys.path`, because
-  it loads the external FAIR repository. `test_architecture.py` enforces this.
+  addressed by its package-qualified name. Project modules are started with
+  `python -m` from the project root. The one exception is `fair_bridge.py`,
+  which imports only the standard library, is still launched by path, and is
+  the only file allowed to change `sys.path` (it loads the external FAIR
+  repository). `test_architecture.py` checks these rules statically: package
+  folders, bare and dynamic (`importlib`/`__import__`) imports of bare file
+  names, `from <package> import <name>` naming a real submodule, `sys.path` or
+  `PYTHONPATH` changes (including through aliases), command lists that start
+  a project file by path, `*_MODULE` launch names matching their files, and
+  every UI action naming a project module with a `__main__` guard started from
+  the project root. It is a static check: code built at runtime (for example
+  a module name assembled from variables) is outside what it can see.
 - **Layers.**
   - `core` holds integrity, the model bridge and cost policy, source overlap,
     and the hashing, JSON and slug helpers. It imports no engine.
@@ -2945,8 +2954,15 @@ correct pattern in one gate was never shared.
 - Fixes to shared rules land once. This covers the audit #10 cost policy and
   gate provenance.
 - The type checker sees real cross-module types. When module names became
-  stable, 28 latent errors appeared: 27 were fixed with annotations only and
-  one disappeared with a redundant import fallback.
+  stable, 28 latent errors appeared: 27 were fixed with type annotations or
+  `typing.cast` (an identity call at runtime), and one disappeared with a
+  redundant import fallback.
+- 17 UI actions (title direction review and 16 production steps such as
+  storyboard, visual search and final render) could not start on `main` when
+  launched by file path, because `pipeline_integrity` was not importable from
+  their folder. Started with `python -m` they now start. This is a fix, not a
+  new feature; the gates in front of them are unchanged.
+- Operator documentation and hint messages give `python -m` commands.
 - Modules that fingerprint their own source (`transformation_engine`,
   `story_script_engine`, `story_plan_engine`, `script_section_rework_runner`,
   `voice_performance`) reject cached model responses once when they are edited,

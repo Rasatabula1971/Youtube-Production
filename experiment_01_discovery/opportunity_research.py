@@ -34,7 +34,8 @@ EXP13_SCRIPT = HERE / "experiment_01_3.py"
 EXP14_SCRIPT = HERE / "experiment_01_4.py"
 EXP15_SCRIPT = HERE / "experiment_01_5.py"
 VIDIQ_SCRIPT = HERE / "vidiq_opportunity_enrichment.py"
-# Child steps start as modules from the project root (D-114).
+# Child steps start as modules from the project root (D-114). The *_SCRIPT
+# paths above name the same files; test_architecture checks they match.
 EXP13_MODULE = "experiment_01_discovery.experiment_01_3"
 EXP14_MODULE = "experiment_01_discovery.experiment_01_4"
 EXP15_MODULE = "experiment_01_discovery.experiment_01_5"

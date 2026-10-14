@@ -1,0 +1,3 @@
+# Windows command scripts must have CRLF line endings when checked out (D-114).
+*.bat text eol=crlf
+*.cmd text eol=crlf

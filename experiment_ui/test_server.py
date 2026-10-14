@@ -283,7 +283,7 @@ class ExperimentUiTests(unittest.TestCase):
     def test_guided_opportunity_action_is_present(self):
         self.assertIn("opportunity_research", server.ACTION_DEFS)
         self.assertIn(
-            "opportunity_research",
+            "experiment_01_discovery.opportunity_research",
             server.ACTION_DEFS["opportunity_research"]["command"][2],
         )
         self.assertIn(
@@ -298,7 +298,7 @@ class ExperimentUiTests(unittest.TestCase):
         )
         self.assertIn("auto_continue", server.ACTION_DEFS)
         self.assertIn(
-            "workflow_automation",
+            "experiment_ui.workflow_automation",
             server.ACTION_DEFS["auto_continue"]["command"][2],
         )
 
@@ -1872,7 +1872,7 @@ class ExperimentUiTests(unittest.TestCase):
 
         command = server.ACTION_DEFS["analysis_model_remaining"]["command"]
         self.assertIn(
-            "analysis_model_runner", " ".join(str(part) for part in command)
+            "experiment_02_analysis.analysis_model_runner", " ".join(str(part) for part in command)
         )
         self.assertIn("--mode", command)
         self.assertIn("batch", command)
