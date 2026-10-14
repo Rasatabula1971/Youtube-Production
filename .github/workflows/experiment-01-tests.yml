@@ -3,6 +3,7 @@ name: Research pipeline tests
 on:
   pull_request:
     paths:
+      - "core/**"
       - "experiment_01_discovery/**"
       - "experiment_02_analysis/**"
       - "experiment_ui/**"
@@ -23,6 +24,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "core/**"
       - "experiment_01_discovery/**"
       - "experiment_02_analysis/**"
       - "experiment_ui/**"

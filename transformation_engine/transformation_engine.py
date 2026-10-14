@@ -56,6 +56,10 @@ def validation_contract_sha256() -> str:
         CONFIG_FILE.resolve(),
         (PROJECT_ROOT / "core" / "source_overlap.py").resolve(),
         (HERE / "human_framing.py").resolve(),
+        # The hash, JSON and slug helpers used to live in this file (D-115).
+        (PROJECT_ROOT / "core" / "hashing.py").resolve(),
+        (PROJECT_ROOT / "core" / "jsonio.py").resolve(),
+        (PROJECT_ROOT / "core" / "slugs.py").resolve(),
     )
     for path in dependencies:
         relative = (

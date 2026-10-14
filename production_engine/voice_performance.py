@@ -111,7 +111,14 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, Any]:
 
 def validation_contract_sha256() -> str:
     digest = hashlib.sha256()
-    for path in (Path(__file__).resolve(), CONFIG_FILE.resolve()):
+    for path in (
+        Path(__file__).resolve(),
+        CONFIG_FILE.resolve(),
+        # The hash, JSON and slug helpers used to live in this file (D-115).
+        (PROJECT_ROOT / "core" / "hashing.py").resolve(),
+        (PROJECT_ROOT / "core" / "jsonio.py").resolve(),
+        (PROJECT_ROOT / "core" / "slugs.py").resolve(),
+    ):
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()

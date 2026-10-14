@@ -1033,7 +1033,7 @@ class DirectGeminiBillingAttestationTests(unittest.TestCase):
     """No direct Gemini call without the operator's billing attestation (D-161)."""
 
     def test_unconfirmed_billing_makes_no_call_and_names_the_reason(self):
-        from experiment_02_analysis import analysis_model_runner as runner
+        from core import model_bridge
 
         fair_result = {"status": "ESCALATION_REQUIRED", "reason_code": "ALL_FREE_MODELS_UNAVAILABLE",
                        "paid_inference_executed": False, "attempts": []}
@@ -1042,19 +1042,19 @@ class DirectGeminiBillingAttestationTests(unittest.TestCase):
             patch("core.model_bridge.direct_gemini_billing_confirmed", return_value=False),
             patch("core.model_bridge.urllib.request.urlopen") as urlopen,
         ):
-            self.assertEqual(runner.direct_gemini_unavailable_reason(), runner.DIRECT_GEMINI_BILLING_UNCONFIRMED)
-            self.assertFalse(runner.direct_gemini_available())
-            result = runner.call_direct_gemini_backup(
+            self.assertEqual(model_bridge.direct_gemini_unavailable_reason(), model_bridge.DIRECT_GEMINI_BILLING_UNCONFIRMED)
+            self.assertFalse(model_bridge.direct_gemini_available())
+            result = model_bridge.call_direct_gemini_backup(
                 {"prompt": "x", "expected_schema": {"type": "object"}}, timeout_seconds=5, fair_result=fair_result,
             )
         urlopen.assert_not_called()
-        self.assertEqual(result["reason_code"], runner.DIRECT_GEMINI_BILLING_UNCONFIRMED)
+        self.assertEqual(result["reason_code"], model_bridge.DIRECT_GEMINI_BILLING_UNCONFIRMED)
         self.assertFalse(result["direct_backup_used"])
-        self.assertFalse(runner.inference_cost_authorized({**result, "paid_inference_executed": None}))
+        self.assertFalse(model_bridge.inference_cost_authorized({**result, "paid_inference_executed": None}))
 
     def test_shipped_attestation_defaults_to_unconfirmed(self):
-        from experiment_02_analysis import analysis_model_runner as runner
+        from core import model_bridge
 
-        payload = json.loads(runner.DIRECT_GEMINI_BILLING_FILE.read_text(encoding="utf-8"))
+        payload = json.loads(model_bridge.DIRECT_GEMINI_BILLING_FILE.read_text(encoding="utf-8"))
         self.assertIs(payload["billing_disabled_confirmed"], False)
         self.assertIn("Google Cloud", payload["note"])

@@ -1,6 +1,5 @@
 import json
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from opportunity_engine import channel_scope, viral_cluster  # noqa: E402

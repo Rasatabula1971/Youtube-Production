@@ -58,6 +58,47 @@ UI_LAUNCHERS = (
 UI_LAUNCH_CWD = {"PROJECT_ROOT", "control.PROJECT_ROOT"}
 POWERSHELL_ACTIONS_DIR = "scripts/"
 
+# Helper names core owns. Outside core they may only be defined where the
+# behaviour deliberately differs (D-115): these load_json variants handle a
+# missing file, invalid JSON or a non-object differently, and thumbnail_render's
+# safe_slug is ASCII-only.
+CORE_HELPER_NAMES = {
+    "sha256_file",
+    "file_sha256",
+    "canonical_sha256",
+    "content_sha256",
+    "sha256_text",
+    "load_json",
+    "load_json_or_exit",
+    "safe_slug",
+}
+KEPT_HELPER_VARIANTS = {
+    ("experiment_01_discovery/experiment_01_4.py", "load_json"),
+    ("experiment_01_discovery/scheduled_refresh.py", "load_json"),
+    ("experiment_02_analysis/fair_bridge.py", "load_json"),
+    ("experiment_02_analysis/vision_review.py", "load_json"),
+    ("packaging_engine/packaging_brief.py", "load_json"),
+    ("research_engine/research_acquisition.py", "load_json"),
+    ("source_acquisition/experiment_02_evidence.py", "load_json"),
+    ("production_engine/thumbnail_render.py", "safe_slug"),
+}
+
+# Normalized shapes (see helper_shape) of every helper copy Task 2 replaced
+# with core, plus core's own. A function outside core with one of these shapes
+# is a copy that should import from core instead.
+REPLACED_HELPER_VARIANTS: dict[str, str] = {
+    "def F(a0):\n    return hashlib.sha256(json.dumps(a0, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')).hexdigest()": 'core.hashing.canonical_sha256',
+    "def F(a0):\n    v0 = json.dumps(a0, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')\n    return hashlib.sha256(v0).hexdigest()": 'core.hashing.canonical_sha256',
+    'def F(a0):\n    return hashlib.sha256(Path(a0).read_bytes()).hexdigest()': 'core.hashing.sha256_file',
+    'def F(a0):\n    return hashlib.sha256(a0.read_bytes()).hexdigest()': 'core.hashing.sha256_file',
+    "def F(a0):\n    v0 = hashlib.sha256()\n    with Path(a0).open('rb') as v1:\n        for v2 in iter(lambda: v1.read(1024 * 1024), b''):\n            v0.update(v2)\n    return v0.hexdigest()": 'core.hashing.sha256_file',
+    "def F(a0):\n    v0 = hashlib.sha256()\n    with a0.open('rb') as v1:\n        for v2 in iter(lambda: v1.read(1024 * 1024), b''):\n            v0.update(v2)\n    return v0.hexdigest()": 'core.hashing.sha256_file',
+    "def F(a0):\n    return hashlib.sha256(a0.encode('utf-8')).hexdigest()": 'core.hashing.sha256_text',
+    "def F(a0):\n    if not a0.exists():\n        raise FileNotFoundError(a0)\n    return json.loads(a0.read_text(encoding='utf-8'))": 'core.jsonio.load_json',
+    "def F(a0):\n    if not a0.exists():\n        raise FileNotFoundError(a0)\n    try:\n        return json.loads(a0.read_text(encoding='utf-8'))\n    except json.JSONDecodeError as exc:\n        raise SystemExit(f'Invalid JSON in {a0}: {exc}') from exc": 'core.jsonio.load_json_or_exit',
+    "def F(a0):\n    v0 = ''.join((v1 if v1.isalnum() or v1 in '-_.' else '_' for v1 in a0)).strip('._')\n    return v0 or 'unknown'": 'core.slugs.safe_slug',
+}
+
 
 def _skipped(path: Path) -> bool:
     parts = path.relative_to(PROJECT_ROOT).parts
@@ -192,6 +233,56 @@ def sys_path_changes(tree: ast.Module, *, allow_pythonpath_literal: bool = False
         elif isinstance(node, ast.Constant) and node.value == "PYTHONPATH" and not allow_pythonpath_literal:
             lines.append(node.lineno)
     return lines
+
+
+def helper_shape(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """A function's shape: its source with the name, docstring, annotations,
+    parameter and local variable names, and keyword-argument order ignored."""
+    clone = ast.parse(ast.unparse(node)).body[0]
+    assert isinstance(clone, (ast.FunctionDef, ast.AsyncFunctionDef))
+    if ast.get_docstring(clone) is not None:
+        clone.body = clone.body[1:] or [ast.Pass()]
+    func = ast.FunctionDef(name="F", args=clone.args, body=clone.body, decorator_list=[], returns=None, type_params=[])
+    arguments = func.args
+    all_args = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
+    all_args += [a for a in (arguments.vararg, arguments.kwarg) if a is not None]
+    rename: dict[str, str] = {}
+    for index, arg in enumerate(all_args):
+        rename[arg.arg] = f"a{index}"
+        arg.annotation = None
+    local = 0
+    for sub in ast.walk(ast.Module(body=func.body, type_ignores=[])):
+        if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Store) and sub.id not in rename:
+            rename[sub.id] = f"v{local}"
+            local += 1
+
+    class Normalize(ast.NodeTransformer):
+        def visit_arg(self, node: ast.arg) -> ast.arg:
+            node.arg = rename.get(node.arg, node.arg)
+            node.annotation = None
+            return node
+
+        def visit_Name(self, node: ast.Name) -> ast.Name:
+            node.id = rename.get(node.id, node.id)
+            return node
+
+        def visit_AnnAssign(self, node: ast.AnnAssign) -> ast.AST:
+            self.generic_visit(node)
+            if node.value is None:
+                return ast.Pass()
+            return ast.Assign(targets=[node.target], value=node.value)
+
+        def visit_Call(self, node: ast.Call) -> ast.Call:
+            self.generic_visit(node)
+            node.keywords.sort(key=lambda k: k.arg or "")
+            return node
+
+    func = Normalize().visit(func)
+    return ast.unparse(ast.fix_missing_locations(func))
+
+
+def outside_core(path: Path) -> bool:
+    return relative(path).parts[0] != "core"
 
 
 def has_main_guard(tree: ast.Module) -> bool:
@@ -396,6 +487,61 @@ class ArchitectureGuardTests(unittest.TestCase):
             if launches == 0:
                 problems.append(f"{launcher}: no action launch found (guard is stale)")
         self.assertEqual(problems, [])
+
+    def test_core_imports_only_the_standard_library_and_core(self) -> None:
+        offenders: list[str] = []
+        core_files = [path for path in python_files() if not outside_core(path)]
+        for path in core_files:
+            for node in ast.walk(parse(path)):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    names = [node.module]
+                elif (
+                    isinstance(node, ast.Call)
+                    and ast.unparse(node.func) in DYNAMIC_IMPORTS
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                ):
+                    names = [node.args[0].value]
+                else:
+                    continue
+                for name in names:
+                    head = name.split(".")[0]
+                    if head not in sys.stdlib_module_names and head not in {"core", "__future__"}:
+                        offenders.append(f"{relative(path)}:{node.lineno} imports {name!r}")
+        self.assertGreater(len(core_files), 0)
+        self.assertEqual(offenders, [], "core must not import any engine")
+
+    def test_no_copies_of_core_helpers_outside_core(self) -> None:
+        offenders = [
+            f"{relative(path)}:{node.lineno} {node.name} copies "
+            f"{REPLACED_HELPER_VARIANTS[helper_shape(node)]}"
+            for path in python_files(include_tests=False)
+            if outside_core(path)
+            for node in ast.walk(parse(path))  # nested functions and methods too
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and helper_shape(node) in REPLACED_HELPER_VARIANTS
+        ]
+        self.assertEqual(offenders, [], "import the helper from core instead")
+
+    def test_core_helper_names_are_only_redefined_where_behaviour_differs(self) -> None:
+        offenders = [
+            f"{relative(path)}:{node.lineno} defines {node.name}"
+            for path in python_files(include_tests=False)
+            if outside_core(path)
+            for node in parse(path).body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in CORE_HELPER_NAMES
+            and (relative(path).as_posix(), node.name) not in KEPT_HELPER_VARIANTS
+        ]
+        self.assertEqual(
+            offenders,
+            [],
+            "use the core helper, or add the file to KEPT_HELPER_VARIANTS with "
+            "the reason its behaviour must differ",
+        )
 
 
 if __name__ == "__main__":

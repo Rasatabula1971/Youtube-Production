@@ -1,6 +1,5 @@
 import copy
 import unittest
-from pathlib import Path
 
 from opportunity_engine import channel_scope, models  # noqa: E402
 from opportunity_engine.packet_schema import build_packet, evidence, validate_packet  # noqa: E402

@@ -10,7 +10,6 @@ No paid provider calls are made here.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import urllib.parse

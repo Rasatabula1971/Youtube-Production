@@ -9,7 +9,10 @@ ignore = ["TRY004"]
 # These modules are subsystem boundaries. They intentionally catch arbitrary
 # provider/parser/runtime failures and convert them into structured status
 # artifacts instead of allowing exceptions to escape the pipeline.
-"experiment_02_analysis/analysis_model_runner.py" = ["BLE001", "S310", "S603"]
+"experiment_02_analysis/analysis_model_runner.py" = ["BLE001"]
+# The model bridge moved here from analysis_model_runner unchanged (D-114). Only
+# the exemptions its code needs; a new blind `except` here must be flagged.
+"core/model_bridge.py" = ["S310", "S603"]
 "experiment_02_analysis/fair_bridge.py" = ["BLE001"]
 "experiment_02_analysis/human_review.py" = ["BLE001"]
 "experiment_02_analysis/vision_review.py" = ["BLE001", "S310"]

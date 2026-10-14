@@ -9,7 +9,6 @@ This module NEVER calls an image/video provider and NEVER spends money.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any

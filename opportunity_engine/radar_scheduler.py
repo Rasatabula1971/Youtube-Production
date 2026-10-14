@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from core.pipeline_integrity import atomic_write_json  # noqa: E402

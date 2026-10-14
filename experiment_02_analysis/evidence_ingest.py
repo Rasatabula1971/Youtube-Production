@@ -8,7 +8,6 @@ Prepared profiles are never overwritten by default.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import mimetypes
 import re

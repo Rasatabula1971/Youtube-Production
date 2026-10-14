@@ -8,7 +8,6 @@ Validation is hand-written, like channel_profiles, to stay dependency-free.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from opportunity_engine import models  # noqa: E402

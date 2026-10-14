@@ -16,7 +16,6 @@ Paid tool use is constrained by vidiq_mcp.py:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from datetime import datetime, timezone
