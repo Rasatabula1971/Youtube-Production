@@ -1,5 +1,5 @@
 @echo off
-rem Scheduled-task entry point (D-114): the research continuation, then a radar tick.
+rem Scheduled-task entry point (D-175): the research continuation, then a radar tick.
 rem Task Scheduler starts in the Windows system folder, and modules are
 rem started with `python -m` from the project root, so change there first.
 rem Usage: run_scheduled_tick.cmd "C:\path\to\python.exe"

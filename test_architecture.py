@@ -1,4 +1,4 @@
-"""Architecture guard tests (D-114).
+"""Architecture guard tests (D-175).
 
 These pin the rules that make module names stable:
 - every folder that holds Python code is a regular package;
@@ -59,7 +59,7 @@ UI_LAUNCH_CWD = {"PROJECT_ROOT", "control.PROJECT_ROOT"}
 POWERSHELL_ACTIONS_DIR = "scripts/"
 
 # Helper names core owns. Outside core they may only be defined where the
-# behaviour deliberately differs (D-115): these load_json variants handle a
+# behaviour deliberately differs (D-176): these load_json variants handle a
 # missing file, invalid JSON or a non-object differently, and thumbnail_render's
 # safe_slug is ASCII-only.
 CORE_HELPER_NAMES = {

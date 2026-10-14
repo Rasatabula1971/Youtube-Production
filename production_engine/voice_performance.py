@@ -114,7 +114,7 @@ def validation_contract_sha256() -> str:
     for path in (
         Path(__file__).resolve(),
         CONFIG_FILE.resolve(),
-        # The hash, JSON and slug helpers used to live in this file (D-115).
+        # The hash, JSON and slug helpers used to live in this file (D-176).
         (PROJECT_ROOT / "core" / "hashing.py").resolve(),
         (PROJECT_ROOT / "core" / "jsonio.py").resolve(),
         (PROJECT_ROOT / "core" / "slugs.py").resolve(),

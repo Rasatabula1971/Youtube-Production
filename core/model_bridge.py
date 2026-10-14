@@ -1,4 +1,4 @@
-"""Shared model bridge (D-114): FAIR subprocess calls, the free-only cost
+"""Shared model bridge (D-175): FAIR subprocess calls, the free-only cost
 check and the direct Gemini backup. Moved without change from
 experiment_02_analysis/analysis_model_runner.py.
 """

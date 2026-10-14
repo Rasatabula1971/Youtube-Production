@@ -14,8 +14,8 @@ through the deterministic Experiment 02 apply gate.
 
 The model bridge itself (the FAIR subprocess call, the free-only cost check
 `inference_cost_authorized` and the direct Gemini backup) lives in
-`core/model_bridge.py`, shared by every engine that calls a model (D-114,
-D-115). This runner keeps the Experiment 02 parts: the response schema, the
+`core/model_bridge.py`, shared by every engine that calls a model (D-175,
+D-176). This runner keeps the Experiment 02 parts: the response schema, the
 prompt, request-scope restriction and the batch. The bridge still reads
 `experiment_02_analysis/analysis_model_runner_config.json` and launches
 `experiment_02_analysis/fair_bridge.py`.

@@ -5367,3 +5367,197 @@ failed or empty search leaves the single-video behaviour exactly as before
 and says so; replication can then be added with *Explore my topic*. Context
 videos are analysed like any study video, so a single video now costs up to
 four analysis calls on the free routes.
+
+## D-175 — One repository, layered packages enforced by a test
+
+**Status:** Accepted (13 Oct 2026). Two parts are still open for the owner:
+the production feature freeze and the Opportunity Gate move (marked
+*Pending* below). Neither is needed before Task 3.
+
+**Numbering.** Recorded on `main` as D-114 on 13 Oct 2026, while the work up to
+D-174 still lived only on the PR #137 branch (and the owner's PC), which uses
+D-114 to D-174 for its own decisions. Renumbered D-175 when #137 was ported onto
+the restructure (14 Oct 2026). The figures in *Context* describe `main` before
+Task 1 (`d950f8c`); the port replayed the same rules on #137.
+
+**Context.** The code reached about 72,600 source lines in 12 folders before M1
+closed. Shared rules exist in many copies: 55 hash helpers in 37 files, the
+free-only cost check inside Experiment 02, and slug and JSON helpers borrowed
+from the Story/Script Engine. Modules had no stable names: 99 `sys.path`
+changes let each folder import siblings by bare file name, so the suite could
+not run from the root and the type checker could not see across modules.
+Audit #1 (gate decisions not bound to the reviewed artifact) happened because a
+correct pattern in one gate was never shared.
+
+**Decision.**
+- **One repository.** A split waits for a concrete trigger: production needs a
+  different machine or runtime, or a second contributor joins.
+- **Stable names.** Every code folder is a package and every module is
+  addressed by its package-qualified name. Project modules are started with
+  `python -m` from the project root. The one exception is `fair_bridge.py`,
+  which imports only the standard library, is still launched by path, and is
+  the only file allowed to change `sys.path` (it loads the external FAIR
+  repository). `test_architecture.py` checks these rules statically: package
+  folders, bare and dynamic (`importlib`/`__import__`) imports of bare file
+  names, `from <package> import <name>` naming a real submodule, `sys.path` or
+  `PYTHONPATH` changes (including through aliases), command lists that start
+  a project file by path, `*_MODULE` launch names matching their files, and
+  every UI action naming a project module with a `__main__` guard started from
+  the project root. It is a static check: code built at runtime (for example
+  a module name assembled from variables) is outside what it can see.
+- **Layers.**
+  - `core` holds integrity, the model bridge and cost policy, source overlap,
+    and the hashing, JSON and slug helpers. It imports no engine.
+  - Preproduction is discovery, source acquisition, opportunity, analysis,
+    transformation, research, story/script, channel profiles, format and
+    packaging (thumbnails included). It may import `core` and earlier
+    preproduction engines, and never `production_engine`.
+  - `production_engine` may import only `core`. It reads preproduction results
+    from files.
+  - `experiment_ui` may import anything.
+
+  A boundary test enforces these rules once `core` exists and the cycles are
+  broken.
+- **No folder moves for grouping.** Layers are a rule, not a directory. A module
+  that must move to break a cycle pins its existing data folder.
+- **Thumbnails belong to packaging.** `thumbnail_render` and `thumbnail_review`
+  move to `packaging_engine`. Their data stays in `production_engine/output/`.
+- *Pending:* **The Opportunity Gate belongs to the opportunity engine.**
+  `opportunity_gate.py` moves to `opportunity_engine`. Its data stays in
+  `experiment_01_discovery/output/experiment_01_5/`.
+- *Pending:* **Production feature freeze.** `production_engine` takes no new
+  features until M1 closes. Fixes are still allowed.
+
+**Alternatives rejected.**
+- *Separate repositories.* Solves no current failure for one developer on one
+  machine. It would also put provenance checks across repository boundaries,
+  the weakest point the audit found.
+- *Moving folders under `preproduction/` and `production/`.* It moves
+  gitignored data on the owner's machine and breaks every launch path (73 UI
+  scripts, internal launches, the .bat and the scheduled task), the CI filters
+  and every document reference. It gains nothing over a boundary test.
+- *`pip install -e .`* It works, but it silently depends on which Python is
+  installed. `python -m` from the root needs nothing.
+
+**Consequences.**
+- Production can be split out later at low cost: once the cycles are broken it
+  imports only `core`.
+- Fixes to shared rules land once. This covers the audit #10 cost policy and
+  gate provenance.
+- The type checker sees real cross-module types. When module names became
+  stable, latent errors appeared (28 on `main`, 36 on the port: the same 28
+  sites plus 8 in #137's code). All were fixed with type annotations or
+  `typing.cast` (an identity call at runtime), or disappeared when an import
+  fallback whose two branches had become identical was collapsed.
+- 17 UI actions (title direction review and 16 production steps such as
+  storyboard, visual search and final render) could not start on `main` when
+  launched by file path, because `pipeline_integrity` was not importable from
+  their folder. Started with `python -m` they now start. This is a fix, not a
+  new feature; the gates in front of them are unchanged.
+- Operator documentation and hint messages give `python -m` commands.
+- Modules that fingerprint their own source (`transformation_engine`,
+  `story_script_engine`, `story_plan_engine`, `script_section_rework_runner`,
+  `voice_performance`) reject cached model responses once when they are edited.
+  For a project running #137's code, the port is that one edit.
+- The Windows scheduled task (#137's `scheduled_tick`: the research
+  continuation, then a radar tick) runs through `scripts/run_scheduled_tick.cmd`,
+  which changes to the project root and starts
+  `python -m opportunity_engine.scheduled_tick`. A task registered before this
+  change must be registered again once.
+- Two guard rules were relaxed for #137: the `PYTHONPATH` literal rule applies
+  to non-test code (a test may remove `PYTHONPATH` from a child environment),
+  and a `*_MODULE` launch constant may pair with a path constant named without
+  `_SCRIPT`.
+
+## D-176 — What the core package holds, and what stays outside it
+
+**Status:** Accepted (14 Oct 2026). Task 2 of D-175. Recorded on `main` as D-115;
+renumbered with D-175 when PR #137 was ported. Figures below are for the port.
+
+**Decision.**
+- `core` holds one implementation of each of the rules below. It does not yet
+  hold every shared rule: see *Not merged yet*.
+  - `core.pipeline_integrity` and `core.source_overlap`, moved from the repo
+    root unchanged. `source_overlap` still reads
+    `source_acquisition/output/experiment_02`.
+  - `core.model_bridge`: the FAIR subprocess call, the free-only cost check
+    (`inference_cost_authorized`) and the direct Gemini backup, moved verbatim
+    from `analysis_model_runner` (19 functions on the port). Its config file,
+    `fair_bridge.py` and the direct-Gemini billing attestation
+    (`direct_gemini_billing.json`, D-161) stay in `experiment_02_analysis/`,
+    reached by fixed paths.
+  - `core.hashing` (`sha256_file`, `canonical_sha256`, `sha256_text`),
+    `core.jsonio` (`load_json`, `load_json_or_exit`) and `core.slugs`
+    (`safe_slug`). They replace 74 copies in 12 folders.
+- A copy is any function with the same shape as a helper once names,
+  annotations, docstrings and keyword order are ignored. Each copy was merged
+  only after it was run against its replacement on a fixed corpus (files,
+  JSON values, strings, missing, invalid and empty files, unicode slugs) and
+  gave identical results and identical errors: 74 of 74 on the port (72 of 72
+  on `main`, where an independent review also ran about 2,000 harder
+  comparisons: missing files, directories, symlinks, non-UTF-8 text, NaN and
+  huge numbers, odd keys; no difference on any input the old copies accepted).
+  The one difference: `sha256_file` now also accepts a string path, which 22
+  of the 23 old copies rejected (the one in `opportunity_engine/provenance`
+  already accepted it),
+  and for a non-path argument it raises `TypeError` instead of
+  `AttributeError`.
+- `core/test_core_helpers.py` pins the outputs, because stored provenance
+  hashes depend on them. It also pins every file and folder `core` reads.
+- `core` imports only the standard library and itself.
+- `test_architecture.py` blocks new same-shape copies of the replaced helpers
+  (names, annotations, docstrings, parameter and local names and keyword order
+  ignored), at any depth. A copy written differently, for example with an
+  aliased `hashlib` or an extra statement, gets past it. It also blocks
+  redefining the helper names outside `core`, except in the places listed
+  below.
+- The stages that fingerprint their own source for `validation_contract_sha256`
+  (transformation, script, voice performance) now also fingerprint
+  `core/hashing.py`, `core/jsonio.py` and `core/slugs.py`. Their helpers used
+  to live in those files, so this keeps their cache invalidation as wide as
+  before. It was added during Task 2's review, beyond its contract, and the
+  owner approved it by merging Task 2. Side effect: any edit to those three
+  whole files, even adding an unrelated function, resets those three stages.
+
+**Kept separate on purpose** (they behave differently, so merging them
+would be a behaviour change):
+- `load_json` in `experiment_01_4`: it exits with "Required file not found"
+  instead of raising.
+- `load_json` in `vision_review` and `experiment_02_evidence`: they raise
+  `ValueError` when the JSON is not an object.
+- `load_json` in `scheduled_refresh`, `fair_bridge` and
+  `research_acquisition`: they differ only in the missing-file error (the OS
+  message and errno, instead of the bare path).
+- `load_json` in `packaging_brief`: it uses `is_file()`, so it reports a
+  directory as missing.
+- `thumbnail_render.safe_slug`: it is ASCII-only (`'日本語'` becomes
+  `'unknown'`). Settle it with audit #15 (slug collisions).
+
+**Not merged yet.** The same canonical-JSON hash is still written inline
+(not as a function) in `package_review`, `narration_preview_render`,
+`research_review` and `concept_review` (found on `main`; #137 may add more). A
+`sha256_bytes` helper remains in `niche_thumbnail_study` and
+`script_section_apply`. `core/pipeline_integrity.py` moved with no tests of its
+own. These are follow-ups, not part of Task 2.
+
+**Names removed from modules.** No code in the repo uses them from there (two
+#137 tests that did were repointed), but an outside script importing them would
+break. Gone from `analysis_model_runner`, all now in `core.model_bridge`: the
+bridge functions it does not itself use (`read_env_file`,
+`direct_gemini_settings`, `direct_gemini_available`,
+`direct_gemini_billing_confirmed`, `direct_gemini_billing_status`,
+`direct_gemini_unavailable_reason`, `gemini_compatible_schema`,
+`call_direct_gemini_backup` and two private helpers), its five bridge path
+constants and the `DIRECT_GEMINI_*` settings; `_INTEGRITY_ROOT` is gone. The
+never-called private `package_pairing._hash` is gone too.
+
+**Correction.** The restructure's gate document (written as "D-115", recorded as
+D-114, now D-175) expected the three `canonical_sha256`
+versions to stay separate. They differ only in variable names and keyword
+order, gave identical results, and are merged, along with 19 other
+canonical-JSON hash copies.
+
+**Consequences.**
+- The audit #10 cost fix lands in one place, `core.model_bridge`.
+- The five stages that fingerprint their own source reject their cached
+  model responses once (see D-175).

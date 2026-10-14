@@ -1,4 +1,4 @@
-"""Golden tests for the shared helpers in core (D-114).
+"""Golden tests for the shared helpers in core (D-175).
 
 Stored provenance hashes on disk were produced by the copies these helpers
 replaced, so the outputs below must never change. The expected digests were

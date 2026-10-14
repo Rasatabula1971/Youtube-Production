@@ -22,7 +22,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 from opportunity_engine import radar_scheduler, viral_radar  # noqa: E402
 
 RESEARCH_RUNNER = _ROOT / "experiment_01_discovery" / "opportunity_research.py"
-RESEARCH_RUNNER_MODULE = "experiment_01_discovery.opportunity_research"  # started with python -m from the project root (D-114)
+RESEARCH_RUNNER_MODULE = "experiment_01_discovery.opportunity_research"  # started with python -m from the project root (D-175)
 LOG_FILE = viral_radar.RADAR_DIR / "scheduled_tick.log"
 RESEARCH_TIMEOUT_SECONDS = 1800
 

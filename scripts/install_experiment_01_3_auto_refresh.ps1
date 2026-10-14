@@ -10,7 +10,7 @@ if ($EveryHours -lt 1) {
 }
 
 # The wrapper changes to the project root and runs
-# `python -m opportunity_engine.scheduled_tick` (D-114).
+# `python -m opportunity_engine.scheduled_tick` (D-175).
 $Runner = Join-Path $PSScriptRoot "run_scheduled_tick.cmd"
 
 if (-not (Test-Path $Runner)) {
