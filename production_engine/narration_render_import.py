@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
-from narration_render import (
+from production_engine.narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
+from production_engine.narration_render import (
     ESTIMATES_DIR,
     OUTPUT_DIR,
     REQUESTS_DIR,

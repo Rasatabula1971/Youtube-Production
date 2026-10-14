@@ -21,9 +21,9 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from vidiq_mcp import (
+from experiment_01_discovery.vidiq_mcp import (
     ALLOWED_PAID_TOOLS,
     BUDGET_FILE,
     BudgetStateUnreadable,
@@ -189,7 +189,7 @@ def doctor(client: VidIQMCPClient | None = None) -> dict[str, Any]:
     ]
     declared_costs = {
         logical: (
-            declared_tool_credit_cost(selected[logical])
+            declared_tool_credit_cost(cast(dict[str, Any], selected[logical]))
             if isinstance(selected.get(logical), dict)
             else None
         )
@@ -482,7 +482,7 @@ def run_enrichment(
         "missing_tools": missing_tools,
         "declared_credit_costs": {
             logical: (
-                declared_tool_credit_cost(selected[logical])
+                declared_tool_credit_cost(cast(dict[str, Any], selected[logical]))
                 if isinstance(selected.get(logical), dict)
                 else None
             )

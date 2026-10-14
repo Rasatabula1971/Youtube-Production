@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import package_review as review
+from packaging_engine import package_review as review
 
 
 class PackageReviewTests(unittest.TestCase):

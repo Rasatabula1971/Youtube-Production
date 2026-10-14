@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import narration_audio_qc
+from production_engine import narration_audio_qc
 
 
 class NarrationAudioQcTests(unittest.TestCase):

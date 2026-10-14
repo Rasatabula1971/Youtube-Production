@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import narration_cost_review
+from production_engine import narration_cost_review
 
 
 def estimate() -> dict:

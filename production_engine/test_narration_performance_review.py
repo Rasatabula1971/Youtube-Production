@@ -1,15 +1,12 @@
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
 
-import narration_performance_review as npr
+from production_engine import narration_performance_review as npr
 
 
 def delivery(**overrides):

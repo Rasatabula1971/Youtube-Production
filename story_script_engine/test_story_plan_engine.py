@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from story_plan_engine import (
+from story_script_engine.story_plan_engine import (
     build_story_plan_request,
     validate_story_plan_response,
 )

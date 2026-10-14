@@ -1,7 +1,7 @@
 import unittest
 from copy import deepcopy
 
-from concept_gate import (
+from transformation_engine.concept_gate import (
     apply_gate,
     build_review_request,
     validate_decisions,

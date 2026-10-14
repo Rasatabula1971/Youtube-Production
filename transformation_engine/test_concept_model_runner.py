@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import concept_model_runner as runner
+from transformation_engine import concept_model_runner as runner
 
-import transformation_engine as engine
+from transformation_engine import transformation_engine as engine
 
 
 class ConceptModelRunnerTests(unittest.TestCase):
@@ -245,8 +245,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
             "Keep This Sibling",
         )
 
-    @patch("concept_model_runner.resolve_fair_paths")
-    @patch("concept_model_runner.call_fair_bridge")
+    @patch("transformation_engine.concept_model_runner.resolve_fair_paths")
+    @patch("transformation_engine.concept_model_runner.call_fair_bridge")
     def test_valid_free_response_is_written_with_request_hash(
         self,
         call_bridge,
@@ -313,10 +313,10 @@ class ConceptModelRunnerTests(unittest.TestCase):
             engine.validation_contract_sha256(),
         )
 
-    @patch("concept_model_runner.call_direct_gemini_backup")
-    @patch("concept_model_runner.direct_gemini_available", return_value=True)
-    @patch("concept_model_runner.resolve_fair_paths")
-    @patch("concept_model_runner.call_fair_bridge")
+    @patch("transformation_engine.concept_model_runner.call_direct_gemini_backup")
+    @patch("transformation_engine.concept_model_runner.direct_gemini_available", return_value=True)
+    @patch("transformation_engine.concept_model_runner.resolve_fair_paths")
+    @patch("transformation_engine.concept_model_runner.call_fair_bridge")
     def test_all_rejected_batch_gets_one_free_validation_repair(
         self,
         call_bridge,
@@ -391,8 +391,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertTrue(result["initial_validation_rejection_summary"])
         call_repair.assert_called_once()
 
-    @patch("concept_model_runner.resolve_fair_paths")
-    @patch("concept_model_runner.call_fair_bridge")
+    @patch("transformation_engine.concept_model_runner.resolve_fair_paths")
+    @patch("transformation_engine.concept_model_runner.call_fair_bridge")
     def test_old_validation_contract_forces_regeneration(
         self,
         call_bridge,
@@ -475,8 +475,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "VALIDATED")
         call_bridge.assert_called_once()
 
-    @patch("concept_model_runner.run_apply")
-    @patch("concept_model_runner.run_one")
+    @patch("transformation_engine.concept_model_runner.run_apply")
+    @patch("transformation_engine.concept_model_runner.run_one")
     def test_merge_ready_overrides_partial_provider_batch(
         self,
         run_one,
@@ -510,8 +510,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["model_runs_invoked"], 4)
         self.assertEqual(run_one.call_count, 4)
 
-    @patch("concept_model_runner.run_apply")
-    @patch("concept_model_runner.run_one")
+    @patch("transformation_engine.concept_model_runner.run_apply")
+    @patch("transformation_engine.concept_model_runner.run_one")
     def test_clean_batch_limit_still_reports_progress_without_ready_pool(
         self,
         run_one,
@@ -543,8 +543,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "BATCH_PROGRESS")
         self.assertEqual(result["provider_batch_status"], "BATCH_PROGRESS")
 
-    @patch("concept_model_runner.run_apply")
-    @patch("concept_model_runner.run_one")
+    @patch("transformation_engine.concept_model_runner.run_apply")
+    @patch("transformation_engine.concept_model_runner.run_one")
     def test_mixed_success_and_escalation_reports_batch_progress(
         self,
         run_one,
@@ -580,8 +580,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["model_runs_invoked"], 4)
         self.assertEqual(run_one.call_count, 4)
 
-    @patch("concept_model_runner.run_apply")
-    @patch("concept_model_runner.run_one")
+    @patch("transformation_engine.concept_model_runner.run_apply")
+    @patch("transformation_engine.concept_model_runner.run_one")
     def test_cached_successes_do_not_mask_provider_stall(
         self,
         run_one,
@@ -618,8 +618,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
         self.assertEqual(result["model_runs_invoked"], 1)
         self.assertEqual(run_one.call_count, 5)
 
-    @patch("concept_model_runner.resolve_fair_paths")
-    @patch("concept_model_runner.call_fair_bridge")
+    @patch("transformation_engine.concept_model_runner.resolve_fair_paths")
+    @patch("transformation_engine.concept_model_runner.call_fair_bridge")
     def test_paid_inference_fails_closed(self, call_bridge, resolve_paths):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

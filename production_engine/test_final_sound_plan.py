@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import final_sound_plan as sound_plan
+from production_engine import final_sound_plan as sound_plan
 
 
 def write_json(path: Path, payload: dict) -> Path:

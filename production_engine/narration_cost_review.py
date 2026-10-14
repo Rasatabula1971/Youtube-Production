@@ -9,17 +9,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from narration_render import (
+from production_engine.narration_render import (
     ESTIMATES_DIR,
     OUTPUT_DIR,
     artifact_key,

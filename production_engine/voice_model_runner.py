@@ -8,13 +8,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import (
     atomic_write_json,
@@ -25,10 +22,8 @@ from pipeline_integrity import (
 )
 
 EXP2_DIR = _ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -38,7 +33,7 @@ from analysis_model_runner import (
     safe_attempts,
 )
 
-from voice_performance import (
+from production_engine.voice_performance import (
     MODEL_RUNS_DIR,
     RAW_OUTPUTS_DIR,
     REQUESTS_DIR,

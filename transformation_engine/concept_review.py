@@ -6,18 +6,15 @@ import argparse
 import hashlib
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
 
-from concept_gate import (
+from transformation_engine.concept_gate import (
     DEFAULT_CANDIDATES,
     RESEARCH_HANDOFF_FILE,
     REVIEW_REQUEST_FILE,
@@ -29,7 +26,7 @@ from concept_gate import (
     load_json,
 )
 
-from transformation_engine import OUTPUT_DIR, REQUESTS_DIR, RESPONSES_DIR, sha256_file
+from transformation_engine.transformation_engine import OUTPUT_DIR, REQUESTS_DIR, RESPONSES_DIR, sha256_file
 
 STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
 IDEA_BANK_DIR = OUTPUT_DIR.parent.parent / ".idea_bank"

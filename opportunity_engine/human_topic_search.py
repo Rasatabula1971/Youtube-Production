@@ -19,7 +19,6 @@ import os
 import re
 import shutil
 import subprocess  # nosec B404 - fixed argument list, no shell
-import sys
 import time
 import urllib.error
 from datetime import datetime, timezone
@@ -27,8 +26,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from opportunity_engine import channel_scope, models  # noqa: E402
 from opportunity_engine.human_video_intake import (  # noqa: E402

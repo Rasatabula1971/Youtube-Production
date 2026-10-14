@@ -10,18 +10,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
 
-from format_engine import (
+from format_engine.format_engine import (
     OUTPUT_DIR,
     PLANS_DIR,
     REQUESTS_DIR,

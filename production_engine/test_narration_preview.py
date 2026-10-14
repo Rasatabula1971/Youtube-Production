@@ -7,9 +7,9 @@ import wave
 from pathlib import Path
 from unittest.mock import patch
 
-import narration_preview
-import narration_preview_render
-import narration_preview_review
+from production_engine import narration_preview
+from production_engine import narration_preview_render
+from production_engine import narration_preview_review
 
 
 class NarrationPreviewTests(unittest.TestCase):

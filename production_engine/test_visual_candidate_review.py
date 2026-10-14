@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import visual_candidate_review as review
-from visual_search import shot_fingerprint
+from production_engine import visual_candidate_review as review
+from production_engine.visual_search import shot_fingerprint
 
 
 def card(shot_id: str, desired: str) -> dict:

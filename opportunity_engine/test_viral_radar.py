@@ -1,5 +1,4 @@
 import json
-import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -7,8 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from opportunity_engine import channel_scope, historical_adapter  # noqa: E402
 from opportunity_engine import human_topic_search as hts  # noqa: E402

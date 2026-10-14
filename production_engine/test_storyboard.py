@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import storyboard
+from production_engine import storyboard
 
 
 class StoryboardTests(unittest.TestCase):

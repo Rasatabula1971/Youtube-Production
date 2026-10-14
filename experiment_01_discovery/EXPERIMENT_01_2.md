@@ -70,7 +70,7 @@ The profile should be revised only from observed false positives/false negatives
 From the repository root in PowerShell:
 
 ```powershell
-python .\experiment_01_discovery\youtube_discovery.py --max-searches 3
+python -m experiment_01_discovery.youtube_discovery --max-searches 3
 ```
 
 The experiment writes under `output/experiment_01_2/`.

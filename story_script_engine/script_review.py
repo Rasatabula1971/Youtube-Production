@@ -5,17 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from script_section_state import (
+from story_script_engine.script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     SECTION_STATE_DIR,
     apply_target_action,
@@ -23,7 +20,7 @@ from script_section_state import (
     state_path_for,
 )
 
-from story_script_engine import (
+from story_script_engine.story_script_engine import (
     DRAFTS_DIR,
     OUTPUT_DIR,
     REQUESTS_DIR,

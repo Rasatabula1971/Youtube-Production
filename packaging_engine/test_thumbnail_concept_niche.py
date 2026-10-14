@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import niche_thumbnail_study
-import thumbnail_concepts as tc
+from packaging_engine import niche_thumbnail_study
+from packaging_engine import thumbnail_concepts as tc
 
 
 class ThumbnailConceptNicheConventionTests(unittest.TestCase):

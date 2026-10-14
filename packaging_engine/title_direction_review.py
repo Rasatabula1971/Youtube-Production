@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from title_direction import (
+from packaging_engine.title_direction import (
     CANDIDATES_FILE,
     REQUESTS_DIR,
     RESPONSES_DIR,

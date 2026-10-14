@@ -9,18 +9,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
+from story_script_engine.story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
 
 SECTION_STATE_DIR = OUTPUT_DIR / "script_section_states"
 SECTION_STATE_ACTION_LOCK = threading.RLock()

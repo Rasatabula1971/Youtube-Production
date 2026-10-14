@@ -1,14 +1,12 @@
 import hashlib
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from visual_gap_planner import build as build_gaps
-from visual_rough_cut import build, sha256_file
-from visual_search import shot_fingerprint
+from production_engine.visual_gap_planner import build as build_gaps
+from production_engine.visual_rough_cut import build, sha256_file
+from production_engine.visual_search import shot_fingerprint
 
 
 def editorial_board() -> dict:

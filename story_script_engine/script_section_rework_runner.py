@@ -12,27 +12,22 @@ import argparse
 import hashlib
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json, atomic_write_text
 from source_overlap import check_texts
-from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
-from script_section_state import (
+from story_script_engine.story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file
+from story_script_engine.script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     assert_state_matches_draft,
 )
 
 EXP2_DIR = _ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -399,7 +394,7 @@ def _prepare_rework_request_unlocked(
     state = load_json(state_path)
     draft = load_json(draft_path)
     if review_requests_dir is None:
-        from script_review import REVIEW_REQUESTS_DIR
+        from story_script_engine.script_review import REVIEW_REQUESTS_DIR
 
         review_requests_dir = REVIEW_REQUESTS_DIR
     review_request_path = review_requests_dir / (

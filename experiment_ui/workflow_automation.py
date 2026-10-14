@@ -13,7 +13,7 @@ import json
 import subprocess
 from typing import Any
 
-import server as control
+from experiment_ui import server as control
 
 AUTO_MACHINE_ACTION_ORDER = [
     "exp2_prepare",
@@ -130,7 +130,7 @@ def research_acquisition_message() -> str:
         "there is nothing for the Research Gate yet. This is a network/search "
         "problem, not an AI model problem."
         + (f" First error: {first_error[:400]}" if first_error else "")
-        + " Check it with: python source_acquisition/agent_reach_adapter.py "
+        + " Check it with: python -m source_acquisition.agent_reach_adapter "
         "--mode doctor (and --mode web-search --query \"test\"), fix the search "
         "backend or network, then retry Continue Automatically."
     )

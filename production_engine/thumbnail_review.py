@@ -16,10 +16,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from typing import Any
 
-try:
-    from production_engine import thumbnail_render as render
-except ImportError:  # executed as a script from production_engine/
-    import thumbnail_render as render  # type: ignore[no-redef]
+from production_engine import thumbnail_render as render
 
 from pipeline_integrity import atomic_write_json
 

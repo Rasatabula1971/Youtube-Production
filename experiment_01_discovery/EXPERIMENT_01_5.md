@@ -62,7 +62,7 @@ These are gates, not scores.
 ## Build
 
 ```powershell
-python .\experiment_01_discovery\experiment_01_5.py --mode build
+python -m experiment_01_discovery.experiment_01_5 --mode build
 ```
 
 No API key is required and no network request is made.

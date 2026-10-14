@@ -12,16 +12,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 _OVERLAP_ROOT = Path(__file__).resolve().parent.parent
-if str(_OVERLAP_ROOT) not in sys.path:
-    sys.path.insert(0, str(_OVERLAP_ROOT))
 
 from source_overlap import check_texts
-from human_framing import generation_contract, validate as validate_human_framing
+from transformation_engine.human_framing import generation_contract, validate as validate_human_framing
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent

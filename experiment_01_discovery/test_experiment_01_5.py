@@ -1,6 +1,6 @@
 import unittest
 
-from experiment_01_5 import (
+from experiment_01_discovery.experiment_01_5 import (
     build_handoff_packets,
     build_study_set,
     evaluate_topic_evidence,

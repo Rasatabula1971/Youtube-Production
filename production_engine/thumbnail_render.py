@@ -32,7 +32,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,13 +40,10 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
-for _path in (PROJECT_ROOT, PACKAGING_DIR):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
 from pipeline_integrity import atomic_write_json
 
-import niche_thumbnail_study as niche
+from packaging_engine import niche_thumbnail_study as niche
 
 TEMPLATE_FILE = HERE / "thumbnail_template.json"
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
@@ -192,7 +188,7 @@ CONCEPT_FIELDS = (
 
 def pairing_sources() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """Current Slice 26 pair validations and Slice 25 concept sets, or nothing yet."""
-    import package_pairing
+    from packaging_engine import package_pairing
 
     try:
         validations, _ = package_pairing._collect_current()
@@ -706,7 +702,8 @@ def feed_html(
         f"Compared with {len(competitors)} breakout thumbnails from the {html.escape(niche_name or '')} "
         f"{video_format} study."
         if competitors
-        else "No niche thumbnail study found: set channel_niche and run niche_thumbnail_study.py "
+        else "No niche thumbnail study found: set channel_niche and run "
+        "python -m packaging_engine.niche_thumbnail_study "
         "to compare against real niche thumbnails."
     )
     return f"""<!doctype html>

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import visual_gap_planner as gap
+from production_engine import visual_gap_planner as gap
 
 
 class VisualGapPlannerTests(unittest.TestCase):

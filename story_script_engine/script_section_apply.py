@@ -14,25 +14,22 @@ import hashlib
 import json
 import os
 import re
-import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
-from script_section_state import (
+from story_script_engine.story_script_engine import OUTPUT_DIR, load_json, safe_slug, sha256_file, validate_script_response
+from story_script_engine.script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     assert_state_matches_draft,
     build_targets,
     validate_state,
 )
-from script_section_rework_runner import (
+from story_script_engine.script_section_rework_runner import (
     REWORK_RESPONSES_DIR,
     alternatives_artifact_integrity_errors,
     assert_request_current,
@@ -40,7 +37,7 @@ from script_section_rework_runner import (
     validation_contract_sha256 as rework_validation_contract_sha256,
 )
 
-from script_review import (
+from story_script_engine.script_review import (
     APPROVED_DIR,
     RESPONSES_DIR as SCRIPT_REVIEW_RESPONSES_DIR,
     REVIEW_REQUESTS_DIR as SCRIPT_REVIEW_REQUESTS_DIR,

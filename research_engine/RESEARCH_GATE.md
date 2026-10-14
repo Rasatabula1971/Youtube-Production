@@ -14,13 +14,13 @@ The Research Gate decides which claims are safe to carry into scripting.
 For one draft package:
 
 ~~~powershell
-python .\research_engine\research_gate.py --mode prepare --draft ".\research_engine\output\draft_packages\CONCEPT_ID.draft_research_package.json"
+python -m research_engine.research_gate --mode prepare --draft ".\research_engine\output\draft_packages\CONCEPT_ID.draft_research_package.json"
 ~~~
 
 Or prepare all current drafts:
 
 ~~~powershell
-python .\research_engine\research_gate.py --mode batch-prepare
+python -m research_engine.research_gate --mode batch-prepare
 ~~~
 
 Review packets are written under:

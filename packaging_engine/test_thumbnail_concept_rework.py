@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import thumbnail_concepts as tc
+from packaging_engine import thumbnail_concepts as tc
 
 
 class ThumbnailConceptReworkTests(unittest.TestCase):

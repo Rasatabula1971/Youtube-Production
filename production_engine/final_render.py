@@ -15,9 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from edit_preview_render import ffmpeg_available, ffmpeg_binary
-from final_render_manifest import MANIFEST_DIR, manifest_is_current
-from visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.edit_preview_render import ffmpeg_available, ffmpeg_binary
+from production_engine.final_render_manifest import MANIFEST_DIR, manifest_is_current
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

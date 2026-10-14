@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import edit_preview_review as review
+from production_engine import edit_preview_review as review
 
 
 def write_json(path: Path, payload: dict) -> Path:

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import psychological_angles as module
+from packaging_engine import psychological_angles as module
 
 
 class PsychologicalAnglesTests(unittest.TestCase):

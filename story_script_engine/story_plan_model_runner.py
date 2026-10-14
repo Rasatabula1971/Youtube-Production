@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import (
     SUCCESS_STATUSES,
@@ -24,10 +21,8 @@ from pipeline_integrity import (
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -36,14 +31,14 @@ from analysis_model_runner import (
     resolve_fair_paths,
     safe_attempts,
 )
-from story_plan_engine import (
+from story_script_engine.story_plan_engine import (
     STORY_PLAN_REQUESTS_DIR,
     STORY_PLAN_RESPONSES_DIR,
     STORY_PLANS_DIR,
     validate_story_plan_response,
     validation_contract_sha256,
 )
-from story_script_engine import (
+from story_script_engine.story_script_engine import (
     OUTPUT_DIR,
     load_json,
     safe_slug,

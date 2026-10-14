@@ -5,8 +5,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import server
-import workflow_automation
+from experiment_ui import server
+from experiment_ui import workflow_automation
 
 
 def ready(**extra):

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evidence_ingest import (
+from experiment_02_analysis.evidence_ingest import (
     ingest_bundle,
     merge_evidence,
     parse_notes_file,

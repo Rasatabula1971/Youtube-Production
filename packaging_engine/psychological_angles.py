@@ -12,25 +12,20 @@ import argparse
 import hashlib
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 _STORY = _ROOT / "story_script_engine"
-if str(_STORY) not in sys.path:
-    sys.path.insert(0, str(_STORY))
 
 from pipeline_integrity import atomic_write_json
-from packaging_brief import (
+from packaging_engine.packaging_brief import (
     BRIEF_DIR,
     brief_is_current,
     load_json,
     snapshot as packaging_brief_snapshot,
 )
-from story_script_engine import safe_slug, sha256_file
+from story_script_engine.story_script_engine import safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"

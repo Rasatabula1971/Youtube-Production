@@ -11,7 +11,6 @@ exercises the seams between them.
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,27 +18,18 @@ from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-for stage in (
-    "transformation_engine",
-    "packaging_engine",
-    "research_engine",
-    "story_script_engine",
-):
-    stage_dir = PROJECT_ROOT / stage
-    if str(stage_dir) not in sys.path:
-        sys.path.insert(0, str(stage_dir))
 
-import concept_gate
-import format_review
-import packaging_gate
-import research_gate
-import script_review
+from transformation_engine import concept_gate
+from format_engine import format_review
+from packaging_engine import packaging_gate
+from research_engine import research_gate
+from story_script_engine import script_review
 
-import format_engine
-import packaging_engine
-import research_engine
-import story_plan_engine
-import story_script_engine
+from format_engine import format_engine
+from packaging_engine import packaging_engine
+from research_engine import research_engine
+from story_script_engine import story_plan_engine
+from story_script_engine import story_script_engine
 
 PROMISE = (
     "This video helps curious automotive viewers understand why racing brakes "

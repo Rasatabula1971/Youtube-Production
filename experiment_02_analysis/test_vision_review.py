@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import vision_review as vision
+from experiment_02_analysis import vision_review as vision
 
 
 class _FakeResponse:

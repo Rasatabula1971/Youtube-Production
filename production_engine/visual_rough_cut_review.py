@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 from pipeline_integrity import atomic_write_json
-from visual_acquisition import load_json,sha256_file
+from production_engine.visual_acquisition import load_json,sha256_file
 HERE=Path(__file__).resolve().parent; OUTPUT=HERE/"output"; ROUGH=OUTPUT/"visual_rough_cuts"; REVIEW=OUTPUT/"visual_rough_cut_reviews"
 
 def _path(p:Path)->Path:

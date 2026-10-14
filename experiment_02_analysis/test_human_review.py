@@ -5,8 +5,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import human_review
-from human_review import (
+from experiment_02_analysis import human_review
+from experiment_02_analysis.human_review import (
     apply_review,
     apply_review_action,
     build_review_request,

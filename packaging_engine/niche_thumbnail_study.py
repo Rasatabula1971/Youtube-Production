@@ -29,7 +29,6 @@ import re
 import shutil
 import statistics
 import subprocess
-import sys
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -39,9 +38,6 @@ from typing import Any, Callable
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-for _path in (PROJECT_ROOT, PROJECT_ROOT / "experiment_02_analysis"):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
 from pipeline_integrity import atomic_write_json
 
@@ -539,7 +535,7 @@ def validate_annotation(item: dict[str, Any], config: dict[str, Any]) -> list[st
 def ollama_thumbnail_draft(
     image_path: Path, *, model: str, host: str, config: dict[str, Any]
 ) -> dict[str, Any]:
-    from vision_review import normalize_ollama_host
+    from experiment_02_analysis.vision_review import normalize_ollama_host
 
     host = normalize_ollama_host(host)
     payload = {

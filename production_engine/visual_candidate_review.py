@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from visual_acquisition import load_json, safe_slug, sha256_file
-from visual_search import (
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.visual_search import (
     search_request_is_current,
     search_result_is_current,
     shot_fingerprint,

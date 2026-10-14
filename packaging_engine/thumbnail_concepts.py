@@ -10,25 +10,20 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 _STORY = _ROOT / "story_script_engine"
-if str(_STORY) not in sys.path:
-    sys.path.insert(0, str(_STORY))
 
 from pipeline_integrity import atomic_write_json
-from packaging_brief import brief_is_current, load_json
-from psychological_angles import (
+from packaging_engine.packaging_brief import brief_is_current, load_json
+from packaging_engine.psychological_angles import (
     ANGLES_FILE,
     item_is_current as angle_item_is_current,
     snapshot as angle_snapshot,
 )
-from story_script_engine import safe_slug, sha256_file
+from story_script_engine.story_script_engine import safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -249,7 +244,7 @@ def niche_conventions(video_format: Any) -> dict[str, Any]:
     niche = load_config().get("channel_niche")
     if not niche or video_format not in {"short", "long_form"}:
         return {}
-    from niche_thumbnail_study import packaging_conventions
+    from packaging_engine.niche_thumbnail_study import packaging_conventions
 
     return packaging_conventions(str(niche), str(video_format)).get(str(video_format), {})
 

@@ -27,15 +27,12 @@ import re
 import shutil
 import statistics
 import subprocess  # nosec B404 - fixed argument list, no shell
-import sys
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json  # noqa: E402
 

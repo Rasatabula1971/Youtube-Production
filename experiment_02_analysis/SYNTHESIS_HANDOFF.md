@@ -30,7 +30,7 @@ final profile validation.
 ## Build
 
 ~~~powershell
-python .\experiment_02_analysis\synthesis_handoff.py --mode build
+python -m experiment_02_analysis.synthesis_handoff --mode build
 ~~~
 
 Override the profile directory with --profiles-dir when needed.

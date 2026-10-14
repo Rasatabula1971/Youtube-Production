@@ -15,12 +15,12 @@ It is descriptive and correlational. It does not measure or predict CTR.
 All output goes to `packaging_engine/output/niche_thumbnails/<niche>__<format>/`.
 
 ~~~powershell
-python .\packaging_engine\niche_thumbnail_study.py --mode select   --niche automotive_racing --format long_form
-python .\packaging_engine\niche_thumbnail_study.py --mode acquire  --niche automotive_racing --format long_form
-python .\packaging_engine\niche_thumbnail_study.py --mode measure  --niche automotive_racing --format long_form
-python .\packaging_engine\niche_thumbnail_study.py --mode annotate --niche automotive_racing --format long_form
+python -m packaging_engine.niche_thumbnail_study --mode select   --niche automotive_racing --format long_form
+python -m packaging_engine.niche_thumbnail_study --mode acquire  --niche automotive_racing --format long_form
+python -m packaging_engine.niche_thumbnail_study --mode measure  --niche automotive_racing --format long_form
+python -m packaging_engine.niche_thumbnail_study --mode annotate --niche automotive_racing --format long_form
 #   edit annotations.json, set each reviewed item to CONFIRMED
-python .\packaging_engine\niche_thumbnail_study.py --mode tabulate --niche automotive_racing --format long_form
+python -m packaging_engine.niche_thumbnail_study --mode tabulate --niche automotive_racing --format long_form
 ~~~
 
 | Stage | Network | What it does |

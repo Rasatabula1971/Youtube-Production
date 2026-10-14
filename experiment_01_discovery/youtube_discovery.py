@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from evidence_quality import (
+from experiment_01_discovery.evidence_quality import (
     RELEVANCE_ADJACENT,
     RELEVANCE_OFF_INTENT,
     RELEVANCE_ON_INTENT,
@@ -48,7 +48,7 @@ from evidence_quality import (
     RELIABILITY_UNAVAILABLE,
     annotate_evidence_quality,
 )
-from market_intelligence import (
+from experiment_01_discovery.market_intelligence import (
     aggregate_topic_evidence,
     append_snapshots,
     build_query_competition_profile,

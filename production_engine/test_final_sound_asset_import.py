@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import final_sound_asset_import as sound_asset
+from production_engine import final_sound_asset_import as sound_asset
 
 
 def write_json(path: Path, payload: dict) -> Path:

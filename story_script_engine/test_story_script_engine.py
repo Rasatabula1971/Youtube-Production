@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import story_script_engine as module
+from story_script_engine import story_script_engine as module
 
-from story_script_engine import build_script_request, validate_script_response
+from story_script_engine.story_script_engine import build_script_request, validate_script_response
 
 
 class StoryScriptTests(unittest.TestCase):

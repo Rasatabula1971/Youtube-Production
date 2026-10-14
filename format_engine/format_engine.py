@@ -12,13 +12,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 from typing import Any, Callable
 
 _OVERLAP_ROOT = Path(__file__).resolve().parent.parent
-if str(_OVERLAP_ROOT) not in sys.path:
-    sys.path.insert(0, str(_OVERLAP_ROOT))
 
 from source_overlap import check_texts
 
@@ -484,9 +481,7 @@ def branch_shape(branch: dict[str, Any]) -> list[str]:
 
 def load_final_package(concept_id: str) -> dict[str, Any]:
     """The current Final Packaging Gate bundle for one concept (Slice 27)."""
-    if str(PACKAGING_DIR) not in sys.path:
-        sys.path.insert(0, str(PACKAGING_DIR))
-    import final_packaging_review
+    from packaging_engine import final_packaging_review
 
     found = final_packaging_review.approved_bundle(concept_id)
     if found is None:

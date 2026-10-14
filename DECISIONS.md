@@ -2882,3 +2882,91 @@ Save and Reject (R11).
   `POST /api/opportunity/inbox` waits for running jobs like the other gate
   routes.
 
+
+## D-114 — One repository, layered packages enforced by a test
+
+**Status:** Accepted (13 Oct 2026). Two parts are still open for the owner:
+the production feature freeze and the Opportunity Gate move (marked
+*Pending* below). Neither is needed before Task 3.
+
+**Context.** The code reached about 72,600 source lines in 12 folders before M1
+closed. Shared rules exist in many copies: 55 hash helpers in 37 files, the
+free-only cost check inside Experiment 02, and slug and JSON helpers borrowed
+from the Story/Script Engine. Modules had no stable names: 99 `sys.path`
+changes let each folder import siblings by bare file name, so the suite could
+not run from the root and the type checker could not see across modules.
+Audit #1 (gate decisions not bound to the reviewed artifact) happened because a
+correct pattern in one gate was never shared.
+
+**Decision.**
+- **One repository.** A split waits for a concrete trigger: production needs a
+  different machine or runtime, or a second contributor joins.
+- **Stable names.** Every code folder is a package and every module is
+  addressed by its package-qualified name. Project modules are started with
+  `python -m` from the project root. The one exception is `fair_bridge.py`,
+  which imports only the standard library, is still launched by path, and is
+  the only file allowed to change `sys.path` (it loads the external FAIR
+  repository). `test_architecture.py` checks these rules statically: package
+  folders, bare and dynamic (`importlib`/`__import__`) imports of bare file
+  names, `from <package> import <name>` naming a real submodule, `sys.path` or
+  `PYTHONPATH` changes (including through aliases), command lists that start
+  a project file by path, `*_MODULE` launch names matching their files, and
+  every UI action naming a project module with a `__main__` guard started from
+  the project root. It is a static check: code built at runtime (for example
+  a module name assembled from variables) is outside what it can see.
+- **Layers.**
+  - `core` holds integrity, the model bridge and cost policy, source overlap,
+    and the hashing, JSON and slug helpers. It imports no engine.
+  - Preproduction is discovery, source acquisition, opportunity, analysis,
+    transformation, research, story/script, channel profiles, format and
+    packaging (thumbnails included). It may import `core` and earlier
+    preproduction engines, and never `production_engine`.
+  - `production_engine` may import only `core`. It reads preproduction results
+    from files.
+  - `experiment_ui` may import anything.
+
+  A boundary test enforces these rules once `core` exists and the cycles are
+  broken.
+- **No folder moves for grouping.** Layers are a rule, not a directory. A module
+  that must move to break a cycle pins its existing data folder.
+- **Thumbnails belong to packaging.** `thumbnail_render` and `thumbnail_review`
+  move to `packaging_engine`. Their data stays in `production_engine/output/`.
+- *Pending:* **The Opportunity Gate belongs to the opportunity engine.**
+  `opportunity_gate.py` moves to `opportunity_engine`. Its data stays in
+  `experiment_01_discovery/output/experiment_01_5/`.
+- *Pending:* **Production feature freeze.** `production_engine` takes no new
+  features until M1 closes. Fixes are still allowed.
+
+**Alternatives rejected.**
+- *Separate repositories.* Solves no current failure for one developer on one
+  machine. It would also put provenance checks across repository boundaries,
+  the weakest point the audit found.
+- *Moving folders under `preproduction/` and `production/`.* It moves
+  gitignored data on the owner's machine and breaks every launch path (73 UI
+  scripts, internal launches, the .bat and the scheduled task), the CI filters
+  and every document reference. It gains nothing over a boundary test.
+- *`pip install -e .`* It works, but it silently depends on which Python is
+  installed. `python -m` from the root needs nothing.
+
+**Consequences.**
+- Production can be split out later at low cost: once the cycles are broken it
+  imports only `core`.
+- Fixes to shared rules land once. This covers the audit #10 cost policy and
+  gate provenance.
+- The type checker sees real cross-module types. When module names became
+  stable, 28 latent errors appeared: 27 were fixed with type annotations or
+  `typing.cast` (an identity call at runtime), and one disappeared with a
+  redundant import fallback.
+- 17 UI actions (title direction review and 16 production steps such as
+  storyboard, visual search and final render) could not start on `main` when
+  launched by file path, because `pipeline_integrity` was not importable from
+  their folder. Started with `python -m` they now start. This is a fix, not a
+  new feature; the gates in front of them are unchanged.
+- Operator documentation and hint messages give `python -m` commands.
+- Modules that fingerprint their own source (`transformation_engine`,
+  `story_script_engine`, `story_plan_engine`, `script_section_rework_runner`,
+  `voice_performance`) reject cached model responses once when they are edited,
+  in Task 1 and again in Task 2.
+- The Windows scheduled refresh runs through
+  `scripts/run_opportunity_research_continue.cmd`. A task registered before this
+  change must be registered again once.

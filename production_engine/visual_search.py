@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from visual_acquisition import load_json, safe_slug, sha256_file
-from storyboard import storyboard_is_current
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.storyboard import storyboard_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -259,7 +259,8 @@ def snapshot() -> dict[str, Any]:
     current_boards = []
     if STORYBOARD_DIR.exists():
         for board_path in sorted(STORYBOARD_DIR.glob("*.storyboard.json")):
-            state = storyboard_is_current(board_path)
+            # `state` holds two differently shaped tuples in this function.
+            state: tuple[Any, ...] | None = storyboard_is_current(board_path)
             if state is not None:
                 current_boards.append(board_path)
 

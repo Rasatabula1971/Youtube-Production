@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import edit_manifest as module
+from production_engine import edit_manifest as module
 
 
 def write_json(path: Path, payload: dict) -> Path:

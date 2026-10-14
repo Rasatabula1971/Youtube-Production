@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from packaging_engine import load_config as load_packaging_config
+from packaging_engine.packaging_engine import load_config as load_packaging_config
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_gate_config.json"

@@ -15,24 +15,21 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from voice_performance import load_json, safe_slug, sha256_file, sha256_text
-from voice_review import APPROVED_DIR as APPROVED_VOICE_DIR
-from narration_preview_review import (
+from production_engine.voice_performance import load_json, safe_slug, sha256_file, sha256_text
+from production_engine.voice_review import APPROVED_DIR as APPROVED_VOICE_DIR
+from production_engine.narration_preview_review import (
     APPROVED_DIR as APPROVED_PREVIEW_DIR,
     PREVIEW_DIR as PREVIEW_MANIFEST_DIR,
     RENDER_DIR as PREVIEW_RENDER_DIR,
     current_render as current_preview_render,
 )
-from sound_design_brief import current_brief_for_branch
+from production_engine.sound_design_brief import current_brief_for_branch
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "narration_render_config.json"

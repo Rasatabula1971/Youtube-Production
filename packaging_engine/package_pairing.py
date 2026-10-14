@@ -14,36 +14,31 @@ import argparse
 import hashlib
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 _STORY = _ROOT / "story_script_engine"
-if str(_STORY) not in sys.path:
-    sys.path.insert(0, str(_STORY))
 
 from pipeline_integrity import atomic_write_json
-from packaging_brief import (
+from packaging_engine.packaging_brief import (
     BRIEF_DIR,
     brief_is_current,
     load_json,
     snapshot as packaging_brief_snapshot,
 )
-from psychological_angles import (
+from packaging_engine.psychological_angles import (
     ANGLES_FILE,
     item_is_current as angle_item_is_current,
 )
-from thumbnail_concepts import (
+from packaging_engine.thumbnail_concepts import (
     CONCEPTS_FILE,
     item_is_current as thumbnail_item_is_current,
     snapshot as thumbnail_snapshot,
 )
-from title_direction import CANDIDATES_FILE as TITLE_CANDIDATES_FILE
-from title_direction_review import snapshot as title_direction_snapshot
-from story_script_engine import safe_slug, sha256_file
+from packaging_engine.title_direction import CANDIDATES_FILE as TITLE_CANDIDATES_FILE
+from packaging_engine.title_direction_review import snapshot as title_direction_snapshot
+from story_script_engine.story_script_engine import safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"

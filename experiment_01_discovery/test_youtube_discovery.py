@@ -9,7 +9,7 @@ from email.message import Message
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import youtube_discovery
+from experiment_01_discovery import youtube_discovery
 
 
 def http_error(code: int, reason: str | None = None, retry_after: str | None = None):
@@ -115,8 +115,8 @@ class YoutubeDiscoveryCheckpointTests(unittest.TestCase):
 
 
 class YoutubeDiscoveryApiTests(unittest.TestCase):
-    @patch("youtube_discovery.time.sleep")
-    @patch("youtube_discovery.urllib.request.urlopen")
+    @patch("experiment_01_discovery.youtube_discovery.time.sleep")
+    @patch("experiment_01_discovery.youtube_discovery.urllib.request.urlopen")
     def test_5xx_retries_with_backoff(self, urlopen, sleep):
         urlopen.side_effect = [
             http_error(503, "backendError"),
@@ -129,8 +129,8 @@ class YoutubeDiscoveryApiTests(unittest.TestCase):
         sleep.assert_called_once_with(1.0)
         self.assertEqual(urlopen.call_count, 2)
 
-    @patch("youtube_discovery.time.sleep")
-    @patch("youtube_discovery.urllib.request.urlopen")
+    @patch("experiment_01_discovery.youtube_discovery.time.sleep")
+    @patch("experiment_01_discovery.youtube_discovery.urllib.request.urlopen")
     def test_429_uses_retry_after(self, urlopen, sleep):
         urlopen.side_effect = [
             http_error(429, "rateLimitExceeded", retry_after="7"),
@@ -143,8 +143,8 @@ class YoutubeDiscoveryApiTests(unittest.TestCase):
         sleep.assert_called_once_with(7.0)
         self.assertEqual(urlopen.call_count, 2)
 
-    @patch("youtube_discovery.time.sleep")
-    @patch("youtube_discovery.urllib.request.urlopen")
+    @patch("experiment_01_discovery.youtube_discovery.time.sleep")
+    @patch("experiment_01_discovery.youtube_discovery.urllib.request.urlopen")
     def test_403_rate_limit_retries(self, urlopen, sleep):
         urlopen.side_effect = [
             http_error(403, "rateLimitExceeded"),
@@ -157,8 +157,8 @@ class YoutubeDiscoveryApiTests(unittest.TestCase):
         sleep.assert_called_once_with(1.0)
         self.assertEqual(urlopen.call_count, 2)
 
-    @patch("youtube_discovery.time.sleep")
-    @patch("youtube_discovery.urllib.request.urlopen")
+    @patch("experiment_01_discovery.youtube_discovery.time.sleep")
+    @patch("experiment_01_discovery.youtube_discovery.urllib.request.urlopen")
     def test_403_quota_exceeded_fails_closed_without_retry(self, urlopen, sleep):
         urlopen.side_effect = http_error(403, "quotaExceeded")
 

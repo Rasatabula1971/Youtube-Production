@@ -20,8 +20,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from evidence_ingest import sha256_file
-from experiment_02 import (
+from experiment_02_analysis.evidence_ingest import sha256_file
+from experiment_02_analysis.experiment_02 import (
     OUTPUT_DIR,
     evidence_index,
     load_config,

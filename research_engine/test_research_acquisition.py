@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import research_acquisition as module
+from research_engine import research_acquisition as module
 
 
 def plan(root: Path) -> Path:

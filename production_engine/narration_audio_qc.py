@@ -12,17 +12,14 @@ import json
 import math
 import re
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
-from narration_render import (
+from production_engine.narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
+from production_engine.narration_render import (
     CONFIG_FILE,
     OUTPUT_DIR,
     REQUESTS_DIR,
@@ -31,7 +28,7 @@ from narration_render import (
     load_json,
     sha256_file,
 )
-from narration_render_import import (
+from production_engine.narration_render_import import (
     current_result as current_registered_result,
     snapshot as narration_render_return_snapshot,
 )

@@ -25,7 +25,7 @@ This contains concepts already accepted by the human Concept Gate.
 ## Prepare
 
 ~~~powershell
-python .\packaging_engine\packaging_engine.py --mode prepare
+python -m packaging_engine.packaging_engine --mode prepare
 ~~~
 
 One package-generation request is created per accepted concept.
@@ -66,7 +66,7 @@ The title and thumbnail are treated as one communication unit.
 The guided workflow can run all current requests through FAIR free-only routing:
 
 ~~~powershell
-python .\packaging_engine\package_model_runner.py --mode batch
+python -m packaging_engine.package_model_runner --mode batch
 ~~~
 
 Each generated response is bound to the SHA-256 of its exact package request.
@@ -84,7 +84,7 @@ packaging_engine/output/package_responses/
 Then run:
 
 ~~~powershell
-python .\packaging_engine\packaging_engine.py --mode apply
+python -m packaging_engine.packaging_engine --mode apply
 ~~~
 
 Outputs:
