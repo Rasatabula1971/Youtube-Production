@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path

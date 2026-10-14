@@ -11,7 +11,6 @@ import argparse
 import hashlib
 import json
 import math
-import sys
 from pathlib import Path
 from typing import Any
 

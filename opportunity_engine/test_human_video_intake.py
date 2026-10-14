@@ -1,6 +1,5 @@
 import json
 import subprocess
-import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone

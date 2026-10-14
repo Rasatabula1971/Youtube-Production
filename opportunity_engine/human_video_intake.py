@@ -14,7 +14,6 @@ import os
 import re
 import shutil
 import subprocess  # nosec B404 - fixed argument list, no shell
-import sys
 import urllib.error
 import urllib.parse
 from datetime import datetime, timezone

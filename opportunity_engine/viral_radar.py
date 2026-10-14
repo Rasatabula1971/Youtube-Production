@@ -27,7 +27,6 @@ import re
 import shutil
 import statistics
 import subprocess  # nosec B404 - fixed argument list, no shell
-import sys
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

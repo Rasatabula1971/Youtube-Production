@@ -14,7 +14,6 @@ import os
 import re
 import shutil
 import statistics
-import sys
 from collections.abc import Sequence
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone

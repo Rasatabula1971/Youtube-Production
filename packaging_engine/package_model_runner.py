@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
