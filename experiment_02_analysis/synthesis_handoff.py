@@ -11,7 +11,6 @@ No network calls, model calls, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path

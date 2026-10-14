@@ -10,7 +10,6 @@ are never treated as identical edits of the same timeline.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable

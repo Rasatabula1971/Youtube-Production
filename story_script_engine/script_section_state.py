@@ -7,8 +7,6 @@ section, and the closing so later slices can request bounded alternatives safely
 
 from __future__ import annotations
 
-import hashlib
-import json
 import threading
 from datetime import datetime, timezone
 from pathlib import Path

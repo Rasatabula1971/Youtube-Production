@@ -7,7 +7,6 @@ Approved package dependencies are carried into the Research Engine handoff.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path

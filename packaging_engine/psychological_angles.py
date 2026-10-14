@@ -9,7 +9,6 @@ Creative framing may be generated. Facts may not be invented.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from pathlib import Path

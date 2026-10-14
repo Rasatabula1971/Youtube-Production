@@ -11,7 +11,6 @@ Final Packaging Gate (final_packaging_review.py) chooses from the PASS pairs.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -40,7 +39,6 @@ from packaging_engine.title_direction import CANDIDATES_FILE as TITLE_CANDIDATES
 from packaging_engine.title_direction_review import snapshot as title_direction_snapshot
 from core.hashing import sha256_file
 from core.slugs import safe_slug
-from core.hashing import canonical_sha256 as _hash
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"

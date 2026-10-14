@@ -9,7 +9,6 @@ human-supplied licensed asset or an explicit human omission.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any

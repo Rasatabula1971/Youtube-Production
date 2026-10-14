@@ -10,7 +10,6 @@ The framework does not browse the web, call an LLM, or declare claims true.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
