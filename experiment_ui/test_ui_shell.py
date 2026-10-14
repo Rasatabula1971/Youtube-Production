@@ -236,9 +236,6 @@ class ShellMarkupTests(unittest.TestCase):
                 self.assertIn(endpoint, server.HUMAN_GATE_MUTATION_ROUTES)
 
     def test_script_review_offers_only_server_rework_reasons(self) -> None:
-        import sys as _sys
-
-        _sys.path.insert(0, str(server.STORY_DIR))
         from story_script_engine.script_section_state import ALLOWED_REWORK_REASONS
 
         script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
@@ -273,9 +270,6 @@ class ShellMarkupTests(unittest.TestCase):
                 self.assertIn(target + ":", rework.group(1))
 
     def test_preview_review_offers_only_server_decisions(self) -> None:
-        import sys as _sys
-
-        _sys.path.insert(0, str(server.PRODUCTION_DIR))
         from production_engine.narration_preview_review import DECISIONS
 
         script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
@@ -284,9 +278,6 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertEqual(offered, set(DECISIONS))
 
     def test_produce_page_decisions_match_the_server(self) -> None:
-        import sys as _sys
-
-        _sys.path.insert(0, str(server.PRODUCTION_DIR))
         from production_engine import edit_preview_review
         from production_engine import final_export_review
 

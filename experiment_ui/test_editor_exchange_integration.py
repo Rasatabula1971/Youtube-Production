@@ -28,7 +28,7 @@ class EditorExchangeIntegrationTests(unittest.TestCase):
 
     def test_server_and_final_export_gate_share_one_module(self):
         # Paths patched or configured on one are seen by the other.
-        self.assertIs(server.tesseract_exchange, sys.modules["final_export_review"].tesseract_exchange)
+        self.assertIs(server.tesseract_exchange, sys.modules["production_engine.final_export_review"].tesseract_exchange)
 
     def test_state_degrades_instead_of_raising(self):
         with patch.object(server.tesseract_exchange, "snapshot", side_effect=ValueError("boom")):

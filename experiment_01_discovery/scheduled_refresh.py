@@ -29,6 +29,7 @@ STATUS_FILE = OUTPUT_DIR / "scheduled_refresh_status.json"
 LOG_FILE = OUTPUT_DIR / "scheduled_refresh.log"
 LOCK_FILE = OUTPUT_ROOT / "experiment_01_3_scheduled_refresh.lock"
 REFRESH_SCRIPT = HERE / "experiment_01_3.py"
+REFRESH_MODULE = "experiment_01_discovery.experiment_01_3"  # started with python -m from the project root (D-114)
 
 DEFAULT_MINIMUM_INTERVAL_HOURS = 1.5
 DEFAULT_LOCK_STALE_MINUTES = 60
@@ -319,7 +320,8 @@ def run_scheduled_refresh(
     executable = python_executable or sys.executable
     command = [
         executable,
-        str(REFRESH_SCRIPT),
+        "-m",
+        REFRESH_MODULE,
         "--mode",
         "refresh",
     ]

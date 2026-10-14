@@ -19,16 +19,6 @@ from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-for stage in (
-    "transformation_engine",
-    "packaging_engine",
-    "research_engine",
-    "story_script_engine",
-):
-    stage_dir = PROJECT_ROOT / stage
-    if str(stage_dir) not in sys.path:
-        sys.path.insert(0, str(stage_dir))
-
 from transformation_engine import concept_gate
 from format_engine import format_review
 from packaging_engine import packaging_gate

@@ -59,8 +59,8 @@ class FormatUiIntegrationTests(unittest.TestCase):
         self.assertIn("production_output", server.OPEN_TARGETS)
         self.assertIn("production_visual_prepare", server.ACTION_DEFS)
         self.assertIn(
-            "production_engine/visual_acquisition.py",
-            server.ACTION_DEFS["production_visual_prepare"]["command"][1],
+            "production_engine.visual_acquisition",
+            server.ACTION_DEFS["production_visual_prepare"]["command"][2],
         )
 
     def test_static_ui_contains_format_gate(self):

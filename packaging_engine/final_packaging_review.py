@@ -109,8 +109,6 @@ def current_validations() -> list[dict[str, Any]] | None:
 
 def thumbnail_approvals() -> dict[str, dict[str, Any]]:
     """Current Human Thumbnail Gate approvals keyed by render_id."""
-    if str(PRODUCTION_DIR) not in sys.path:
-        sys.path.insert(0, str(PRODUCTION_DIR))
     from production_engine import thumbnail_render
 
     return thumbnail_render.current_approvals()

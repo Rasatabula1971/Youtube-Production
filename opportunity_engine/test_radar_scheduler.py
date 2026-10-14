@@ -103,7 +103,7 @@ class ScheduledTickTests(unittest.TestCase):
         ):
             self.assertEqual(scheduled_tick.run_research_continue(), 0)
         command = run.call_args.args[0]
-        self.assertEqual(command[1:], [str(scheduled_tick.RESEARCH_RUNNER), "--mode", "continue"])
+        self.assertEqual(command[1:], ["-m", scheduled_tick.RESEARCH_RUNNER_MODULE, "--mode", "continue"])
         self.assertFalse(run.call_args.kwargs["shell"])
 
     def test_both_failing_exits_nonzero(self):
@@ -118,8 +118,10 @@ class ScheduledTickTests(unittest.TestCase):
 
     def test_install_script_points_at_the_combined_runner(self):
         script = (_ROOT / "scripts" / "install_experiment_01_3_auto_refresh.ps1").read_text(encoding="utf-8")
-        self.assertIn('opportunity_engine\\scheduled_tick.py', script)
+        self.assertIn("run_scheduled_tick.cmd", script)
         self.assertNotIn("--mode continue", script)
+        wrapper = (_ROOT / "scripts" / "run_scheduled_tick.cmd").read_text(encoding="utf-8")
+        self.assertIn("-m opportunity_engine.scheduled_tick", wrapper)
 
 
 

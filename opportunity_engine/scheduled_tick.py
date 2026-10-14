@@ -22,6 +22,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 from opportunity_engine import radar_scheduler, viral_radar  # noqa: E402
 
 RESEARCH_RUNNER = _ROOT / "experiment_01_discovery" / "opportunity_research.py"
+RESEARCH_RUNNER_MODULE = "experiment_01_discovery.opportunity_research"  # started with python -m from the project root (D-114)
 LOG_FILE = viral_radar.RADAR_DIR / "scheduled_tick.log"
 RESEARCH_TIMEOUT_SECONDS = 1800
 
@@ -35,7 +36,7 @@ def _log(line: str) -> None:
 def run_research_continue() -> int:
     try:
         completed = subprocess.run(  # nosec B603 - fixed argument list, no shell
-            [sys.executable, str(RESEARCH_RUNNER), "--mode", "continue"],
+            [sys.executable, "-m", RESEARCH_RUNNER_MODULE, "--mode", "continue"],
             cwd=str(_ROOT),
             capture_output=True,
             text=True,
