@@ -25,8 +25,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-_ROOT = Path(__file__).resolve().parent.parent
-
 from opportunity_engine import channel_scope, models  # noqa: E402
 from opportunity_engine.human_video_intake import (  # noqa: E402
     IntakeError,

@@ -6,16 +6,17 @@ paid provider.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import threading
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
 from production_engine.visual_gap_planner import gap_plan_is_current
+from core.hashing import canonical_sha256 as _gap_fingerprint
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -87,16 +88,6 @@ def _path(plan_path: Path) -> Path:
         ".visual_gap_plan.json",
         ".visual_spend_review.json",
     )
-
-
-def _gap_fingerprint(gap: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        gap,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _hero_gaps(plan: dict[str, Any]) -> list[dict[str, Any]]:

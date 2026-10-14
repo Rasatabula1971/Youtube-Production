@@ -13,17 +13,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from production_engine.narration_render import (
     ESTIMATES_DIR,
     OUTPUT_DIR,
     artifact_key,
-    load_json,
-    sha256_file,
     snapshot as narration_render_snapshot,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
 
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "narration_spend_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "narration_spend_review_responses"

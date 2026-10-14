@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-_ROOT = Path(__file__).resolve().parent.parent
-
 from opportunity_engine import active_source  # noqa: E402
 from opportunity_engine import human_topic_search as hts  # noqa: E402
 from opportunity_engine.human_video_intake import IntakeError  # noqa: E402

@@ -16,11 +16,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from production_engine.narration_render_import import (
     current_result as current_registered_narration_result,
 )
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.visual_assembly_plan import assembly_plan_is_current
 
 HERE = Path(__file__).resolve().parent

@@ -8,14 +8,19 @@ third-party footage, and it never calls paid generation providers.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.storyboard import storyboard_is_current
+from core.hashing import (
+    canonical_sha256 as request_fingerprint,
+    canonical_sha256 as shot_fingerprint,
+)
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -41,26 +46,6 @@ AUTO_ELIGIBLE = {
 
 def _key(concept_id: str, fmt: str) -> str:
     return f"{safe_slug(concept_id)}.{safe_slug(fmt)}"
-
-
-def shot_fingerprint(card: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        card,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def request_fingerprint(request: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        request,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def raw_matches_request(

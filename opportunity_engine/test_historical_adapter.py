@@ -3,8 +3,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-
 from opportunity_engine import historical_adapter  # noqa: E402
 from opportunity_engine.packet_schema import validate_packet  # noqa: E402
 

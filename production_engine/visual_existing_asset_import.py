@@ -11,14 +11,16 @@ selections it requires the existing Human Rights/Context Gate approval.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as _hash_json
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -36,17 +38,6 @@ ALLOWED_EXTENSIONS = {
     ".mp4", ".mov", ".webm", ".mkv",
     ".jpg", ".jpeg", ".png", ".webp",
 }
-
-
-def _hash_json(value: Any) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-    ).hexdigest()
 
 
 def _candidate(

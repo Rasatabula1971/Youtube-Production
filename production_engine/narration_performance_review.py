@@ -7,8 +7,9 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 from typing import Any
-from pipeline_integrity import atomic_write_json
-from production_engine.voice_performance import load_json,sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
 
 HERE=Path(__file__).resolve().parent;OUTPUT=HERE/"output"
 MANIFESTS=OUTPUT/"narration_preview_manifests";REVISIONS=OUTPUT/"narration_performance_revisions"

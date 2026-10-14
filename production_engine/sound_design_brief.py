@@ -11,8 +11,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.voice_performance import load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.narration_preview_review import (
     RENDER_DIR as PREVIEW_RENDER_DIR,
     current_render as current_preview_render,

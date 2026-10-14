@@ -8,7 +8,6 @@ Prepared profiles are never overwritten by default.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import mimetypes
 import re
@@ -19,10 +18,11 @@ from typing import Any
 from experiment_02_analysis.experiment_02 import (
     OUTPUT_DIR,
     load_config,
-    load_json,
     safe_filename,
     validate_profile,
 )
+from core.jsonio import load_json_or_exit as load_json
+from core.hashing import sha256_file
 
 ENRICHED_DIR = OUTPUT_DIR / "profiles_enriched"
 INGESTION_REPORTS_DIR = OUTPUT_DIR / "ingestion_reports"
@@ -32,14 +32,6 @@ TIMECODE_HMS_RE = re.compile(
 )
 TIMECODE_MS_RE = re.compile(r"^(?P<m>\d{1,2}):(?P<s>\d{2})[,.](?P<ms>\d{3})$")
 TAG_RE = re.compile(r"<[^>]+>")
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def resolve_bundle_path(bundle_path: Path, value: str | None) -> Path | None:

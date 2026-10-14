@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json,sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
 HERE=Path(__file__).resolve().parent; OUTPUT=HERE/"output"; ROUGH=OUTPUT/"visual_rough_cuts"; REVIEW=OUTPUT/"visual_rough_cut_reviews"
 
 def _path(p:Path)->Path:

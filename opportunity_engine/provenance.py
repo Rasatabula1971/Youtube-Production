@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from pathlib import Path
 from typing import Any
+from core.hashing import canonical_sha256, sha256_file as file_sha256
 
 # Fields that change on every rebuild, or record people and runtime rather than
 # evidence, so they must not change a packet's evidence hash.
 VOLATILE_FIELDS = frozenset({"created_at", "packet_sha256", "human_notes", "intake"})
-
-
-def canonical_sha256(value: Any) -> str:
-    encoded = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def file_sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def source_artifact(path: Path, role: str) -> dict[str, str]:

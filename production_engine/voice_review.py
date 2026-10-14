@@ -13,18 +13,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from production_engine.voice_performance import (
-    SPECS_DIR,
+    MODEL_RUNS_DIR,
     OUTPUT_DIR,
     REQUESTS_DIR,
-    MODEL_RUNS_DIR,
-    load_json,
-    safe_slug,
-    sha256_file,
+    SPECS_DIR,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 GATE_CONFIG_FILE = HERE / "voice_gate_config.json"

@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import colorsys
-import hashlib
 import html
 import itertools
 import json
@@ -41,9 +40,11 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 from packaging_engine import niche_thumbnail_study as niche
+from core.hashing import canonical_sha256 as content_sha256, sha256_file
+from core.jsonio import load_json
 
 TEMPLATE_FILE = HERE / "thumbnail_template.json"
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
@@ -61,23 +62,6 @@ INK = bytes(1 if value > 96 else 0 for value in range(256))
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def safe_slug(value: str) -> str:

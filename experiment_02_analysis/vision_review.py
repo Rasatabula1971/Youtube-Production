@@ -20,12 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from urllib.parse import urlparse
 
-from experiment_02_analysis.evidence_ingest import run_ingest, sha256_file
+from experiment_02_analysis.evidence_ingest import run_ingest
+from core.hashing import sha256_file
 from experiment_02_analysis.experiment_02 import OUTPUT_DIR, PROJECT_ROOT, safe_filename
 
 PREPARED_DIR = OUTPUT_DIR / "profiles_to_complete"

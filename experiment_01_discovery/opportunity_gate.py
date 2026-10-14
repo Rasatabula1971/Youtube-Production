@@ -7,18 +7,17 @@ Experiment 02.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 from opportunity_engine import active_source
+from core.hashing import canonical_sha256
+from core.jsonio import load_json
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output" / "experiment_01_5"
@@ -43,22 +42,6 @@ VIDEO_ACTIONS = {
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def canonical_sha256(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def opportunity_id(

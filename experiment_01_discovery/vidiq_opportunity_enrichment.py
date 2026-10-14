@@ -16,7 +16,6 @@ Paid tool use is constrained by vidiq_mcp.py:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -45,6 +44,8 @@ from experiment_01_discovery.vidiq_mcp import (
     reserve_budget,
     result_preview,
 )
+from core.hashing import canonical_sha256
+from core.jsonio import load_json
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_ROOT = HERE / "output"
@@ -60,22 +61,6 @@ TOOL_ORDER = ("keyword_research", "outliers", "trending_videos")
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def canonical_sha256(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
 
 
 def write_json(path: Path, payload: Any) -> None:

@@ -20,16 +20,16 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from experiment_02_analysis.evidence_ingest import sha256_file
+from core.hashing import sha256_file
 from experiment_02_analysis.experiment_02 import (
     OUTPUT_DIR,
     evidence_index,
     load_config,
-    load_json,
     safe_filename,
     validate_profile,
     validate_supported_item,
 )
+from core.jsonio import load_json_or_exit as load_json
 
 REQUESTS_DIR = OUTPUT_DIR / "analysis_requests"
 ANALYZED_DIR = OUTPUT_DIR / "profiles_analyzed"

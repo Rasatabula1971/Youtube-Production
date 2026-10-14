@@ -15,10 +15,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-_OVERLAP_ROOT = Path(__file__).resolve().parent.parent
-
-from source_overlap import check_texts
+from core.source_overlap import check_texts
 from transformation_engine.human_framing import generation_contract, validate as validate_human_framing
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -40,14 +41,6 @@ REJECTED_FILE = OUTPUT_DIR / "rejected_concepts.json"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def validation_contract_sha256() -> str:
     """Fingerprint the rules that decide whether a concept is acceptable.
 
@@ -60,8 +53,12 @@ def validation_contract_sha256() -> str:
     dependencies = (
         Path(__file__).resolve(),
         CONFIG_FILE.resolve(),
-        (PROJECT_ROOT / "source_overlap.py").resolve(),
+        (PROJECT_ROOT / "core" / "source_overlap.py").resolve(),
         (HERE / "human_framing.py").resolve(),
+        # The hash, JSON and slug helpers used to live in this file (D-115).
+        (PROJECT_ROOT / "core" / "hashing.py").resolve(),
+        (PROJECT_ROOT / "core" / "jsonio.py").resolve(),
+        (PROJECT_ROOT / "core" / "slugs.py").resolve(),
     )
     for path in dependencies:
         relative = (
@@ -74,12 +71,6 @@ def validation_contract_sha256() -> str:
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_config() -> dict[str, Any]:
@@ -98,13 +89,6 @@ def load_config() -> dict[str, Any]:
         int(config["concepts_per_mechanism"]),
     )
     return config
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_" for char in value
-    ).strip("._")
-    return cleaned or "unknown"
 
 
 def ready_entries(

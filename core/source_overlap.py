@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = PROJECT_ROOT / "source_acquisition" / "output" / "experiment_02"
 TRANSCRIPT_SUFFIXES = {".vtt", ".srt", ".txt", ".md"}
 

@@ -11,7 +11,6 @@ No network calls, model calls, or YouTube API calls are made here.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -19,10 +18,11 @@ from typing import Any
 
 from experiment_02_analysis.experiment_02 import (
     load_config,
-    load_json,
     load_study_set_video_ids,
     validate_profile,
 )
+from core.jsonio import load_json_or_exit as load_json
+from core.hashing import sha256_file
 
 HERE = Path(__file__).resolve().parent
 SYNTHESIS_CONFIG_FILE = HERE / "synthesis_config.json"
@@ -519,10 +519,6 @@ def build_summary(
         "api_calls": 0,
         "model_calls": 0,
     }
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def preferred_profiles_dir() -> Path:

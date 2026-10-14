@@ -9,7 +9,6 @@ Creative framing may be generated. Facts may not be invented.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -18,14 +17,16 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from packaging_engine.packaging_brief import (
     BRIEF_DIR,
     brief_is_current,
     load_json,
     snapshot as packaging_brief_snapshot,
 )
-from story_script_engine.story_script_engine import safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as fingerprint
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -59,13 +60,6 @@ def load_config() -> dict[str, Any]:
     if len(drivers) < count or len(drivers) != len(set(drivers)):
         raise ValueError("Slice 25 psychological drivers must be unique and sufficient")
     return payload
-
-
-def fingerprint(value: Any) -> str:
-    raw = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _required_text(value: Any, field: str) -> str:

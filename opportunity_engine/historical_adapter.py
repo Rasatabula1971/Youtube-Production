@@ -19,11 +19,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 
 from opportunity_engine import channel_scope, models  # noqa: E402
 from opportunity_engine.packet_schema import build_packet, evidence  # noqa: E402
-from opportunity_engine.provenance import (  # noqa: E402
-    canonical_sha256,
-    opportunity_id,
-    source_artifact,
-)
+from opportunity_engine.provenance import opportunity_id, source_artifact
+from core.hashing import canonical_sha256
 
 HERE = Path(__file__).resolve().parent
 EXPERIMENT_01_5_DIR = _ROOT / "experiment_01_discovery" / "output" / "experiment_01_5"

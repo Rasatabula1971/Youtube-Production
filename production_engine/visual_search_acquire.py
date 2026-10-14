@@ -7,18 +7,17 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json
+from core.pipeline_integrity import atomic_write_json
+from core.jsonio import load_json
 from production_engine.visual_search import (
     OUTPUT_DIR,
     RAW_DIR,
     RESULT_DIR,
     compile_results,
-    request_fingerprint,
     search_request_is_current,
     search_result_is_current,
-    sha256_file,
 )
+from core.hashing import canonical_sha256 as request_fingerprint, sha256_file
 from production_engine.visual_search_adapters import discover_with_diagnostics
 
 SUMMARY_FILE = OUTPUT_DIR / "visual_search_acquire_summary.json"

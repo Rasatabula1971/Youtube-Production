@@ -12,11 +12,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from production_engine.final_production_handoff import HANDOFF_DIR, handoff_is_current
 from production_engine.final_sound_plan import PLAN_DIR, plan_is_current
 from production_engine.final_sound_asset_import import REGISTRY_DIR, resolution_is_current
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
