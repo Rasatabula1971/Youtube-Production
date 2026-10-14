@@ -37,7 +37,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
-from pipeline_integrity import named_lock
+from core.pipeline_integrity import named_lock
 from production_engine import publish_review
 
 PROJECT_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"

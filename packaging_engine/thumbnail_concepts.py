@@ -16,14 +16,15 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from packaging_engine.packaging_brief import brief_is_current, load_json
 from packaging_engine.psychological_angles import (
     ANGLES_FILE,
     item_is_current as angle_item_is_current,
     snapshot as angle_snapshot,
 )
-from story_script_engine.story_script_engine import safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"

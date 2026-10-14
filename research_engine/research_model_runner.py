@@ -14,11 +14,9 @@ import re
 import unicodedata
 from pathlib import Path
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
 from typing import Any
 
-from pipeline_integrity import (
+from core.pipeline_integrity import (
     atomic_write_json,
     atomic_write_text,
     batch_status,
@@ -30,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 
-from experiment_02_analysis.analysis_model_runner import (
+from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -44,20 +42,17 @@ from research_engine.research_engine import (
     PLANS_DIR,
     RESPONSES_DIR,
     load_config,
-    load_json,
     run_apply,
-    safe_slug,
     validate_research_response,
 )
+from core.jsonio import load_json
+from core.slugs import safe_slug
+from core.hashing import sha256_file
 
 EVIDENCE_DIR = HERE / "output" / "acquired_evidence"
 MODEL_RUNS_DIR = HERE / "output" / "research_model_runs"
 RAW_OUTPUTS_DIR = HERE / "output" / "raw_research_outputs"
 BATCH_SUMMARY_FILE = HERE / "output" / "research_model_batch_summary.json"
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def response_schema(plan: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:

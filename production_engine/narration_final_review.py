@@ -28,12 +28,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
+from core.pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 from production_engine.narration_audio_qc import QC_DIR, TIMING_DIR
 from production_engine.narration_audio_qc import snapshot as audio_qc_snapshot
-from production_engine.narration_render import OUTPUT_DIR, artifact_key, load_json, sha256_file
+from production_engine.narration_render import OUTPUT_DIR, artifact_key
+from core.hashing import sha256_file
+from core.jsonio import load_json
 
 APPROVED_DIR = OUTPUT_DIR / "approved_final_narration"
 HISTORY_FILE = OUTPUT_DIR / "final_narration_history.jsonl"

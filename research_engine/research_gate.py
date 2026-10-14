@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Any
 
 from research_engine.evidence_policy import AUTO_CLEARED, evaluate_claim, policy_settings
+from core.hashing import canonical_sha256 as content_sha256, sha256_file as file_sha256
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 HUMAN_REWORK_ORIGIN = "human_rework"
@@ -35,23 +38,6 @@ VERIFIED_DIR = OUTPUT_DIR / "verified_packages"
 SUMMARY_FILE = OUTPUT_DIR / "research_gate_summary.json"
 
 
-def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def load_config() -> dict[str, Any]:
     config = load_json(CONFIG_FILE)
     required = {
@@ -63,13 +49,6 @@ def load_config() -> dict[str, Any]:
     if missing:
         raise SystemExit("Research Gate config is missing: " + ", ".join(missing))
     return config
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_" for char in value
-    ).strip("._")
-    return cleaned or "unknown"
 
 
 def compact_source_lookup(

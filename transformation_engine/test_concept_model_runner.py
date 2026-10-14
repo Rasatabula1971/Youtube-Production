@@ -573,8 +573,8 @@ class ConceptModelRunnerTests(unittest.TestCase):
             engine.validation_contract_sha256(),
         )
 
-    @patch("experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup")
-    @patch("experiment_02_analysis.analysis_model_runner.direct_gemini_available", return_value=True)
+    @patch("core.model_bridge.call_direct_gemini_backup")
+    @patch("core.model_bridge.direct_gemini_available", return_value=True)
     @patch("transformation_engine.concept_model_runner.resolve_fair_paths")
     @patch("transformation_engine.concept_model_runner.call_fair_bridge")
     def test_all_rejected_batch_is_reported_not_repaired_by_gemini(

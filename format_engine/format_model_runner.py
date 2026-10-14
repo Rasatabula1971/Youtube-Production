@@ -6,11 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
 from typing import Any
 
-from pipeline_integrity import (
+from core.pipeline_integrity import (
     atomic_write_json,
     atomic_write_text,
     batch_status,
@@ -21,7 +19,7 @@ from pipeline_integrity import (
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
-from experiment_02_analysis.analysis_model_runner import (
+from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -36,11 +34,11 @@ from format_engine.format_engine import (
     PLANS_DIR,
     REQUESTS_DIR,
     RESPONSES_DIR,
-    load_json,
-    safe_slug,
-    sha256_file,
     validate_format_response,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 MODEL_RUNS_DIR = OUTPUT_DIR / "format_model_runs"
 RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_format_outputs"

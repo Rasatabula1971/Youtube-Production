@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from transformation_engine.format_resolution import normalize_choice, resolve_format
+from core.hashing import canonical_sha256 as content_sha256, sha256_file as file_sha256
+from core.jsonio import load_json
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "concept_gate_config.json"
@@ -33,23 +35,6 @@ REVIEW_REQUEST_FILE = OUTPUT_DIR / "concept_gate_request.json"
 REVIEWED_FILE = OUTPUT_DIR / "concept_gate_reviewed.json"
 RESEARCH_HANDOFF_FILE = OUTPUT_DIR / "research_handoff.json"
 SUMMARY_FILE = OUTPUT_DIR / "concept_gate_summary.json"
-
-
-def content_sha256(payload: Any) -> str:
-    encoded = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_config() -> dict[str, Any]:

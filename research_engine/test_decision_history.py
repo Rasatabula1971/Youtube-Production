@@ -10,7 +10,7 @@ from pathlib import Path
 
 from research_engine import research_review as review
 from research_engine import test_evidence_policy as policy_tests
-from pipeline_integrity import append_jsonl, read_jsonl
+from core.pipeline_integrity import append_jsonl, read_jsonl
 
 
 class JsonlLogTests(unittest.TestCase):

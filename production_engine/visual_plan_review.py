@@ -34,9 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
+from core.pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 from production_engine import video_budget
 from production_engine.narration_preview_render import SEGMENT_AUDIO_DIR
 from production_engine.narration_preview_review import APPROVED_DIR as APPROVED_PREVIEW_DIR
@@ -46,10 +44,10 @@ from production_engine.visual_acquisition import (
     OUTPUT_DIR,
     build_manifest,
     load_config,
-    load_json,
-    safe_slug,
-    sha256_file,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 APPROVED_DIR = OUTPUT_DIR / "approved_visual_plans"
 HISTORY_FILE = OUTPUT_DIR / "visual_plan_history.jsonl"

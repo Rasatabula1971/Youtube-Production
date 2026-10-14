@@ -14,9 +14,10 @@ import math
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file, sha256_text
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -38,27 +39,6 @@ APPROVED_VOICE_SPECS_DIR = OUTPUT_DIR / "approved_voice_specs"
 VOICE_GATE_SUMMARY_FILE = OUTPUT_DIR / "voice_performance_gate_summary.json"
 
 READY_STATUS = "READY_FOR_PRODUCTION_ENGINE"
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def sha256_text(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(
-        char if char.isalnum() or char in "-_." else "_" for char in value
-    ).strip("._")
-    return cleaned or "unknown"
 
 
 def _number(value: Any, *, label: str) -> float:

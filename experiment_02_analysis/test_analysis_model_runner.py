@@ -8,17 +8,19 @@ from unittest.mock import patch
 
 from experiment_02_analysis.analysis_model_runner import (
     build_model_prompt,
-    call_direct_gemini_backup,
-    call_fair_bridge,
-    confirmed_free_providers,
-    gemini_compatible_schema,
-    direct_gemini_fallback_decision,
     fair_allows_direct_gemini_fallback,
-    inference_cost_authorized,
-    parse_model_json,
     response_schema,
     restrict_response_to_request,
     run_one,
+)
+from core.model_bridge import (
+    call_direct_gemini_backup,
+    call_fair_bridge,
+    confirmed_free_providers,
+    direct_gemini_fallback_decision,
+    gemini_compatible_schema,
+    inference_cost_authorized,
+    parse_model_json,
 )
 
 
@@ -26,7 +28,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
     def setUp(self):
         # These tests exercise the free-tier route; the attestation is a
         # separate decision (D-161) tested below.
-        patcher = patch("experiment_02_analysis.analysis_model_runner.direct_gemini_billing_confirmed", return_value=True)
+        patcher = patch("core.model_bridge.direct_gemini_billing_confirmed", return_value=True)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -521,7 +523,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 return_value=FakeResponse(),
             ) as urlopen,
         ):
@@ -615,7 +617,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 side_effect=fake_urlopen,
             ) as urlopen,
         ):
@@ -717,7 +719,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 side_effect=fake_urlopen,
             ),
         ):
@@ -788,7 +790,7 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "experiment_02_analysis.analysis_model_runner.urllib.request.urlopen",
+                "core.model_bridge.urllib.request.urlopen",
                 side_effect=raise_http_error,
             ),
         ):
@@ -843,9 +845,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("core.model_bridge.subprocess.run", side_effect=fake_run),
                 patch(
-                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup",
+                    "core.model_bridge.call_direct_gemini_backup",
                     return_value=backup,
                 ) as direct_backup,
             ):
@@ -899,9 +901,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("core.model_bridge.subprocess.run", side_effect=fake_run),
                 patch(
-                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup",
+                    "core.model_bridge.call_direct_gemini_backup",
                     return_value=backup,
                 ) as direct_backup,
             ):
@@ -951,9 +953,9 @@ class AnalysisModelRunnerTests(unittest.TestCase):
                     {"DIRECT_GEMINI_API_KEY": "test-key"},
                     clear=False,
                 ),
-                patch("experiment_02_analysis.analysis_model_runner.subprocess.run", side_effect=fake_run),
+                patch("core.model_bridge.subprocess.run", side_effect=fake_run),
                 patch(
-                    "experiment_02_analysis.analysis_model_runner.call_direct_gemini_backup"
+                    "core.model_bridge.call_direct_gemini_backup"
                 ) as direct_backup,
             ):
                 result = call_fair_bridge(
@@ -1037,8 +1039,8 @@ class DirectGeminiBillingAttestationTests(unittest.TestCase):
                        "paid_inference_executed": False, "attempts": []}
         with (
             patch.dict("os.environ", {"DIRECT_GEMINI_API_KEY": "k", "DIRECT_GEMINI_MODELS": "m"}, clear=False),
-            patch("experiment_02_analysis.analysis_model_runner.direct_gemini_billing_confirmed", return_value=False),
-            patch("experiment_02_analysis.analysis_model_runner.urllib.request.urlopen") as urlopen,
+            patch("core.model_bridge.direct_gemini_billing_confirmed", return_value=False),
+            patch("core.model_bridge.urllib.request.urlopen") as urlopen,
         ):
             self.assertEqual(runner.direct_gemini_unavailable_reason(), runner.DIRECT_GEMINI_BILLING_UNCONFIRMED)
             self.assertFalse(runner.direct_gemini_available())

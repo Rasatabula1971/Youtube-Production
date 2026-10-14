@@ -13,10 +13,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-_OVERLAP_ROOT = Path(__file__).resolve().parent.parent
-
 from channel_profiles.channel_profile import normalize_binding, unconfigured_binding
-from source_overlap import check_texts
+from core.source_overlap import check_texts
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -32,29 +33,12 @@ SUMMARY_FILE = OUTPUT_DIR / "summary.json"
 PSYCHOLOGY_PROFILE_CONFIG = HERE / "script_psychology_profiles.json"
 
 
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(c if c.isalnum() or c in "-_." else "_" for c in value).strip(
-        "._"
-    )
-    return cleaned or "unknown"
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def validation_contract_sha256() -> str:
     """Fingerprint deterministic Script acceptance and overlap rules."""
     digest = hashlib.sha256()
     for path in (
         Path(__file__).resolve(),
-        (PROJECT_ROOT / "source_overlap.py").resolve(),
+        (PROJECT_ROOT / "core" / "source_overlap.py").resolve(),
     ):
         digest.update(path.read_bytes())
         digest.update(b"\0")

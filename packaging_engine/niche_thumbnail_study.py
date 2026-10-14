@@ -39,7 +39,8 @@ from typing import Any, Callable
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
+from core.jsonio import load_json
 
 
 CONFIG_FILE = HERE / "niche_thumbnail_config.json"
@@ -109,12 +110,6 @@ def comparison_rules(video_format: str, config: dict[str, Any]) -> dict[str, Any
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_config() -> dict[str, Any]:

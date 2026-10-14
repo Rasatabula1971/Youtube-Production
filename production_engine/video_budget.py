@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import append_jsonl, named_lock, read_jsonl
+from core.pipeline_integrity import append_jsonl, named_lock, read_jsonl
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "video_budget_config.json"

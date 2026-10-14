@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import pipeline_integrity
+from core import pipeline_integrity
 
 
 class AtomicWriteTests(unittest.TestCase):

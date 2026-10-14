@@ -16,6 +16,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+from core.jsonio import load_json_or_exit as load_json
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "experiment_01_5_config.json"
@@ -39,15 +40,6 @@ HUMAN_DECISION_FILE = OUTPUT_DIR / "human_opportunity_decision.json"
 APPROVED_STUDY_SET_FILE = OUTPUT_DIR / "approved_study_set.json"
 
 EXPERIMENT_ID = "01.5"
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"Invalid JSON in {path}: {exc}") from exc
 
 
 def load_config() -> dict[str, Any]:

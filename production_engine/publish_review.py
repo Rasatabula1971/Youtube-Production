@@ -33,10 +33,12 @@ from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
+from core.pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 from production_engine.final_export_review import APPROVED_DIR as APPROVED_EXPORT_DIR
 from production_engine.final_export_review import approval_is_current
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

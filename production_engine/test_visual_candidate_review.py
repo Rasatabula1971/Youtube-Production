@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from production_engine import visual_candidate_review as review
-from production_engine.visual_search import shot_fingerprint
+from core.hashing import canonical_sha256 as shot_fingerprint
 
 
 def card(shot_id: str, desired: str) -> dict:

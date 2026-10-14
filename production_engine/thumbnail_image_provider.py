@@ -38,7 +38,8 @@ from typing import Any, Callable
 
 from production_engine import thumbnail_render as render
 
-from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
+from core.pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
+from core.hashing import sha256_text as prompt_sha256
 
 try:
     from production_engine import video_budget
@@ -107,10 +108,6 @@ def build_prompt(unit: dict[str, Any]) -> str:
             "No text, letters, numbers, logos, brand marks or watermarks.",
         ]
     )
-
-
-def prompt_sha256(prompt: str) -> str:
-    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------- providers

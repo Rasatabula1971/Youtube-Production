@@ -15,6 +15,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from core.jsonio import load_json_or_exit as load_json
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -38,15 +39,6 @@ SUMMARY_FILE = OUTPUT_DIR / "summary.json"
 
 EXPERIMENT_ID = "02"
 SCHEMA_VERSION = "2.0"
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"Invalid JSON in {path}: {exc}") from exc
 
 
 def load_config() -> dict[str, Any]:

@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from production_engine import final_export_review as export_review
 from production_engine import tesseract_exchange as te
-from production_engine.visual_acquisition import sha256_file
+from core.hashing import sha256_file
 
 PROFILE = {"width": 320, "height": 180, "fps": 30}
 

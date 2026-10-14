@@ -14,18 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
+from core.pipeline_integrity import atomic_write_json
 
-from pipeline_integrity import atomic_write_json
-
-from format_engine.format_engine import (
-    OUTPUT_DIR,
-    PLANS_DIR,
-    REQUESTS_DIR,
-    load_json,
-    safe_slug,
-    sha256_file,
-)
+from format_engine.format_engine import OUTPUT_DIR, PLANS_DIR, REQUESTS_DIR
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 GATE_CONFIG_FILE = HERE / "format_gate_config.json"

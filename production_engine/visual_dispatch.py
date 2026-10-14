@@ -29,9 +29,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from pipeline_integrity import append_jsonl, named_lock, read_jsonl
+from core.pipeline_integrity import append_jsonl, named_lock, read_jsonl
 from production_engine import video_budget
-from production_engine.visual_acquisition import load_json, safe_slug
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.visual_generated_asset_import import (
     OUTPUT,
     REQUEST_DIR,
@@ -39,6 +40,7 @@ from production_engine.visual_generated_asset_import import (
     _registry_path,
     register,
 )
+from core.hashing import sha256_file as _request_sha256
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "visual_provider_config.json"
@@ -150,10 +152,6 @@ def _request_path(request_file: Any) -> Path:
     if path.parent != REQUEST_DIR.resolve():
         raise ValueError("Invalid visual generation request")
     return path
-
-
-def _request_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def generate(

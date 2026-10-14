@@ -14,9 +14,12 @@ import math
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.visual_gap_planner import gap_plan_is_current
+from core.hashing import canonical_sha256 as _fingerprint
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -56,17 +59,6 @@ def _generation_request(
         f"{safe_slug(concept_id)}.{safe_slug(fmt)}."
         f"{safe_slug(shot_id)}.visual_generation_request.json"
     )
-
-
-def _fingerprint(value: dict[str, Any]) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-    ).hexdigest()
 
 
 def _gap_fingerprint(gap: dict[str, Any]) -> str:

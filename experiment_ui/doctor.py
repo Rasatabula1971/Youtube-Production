@@ -100,7 +100,7 @@ def check_youtube_key() -> tuple[str, str]:
 
 
 def check_gemini() -> tuple[str, str]:
-    from experiment_02_analysis.analysis_model_runner import DIRECT_GEMINI_KEY_ENV, direct_gemini_billing_status
+    from core.model_bridge import DIRECT_GEMINI_KEY_ENV, direct_gemini_billing_status
 
     key = env_value(DIRECT_GEMINI_KEY_ENV)
     billing = direct_gemini_billing_status()

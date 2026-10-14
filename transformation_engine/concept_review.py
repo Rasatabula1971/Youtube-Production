@@ -10,24 +10,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 from transformation_engine.concept_gate import (
     DEFAULT_CANDIDATES,
     RESEARCH_HANDOFF_FILE,
-    REVIEW_REQUEST_FILE,
     REVIEWED_FILE,
+    REVIEW_REQUEST_FILE,
     SUMMARY_FILE,
     apply_gate,
     build_review_request,
     load_config,
-    load_json,
 )
+from core.jsonio import load_json
 
 from transformation_engine.format_resolution import normalize_choice
-from transformation_engine.transformation_engine import OUTPUT_DIR, REQUESTS_DIR, RESPONSES_DIR, sha256_file
+from transformation_engine.transformation_engine import (
+    OUTPUT_DIR,
+    REQUESTS_DIR,
+    RESPONSES_DIR,
+)
+from core.hashing import sha256_file
 
 STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
 IDEA_BANK_DIR = OUTPUT_DIR.parent.parent / ".idea_bank"

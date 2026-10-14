@@ -9,9 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from story_script_engine.script_section_state import (
     SECTION_STATE_ACTION_LOCK,
     SECTION_STATE_DIR,
@@ -20,14 +18,10 @@ from story_script_engine.script_section_state import (
     state_path_for,
 )
 
-from story_script_engine.story_script_engine import (
-    DRAFTS_DIR,
-    OUTPUT_DIR,
-    REQUESTS_DIR,
-    load_json,
-    safe_slug,
-    sha256_file,
-)
+from story_script_engine.story_script_engine import DRAFTS_DIR, OUTPUT_DIR, REQUESTS_DIR
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "script_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "script_review_responses"

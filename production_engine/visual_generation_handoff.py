@@ -14,10 +14,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.visual_gap_planner import gap_plan_is_current
 from production_engine.visual_spend_review import snapshot as visual_spend_snapshot
+from core.hashing import canonical_sha256 as _fingerprint
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -37,17 +40,6 @@ def _request_path(concept_id: str, fmt: str, shot_id: str) -> Path:
     return REQUEST_DIR / (
         f"{_key(concept_id, fmt, shot_id)}.visual_generation_request.json"
     )
-
-
-def _fingerprint(value: dict[str, Any]) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-    ).hexdigest()
 
 
 def _authorized_decisions(

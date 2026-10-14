@@ -22,9 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json  # noqa: E402
+from core.pipeline_integrity import atomic_write_json  # noqa: E402
 
 from experiment_01_discovery.scheduled_refresh import acquire_lock, release_lock  # noqa: E402
 from opportunity_engine import channel_scope, viral_radar  # noqa: E402

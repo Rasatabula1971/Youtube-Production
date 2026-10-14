@@ -49,10 +49,12 @@ from typing import Any, Callable
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-from pipeline_integrity import append_jsonl, atomic_write_json, named_lock, read_jsonl
+from core.pipeline_integrity import append_jsonl, atomic_write_json, named_lock, read_jsonl
 from production_engine.final_render import RESULT_DIR, _final_visual_segments, result_is_current
 from production_engine.final_render_manifest import manifest_is_current
-from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

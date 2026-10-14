@@ -16,9 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-_INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import (
+from core.pipeline_integrity import (
     atomic_write_json,
     atomic_write_text,
     exit_code_for_status,
@@ -28,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
 
-from experiment_02_analysis.analysis_model_runner import (
+from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -43,12 +41,9 @@ from transformation_engine.concept_diversity import (  # noqa: E402
     near_duplicate_groups,
     select_diverse,
 )
-from transformation_engine.transformation_engine import (  # noqa: E402
-    CANDIDATES_FILE,
-    OUTPUT_DIR,
-    load_json,
-    sha256_file,
-)
+from transformation_engine.transformation_engine import CANDIDATES_FILE, OUTPUT_DIR
+from core.hashing import sha256_file
+from core.jsonio import load_json
 from transformation_engine.transformation_engine import load_config as load_transformation_config  # noqa: E402
 
 TRIAGE_OUTPUT_FILE = OUTPUT_DIR / "concept_triage.json"

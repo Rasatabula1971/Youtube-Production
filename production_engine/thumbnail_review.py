@@ -18,7 +18,7 @@ from typing import Any
 
 from production_engine import thumbnail_render as render
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"

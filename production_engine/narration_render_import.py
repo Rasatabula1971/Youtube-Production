@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from production_engine import video_budget
 from production_engine.narration_cost_review import APPROVED_DIR as APPROVED_SPEND_DIR
 from production_engine.narration_render import (
@@ -24,11 +24,11 @@ from production_engine.narration_render import (
     OUTPUT_DIR,
     REQUESTS_DIR,
     artifact_key,
-    load_json,
-    safe_slug,
-    sha256_file,
     snapshot as narration_render_snapshot,
 )
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 RENDER_RESULTS_DIR = OUTPUT_DIR / "narration_render_results"
 MANAGED_AUDIO_DIR = OUTPUT_DIR / "narration_audio"

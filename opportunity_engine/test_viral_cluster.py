@@ -3,8 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-_ROOT = Path(__file__).resolve().parent.parent
-
 from opportunity_engine import channel_scope, viral_cluster  # noqa: E402
 from opportunity_engine import viral_radar as vr  # noqa: E402
 from opportunity_engine.test_viral_radar import FakeApi, RadarTestCase, item  # noqa: E402

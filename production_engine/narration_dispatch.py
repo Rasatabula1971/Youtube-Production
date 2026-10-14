@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from pipeline_integrity import append_jsonl, named_lock, read_jsonl
+from core.pipeline_integrity import append_jsonl, named_lock, read_jsonl
 from production_engine import video_budget
 from production_engine.narration_render import (
     CONFIG_FILE,
@@ -48,9 +48,9 @@ from production_engine.narration_render import (
     load_config,
     provider_contract_verified,
     provider_is_local,
-    safe_slug,
-    sha256_file,
 )
+from core.hashing import sha256_file
+from core.slugs import safe_slug
 from production_engine.narration_render_import import (
     current_authorization,
     current_result,

@@ -20,7 +20,7 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
-from pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json
 from packaging_engine.packaging_brief import (
     BRIEF_DIR,
     brief_is_current,
@@ -38,7 +38,9 @@ from packaging_engine.thumbnail_concepts import (
 )
 from packaging_engine.title_direction import CANDIDATES_FILE as TITLE_CANDIDATES_FILE
 from packaging_engine.title_direction_review import snapshot as title_direction_snapshot
-from story_script_engine.story_script_engine import safe_slug, sha256_file
+from core.hashing import sha256_file
+from core.slugs import safe_slug
+from core.hashing import canonical_sha256 as _hash
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -97,13 +99,6 @@ def load_config() -> dict[str, Any]:
     if len(diagnostics) != 11 or len(diagnostics) != len(set(diagnostics)):
         raise ValueError("Slice 26 requires exactly 11 unique diagnostic dimensions")
     return payload
-
-
-def _hash(value: Any) -> str:
-    raw = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _required_text(value: Any, field: str) -> str:

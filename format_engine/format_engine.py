@@ -15,9 +15,10 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-_OVERLAP_ROOT = Path(__file__).resolve().parent.parent
-
-from source_overlap import check_texts
+from core.source_overlap import check_texts
+from core.hashing import sha256_file
+from core.jsonio import load_json
+from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -46,23 +47,6 @@ FORMAT_GATE_SUMMARY_FILE = OUTPUT_DIR / "format_gate_summary.json"
 
 READY_STATUS = "READY_FOR_PRODUCTION"
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
-
-
-def load_json(path: Path) -> Any:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def safe_slug(value: str) -> str:
-    cleaned = "".join(c if c.isalnum() or c in "-_." else "_" for c in value).strip(
-        "._"
-    )
-    return cleaned or "unknown"
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _expected_section_state_path(concept_id: str, fmt: str) -> Path:

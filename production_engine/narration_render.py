@@ -19,10 +19,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parent.parent
-
-from pipeline_integrity import atomic_write_json
-from production_engine.voice_performance import load_json, safe_slug, sha256_file, sha256_text
+from core.pipeline_integrity import atomic_write_json
+from core.hashing import sha256_file, sha256_text
+from core.jsonio import load_json
+from core.slugs import safe_slug
 from production_engine.voice_review import APPROVED_DIR as APPROVED_VOICE_DIR
 from production_engine.narration_preview_review import (
     APPROVED_DIR as APPROVED_PREVIEW_DIR,
