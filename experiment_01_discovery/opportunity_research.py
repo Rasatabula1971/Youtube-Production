@@ -34,7 +34,7 @@ EXP13_SCRIPT = HERE / "experiment_01_3.py"
 EXP14_SCRIPT = HERE / "experiment_01_4.py"
 EXP15_SCRIPT = HERE / "experiment_01_5.py"
 VIDIQ_SCRIPT = HERE / "vidiq_opportunity_enrichment.py"
-# Child steps start as modules from the project root (D-115).
+# Child steps start as modules from the project root (D-114).
 EXP13_MODULE = "experiment_01_discovery.experiment_01_3"
 EXP14_MODULE = "experiment_01_discovery.experiment_01_4"
 EXP15_MODULE = "experiment_01_discovery.experiment_01_5"

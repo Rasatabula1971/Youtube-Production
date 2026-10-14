@@ -11,7 +11,7 @@ if ($EveryHours -lt 1) {
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 # The wrapper changes to the project root and starts the runner with
-# `python -m experiment_01_discovery.opportunity_research` (D-115).
+# `python -m experiment_01_discovery.opportunity_research` (D-114).
 $Runner = Join-Path $PSScriptRoot "run_opportunity_research_continue.cmd"
 
 if (-not (Test-Path $Runner)) {
