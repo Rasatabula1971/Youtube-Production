@@ -39,9 +39,6 @@ from typing import Any, Callable
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-for _path in (PROJECT_ROOT, PROJECT_ROOT / "experiment_02_analysis"):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
 from pipeline_integrity import atomic_write_json
 

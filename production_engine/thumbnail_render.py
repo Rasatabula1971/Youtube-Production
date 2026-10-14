@@ -41,9 +41,6 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 PACKAGING_DIR = PROJECT_ROOT / "packaging_engine"
-for _path in (PROJECT_ROOT, PACKAGING_DIR):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
 
 from pipeline_integrity import atomic_write_json
 
