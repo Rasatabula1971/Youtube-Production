@@ -109,7 +109,7 @@ From PowerShell:
 ```powershell
 cd "C:\Youtube Production"
 
-python .\experiment_01_discovery\experiment_01_3.py --mode discover
+python -m experiment_01_discovery.experiment_01_3 --mode discover
 ```
 
 The first run creates the fixed cohort and writes a measurement snapshot.
@@ -132,7 +132,7 @@ When a cohort is refresh-worthy:
 ```powershell
 cd "C:\Youtube Production"
 
-python .\experiment_01_discovery\experiment_01_3.py --mode refresh
+python -m experiment_01_discovery.experiment_01_3 --mode refresh
 ```
 
 Refresh mode:
@@ -238,7 +238,7 @@ Outlier performance remains supporting evidence only.
 To intentionally replace an existing 01.3 cohort, use:
 
 ```powershell
-python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-cohort
+python -m experiment_01_discovery.experiment_01_3 --mode discover --replace-cohort
 ```
 
 The program automatically moves the previous `output\experiment_01_3`
@@ -269,7 +269,7 @@ If the configured per-run API search budget is reached, the experiment writes:
 The cohort is **not** frozen at that point. Run the same command again:
 
 ```powershell
-python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-cohort
+python -m experiment_01_discovery.experiment_01_3 --mode discover --replace-cohort
 ```
 
 Completed search jobs are skipped automatically and discovery continues using
@@ -278,7 +278,7 @@ the original publication windows.
 To intentionally discard a checkpoint and start the discovery search again:
 
 ```powershell
-python .\experiment_01_discovery\experiment_01_3.py --mode discover --replace-cohort --restart-discovery
+python -m experiment_01_discovery.experiment_01_3 --mode discover --replace-cohort --restart-discovery
 ```
 
 The checkpoint is deleted automatically once the cohort is successfully frozen.

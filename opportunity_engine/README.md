@@ -26,7 +26,7 @@ read the *v2.1 Revisions* section first).
 Run the historical adapter:
 
 ```
-python opportunity_engine/historical_adapter.py
+python -m opportunity_engine.historical_adapter
 ```
 
 It reads `experiment_01_discovery/output/experiment_01_5/study_set.json` and
@@ -94,7 +94,7 @@ output fields. Historical topics get exactly the same requests as before.
 ## Viral / breakout radar (O6–O9)
 
 *Run viral radar* on the Opportunity page (or
-`python opportunity_engine/viral_radar.py run`) does one pass:
+`python -m opportunity_engine.viral_radar run`) does one pass:
 
 1. **Watchlist (O6).** The seed handles in `config.json → viral_radar`
    (Veritasium, Steve Mould, Real Engineering, …) plus every channel the
@@ -147,7 +147,7 @@ same handoff as *Analyze why it worked*.
 Command line:
 
 ```
-python opportunity_engine/human_topic_search.py "Why are aircraft windows round?"
+python -m opportunity_engine.human_topic_search "Why are aircraft windows round?"
 ```
 
 ## Analyze a video (O5)
@@ -168,7 +168,7 @@ back to the historical gate; approving a historical topic does the same.
 Command line:
 
 ```
-python opportunity_engine/human_video_intake.py https://youtu.be/<id> --topic "hummingbird flight" --note "why I picked it"
+python -m opportunity_engine.human_video_intake https://youtu.be/<id> --topic "hummingbird flight" --note "why I picked it"
 ```
 
 ## Rules the contract enforces

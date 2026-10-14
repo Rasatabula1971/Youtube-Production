@@ -71,31 +71,31 @@ There is deliberately no "three-second rule" in the code.
 Prepare Voice Performance requests:
 
 ```bash
-python production_engine/voice_performance.py --mode prepare
+python -m production_engine.voice_performance --mode prepare
 ```
 
 Generate free-only performance plans through FAIR:
 
 ```bash
-python production_engine/voice_model_runner.py --mode batch
+python -m production_engine.voice_model_runner --mode batch
 ```
 
 Prepare the Human Performance Gate:
 
 ```bash
-python production_engine/voice_review.py --mode prepare
+python -m production_engine.voice_review --mode prepare
 ```
 
 After human performance approval, prepare visual manifests:
 
 ```bash
-python production_engine/visual_acquisition.py --mode prepare
+python -m production_engine.visual_acquisition --mode prepare
 ```
 
 Re-evaluate visual manifests after candidate assets have been added:
 
 ```bash
-python production_engine/visual_acquisition.py --mode route
+python -m production_engine.visual_acquisition --mode route
 ```
 
 ## Output

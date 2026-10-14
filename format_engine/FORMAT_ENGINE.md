@@ -88,10 +88,10 @@ format_engine/output/
 ## Commands
 
 ```bash
-python format_engine/format_engine.py --mode prepare
-python format_engine/format_model_runner.py --mode batch
-python format_engine/format_review.py --mode prepare
-python format_engine/format_review.py --mode apply --request <request> --response <response>
+python -m format_engine.format_engine --mode prepare
+python -m format_engine.format_model_runner --mode batch
+python -m format_engine.format_review --mode prepare
+python -m format_engine.format_review --mode apply --request <request> --response <response>
 ```
 
 No score, ranking, predicted retention or automatic branch winner is produced.

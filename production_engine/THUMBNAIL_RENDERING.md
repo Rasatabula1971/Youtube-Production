@@ -82,12 +82,12 @@ because it needs a human-supplied subject image.
 ## Commands
 
 ~~~powershell
-python .\production_engine\thumbnail_render.py --mode prepare
+python -m production_engine.thumbnail_render --mode prepare
 #   fill subject_image in production_engine\output\thumbnails\<render_id>\render_spec.json
-python .\production_engine\thumbnail_render.py --mode render
-python .\production_engine\thumbnail_render.py --mode render --render-id <render_id>
-python .\production_engine\thumbnail_render.py --mode render --placeholder   # layout preview without a subject
-python .\production_engine\thumbnail_render.py --mode review --response .\my_thumbnail_review.json
+python -m production_engine.thumbnail_render --mode render
+python -m production_engine.thumbnail_render --mode render --render-id <render_id>
+python -m production_engine.thumbnail_render --mode render --placeholder   # layout preview without a subject
+python -m production_engine.thumbnail_render --mode review --response .\my_thumbnail_review.json
 ~~~
 
 `prepare` reads the current Slice 26 validations and Slice 25 concepts and

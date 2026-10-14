@@ -35,7 +35,7 @@ Model-only drafts that still require human review are not used.
 ## Prepare
 
 ~~~powershell
-python .\transformation_engine\transformation_engine.py --mode prepare
+python -m transformation_engine.transformation_engine --mode prepare
 ~~~
 
 This creates one concept-generation request per ready mechanism under:
@@ -89,7 +89,7 @@ transformation_engine/output/concept_responses/
 Then run:
 
 ~~~powershell
-python .\transformation_engine\transformation_engine.py --mode apply
+python -m transformation_engine.transformation_engine --mode apply
 ~~~
 
 The engine validates every concept and writes:
@@ -154,7 +154,7 @@ proven gap from views, outliers, or model intuition alone.
 The Transformation Engine now has a FAIR-backed execution layer:
 
 ~~~powershell
-python .\transformation_engine\concept_model_runner.py --mode batch --requests-dir ".\transformation_engine\output\concept_requests"
+python -m transformation_engine.concept_model_runner --mode batch --requests-dir ".\transformation_engine\output\concept_requests"
 ~~~
 
 The runner reuses the project's existing FAIR subprocess bridge and the same
