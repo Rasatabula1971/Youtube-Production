@@ -255,8 +255,8 @@ class ScheduledRefreshTests(unittest.TestCase):
                     ["--mode", "refresh"],
                 )
                 self.assertEqual(
-                    Path(command[1]),
-                    scheduler.REFRESH_SCRIPT,
+                    command[1:3],
+                    ["-m", scheduler.REFRESH_MODULE],
                 )
                 self.assertFalse(scheduler.LOCK_FILE.exists())
                 self.assertIn(

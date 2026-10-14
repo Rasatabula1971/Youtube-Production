@@ -34,6 +34,11 @@ EXP13_SCRIPT = HERE / "experiment_01_3.py"
 EXP14_SCRIPT = HERE / "experiment_01_4.py"
 EXP15_SCRIPT = HERE / "experiment_01_5.py"
 VIDIQ_SCRIPT = HERE / "vidiq_opportunity_enrichment.py"
+# Child steps start as modules from the project root (D-115).
+EXP13_MODULE = "experiment_01_discovery.experiment_01_3"
+EXP14_MODULE = "experiment_01_discovery.experiment_01_4"
+EXP15_MODULE = "experiment_01_discovery.experiment_01_5"
+VIDIQ_MODULE = "experiment_01_discovery.vidiq_opportunity_enrichment"
 VIDIQ_DOCTOR_FILE = OUTPUT_ROOT / "vidiq" / "doctor.json"
 VIDIQ_ENRICHMENT_FILE = OUTPUT_ROOT / "vidiq" / "opportunity_enrichment.json"
 EXP14_CONFIG = HERE / "experiment_01_4_config.json"
@@ -197,7 +202,8 @@ def run_vidiq_supplemental(
     doctor_code = run_command(
         [
             python_executable,
-            str(VIDIQ_SCRIPT),
+            "-m",
+            VIDIQ_MODULE,
             "--mode",
             "doctor",
         ],
@@ -215,7 +221,8 @@ def run_vidiq_supplemental(
     enrich_code = run_command(
         [
             python_executable,
-            str(VIDIQ_SCRIPT),
+            "-m",
+            VIDIQ_MODULE,
             "--mode",
             "enrich",
         ],
@@ -274,7 +281,8 @@ def advance_downstream(
         plan_code = run_command(
             [
                 python_executable,
-                str(EXP14_SCRIPT),
+                "-m",
+                EXP14_MODULE,
                 "--mode",
                 "plan",
             ],
@@ -298,7 +306,8 @@ def advance_downstream(
         execute_code = run_command(
             [
                 python_executable,
-                str(EXP14_SCRIPT),
+                "-m",
+                EXP14_MODULE,
                 "--mode",
                 "execute",
             ],
@@ -314,7 +323,8 @@ def advance_downstream(
     handoff_code = run_command(
         [
             python_executable,
-            str(EXP15_SCRIPT),
+            "-m",
+            EXP15_MODULE,
             "--mode",
             "build",
         ],
@@ -450,7 +460,8 @@ def start_research(
     code = run_command(
         [
             python_executable,
-            str(EXP13_SCRIPT),
+            "-m",
+            EXP13_MODULE,
             "--mode",
             "discover",
             "--replace-cohort",
