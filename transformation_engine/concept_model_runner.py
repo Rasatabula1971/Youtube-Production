@@ -538,7 +538,7 @@ def run_one(
                 timeout_seconds=timeout,
             )
     except Exception as exc:
-        report = {
+        report: dict[str, Any] = {
             "mechanism_id": mechanism_id,
             "status": "RUNNER_ERROR",
             "error_type": type(exc).__name__,

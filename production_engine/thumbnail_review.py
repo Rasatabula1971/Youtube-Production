@@ -67,10 +67,7 @@ def competitors(unit: dict[str, Any], template: dict[str, Any]) -> list[dict[str
 
 def _image_candidates(render_id: str) -> dict[str, Any]:
     """Candidate subject images (D-135) with file URLs for the UI."""
-    try:
-        from production_engine import thumbnail_image_provider as images
-    except ImportError:  # executed as a script from production_engine/
-        from production_engine import thumbnail_image_provider as images  # type: ignore[no-redef]
+    from production_engine import thumbnail_image_provider as images
 
     view = images.candidates_view(render_id)
     for row in view["candidates"]:
@@ -79,10 +76,7 @@ def _image_candidates(render_id: str) -> dict[str, Any]:
 
 
 def image_provider_status() -> dict[str, Any]:
-    try:
-        from production_engine import thumbnail_image_provider as images
-    except ImportError:  # executed as a script from production_engine/
-        from production_engine import thumbnail_image_provider as images  # type: ignore[no-redef]
+    from production_engine import thumbnail_image_provider as images
 
     return images.provider_status()
 
@@ -234,10 +228,7 @@ def thumbnail_file_path(render_id: str, name: str) -> Path:
     }
     if name.startswith("candidates/"):
         current_unit(render_id)
-        try:
-            from production_engine import thumbnail_image_provider as images
-        except ImportError:  # executed as a script from production_engine/
-            from production_engine import thumbnail_image_provider as images  # type: ignore[no-redef]
+        from production_engine import thumbnail_image_provider as images
         return images.candidate_file_path(render_id, name)
     if name not in allowed:
         raise ValueError("Unknown thumbnail file")

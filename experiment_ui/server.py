@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, urlencode, urlparse
 
 HERE = Path(__file__).resolve().parent
@@ -3120,7 +3120,7 @@ def voice_performance_artifact_state() -> dict[str, Any]:
 
     requests_ready = bool(expected) and expected.issubset(request_hashes)
     specs_ready = requests_ready and expected.issubset(spec_keys)
-    performance_gate = (
+    performance_gate: dict[str, Any] = (
         performance_gate_snapshot()
         if specs_ready
         else {
@@ -9658,7 +9658,10 @@ class Handler(BaseHTTPRequestHandler):
                     manifest_file=str(body.get("manifest_file", "")),
                     segment_id=str(body.get("segment_id", "")),
                     instruction=str(body.get("instruction") or ""),
-                    delivery_changes=body.get("delivery_changes") if isinstance(body.get("delivery_changes"), dict) else {},
+                    delivery_changes=cast(
+                        dict[str, Any],
+                        body.get("delivery_changes") if isinstance(body.get("delivery_changes"), dict) else {},
+                    ),
                 )
                 self._send_json(payload)
                 return
@@ -9827,7 +9830,10 @@ class Handler(BaseHTTPRequestHandler):
                     storyboard_file=str(body.get("storyboard_file", "")),
                     shot_id=str(body.get("shot_id", "")),
                     instruction=str(body.get("instruction") or ""),
-                    changes=body.get("changes") if isinstance(body.get("changes"), dict) else {},
+                    changes=cast(
+                        dict[str, Any],
+                        body.get("changes") if isinstance(body.get("changes"), dict) else {},
+                    ),
                 )
                 self._send_json(payload)
                 return
@@ -10088,10 +10094,11 @@ class Handler(BaseHTTPRequestHandler):
                     format=str(body.get("format", "")),
                     provider_job_id=str(body.get("provider_job_id", "")),
                     actual_cost_usd=body.get("actual_cost_usd"),
-                    segments=(
+                    segments=cast(
+                        list[dict[str, Any]],
                         body.get("segments")
                         if isinstance(body.get("segments"), list)
-                        else []
+                        else [],
                     ),
                 )
                 auto_job = maybe_start_automatic_workflow()

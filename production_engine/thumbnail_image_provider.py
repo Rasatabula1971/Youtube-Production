@@ -36,10 +36,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-try:
-    from production_engine import thumbnail_render as render
-except ImportError:  # executed as a script from production_engine/
-    from production_engine import thumbnail_render as render  # type: ignore[no-redef]
+from production_engine import thumbnail_render as render
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
@@ -470,10 +467,7 @@ def import_candidate(
 
 def choose(*, render_id: str, candidate_id: str, accent_hex: Any = None) -> dict[str, Any]:
     """Make a candidate the render spec's subject image."""
-    try:
-        from production_engine import thumbnail_review as review
-    except ImportError:  # executed as a script from production_engine/
-        from production_engine import thumbnail_review as review  # type: ignore[no-redef]
+    from production_engine import thumbnail_review as review
 
     unit = _current_unit(render_id)
     candidate = next(
