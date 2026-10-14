@@ -14,8 +14,6 @@ import time
 from pathlib import Path
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from typing import Any
 
@@ -29,10 +27,8 @@ from pipeline_integrity import (
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_direct_gemini_backup,
     call_fair_bridge,
@@ -44,10 +40,10 @@ from analysis_model_runner import (
     resolve_fair_paths,
     safe_attempts,
 )
-from evidence_ingest import sha256_file
-from human_framing import response_schema as human_framing_response_schema
+from experiment_02_analysis.evidence_ingest import sha256_file
+from transformation_engine.human_framing import response_schema as human_framing_response_schema
 
-from transformation_engine import (
+from transformation_engine.transformation_engine import (
     OUTPUT_DIR,
     REQUESTS_DIR,
     RESPONSES_DIR,

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import script_section_state as section_state
+from story_script_engine import script_section_state as section_state
 
 
 class ScriptSectionStateTests(unittest.TestCase):

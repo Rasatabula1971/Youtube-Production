@@ -1,7 +1,7 @@
-import research_engine as module
+from research_engine import research_engine as module
 import unittest
 
-from research_engine import (
+from research_engine.research_engine import (
     build_research_plan,
     claim_coverage_state,
     validate_research_response,

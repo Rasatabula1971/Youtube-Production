@@ -8,8 +8,8 @@ import unittest
 from contextlib import ExitStack
 from pathlib import Path
 
-import research_review as review
-import test_evidence_policy as policy_tests
+from research_engine import research_review as review
+from research_engine import test_evidence_policy as policy_tests
 from pipeline_integrity import append_jsonl, read_jsonl
 
 

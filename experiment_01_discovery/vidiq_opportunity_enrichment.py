@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from vidiq_mcp import (
+from experiment_01_discovery.vidiq_mcp import (
     ALLOWED_PAID_TOOLS,
     BUDGET_FILE,
     BudgetStateUnreadable,

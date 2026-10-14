@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from concept_diversity import (
+from transformation_engine.concept_diversity import (
     DEFAULT_NEAR_DUPLICATE_THRESHOLD,
     allocate_concept_counts,
     concept_similarity,
@@ -12,7 +12,7 @@ from concept_diversity import (
     pool_assessment,
     select_diverse,
 )
-from concept_triage import apply_diverse_shortlist
+from transformation_engine.concept_triage import apply_diverse_shortlist
 
 
 def concept(concept_id, mechanism, archetype, title, premise, problem, promise, question, hook, payoff):

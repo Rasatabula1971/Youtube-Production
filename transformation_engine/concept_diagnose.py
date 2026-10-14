@@ -30,8 +30,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-import concept_model_runner as runner
-from transformation_engine import OUTPUT_DIR, REQUESTS_DIR, load_config, safe_slug, validate_response
+from transformation_engine import concept_model_runner as runner
+from transformation_engine.transformation_engine import OUTPUT_DIR, REQUESTS_DIR, load_config, safe_slug, validate_response
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 DIAGNOSTICS_DIR = OUTPUT_DIR / "concept_diagnostics"

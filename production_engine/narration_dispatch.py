@@ -40,8 +40,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from pipeline_integrity import append_jsonl, named_lock, read_jsonl
-import video_budget
-from narration_render import (
+from production_engine import video_budget
+from production_engine.narration_render import (
     CONFIG_FILE,
     OUTPUT_DIR,
     artifact_key,
@@ -51,7 +51,7 @@ from narration_render import (
     safe_slug,
     sha256_file,
 )
-from narration_render_import import (
+from production_engine.narration_render_import import (
     current_authorization,
     current_result,
     register,
@@ -153,7 +153,7 @@ def local_kokoro(
     """
     import tempfile
 
-    import narration_preview_render as preview
+    from production_engine import narration_preview_render as preview
 
     if "pipeline" not in _LOCAL:
         _LOCAL["pipeline"] = preview._load_local_pipeline()

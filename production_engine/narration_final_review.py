@@ -30,13 +30,11 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
-from narration_audio_qc import QC_DIR, TIMING_DIR
-from narration_audio_qc import snapshot as audio_qc_snapshot
-from narration_render import OUTPUT_DIR, artifact_key, load_json, sha256_file
+from production_engine.narration_audio_qc import QC_DIR, TIMING_DIR
+from production_engine.narration_audio_qc import snapshot as audio_qc_snapshot
+from production_engine.narration_render import OUTPUT_DIR, artifact_key, load_json, sha256_file
 
 APPROVED_DIR = OUTPUT_DIR / "approved_final_narration"
 HISTORY_FILE = OUTPUT_DIR / "final_narration_history.jsonl"

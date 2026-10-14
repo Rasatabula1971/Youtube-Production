@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import script_section_service as service
+from story_script_engine import script_section_service as service
 
 
 class ScriptSectionServiceTests(unittest.TestCase):

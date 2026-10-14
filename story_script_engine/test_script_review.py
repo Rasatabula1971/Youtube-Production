@@ -5,9 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-import script_review
-import script_section_service as section_service
-import script_section_state as section_state
+from story_script_engine import script_review
+from story_script_engine import script_section_service as section_service
+from story_script_engine import script_section_state as section_state
 
 
 class ScriptReviewTests(unittest.TestCase):

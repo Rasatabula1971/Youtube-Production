@@ -30,9 +30,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from pipeline_integrity import append_jsonl, named_lock, read_jsonl
-import video_budget
-from visual_acquisition import load_json, safe_slug
-from visual_generated_asset_import import (
+from production_engine import video_budget
+from production_engine.visual_acquisition import load_json, safe_slug
+from production_engine.visual_generated_asset_import import (
     OUTPUT,
     REQUEST_DIR,
     _assert_current_request,
@@ -59,7 +59,7 @@ def load_config() -> dict[str, Any]:
 
 def _images_adapter(prompt: str, *, count: int, settings: dict[str, Any]) -> list[dict[str, Any]]:
     try:
-        from thumbnail_image_provider import openai_compatible_images
+        from production_engine.thumbnail_image_provider import openai_compatible_images
     except ImportError:  # imported as production_engine.visual_dispatch
         from production_engine.thumbnail_image_provider import openai_compatible_images
     return openai_compatible_images(prompt, count=count, settings=settings)
@@ -70,7 +70,7 @@ ADAPTERS: dict[str, Callable[..., list[dict[str, Any]]]] = {"OPENAI_COMPATIBLE_I
 
 def provider_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     try:
-        from thumbnail_image_provider import _env_value
+        from production_engine.thumbnail_image_provider import _env_value
     except ImportError:  # imported as production_engine.visual_dispatch
         from production_engine.thumbnail_image_provider import _env_value
     config = config or load_config()

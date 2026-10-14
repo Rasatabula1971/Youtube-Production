@@ -8,7 +8,7 @@ import json
 from unittest.mock import patch
 
 from production_engine import thumbnail_image_provider as images
-import video_budget
+from production_engine import video_budget
 from production_engine import thumbnail_review as review
 from production_engine.test_thumbnail_render import RID, PipelineTestCase
 

@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import vidiq_mcp as module
+from experiment_01_discovery import vidiq_mcp as module
 
 
 class VidIQMCPTests(unittest.TestCase):

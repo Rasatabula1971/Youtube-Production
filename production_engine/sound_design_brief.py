@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from voice_performance import load_json, safe_slug, sha256_file
-from narration_preview_review import (
+from production_engine.voice_performance import load_json, safe_slug, sha256_file
+from production_engine.narration_preview_review import (
     RENDER_DIR as PREVIEW_RENDER_DIR,
     current_render as current_preview_render,
 )

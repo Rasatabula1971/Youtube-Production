@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import experiment_02_evidence as base
+from source_acquisition import experiment_02_evidence as base
 
 PROJECT_ROOT = base.PROJECT_ROOT
 PREPARED_DIR = base.PREPARED_DIR

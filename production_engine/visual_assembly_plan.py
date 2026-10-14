@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from visual_acquisition import load_json, safe_slug, sha256_file
-from visual_gap_planner import gap_plan_is_current
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.visual_gap_planner import gap_plan_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

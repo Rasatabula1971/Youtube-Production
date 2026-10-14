@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import concept_diagnose as diag
-import test_concept_model_runner as runner_tests
+from transformation_engine import concept_diagnose as diag
+from transformation_engine import test_concept_model_runner as runner_tests
 
 
 # The runner tests' fixtures, without running those tests again here.

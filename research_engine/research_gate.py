@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from evidence_policy import AUTO_CLEARED, evaluate_claim, policy_settings
+from research_engine.evidence_policy import AUTO_CLEARED, evaluate_claim, policy_settings
 
 HERE = Path(__file__).resolve().parent
 HUMAN_REWORK_ORIGIN = "human_rework"

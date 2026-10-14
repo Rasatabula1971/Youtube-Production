@@ -49,13 +49,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import append_jsonl, atomic_write_json, named_lock, read_jsonl
-from final_render import RESULT_DIR, _final_visual_segments, result_is_current
-from final_render_manifest import manifest_is_current
-from visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.final_render import RESULT_DIR, _final_visual_segments, result_is_current
+from production_engine.final_render_manifest import manifest_is_current
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import synthesis_handoff as module
+from experiment_02_analysis import synthesis_handoff as module
 
-from synthesis_handoff import (
+from experiment_02_analysis.synthesis_handoff import (
     build_mechanism_library,
     build_transformation_handoff,
     mechanism_state,

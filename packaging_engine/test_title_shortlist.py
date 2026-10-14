@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import unittest
 
-import final_packaging_review as fpr
-import test_final_packaging_review as gate_tests
-from test_final_packaging_review import CRITERIA, approval, package
-from title_shortlist import build_shortlist, title_similarity
+from packaging_engine import final_packaging_review as fpr
+from packaging_engine import test_final_packaging_review as gate_tests
+from packaging_engine.test_final_packaging_review import CRITERIA, approval, package
+from packaging_engine.title_shortlist import build_shortlist, title_similarity
 
 DIAG = {"title_strength": 4, "clarity": 4, "credibility": 4, "promise_alignment": 4}
 

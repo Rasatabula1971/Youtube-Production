@@ -9,10 +9,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import server  # noqa: E402
-from testing_isolation import ModuleIsolation  # noqa: E402
+from experiment_ui import server  # noqa: E402
+from experiment_ui.testing_isolation import ModuleIsolation  # noqa: E402
 
 _ISOLATION = ModuleIsolation(server)
 

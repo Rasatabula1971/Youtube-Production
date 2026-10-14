@@ -17,18 +17,14 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import atomic_write_json, exit_code_for_status
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 SOURCE_DIR = PROJECT_ROOT / "source_acquisition"
-if str(SOURCE_DIR) not in sys.path:
-    sys.path.insert(0, str(SOURCE_DIR))
 
-from agent_reach_adapter import (
+from source_acquisition.agent_reach_adapter import (
     read_web_page_with_fallback,
     search_web_with_fallback,
 )

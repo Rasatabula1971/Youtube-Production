@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-import workflow_automation as automation
+from experiment_ui import workflow_automation as automation
 
 
 class WorkflowAutomationTests(unittest.TestCase):

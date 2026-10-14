@@ -9,11 +9,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import video_budget
-import visual_dispatch as dispatch
-import visual_generated_asset_import as importer
-import test_visual_generated_asset_import as base
-from test_visual_generated_asset_import import write_json
+from production_engine import video_budget
+from production_engine import visual_dispatch as dispatch
+from production_engine import visual_generated_asset_import as importer
+from production_engine import test_visual_generated_asset_import as base
+from production_engine.test_visual_generated_asset_import import write_json
 
 PNG = b"\x89PNG\r\n\x1a\n"
 

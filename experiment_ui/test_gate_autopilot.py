@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import gate_autopilot as autopilot
+from experiment_ui import gate_autopilot as autopilot
 
 AUTO_ALL = {"reviewer_id": "gate-policy-auto", "gates": {g: "AUTO_IF_CLEAN" for g in autopilot.RUNNERS}}
 PACKAGING = {

@@ -1,6 +1,6 @@
 import unittest
 
-from research_gate import (
+from research_engine.research_gate import (
     apply_gate,
     build_review_request,
     validate_decisions,

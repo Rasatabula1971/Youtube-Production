@@ -21,8 +21,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from experiment_01_3 import classify_topic_relevance
-from youtube_discovery import (
+from experiment_01_discovery.experiment_01_3 import classify_topic_relevance
+from experiment_01_discovery.youtube_discovery import (
     age_days,
     api_get,
     classify_format_candidate,

@@ -33,13 +33,11 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
-from final_export_review import APPROVED_DIR as APPROVED_EXPORT_DIR
-from final_export_review import approval_is_current
-from visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.final_export_review import APPROVED_DIR as APPROVED_EXPORT_DIR
+from production_engine.final_export_review import approval_is_current
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

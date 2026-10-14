@@ -39,12 +39,12 @@ from typing import Any, Callable
 try:
     from production_engine import thumbnail_render as render
 except ImportError:  # executed as a script from production_engine/
-    import thumbnail_render as render  # type: ignore[no-redef]
+    from production_engine import thumbnail_render as render  # type: ignore[no-redef]
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
 try:
-    import video_budget
+    from production_engine import video_budget
 except ImportError:  # imported as production_engine.thumbnail_image_provider
     from production_engine import video_budget
 
@@ -473,7 +473,7 @@ def choose(*, render_id: str, candidate_id: str, accent_hex: Any = None) -> dict
     try:
         from production_engine import thumbnail_review as review
     except ImportError:  # executed as a script from production_engine/
-        import thumbnail_review as review  # type: ignore[no-redef]
+        from production_engine import thumbnail_review as review  # type: ignore[no-redef]
 
     unit = _current_unit(render_id)
     candidate = next(

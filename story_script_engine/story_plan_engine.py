@@ -15,15 +15,13 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from channel_profiles.channel_profile import (
     load_active_profile_binding,
     normalize_binding,
 )
 from pipeline_integrity import atomic_write_json
-from story_script_engine import (
+from story_script_engine.story_script_engine import (
     RESEARCH_VERIFIED_DIR,
     OUTPUT_DIR,
     assert_unique_slug_ids,

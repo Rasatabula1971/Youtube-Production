@@ -9,11 +9,11 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import human_review
-import test_human_review as analysis_tests
-import test_vision_review as vision_tests
-import vision_review as vision
-from human_review import apply_review_action, build_review_request
+from experiment_02_analysis import human_review
+from experiment_02_analysis import test_human_review as analysis_tests
+from experiment_02_analysis import test_vision_review as vision_tests
+from experiment_02_analysis import vision_review as vision
+from experiment_02_analysis.human_review import apply_review_action, build_review_request
 from pipeline_integrity import read_jsonl
 
 

@@ -6,11 +6,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
 
-import storyboard_review as sr
-from storyboard_review import revise
+from production_engine import storyboard_review as sr
+from production_engine.storyboard_review import revise
 
 
 class StoryboardReviewTests(unittest.TestCase):

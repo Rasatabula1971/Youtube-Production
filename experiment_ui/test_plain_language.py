@@ -7,9 +7,8 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import plain_language as plain  # noqa: E402
+from experiment_ui import plain_language as plain  # noqa: E402
 
 ENGINES = ["production_engine", "packaging_engine", "research_engine", "story_script_engine",
            "format_engine", "experiment_02_analysis", "transformation_engine", "opportunity_engine"]

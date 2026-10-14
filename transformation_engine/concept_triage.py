@@ -18,8 +18,6 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import (
     atomic_write_json,
@@ -30,10 +28,8 @@ from pipeline_integrity import (
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -43,18 +39,18 @@ from analysis_model_runner import (
     safe_attempts,
 )
 
-from concept_diversity import (  # noqa: E402
+from transformation_engine.concept_diversity import (  # noqa: E402
     DEFAULT_NEAR_DUPLICATE_THRESHOLD,
     near_duplicate_groups,
     select_diverse,
 )
-from transformation_engine import (  # noqa: E402
+from transformation_engine.transformation_engine import (  # noqa: E402
     CANDIDATES_FILE,
     OUTPUT_DIR,
     load_json,
     sha256_file,
 )
-from transformation_engine import load_config as load_transformation_config  # noqa: E402
+from transformation_engine.transformation_engine import load_config as load_transformation_config  # noqa: E402
 
 TRIAGE_OUTPUT_FILE = OUTPUT_DIR / "concept_triage.json"
 SHORTLIST_FILE = OUTPUT_DIR / "concept_candidates_triaged.json"

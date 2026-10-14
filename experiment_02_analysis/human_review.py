@@ -21,13 +21,11 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
-from evidence_ingest import sha256_file
-from experiment_02 import (
+from experiment_02_analysis.evidence_ingest import sha256_file
+from experiment_02_analysis.experiment_02 import (
     OUTPUT_DIR,
     evidence_index,
     load_config,

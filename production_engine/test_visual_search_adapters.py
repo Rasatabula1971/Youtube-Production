@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-import visual_search_adapters as adapters
+from production_engine import visual_search_adapters as adapters
 
 
 class VisualSearchAdapterTests(unittest.TestCase):

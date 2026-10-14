@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import video_budget as budget
+from production_engine import video_budget as budget
 
 
 class VideoBudgetTests(unittest.TestCase):

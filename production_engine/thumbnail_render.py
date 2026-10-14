@@ -47,7 +47,7 @@ for _path in (PROJECT_ROOT, PACKAGING_DIR):
 
 from pipeline_integrity import atomic_write_json
 
-import niche_thumbnail_study as niche
+from packaging_engine import niche_thumbnail_study as niche
 
 TEMPLATE_FILE = HERE / "thumbnail_template.json"
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
@@ -192,7 +192,7 @@ CONCEPT_FIELDS = (
 
 def pairing_sources() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """Current Slice 26 pair validations and Slice 25 concept sets, or nothing yet."""
-    import package_pairing
+    from packaging_engine import package_pairing
 
     try:
         validations, _ = package_pairing._collect_current()

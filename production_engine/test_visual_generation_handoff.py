@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import visual_generation_handoff as handoff
+from production_engine import visual_generation_handoff as handoff
 
 
 def write_json(path: Path, payload: dict) -> Path:

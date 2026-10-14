@@ -5,9 +5,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-import server
-import workflow_automation
-from testing_isolation import ModuleIsolation  # noqa: E402
+from experiment_ui import server
+from experiment_ui import workflow_automation
+from experiment_ui.testing_isolation import ModuleIsolation  # noqa: E402
 
 _ISOLATION = ModuleIsolation(server)
 

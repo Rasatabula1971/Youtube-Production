@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from visual_acquisition import load_json, sha256_file
-from visual_candidate_review import candidate_selection_status
-from visual_search import search_result_is_current
+from production_engine.visual_acquisition import load_json, sha256_file
+from production_engine.visual_candidate_review import candidate_selection_status
+from production_engine.visual_search import search_result_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

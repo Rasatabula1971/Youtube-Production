@@ -12,8 +12,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import server
-from testing_isolation import isolate_outputs
+from experiment_ui import server
+from experiment_ui.testing_isolation import isolate_outputs
 
 
 class ExperimentUiTests(unittest.TestCase):
@@ -2167,7 +2167,7 @@ class JobRecoveryTests(unittest.TestCase):
         state.write_text(json.dumps({
             "id": "20260101_000000_auto_continue", "action_id": "auto_continue", "label": "Continue",
             "status": "RUNNING", "pid": pid, "identity": identity,
-            "command": [sys.executable, "experiment_ui/workflow_automation.py"],
+            "command": [sys.executable, "-m", "experiment_ui.workflow_automation"],
             "started_at": "2026-01-01T00:00:00+00:00",
             "finished_at": None, "return_code": None, "log_path": str(root / "x.log"),
         }), encoding="utf-8")

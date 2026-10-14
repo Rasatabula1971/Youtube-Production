@@ -14,8 +14,8 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
-import gate_autopilot
-import server as control
+from experiment_ui import gate_autopilot
+from experiment_ui import server as control
 from pipeline_integrity import atomic_write_json
 
 LAST_RUN_FILE = control.UI_OUTPUT_DIR / "last_auto_run.json"

@@ -14,8 +14,6 @@ import sys
 from pathlib import Path
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from typing import Any
 
@@ -30,10 +28,8 @@ from pipeline_integrity import (
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 EXP2_DIR = PROJECT_ROOT / "experiment_02_analysis"
-if str(EXP2_DIR) not in sys.path:
-    sys.path.insert(0, str(EXP2_DIR))
 
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -43,7 +39,7 @@ from analysis_model_runner import (
     safe_attempts,
 )
 
-from packaging_engine import (
+from packaging_engine.packaging_engine import (
     OUTPUT_DIR,
     REQUESTS_DIR,
     RESPONSES_DIR,

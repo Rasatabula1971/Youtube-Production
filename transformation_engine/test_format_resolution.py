@@ -8,11 +8,11 @@ import unittest
 from contextlib import ExitStack
 from pathlib import Path
 
-import concept_review as review
-import test_concept_gate as gate_tests
-import test_concept_review as review_tests
-from concept_gate import apply_gate, build_review_request, validate_decisions
-from format_resolution import normalize_choice, resolve_format
+from transformation_engine import concept_review as review
+from transformation_engine import test_concept_gate as gate_tests
+from transformation_engine import test_concept_review as review_tests
+from transformation_engine.concept_gate import apply_gate, build_review_request, validate_decisions
+from transformation_engine.format_resolution import normalize_choice, resolve_format
 
 
 class ResolveFormatTests(unittest.TestCase):

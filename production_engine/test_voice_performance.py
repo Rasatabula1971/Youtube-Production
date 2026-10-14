@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import voice_performance
+from production_engine import voice_performance
 
 
 def approved_plan() -> dict:

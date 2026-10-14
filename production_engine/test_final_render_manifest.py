@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import final_render_manifest as render_manifest
+from production_engine import final_render_manifest as render_manifest
 
 
 def write_json(path: Path, payload: dict) -> Path:

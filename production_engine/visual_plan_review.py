@@ -36,15 +36,13 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
-import video_budget
-from narration_preview_render import SEGMENT_AUDIO_DIR
-from narration_preview_review import APPROVED_DIR as APPROVED_PREVIEW_DIR
-from narration_preview_review import PREVIEW_DIR
-from visual_acquisition import (
+from production_engine import video_budget
+from production_engine.narration_preview_render import SEGMENT_AUDIO_DIR
+from production_engine.narration_preview_review import APPROVED_DIR as APPROVED_PREVIEW_DIR
+from production_engine.narration_preview_review import PREVIEW_DIR
+from production_engine.visual_acquisition import (
     APPROVED_FORMAT_DIR,
     OUTPUT_DIR,
     build_manifest,

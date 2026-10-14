@@ -15,11 +15,9 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from pipeline_integrity import atomic_write_json
-from voice_performance import (
+from production_engine.voice_performance import (
     SPECS_DIR,
     OUTPUT_DIR,
     REQUESTS_DIR,

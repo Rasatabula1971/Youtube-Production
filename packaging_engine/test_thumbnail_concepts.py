@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import thumbnail_concepts as module
+from packaging_engine import thumbnail_concepts as module
 
 
 class ThumbnailConceptTests(unittest.TestCase):

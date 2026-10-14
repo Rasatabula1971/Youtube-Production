@@ -10,10 +10,9 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import server  # noqa: E402
-from testing_isolation import ModuleIsolation  # noqa: E402
+from experiment_ui import server  # noqa: E402
+from experiment_ui.testing_isolation import ModuleIsolation  # noqa: E402
 
 _ISOLATION = ModuleIsolation(server)
 
@@ -240,7 +239,7 @@ class ShellMarkupTests(unittest.TestCase):
         import sys as _sys
 
         _sys.path.insert(0, str(server.STORY_DIR))
-        from script_section_state import ALLOWED_REWORK_REASONS
+        from story_script_engine.script_section_state import ALLOWED_REWORK_REASONS
 
         script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
         block = re.search(r"const REWORK_REASONS = \[(.*?)\n  \];", script, re.S)
@@ -277,7 +276,7 @@ class ShellMarkupTests(unittest.TestCase):
         import sys as _sys
 
         _sys.path.insert(0, str(server.PRODUCTION_DIR))
-        from narration_preview_review import DECISIONS
+        from production_engine.narration_preview_review import DECISIONS
 
         script = (STATIC / "js" / "gate-reviews.js").read_text(encoding="utf-8")
         block = script.split("const preview = {", 1)[1].split("const CONFIGS", 1)[0]
@@ -288,8 +287,8 @@ class ShellMarkupTests(unittest.TestCase):
         import sys as _sys
 
         _sys.path.insert(0, str(server.PRODUCTION_DIR))
-        import edit_preview_review
-        import final_export_review
+        from production_engine import edit_preview_review
+        from production_engine import final_export_review
 
         script = (STATIC / "js" / "produce.js").read_text(encoding="utf-8")
         tabs = re.findall(r'\["([a-z]+)", "[^"]+", "[a-z]+"\]', script.split("let activeTab")[0])
@@ -310,8 +309,8 @@ class ShellMarkupTests(unittest.TestCase):
             return {a or b for a, b in found}
 
         # Server-side decision sets, copied from each gate module's validation.
-        import narration_final_review
-        import visual_plan_review
+        from production_engine import narration_final_review
+        from production_engine import visual_plan_review
 
         self.assertEqual(values("const plan = {", "const narration = {"), set(visual_plan_review.DECISIONS))
 

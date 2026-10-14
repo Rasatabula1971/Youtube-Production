@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import format_engine as module
+from format_engine import format_engine as module
 
-from format_engine import (
+from format_engine.format_engine import (
     build_format_request,
     load_config,
     resolve_branches,

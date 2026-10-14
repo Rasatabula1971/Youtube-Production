@@ -9,9 +9,9 @@ import wave
 from pathlib import Path
 from unittest.mock import patch
 
-import video_budget
-import visual_plan_review as gate
-from test_visual_acquisition import approved_plan, write_plan
+from production_engine import video_budget
+from production_engine import visual_plan_review as gate
+from production_engine.test_visual_acquisition import approved_plan, write_plan
 
 KEY = "concept-1.long_form"
 

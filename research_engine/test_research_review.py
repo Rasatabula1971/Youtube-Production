@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import research_review as review
+from research_engine import research_review as review
 
 
 class ResearchReviewTests(unittest.TestCase):

@@ -12,18 +12,16 @@ from pathlib import Path
 from typing import Any
 
 _INTEGRITY_ROOT = Path(__file__).resolve().parent.parent
-if str(_INTEGRITY_ROOT) not in sys.path:
-    sys.path.insert(0, str(_INTEGRITY_ROOT))
 
 from pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 
-from evidence_policy import (
+from research_engine.evidence_policy import (
     AUTO_CLEARED,
     evaluate_claim,
     policy_fingerprint,
     policy_settings,
 )
-from research_gate import (
+from research_engine.research_gate import (
     DEFAULT_DRAFTS_DIR,
     HUMAN_REWORK_ORIGIN,
     POLICY_DECIDER,

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import research_model_runner as runner
+from research_engine import research_model_runner as runner
 
 
 class ResearchModelRunnerTests(unittest.TestCase):

@@ -26,17 +26,13 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 _STORY = _ROOT / "story_script_engine"
-if str(_STORY) not in sys.path:
-    sys.path.insert(0, str(_STORY))
 
 from pipeline_integrity import atomic_write_json
-import package_pairing
-from packaging_brief import load_json
-from story_script_engine import safe_slug
-from title_shortlist import build_shortlist, shortlist_settings
+from packaging_engine import package_pairing
+from packaging_engine.packaging_brief import load_json
+from story_script_engine.story_script_engine import safe_slug
+from packaging_engine.title_shortlist import build_shortlist, shortlist_settings
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "final_packaging_gate_config.json"
@@ -115,7 +111,7 @@ def thumbnail_approvals() -> dict[str, dict[str, Any]]:
     """Current Human Thumbnail Gate approvals keyed by render_id."""
     if str(PRODUCTION_DIR) not in sys.path:
         sys.path.insert(0, str(PRODUCTION_DIR))
-    import thumbnail_render
+    from production_engine import thumbnail_render
 
     return thumbnail_render.current_approvals()
 
@@ -519,11 +515,11 @@ def _route_rework(item: dict[str, Any], target: str, note: str) -> None:
     tagged = f"Final Packaging Gate ({item['format']}): {note}"
     concept_id = str(item["concept_id"])
     if target == "TITLE_DIRECTIONS":
-        from title_direction_review import reopen_for_rework
+        from packaging_engine.title_direction_review import reopen_for_rework
 
         reopen_for_rework(concept_id=concept_id, note=tagged)
     elif target == "THUMBNAIL_CONCEPTS":
-        from thumbnail_concepts import request_rework
+        from packaging_engine.thumbnail_concepts import request_rework
 
         concepts = package_pairing._current_thumbnail_items().get(item["video_id"], {})
         request_rework(
@@ -533,7 +529,7 @@ def _route_rework(item: dict[str, Any], target: str, note: str) -> None:
             previous_concepts=list(concepts.get("thumbnail_concepts", [])),
         )
     elif target == "SCRIPT":
-        import script_review
+        from story_script_engine import script_review
 
         script_review.apply_action(
             concept_id=concept_id,

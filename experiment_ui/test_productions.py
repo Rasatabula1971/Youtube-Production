@@ -3,9 +3,8 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import productions  # noqa: E402
+from experiment_ui import productions  # noqa: E402
 
 CID = "c1"
 

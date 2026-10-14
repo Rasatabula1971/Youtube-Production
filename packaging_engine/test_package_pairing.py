@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import package_pairing as module
+from packaging_engine import package_pairing as module
 
 
 class PackagePairingTests(unittest.TestCase):

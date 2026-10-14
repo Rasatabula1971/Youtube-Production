@@ -1,6 +1,6 @@
 import unittest
 
-from experiment_01_4 import (
+from experiment_01_discovery.experiment_01_4 import (
     allocate_search_budget,
     build_plan,
     classify_depth_readiness,

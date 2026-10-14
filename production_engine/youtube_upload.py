@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from pipeline_integrity import named_lock
-import publish_review
+from production_engine import publish_review
 
 PROJECT_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 - an endpoint, not a secret

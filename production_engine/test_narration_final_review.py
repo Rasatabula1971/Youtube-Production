@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import narration_final_review as gate
-from narration_render import artifact_key
+from production_engine import narration_final_review as gate
+from production_engine.narration_render import artifact_key
 
 
 class FinalAudioGateTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 import unittest
 
-from experiment_02 import (
+from experiment_02_analysis.experiment_02 import (
     SOURCE_STUDY_SET,
     aggregate_profiles,
     build_profile_from_study_item,

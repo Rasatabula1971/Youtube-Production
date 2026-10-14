@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import niche_thumbnail_study as module
+from packaging_engine import niche_thumbnail_study as module
 
 
 def video_row(index, *, niche="automotive_racing", channel=None, **overrides):

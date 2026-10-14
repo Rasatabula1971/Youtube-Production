@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import scheduled_refresh
+from experiment_01_discovery import scheduled_refresh
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import format_review
+from format_engine import format_review
 
 CRITERIA = format_review.criteria_names()
 

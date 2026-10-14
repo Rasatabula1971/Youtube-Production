@@ -15,8 +15,6 @@ from pathlib import Path
 from typing import Any
 
 _OVERLAP_ROOT = Path(__file__).resolve().parent.parent
-if str(_OVERLAP_ROOT) not in sys.path:
-    sys.path.insert(0, str(_OVERLAP_ROOT))
 
 from channel_profiles.channel_profile import normalize_binding, unconfigured_binding
 from source_overlap import check_texts

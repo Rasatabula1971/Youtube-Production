@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from format_resolution import normalize_choice, resolve_format
+from transformation_engine.format_resolution import normalize_choice, resolve_format
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "concept_gate_config.json"

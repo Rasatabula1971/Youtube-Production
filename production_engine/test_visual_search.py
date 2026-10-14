@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import visual_search
-import visual_search_acquire
+from production_engine import visual_search
+from production_engine import visual_search_acquire
 
 
 class VisualSearchTests(unittest.TestCase):

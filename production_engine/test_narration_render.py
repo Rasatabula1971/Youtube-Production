@@ -6,9 +6,9 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-import narration_preview_review
-import narration_render
-from voice_performance import sha256_text
+from production_engine import narration_preview_review
+from production_engine import narration_render
+from production_engine.voice_performance import sha256_text
 
 
 def approved_spec(*, configured: bool = True) -> dict:

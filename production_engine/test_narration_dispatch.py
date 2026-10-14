@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import narration_dispatch as dispatch
-import test_narration_render_import as base
+from production_engine import narration_dispatch as dispatch
+from production_engine import test_narration_render_import as base
 
 WAV = b"RIFF\x24\x00\x00\x00WAVEfmt "
 BASE_REQUEST = base.request_payload

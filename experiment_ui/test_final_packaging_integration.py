@@ -5,8 +5,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
-import server
-from testing_isolation import ModuleIsolation  # noqa: E402
+from experiment_ui import server
+from experiment_ui.testing_isolation import ModuleIsolation  # noqa: E402
 
 _ISOLATION = ModuleIsolation(server)
 
@@ -18,7 +18,7 @@ def setUpModule() -> None:
 
 def tearDownModule() -> None:
     _ISOLATION.stop()
-import workflow_automation
+from experiment_ui import workflow_automation
 
 
 def ready(**extra):

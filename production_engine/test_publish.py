@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import publish_review as gate
-import youtube_upload as uploader
+from production_engine import publish_review as gate
+from production_engine import youtube_upload as uploader
 
 
 def sha(path: Path) -> str:

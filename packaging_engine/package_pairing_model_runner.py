@@ -10,11 +10,7 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 _EXP2 = _ROOT / "experiment_02_analysis"
-if str(_EXP2) not in sys.path:
-    sys.path.insert(0, str(_EXP2))
 
 from pipeline_integrity import (
     atomic_write_json,
@@ -23,7 +19,7 @@ from pipeline_integrity import (
     exit_code_for_status,
     tolerant_load_json,
 )
-from analysis_model_runner import (
+from experiment_02_analysis.analysis_model_runner import (
     bridge_payload,
     call_fair_bridge,
     inference_cost_authorized,
@@ -32,7 +28,7 @@ from analysis_model_runner import (
     resolve_fair_paths,
     safe_attempts,
 )
-from package_pairing import (
+from packaging_engine.package_pairing import (
     MATURE_DIR,
     PACKAGE_VALIDATION_FILE,
     PROMPT_VERSION,

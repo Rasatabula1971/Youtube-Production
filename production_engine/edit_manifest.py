@@ -17,11 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_integrity import atomic_write_json
-from narration_render_import import (
+from production_engine.narration_render_import import (
     current_result as current_registered_narration_result,
 )
-from visual_acquisition import load_json, safe_slug, sha256_file
-from visual_assembly_plan import assembly_plan_is_current
+from production_engine.visual_acquisition import load_json, safe_slug, sha256_file
+from production_engine.visual_assembly_plan import assembly_plan_is_current
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"

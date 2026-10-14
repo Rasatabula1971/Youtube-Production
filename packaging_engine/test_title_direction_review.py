@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import title_direction_review as module
+from packaging_engine import title_direction_review as module
 
 
 def write_json(path: Path, payload: dict) -> Path:

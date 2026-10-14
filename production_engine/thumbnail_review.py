@@ -19,7 +19,7 @@ from typing import Any
 try:
     from production_engine import thumbnail_render as render
 except ImportError:  # executed as a script from production_engine/
-    import thumbnail_render as render  # type: ignore[no-redef]
+    from production_engine import thumbnail_render as render  # type: ignore[no-redef]
 
 from pipeline_integrity import atomic_write_json
 
@@ -73,7 +73,7 @@ def _image_candidates(render_id: str) -> dict[str, Any]:
     try:
         from production_engine import thumbnail_image_provider as images
     except ImportError:  # executed as a script from production_engine/
-        import thumbnail_image_provider as images  # type: ignore[no-redef]
+        from production_engine import thumbnail_image_provider as images  # type: ignore[no-redef]
 
     view = images.candidates_view(render_id)
     for row in view["candidates"]:
@@ -85,7 +85,7 @@ def image_provider_status() -> dict[str, Any]:
     try:
         from production_engine import thumbnail_image_provider as images
     except ImportError:  # executed as a script from production_engine/
-        import thumbnail_image_provider as images  # type: ignore[no-redef]
+        from production_engine import thumbnail_image_provider as images  # type: ignore[no-redef]
 
     return images.provider_status()
 
@@ -240,7 +240,7 @@ def thumbnail_file_path(render_id: str, name: str) -> Path:
         try:
             from production_engine import thumbnail_image_provider as images
         except ImportError:  # executed as a script from production_engine/
-            import thumbnail_image_provider as images  # type: ignore[no-redef]
+            from production_engine import thumbnail_image_provider as images  # type: ignore[no-redef]
         return images.candidate_file_path(render_id, name)
     if name not in allowed:
         raise ValueError("Unknown thumbnail file")

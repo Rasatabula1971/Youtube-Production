@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import server
-from testing_isolation import ModuleIsolation  # noqa: E402
+from experiment_ui import server
+from experiment_ui.testing_isolation import ModuleIsolation  # noqa: E402
 
 _ISOLATION = ModuleIsolation(server)
 

@@ -10,9 +10,9 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
-import research_gate
-import research_review as review
-from evidence_policy import (
+from research_engine import research_gate
+from research_engine import research_review as review
+from research_engine.evidence_policy import (
     AUTO_CLEARED,
     BLOCKED,
     REVIEW_REQUIRED,
@@ -20,7 +20,7 @@ from evidence_policy import (
     policy_fingerprint,
     policy_settings,
 )
-import test_research_review as base
+from research_engine import test_research_review as base
 
 SETTINGS = policy_settings({})
 
