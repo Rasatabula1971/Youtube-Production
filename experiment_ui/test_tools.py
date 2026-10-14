@@ -1,5 +1,4 @@
 import json
-import sys
 import tempfile
 import threading
 import unittest

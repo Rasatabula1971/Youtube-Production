@@ -29,7 +29,6 @@ import re
 import shutil
 import statistics
 import subprocess
-import sys
 import urllib.error
 import urllib.request
 from collections import Counter

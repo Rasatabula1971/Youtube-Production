@@ -1,6 +1,4 @@
-import sys
 import unittest
-from pathlib import Path
 
 
 from opportunity_engine import radar_learning as rl  # noqa: E402

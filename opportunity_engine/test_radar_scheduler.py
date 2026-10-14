@@ -1,6 +1,5 @@
 
 import subprocess
-import sys
 import unittest
 from datetime import timedelta
 from pathlib import Path

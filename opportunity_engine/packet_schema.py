@@ -7,7 +7,6 @@ Validation is hand-written, like channel_profiles, to stay dependency-free.
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
