@@ -8,7 +8,15 @@ These pin the rules that make module names stable:
   the external FAIR repository;
 - project modules are started with ``python -m`` (fair_bridge.py excepted),
   every Experiment UI action names a real project module with a
-  ``__main__`` guard, and the UI starts every action from the project root.
+  ``__main__`` guard, and the UI starts every action from the project root;
+- Windows .bat/.cmd/.ps1 scripts start modules, not .py files.
+
+The checks are static and read the files git tracks (what CI sees), so an
+untracked local folder such as a virtualenv never trips them. They are
+deliberately strict: a ``*_MODULE`` constant needs a matching ``*_SCRIPT``,
+and any "PYTHONPATH" literal or command list naming a ``.py`` file in
+non-test code fails. Code that builds names at runtime is outside what a
+static check can see.
 
 Run from the project root:  python -m unittest test_architecture
 """
@@ -17,6 +25,8 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -54,12 +64,29 @@ def _skipped(path: Path) -> bool:
     return any(part in SKIP_DIRS or part.startswith(".") for part in parts)
 
 
+def project_files(pattern: str) -> list[Path]:
+    """Files tracked by git (what CI sees), so local untracked folders such as
+    a virtualenv or personal tools never trip the guards. Falls back to the
+    working tree when this is not a git checkout."""
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z", "--", pattern],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            check=True,
+        ).stdout.decode("utf-8")
+        paths = [PROJECT_ROOT / name for name in listed.split("\0") if name]
+    except (OSError, subprocess.CalledProcessError):
+        paths = list(PROJECT_ROOT.rglob(pattern))
+    return sorted(path for path in paths if path.is_file() and not _skipped(path))
+
+
 def code_folders() -> list[Path]:
     """Every folder (at any depth) that directly holds Python files."""
     folders = {
         path.parent
-        for path in PROJECT_ROOT.rglob("*.py")
-        if not _skipped(path) and path.parent != PROJECT_ROOT
+        for path in project_files("*.py")
+        if path.parent != PROJECT_ROOT
     }
     return sorted(folders)
 
@@ -71,13 +98,11 @@ def top_level_packages() -> set[str]:
 
 
 def python_files(*, include_tests: bool = True) -> list[Path]:
-    files = [
+    return [
         path
-        for path in PROJECT_ROOT.rglob("*.py")
-        if not _skipped(path)
-        and (include_tests or not path.name.startswith("test_"))
+        for path in project_files("*.py")
+        if include_tests or not path.name.startswith("test_")
     ]
-    return sorted(files)
 
 
 def module_stems() -> dict[str, str]:
@@ -201,6 +226,25 @@ def script_launches(tree: ast.Module) -> list[tuple[int, str]]:
 
 
 class ArchitectureGuardTests(unittest.TestCase):
+    def test_guards_scan_a_non_empty_project(self) -> None:
+        from experiment_ui import server
+
+        self.assertGreater(len(code_folders()), 0)
+        self.assertGreater(len(python_files(include_tests=False)), 0)
+        self.assertGreater(len(server.ACTION_DEFS), 0)
+
+    def test_windows_scripts_start_modules_not_files(self) -> None:
+        offenders = [
+            f"{relative(path)}:{number}: {line.strip()}"
+            for pattern in ("*.bat", "*.cmd", "*.ps1")
+            for path in project_files(pattern)
+            for number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            )
+            if re.search(r"\.py\b", line) and "fair_bridge" not in line
+        ]
+        self.assertEqual(offenders, [])
+
     def test_every_code_folder_is_a_regular_package(self) -> None:
         required: set[Path] = set()
         for folder in code_folders():
