@@ -234,8 +234,8 @@ class ExperimentUiTests(unittest.TestCase):
         )
         self.assertIn("final_sound_plan_prepare", server.ACTION_DEFS)
         self.assertIn(
-            "production_engine/final_sound_plan.py",
-            server.ACTION_DEFS["final_sound_plan_prepare"]["command"][1],
+            "production_engine.final_sound_plan",
+            server.ACTION_DEFS["final_sound_plan_prepare"]["command"][2],
         )
 
     def test_final_export_route_is_human_gate_guarded(self):
@@ -246,14 +246,14 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertIn("final_render_manifest_prepare", server.ACTION_DEFS)
         self.assertIn("final_render_local", server.ACTION_DEFS)
         self.assertIn(
-            "production_engine/final_render_manifest.py",
+            "production_engine.final_render_manifest",
             server.ACTION_DEFS[
                 "final_render_manifest_prepare"
-            ]["command"][1],
+            ]["command"][2],
         )
         self.assertIn(
-            "production_engine/final_render.py",
-            server.ACTION_DEFS["final_render_local"]["command"][1],
+            "production_engine.final_render",
+            server.ACTION_DEFS["final_render_local"]["command"][2],
         )
 
     def test_action_allowlist_contains_no_shell_strings(self):
@@ -283,8 +283,8 @@ class ExperimentUiTests(unittest.TestCase):
     def test_guided_opportunity_action_is_present(self):
         self.assertIn("opportunity_research", server.ACTION_DEFS)
         self.assertIn(
-            "opportunity_research.py",
-            server.ACTION_DEFS["opportunity_research"]["command"][1],
+            "opportunity_research",
+            server.ACTION_DEFS["opportunity_research"]["command"][2],
         )
         self.assertIn(
             "opportunity_research",
@@ -298,8 +298,8 @@ class ExperimentUiTests(unittest.TestCase):
         )
         self.assertIn("auto_continue", server.ACTION_DEFS)
         self.assertIn(
-            "workflow_automation.py",
-            server.ACTION_DEFS["auto_continue"]["command"][1],
+            "workflow_automation",
+            server.ACTION_DEFS["auto_continue"]["command"][2],
         )
 
 
@@ -354,8 +354,8 @@ class ExperimentUiTests(unittest.TestCase):
     def test_experiment_02_evidence_acquisition_is_guided_step(self):
         self.assertIn("exp2_acquire", server.ACTION_DEFS)
         self.assertIn(
-            "source_acquisition/experiment_02_evidence.py",
-            server.ACTION_DEFS["exp2_acquire"]["command"][1],
+            "source_acquisition.experiment_02_evidence",
+            server.ACTION_DEFS["exp2_acquire"]["command"][2],
         )
         self.assertEqual(
             server.AUTO_MACHINE_ACTION_ORDER[
@@ -383,16 +383,16 @@ class ExperimentUiTests(unittest.TestCase):
             ],
         )
         self.assertIn(
-            "transformation_engine/transformation_engine.py",
-            server.ACTION_DEFS["transform_prepare"]["command"][1],
+            "transformation_engine.transformation_engine",
+            server.ACTION_DEFS["transform_prepare"]["command"][2],
         )
         self.assertIn(
-            "transformation_engine/concept_model_runner.py",
-            server.ACTION_DEFS["concept_generate"]["command"][1],
+            "transformation_engine.concept_model_runner",
+            server.ACTION_DEFS["concept_generate"]["command"][2],
         )
         self.assertIn(
-            "transformation_engine/concept_review.py",
-            server.ACTION_DEFS["concept_gate_prepare"]["command"][1],
+            "transformation_engine.concept_review",
+            server.ACTION_DEFS["concept_gate_prepare"]["command"][2],
         )
 
     def test_legacy_packaging_actions_are_retained_but_not_in_active_order(self):
@@ -405,16 +405,16 @@ class ExperimentUiTests(unittest.TestCase):
             self.assertNotIn(action_id, server.AUTO_MACHINE_ACTION_ORDER)
 
         self.assertIn(
-            "packaging_engine/packaging_engine.py",
-            server.ACTION_DEFS["package_prepare"]["command"][1],
+            "packaging_engine.packaging_engine",
+            server.ACTION_DEFS["package_prepare"]["command"][2],
         )
         self.assertIn(
-            "packaging_engine/package_model_runner.py",
-            server.ACTION_DEFS["package_generate"]["command"][1],
+            "packaging_engine.package_model_runner",
+            server.ACTION_DEFS["package_generate"]["command"][2],
         )
         self.assertIn(
-            "packaging_engine/package_review.py",
-            server.ACTION_DEFS["package_gate_prepare"]["command"][1],
+            "packaging_engine.package_review",
+            server.ACTION_DEFS["package_gate_prepare"]["command"][2],
         )
 
     def test_research_actions_follow_concept_gate_directly(self):
@@ -437,20 +437,20 @@ class ExperimentUiTests(unittest.TestCase):
             ],
         )
         self.assertIn(
-            "research_engine/research_engine.py",
-            server.ACTION_DEFS["research_prepare"]["command"][1],
+            "research_engine.research_engine",
+            server.ACTION_DEFS["research_prepare"]["command"][2],
         )
         self.assertIn(
-            "research_engine/research_acquisition.py",
-            server.ACTION_DEFS["research_acquire"]["command"][1],
+            "research_engine.research_acquisition",
+            server.ACTION_DEFS["research_acquire"]["command"][2],
         )
         self.assertIn(
-            "research_engine/research_model_runner.py",
-            server.ACTION_DEFS["research_generate"]["command"][1],
+            "research_engine.research_model_runner",
+            server.ACTION_DEFS["research_generate"]["command"][2],
         )
         self.assertIn(
-            "research_engine/research_review.py",
-            server.ACTION_DEFS["research_gate_prepare"]["command"][1],
+            "research_engine.research_review",
+            server.ACTION_DEFS["research_gate_prepare"]["command"][2],
         )
 
     def test_pending_research_gate_becomes_human_workflow_gate(self):
@@ -709,8 +709,8 @@ class ExperimentUiTests(unittest.TestCase):
     def test_experiment_02_visual_structure_is_guided_after_source_evidence(self):
         self.assertIn("exp2_visual", server.ACTION_DEFS)
         self.assertIn(
-            "source_acquisition/experiment_02_visual.py",
-            server.ACTION_DEFS["exp2_visual"]["command"][1],
+            "source_acquisition.experiment_02_visual",
+            server.ACTION_DEFS["exp2_visual"]["command"][2],
         )
         acquire_index = server.AUTO_MACHINE_ACTION_ORDER.index("exp2_acquire")
         self.assertEqual(
@@ -721,8 +721,8 @@ class ExperimentUiTests(unittest.TestCase):
     def test_visual_review_is_guided_after_visual_structure(self):
         self.assertIn("exp2_vision_prepare", server.ACTION_DEFS)
         self.assertIn(
-            "experiment_02_analysis/vision_review.py",
-            server.ACTION_DEFS["exp2_vision_prepare"]["command"][1],
+            "experiment_02_analysis.vision_review",
+            server.ACTION_DEFS["exp2_vision_prepare"]["command"][2],
         )
         visual_index = server.AUTO_MACHINE_ACTION_ORDER.index("exp2_visual")
         self.assertEqual(
@@ -1872,7 +1872,7 @@ class ExperimentUiTests(unittest.TestCase):
 
         command = server.ACTION_DEFS["analysis_model_remaining"]["command"]
         self.assertIn(
-            "analysis_model_runner.py", " ".join(str(part) for part in command)
+            "analysis_model_runner", " ".join(str(part) for part in command)
         )
         self.assertIn("--mode", command)
         self.assertIn("batch", command)
@@ -1963,7 +1963,7 @@ class ExperimentUiTests(unittest.TestCase):
 
         command = server.ACTION_DEFS["concept_triage"]["command"]
         self.assertIn(
-            "transformation_engine/concept_triage.py",
+            "transformation_engine.concept_triage",
             " ".join(str(part) for part in command),
         )
         self.assertIn("--mode", command)

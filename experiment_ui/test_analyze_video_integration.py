@@ -172,7 +172,7 @@ class AnalyzeVideoIntegrationTests(unittest.TestCase):
 
     def test_viral_radar_action_and_analyze(self):
         self.assertIn("viral_radar", server.ACTION_DEFS)
-        self.assertEqual(server.ACTION_DEFS["viral_radar"]["command"][1:], ["opportunity_engine/viral_radar.py", "run"])
+        self.assertEqual(server.ACTION_DEFS["viral_radar"]["command"][1:], ["-m", "opportunity_engine.viral_radar", "run"])
         self.assertNotIn("viral_radar", server.AUTO_MACHINE_ACTION_ORDER)
         self.assertTrue(server.action_readiness()["viral_radar"]["enabled"])
         from opportunity_engine import channel_scope

@@ -26,7 +26,7 @@ class ThumbnailUiIntegrationTests(unittest.TestCase):
         for action_id in ("thumbnail_render", "thumbnail_render_preview"):
             self.assertIn(action_id, server.ACTION_DEFS)
             self.assertNotIn(action_id, server.AUTO_MACHINE_ACTION_ORDER)
-            self.assertIn("production_engine/thumbnail_render.py", server.ACTION_DEFS[action_id]["command"])
+            self.assertIn("production_engine.thumbnail_render", server.ACTION_DEFS[action_id]["command"])
         self.assertIn("--placeholder", server.ACTION_DEFS["thumbnail_render_preview"]["command"])
 
     def test_render_readiness_follows_subject_images(self) -> None:
