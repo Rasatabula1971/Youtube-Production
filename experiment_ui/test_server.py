@@ -2272,6 +2272,38 @@ class JobRecoveryTests(unittest.TestCase):
             self.assertIn(server._proc_state(step), ("", "Z"), "the leftover step is still running")
         self.assertEqual(recovered["status"], "ORPHANED")
 
+    def test_windows_marker_is_the_module_for_python_m_jobs(self) -> None:
+        """D-175: jobs start as `python -m <module>`, so recovery must look for the module."""
+        for action_id, action in server.ACTION_DEFS.items():
+            command = [str(part) for part in action["command"]]
+            if command[1:2] != ["-m"]:
+                continue
+            with self.subTest(action=action_id):
+                self.assertEqual(server._script_marker({"command": command}), command[2])
+        self.assertEqual(
+            server._script_marker({"command": ["C:\\Python\\python.exe", "experiment_01_discovery\\opportunity_research.py", "--mode", "continue"]}),
+            "opportunity_research.py",
+            "a job saved before D-175 is still recognised by its script name",
+        )
+
+    def test_windows_recovery_finds_a_python_m_job_and_only_that_job(self) -> None:
+        """D-175 regression: the `-m` launch must not disable Windows leftover-job recovery."""
+        started = "2026-10-15T10:00:00+00:00"
+        command = [sys.executable, "-m", "experiment_ui.workflow_automation"]
+        saved = {"pid": 4242, "command": command, "started_at": started}
+        cases = {
+            "the same job": ('"C:\\Python\\python.exe" -m experiment_ui.workflow_automation', [4242]),
+            "another python process": ('"C:\\Python\\python.exe" -m http.server', []),
+            "an unrelated program": ("C:\\Windows\\notepad.exe", []),
+        }
+        for label, (command_line, expected) in cases.items():
+            with self.subTest(label), patch.object(server.os, "name", "nt"), patch.object(
+                server,
+                "_windows_process",
+                return_value={"command_line": command_line, "created": "2026-10-15T10:00:30Z"},
+            ):
+                self.assertEqual(server.leftover_job_processes(saved), expected)
+
     def test_the_ui_never_signals_itself_or_its_parent(self) -> None:
         """Audit 2 F3."""
         for pid in (os.getpid(), os.getppid(), 1):

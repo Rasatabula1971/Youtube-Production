@@ -7165,9 +7165,18 @@ def process_identity(pid: int) -> dict[str, Any] | None:
 
 
 def _script_marker(saved: dict[str, Any]) -> str:
+    """Text the job process's command line must contain on Windows.
+
+    Jobs start as ``python -m <module>`` (D-175), so the marker is the module
+    name. A job saved before that upgrade was started by script path, so its
+    marker is the script's file name.
+    """
     command_value = saved.get("command")
-    command: list[Any] = command_value if isinstance(command_value, list) else []
-    scripts = [Path(str(part)).name for part in command if str(part).endswith(".py")]
+    command = [str(part) for part in command_value] if isinstance(command_value, list) else []
+    for index, part in enumerate(command[:-1]):
+        if part == "-m":
+            return command[index + 1]
+    scripts = [part.replace("\\", "/").rsplit("/", 1)[-1] for part in command if part.endswith(".py")]
     return scripts[0] if scripts else "workflow_automation.py"
 
 
@@ -7177,8 +7186,9 @@ def leftover_job_processes(saved: dict[str, Any]) -> list[int]:
     Linux: same boot, run from this project's folder, and either the saved
     leader with its recorded start time or a member of its process group
     (the leader may already have exited and left its step running).
-    Windows: the saved pid only, when its command line names the job's script
-    and it was created within two minutes of the job's start. Any other
+    Windows: the saved pid only, when its command line names the job's module
+    (or, for a job saved before D-175, its script) and it was created within
+    two minutes of the job's start. Any other
     system: nothing is stopped, because nothing can be verified.
     """
     pid = int(saved.get("pid") or 0)
