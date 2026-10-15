@@ -16,8 +16,8 @@ untracked local folder such as a virtualenv never trips them. They are
 deliberately strict: a ``*_MODULE`` constant needs a matching path constant
 (``<NAME>_SCRIPT``, or ``<NAME>`` itself), a "PYTHONPATH" literal fails unless
 it only reads or removes the variable (a comparison, or ``.get``/``.pop``),
-and a command list naming a ``.py`` file in non-test code fails. Code that builds names at runtime is outside what a
-static check can see.
+and a command list naming a ``.py`` file in non-test code fails. Code that
+builds names at runtime is outside what a static check can see.
 
 Run from the project root:  python -m unittest test_architecture
 """

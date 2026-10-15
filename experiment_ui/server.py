@@ -7174,10 +7174,18 @@ def _script_marker(saved: dict[str, Any]) -> str:
     command_value = saved.get("command")
     command = [str(part) for part in command_value] if isinstance(command_value, list) else []
     for index, part in enumerate(command[:-1]):
-        if part == "-m":
+        if part == "-m" and command[index + 1]:
             return command[index + 1]
     scripts = [part.replace("\\", "/").rsplit("/", 1)[-1] for part in command if part.endswith(".py")]
     return scripts[0] if scripts else "workflow_automation.py"
+
+
+def _names_marker(command_line: str, marker: str) -> bool:
+    """Whether the command line names the marker as a whole module or file
+    name, so `title_direction` never matches `title_direction_model_runner`."""
+    if not marker:
+        return False
+    return re.search(rf"(?<![\w.]){re.escape(marker)}(?![\w.])", command_line) is not None
 
 
 def leftover_job_processes(saved: dict[str, Any]) -> list[int]:
@@ -7198,7 +7206,7 @@ def leftover_job_processes(saved: dict[str, Any]) -> list[int]:
     identity: dict[str, Any] = identity_value if isinstance(identity_value, dict) else {}
     if os.name == "nt":
         info = _windows_process(pid)
-        if not info or _script_marker(saved) not in info["command_line"]:
+        if not info or not _names_marker(info["command_line"], _script_marker(saved)):
             return []
         try:
             created = datetime.fromisoformat(info["created"].replace("Z", "+00:00"))

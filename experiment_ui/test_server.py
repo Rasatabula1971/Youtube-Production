@@ -2280,6 +2280,7 @@ class JobRecoveryTests(unittest.TestCase):
                 continue
             with self.subTest(action=action_id):
                 self.assertEqual(server._script_marker({"command": command}), command[2])
+        self.assertEqual(server._script_marker({"command": ["python", "-m", ""]}), "workflow_automation.py")
         self.assertEqual(
             server._script_marker({"command": ["C:\\Python\\python.exe", "experiment_01_discovery\\opportunity_research.py", "--mode", "continue"]}),
             "opportunity_research.py",
@@ -2295,6 +2296,10 @@ class JobRecoveryTests(unittest.TestCase):
             "the same job": ('"C:\\Python\\python.exe" -m experiment_ui.workflow_automation', [4242]),
             "another python process": ('"C:\\Python\\python.exe" -m http.server', []),
             "an unrelated program": ("C:\\Windows\\notepad.exe", []),
+            "a job whose module name starts the same": (
+                '"C:\\Python\\python.exe" -m experiment_ui.workflow_automation_extra',
+                [],
+            ),
         }
         for label, (command_line, expected) in cases.items():
             with self.subTest(label), patch.object(server.os, "name", "nt"), patch.object(
