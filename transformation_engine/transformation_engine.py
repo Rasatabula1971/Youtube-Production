@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from core.source_overlap import check_texts
+from transformation_engine.concept_diversity import allocate_concept_counts, pool_assessment
 from transformation_engine.human_framing import generation_contract, validate as validate_human_framing
 from core.hashing import sha256_file
 from core.jsonio import load_json
@@ -55,7 +56,7 @@ def validation_contract_sha256() -> str:
         CONFIG_FILE.resolve(),
         (PROJECT_ROOT / "core" / "source_overlap.py").resolve(),
         (HERE / "human_framing.py").resolve(),
-        # The hash, JSON and slug helpers used to live in this file (D-115).
+        # The hash, JSON and slug helpers used to live in this file (D-176).
         (PROJECT_ROOT / "core" / "hashing.py").resolve(),
         (PROJECT_ROOT / "core" / "jsonio.py").resolve(),
         (PROJECT_ROOT / "core" / "slugs.py").resolve(),
@@ -627,9 +628,21 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         )
         return summary
 
+    # Size every request so the opportunity's pool lands in 15–25 (D-130).
+    pool = config.get("concept_pool", {})
+    allocation = allocate_concept_counts(
+        [str(entry.get("mechanism_id", "")).strip() for entry in entries],
+        pool_minimum=int(pool.get("minimum", 15)),
+        pool_maximum=int(pool.get("maximum", 25)),
+        per_request_minimum=int(pool.get("per_request_minimum", 2)),
+        per_request_maximum=int(pool.get("per_request_maximum", 8)),
+        preferred_per_request=int(config.get("concepts_per_mechanism", 5)),
+    )
     requests = []
     for entry in entries:
         request = build_concept_request(entry, config)
+        if request.get("mechanism_id") in allocation:
+            request["concept_count_requested"] = allocation[request["mechanism_id"]]
         request["request_provenance"] = {
             "handoff_source": str(handoff_path.resolve()),
             "handoff_sha256": handoff_hash,
@@ -648,6 +661,8 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         "handoff_status": handoff.get("status"),
         "handoff_sha256": handoff_hash,
         "ready_mechanisms": len(entries),
+        "concepts_requested": sum(allocation.values()),
+        "concepts_requested_per_mechanism": allocation,
         "requests_created": len(requests),
         "requests": requests,
         "model_calls": 0,
@@ -823,18 +838,31 @@ def run_apply() -> dict[str, Any]:
             config.get("concepts_per_mechanism", 5),
         )
     )
+    contributed = sorted(current_response_hashes)
+    missing_mechanisms = sorted(request_mechanism_ids - set(contributed))
+    # A resumable batch is not a complete stage (vision §104-105, D-129):
+    # triage starts only when every requested mechanism has contributed at
+    # least one current, validated concept. Until then generation stays the
+    # next step and resumes the missing mechanisms.
     ready_for_triage = (
         len(accepted) >= minimum_candidates
         and bool(current_response_hashes)
+        and not missing_mechanisms
     )
-    contributed = sorted(current_response_hashes)
-    missing_mechanisms = sorted(request_mechanism_ids - set(contributed))
+
+    pool_config = config.get("concept_pool", {})
+    pool = pool_assessment(
+        len(accepted),
+        pool_minimum=int(pool_config.get("minimum", 15)),
+        pool_maximum=int(pool_config.get("maximum", 25)),
+    )
 
     CANDIDATES_FILE.write_text(
         json.dumps(
             {
                 "artifact": "concept_candidates",
                 "count": len(accepted),
+                "pool": pool,
                 "minimum_candidates_for_triage": minimum_candidates,
                 "ready_for_triage": ready_for_triage,
                 "requested_mechanism_ids": sorted(request_mechanism_ids),
@@ -847,7 +875,7 @@ def run_apply() -> dict[str, Any]:
                     "Concepts are not ranked.",
                     "Acceptance here means structural/source-dependency validation only.",
                     "Human Concept Gate approval is still required.",
-                    "Provider coverage may be partial when the current validated candidate pool meets the triage minimum.",
+                    "Triage requires every requested mechanism to contribute at least one current validated concept.",
                 ],
             },
             indent=2,
@@ -870,6 +898,8 @@ def run_apply() -> dict[str, Any]:
 
     if ready_for_triage:
         status = "CONCEPT_CANDIDATES_READY"
+    elif accepted and missing_mechanisms:
+        status = "INCOMPLETE_MECHANISM_COVERAGE"
     elif accepted:
         status = "INSUFFICIENT_CONCEPT_CANDIDATES"
     else:
@@ -884,6 +914,7 @@ def run_apply() -> dict[str, Any]:
         "contributing_mechanisms": len(contributed),
         "missing_mechanism_ids": missing_mechanisms,
         "partial_mechanism_coverage": bool(missing_mechanisms),
+        "pool": pool,
         "rejected_concepts": len(rejected),
         "candidates_file": str(CANDIDATES_FILE),
         "rejected_file": str(REJECTED_FILE),

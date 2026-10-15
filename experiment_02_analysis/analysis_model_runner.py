@@ -32,6 +32,7 @@ from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
     confirmed_free_providers,
+    direct_gemini_fallback_decision,
     inference_cost_authorized,
     load_runner_config,
     parse_model_json,
@@ -48,6 +49,11 @@ MODEL_RESPONSES_DIR = OUTPUT_DIR / "model_responses"
 RAW_OUTPUTS_DIR = OUTPUT_DIR / "raw_model_outputs"
 ANALYZED_DIR = OUTPUT_DIR / "profiles_analyzed"
 BATCH_SUMMARY_FILE = OUTPUT_DIR / "model_runner_batch_summary.json"
+
+# Direct Gemini replaces exhausted free capacity only (vision §101, D-068,
+# D-129). It never covers output that failed quality or validation, a missing
+# verifier, or a request no free route can serve: those are repairable errors.
+
 
 def response_schema(request: dict[str, Any]) -> dict[str, Any]:
     mechanism_ids = sorted(request.get("mechanism_taxonomy", {}))
@@ -297,6 +303,10 @@ def restrict_response_to_request(
         restrict(item, f"working_hypotheses[{index}]")
 
     return result, removals
+
+
+def fair_allows_direct_gemini_fallback(result: dict[str, Any]) -> bool:
+    return bool(direct_gemini_fallback_decision(result)["eligible"])
 
 
 def resolve_profile_path(

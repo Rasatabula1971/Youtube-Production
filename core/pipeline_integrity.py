@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,27 @@ FAIL_STATUSES = {
 }
 
 
+# On Windows, os.replace fails with "Access is denied" or a sharing violation
+# (both PermissionError) while another process briefly has the target open,
+# for example the UI's status refresh reading a summary file the automation
+# job is rewriting. Linux and macOS allow the replace. Retrying for about two
+# seconds rides out that overlap; a file that stays locked still raises.
+_REPLACE_ATTEMPTS = 12
+
+
+def _replace(source: Path, target: Path) -> None:
+    delay = 0.01
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.25)
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
@@ -47,7 +69,7 @@ def atomic_write_text(path: Path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temp_path, path)
+        _replace(temp_path, path)
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -103,3 +125,41 @@ def exit_code_for_status(status: str) -> int:
         }
         else 2
     )
+
+
+def append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    """Append one JSON record as a line; earlier lines are never rewritten (D-133)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(line)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Records of an append-only log; a torn or invalid line is skipped."""
+    if not path.exists():
+        return []
+    records = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            records.append(value)
+    return records
+
+
+_NAMED_LOCKS: dict[str, Any] = {}
+
+
+def named_lock(name: str) -> Any:
+    """One process-wide re-entrant lock per name, shared however a module is imported."""
+    import threading
+
+    lock = _NAMED_LOCKS.get(name)
+    if lock is None:
+        lock = _NAMED_LOCKS.setdefault(name, threading.RLock())
+    return lock

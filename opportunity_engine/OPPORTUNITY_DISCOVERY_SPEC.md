@@ -161,7 +161,10 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
    `opportunity_context` + opportunity questions in Experiment 02; the inbox
    as the unified gate with Approve / Rework / Watch / Save / Reject, the
    evidence matrix, decision history and the evidence-moved notice).
-7. **O13 + O14** — extend the scheduler; trajectory charts.
+7. **O13 + O14** — extend the scheduler; trajectory charts (built:
+   `radar_scheduler.py` + `scheduled_tick.py` on the existing Windows task;
+   the evidence drawer with a snapshot trajectory chart). All v2.1 slices
+   are now built.
 
 Also pending: an `everyday_science` 01.3 topic set (01.3 is currently scoped to
 motorsport engineering), added as its own change so the existing frozen cohort

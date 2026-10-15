@@ -1,5 +1,7 @@
 {
-  "acceptable_validation_statuses": ["PASS"],
+  "acceptable_validation_statuses": [
+    "PASS"
+  ],
   "require_approved_thumbnail_image": true,
   "required_accept_criteria": [
     "title_and_thumbnail_read_as_one_unit",
@@ -9,5 +11,14 @@
     "claims_within_approved_evidence"
   ],
   "image_criterion": "approved_image_is_the_thumbnail",
-  "rework_targets": ["TITLE_DIRECTIONS", "THUMBNAIL_CONCEPTS", "SCRIPT"]
+  "rework_targets": [
+    "TITLE_DIRECTIONS",
+    "THUMBNAIL_CONCEPTS",
+    "SCRIPT"
+  ],
+  "title_shortlist": {
+    "target": 3,
+    "minimum": 2,
+    "near_duplicate_threshold": 0.5
+  }
 }

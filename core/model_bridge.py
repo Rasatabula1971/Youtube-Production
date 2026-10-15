@@ -1,4 +1,4 @@
-"""Shared model bridge (D-114): FAIR subprocess calls, the free-only cost
+"""Shared model bridge (D-175): FAIR subprocess calls, the free-only cost
 check and the direct Gemini backup. Moved without change from
 experiment_02_analysis/analysis_model_runner.py.
 """
@@ -27,6 +27,7 @@ RUNNER_CONFIG_FILE = EXP2_DIR / "analysis_model_runner_config.json"
 FAIR_BRIDGE_FILE = EXP2_DIR / "fair_bridge.py"
 DEFAULT_FAIR_REPO = PROJECT_ROOT.parent / "FAIR Free AI Router"
 PROJECT_ENV_FILE = PROJECT_ROOT / ".env"
+DIRECT_GEMINI_BILLING_FILE = EXP2_DIR / "direct_gemini_billing.json"
 DIRECT_GEMINI_KEY_ENV = "DIRECT_GEMINI_API_KEY"
 DIRECT_GEMINI_MODEL_ENV = "DIRECT_GEMINI_MODEL"
 DIRECT_GEMINI_MODELS_ENV = "DIRECT_GEMINI_MODELS"
@@ -35,12 +36,30 @@ DEFAULT_DIRECT_GEMINI_MODELS = (
     "gemini-3.5-flash",
 )
 DIRECT_GEMINI_FAIR_FALLBACK_REASONS = {
-    "NO_ELIGIBLE_FREE_MODELS",
     "ALL_FREE_MODELS_UNAVAILABLE",
-    "ALL_FREE_MODELS_FAILED_QUALITY",
-    "QUALITY_VERIFICATION_UNAVAILABLE",
-    "INDEPENDENT_VERIFIER_UNAVAILABLE",
 }
+DIRECT_GEMINI_REFUSED_REASONS = {
+    "ALL_FREE_MODELS_FAILED_QUALITY": (
+        "Free models answered but their output failed quality checks. Repair the "
+        "prompt, schema or request and rerun on the free route; a paid fallback "
+        "would hide the defect."
+    ),
+    "QUALITY_VERIFICATION_UNAVAILABLE": (
+        "Quality verification was unavailable. Retry when the verifier is back; "
+        "a paid fallback would skip verification rather than replace capacity."
+    ),
+    "INDEPENDENT_VERIFIER_UNAVAILABLE": (
+        "The independent verifier was unavailable. Retry when it is back; a paid "
+        "fallback would skip verification rather than replace capacity."
+    ),
+    "NO_ELIGIBLE_FREE_MODELS": (
+        "No free route fits this request (schema, size or output floor), which "
+        "is not proven provider exhaustion. Repair the request or the route "
+        "configuration (run FAIR Doctor)."
+    ),
+}
+DIRECT_GEMINI_BILLING_UNCONFIRMED = "DIRECT_GEMINI_BILLING_UNCONFIRMED"
+DIRECT_GEMINI_NOT_CONFIGURED = "DIRECT_GEMINI_NOT_CONFIGURED"
 
 
 def load_runner_config() -> dict[str, Any]:
@@ -270,17 +289,79 @@ def direct_gemini_settings() -> dict[str, Any]:
     }
 
 
-def direct_gemini_available() -> bool:
+def direct_gemini_billing_status() -> dict[str, Any]:
+    """The operator's attestation that the key's project has no billing (D-161).
+
+    Free-tier is a property of the Google Cloud project, not of this code, so
+    it is a dated, explicit statement in a config file; until it is true no
+    direct Gemini call is made.
+    """
+    try:
+        payload = json.loads(DIRECT_GEMINI_BILLING_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    confirmed = payload.get("billing_disabled_confirmed") is True
+    return {
+        "confirmed": confirmed,
+        "confirmed_on": payload.get("confirmed_on"),
+        "file": str(DIRECT_GEMINI_BILLING_FILE),
+        "problem": (
+            ""
+            if confirmed
+            else "Direct Gemini is off until you confirm the key's Google Cloud project has no "
+            f"billing account: set billing_disabled_confirmed to true in {DIRECT_GEMINI_BILLING_FILE.name}."
+        ),
+    }
+
+
+def direct_gemini_billing_confirmed() -> bool:
+    return bool(direct_gemini_billing_status()["confirmed"])
+
+
+def direct_gemini_unavailable_reason() -> str | None:
+    """Why the direct route cannot run now, or None when it can."""
     settings = direct_gemini_settings()
-    return bool(settings["api_key"] and settings["models"])
+    if not (settings["api_key"] and settings["models"]):
+        return DIRECT_GEMINI_NOT_CONFIGURED
+    if not direct_gemini_billing_confirmed():
+        return DIRECT_GEMINI_BILLING_UNCONFIRMED
+    return None
 
 
-def fair_allows_direct_gemini_fallback(result: dict[str, Any]) -> bool:
-    return (
-        result.get("status") == "ESCALATION_REQUIRED"
-        and result.get("paid_inference_executed") is False
-        and str(result.get("reason_code") or "") in DIRECT_GEMINI_FAIR_FALLBACK_REASONS
-    )
+def direct_gemini_available() -> bool:
+    return direct_gemini_unavailable_reason() is None
+
+
+def direct_gemini_fallback_decision(result: dict[str, Any]) -> dict[str, Any]:
+    """Whether a FAIR result may fall back to direct Gemini, and why (D-129).
+
+    The only shared gate: allowed only when FAIR escalated because the free
+    pool was exhausted and nothing paid has run yet.
+    """
+    reason = str(result.get("reason_code") or "")
+    if result.get("status") != "ESCALATION_REQUIRED":
+        return {"eligible": False, "reason_code": reason, "explanation": "FAIR did not escalate."}
+    if result.get("paid_inference_executed") is not False:
+        return {
+            "eligible": False,
+            "reason_code": reason,
+            "explanation": "Paid inference state is unknown or already used; no fallback.",
+        }
+    if reason in DIRECT_GEMINI_FAIR_FALLBACK_REASONS:
+        return {
+            "eligible": True,
+            "reason_code": reason,
+            "explanation": "Free-model capacity is exhausted; direct Gemini may replace it.",
+        }
+    return {
+        "eligible": False,
+        "reason_code": reason,
+        "explanation": DIRECT_GEMINI_REFUSED_REASONS.get(
+            reason, "Unrecognised escalation reason; no paid fallback without proof of exhaustion."
+        ),
+    }
 
 
 def inference_cost_authorized(result: dict[str, Any]) -> bool:
@@ -420,6 +501,18 @@ def call_direct_gemini_backup(
     models = list(settings["models"])
     if not api_key or not models:
         return fair_result
+    if not direct_gemini_billing_confirmed():
+        # No call at all until the operator has attested that the key's
+        # project cannot bill (D-161): unknown cost is not zero cost.
+        return {
+            **fair_result,
+            "status": "ESCALATION_REQUIRED",
+            "reason_code": DIRECT_GEMINI_BILLING_UNCONFIRMED,
+            "paid_inference_executed": False,
+            "direct_backup_attempted": False,
+            "direct_backup_used": False,
+            "direct_backup_refused": direct_gemini_billing_status()["problem"],
+        }
 
     prompt = str(payload.get("prompt") or "")
     schema = payload.get("expected_schema")
@@ -467,8 +560,11 @@ def call_direct_gemini_backup(
                 if response_mode == "STRUCTURED_SCHEMA"
                 else "JSON_MODE_DETERMINISTIC_VALIDATION_REQUIRED"
             ),
-            "paid_inference_executed": None,
+            # The operator attested the project has no billing (D-161), so
+            # this call cannot have been paid for.
+            "paid_inference_executed": False,
             "billing_authorization": "USER_APPROVED_DIRECT_GEMINI_BACKUP",
+            "billing_disabled_confirmed_on": direct_gemini_billing_status()["confirmed_on"],
             "direct_backup_attempted": True,
             "direct_backup_used": True,
             "direct_backup_free_tier_only": True,
@@ -680,10 +776,14 @@ def call_fair_bridge(
         result = load_json(output_path)
         if not isinstance(result, dict):
             raise RuntimeError("FAIR bridge result must be a JSON object")
-        if fair_allows_direct_gemini_fallback(result) and direct_gemini_available():
+        decision = direct_gemini_fallback_decision(result)
+        if decision["eligible"] and direct_gemini_available():
             return call_direct_gemini_backup(
                 payload,
                 timeout_seconds=timeout_seconds,
                 fair_result=result,
             )
+        if result.get("status") == "ESCALATION_REQUIRED":
+            # Record why no paid fallback ran, for the run report and the UI.
+            result = {**result, "direct_gemini_fallback": decision}
         return result

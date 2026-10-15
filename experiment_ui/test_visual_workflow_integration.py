@@ -5,6 +5,18 @@ from contextlib import ExitStack
 from unittest.mock import patch
 
 from experiment_ui import server
+from experiment_ui.testing_isolation import ModuleIsolation  # noqa: E402
+
+_ISOLATION = ModuleIsolation(server)
+
+
+def setUpModule() -> None:
+    # Never read the real pipeline outputs of the machine running the tests.
+    _ISOLATION.start()
+
+
+def tearDownModule() -> None:
+    _ISOLATION.stop()
 from experiment_ui import workflow_automation
 
 

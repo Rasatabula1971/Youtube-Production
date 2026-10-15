@@ -1,4 +1,4 @@
-"""Architecture guard tests (D-114).
+"""Architecture guard tests (D-175).
 
 These pin the rules that make module names stable:
 - every folder that holds Python code is a regular package;
@@ -13,10 +13,11 @@ These pin the rules that make module names stable:
 
 The checks are static and read the files git tracks (what CI sees), so an
 untracked local folder such as a virtualenv never trips them. They are
-deliberately strict: a ``*_MODULE`` constant needs a matching ``*_SCRIPT``,
-and any "PYTHONPATH" literal or command list naming a ``.py`` file in
-non-test code fails. Code that builds names at runtime is outside what a
-static check can see.
+deliberately strict: a ``*_MODULE`` constant needs a matching path constant
+(``<NAME>_SCRIPT``, or ``<NAME>`` itself), a "PYTHONPATH" literal fails unless
+it only reads or removes the variable (a comparison, or ``.get``/``.pop``),
+and a command list naming a ``.py`` file in non-test code fails. Code that
+builds names at runtime is outside what a static check can see.
 
 Run from the project root:  python -m unittest test_architecture
 """
@@ -59,7 +60,7 @@ UI_LAUNCH_CWD = {"PROJECT_ROOT", "control.PROJECT_ROOT"}
 POWERSHELL_ACTIONS_DIR = "scripts/"
 
 # Helper names core owns. Outside core they may only be defined where the
-# behaviour deliberately differs (D-115): these load_json variants handle a
+# behaviour deliberately differs (D-176): these load_json variants handle a
 # missing file, invalid JSON or a non-object differently, and thumbnail_render's
 # safe_slug is ASCII-only.
 CORE_HELPER_NAMES = {
@@ -212,8 +213,22 @@ class _SysPathAliases:
         return isinstance(node, ast.Name) and node.id in self.path_names
 
 
+def _pythonpath_reads(tree: ast.Module) -> set[int]:
+    """ids of "PYTHONPATH" literals that only read or remove the variable:
+    a comparison (`k != "PYTHONPATH"`, `"PYTHONPATH" in env`) or the key of a
+    `.get(...)` / `.pop(...)` call. Setting it stays forbidden."""
+    reads: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            reads.update(id(part) for part in [node.left, *node.comparators] if isinstance(part, ast.Constant))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in {"get", "pop"}:
+            reads.update(id(arg) for arg in node.args[:1] if isinstance(arg, ast.Constant))
+    return reads
+
+
 def sys_path_changes(tree: ast.Module) -> list[int]:
     aliases = _SysPathAliases(tree)
+    pythonpath_reads = _pythonpath_reads(tree)
     lines: list[int] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
@@ -230,7 +245,7 @@ def sys_path_changes(tree: ast.Module) -> list[int]:
                 base = target.value if isinstance(target, ast.Subscript) else target
                 if aliases.is_path(base):
                     lines.append(node.lineno)
-        elif isinstance(node, ast.Constant) and node.value == "PYTHONPATH":
+        elif isinstance(node, ast.Constant) and node.value == "PYTHONPATH" and id(node) not in pythonpath_reads:
             lines.append(node.lineno)
     return lines
 
@@ -396,11 +411,10 @@ class ArchitectureGuardTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_only_fair_bridge_changes_the_import_path(self) -> None:
-        this_file = relative(Path(__file__).resolve())  # names "PYTHONPATH" itself
         offenders = [
             f"{relative(path)}:{line}"
             for path in python_files()
-            if relative(path) not in {FAIR_BRIDGE, this_file}
+            if relative(path) != FAIR_BRIDGE
             for line in sys_path_changes(parse(path))
         ]
         self.assertEqual(offenders, [], "sys.path / PYTHONPATH changes")
@@ -431,7 +445,8 @@ class ArchitectureGuardTests(unittest.TestCase):
             for name in names:
                 checked += 1
                 launched = getattr(module, name)
-                script = getattr(module, name.removesuffix("_MODULE") + "_SCRIPT", None)
+                base = name.removesuffix("_MODULE")
+                script = getattr(module, base + "_SCRIPT", None) or getattr(module, base, None)
                 if script is None:
                     problems.append(f"{module_name}.{name}: no matching *_SCRIPT")
                     continue

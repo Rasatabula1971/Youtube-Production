@@ -9,9 +9,9 @@ if ($EveryHours -lt 1) {
     throw "EveryHours must be at least 1."
 }
 
-# The wrapper changes to the project root and starts the runner with
-# `python -m experiment_01_discovery.opportunity_research` (D-114).
-$Runner = Join-Path $PSScriptRoot "run_opportunity_research_continue.cmd"
+# The wrapper changes to the project root and runs
+# `python -m opportunity_engine.scheduled_tick` (D-175).
+$Runner = Join-Path $PSScriptRoot "run_scheduled_tick.cmd"
 
 if (-not (Test-Path $Runner)) {
     throw "Cannot find scheduled refresh runner: $Runner"
@@ -52,7 +52,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "Opportunity Research continuation installed."
-Write-Host "The task wakes every $EveryHours hour(s), takes a frozen-cohort snapshot"
-Write-Host "only when due, then automatically advances through 01.4 and 01.5 when"
-Write-Host "velocity evidence becomes ready."
+Write-Host "Opportunity automation installed."
+Write-Host "The task wakes every $EveryHours hour(s). It takes a frozen-cohort snapshot"
+Write-Host "only when due and advances through 01.4 and 01.5 when velocity evidence is"
+Write-Host "ready, then runs one viral radar tick: discovery when due (every 8 hours by"
+Write-Host "default), otherwise snapshots of tracked breakouts when due."

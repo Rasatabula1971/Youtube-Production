@@ -1,11 +1,11 @@
 @echo off
-rem Scheduled-task entry point for Opportunity Research continuation (D-114).
+rem Scheduled-task entry point (D-175): the research continuation, then a radar tick.
 rem Task Scheduler starts in the Windows system folder, and modules are
 rem started with `python -m` from the project root, so change there first.
-rem Usage: run_opportunity_research_continue.cmd "C:\path\to\python.exe"
+rem Usage: run_scheduled_tick.cmd "C:\path\to\python.exe"
 setlocal
 cd /d "%~dp0.."
 set "PYTHON_EXE=%~1"
 if "%PYTHON_EXE%"=="" set "PYTHON_EXE=python"
-"%PYTHON_EXE%" -m experiment_01_discovery.opportunity_research --mode continue
+"%PYTHON_EXE%" -m opportunity_engine.scheduled_tick
 exit /b %ERRORLEVEL%

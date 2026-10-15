@@ -160,7 +160,7 @@ Manual maintenance controls remain under **Tools & Diagnostics**:
 
 The continuation task wakes every two hours and runs
 `python -m experiment_01_discovery.opportunity_research --mode continue`
-(through `scripts/run_opportunity_research_continue.cmd`). That orchestrator calls the
+(from `opportunity_engine.scheduled_tick`). That orchestrator calls the
 self-limiting frozen-cohort refresh only when another snapshot is due. It skips
 API work when:
 

@@ -31,6 +31,20 @@ transformation_engine/output/concept_gate_request.json
 **ACCEPT** means the human approves the concept as-is. No criteria checkboxes are
 required.
 
+**One format per production (D-132).** Every accepted concept leaves the gate
+with exactly one format, `long_form` or `short`:
+
+- a concept generated as `either` is accepted as long-form or as a Short (the
+  review page offers both buttons);
+- an ACCEPT that names no format (an API call or the classic view) takes
+  `either_default_format` from `concept_gate_config.json`, long-form by
+  default;
+- a concept generated as one format keeps it unless the human chooses the
+  other.
+
+The handoff records the result as `format_resolution` (the format, what was
+requested, `decided_by` HUMAN, CONCEPT or DEFAULT, and why).
+
 **REWORK** keeps the concept for revision. The criteria become keep/change
 dimensions:
 
@@ -83,7 +97,7 @@ The handoff preserves:
 - working title;
 - premise;
 - audience promise;
-- intended format;
+- the one resolved format and how it was chosen (`format_resolution`);
 - mechanism application;
 - transformation method;
 - independent research questions;

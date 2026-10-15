@@ -1,5 +1,20 @@
 # PROJECT — YouTube Production
 
+> **Status note (October 2026).** The governing product definition is now the
+> Master Product Vision and Build Comparison Specification (D-128).
+>
+> This document is kept as the original design record, and parts of it are
+> historical:
+> - the M1-only milestone framing (§4, §9);
+> - the "offline framework" descriptions of the later engines;
+> - package-before-script (§2, §9 Packaging), superseded by post-script
+>   packaging (D-093 to D-099).
+>
+> The current built state, the deviations found by the 3 October 2026 audit,
+> and the correction order (patches A1–A6, then packaging, planning and
+> budget, production, Tesseract, publishing and learning) are in the
+> README's **Current status** section.
+
 ## 1. Objective
 
 Build a repeatable system that:

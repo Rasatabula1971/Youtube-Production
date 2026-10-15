@@ -49,6 +49,34 @@ rules.
 
 The budget can be changed later without changing the manifest schema.
 
+### One budget per video (D-136)
+
+`video_budget.py` keeps one append-only ledger,
+`output/video_budget_ledger.jsonl`, keyed by video (`concept:format`). Every
+paid step records into it:
+
+| Step | Records |
+|---|---|
+| Narration Spend Gate ACCEPT | reserves the approved worst case; any other decision releases it |
+| Narration return | the actual cumulative narration cost |
+| Visual Spend Gate AUTHORIZE | reserves the shot's maximum; Keep placeholder or Retry releases it |
+| Generated visual import | the shot's actual cost |
+| Thumbnail candidate generation | reserves the maximum before the call, then records the actual |
+| Thumbnail import, final sound import | the actual cost already spent outside the app |
+
+An item counts at the larger of its live reservation and its actual spend.
+
+- **Above the ceiling:** a new reservation that would take the video's
+  committed total above `ceiling_usd` is refused. This applies across
+  narration, visuals and thumbnails.
+- **Above the target:** a reservation is allowed and the overrun is flagged.
+- **Actual spend:** always recorded, because it has already happened.
+
+The target (US$5) and ceiling (US$10) live in `video_budget_config.json`,
+with `confirmed_by_human: false` until you confirm them. The stage caps (per
+shot, per thumbnail, global visual workflow) still apply on top of the
+budget. The `/produce` page shows each video's committed and spent totals.
+
 ## Third-party excerpts
 
 An `EDITORIAL_EXCERPT` is never auto-selected. It remains
@@ -118,9 +146,11 @@ identity.
 
 ## Paid narration remains unbuilt
 
-D-061 still governs paid narration: Higgsfield is the planned licensed-voice
-renderer, but the paid adapter is intentionally not part of the current slice.
-Before a paid call is allowed, the system still needs:
+Since D-168 the shipped narration provider is the free local Kokoro voice
+(`LOCAL_KOKORO` adapter, $0, no network); the paid HTTP adapter (D-139)
+remains available for a provider whose contract is verified. The paragraphs
+below describe the paid path. Before a paid call is allowed, the system
+still needs:
 
 - configured licensed voice identity;
 - licence reference;
@@ -205,9 +235,10 @@ authorization; it still does not execute the paid narration render.
 Changing the current estimate invalidates old spend-review decisions and
 approved spend artifacts.
 
-The checked-in Higgsfield narration provider contract remains intentionally
-unverified, so production will stop at provider setup/quote requirements until
-those prerequisites are supplied from verified provider information.
+The Higgsfield narration provider contract is kept, unverified, under
+`paid_provider_example` in `narration_render_config.json`; the active
+provider is the local Kokoro voice (D-168), whose $0 quote the system writes
+itself.
 
 ## Slice 12 — authorized narration return and deterministic Audio QC
 
@@ -258,6 +289,223 @@ PASS result. Partial branch coverage cannot report a global PASS.
 
 Slice 12 does not execute paid narration and does not start storyboard or visual
 production.
+
+## Tesseract project exchange (D-144)
+
+Tesseract is the final editable production environment. `tesseract_exchange.py`
+hands it a structured project rather than only the rendered MP4, and brings
+the finished edit back. It is optional: the automated render can be approved
+at the Final Export Gate directly.
+
+**Export** (`/produce#tesseract`, "Export editable project") writes one folder
+per video under `output/editor_projects/<key>/<export id>/`:
+
+- `media/visuals`, `media/narration`, `media/sound`: copies of the exact
+  approved media;
+- `<key>.otio` (OpenTimelineIO) and `<key>.xml` (Final Cut Pro 7 XML): the
+  same timeline, with visuals on V1, narration on A1, then music and
+  sound-effect tracks (overlapping cues on separate tracks);
+- `reference/automated_render.mp4`, for comparison;
+- `thumbnail/`: the approved thumbnail, its render spec and subject image;
+- `exchange.json` (every clip, its source hash, timing and mix volume) and
+  `README.txt`.
+
+Every clip is named with a stable id: `V-<shot id>`, `N-<narration segment
+id>`, `S-<sound requirement id>`. Moving clips and music beds that are shorter
+than their slot repeat, as in the automated render; a short sound effect plays
+once. The export is tied to the exact automated render result, and a new
+render makes it stale.
+
+**Import** ("Import the finished edit") takes the path of the edited video
+(.mp4 or .mov) and, optionally, the edited `.otio`:
+
+- `ffprobe` checks for a video stream at the format's frame size and an audio
+  stream; a failure is refused with the reason;
+- the file is copied into `output/editor_returns/<key>/` and bound to its
+  hash, the export and the automated render it came from;
+- with an edited timeline, each exported clip is reported as kept, moved,
+  retimed, moved and retimed, or removed, and any new clip as added.
+
+The returned edit becomes the candidate at the Final Export Gate in place of
+the automated render. An approval of the automated render stops counting,
+and approving the edit binds its exact bytes. The gate can send an edit back
+with `RETURN_TO_EDITOR`. "Discard the edit" (with a note) makes the automated
+render the candidate again. Exports, imports and discards are logged in
+`output/editor_exchange_history.jsonl`.
+
+**Contract status.** Tesseract's own project format is not known to this
+build, so the export uses the two open timeline formats most editors import.
+`tesseract_exchange_config.json` keeps `round_trip_verified: false` until one
+project has been through Tesseract and back, and the tab says so.
+
+## Publish package and Human Publish Gate (D-142)
+
+For every approved final export, `publish_review.py` assembles the publish
+package, shown on `/produce#publish`:
+
+- the exact rendered video;
+- the approved thumbnail and the exact title from the Final Packaging Gate;
+- a description: the viewer promise, the verified research sources (web URLs
+  only, deduplicated) and an AI-voice disclosure line;
+- category, language, made-for-kids, privacy (private by default), an
+  optional schedule, tags, and the altered/synthetic content flag (on by
+  default).
+
+You can edit the description, tags, privacy, schedule and synthetic flag.
+The title cannot be edited here.
+
+**Approve.** `APPROVE_PUBLISH` checks YouTube's limits:
+
+- title up to 100 characters, with no angle brackets;
+- description up to 5,000 bytes;
+- tags totalling up to 500 characters;
+- a schedule must be in the future, have a time zone and use private
+  privacy.
+
+The approval is bound to the export approval, the final package bundle and
+the research hashes. `HOLD` needs a note.
+
+**Recording the upload.** After an upload the YouTube video id is recorded
+once in `output/published_videos/<key>.publish_record.json`, either by the
+uploader or by hand ("Record a manual upload"). A published video cannot be
+approved or uploaded again.
+
+## YouTube upload (D-143)
+
+`youtube_upload.py` uploads an approved package through the YouTube Data API
+v3:
+
+1. It exchanges the OAuth refresh token for an access token.
+2. It starts a resumable `videos.insert` upload with the exact metadata,
+   including `status.containsSyntheticMedia` and `publishAt`.
+3. It sends the video bytes.
+4. It calls `thumbnails.set`.
+
+**Before uploading** it re-checks the approval and the video and thumbnail
+hashes, and refuses a video that already has a publish record.
+
+**If the thumbnail fails**, the uploaded video is still recorded (with
+`thumbnail_set: false`), so a retry never uploads a duplicate.
+
+**Off by default.** Setting it up takes `youtube_upload.enabled: true` in
+`publish_config.json` plus the three `YOUTUBE_OAUTH_*` values in `.env`.
+Until then, use the manual upload record.
+
+## Paid premium-visual dispatch (D-140)
+
+`visual_dispatch.py` generates variants for a shot that was authorized at
+the Visual Spend Gate. It works from the current generation request and that
+request's brief, and you choose one variant on `/produce#generate`. Choosing
+registers it through `visual_generated_asset_import.register`, marked
+`APP_PROVIDER_DISPATCH`, so assembly and everything after are unchanged.
+
+**When it is allowed.** All of these must hold:
+
+- `active_provider` is set in `visual_provider_config.json`;
+- the provider's endpoint, model, licence and price per image (never
+  guessed) are set;
+- `contract_verified: true`;
+- `VISUAL_PROVIDER_API_KEY` is set;
+- what is already spent on the shot, plus the estimate for
+  `variants_per_shot` variants, stays within the shot's authorized maximum.
+
+**Spend.** Recorded in the per-video budget as soon as it happens, whether
+or not a variant is chosen.
+
+**The built-in adapter** makes still images through the OpenAI-compatible
+images request. A video model needs its own adapter in `ADAPTERS`.
+
+## Paid narration dispatch (D-139)
+
+`narration_dispatch.py` makes the paid provider call itself and hands the
+audio to the existing return registration. Audio QC, the Final Audio Gate and
+the per-video budget then apply unchanged.
+
+**When it is allowed.** All of these must hold:
+
+- the provider contract is verified (`provider_contract` in
+  `narration_render_config.json`; until then the narration request is
+  BLOCKED);
+- `provider_adapter` names an adapter kind, model and voice, the API key
+  variable (`NARRATION_PROVIDER_API_KEY`) and the price per 1,000
+  characters, which is never guessed;
+- the Narration Spend Gate approved the exact current request;
+- the estimate for the segments to render, plus what this narration already
+  cost, stays within the approved worst case.
+
+**Re-recording.** The first dispatch renders every segment. After a
+`REWORK_SEGMENTS` decision at the Final Audio Gate, a dispatch re-records
+only the named segments, as the next attempt within the approved
+regeneration policy. The other segments keep their registered audio.
+
+**Failures.** A provider failure part-way records what was already spent,
+in the dispatch history and in the budget.
+
+**The built-in adapter.** `HTTP_TTS_JSON` posts:
+
+```json
+{"model": "...", "voice_id": "...", "text": "...", "speed": 1.0,
+ "emotion": "...", "intensity": "...", "format": "wav"}
+```
+
+It accepts either an audio response or JSON with base64 `audio`, plus an
+optional `cost_usd` and `job_id`. A provider with another shape needs one
+adapter function in `ADAPTERS`.
+
+**UI.** The buttons are on `/produce`: "Generate narration with the
+provider" on an approved Narration spend item, and "Re-record N segments" on
+a Final audio rework. Each asks for confirmation first.
+
+## Human Visual Plan Gate (D-138)
+
+After the free narration preview is approved, `visual_plan_review.py` builds
+the complete visual plan per video. It holds the paid narration until you
+approve it on `/produce#plan`.
+
+- **Built from:** the approved format plan, using the same requirements as
+  the visual manifest.
+- **Each shot shows:**
+  - its beat, purpose, visual treatment and claims;
+  - its window in the approved preview, taken from the preview's per-beat
+    audio;
+  - the first source tier it will try.
+- **Also shown:** the video's budget (D-136).
+
+| Decision | Effect |
+|---|---|
+| `APPROVE_VISUAL_PLAN` | Bound to the format plan, the preview audio and the plan content. |
+| `REWORK_VISUAL_PLAN` | Needs a note; spend stays held until the format plan is reworked. |
+
+- **Enforcement.** The server refuses ACCEPT at the Narration Spend Gate for
+  a video whose plan is not approved. The workflow stops at
+  `HUMAN_VISUAL_PLAN_GATE`, or at `VISUAL_PLAN_REWORK_REQUIRED` after a
+  rework.
+- **Already-spent videos.** A video whose narration spend was authorized
+  before this gate existed is not pulled back to it.
+- **After the paid narration.** Once it is approved (D-137), the storyboard
+  is retimed to the real audio as before; its shots are the approved plan's
+  beats.
+
+## Human Final Audio Gate (D-137)
+
+Audio QC is automatic: it checks duration, silence, clipping and missing
+files. After it passes, `narration_final_review.py` holds the exact paid
+narration for a human to listen to, segment by segment, on `/produce#audio`.
+
+| Decision | Effect |
+|---|---|
+| `APPROVE_FINAL_AUDIO` | Makes this audio the narration. |
+| `REWORK_SEGMENTS` | Names segments to re-record, with a note; the next provider return replaces them. |
+| `REJECT_AUDIO` | The whole return is unusable; needs a note. |
+
+- **Binding.** An approval is bound to the hashes of the QC report and the
+  timing map, so a new return or a re-run of QC reopens it.
+- **Ready means approved.** The server treats narration audio as ready only
+  once it is approved, so the visual manifest, storyboard and everything
+  timed from the audio wait for it.
+- **Stops.** The workflow stops at `HUMAN_FINAL_AUDIO_GATE`, or at
+  `FINAL_AUDIO_REWORK_REQUIRED` after a rework or reject.
+- **History.** Decisions are appended to `final_narration_history.jsonl`.
 
 ## Slice 13 — narration-bound visual manifest, storyboard and search request
 

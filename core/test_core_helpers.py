@@ -1,4 +1,4 @@
-"""Golden tests for the shared helpers in core (D-114).
+"""Golden tests for the shared helpers in core (D-175).
 
 Stored provenance hashes on disk were produced by the copies these helpers
 replaced, so the outputs below must never change. The expected digests were
@@ -159,6 +159,9 @@ class PinnedPathTests(unittest.TestCase):
         self.assertEqual(model_bridge.FAIR_BRIDGE_FILE, exp2 / "fair_bridge.py")
         self.assertTrue(model_bridge.RUNNER_CONFIG_FILE.is_file())
         self.assertTrue(model_bridge.FAIR_BRIDGE_FILE.is_file())
+        # The billing attestation (D-161) the direct Gemini route checks.
+        self.assertEqual(model_bridge.DIRECT_GEMINI_BILLING_FILE, exp2 / "direct_gemini_billing.json")
+        self.assertTrue(model_bridge.DIRECT_GEMINI_BILLING_FILE.is_file())
         self.assertEqual(model_bridge.DEFAULT_FAIR_REPO, REPO_ROOT.parent / "FAIR Free AI Router")
         self.assertEqual(model_bridge.PROJECT_ENV_FILE, REPO_ROOT / ".env")
 

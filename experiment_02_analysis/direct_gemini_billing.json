@@ -1,0 +1,5 @@
+{
+  "billing_disabled_confirmed": false,
+  "confirmed_on": null,
+  "note": "The direct Gemini route is free only while the Google Cloud project behind DIRECT_GEMINI_API_KEY has NO billing account (D-161). Check it in Google Cloud Console (Billing for that project), then set billing_disabled_confirmed to true and confirmed_on to today's date. While it is false, no direct Gemini call is made: concept generation and the FAIR fallback report DIRECT_GEMINI_BILLING_UNCONFIRMED. Set it back to false if you ever attach billing to that project."
+}

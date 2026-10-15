@@ -515,6 +515,67 @@ class TransformationEngineTests(unittest.TestCase):
 
             self.assertTrue(all(not (output / name).exists() for name in stale_names))
 
+    def test_triage_waits_until_every_mechanism_contributes(self):
+        # D-129: a resumable batch is not a complete stage. Five valid concepts
+        # from m1 alone must not open triage while m2 has none.
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            output = Path(tmp)
+            requests = output / "concept_requests"
+            responses = output / "concept_responses"
+            requests.mkdir()
+            responses.mkdir()
+            for name, value in {
+                "OUTPUT_DIR": output,
+                "REQUESTS_DIR": requests,
+                "RESPONSES_DIR": responses,
+                "CANDIDATES_FILE": output / "concept_candidates.json",
+                "REJECTED_FILE": output / "rejected_concepts.json",
+                "SUMMARY_FILE": output / "summary.json",
+            }.items():
+                stack.enter_context(patch.object(module, name, value))
+            stack.enter_context(
+                patch.object(module, "load_config", return_value={"minimum_candidates_for_triage": 5})
+            )
+            stack.enter_context(
+                patch.object(
+                    module,
+                    "validate_response",
+                    side_effect=lambda response, request, config: {
+                        "accepted": [dict(item) for item in response["concepts"]],
+                        "rejected": [],
+                    },
+                )
+            )
+            contract = module.validation_contract_sha256()
+
+            def write_mechanism(mechanism_id, concepts):
+                request = requests / f"{mechanism_id}.concept_request.json"
+                request.write_text(json.dumps({"mechanism_id": mechanism_id}), encoding="utf-8")
+                if concepts:
+                    (responses / f"{mechanism_id}.json").write_text(
+                        json.dumps({
+                            "mechanism_id": mechanism_id,
+                            "concepts": [{"concept_id": f"{mechanism_id}-c{i}"} for i in range(concepts)],
+                            "response_provenance": {
+                                "request_sha256": module.sha256_file(request),
+                                "validation_contract_sha256": contract,
+                            },
+                        }),
+                        encoding="utf-8",
+                    )
+
+            write_mechanism("m1", 5)
+            write_mechanism("m2", 0)
+            partial = module.run_apply()
+            self.assertEqual(partial["status"], "INCOMPLETE_MECHANISM_COVERAGE")
+            self.assertFalse(partial["ready_for_triage"])
+            self.assertEqual(partial["missing_mechanism_ids"], ["m2"])
+
+            write_mechanism("m2", 1)
+            complete = module.run_apply()
+            self.assertEqual(complete["status"], "CONCEPT_CANDIDATES_READY")
+            self.assertTrue(complete["ready_for_triage"])
+
 
 if __name__ == "__main__":
     unittest.main()

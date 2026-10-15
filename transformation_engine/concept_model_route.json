@@ -1,0 +1,6 @@
+{
+  "route": "direct_gemini",
+  "concepts_per_call": 2,
+  "pause_between_calls_seconds": 10,
+  "note": "Concept generation settings (D-146 to D-151). route: direct_gemini (the human's choice, D-151: the project's DIRECT_GEMINI_API_KEY only, no FAIR, no fallback; free only while the key's Google Cloud project has no billing) or fair (free models through FAIR). concepts_per_call: concepts asked for in one model call. pause_between_calls_seconds: minimum gap between concept calls (65 suits Groq's per-minute limit on the fair route; 10 is enough for Gemini's free tier)."
+}

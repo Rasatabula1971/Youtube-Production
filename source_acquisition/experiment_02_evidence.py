@@ -26,9 +26,7 @@ EXP2_OUTPUT = EXP2_DIR / "output"
 PREPARED_DIR = EXP2_OUTPUT / "profiles_to_complete"
 ENRICHED_DIR = EXP2_OUTPUT / "profiles_enriched"
 INGEST_SCRIPT = EXP2_DIR / "evidence_ingest.py"
-# Started as a module from the project root (D-114). INGEST_SCRIPT names the
-# same file; test_architecture checks they match.
-INGEST_MODULE = "experiment_02_analysis.evidence_ingest"
+INGEST_MODULE = "experiment_02_analysis.evidence_ingest"  # started with python -m from the project root (D-175)
 
 ACQUISITION_ROOT = Path(__file__).resolve().parent / "output" / "experiment_02"
 SUMMARY_FILE = ACQUISITION_ROOT / "summary.json"

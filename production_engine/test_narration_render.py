@@ -433,3 +433,95 @@ class NarrationRenderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def local_config() -> dict:
+    payload = config(verified=True)
+    payload["provider"] = "kokoro_local"
+    payload["provider_contract"] = {
+        "schema_verified": True,
+        "endpoint": None,
+        "documentation_url": "https://huggingface.co/hexgrad/Kokoro-82M",
+        "verified_at": "2026-10-04",
+    }
+    payload["provider_adapter"] = {
+        "kind": "LOCAL_KOKORO", "model": "hexgrad/Kokoro-82M", "voice_id": "af_heart",
+        "api_key_env": None, "price_per_1000_characters_usd": 0.0,
+    }
+    return payload
+
+
+class LocalProviderTests(NarrationRenderTests):
+    """A local renderer verifies its contract without an endpoint and quotes itself $0 (D-168)."""
+
+    def test_local_contract_needs_no_endpoint_but_a_paid_one_does(self) -> None:
+        self.assertTrue(narration_render.provider_is_local(local_config()))
+        self.assertTrue(narration_render.provider_contract_verified(local_config()))
+        paid = config(verified=True)
+        paid["provider_contract"]["endpoint"] = None
+        self.assertFalse(narration_render.provider_contract_verified(paid))
+
+    def test_local_quote_is_valid_and_unlocks_the_spend_gate_at_zero(self) -> None:
+        payload = approved_spec(configured=True)
+        payload["voice_identity"]["provider"] = "kokoro_local"
+        temp = tempfile.TemporaryDirectory()
+        try:
+            path = Path(temp.name) / "approved.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            brief = Path(temp.name) / "brief.json"
+            brief.write_text("{}", encoding="utf-8")
+            with (
+                patch.object(narration_render, "_preview_approved", return_value=True),
+                patch.object(narration_render, "current_brief_for_branch", return_value=(brief, {})),
+            ):
+                request = narration_render.build_render_request(payload, path, local_config())
+            self.assertEqual(request["render_blockers"], [])
+            request_path = Path(temp.name) / "request.json"
+            request_path.write_text(json.dumps(request), encoding="utf-8")
+            quote = narration_render.local_quote(request, request_path, local_config())
+            quote_path = Path(temp.name) / "quote.json"
+            quote_path.write_text(json.dumps(quote), encoding="utf-8")
+            estimate = narration_render.build_cost_estimate(request, request_path, local_config(), quote_path)
+        finally:
+            temp.cleanup()
+        self.assertEqual(estimate["status"], "READY_FOR_SPEND_GATE")
+        self.assertEqual(estimate["worst_case_estimate_usd"], 0.0)
+        self.assertEqual(estimate["provider_quote"]["quote_reference"], narration_render.LOCAL_QUOTE_REFERENCE)
+
+    def test_prepare_writes_the_local_quote_and_refreshes_it_when_the_request_changes(self) -> None:
+        payload = approved_spec(configured=True)
+        payload["voice_identity"]["provider"] = "kokoro_local"
+        temp = tempfile.TemporaryDirectory()
+        try:
+            root = Path(temp.name)
+            approved = root / "approved_voice"
+            approved.mkdir()
+            (approved / "concept-1.long_form.approved_voice_spec.json").write_text(json.dumps(payload), encoding="utf-8")
+            brief = root / "brief.json"
+            brief.write_text("{}", encoding="utf-8")
+            with (
+                patch.object(narration_render, "APPROVED_VOICE_DIR", approved),
+                patch.object(narration_render, "REQUESTS_DIR", root / "requests"),
+                patch.object(narration_render, "QUOTE_TEMPLATES_DIR", root / "templates"),
+                patch.object(narration_render, "QUOTES_DIR", root / "quotes"),
+                patch.object(narration_render, "ESTIMATES_DIR", root / "estimates"),
+                patch.object(narration_render, "SUMMARY_FILE", root / "summary.json"),
+                patch.object(narration_render, "_preview_approved", return_value=True),
+                patch.object(narration_render, "current_brief_for_branch", return_value=(brief, {})),
+            ):
+                first = narration_render.prepare(local_config())
+                quotes = sorted((root / "quotes").glob("*.json"))
+                self.assertEqual(len(quotes), 1)
+                written = json.loads(quotes[0].read_text(encoding="utf-8"))
+                self.assertEqual(written["worst_case_estimate_usd"], 0.0)
+                # A changed request gets a fresh quote bound to the new hash.
+                payload["beats"][0]["immutable_narration"] = "Different words now."
+                payload["beats"][0]["immutable_narration_sha256"] = sha256_text("Different words now.")
+                (approved / "concept-1.long_form.approved_voice_spec.json").write_text(json.dumps(payload), encoding="utf-8")
+                second = narration_render.prepare(local_config())
+                refreshed = json.loads(quotes[0].read_text(encoding="utf-8"))
+        finally:
+            temp.cleanup()
+        self.assertEqual(first["status"], "READY_FOR_SPEND_GATE")
+        self.assertEqual(second["status"], "READY_FOR_SPEND_GATE")
+        self.assertNotEqual(written["render_request_sha256"], refreshed["render_request_sha256"])

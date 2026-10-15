@@ -1,0 +1,94 @@
+/* Accessibility and responsive guarantees (UI-16, D-124). */
+
+/* Primary fill with text contrast of at least 4.5:1 (was 3.35:1). The bright
+   --accent-strong stays for dots, borders and focus accents. */
+:root { --accent-fill: #1960d0; }
+button,
+.button-link { background: var(--accent-fill); }
+.run-button.do_now { background: var(--accent-fill); }
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-fill);
+  color: #fff;
+  font-weight: var(--weight-heavy);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus { transform: none; }
+
+/* Programmatic focus targets (page title, main) do not need a ring. */
+#pageTitle:focus,
+#mainContent:focus { outline: none; box-shadow: none; }
+
+/* Small screens: comfortable touch targets for icon-only controls. */
+@media (max-width: 860px) {
+  .icon-button,
+  .mobile-menu { min-width: 44px; min-height: 44px; }
+}
+
+/* Reduced motion: no transitions, animations or smooth scrolling anywhere. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  button:hover:not(:disabled) { transform: none; }
+}
+
+/* Windows High Contrast / forced colors: keep focus and selection visible. */
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+  .status-badge,
+  .status-chip { border: 1px solid CanvasText; }
+}
+
+/* Web Interface Guidelines QA (UI-18, D-126). */
+html { -webkit-tap-highlight-color: transparent; }
+button,
+.button-link,
+[role="tab"],
+summary,
+label { touch-action: manipulation; }
+
+/* Drawers, the phone menu and log panes keep scroll inside themselves. */
+.job-drawer,
+.sidebar,
+.log-view,
+.tj-log,
+.evidence-drawer-body { overscroll-behavior: contain; }
+
+/* Checkbox labels are the hit target: one generous row, no dead zone. */
+.gate-toggle { min-height: 32px; cursor: pointer; }
+
+/* Native selects: explicit colours so Windows dark mode stays legible. */
+select { background-color: var(--surface-sunken); color: var(--text-primary); }
+
+/* Sections reached by in-page links clear the sticky top bar. */
+.app-view [id] { scroll-margin-top: 96px; }
+
+/* Phones: 44px targets and 16px inputs (no iOS zoom on focus). */
+@media (max-width: 860px), (pointer: coarse) {
+  button,
+  .button-link,
+  [role="tab"],
+  summary,
+  .skip-link,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]) { min-height: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea { font-size: 16px; }
+  .job-summary,
+  .gate-toggle { min-height: 44px; }
+}

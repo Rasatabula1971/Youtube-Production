@@ -186,20 +186,68 @@ invalid viewer-need framing, unsupported gap claims, weak title-clarity output,
 missing research questions, and malformed Source Dependency Tests are rejected
 before the human gate.
 
-### Degraded provider coverage
+### Concept generation settings (D-146 to D-151)
 
-Concept generation is artifact-driven rather than provider-count-driven.
+`transformation_engine/concept_model_route.json` holds three settings:
 
-The system still prepares one request per transferable mechanism, but it no
-longer blocks the entire workflow solely because every provider-backed request
-did not succeed. If the deterministic merge produces a current,
-provenance-valid pool that meets `minimum_candidates_for_triage`, the pool may
-advance to Concept Triage while the batch report records partial mechanism
-coverage and the missing mechanism IDs.
+- **`concepts_per_call`** (currently 2). A mechanism's concepts are generated in
+  several calls of at most this many concepts. Each call sees the working
+  titles and premises of the concepts already accepted and is asked for
+  different ones. Only concepts that pass validation count towards the
+  requested number; one spare call covers a call that returns nothing usable,
+  and concepts from successful calls are kept if a later call fails. The
+  model-run report lists every call. Without the setting, all concepts are
+  requested in one call. Reason: free models dropped `human_framing` and
+  `viewer_need_evidence` when asked for five full concepts at once.
+- **`route`** (currently `"direct_gemini"`, D-151). `"fair"` uses free models through FAIR.
+  `"direct_gemini"` uses the project's `DIRECT_GEMINI_API_KEY` only, with no
+  FAIR and no fallback; it is free only while the key's Google Cloud project
+  has no billing enabled, and it departs from vision §101, so it is a manual
+  override rather than the default.
 
-The default minimum is five candidates, matching one full
-`concepts_per_mechanism` response. Fewer than the minimum remains blocked and
-generation continues.
+- **`pause_between_calls_seconds`** (currently 10 for Gemini; use 65 on the `fair` route). The minimum gap between
+  any two concept calls, across mechanisms and across automatic steps; the
+  time of the last call is kept in `output/concept_call_clock.json`. Groq's
+  free tier limits tokens per minute. A call that FAIR still reports as rate
+  limited waits this long and is retried once (D-148, D-149).
+
+When a call returns concepts that are complete except for `human_framing` and
+`viewer_need_evidence`, one small follow-up call on the same route asks for just
+those two sections for just those concept ids (D-150). The answers are merged in
+and every concept is validated as usual; the report records the completion
+under the call's `section_completion`.
+
+The schema sent to the provider keeps every field bound (drama levels 4–10,
+3–5 opening moments and so on). The prompt also states the cross-field drama
+rules a schema cannot express: target no higher than capacity, and the story
+curve reaching the target. Only the number of concepts in one answer is left
+to the runner.
+
+These settings are outside the validation contract, so changing them does not
+regenerate mechanisms that already validated. Every concept still goes through
+`validate_response()`.
+
+`concept_diagnose.py` sends one mechanism's prompt straight to Groq and saves
+what comes back (error, refused text, finish reason, per-concept validation);
+`--inspect` compares the requests and `--count` asks for fewer concepts.
+
+### Mechanism coverage (D-129)
+
+The system prepares one concept request per transferable mechanism. A batch can
+stop part-way and resume later: validated responses are kept and only missing
+mechanisms are retried.
+
+Concept Triage starts only when the merged pool is current, meets
+`minimum_candidates_for_triage` (default five), **and every requested mechanism
+has contributed at least one validated concept**. Until then:
+- the merge reports `INCOMPLETE_MECHANISM_COVERAGE` with the missing mechanism
+  IDs;
+- concept generation stays the next step;
+- the automatic runner stops with an explanation rather than handing an
+  incomplete pool to the Concept Gate.
+
+A mechanism whose output fails validation is reported with its validation errors
+and rerun on the free route; it is never "repaired" through direct Gemini.
 
 Provider failures remain visible in the batch report; degraded readiness does
 not convert failed model calls into successful ones.

@@ -1,0 +1,7 @@
+{
+  "target_usd": 5.0,
+  "ceiling_usd": 10.0,
+  "confirmed_by_human": true,
+  "note": "Per-video budget confirmed by the operator: $5 target, $10 ceiling. Automatic spend approval stays at or under the target (D-158); above it a person decides, and nothing is authorized above the ceiling.",
+  "confirmed_on": "2026-10-04"
+}

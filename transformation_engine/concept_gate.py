@@ -6,7 +6,9 @@ ACCEPT / REWORK / REJECT / SAVE_IDEA.
 ACCEPT means the human approves the concept as-is. REWORK uses the criteria as
 "keep/change" dimensions: checked criteria are preserved and unchecked criteria
 are the parts to revise. SAVE_IDEA parks the concept for later without sending
-it forward. Only accepted concepts enter the Research Engine handoff.
+it forward. Only accepted concepts enter the Research Engine handoff, each with
+exactly one format: ACCEPT may carry the human's chosen format, and a concept
+generated as "either" otherwise takes the configured default (D-132).
 
 No model or network calls are made.
 """
@@ -18,6 +20,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from transformation_engine.format_resolution import normalize_choice, resolve_format
 from core.hashing import canonical_sha256 as content_sha256, sha256_file as file_sha256
 from core.jsonio import load_json
 
@@ -269,6 +273,9 @@ def validate_decisions(
             }
 
         note = str(decision.get("note", "") or "").strip()
+        chosen_format = normalize_choice(decision.get("format"))
+        if chosen_format and value != "ACCEPT":
+            raise ValueError(f"A format can only be chosen when accepting {concept_id}")
 
         mapped[concept_id] = {
             "concept_id": concept_id,
@@ -276,6 +283,8 @@ def validate_decisions(
             "criteria": normalized_criteria,
             "note": note,
         }
+        if chosen_format:
+            mapped[concept_id]["format"] = chosen_format
 
     missing = sorted(expected - set(mapped))
     if missing:
@@ -327,6 +336,13 @@ def apply_gate(
         }
 
         if decision["decision"] == "ACCEPT":
+            resolution = resolve_format(
+                concept.get("format_intent"),
+                chosen=decision.get("format"),
+                default=config.get("either_default_format"),
+            )
+            concept["format_intent"] = resolution["format_intent"]
+            concept["format_resolution"] = resolution
             buckets["accepted"].append(concept)
         elif decision["decision"] == "REWORK":
             buckets["rework"].append(concept)
@@ -375,6 +391,7 @@ def apply_gate(
                 "channel_fit": concept.get("channel_fit", {}),
                 "title_clarity_test": concept.get("title_clarity_test", {}),
                 "format_intent": concept.get("format_intent"),
+                "format_resolution": concept.get("format_resolution", {}),
                 "mechanism_application": concept.get("mechanism_application"),
                 "transformation_method": concept.get("transformation_method"),
                 "research_questions": concept.get("research_questions", []),
@@ -386,6 +403,7 @@ def apply_gate(
         "notes": [
             "Working titles are not final packaging.",
             "Research must independently verify factual claims before scripting.",
+            "Each concept carries one resolved format_intent; downstream writes one script branch.",
         ],
     }
 

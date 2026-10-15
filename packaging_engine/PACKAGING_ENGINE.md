@@ -548,6 +548,29 @@ FINAL_PACKAGING_APPROVED → Format planning (re-enabled)
 format it lists every pair, PASS first, with its diagnostics, findings, Viewer
 Promise and opening hook.
 
+### Title shortlist (D-134)
+
+The gate leads with a shortlist of 2–3 of the five titles, built by
+`title_shortlist.py` from the pair validations. No model is called and no
+viral score is produced. Titles are ranked in this order:
+
+1. the title direction chosen at the Title Direction Gate;
+2. more PASS pairs, meaning the title works with more thumbnails;
+3. the mean of `title_strength`, `clarity`, `credibility` and
+   `promise_alignment` over its PASS pairs;
+4. `title_id`, so ties are stable.
+
+A title with no PASS pair is not eligible. A title whose content words
+overlap a shortlisted one at or above `near_duplicate_threshold` (0.5) never
+takes a place. When fewer than `minimum` (2) qualify, the shortfall is stated
+and not filled.
+
+Each entry carries its reason, and each package is marked
+`in_title_shortlist`. Shortlisted packages are listed first and the rest stay
+reachable. Accepting a title outside the shortlist needs a note, and the
+decision records `title_in_shortlist`. Settings live under `title_shortlist`
+in `final_packaging_gate_config.json`.
+
 ### Accept
 
 A package can be accepted only when:

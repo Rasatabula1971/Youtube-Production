@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from core.pipeline_integrity import atomic_write_json
+from production_engine import video_budget
 from production_engine.final_sound_plan import PLAN_DIR, plan_is_current
 from core.hashing import sha256_file
 from core.jsonio import load_json
@@ -220,6 +221,16 @@ def register(
         },
     }
     path = _resolution_path(plan, requirement)
+    # Sound is bought outside the app, so the cost is recorded, not reserved;
+    # an overrun of the per-video ceiling shows in the budget (D-136).
+    video_budget.record_actual(
+        video=video_budget.video_id(plan.get("concept_id"), plan.get("format")),
+        category="sound",
+        ref=f"sound:{requirement.get('requirement_id') or requirement_id}",
+        total_usd=cost,
+        note=source_label,
+        ledger=video_budget.ledger_in(REGISTRY_DIR.parent),
+    )
     atomic_write_json(path, resolution)
     _cleanup_old_assets(plan, requirement, keep=destination)
     return resolution

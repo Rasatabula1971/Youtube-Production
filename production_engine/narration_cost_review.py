@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from core.pipeline_integrity import atomic_write_json
+from core.pipeline_integrity import atomic_write_json, named_lock
+from production_engine import video_budget
 from production_engine.narration_render import (
     ESTIMATES_DIR,
     OUTPUT_DIR,
@@ -284,7 +285,17 @@ def apply_payload(
         f"{artifact_key(request['concept_id'], request['format'])}"
         ".approved_narration_spend.json"
     )
+    budget_video = video_budget.video_id(request["concept_id"], request["format"])
     if decision == "ACCEPT":
+        # The approved worst case is this video's narration reservation (D-136).
+        video_budget.reserve(
+            video=budget_video,
+            category="narration",
+            ref="narration",
+            amount_usd=float(request["worst_case_estimate_usd"]),
+            note="Narration spend approved at the worst-case estimate",
+            ledger=video_budget.ledger_in(APPROVED_DIR.parent),
+        )
         estimate = load_json(source)
         payload = {
             **estimate,
@@ -297,8 +308,13 @@ def apply_payload(
         APPROVED_DIR.mkdir(parents=True, exist_ok=True)
         atomic_write_json(approved_path, payload)
         summary["approved_narration_spend"] = str(approved_path)
-    elif approved_path.exists():
-        approved_path.unlink()
+    else:
+        video_budget.release(
+            video=budget_video, category="narration", ref="narration", note=decision,
+            ledger=video_budget.ledger_in(APPROVED_DIR.parent),
+        )
+        if approved_path.exists():
+            approved_path.unlink()
 
     SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(SUMMARY_FILE, summary)
@@ -418,6 +434,16 @@ def apply_action(
     note: str | None = None,
 ) -> dict[str, Any]:
     key = artifact_key(concept_id, format)
+    # Two decisions on the same video at once (two tabs, or a person and the
+    # gate policy) must not interleave reserve/release with the approval file
+    # (audit 2026-10-04).
+    with named_lock(f"narration_spend_gate:{key}"):
+        return _apply_action(key, concept_id, format, decision, criteria, note)
+
+
+def _apply_action(
+    key: str, concept_id: str, format: str, decision: str, criteria: dict[str, Any], note: str | None
+) -> dict[str, Any]:
     request_path = (
         REVIEW_REQUESTS_DIR / f"{key}.narration_spend_review_request.json"
     )

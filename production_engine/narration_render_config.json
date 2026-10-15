@@ -1,10 +1,11 @@
 {
-  "provider": "higgsfield",
+  "provider": "kokoro_local",
   "provider_contract": {
-    "schema_verified": false,
+    "schema_verified": true,
     "endpoint": null,
-    "documentation_url": null,
-    "verified_at": null
+    "documentation_url": "https://huggingface.co/hexgrad/Kokoro-82M",
+    "verified_at": "2026-10-04",
+    "note": "Local renderer (D-168): the Kokoro-82M weights are Apache-2.0; voices are listed in the model card. No network call, no charge."
   },
   "max_regenerations_per_segment": 2,
   "quote_currency": "USD",
@@ -16,5 +17,33 @@
     "unexpected_silence_seconds": 0.8,
     "silence_noise_db": -50.0,
     "clipping_peak_dbfs": -0.1
+  },
+  "provider_adapter": {
+    "kind": "LOCAL_KOKORO",
+    "model": "hexgrad/Kokoro-82M",
+    "voice_id": "af_heart",
+    "api_key_env": null,
+    "price_per_1000_characters_usd": 0.0,
+    "audio_format": "wav",
+    "timeout_seconds": 600
+  },
+  "paid_provider_example": {
+    "provider": "higgsfield",
+    "provider_contract": {
+      "schema_verified": false,
+      "endpoint": null,
+      "documentation_url": null,
+      "verified_at": null
+    },
+    "provider_adapter": {
+      "kind": "HTTP_TTS_JSON",
+      "model": "",
+      "voice_id": "",
+      "api_key_env": "NARRATION_PROVIDER_API_KEY",
+      "price_per_1000_characters_usd": null,
+      "audio_format": "wav",
+      "timeout_seconds": 120
+    },
+    "note": "A paid HTTP provider. To switch, copy these three keys over the ones above, verify the contract (schema_verified, endpoint, documentation_url, verified_at), set the price and the API key variable, and set voice_performance_config.json provider and voice_identity to match."
   }
 }

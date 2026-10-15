@@ -39,7 +39,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from experiment_01_discovery.evidence_quality import (
+# Importers outside this folder (the radar and the opportunity intake jobs)
+# reach this module as a package; its sibling imports are bare names.
+_HERE = Path(__file__).resolve().parent
+
+from experiment_01_discovery.evidence_quality import (  # noqa: E402
     RELEVANCE_ADJACENT,
     RELEVANCE_OFF_INTENT,
     RELEVANCE_ON_INTENT,
@@ -48,7 +52,7 @@ from experiment_01_discovery.evidence_quality import (
     RELIABILITY_UNAVAILABLE,
     annotate_evidence_quality,
 )
-from experiment_01_discovery.market_intelligence import (
+from experiment_01_discovery.market_intelligence import (  # noqa: E402
     aggregate_topic_evidence,
     append_snapshots,
     build_query_competition_profile,

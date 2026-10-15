@@ -31,15 +31,13 @@ EXP15_DIR = OUTPUT_ROOT / "experiment_01_5"
 
 STATE_FILE = OUTPUT_ROOT / "opportunity_research_state.json"
 EXP13_SCRIPT = HERE / "experiment_01_3.py"
+EXP13_MODULE = "experiment_01_discovery.experiment_01_3"  # started with python -m from the project root (D-175)
 EXP14_SCRIPT = HERE / "experiment_01_4.py"
+EXP14_MODULE = "experiment_01_discovery.experiment_01_4"  # started with python -m from the project root (D-175)
 EXP15_SCRIPT = HERE / "experiment_01_5.py"
+EXP15_MODULE = "experiment_01_discovery.experiment_01_5"  # started with python -m from the project root (D-175)
 VIDIQ_SCRIPT = HERE / "vidiq_opportunity_enrichment.py"
-# Child steps start as modules from the project root (D-114). The *_SCRIPT
-# paths above name the same files; test_architecture checks they match.
-EXP13_MODULE = "experiment_01_discovery.experiment_01_3"
-EXP14_MODULE = "experiment_01_discovery.experiment_01_4"
-EXP15_MODULE = "experiment_01_discovery.experiment_01_5"
-VIDIQ_MODULE = "experiment_01_discovery.vidiq_opportunity_enrichment"
+VIDIQ_MODULE = "experiment_01_discovery.vidiq_opportunity_enrichment"  # started with python -m from the project root (D-175)
 VIDIQ_DOCTOR_FILE = OUTPUT_ROOT / "vidiq" / "doctor.json"
 VIDIQ_ENRICHMENT_FILE = OUTPUT_ROOT / "vidiq" / "opportunity_enrichment.json"
 EXP14_CONFIG = HERE / "experiment_01_4_config.json"
