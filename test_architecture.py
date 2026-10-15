@@ -13,9 +13,10 @@ These pin the rules that make module names stable:
 
 The checks are static and read the files git tracks (what CI sees), so an
 untracked local folder such as a virtualenv never trips them. They are
-deliberately strict: a ``*_MODULE`` constant needs a matching ``*_SCRIPT``,
-and any "PYTHONPATH" literal or command list naming a ``.py`` file in
-non-test code fails. Code that builds names at runtime is outside what a
+deliberately strict: a ``*_MODULE`` constant needs a matching path constant
+(``<NAME>_SCRIPT``, or ``<NAME>`` itself), a "PYTHONPATH" literal fails unless
+it only reads or removes the variable (a comparison, or ``.get``/``.pop``),
+and a command list naming a ``.py`` file in non-test code fails. Code that builds names at runtime is outside what a
 static check can see.
 
 Run from the project root:  python -m unittest test_architecture
@@ -212,8 +213,22 @@ class _SysPathAliases:
         return isinstance(node, ast.Name) and node.id in self.path_names
 
 
-def sys_path_changes(tree: ast.Module, *, allow_pythonpath_literal: bool = False) -> list[int]:
+def _pythonpath_reads(tree: ast.Module) -> set[int]:
+    """ids of "PYTHONPATH" literals that only read or remove the variable:
+    a comparison (`k != "PYTHONPATH"`, `"PYTHONPATH" in env`) or the key of a
+    `.get(...)` / `.pop(...)` call. Setting it stays forbidden."""
+    reads: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            reads.update(id(part) for part in [node.left, *node.comparators] if isinstance(part, ast.Constant))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in {"get", "pop"}:
+            reads.update(id(arg) for arg in node.args[:1] if isinstance(arg, ast.Constant))
+    return reads
+
+
+def sys_path_changes(tree: ast.Module) -> list[int]:
     aliases = _SysPathAliases(tree)
+    pythonpath_reads = _pythonpath_reads(tree)
     lines: list[int] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
@@ -230,7 +245,7 @@ def sys_path_changes(tree: ast.Module, *, allow_pythonpath_literal: bool = False
                 base = target.value if isinstance(target, ast.Subscript) else target
                 if aliases.is_path(base):
                     lines.append(node.lineno)
-        elif isinstance(node, ast.Constant) and node.value == "PYTHONPATH" and not allow_pythonpath_literal:
+        elif isinstance(node, ast.Constant) and node.value == "PYTHONPATH" and id(node) not in pythonpath_reads:
             lines.append(node.lineno)
     return lines
 
@@ -400,7 +415,7 @@ class ArchitectureGuardTests(unittest.TestCase):
             f"{relative(path)}:{line}"
             for path in python_files()
             if relative(path) != FAIR_BRIDGE
-            for line in sys_path_changes(parse(path), allow_pythonpath_literal=path.name.startswith("test_"))
+            for line in sys_path_changes(parse(path))
         ]
         self.assertEqual(offenders, [], "sys.path / PYTHONPATH changes")
 

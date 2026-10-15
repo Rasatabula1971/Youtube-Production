@@ -16,7 +16,7 @@ It writes nothing the pipeline reads; the report goes to
 from FAIR's .env (GROQ_API_KEY), never prints it, and calls only the free
 Groq endpoint.
 
-    python transformation_engine/concept_diagnose.py --mechanism specificity
+    python -m transformation_engine.concept_diagnose --mechanism specificity
 """
 
 from __future__ import annotations

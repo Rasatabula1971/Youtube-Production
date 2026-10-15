@@ -5464,10 +5464,16 @@ correct pattern in one gate was never shared.
   which changes to the project root and starts
   `python -m opportunity_engine.scheduled_tick`. A task registered before this
   change must be registered again once.
-- Two guard rules were relaxed for #137: the `PYTHONPATH` literal rule applies
-  to non-test code (a test may remove `PYTHONPATH` from a child environment),
-  and a `*_MODULE` launch constant may pair with a path constant named without
-  `_SCRIPT`.
+- Two guard rules were relaxed for #137: a `PYTHONPATH` literal is allowed
+  where it only reads or removes the variable (a comparison, or `.get`/`.pop`),
+  since a test removes it from a child environment; setting it still fails in
+  any file. And a `*_MODULE` launch constant may pair with a path constant
+  named without `_SCRIPT`.
+- Windows leftover-job recovery (#137's D-171) recognised a job's process by
+  the `.py` script in its saved command. With `python -m` there is none, so it
+  now looks for the module after `-m`, and still accepts the script name for a
+  job saved before this change. Without this, a job left running after a UI
+  crash on Windows was never stopped. Found in the port's review; tested.
 
 ## D-176 — What the core package holds, and what stays outside it
 

@@ -167,8 +167,8 @@ def research_acquisition_message() -> str:
             + " Retry Continue Automatically: those questions are searched again, also as short "
             "keywords; a question still without a source after the configured rounds is set "
             "aside and waived at the Research Gate with a note (D-163). If it keeps failing, "
-            "check the search backends with: python "
-            "source_acquisition/agent_reach_adapter.py --mode doctor (Exa needs Agent Reach's "
+            "check the search backends with: python -m "
+            "source_acquisition.agent_reach_adapter --mode doctor (Exa needs Agent Reach's "
             "mcporter on PATH)."
         )
     return (
