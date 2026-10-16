@@ -6,26 +6,73 @@
   "maximum_plan_searches": 30,
   "search_order": "viewCount",
   "lookback_days": 1825,
-  "motorsport_context_terms": [
-    "f1",
-    "formula 1",
-    "formula one",
-    "motorsport",
-    "race car",
-    "racecar",
-    "racing",
-    "grand prix",
-    "pit stop",
-    "mclaren",
-    "ferrari",
-    "red bull",
-    "mercedes",
-    "aston martin",
-    "alpine",
-    "williams",
-    "sauber",
-    "haas"
-  ],
+  "niche_context_terms": {
+    "automotive_racing": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "race car",
+      "racecar",
+      "racing",
+      "grand prix",
+      "pit stop",
+      "mclaren",
+      "ferrari",
+      "red bull",
+      "mercedes",
+      "aston martin",
+      "alpine",
+      "williams",
+      "sauber",
+      "haas"
+    ],
+    "everyday_science": [
+      "science",
+      "physics",
+      "engineering",
+      "explained",
+      "explainer",
+      "how",
+      "why",
+      "works",
+      "mechanism",
+      "chemistry",
+      "biology",
+      "experiment",
+      "slow motion",
+      "inside"
+    ]
+  },
+  "niche_exclude_title_terms": {
+    "everyday_science": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "grand prix",
+      "race car",
+      "racecar",
+      "racing",
+      "pit stop",
+      "nascar",
+      "indycar",
+      "power unit",
+      "how to",
+      "tutorial",
+      "repair",
+      "review",
+      "unboxing",
+      "buying guide",
+      "asmr",
+      "compilation",
+      "reaction",
+      "prank",
+      "music video",
+      "lyrics",
+      "cover"
+    ]
+  },
   "exclude_title_terms": [
     "sim racing",
     "simracing",
@@ -118,6 +165,164 @@
         "pitstop"
       ],
       "niche": "automotive_racing"
+    },
+    "tyre_grip": {
+      "query_root": "tire grip",
+      "match_terms": [
+        "tire",
+        "tires",
+        "tyre",
+        "tyres",
+        "traction"
+      ],
+      "niche": "everyday_science"
+    },
+    "animal_abilities": {
+      "query_root": "animal physics",
+      "match_terms": [
+        "animal",
+        "animals",
+        "hummingbird",
+        "hummingbirds",
+        "gecko",
+        "geckos",
+        "bird",
+        "birds",
+        "insect",
+        "insects",
+        "bee",
+        "bees",
+        "spider",
+        "spiders",
+        "cat",
+        "cats",
+        "shark",
+        "sharks"
+      ],
+      "niche": "everyday_science"
+    },
+    "household_appliances": {
+      "query_root": "refrigerator",
+      "match_terms": [
+        "refrigerator",
+        "refrigerators",
+        "fridge",
+        "fridges",
+        "microwave",
+        "microwaves",
+        "washing machine",
+        "dishwasher",
+        "air conditioner",
+        "air conditioning",
+        "toaster",
+        "vacuum cleaner",
+        "kettle",
+        "oven"
+      ],
+      "niche": "everyday_science"
+    },
+    "musical_acoustics": {
+      "query_root": "sound physics",
+      "match_terms": [
+        "sound",
+        "sounds",
+        "acoustic",
+        "acoustics",
+        "resonance",
+        "guitar",
+        "guitars",
+        "piano",
+        "violin",
+        "drum",
+        "drums",
+        "steelpan",
+        "steel pan",
+        "instrument",
+        "instruments",
+        "speaker",
+        "speakers"
+      ],
+      "niche": "everyday_science"
+    },
+    "road_cars": {
+      "query_root": "car engine",
+      "match_terms": [
+        "car",
+        "cars",
+        "engine",
+        "engines",
+        "brake",
+        "brakes",
+        "abs",
+        "airbag",
+        "airbags",
+        "transmission",
+        "clutch",
+        "battery",
+        "hybrid",
+        "electric car"
+      ],
+      "niche": "everyday_science"
+    },
+    "weather_storms": {
+      "query_root": "lightning",
+      "match_terms": [
+        "weather",
+        "storm",
+        "storms",
+        "lightning",
+        "thunder",
+        "hurricane",
+        "hurricanes",
+        "tornado",
+        "tornadoes",
+        "rain",
+        "cloud",
+        "clouds",
+        "snow",
+        "hail",
+        "wind"
+      ],
+      "niche": "everyday_science"
+    },
+    "earth_oceans": {
+      "query_root": "ocean waves",
+      "match_terms": [
+        "ocean",
+        "oceans",
+        "sea",
+        "wave",
+        "waves",
+        "tide",
+        "tides",
+        "volcano",
+        "volcanoes",
+        "earthquake",
+        "earthquakes",
+        "sky",
+        "sun",
+        "moon",
+        "rainbow"
+      ],
+      "niche": "everyday_science"
+    },
+    "aircraft_wings": {
+      "query_root": "airplane wing",
+      "match_terms": [
+        "airplane",
+        "airplanes",
+        "aeroplane",
+        "plane",
+        "planes",
+        "aircraft",
+        "jet",
+        "jets",
+        "wing",
+        "wings",
+        "helicopter",
+        "jet engine"
+      ],
+      "niche": "everyday_science"
     }
   },
   "query_families": [
@@ -145,5 +350,33 @@
       "family": "rules_loopholes",
       "template": "{root} rules banned"
     }
-  ]
+  ],
+  "query_families_by_niche": {
+    "everyday_science": [
+      {
+        "family": "how_it_works",
+        "template": "how {root} works"
+      },
+      {
+        "family": "science_explained",
+        "template": "{root} science explained"
+      },
+      {
+        "family": "physics",
+        "template": "{root} physics"
+      },
+      {
+        "family": "hidden_mechanism",
+        "template": "{root} inside"
+      },
+      {
+        "family": "slow_motion",
+        "template": "{root} slow motion"
+      },
+      {
+        "family": "myth_misconception",
+        "template": "{root} myth"
+      }
+    ]
+  }
 }

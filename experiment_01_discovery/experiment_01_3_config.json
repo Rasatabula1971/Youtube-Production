@@ -7,26 +7,73 @@
   "search_orders": [
     "viewCount"
   ],
-  "motorsport_context_terms": [
-    "f1",
-    "formula 1",
-    "formula one",
-    "motorsport",
-    "race car",
-    "racecar",
-    "racing",
-    "grand prix",
-    "pit stop",
-    "mclaren",
-    "ferrari",
-    "red bull",
-    "mercedes",
-    "aston martin",
-    "alpine",
-    "williams",
-    "sauber",
-    "haas"
-  ],
+  "niche_context_terms": {
+    "automotive_racing": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "race car",
+      "racecar",
+      "racing",
+      "grand prix",
+      "pit stop",
+      "mclaren",
+      "ferrari",
+      "red bull",
+      "mercedes",
+      "aston martin",
+      "alpine",
+      "williams",
+      "sauber",
+      "haas"
+    ],
+    "everyday_science": [
+      "science",
+      "physics",
+      "engineering",
+      "explained",
+      "explainer",
+      "how",
+      "why",
+      "works",
+      "mechanism",
+      "chemistry",
+      "biology",
+      "experiment",
+      "slow motion",
+      "inside"
+    ]
+  },
+  "niche_exclude_title_terms": {
+    "everyday_science": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "grand prix",
+      "race car",
+      "racecar",
+      "racing",
+      "pit stop",
+      "nascar",
+      "indycar",
+      "power unit",
+      "how to",
+      "tutorial",
+      "repair",
+      "review",
+      "unboxing",
+      "buying guide",
+      "asmr",
+      "compilation",
+      "reaction",
+      "prank",
+      "music video",
+      "lyrics",
+      "cover"
+    ]
+  },
   "topics": [
     {
       "topic": "gearbox_transmission",
@@ -174,6 +221,236 @@
         "F1 pit stop #shorts"
       ],
       "niche": "automotive_racing"
+    },
+    {
+      "topic": "tyre_grip",
+      "queries": [
+        "how tires grip the road"
+      ],
+      "match_terms": [
+        "tire",
+        "tires",
+        "tyre",
+        "tyres",
+        "traction"
+      ],
+      "expansion_queries": [
+        "tire science explained"
+      ],
+      "short_expansion_queries": [
+        "tire science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "animal_abilities",
+      "queries": [
+        "animal physics explained"
+      ],
+      "match_terms": [
+        "animal",
+        "animals",
+        "hummingbird",
+        "hummingbirds",
+        "gecko",
+        "geckos",
+        "bird",
+        "birds",
+        "insect",
+        "insects",
+        "bee",
+        "bees",
+        "spider",
+        "spiders",
+        "cat",
+        "cats",
+        "shark",
+        "sharks"
+      ],
+      "expansion_queries": [
+        "how hummingbirds fly"
+      ],
+      "short_expansion_queries": [
+        "animal physics #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "household_appliances",
+      "queries": [
+        "how a refrigerator works"
+      ],
+      "match_terms": [
+        "refrigerator",
+        "refrigerators",
+        "fridge",
+        "fridges",
+        "microwave",
+        "microwaves",
+        "washing machine",
+        "dishwasher",
+        "air conditioner",
+        "air conditioning",
+        "toaster",
+        "vacuum cleaner",
+        "kettle",
+        "oven"
+      ],
+      "expansion_queries": [
+        "how household appliances work"
+      ],
+      "short_expansion_queries": [
+        "how appliances work #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "musical_acoustics",
+      "queries": [
+        "physics of sound explained"
+      ],
+      "match_terms": [
+        "sound",
+        "sounds",
+        "acoustic",
+        "acoustics",
+        "resonance",
+        "guitar",
+        "guitars",
+        "piano",
+        "violin",
+        "drum",
+        "drums",
+        "steelpan",
+        "steel pan",
+        "instrument",
+        "instruments",
+        "speaker",
+        "speakers"
+      ],
+      "expansion_queries": [
+        "how musical instruments make sound"
+      ],
+      "short_expansion_queries": [
+        "sound physics #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "road_cars",
+      "queries": [
+        "how car engines work"
+      ],
+      "match_terms": [
+        "car",
+        "cars",
+        "engine",
+        "engines",
+        "brake",
+        "brakes",
+        "abs",
+        "airbag",
+        "airbags",
+        "transmission",
+        "clutch",
+        "battery",
+        "hybrid",
+        "electric car"
+      ],
+      "expansion_queries": [
+        "car science explained"
+      ],
+      "short_expansion_queries": [
+        "car science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "weather_storms",
+      "queries": [
+        "weather science explained"
+      ],
+      "match_terms": [
+        "weather",
+        "storm",
+        "storms",
+        "lightning",
+        "thunder",
+        "hurricane",
+        "hurricanes",
+        "tornado",
+        "tornadoes",
+        "rain",
+        "cloud",
+        "clouds",
+        "snow",
+        "hail",
+        "wind"
+      ],
+      "expansion_queries": [
+        "how lightning works"
+      ],
+      "short_expansion_queries": [
+        "weather science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "earth_oceans",
+      "queries": [
+        "earth science explained"
+      ],
+      "match_terms": [
+        "ocean",
+        "oceans",
+        "sea",
+        "wave",
+        "waves",
+        "tide",
+        "tides",
+        "volcano",
+        "volcanoes",
+        "earthquake",
+        "earthquakes",
+        "sky",
+        "sun",
+        "moon",
+        "rainbow"
+      ],
+      "expansion_queries": [
+        "why the sky is blue"
+      ],
+      "short_expansion_queries": [
+        "earth science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "aircraft_wings",
+      "queries": [
+        "how airplanes fly"
+      ],
+      "match_terms": [
+        "airplane",
+        "airplanes",
+        "aeroplane",
+        "plane",
+        "planes",
+        "aircraft",
+        "jet",
+        "jets",
+        "wing",
+        "wings",
+        "helicopter",
+        "jet engine"
+      ],
+      "expansion_queries": [
+        "airplane engineering explained"
+      ],
+      "short_expansion_queries": [
+        "airplane science #shorts"
+      ],
+      "niche": "everyday_science"
     }
   ],
   "wide_age_tolerance_days": 30,

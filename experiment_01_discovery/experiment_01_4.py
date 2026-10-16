@@ -21,7 +21,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from experiment_01_discovery.experiment_01_3 import classify_topic_relevance
+from experiment_01_discovery.experiment_01_3 import (
+    LEGACY_CONTEXT_NICHE,
+    check_niche_terms,
+    classify_topic_relevance,
+    niche_context_terms,
+    niche_exclude_terms,
+)
 from experiment_01_discovery.youtube_discovery import (
     age_days,
     api_get,
@@ -71,7 +77,6 @@ def load_config() -> dict[str, Any]:
         "maximum_plan_searches",
         "search_order",
         "lookback_days",
-        "motorsport_context_terms",
         "exclude_title_terms",
         "topic_definitions",
         "query_families",
@@ -81,14 +86,26 @@ def load_config() -> dict[str, Any]:
     if missing:
         raise SystemExit("Experiment 01.4 config is missing: " + ", ".join(missing))
 
+    niches = set()
     for topic, definition in config["topic_definitions"].items():
         niche = str(definition.get("niche") or "").strip()
         if not niche:
             raise SystemExit(
                 f"Experiment 01.4 topic '{topic}' is missing required niche."
             )
+        niches.add(niche)
+    try:
+        check_niche_terms(config, niches)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     return config
+
+
+def query_families(config: dict[str, Any], niche: str) -> list[dict[str, Any]]:
+    """A niche's own query families, else the shared list (D-178)."""
+    by_niche = config.get("query_families_by_niche") or {}
+    return list(by_niche.get(niche) or config["query_families"])
 
 
 def extract_topic_cells(topic_velocity: dict[str, Any]) -> list[dict[str, Any]]:
@@ -168,7 +185,7 @@ def build_tasks_for_cell(
     duration_filters = list(config["duration_filters"].get(fmt, []))
     tasks: list[dict[str, Any]] = []
 
-    for family in config["query_families"]:
+    for family in query_families(config, niche):
         family_name = str(family["family"])
         template = str(family["template"])
         query = template.format(root=root).strip()
@@ -454,11 +471,13 @@ def build_candidates(
             if match["format_candidate"] != fmt:
                 continue
             topic_def = config["topic_definitions"].get(topic, {})
+            niche = str(topic_def.get("niche") or LEGACY_CONTEXT_NICHE)
             result = classify_topic_relevance(
                 title,
                 list(topic_def.get("match_terms", [])),
-                list(config["motorsport_context_terms"]),
-                list(config["exclude_title_terms"]),
+                niche_context_terms(config, niche),
+                niche_exclude_terms(config, niche),
+                niche=niche,
             )
             topic_validation[topic] = result
             if result["topic_relevance"] == "ON_TOPIC":

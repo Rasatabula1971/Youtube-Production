@@ -5809,3 +5809,88 @@ Checked against `c0adb20`:
     for a baseline.
   - The baseline is a median of lifetime views from uploads aged 15 days to
     months.
+
+## D-178 — Two niches in the historical lane: Science Inside joins F1 in one cohort
+
+**Status:** Accepted (16 Oct 2026). PR 2 of the M1 closure (D-177, criterion 1).
+
+**Context.**
+- The historical lane (01.3 → 01.4 → 01.5) could only ever find motorsport:
+  - all 8 topics were `automotive_racing`;
+  - every title had to contain one of 18 motorsport words;
+  - one 01.4 query family was "{root} rules banned".
+- 01.5 also deleted the earlier human gate decision and `approved_study_set.json`
+  whenever it rebuilt the handoff, so a new cohort would have erased the gate
+  history.
+
+**Decision.**
+- **Each niche has its own title rules.**
+  - `niche_context_terms` gives the words a title must contain, per niche.
+  - `niche_exclude_title_terms` adds exclusions per niche, on top of the
+    shared `exclude_title_terms`.
+  - `query_families_by_niche` in 01.4 lets a niche use its own query
+    families; any other niche uses the shared list.
+  - Every topic is checked against its own niche's rules, in 01.3 and in 01.4.
+  - A config that still has only `motorsport_context_terms` keeps working for
+    the motorsport niche.
+- **F1 is unchanged.**
+  - The same 18 context words, the same 8 shared exclusions and the same 8
+    topics.
+  - The same query families, field names and reasons
+    (`motorsport_context_matches`, `missing_motorsport_context_in_title`,
+    `title_topic_and_motorsport_context`).
+  - A test hashes 400 F1 topic/title results and requires the value computed
+    on `a10af38` before this change.
+- **`everyday_science` (Science Inside) has 8 topics:**
+  - `tyre_grip`, `animal_abilities`, `household_appliances`,
+    `musical_acoustics`, `road_cars`, `weather_storms`, `earth_oceans`,
+    `aircraft_wings`;
+  - each has strict, expansion and Shorts queries.
+  - **Context words:** science, physics, engineering, explained, explainer,
+    how, why, works, mechanism, chemistry, biology, experiment, slow motion,
+    inside.
+  - **Exclusions:**
+    - motorsport words, including "power unit", so the two niches stay apart;
+    - how-to, tutorial, repair, review, unboxing, buying guide, ASMR,
+      compilation, reaction, prank, music video, lyrics and cover.
+  - **Query families:**
+    - how {root} works;
+    - {root} science explained;
+    - {root} physics;
+    - {root} inside;
+    - {root} slow motion;
+    - {root} myth.
+  - **Left out for now:** the "your body" family. It needs a medical-advice
+    exclusion first (R10).
+  - **Topic ids avoid generic words** such as "physics" or "science". The
+    radar's historical alignment matches any 4+ letter word of a topic id.
+  - Non-F1 results use neutral names: `niche_context_matches`,
+    `missing_niche_context_in_title` and `title_topic_and_niche_context`.
+- **01.5 archives, never deletes.** When 01.5 rebuilds, an earlier human
+  decision moves to `experiment_01_5/archive/gate_<UTC time>/`, together with
+  the approved study set and the study set and packets it was made against
+  (D-157's rule). The rebuilt handoff still starts the gate fresh.
+- **Running it is the owner's step.** The next "Discover proven demand" or
+  "Run / Resume 01.3 Auto Discovery":
+  - archives the current cohort;
+  - discovers both niches.
+
+  Before clicking, check the ACTIVE study set:
+  - **From your own video, topic or a radar pick:** the gate re-creates
+    `approved_study_set.json` from it.
+  - **A historical F1 topic:** the new cohort ends that approval (archived,
+    not lost). Finish that video first.
+- **Quota.**
+  - Discovery: 51 strict API searches (5,100 units), capped at 60 searches
+    (6,000 units), with yt-dlp after that.
+  - 01.4: its 30 searches run on a later day.
+  - With the radar, the busiest day stays under 8,000 units.
+- **Same bars for both niches.** `minimum_views` (500,000) and the 3-channel
+  minimum are unchanged. A Science Inside cell that falls short is evidence,
+  not a reason to lower a bar now.
+
+**Consequences.**
+- 01.4's 30-search budget is shared round-robin across both niches' ready
+  cells, so each niche gets about half the depth F1 had alone.
+- Once the new cohort reaches 01.5, the radar's historical alignment also
+  recognises the Science Inside topics.

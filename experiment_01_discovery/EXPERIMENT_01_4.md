@@ -96,8 +96,10 @@ Execution:
 - uses `viewCount` ordering;
 - searches the previous five years by default;
 - keeps short and long-form duration branches separate;
-- validates the returned title against both the topic and F1/motorsport
-  context;
+- validates the returned title against both the topic and its niche's
+  context words (D-178);
+- uses each niche's own query families (`query_families_by_niche`); F1 keeps
+  the shared list;
 - preserves query-family provenance; and
 - checkpoints completed search tasks.
 

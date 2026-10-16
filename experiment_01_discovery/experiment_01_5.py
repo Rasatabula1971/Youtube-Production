@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from core.jsonio import load_json_or_exit as load_json
@@ -310,6 +312,31 @@ CSV_FIELDS = [
 ]
 
 
+GATE_ARCHIVE_DIR = OUTPUT_DIR / "archive"
+
+
+def archive_gate_files(now: datetime | None = None) -> Path | None:
+    """Move an earlier human decision, its approved study set and the study set
+    and packets it was made against into ``archive/gate_<UTC time>/`` (D-178).
+
+    Nothing is archived when no human decision or approved set exists, so a
+    re-run with no decision does not fill the archive.
+    """
+    if not (HUMAN_DECISION_FILE.exists() or APPROVED_STUDY_SET_FILE.exists()):
+        return None
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    destination = GATE_ARCHIVE_DIR / f"gate_{stamp}"
+    suffix = 1
+    while destination.exists():
+        destination = GATE_ARCHIVE_DIR / f"gate_{stamp}_{suffix}"
+        suffix += 1
+    destination.mkdir(parents=True)
+    for source in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE, STUDY_SET_FILE, PACKETS_FILE):
+        if source.exists():
+            shutil.move(str(source), str(destination / source.name))
+    return destination
+
+
 def write_outputs(
     packets: list[dict[str, Any]],
     study_set: list[dict[str, Any]],
@@ -319,10 +346,11 @@ def write_outputs(
 ) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # A rebuilt machine handoff invalidates any earlier human decision.
-    for stale_gate_file in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE):
-        if stale_gate_file.exists():
-            stale_gate_file.unlink()
+    # A rebuilt machine handoff invalidates any earlier human decision. The
+    # decision and the evidence it was made against are archived, not deleted.
+    archived = archive_gate_files()
+    if archived is not None:
+        print(f"Archived the earlier gate decision and study set to: {archived}")
 
     PACKETS_FILE.write_text(
         json.dumps(packets, indent=2, ensure_ascii=False),
