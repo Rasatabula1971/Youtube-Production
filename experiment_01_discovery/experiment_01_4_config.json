@@ -6,26 +6,44 @@
   "maximum_plan_searches": 30,
   "search_order": "viewCount",
   "lookback_days": 1825,
-  "motorsport_context_terms": [
-    "f1",
-    "formula 1",
-    "formula one",
-    "motorsport",
-    "race car",
-    "racecar",
-    "racing",
-    "grand prix",
-    "pit stop",
-    "mclaren",
-    "ferrari",
-    "red bull",
-    "mercedes",
-    "aston martin",
-    "alpine",
-    "williams",
-    "sauber",
-    "haas"
-  ],
+  "context_terms_by_niche": {
+    "automotive_racing": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "race car",
+      "racecar",
+      "racing",
+      "grand prix",
+      "pit stop",
+      "mclaren",
+      "ferrari",
+      "red bull",
+      "mercedes",
+      "aston martin",
+      "alpine",
+      "williams",
+      "sauber",
+      "haas"
+    ],
+    "everyday_science": [
+      "how",
+      "why",
+      "what is",
+      "what happens",
+      "what causes",
+      "explained",
+      "explain",
+      "explains",
+      "science",
+      "physics",
+      "engineering",
+      "works",
+      "inside",
+      "secret"
+    ]
+  },
   "exclude_title_terms": [
     "sim racing",
     "simracing",
@@ -118,6 +136,84 @@
         "pitstop"
       ],
       "niche": "automotive_racing"
+    },
+    "airplane_tires": {
+      "query_root": "airplane tires",
+      "match_terms": [
+        "airplane tire",
+        "airplane tires",
+        "aircraft tire",
+        "aircraft tires",
+        "plane tire",
+        "plane tires",
+        "airplane tyre",
+        "airplane tyres",
+        "aircraft tyre",
+        "aircraft tyres",
+        "plane tyre",
+        "plane tyres"
+      ],
+      "niche": "everyday_science"
+    },
+    "hummingbird_flight": {
+      "query_root": "hummingbird flight",
+      "match_terms": [
+        "hummingbird",
+        "hummingbirds"
+      ],
+      "niche": "everyday_science"
+    },
+    "microwave_oven": {
+      "query_root": "microwave oven",
+      "match_terms": [
+        "microwave",
+        "microwaves"
+      ],
+      "niche": "everyday_science"
+    },
+    "refrigerator": {
+      "query_root": "refrigerator",
+      "match_terms": [
+        "refrigerator",
+        "refrigerators",
+        "fridge",
+        "fridges"
+      ],
+      "niche": "everyday_science"
+    },
+    "sonic_boom": {
+      "query_root": "sonic boom",
+      "match_terms": [
+        "sonic boom",
+        "sonic booms",
+        "sound barrier"
+      ],
+      "niche": "everyday_science"
+    },
+    "car_airbags": {
+      "query_root": "car airbag",
+      "match_terms": [
+        "airbag",
+        "airbags",
+        "air bag",
+        "air bags"
+      ],
+      "niche": "everyday_science"
+    },
+    "lightning": {
+      "query_root": "lightning",
+      "match_terms": [
+        "lightning"
+      ],
+      "niche": "everyday_science"
+    },
+    "hiccups": {
+      "query_root": "hiccups",
+      "match_terms": [
+        "hiccup",
+        "hiccups"
+      ],
+      "niche": "everyday_science"
     }
   },
   "query_families": [
@@ -143,7 +239,10 @@
     },
     {
       "family": "rules_loopholes",
-      "template": "{root} rules banned"
+      "template": "{root} rules banned",
+      "niches": [
+        "automotive_racing"
+      ]
     }
   ]
 }

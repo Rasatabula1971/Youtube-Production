@@ -229,3 +229,53 @@ class Experiment015Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GateArchiveTests(unittest.TestCase):
+    """D-178: a rebuilt handoff archives the earlier human decision, never deletes it."""
+
+    def test_rebuild_archives_decision_and_approved_set_with_their_study_set(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from experiment_01_discovery import experiment_01_5 as exp15
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "output"
+            out15 = out / "experiment_01_5"
+            out15.mkdir(parents=True)
+            names = {
+                "OUTPUT_DIR": out15,
+                "PACKETS_FILE": out15 / "handoff_packets.json",
+                "STUDY_SET_FILE": out15 / "study_set.json",
+                "CSV_FILE": out15 / "handoff_candidates.csv",
+                "SUMMARY_FILE": out15 / "summary.json",
+                "HUMAN_DECISION_FILE": out15 / "human_opportunity_decision.json",
+                "APPROVED_STUDY_SET_FILE": out15 / "approved_study_set.json",
+                "ARCHIVE_ROOT": out / "archive",
+            }
+            names["STUDY_SET_FILE"].write_text('[{"video_id": "old"}]', encoding="utf-8")
+            names["PACKETS_FILE"].write_text("[]", encoding="utf-8")
+            names["HUMAN_DECISION_FILE"].write_text('{"decision": "APPROVE"}', encoding="utf-8")
+            names["APPROVED_STUDY_SET_FILE"].write_text('[{"video_id": "old"}]', encoding="utf-8")
+            patches = [patch.object(exp15, key, value) for key, value in names.items()]
+            for p in patches:
+                p.start()
+                self.addCleanup(p.stop)
+
+            exp15.write_outputs([], [{"video_id": "new"}], {}, {}, {})
+
+            self.assertFalse(names["HUMAN_DECISION_FILE"].exists())
+            self.assertFalse(names["APPROVED_STUDY_SET_FILE"].exists())
+            [archived] = list(names["ARCHIVE_ROOT"].iterdir())
+            self.assertTrue(archived.name.startswith("experiment_01_5_gate_"))
+            self.assertEqual(json.loads((archived / "human_opportunity_decision.json").read_text())["decision"], "APPROVE")
+            self.assertEqual(json.loads((archived / "approved_study_set.json").read_text()), [{"video_id": "old"}])
+            self.assertEqual(json.loads((archived / "study_set.json").read_text()), [{"video_id": "old"}])
+            self.assertEqual(json.loads(names["STUDY_SET_FILE"].read_text()), [{"video_id": "new"}])
+
+            # Nothing to retire: nothing is archived.
+            exp15.write_outputs([], [{"video_id": "newer"}], {}, {}, {})
+            self.assertEqual(len(list(names["ARCHIVE_ROOT"].iterdir())), 1)

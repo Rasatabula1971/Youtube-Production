@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from experiment_01_discovery.experiment_01_3 import classify_topic_relevance
+from experiment_01_discovery.experiment_01_3 import classify_topic_relevance, context_terms_for
 from experiment_01_discovery.youtube_discovery import (
     age_days,
     api_get,
@@ -71,13 +71,14 @@ def load_config() -> dict[str, Any]:
         "maximum_plan_searches",
         "search_order",
         "lookback_days",
-        "motorsport_context_terms",
         "exclude_title_terms",
         "topic_definitions",
         "query_families",
         "duration_filters",
     }
     missing = sorted(required - set(config))
+    if not ({"context_terms_by_niche", "motorsport_context_terms"} & set(config)):
+        missing.append("context_terms_by_niche")
     if missing:
         raise SystemExit("Experiment 01.4 config is missing: " + ", ".join(missing))
 
@@ -87,6 +88,10 @@ def load_config() -> dict[str, Any]:
             raise SystemExit(
                 f"Experiment 01.4 topic '{topic}' is missing required niche."
             )
+        try:
+            context_terms_for(config, niche)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
 
     return config
 
@@ -170,6 +175,11 @@ def build_tasks_for_cell(
 
     for family in config["query_families"]:
         family_name = str(family["family"])
+        # A family may be limited to some niches ("rules banned" is a
+        # motorsport question, not a microwave one) (D-178).
+        family_niches = family.get("niches")
+        if isinstance(family_niches, list) and niche not in family_niches:
+            continue
         template = str(family["template"])
         query = template.format(root=root).strip()
 
@@ -454,10 +464,14 @@ def build_candidates(
             if match["format_candidate"] != fmt:
                 continue
             topic_def = config["topic_definitions"].get(topic, {})
+            try:
+                context_terms = context_terms_for(config, str(topic_def.get("niche") or match.get("niche") or ""))
+            except ValueError:
+                context_terms = []  # an unknown topic: it cannot pass, as before
             result = classify_topic_relevance(
                 title,
                 list(topic_def.get("match_terms", [])),
-                list(config["motorsport_context_terms"]),
+                context_terms,
                 list(config["exclude_title_terms"]),
             )
             topic_validation[topic] = result

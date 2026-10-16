@@ -7,26 +7,44 @@
   "search_orders": [
     "viewCount"
   ],
-  "motorsport_context_terms": [
-    "f1",
-    "formula 1",
-    "formula one",
-    "motorsport",
-    "race car",
-    "racecar",
-    "racing",
-    "grand prix",
-    "pit stop",
-    "mclaren",
-    "ferrari",
-    "red bull",
-    "mercedes",
-    "aston martin",
-    "alpine",
-    "williams",
-    "sauber",
-    "haas"
-  ],
+  "context_terms_by_niche": {
+    "automotive_racing": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "race car",
+      "racecar",
+      "racing",
+      "grand prix",
+      "pit stop",
+      "mclaren",
+      "ferrari",
+      "red bull",
+      "mercedes",
+      "aston martin",
+      "alpine",
+      "williams",
+      "sauber",
+      "haas"
+    ],
+    "everyday_science": [
+      "how",
+      "why",
+      "what is",
+      "what happens",
+      "what causes",
+      "explained",
+      "explain",
+      "explains",
+      "science",
+      "physics",
+      "engineering",
+      "works",
+      "inside",
+      "secret"
+    ]
+  },
   "topics": [
     {
       "topic": "gearbox_transmission",
@@ -174,6 +192,156 @@
         "F1 pit stop #shorts"
       ],
       "niche": "automotive_racing"
+    },
+    {
+      "topic": "airplane_tires",
+      "queries": [
+        "how airplane tires work"
+      ],
+      "match_terms": [
+        "airplane tire",
+        "airplane tires",
+        "aircraft tire",
+        "aircraft tires",
+        "plane tire",
+        "plane tires",
+        "airplane tyre",
+        "airplane tyres",
+        "aircraft tyre",
+        "aircraft tyres",
+        "plane tyre",
+        "plane tyres"
+      ],
+      "expansion_queries": [
+        "airplane tires explained"
+      ],
+      "short_expansion_queries": [
+        "airplane tires #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "hummingbird_flight",
+      "queries": [
+        "how hummingbirds fly"
+      ],
+      "match_terms": [
+        "hummingbird",
+        "hummingbirds"
+      ],
+      "expansion_queries": [
+        "hummingbird flight explained"
+      ],
+      "short_expansion_queries": [
+        "hummingbird #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "microwave_oven",
+      "queries": [
+        "how a microwave oven works"
+      ],
+      "match_terms": [
+        "microwave",
+        "microwaves"
+      ],
+      "expansion_queries": [
+        "microwave oven explained"
+      ],
+      "short_expansion_queries": [
+        "microwave science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "refrigerator",
+      "queries": [
+        "how a refrigerator works"
+      ],
+      "match_terms": [
+        "refrigerator",
+        "refrigerators",
+        "fridge",
+        "fridges"
+      ],
+      "expansion_queries": [
+        "how fridges keep food cold"
+      ],
+      "short_expansion_queries": [
+        "fridge science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "sonic_boom",
+      "queries": [
+        "what causes a sonic boom"
+      ],
+      "match_terms": [
+        "sonic boom",
+        "sonic booms",
+        "sound barrier"
+      ],
+      "expansion_queries": [
+        "sonic boom explained"
+      ],
+      "short_expansion_queries": [
+        "sonic boom #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "car_airbags",
+      "queries": [
+        "how car airbags work"
+      ],
+      "match_terms": [
+        "airbag",
+        "airbags",
+        "air bag",
+        "air bags"
+      ],
+      "expansion_queries": [
+        "airbag deployment explained"
+      ],
+      "short_expansion_queries": [
+        "airbag #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "lightning",
+      "queries": [
+        "how lightning works"
+      ],
+      "match_terms": [
+        "lightning"
+      ],
+      "expansion_queries": [
+        "lightning explained"
+      ],
+      "short_expansion_queries": [
+        "lightning science #shorts"
+      ],
+      "niche": "everyday_science"
+    },
+    {
+      "topic": "hiccups",
+      "queries": [
+        "why do we get hiccups"
+      ],
+      "match_terms": [
+        "hiccup",
+        "hiccups"
+      ],
+      "expansion_queries": [
+        "hiccups explained"
+      ],
+      "short_expansion_queries": [
+        "hiccups #shorts"
+      ],
+      "niche": "everyday_science"
     }
   ],
   "wide_age_tolerance_days": 30,

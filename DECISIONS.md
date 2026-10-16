@@ -5809,3 +5809,80 @@ Checked against `c0adb20`:
     for a baseline.
   - The baseline is a median of lifetime views from uploads aged 15 days to
     months.
+
+## D-178 — The historical lane runs two niches; a rebuilt handoff archives the old decision
+
+**Status:** Accepted (15 Oct 2026). PR 2 of the M1 closure (D-177, criterion 1).
+
+**Context.**
+- **One niche only.** All eight 01.3 topics were `automotive_racing`. The
+  01.3/01.4 relevance rule demanded a motorsport word (`f1`, `racing`,
+  `ferrari`…) in every title, so the historical lane could find nothing for
+  Science Inside, the active channel. M1 criterion 1 needs at least two
+  niches in one cohort.
+- **The old decision was deleted.** The contract asked whether a new cohort
+  would overwrite the owner's gate decisions. It would: whenever 01.5 rebuilt
+  its handoff, `experiment_01_5.write_outputs` deleted
+  `human_opportunity_decision.json` and `approved_study_set.json`.
+
+**Decision.**
+1. **Context words per niche.**
+   - `context_terms_by_niche` replaces `motorsport_context_terms` in the
+     01.3 and 01.4 configs, and `context_terms_for(config, niche)` reads it.
+     A title must still name the topic and carry a context word, now one from
+     its own niche.
+   - `automotive_racing` keeps its 18 words exactly.
+   - `everyday_science` uses explanation words: how, why, what is, what
+     happens, what causes, explained, explain, explains, science, physics,
+     engineering, works, inside, secret.
+   - A niche with no words is refused at load. A config without the map
+     falls back to the old single list for every topic.
+   - The relevance result fields are renamed to match:
+     - `motorsport_context_matches` becomes `context_matches`;
+     - the reason `missing_motorsport_context_in_title` becomes
+       `missing_niche_context_in_title`;
+     - the reason `title_topic_and_motorsport_context` becomes
+       `title_topic_and_niche_context`.
+     No code reads them.
+2. **Eight Science Inside topics** in `everyday_science`, one strict query
+   each, with expansion and Shorts queries:
+   - airplane tires and hummingbird flight;
+   - microwave ovens and refrigerators;
+   - sonic booms and car airbags;
+   - lightning and hiccups (a mechanism, never medical advice).
+
+   These are picks from the R0 families, and the owner may swap any of them
+   before running discovery. The steelpan was left out because it is
+   unlikely to clear the 500,000-view bar at 120 days.
+3. **01.4 query families can be limited to niches.** `rules_loopholes`
+   ("{root} rules banned") is asked only of `automotive_racing`.
+4. **A rebuilt 01.5 handoff archives, never deletes** (as D-157 does).
+   - The earlier decision and approved study set move to
+     `output/archive/experiment_01_5_gate_<time>/`, together with copies of
+     the study set and packets they were made against.
+   - A new handoff still needs a fresh human decision, as before.
+   - An active human or radar study source (`active_source`) is unaffected.
+
+**Proof.** The old (`a10af38`) and new rules were compared:
+- **Titles.** 365,148 generated automotive titles covered every topic term,
+  every context word and near-miss, every excluded term, and filler words.
+  0 differ, apart from the renamed fields.
+- **Search plans.** All 16 automotive 01.4 cells give identical tasks.
+- **Config.** The automotive 01.3 topic entries, the exclude list and the
+  01.4 definitions are identical.
+
+**Quota.** 01.3 makes 51 strict searches across both niches (27 F1, 24
+science); 65 if every cell needs expansion. The API cap is 60 searches a run,
+about 6,000 of the 10,000 free daily units, and the rest fall back to free
+yt-dlp. 01.4 (cap 30) runs days later, after the velocity refreshes.
+
+**Consequences.**
+- **Starting the new cohort is a human action:** the UI's "Run / Resume 01.3
+  Auto Discovery" or "Start research". It archives the current 01.3 cohort
+  (as before). Later, when 01.5 rebuilds, the current historical
+  opportunity decision is archived too.
+- **Downstream.** Productions already started from a historical approval keep
+  their own outputs, but Experiment 02 sees no approved study set until the
+  new handoff is decided. The UI action text says so.
+- **M1 criterion 6** (a real gate decision) is demonstrated on the
+  two-niche handoff.

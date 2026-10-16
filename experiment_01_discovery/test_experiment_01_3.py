@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -35,7 +35,7 @@ class Experiment013Tests(unittest.TestCase):
         )
         self.assertEqual(result["topic_relevance"], "OFF_TOPIC")
         self.assertEqual(
-            result["topic_relevance_reason"], "missing_motorsport_context_in_title"
+            result["topic_relevance_reason"], "missing_niche_context_in_title"
         )
 
     def test_formula_1_gearbox_is_on_topic(self):
@@ -818,3 +818,87 @@ class Experiment013Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ORIGINAL_MOTORSPORT_CONTEXT = [
+    "f1", "formula 1", "formula one", "motorsport", "race car", "racecar", "racing",
+    "grand prix", "pit stop", "mclaren", "ferrari", "red bull", "mercedes",
+    "aston martin", "alpine", "williams", "sauber", "haas",
+]
+
+
+class SecondNicheTests(unittest.TestCase):
+    """D-178: context words come from each topic's niche; motorsport is unchanged."""
+
+    def setUp(self):
+        self.config = exp13.load_config()
+
+    def test_motorsport_context_words_are_exactly_the_original_list(self):
+        self.assertEqual(
+            exp13.context_terms_for(self.config, "automotive_racing"), ORIGINAL_MOTORSPORT_CONTEXT
+        )
+        niches = exp13.topic_niche_map(self.config)
+        self.assertEqual(sum(n == "automotive_racing" for n in niches.values()), 8)
+        self.assertEqual(sum(n == "everyday_science" for n in niches.values()), 8)
+
+    def test_science_titles_need_an_explanation_word_not_a_motorsport_word(self):
+        science = exp13.context_terms_for(self.config, "everyday_science")
+        tyres = ["airplane tire", "airplane tires", "plane tire", "plane tires"]
+        on = classify_topic_relevance("How Do Airplane Tires Survive Landing?", tyres, science)
+        self.assertEqual((on["topic_relevance"], on["context_matches"]), ("ON_TOPIC", ["how"]))
+        off = classify_topic_relevance("Airplane tire bursts on the runway", tyres, science)
+        self.assertEqual(off["topic_relevance_reason"], "missing_niche_context_in_title")
+        # Before D-178 every topic needed a motorsport word: this title failed.
+        motorsport = exp13.context_terms_for(self.config, "automotive_racing")
+        self.assertEqual(
+            classify_topic_relevance("How Do Airplane Tires Survive Landing?", tyres, motorsport)["topic_relevance"],
+            "OFF_TOPIC",
+        )
+        # An F1 title still needs its motorsport word.
+        f1 = ["tyre", "tyres", "tire", "tires"]
+        self.assertEqual(classify_topic_relevance("How tyres work", f1, motorsport)["topic_relevance"], "OFF_TOPIC")
+        self.assertEqual(classify_topic_relevance("How F1 tyres work", f1, motorsport)["topic_relevance"], "ON_TOPIC")
+
+    def test_build_rows_checks_each_topic_against_its_own_niche(self):
+        observed = datetime.now(timezone.utc)
+        window = calculate_age_window(observed, 120, 15)
+        published = (observed.replace(microsecond=0) - timedelta(days=120)).isoformat().replace("+00:00", "Z")
+
+        def item(title):
+            return {
+                "snippet": {"title": title, "publishedAt": published, "channelId": "UC" + "a" * 22, "channelTitle": "Lab"},
+                "statistics": {"viewCount": "2000000", "likeCount": "10", "commentCount": "1"},
+                "contentDetails": {"duration": "PT10M"},
+            }
+
+        details = {
+            "sci": item("How Do Airplane Tires Survive Landing?"),
+            "f1": item("How F1 tyres work"),
+            "both": item("How tyres work"),
+        }
+        discovered = {"sci": {"airplane_tires"}, "f1": {"tyres_tires"}, "both": {"tyres_tires"}}
+        matches = {
+            vid: [{"target_topic": topic, "search_format_target": "long_form_candidate"} for topic in topics]
+            for vid, topics in discovered.items()
+        }
+        rows, rejected = exp13.build_rows(
+            discovered, matches, details, {}, self.config, window, "unused", include_baselines=False
+        )
+        validated = {row["video_id"]: row["validated_topics"] for row in rows + rejected}
+        self.assertEqual(validated["sci"], ["airplane_tires"])
+        self.assertEqual(validated["f1"], ["tyres_tires"])
+        self.assertEqual(validated["both"], [])
+
+    def test_a_niche_without_context_words_is_refused(self):
+        bad = json.loads(json.dumps(self.config))
+        bad["topics"].append({"topic": "x", "queries": ["x"], "match_terms": ["x"], "niche": "history"})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(json.dumps(bad), encoding="utf-8")
+            with patch.object(exp13, "CONFIG_FILE", path):
+                with self.assertRaisesRegex(SystemExit, "niche 'history'"):
+                    exp13.load_config()
+
+    def test_a_config_without_the_map_keeps_one_list_for_every_topic(self):
+        legacy = {"motorsport_context_terms": ["f1"]}
+        self.assertEqual(exp13.context_terms_for(legacy, "everyday_science"), ["f1"])
