@@ -369,6 +369,9 @@
   "viral_radar": {
     "_note": "Thresholds are hypotheses (D-009 style); day-15 outcomes are recorded to calibrate them (R7).",
     "active_window_days": 15,
+    "_note_outcomes": "D-177: every upload first seen under fresh_cohort_max_age_hours joins the comparison group; a day-15 reading taken after outcome_reading_max_hours is LATE.",
+    "fresh_cohort_max_age_hours": 48,
+    "outcome_reading_max_hours": 384,
     "watchlist_handles": [
       "@veritasium",
       "@SteveMould",

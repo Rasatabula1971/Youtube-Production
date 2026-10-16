@@ -185,6 +185,18 @@ class InboxTests(unittest.TestCase):
         api = FakeApi(MATURE + [radar_item(10, 48, 80_000)], handles={"@brakelab": "UC" + "a" * 22})
         vr.run(api=api, searcher=lambda u, l, t: [], config=config, now=NOW)
 
+    def test_every_video_names_how_its_format_was_decided(self):
+        """M1 criterion 5 (D-177): formats are by length, and the inbox says so."""
+        self.study_file.write_text(json.dumps([study_item("a1", "brakes")]), encoding="utf-8")
+        self.save_video()
+        self.run_radar()
+        items = inbox.build_inbox({})["items"]
+        self.assertEqual({item["source_label"] for item in items}, {"HISTORICAL", "YOUR VIDEO", "VIRAL"})
+        for item in items:
+            for video in item["videos"]:
+                self.assertEqual(video["format_basis"], "duration_heuristic", item["source_label"])
+                self.assertIn("by length" if video["format"] == "short" else "over 180 s", video["format_label"])
+
     def test_radar_breakouts_can_be_watched_and_analysed(self):
         self.run_radar()
         snapshot = inbox.build_inbox({})

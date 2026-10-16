@@ -491,6 +491,14 @@ class ShellMarkupTests(unittest.TestCase):
         self.assertIn("independent_channel_count || 0) >= 2 ? 0 : 1", script)
         self.assertIn('localStorage.setItem(FILTER_KEY', script)
 
+    def test_radar_never_shows_a_length_guess_as_a_confirmed_short(self) -> None:
+        """M1 criterion 5 (D-177): the row shows the server's label, which names the basis."""
+        script = (STATIC / "js" / "radar.js").read_text(encoding="utf-8")
+        self.assertIn('(row.format_label || "Format unknown")', script)
+        self.assertIn('["short", "Short by length"]', script)
+        self.assertNotIn('"Short" : "Long-form"', script)
+        self.assertNotIn('["short", "Shorts"]', script)
+
     def test_nav_routes_are_app_routes(self) -> None:
         for route in set(re.findall(r'data-route="([^"]+)"', self.html)):
             with self.subTest(route=route):

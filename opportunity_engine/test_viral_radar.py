@@ -46,6 +46,7 @@ class FakeApi:
         self.videos = {v["id"]: v for v in videos}
         self.channels = channels or {CH: {"subs": "50000"}}
         self.handles = handles or {}
+        self.hidden_from_playlist = set()
         self.calls = []
 
     def __call__(self, resource, **params):
@@ -68,7 +69,11 @@ class FakeApi:
             }
         if resource == "playlistItems":
             cid = "UC" + params["playlistId"][2:]
-            ids = [v for v, data in self.videos.items() if data["snippet"]["channelId"] == cid]
+            ids = [
+                v
+                for v, data in self.videos.items()
+                if data["snippet"]["channelId"] == cid and v not in self.hidden_from_playlist
+            ]
             return {"items": [{"contentDetails": {"videoId": v}} for v in ids]}
         if resource == "videos":
             return {"items": [self.videos[v] for v in params["id"].split(",") if v in self.videos]}
@@ -246,6 +251,157 @@ class RunTests(RadarTestCase):
         summary = self.run_radar(api)
         self.assertEqual(summary["excluded_candidates"], 1)
         self.assertIsNone(vr.load_packet(vid(10)))
+
+
+class CalibrationDataTests(RadarTestCase):
+    """D-177: what the day-15 test needs is kept, for flagged videos and for a
+    fresh-upload comparison group, whatever the run cadence."""
+
+    def outcome_rows(self):
+        path = vr.outcomes_file()
+        self.assertTrue(str(path).startswith(str(self.root)))
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def test_milestones_survive_more_than_sixty_ratings(self):
+        # With several tracked videos a tick runs nearly every two hours, and
+        # each pass rates every tracked video. Before D-177 the 60-entry cap on
+        # the rating list dropped the 3-day and 7-day ratings by day 15.
+        api = FakeApi(MATURE + [item(10, 30, 60_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        for step in range(1, 165):  # ages 32 h to 358 h, every 2 hours
+            api.videos[vid(10)]["statistics"]["viewCount"] = str(60_000 + step * 500)
+            vr.run(api=api, config=self.config, now=NOW + timedelta(hours=2 * step), mode=vr.MODE_SNAPSHOTS)
+        self.assertEqual(len(vr.load_state()["tracked"][vid(10)]["classifications"]), 60)
+        self.run_radar(api, now=NOW + timedelta(hours=332))  # age 362 h: past day 15
+        marks = vr.load_state()["completed"][vid(10)]["outcome"]["classified_at"]
+        self.assertIsNone(marks["24h"])  # first seen at 30 h
+        self.assertEqual(marks["3d"]["age_hours"], 72.0)
+        self.assertEqual(marks["7d"]["age_hours"], 168.0)
+        self.assertEqual(marks["3d"]["baseline_median_views"], 10_350.0)
+
+    def test_first_rating_is_kept_and_the_outcome_row_has_the_test_inputs(self):
+        api = FakeApi(MATURE + [item(10, 30, 60_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        first = vr.load_state()["tracked"][vid(10)]["first_rating"]
+        self.assertEqual((first["strength"], first["rule_id"]), ("BREAKOUT", "VS-BREAKOUT"))
+        self.assertEqual((first["age_hours"], first["views"]), (30.0, 60_000))
+        self.assertEqual(first["baseline_median_views"], 10_350.0)
+        api.videos[vid(10)]["statistics"]["viewCount"] = "90000"
+        self.run_radar(api, now=NOW + timedelta(hours=12))
+        self.assertEqual(vr.load_state()["tracked"][vid(10)]["first_rating"], first)
+
+        self.run_radar(api, now=NOW + timedelta(hours=335))  # age 365 h
+        rows = [r for r in self.outcome_rows() if r["group"] == vr.GROUP_TRACKED]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["video_id"], row["reading"], row["legacy"]), (vid(10), vr.READING_ON_TIME, False))
+        self.assertEqual((row["final_views"], row["final_age_hours"]), (90_000, 365.0))
+        self.assertEqual(row["first_rating"], first)
+        self.assertEqual(row["format_basis"], "duration_heuristic")
+        self.assertEqual(row["milestones"]["3d"]["strength"], "BREAKOUT")
+
+    def test_a_late_reading_is_labelled_late(self):
+        api = FakeApi(MATURE + [item(10, 30, 60_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        self.run_radar(api, now=NOW + timedelta(hours=370))  # age 400 h: the PC was off
+        row = self.outcome_rows()[0]
+        self.assertEqual((row["reading"], row["final_age_hours"]), (vr.READING_LATE, 400.0))
+
+    def test_a_record_tracked_before_d177_is_marked_legacy(self):
+        api = FakeApi(MATURE + [item(10, 30, 60_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        state = vr.load_state()
+        record = state["tracked"][vid(10)]
+        for key in ("first_rating", "milestones"):
+            record.pop(key)
+        record["classifications"] = [{"at": at(0), "age_hours": 30.0, "strength": "BREAKOUT", "trajectory": "FLAT"}]
+        vr.save_state(state)
+        self.run_radar(api, now=NOW + timedelta(hours=12))
+        marks = vr.load_state()["tracked"][vid(10)]["milestones"]
+        self.assertEqual(marks["3d"]["age_hours"], 42.0)  # the newest rating at or before 72 h
+        self.run_radar(api, now=NOW + timedelta(hours=335))
+        row = self.outcome_rows()[0]
+        self.assertTrue(row["legacy"])
+        self.assertIsNone(row["first_rating"])
+
+    def test_fresh_uploads_join_the_comparison_group_on_first_sight_only(self):
+        videos = MATURE + [
+            item(20, 6, 500),  # 6 h, quiet: NORMAL, joins
+            item(21, 30, 60_000),  # 30 h, already a breakout: joins too (every fresh upload)
+            item(22, 60, 3_000),  # 60 h: too old on first sight
+            item(23, 10, 400, duration="PT40S"),  # fresh Short, no Shorts baseline
+        ]
+        api = FakeApi(videos, handles={"@brakelab": CH})
+        summary = self.run_radar(api)
+        cohort = vr.load_state()["cohort"]
+        self.assertEqual(sorted(cohort), [vid(20), vid(21)])
+        self.assertEqual(summary["fresh_cohort"]["enrolled"], 2)
+        self.assertEqual(summary["fresh_cohort"]["skipped_no_baseline"], 1)
+        self.assertEqual(cohort[vid(20)]["first_rating"]["strength"], "NORMAL")
+        self.assertEqual(cohort[vid(21)]["first_rating"]["strength"], "BREAKOUT")
+        self.assertEqual(cohort[vid(20)]["first_rating"]["baseline_median_views"], 10_350.0)
+
+        api.videos[vid(24)] = item(24, 1, 50)
+        summary = self.run_radar(api, now=NOW + timedelta(hours=8))
+        self.assertEqual(summary["fresh_cohort"]["enrolled"], 1)  # only the new upload
+        self.assertEqual(sorted(vr.load_state()["cohort"]), [vid(20), vid(21), vid(24)])
+
+    def test_the_day_15_reading_is_taken_even_off_the_uploads_page(self):
+        api = FakeApi(MATURE + [item(20, 6, 500)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        api.hidden_from_playlist = {vid(20)}  # 20+ newer uploads pushed it off
+        api.videos[vid(20)]["statistics"]["viewCount"] = "70000"
+        summary = self.run_radar(api, now=NOW + timedelta(hours=358))  # age 364 h
+        self.assertNotIn(vid(20), vr.load_state()["cohort"])
+        self.assertEqual(summary["fresh_cohort"]["readings"], 1)
+        row = self.outcome_rows()[0]
+        self.assertEqual((row["group"], row["video_id"], row["reading"]), (vr.GROUP_FRESH, vid(20), vr.READING_ON_TIME))
+        self.assertEqual((row["final_views"], row["final_age_hours"]), (70_000, 364.0))
+        self.assertEqual(row["first_rating"]["strength"], "NORMAL")
+        self.assertEqual(row["format_basis"], "duration_heuristic")
+
+    def test_snapshot_passes_take_due_readings_too(self):
+        api = FakeApi(MATURE + [item(20, 6, 500)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        vr.run(api=api, config=self.config, now=NOW + timedelta(hours=360), mode=vr.MODE_SNAPSHOTS)
+        self.assertEqual(self.outcome_rows()[0]["reading"], vr.READING_ON_TIME)
+
+    def test_a_vanished_video_is_recorded_missed_after_day_16(self):
+        api = FakeApi(MATURE + [item(20, 6, 500)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        del api.videos[vid(20)]
+        self.run_radar(api, now=NOW + timedelta(hours=360))  # age 366 h: retried later
+        self.assertIn(vid(20), vr.load_state()["cohort"])
+        summary = self.run_radar(api, now=NOW + timedelta(hours=380))  # age 386 h
+        self.assertNotIn(vid(20), vr.load_state()["cohort"])
+        self.assertEqual(summary["fresh_cohort"]["missed"], 1)
+        row = self.outcome_rows()[0]
+        self.assertEqual((row["reading"], row["final_views"]), (vr.READING_MISSED, None))
+
+
+class FormatBasisTests(RadarTestCase):
+    """M1 criterion 5 (D-177): a length-based format is never shown as a confirmed Short."""
+
+    def test_every_lane_uses_the_one_length_rule(self):
+        from opportunity_engine import models
+
+        self.assertEqual(self.config["viral_radar"]["short_max_seconds"], models.SHORT_MAX_SECONDS)
+        self.assertEqual(hvi.SHORT_MAX_SECONDS, models.SHORT_MAX_SECONDS)
+        self.assertEqual(hts.SHORT_MAX_SECONDS, models.SHORT_MAX_SECONDS)
+        self.assertEqual(models.format_label("short_candidate"), "Short (≤ 180 s, by length)")
+        self.assertEqual(models.format_label("long_form"), "Long-form (over 180 s)")
+        self.assertEqual(models.format_label("long"), "Format unknown")
+
+    def test_radar_records_packets_and_rows_name_the_basis(self):
+        api = FakeApi(MATURE + [item(10, 30, 60_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        self.assertEqual(vr.load_state()["tracked"][vid(10)]["format_basis"], "duration_heuristic")
+        candidate = vr.load_packet(vid(10))["candidate_videos"][0]
+        self.assertEqual((candidate["format"], candidate["format_basis"]), ("long_form", "duration_heuristic"))
+        row = vr.radar_overview(now=NOW)["tracked"][0]
+        self.assertEqual(row["format_label"], "Long-form (over 180 s)")
 
 
 class OverviewTests(RadarTestCase):

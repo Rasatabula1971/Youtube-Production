@@ -5370,9 +5370,10 @@ four analysis calls on the free routes.
 
 ## D-175 — One repository, layered packages enforced by a test
 
-**Status:** Accepted (13 Oct 2026). Two parts are still open for the owner:
+**Status:** Accepted (13 Oct 2026). Two parts were left open for the owner:
 the production feature freeze and the Opportunity Gate move (marked
-*Pending* below). Neither is needed before Task 3.
+*Pending* below). Both were decided in D-177 (15 Oct 2026): the freeze is
+accepted, the move waits until M1 closes.
 
 **Numbering.** Recorded on `main` as D-114 on 13 Oct 2026, while the work up to
 D-174 still lived only on the PR #137 branch (and the owner's PC), which uses
@@ -5567,3 +5568,126 @@ canonical-JSON hash copies.
 - The audit #10 cost fix lands in one place, `core.model_bridge`.
 - The five stages that fingerprint their own source reject their cached
   model responses once (see D-175).
+
+## D-177 — M1 closes on measured evidence: two niches and a radar test fixed before the data
+
+**Status:** Accepted (15 Oct 2026). Closure plan: the Project document
+`M1_Closure_Contract.md`. This entry records the decisions and the first change
+(PR 1).
+
+**Context.** The M1 criteria (PROJECT.md §9) were written before Opportunity
+Engine v2.1, which has three lanes and one active channel (Science Inside).
+Checked against `c0adb20`:
+- The historical lane can find nothing outside motorsport. All 8 topics in
+  `experiment_01_3_config.json` are `automotive_racing`, and the 01.3/01.4
+  relevance rule rejects any title without one of the motorsport context words.
+- v2 (#137) dropped the Shorts qualifier. 01.x labels formats
+  `short_candidate`, but the packet contract turned that into a plain `short`,
+  and the radar set `short` from length alone.
+- Nothing measured whether the radar is right. Day-15 results were stored
+  (R7), but `NORMAL` videos were never followed, so there was no base rate.
+- The early ratings R7 needs were being lost. Each tracked video keeps only its
+  newest 60 ratings. With several videos tracked a pass runs almost every
+  two-hour tick and rates every one of them, so by day 15 the 3-day and 7-day
+  ratings were gone. A test written for this fails on `c0adb20`.
+- The opportunity engine makes no model calls, so the audit #10 cost fix does
+  not affect M1.
+
+**Decision.**
+1. **M1 criteria amended** (PROJECT.md §9):
+   - Criterion 1 now means two niches, `automotive_racing` and
+     `everyday_science`, in one historical-lane cohort, each niche + format
+     compared only with itself.
+   - A new criterion 7: the radar's early ratings are scored against a
+     comparison group with the test below, and the result is reported
+     whatever it is.
+   - M1 closes by a later decision entry that cites the evidence report.
+     From then on, discovery thresholds and rules change only by a new
+     decision, and any retune is checked on a fresh sample, never the one it
+     was tuned on.
+2. **The radar test, fixed before any outcome data was looked at:**
+   - **Ratings tested.** A tracked video's rating at a milestone is its last
+     rating at or before 24 hours, 3 days or 7 days of age.
+   - **Result.** Views at the day-15 reading divided by the channel median in
+     the rating being tested.
+   - **Grades.** HIT is at least 5× (the `VS-BREAKOUT` bar). PARTIAL is 2× to
+     under 5×. MISS is under 2×.
+   - **What is scored.**
+     - Only readings taken between day 15 and day 16 (`ON_TIME`) are scored.
+       `LATE` and `MISSED` readings are counted and reported.
+     - Videos tracked before this change (`legacy`) are reported apart and
+       never count toward the bar.
+   - **Comparison group.** Every upload from the watched channels that is
+     first seen under 48 hours old and has a usable baseline, whatever its
+     first rating. Its HIT rate is the base rate.
+   - **Pass bar.**
+     - Videos rated `BREAKOUT_CANDIDATE` at the 3-day milestone have a HIT
+       rate at least 3× the base rate.
+     - At least 30 such candidates and at least 100 comparison videos are
+       scored.
+   - **If it fails.** M1 can still close, but the radar's evidence levels drop
+     one step (STRONG → MODERATE → WEAK) until a later, separate sample passes.
+   - **Two tightenings of the contract**, made before any data was seen:
+     - The base rate counts all fresh uploads, not only `NORMAL` ones.
+       Leaving out the flagged ones would lower the base rate and flatter
+       the radar.
+     - Candidates are scored at the 3-day milestone, because early detection
+       is the point. A video first flagged at day 10 is reported, not scored
+       for the bar.
+   - **Open, to decide before the report scores any data: an absolute
+     precision floor.** The 3× lift bar is probably easy to meet. Views never
+     fall and the median is fixed, so a video already at 2× the median by
+     day 3 ends at 2× or more. The useful question is how often a candidate
+     reaches 5×.
+3. **Production feature freeze** (pending in D-175). `production_engine` takes
+   no new features until M1 closes. Fixes are still allowed.
+4. **The Opportunity Gate move** (pending in D-175) waits until M1 closes. Moving
+   files while evidence is collected risks the scheduled task.
+5. **Audit #10** (the cost of a failure after dispatch) comes after M1 and
+   before the next paid batch.
+
+**This change (PR 1).**
+- **Ratings that survive.**
+  - Each tracked record keeps a `first_rating` that is never overwritten.
+  - Its 24 h / 3 d / 7 d `milestones` are stored as ratings arrive, so the
+    60-entry list cap can no longer drop them.
+  - Every rating records its strength, rule, ratios and the baseline median
+    it used.
+  - A record tracked before this change is seeded from whatever its list
+    still holds.
+- **The comparison group.**
+  - A full pass enrols every upload it sees for the first time under
+    `fresh_cohort_max_age_hours` (48), unless it has no usable baseline (that
+    is counted).
+  - After day 15, any pass reads the group's due videos, even ones newer
+    uploads have pushed off the channel page. This costs at most one API unit
+    per 50 videos.
+  - A video not read by `outcome_reading_max_hours` (384, day 16) is recorded
+    as `MISSED`.
+- **The outcome log.**
+  - `opportunity_engine/output/viral/outcomes.jsonl` is append-only. It holds
+    one row per tracked video leaving the radar and per comparison video
+    read: group, first rating, milestones, final views and age, reading
+    status and the legacy flag.
+  - `radar_state.json` gains `cohort`, the comparison videos still waiting
+    for their reading. Its schema version is unchanged, so existing state
+    loads.
+- **The Shorts basis.**
+  - `models.SHORT_MAX_SECONDS` (180) is the one length rule. A test checks
+    that the radar config and both human lanes use it.
+  - `models.FORMAT_BASIS = "duration_heuristic"`.
+  - Radar records and new radar and human-lane candidate videos carry
+    `format_basis`. The inbox gives every video `format_basis` and a
+    `format_label`, such as "Short (≤ 180 s, by length)", and the radar page
+    shows that label.
+  - Historical packets are rebuilt on every read and are left unchanged.
+    Changing their content would change their hash and mark every past
+    historical decision "evidence has moved". The inbox labels their videos
+    the same way.
+
+**Consequences.**
+- The outcome log grows by about one row per fresh upload on the watched
+  channels, plus one per tracked video.
+- Base-rate rows start about 15 days after this change reaches the PC.
+- The calibration report (PR 3) reads the outcome log. Nothing in the UI
+  reads it yet.

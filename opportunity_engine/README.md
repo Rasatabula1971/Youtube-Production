@@ -152,6 +152,22 @@ output fields. Historical topics get exactly the same requests as before.
    `output/viral/snapshots.jsonl` (the D-021 format). After 15 days a video
    leaves the radar and its outcome is kept beside its 24 h / 3 d / 7 d
    classifications, to calibrate the thresholds (R7).
+5. **Measure the radar (D-177).**
+   - **Ratings kept.** Each tracked video keeps its first rating and its
+     24 h / 3 d / 7 d milestone ratings, each with the baseline median it used.
+   - **Comparison group.** Every upload a full pass sees for the first time
+     under 48 hours old joins it, flagged or not, so there is a base rate.
+     After day 15 each one gets a reading, even if it has dropped off the
+     channel page (at most 1 API unit per 50).
+   - **Outcome log.** Both groups land in `output/viral/outcomes.jsonl`
+     (append-only). A reading is `ON_TIME` (day 15–16), `LATE` or `MISSED`.
+   - **The test.** It was fixed in D-177 before any data was seen. The
+     calibration report (M1 closure, PR 3) applies it.
+
+Formats are decided by length alone: 180 seconds or less is "short". YouTube
+does not say whether a video is a Short, so every video carries
+`format_basis: duration_heuristic`, and the UI says "Short (≤ 180 s, by
+length)".
 
 Breakouts appear in the inbox as **VIRAL** cards. *Watch* moves one to the
 Watching tab, and *Analyze why it worked* makes it the study set. Failures are

@@ -66,6 +66,18 @@ PACKETS_DIR = HERE / "output" / "opportunities" / "viral"
 GENERATOR = "opportunity_engine.viral_radar"
 SCHEMA_VERSION = 1
 
+# Day-15 outcomes (R7, D-177). Two groups are recorded for the pre-registered
+# test: videos the radar tracked, and every fresh upload from the same channels
+# (first seen under 48 hours old), which gives the base rate.
+GROUP_TRACKED = "tracked"
+GROUP_FRESH = "fresh_cohort"
+READING_ON_TIME = "ON_TIME"  # read between day 15 and day 16
+READING_LATE = "LATE"  # read after day 16 (no pass ran in time)
+READING_MISSED = "MISSED"  # never read: deleted, private or views hidden
+MILESTONES = (("24h", 24), ("3d", 72), ("7d", 168))
+DEFAULT_FRESH_MAX_AGE_HOURS = 48
+DEFAULT_READING_MAX_HOURS = 384
+
 STATUS_COMPLETE = "COMPLETE"
 STATUS_PARTIAL = "PARTIAL"
 API_UNAVAILABLE = "API_VALIDATION_UNAVAILABLE"
@@ -115,6 +127,7 @@ def empty_state() -> dict[str, Any]:
         "seen_video_ids": {},
         "tracked": {},
         "completed": {},
+        "cohort": {},
         "bucket_cursor": 0,
         "throttled_until": None,
         "last_discovery_run": None,
@@ -587,10 +600,80 @@ def append_snapshot(video: dict[str, Any], hours: float, observed_at: str) -> No
 def _milestones(classifications: list[dict[str, Any]]) -> dict[str, Any]:
     """The classification closest to (and not after) 24h, 72h and 168h (R7)."""
     marks: dict[str, Any] = {}
-    for label, limit in (("24h", 24), ("3d", 72), ("7d", 168)):
+    for label, limit in MILESTONES:
         earlier = [c for c in classifications if float(c["age_hours"]) <= limit]
         marks[label] = earlier[-1] if earlier else None
     return marks
+
+
+def _rating(
+    metrics: dict[str, Any], baseline: dict[str, Any], strength: str, rule_id: str | None, at: str
+) -> dict[str, Any]:
+    """One rating with everything the day-15 test needs (D-177)."""
+    return {
+        "at": at,
+        "age_hours": metrics["age_hours"],
+        "strength": strength,
+        "rule_id": rule_id,
+        "views": metrics.get("views"),
+        "lifetime_ratio": metrics.get("lifetime_ratio"),
+        "vph_ratio": metrics.get("vph_ratio"),
+        "baseline_median_views": baseline.get("median_views"),
+        "baseline_sample_size": baseline.get("sample_size"),
+    }
+
+
+def _record_rating(record: dict[str, Any], entry: dict[str, Any]) -> None:
+    """Append a rating and keep the 24 h / 3 d / 7 d milestones as it arrives.
+
+    The rating list keeps only its newest 60 entries, and with several videos
+    tracked a pass runs almost every tick, so by day 15 the list no longer
+    holds the early ratings (D-177). Milestones are therefore stored on their
+    own. A record tracked before D-177 is seeded from whatever its list still
+    holds.
+    """
+    if not isinstance(record.get("milestones"), dict):
+        record["milestones"] = _milestones(record.get("classifications") or [])
+    record["classifications"] = ((record.get("classifications") or []) + [entry])[-60:]
+    for label, limit in MILESTONES:
+        if float(entry["age_hours"]) <= limit:
+            record["milestones"][label] = entry
+
+
+def _reading(hours: float, settings: dict[str, Any]) -> str:
+    limit = float(settings.get("outcome_reading_max_hours", DEFAULT_READING_MAX_HOURS))
+    return READING_ON_TIME if hours <= limit else READING_LATE
+
+
+def outcomes_file() -> Path:
+    """The append-only day-15 outcome log, kept beside the snapshot log."""
+    return SNAPSHOT_FILE.parent / "outcomes.jsonl"
+
+
+def _append_outcome(row: dict[str, Any]) -> None:
+    path = outcomes_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _cohort_outcome(
+    video_id: str, entry: dict[str, Any], views: Any, hours: float | None, reading: str, at: str
+) -> dict[str, Any]:
+    return {
+        "group": GROUP_FRESH,
+        "video_id": video_id,
+        "channel_id": entry.get("channel_id"),
+        "format": entry.get("format"),
+        "format_basis": models.FORMAT_BASIS,
+        "first_rating": entry.get("first_rating"),
+        "milestones": None,
+        "final_views": views,
+        "final_age_hours": round(hours, 2) if hours is not None else None,
+        "reading": reading,
+        "recorded_at": at,
+        "legacy": False,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -697,6 +780,7 @@ def build_viral_packet(record: dict[str, Any], config: dict[str, Any]) -> dict[s
                 "channel_id": video.get("channel_id"),
                 "channel_title": video.get("channel_title"),
                 "format": record["format"],
+                "format_basis": models.FORMAT_BASIS,
                 "published_at": video.get("published_at"),
                 "age_days": round(record["metrics"]["age_hours"] / 24, 2),
                 "duration_seconds": video.get("duration_seconds"),
@@ -767,7 +851,9 @@ def run(
         "completed_tracking": 0,
         "excluded_candidates": 0,
         "packets_written": 0,
+        "fresh_cohort": {"enrolled": 0, "skipped_no_baseline": 0, "readings": 0, "missed": 0, "size": 0},
     }
+    cohort_summary = summary["fresh_cohort"]
 
     try:
         api_call = api or default_api()
@@ -797,7 +883,17 @@ def run(
             refresh_channels(state, counted)
             uploads = crawl_uploads(state, counted, settings)
         tracked_ids = list(state["tracked"])
-        measured = measure_videos([v for ids in uploads.values() for v in ids] + tracked_ids, counted)
+        # Fresh uploads past day 15 get their reading even when newer uploads
+        # have pushed them off the channel's page: at most 1 unit per 50.
+        window_end = float(settings["active_window_days"]) * 24
+        due_cohort_ids = [
+            video_id
+            for video_id, entry in state["cohort"].items()
+            if (age_hours(entry, now) or 0.0) > window_end
+        ]
+        measured = measure_videos(
+            [v for ids in uploads.values() for v in ids] + tracked_ids + due_cohort_ids, counted
+        )
     except RadarError as exc:
         summary.update(status=exc.code)
         summary["errors"].append(str(exc))
@@ -813,6 +909,7 @@ def run(
             "The watchlist is empty: no seed handle resolved and no channel has been seen yet."
         )
     window_hours = float(settings["active_window_days"]) * 24
+    fresh_max_hours = float(settings.get("fresh_cohort_max_age_hours", DEFAULT_FRESH_MAX_AGE_HOURS))
     by_channel: dict[str, list[dict[str, Any]]] = {}
     for video in measured.values():
         by_channel.setdefault(str(video.get("channel_id")), []).append(video)
@@ -831,10 +928,19 @@ def run(
             continue
         if hours > window_hours:
             if record:
-                _complete(state, video_id, record, video, hours, observed_at)
+                _complete(state, video_id, record, video, hours, observed_at, settings)
                 summary["completed_tracking"] += 1
+            cohort_entry = state["cohort"].pop(video_id, None)
+            if cohort_entry is not None:
+                _append_outcome(
+                    _cohort_outcome(
+                        video_id, cohort_entry, video.get("views"), hours, _reading(hours, settings), observed_at
+                    )
+                )
+                cohort_summary["readings"] += 1
             continue
         summary["recent_videos"] += 1
+        first_sighting = video_id not in state["seen_video_ids"]
         state["seen_video_ids"].setdefault(video_id, observed_at)
         fmt = video_format(video, settings)
         follower_count = (state["watchlist"].get(str(video.get("channel_id"))) or {}).get("follower_count")
@@ -844,9 +950,28 @@ def run(
         metrics = ratios(video, baseline, follower_count, now)
         strength, rule_id = classify_strength(metrics, settings)
         summary["classified"][strength] = summary["classified"].get(strength, 0) + 1
+        if first_sighting and hours < fresh_max_hours:
+            # Every fresh upload joins the comparison group, flagged or not;
+            # without a baseline the day-15 test has nothing to divide by.
+            if strength == "INSUFFICIENT_EVIDENCE":
+                cohort_summary["skipped_no_baseline"] += 1
+            else:
+                state["cohort"][video_id] = {
+                    "channel_id": video.get("channel_id"),
+                    "published_at": video.get("published_at"),
+                    "format": fmt,
+                    "first_rating": _rating(metrics, baseline, strength, rule_id, observed_at),
+                }
+                cohort_summary["enrolled"] += 1
         if strength not in settings["track_strengths"] and not record:
             continue
-        record = record or {"first_seen_at": observed_at, "snapshots_taken": [], "classifications": []}
+        if record is None:
+            record = {
+                "first_seen_at": observed_at,
+                "snapshots_taken": [],
+                "classifications": [],
+                "first_rating": _rating(metrics, baseline, strength, rule_id, observed_at),
+            }
         if snapshot_due(record, hours, settings, now):
             append_snapshot(video, hours, observed_at)
             record["last_snapshot_at"] = observed_at
@@ -862,6 +987,7 @@ def run(
         record.update(
             video=video,
             format=fmt,
+            format_basis=models.FORMAT_BASIS,
             baseline=baseline,
             metrics=metrics,
             strength=strength,
@@ -872,10 +998,7 @@ def run(
             historical_topic=topic,
             tracking_status="TRACKING",
         )
-        record["classifications"] = (record.get("classifications") or []) + [
-            {"at": observed_at, "age_hours": metrics["age_hours"], "strength": strength, "trajectory": trajectory}
-        ]
-        record["classifications"] = record["classifications"][-60:]
+        _record_rating(record, {**_rating(metrics, baseline, strength, rule_id, observed_at), "trajectory": trajectory})
         state["tracked"][video_id] = record
         summary["tracked"] += 1
 
@@ -884,6 +1007,18 @@ def run(
         record = state["tracked"].pop(video_id)
         record["tracking_status"] = "UNAVAILABLE"
         state["completed"][video_id] = {"at": observed_at, "reason": "video unavailable", "last": record.get("metrics")}
+
+    # A fresh upload that could not be read by day 16 is recorded as missed,
+    # so the report can say how many were left out (D-177).
+    reading_max = float(settings.get("outcome_reading_max_hours", DEFAULT_READING_MAX_HOURS))
+    for video_id in [v for v in state["cohort"] if v not in measured]:
+        entry = state["cohort"][video_id]
+        hours = age_hours(entry, now)
+        if hours is not None and hours > reading_max:
+            state["cohort"].pop(video_id)
+            _append_outcome(_cohort_outcome(video_id, entry, None, hours, READING_MISSED, observed_at))
+            cohort_summary["missed"] += 1
+    cohort_summary["size"] = len(state["cohort"])
 
     # O10: themes across independent channels, then one packet per breakout.
     clusters = viral_cluster.cluster(state["tracked"], config["viral_clustering"])
@@ -920,17 +1055,45 @@ def run(
 
 
 def _complete(
-    state: dict[str, Any], video_id: str, record: dict[str, Any], video: dict[str, Any], hours: float, at: str
+    state: dict[str, Any],
+    video_id: str,
+    record: dict[str, Any],
+    video: dict[str, Any],
+    hours: float,
+    at: str,
+    settings: dict[str, Any],
 ) -> None:
-    """Leave the active radar after the window; keep the outcome (R7)."""
+    """Leave the active radar after the window; keep the outcome (R7, D-177)."""
+    milestones = record.get("milestones")
+    if not isinstance(milestones, dict):
+        milestones = _milestones(record.get("classifications") or [])
     record["outcome"] = {
         "final_views": video.get("views"),
         "final_age_hours": round(hours, 2),
-        "classified_at": _milestones(record.get("classifications") or []),
+        "reading": _reading(hours, settings),
+        "classified_at": milestones,
     }
     record["tracking_status"] = "TRACKING_COMPLETE"
     state["completed"][video_id] = {"at": at, "reason": "15-day window ended", "outcome": record["outcome"]}
     state["tracked"].pop(video_id, None)
+    _append_outcome(
+        {
+            "group": GROUP_TRACKED,
+            "video_id": video_id,
+            "channel_id": (record.get("video") or {}).get("channel_id") or video.get("channel_id"),
+            "format": record.get("format"),
+            "format_basis": models.FORMAT_BASIS,
+            "first_rating": record.get("first_rating"),
+            "milestones": milestones,
+            "final_views": video.get("views"),
+            "final_age_hours": round(hours, 2),
+            "reading": record["outcome"]["reading"],
+            "recorded_at": at,
+            # Tracked before D-177: no first rating, milestones only as far as
+            # the capped rating list still reached.
+            "legacy": "first_rating" not in record,
+        }
+    )
     if load_packet(video_id) is not None and record.get("metrics"):
         record["video"] = {**record.get("video", {}), **{k: v for k, v in video.items() if v is not None}}
         try:
@@ -1062,6 +1225,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
             "title": video.get("title"),
             "channel_title": video.get("channel_title"),
             "format": record.get("format"),
+            "format_label": models.format_label(record.get("format")),
             "strength": record.get("strength"),
             "trajectory": record.get("trajectory"),
             "breadth": record.get("breadth"),
@@ -1180,6 +1344,7 @@ def status_snapshot() -> dict[str, Any]:
         "watchlist_size": len(state["watchlist"]),
         "tracked_count": len(state["tracked"]),
         "completed_count": len(state["completed"]),
+        "fresh_cohort_size": len(state["cohort"]),
         "throttled_until": state.get("throttled_until"),
         "replicated_themes": sum(1 for c in load_clusters() if c.get("breadth") == "REPLICATED"),
     }
@@ -1197,6 +1362,11 @@ def main() -> None:
     print(f"  Watchlist {summary['watchlist_size']} channels (+{summary['new_channels']} new)")
     print(f"  Recent uploads checked {summary['recent_videos']}: {summary['classified']}")
     print(f"  Tracked {summary['tracked']}, packets written {summary['packets_written']}, finished tracking {summary['completed_tracking']}")
+    cohort = summary["fresh_cohort"]
+    print(
+        f"  Fresh uploads: {cohort['enrolled']} joined, {cohort['readings']} day-15 readings, "
+        f"{cohort['missed']} missed, {cohort['size']} waiting"
+    )
     for error in summary["errors"]:
         print(f"  ! {error}")
     if summary["status"] not in (STATUS_COMPLETE, STATUS_PARTIAL):

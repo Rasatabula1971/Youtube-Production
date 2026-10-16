@@ -6,7 +6,9 @@
   "use strict";
 
   const REFRESH_MS = 30000;
-  const FORMATS = [["all", "All formats"], ["long_form", "Long-form"], ["short", "Shorts"]];
+  // Formats are decided by length (180 s or less), never confirmed as Shorts
+  // by YouTube, so the labels say so (D-177, M1 criterion 5).
+  const FORMATS = [["all", "All formats"], ["long_form", "Long-form"], ["short", "Short by length"]];
   // Shortlist filters (D-162). Lane comes from the server's word lists;
   // ratio and freshness are the two numbers worth a threshold.
   const LANES = [["lane", "My lane"], ["all", "Everything"]];
@@ -269,7 +271,7 @@
     const statusLabel = status ? words(status) : "excluded or not in inbox";
     return '<article class="tracked-row">' +
       '<div class="tracked-main"><h3 class="production-title">' + watchLink(row.video_id, row.title || row.video_id) + "</h3>" +
-        '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format === "short" ? "Short" : "Long-form") + " · " + statusLabel) + laneBadge(row.lane) + tasteBadge(row) + "</p></div>" +
+        '<p class="production-detail">' + esc((row.channel_title || "") + " · " + (row.format_label || "Format unknown") + " · " + statusLabel) + laneBadge(row.lane) + tasteBadge(row) + "</p></div>" +
       '<div class="tracked-day"><strong>' + esc(row.day == null ? "—" : "Day " + row.day + " / " + row.window_days) + "</strong></div>" +
       '<div class="tracked-ratio"><strong>' + esc(ratio(row.lifetime_ratio)) + '</strong><span class="muted">channel normal</span></div>' +
       '<div class="tracked-trend">' + sparkline(row.series, row.title || row.video_id) + "</div>" +

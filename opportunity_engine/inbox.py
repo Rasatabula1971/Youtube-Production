@@ -136,6 +136,10 @@ def _videos(packet: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
             "channel_title": video.get("channel_title"),
             "views": video.get("views"),
             "format": video.get("format"),
+            # Every lane decides format by length (D-177); packets written
+            # before format_basis existed were decided the same way.
+            "format_basis": video.get("format_basis") or models.FORMAT_BASIS,
+            "format_label": models.format_label(video.get("format")),
             "age_days": video.get("age_days"),
         }
         for video in (packet.get("candidate_videos") or [])[:limit]
