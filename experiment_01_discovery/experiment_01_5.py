@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import shutil
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -349,14 +349,17 @@ def archive_gate_files(now: datetime | None = None) -> Path | None:
     try:
         for source in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE, STUDY_SET_FILE, PACKETS_FILE):
             if source.exists():
-                shutil.move(str(source), str(destination / source.name))
+                os.rename(source, destination / source.name)  # moves or fails, never half
                 moved.append(source)
     except OSError:
         # All or nothing: put back what moved, so the gate is never left half
         # archived (a Windows sharing violation, say), then report the failure.
         for source in reversed(moved):
-            shutil.move(str(destination / source.name), str(source))
-        destination.rmdir()
+            os.rename(destination / source.name, source)
+        try:
+            destination.rmdir()
+        except OSError:
+            pass  # never hide the original error
         raise
     return destination
 

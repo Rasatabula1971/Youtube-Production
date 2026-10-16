@@ -269,16 +269,16 @@ class NewCohortFlowTests(unittest.TestCase):
         self.assertEqual(json.loads((old_gate / "approved_study_set.json").read_text()), [{"video_id": "old"}])
 
     def test_a_failed_move_leaves_everything_in_place(self):
-        real_move = e3.shutil.move
+        real_rename = e3.os.rename
         calls = []
 
         def flaky(source, target):
             calls.append(source)
             if len(calls) == 2:
                 raise PermissionError("file in use")
-            return real_move(source, target)
+            return real_rename(source, target)
 
-        with patch.object(e3.shutil, "move", side_effect=flaky):
+        with patch.object(e3.os, "rename", side_effect=flaky):
             with self.assertRaisesRegex(SystemExit, "Nothing was moved"):
                 e3.archive_existing_output()
         for name in ("experiment_01_3", "experiment_01_4", "experiment_01_5"):
@@ -300,6 +300,47 @@ class QuotaDayTests(unittest.TestCase):
         self.assertIsNone(research.next_quota_day_wait(late, datetime(2026, 10, 17, 9, tzinfo=timezone.utc)))
         self.assertIsNone(research.next_quota_day_wait({}, datetime(2026, 10, 17, tzinfo=timezone.utc)))
 
+    def test_summer_and_resumed_discoveries_never_allow_same_day_spending(self):
+        # PDT: the real reset is 07:00Z. Finished 07:30Z on 15 Jul = 00:30 Pacific.
+        summer = {"cohort_created_at": "2026-07-15T07:30:00Z"}
+        self.assertEqual(research.next_quota_day_wait(summer, datetime(2026, 7, 15, 9, 30, tzinfo=timezone.utc)),
+                         datetime(2026, 7, 16, 8, tzinfo=timezone.utc))
+        # A discovery that resumed and finished a day later counts from its end.
+        resumed = {"cohort_created_at": "2026-10-15T20:00:00Z", "discovery_completed_at": "2026-10-16T15:00:00Z"}
+        self.assertEqual(research.next_quota_day_wait(resumed, datetime(2026, 10, 16, 18, tzinfo=timezone.utc)),
+                         datetime(2026, 10, 17, 8, tzinfo=timezone.utc))
+
+    def test_a_recorded_wait_holds_until_it_is_due(self):
+        state = {"status": "WAITING_FOR_NEXT_QUOTA_DAY", "next_refresh_due_at": "2026-10-17T08:00:00+00:00"}
+        self.assertEqual(research.held_until(state, datetime(2026, 10, 17, 7, tzinfo=timezone.utc)),
+                         datetime(2026, 10, 17, 8, tzinfo=timezone.utc))
+        self.assertIsNone(research.held_until(state, datetime(2026, 10, 17, 8, tzinfo=timezone.utc)))
+        self.assertIsNone(research.held_until({"status": "FAILED_01_5"}, datetime(2026, 10, 17, tzinfo=timezone.utc)))
+
+    def test_a_quota_pause_in_01_4_waits_instead_of_failing(self):
+        now = datetime(2026, 10, 18, 16, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("experiment_01_3", "experiment_01_4"):
+                (root / name).mkdir()
+            (root / "experiment_01_3" / "summary.json").write_text(
+                json.dumps({"mode": "refresh", "cohort_created_at": "2026-10-16T14:00:00+00:00"}), encoding="utf-8")
+            (root / "experiment_01_4" / "search_checkpoint.json").write_text('{"status": "QUOTA_EXHAUSTED"}', encoding="utf-8")
+            with patch.multiple(research, EXP13_DIR=root / "experiment_01_3", EXP14_DIR=root / "experiment_01_4",
+                                EXP15_DIR=root / "experiment_01_5", OUTPUT_ROOT=root, STATE_FILE=root / "state.json"), \
+                    patch.object(research, "velocity_ready", return_value=True), \
+                    patch.object(research, "exp14_plan_ready", return_value=True), \
+                    patch.object(research, "utc_now", return_value=now), \
+                    patch.object(research, "run_command", return_value=0):
+                state = research.advance_downstream(python_executable="python", refresh_attempts=1)
+        self.assertEqual(state["status"], "WAITING_FOR_NEXT_QUOTA_DAY")
+        self.assertEqual(state["next_refresh_due_at"], "2026-10-19T08:00:00+00:00")
+
+    def test_01_4_execute_defaults_to_the_whole_plan(self):
+        import inspect
+        source = inspect.getsource(e4.run_execute)
+        self.assertIn('len(plan.get("search_tasks", []))', source)
+
     def test_01_4_execution_waits_and_says_why(self):
         commands = []
         now = datetime(2026, 10, 16, 16, tzinfo=timezone.utc)
@@ -312,7 +353,6 @@ class QuotaDayTests(unittest.TestCase):
                                 EXP15_DIR=root / "experiment_01_5", OUTPUT_ROOT=root, STATE_FILE=root / "state.json"), \
                     patch.object(research, "velocity_ready", return_value=True), \
                     patch.object(research, "exp14_plan_ready", return_value=True), \
-                    patch.object(research, "remove_continuation_task"), \
                     patch.object(research, "utc_now", return_value=now), \
                     patch.object(research, "run_command", side_effect=lambda c, l: commands.append(c) or 0):
                 state = research.advance_downstream(python_executable="python", refresh_attempts=1)
@@ -391,16 +431,16 @@ class GateArchiveTests(unittest.TestCase):
     def test_a_failed_move_puts_everything_back(self):
         for name in ("human_opportunity_decision.json", "approved_study_set.json", "study_set.json"):
             (self.out / name).write_text("{}", encoding="utf-8")
-        real_move = e5.shutil.move
+        real_rename = e5.os.rename
         calls = []
 
         def flaky(source, target):
             calls.append(source)
             if len(calls) == 2:
                 raise PermissionError("sharing violation")
-            return real_move(source, target)
+            return real_rename(source, target)
 
-        with patch.object(e5.shutil, "move", side_effect=flaky):
+        with patch.object(e5.os, "rename", side_effect=flaky):
             with self.assertRaises(PermissionError):
                 e5.archive_gate_files()
         for name in ("human_opportunity_decision.json", "approved_study_set.json", "study_set.json"):

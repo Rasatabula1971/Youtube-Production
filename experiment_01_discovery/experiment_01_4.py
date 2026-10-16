@@ -713,7 +713,13 @@ def run_execute(args: argparse.Namespace) -> None:
     search_results, status, calls = execute_plan(
         plan,
         api_key,
-        max_searches=args.max_searches,
+        # By default the whole plan: the plan budget is the spending limit,
+        # and the continuation passes no value (D-178 review).
+        max_searches=(
+            args.max_searches
+            if args.max_searches is not None
+            else len(plan.get("search_tasks", []))
+        ),
         region_code=args.region_code,
         language=args.language,
     )
@@ -755,7 +761,7 @@ def main() -> None:
     )
     parser.add_argument("--mode", choices=("plan", "execute"), required=True)
     parser.add_argument("--plan-searches", type=int, default=None)
-    parser.add_argument("--max-searches", type=int, default=30)
+    parser.add_argument("--max-searches", type=int, default=None, help="Default: every task in the plan.")
     parser.add_argument("--region-code", default=None)
     parser.add_argument("--language", default=None)
     args = parser.parse_args()

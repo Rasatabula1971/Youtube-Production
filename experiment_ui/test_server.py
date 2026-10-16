@@ -1385,6 +1385,53 @@ class ExperimentUiTests(unittest.TestCase):
         self.assertEqual(workflow["state"], "WAITING_AUTOMATIC")
         self.assertIn("Automatic", workflow["current_title"])
 
+    def test_a_01_4_failure_never_offers_a_fresh_discovery(self):
+        """D-178 review: re-discovery after a 01.4 failure would spend the
+        discovery quota again; the scheduled tick retries 01.4 instead."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exp13 = root / "experiment_01_3"
+            exp13.mkdir()
+            (exp13 / "cohort_manifest.json").write_text("{}", encoding="utf-8")
+            state = root / "opportunity_research_state.json"
+            state.write_text(json.dumps({"status": "FAILED_01_4_EXECUTION"}), encoding="utf-8")
+            with (
+                patch.object(server, "OPPORTUNITY_RESEARCH_STATE", state),
+                patch.object(server, "EXP13_DIR", exp13),
+                patch.object(server, "EXP15_DIR", root / "missing_15"),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={"ready_for_experiment_02": False, "opportunities": []},
+                ),
+            ):
+                readiness = server.action_readiness()
+                workflow = server.workflow_guidance(readiness)
+        self.assertFalse(readiness["opportunity_research"]["enabled"])
+        self.assertIn("retries", readiness["opportunity_research"]["reason"])
+        self.assertNotEqual(workflow.get("current_action_id"), "opportunity_research")
+
+    def test_waiting_for_the_quota_day_is_shown_as_automatic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / "opportunity_research_state.json"
+            state.write_text(json.dumps({"status": "WAITING_FOR_NEXT_QUOTA_DAY",
+                                         "next_refresh_due_at": "2026-10-17T08:00:00+00:00"}), encoding="utf-8")
+            with (
+                patch.object(server, "OPPORTUNITY_RESEARCH_STATE", state),
+                patch.object(server, "EXP15_DIR", root / "missing_15"),
+                patch.object(
+                    server,
+                    "opportunity_gate_snapshot",
+                    return_value={"ready_for_experiment_02": False, "opportunities": []},
+                ),
+            ):
+                readiness = server.action_readiness()
+                workflow = server.workflow_guidance(readiness)
+        self.assertFalse(readiness["opportunity_research"]["enabled"])
+        self.assertEqual(workflow["state"], "WAITING_AUTOMATIC")
+        self.assertEqual(workflow["next_due_at"], "2026-10-17T08:00:00+00:00")
+
     def test_pending_human_gate_is_current_guided_step(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

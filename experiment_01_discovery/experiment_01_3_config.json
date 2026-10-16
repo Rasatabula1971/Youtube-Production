@@ -445,12 +445,15 @@
         "plane",
         "planes",
         "aircraft",
-        "jet",
-        "jets",
+        "jet engine",
+        "jet engines",
+        "fighter jet",
+        "fighter jets",
+        "jet plane",
+        "jet planes",
         "wing",
         "wings",
-        "helicopter",
-        "jet engine"
+        "helicopter"
       ],
       "expansion_queries": [
         "airplane engineering explained"

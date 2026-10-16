@@ -73,7 +73,7 @@ fit one of these structures.
 
 ## Budget allocation
 
-The default plan budget is 30 `search.list` calls.
+The default plan budget is 60 `search.list` calls (30 before D-178, when F1 was the only niche). `--mode execute` runs the whole plan unless `--max-searches` is given; a quota or budget pause resumes from the checkpoint on the next quota day.
 
 Scheduling uses the primary 01.3 age-matched velocity metric to order
 evidence-ready cells, then allocates calls round-robin so one long-form cell

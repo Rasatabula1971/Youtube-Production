@@ -12,7 +12,6 @@ import csv
 import json
 import os
 import re
-import shutil
 import statistics
 from collections.abc import Sequence
 from collections import defaultdict
@@ -1152,11 +1151,14 @@ def archive_existing_output() -> Path | None:
     done: list[tuple[Path, Path]] = []
     try:
         for source, target in moves:
-            shutil.move(str(source), str(target))
+            # os.rename either moves the folder or fails with nothing
+            # touched; shutil.move would fall back to copy-then-delete and
+            # could leave half a folder behind on Windows (D-178 review).
+            os.rename(source, target)
             done.append((source, target))
     except OSError as exc:
         for source, target in reversed(done):
-            shutil.move(str(target), str(source))
+            os.rename(target, source)
         raise SystemExit(
             f"Could not archive the previous cohort ({exc}). Nothing was moved; "
             "close any open output files and run discovery again."
@@ -1631,6 +1633,7 @@ def build_summary(
         "mode": mode,
         "cohort_id": manifest.get("cohort_id"),
         "cohort_created_at": manifest.get("created_at"),
+        "discovery_completed_at": manifest.get("discovery_completed_at"),
         "target_age_days": manifest.get("target_age_days"),
         "age_tolerance_days": manifest.get("age_tolerance_days"),
         "minimum_age_days": manifest.get("minimum_age_days"),
@@ -2020,6 +2023,9 @@ def run_discover(
         "experiment_id": EXPERIMENT_ID,
         "cohort_id": (f"day{target}_adaptive_{observed_dt.strftime('%Y%m%dT%H%M%SZ')}"),
         "created_at": observed_at,
+        # When the search spending ended (a resumed discovery can end a day
+        # later than it started); 01.4 waits for a later quota day (D-178).
+        "discovery_completed_at": datetime.now(timezone.utc).isoformat(),
         "target_age_days": target,
         "age_tolerance_days": tolerance,
         "minimum_age_days": strict_window["minimum_age_days"],
