@@ -37,6 +37,9 @@ class ScheduledRefreshTests(unittest.TestCase):
             )
         )
         stack.enter_context(
+            patch.object(scheduler, "SUMMARY_01_3_FILE", output_dir / "summary.json")
+        )
+        stack.enter_context(
             patch.object(
                 scheduler,
                 "PERSISTENT_SNAPSHOT_FILE",
@@ -156,6 +159,8 @@ class ScheduledRefreshTests(unittest.TestCase):
                 velocity_samples=3,
                 index=1.4,
             )
+            # Ready means refreshed at least once since discovery (D-178).
+            scheduler.SUMMARY_01_3_FILE.write_text(json.dumps({"mode": "refresh"}), encoding="utf-8")
 
             with patch.object(scheduler.subprocess, "run") as run:
                 result = scheduler.run_scheduled_refresh(
@@ -291,3 +296,17 @@ class ScheduledRefreshTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReadinessAfterDiscoveryTests(unittest.TestCase):
+    """D-178: velocity carried over from archived cohorts must not let 01.4
+    plan before the new cohort's own first refresh."""
+
+    def test_ready_cells_wait_for_one_refresh_after_discovery(self):
+        velocity = {"topics": {"brakes": {"by_format": {"short_candidate": {
+            "unique_channels": 3, "velocity_sample_count": 3, "age_matched_velocity_index": 1.4}}}}}
+        config = {"minimum_unique_channels": 3, "minimum_velocity_samples": 3}
+        self.assertTrue(scheduler.current_cohort_ready_for_01_4(velocity, config))  # old two-argument form
+        self.assertFalse(scheduler.current_cohort_ready_for_01_4(velocity, config, {"mode": "discover"}))
+        self.assertFalse(scheduler.current_cohort_ready_for_01_4(velocity, config, {}))
+        self.assertTrue(scheduler.current_cohort_ready_for_01_4(velocity, config, {"mode": "refresh"}))

@@ -5249,9 +5249,18 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     research_status = str(research_state.get("status") or "")
     research_waiting = research_status in {
         "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
+        "WAITING_FOR_NEXT_QUOTA_DAY",
         "DISCOVERY_RUNNING",
 
     }
+    # 01.4 / 01.5 failures are retried by the next scheduled tick. Starting
+    # research again would re-discover the cohort and spend the discovery
+    # quota again (D-178 review); Tools still offers a clean restart.
+    research_retrying = research_status in {
+        "FAILED_01_4_PLAN",
+        "FAILED_01_4_EXECUTION",
+        "FAILED_01_5",
+    } and (EXP13_DIR / "cohort_manifest.json").exists()
     human_gate = opportunity_gate_snapshot()
     human_gate_ready = bool(human_gate.get("ready_for_experiment_02"))
 
@@ -5495,14 +5504,20 @@ def action_readiness() -> dict[str, dict[str, Any]]:
 
     result: dict[str, dict[str, Any]] = {
         "opportunity_research": {
-            "enabled": not study_set and not research_waiting,
+            "enabled": not study_set and not research_waiting and not research_retrying,
             "reason": (
                 "Opportunity handoff already exists; review it below."
                 if study_set
                 else (
                     "Automatic velocity measurement is already scheduled."
                     if research_waiting
-                    else "Run the Opportunity Engine automatically through 01.5."
+                    else (
+                        "The automatic run retries 01.4 / 01.5 on its next tick; starting "
+                        "again would re-discover and spend the discovery quota again. "
+                        "Tools -> Restart 01.3 Discovery Clean starts over."
+                        if research_retrying
+                        else "Run the Opportunity Engine automatically through 01.5."
+                    )
                 )
             ),
         },
@@ -7546,6 +7561,37 @@ def workflow_guidance(
             ),
             "next_action_id": None,
             "next_title": "Automatic velocity validation",
+        }
+
+    if (
+        research_status in {"FAILED_01_4_PLAN", "FAILED_01_4_EXECUTION", "FAILED_01_5"}
+        and not study_set
+        and (EXP13_DIR / "cohort_manifest.json").exists()
+    ):
+        return {
+            "state": "WAITING_AUTOMATIC",
+            "current_action_id": None,
+            "current_title": "01.4 / 01.5 retries on the next scheduled tick",
+            "current_detail": (
+                str(research_state.get("message") or "The last step failed.")
+                + " The current cohort is kept; the job log has the reason."
+            ),
+            "next_action_id": None,
+            "next_title": "Review Opportunity",
+        }
+
+    if research_status == "WAITING_FOR_NEXT_QUOTA_DAY" and not study_set:
+        return {
+            "state": "WAITING_AUTOMATIC",
+            "current_action_id": None,
+            "current_title": "01.4 searches wait for tomorrow's YouTube quota",
+            "current_detail": str(
+                research_state.get("message")
+                or "The system will continue automatically."
+            ),
+            "next_action_id": None,
+            "next_title": "Review Opportunity",
+            "next_due_at": research_state.get("next_refresh_due_at"),
         }
 
     if research_status == "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH" and not study_set:

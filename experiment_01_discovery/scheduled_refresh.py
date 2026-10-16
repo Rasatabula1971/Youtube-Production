@@ -23,6 +23,7 @@ OUTPUT_ROOT = HERE / "output"
 OUTPUT_DIR = OUTPUT_ROOT / "experiment_01_3"
 MANIFEST_FILE = OUTPUT_DIR / "cohort_manifest.json"
 TOPIC_VELOCITY_FILE = OUTPUT_DIR / "topic_velocity.json"
+SUMMARY_01_3_FILE = OUTPUT_DIR / "summary.json"
 PERSISTENT_SNAPSHOT_FILE = OUTPUT_ROOT / "experiment_01_3_snapshot_history.jsonl"
 EXP14_CONFIG_FILE = HERE / "experiment_01_4_config.json"
 STATUS_FILE = OUTPUT_DIR / "scheduled_refresh_status.json"
@@ -91,7 +92,18 @@ def append_log(
 def current_cohort_ready_for_01_4(
     topic_velocity: dict[str, Any],
     config_01_4: dict[str, Any],
+    summary_01_3: dict[str, Any] | None = None,
 ) -> bool:
+    """True when 01.4 may plan from this cohort.
+
+    With ``summary_01_3``, the cohort must also have been refreshed at least
+    once since discovery. Snapshots from archived cohorts give re-found videos
+    a velocity at once, while new ones (a new niche) have none until the
+    cohort's own first refresh. Planning before it would freeze a plan
+    without them (D-178).
+    """
+    if summary_01_3 is not None and summary_01_3.get("mode") != "refresh":
+        return False
     minimum_channels = int(config_01_4["minimum_unique_channels"])
     minimum_velocity = int(config_01_4["minimum_velocity_samples"])
 
@@ -247,12 +259,17 @@ def run_scheduled_refresh(
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             topic_velocity = {}
             config_01_4 = {}
+        try:
+            summary_01_3 = load_json(SUMMARY_01_3_FILE) if SUMMARY_01_3_FILE.exists() else {}
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            summary_01_3 = {}
         if (
             topic_velocity
             and config_01_4
             and current_cohort_ready_for_01_4(
                 topic_velocity,
                 config_01_4,
+                summary_01_3,
             )
         ):
             message = (

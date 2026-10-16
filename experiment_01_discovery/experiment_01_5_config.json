@@ -8,5 +8,6 @@
   "candidate_view_reference": 500000,
   "max_study_candidates": 8,
   "max_per_topic_format": 2,
-  "max_per_channel": 1
+  "max_per_channel": 1,
+  "min_per_niche": 2
 }

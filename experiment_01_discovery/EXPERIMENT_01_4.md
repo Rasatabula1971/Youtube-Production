@@ -73,7 +73,7 @@ fit one of these structures.
 
 ## Budget allocation
 
-The default plan budget is 30 `search.list` calls.
+The default plan budget is 60 `search.list` calls (30 before D-178, when F1 was the only niche). `--mode execute` runs the whole plan unless `--max-searches` is given; a quota or budget pause resumes from the checkpoint on the next quota day.
 
 Scheduling uses the primary 01.3 age-matched velocity metric to order
 evidence-ready cells, then allocates calls round-robin so one long-form cell
@@ -96,8 +96,15 @@ Execution:
 - uses `viewCount` ordering;
 - searches the previous five years by default;
 - keeps short and long-form duration branches separate;
-- validates the returned title against both the topic and F1/motorsport
-  context;
+- validates the returned title against both the topic and its niche's
+  context words (D-178);
+- uses each niche's own query families (`query_families_by_niche`); F1 keeps
+  the shared list;
+- plans only after the cohort's own first refresh, so every niche is measured
+  before the plan is frozen (D-178);
+- spends search quota only on a later YouTube quota day than discovery
+  (midnight Pacific), so one day never pays for both; the automatic run waits
+  with `WAITING_FOR_NEXT_QUOTA_DAY` (D-178);
 - preserves query-family provenance; and
 - checkpoints completed search tasks.
 

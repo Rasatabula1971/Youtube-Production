@@ -166,9 +166,9 @@ APPROVE · REWORK (note required) · WATCH (viral lane only) · SAVE · REJECT.
    the evidence drawer with a snapshot trajectory chart). All v2.1 slices
    are now built.
 
-Also pending: an `everyday_science` 01.3 topic set (01.3 is currently scoped to
-motorsport engineering), added as its own change so the existing frozen cohort
-is not disturbed.
+The `everyday_science` 01.3 topic set was added in D-178, as its own change.
+The current frozen cohort is untouched until the owner starts a new discovery,
+which archives it.
 
 ---
 

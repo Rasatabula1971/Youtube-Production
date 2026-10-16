@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from core.jsonio import load_json_or_exit as load_json
@@ -246,45 +248,59 @@ def build_study_set(
     maximum = int(config["max_study_candidates"])
     max_per_cell = int(config["max_per_topic_format"])
     max_per_channel = int(config["max_per_channel"])
+    # Every niche with passing packets is guaranteed this many places, so one
+    # niche cannot take the whole study set (D-178). One niche: no effect.
+    min_per_niche = int(config.get("min_per_niche", 0))
 
     topic_format_counts: dict[tuple[str, str], int] = defaultdict(int)
     channel_counts: dict[str, int] = defaultdict(int)
+    niche_counts: dict[str, int] = defaultdict(int)
     used_video_ids: set[str] = set()
-    selected: list[dict[str, Any]] = []
+    chosen: list[dict[str, Any]] = []
 
-    for packet in eligible:
-        if len(selected) >= maximum:
-            break
-
+    def take(packet: dict[str, Any]) -> bool:
         video_id = str(packet.get("video_id", ""))
         channel_id = str(packet.get("channel_id", ""))
         key = (str(packet.get("topic", "")), str(packet.get("format_candidate", "")))
-
-        if not video_id or video_id in used_video_ids:
-            continue
+        if len(chosen) >= maximum or not video_id or video_id in used_video_ids:
+            return False
         if topic_format_counts[key] >= max_per_cell:
-            continue
+            return False
         if channel_id and channel_counts[channel_id] >= max_per_channel:
-            continue
-
-        selected.append(
-            {
-                **packet,
-                "study_set_sequence": len(selected) + 1,
-                "selection_basis": [
-                    "PASS handoff gate",
-                    "ordered by age_matched_velocity_index",
-                    "absolute views used only as tie-breaker",
-                    "topic/format and channel diversity caps applied",
-                ],
-            }
-        )
+            return False
+        chosen.append(packet)
         used_video_ids.add(video_id)
         topic_format_counts[key] += 1
+        niche_counts[str(packet.get("niche") or "")] += 1
         if channel_id:
             channel_counts[channel_id] += 1
+        return True
 
-    return selected
+    niches = sorted({str(packet.get("niche") or "") for packet in eligible})
+    if min_per_niche > 0 and len(niches) > 1:
+        for niche in niches:
+            for packet in eligible:
+                if niche_counts[niche] >= min_per_niche:
+                    break
+                if str(packet.get("niche") or "") == niche:
+                    take(packet)
+    for packet in eligible:
+        if len(chosen) >= maximum:
+            break
+        take(packet)
+
+    basis = [
+        "PASS handoff gate",
+        "ordered by age_matched_velocity_index",
+        "absolute views used only as tie-breaker",
+        "topic/format and channel diversity caps applied",
+    ]
+    if min_per_niche > 0 and len(niches) > 1:
+        basis.append(f"at least {min_per_niche} per niche where available")
+    return [
+        {**packet, "study_set_sequence": sequence, "selection_basis": list(basis)}
+        for sequence, packet in enumerate(sorted(chosen, key=study_priority), start=1)
+    ]
 
 
 CSV_FIELDS = [
@@ -310,6 +326,44 @@ CSV_FIELDS = [
 ]
 
 
+GATE_ARCHIVE_DIR = OUTPUT_DIR / "archive"
+
+
+def archive_gate_files(now: datetime | None = None) -> Path | None:
+    """Move an earlier human decision, its approved study set and the study set
+    and packets it was made against into ``archive/gate_<UTC time>/`` (D-178).
+
+    Nothing is archived when no human decision or approved set exists, so a
+    re-run with no decision does not fill the archive.
+    """
+    if not (HUMAN_DECISION_FILE.exists() or APPROVED_STUDY_SET_FILE.exists()):
+        return None
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    destination = GATE_ARCHIVE_DIR / f"gate_{stamp}"
+    suffix = 1
+    while destination.exists():
+        destination = GATE_ARCHIVE_DIR / f"gate_{stamp}_{suffix}"
+        suffix += 1
+    destination.mkdir(parents=True)
+    moved: list[Path] = []
+    try:
+        for source in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE, STUDY_SET_FILE, PACKETS_FILE):
+            if source.exists():
+                os.rename(source, destination / source.name)  # moves or fails, never half
+                moved.append(source)
+    except OSError:
+        # All or nothing: put back what moved, so the gate is never left half
+        # archived (a Windows sharing violation, say), then report the failure.
+        for source in reversed(moved):
+            os.rename(destination / source.name, source)
+        try:
+            destination.rmdir()
+        except OSError:
+            pass  # never hide the original error
+        raise
+    return destination
+
+
 def write_outputs(
     packets: list[dict[str, Any]],
     study_set: list[dict[str, Any]],
@@ -319,10 +373,11 @@ def write_outputs(
 ) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # A rebuilt machine handoff invalidates any earlier human decision.
-    for stale_gate_file in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE):
-        if stale_gate_file.exists():
-            stale_gate_file.unlink()
+    # A rebuilt machine handoff invalidates any earlier human decision. The
+    # decision and the evidence it was made against are archived, not deleted.
+    archived = archive_gate_files()
+    if archived is not None:
+        print(f"Archived the earlier gate decision and study set to: {archived}")
 
     PACKETS_FILE.write_text(
         json.dumps(packets, indent=2, ensure_ascii=False),

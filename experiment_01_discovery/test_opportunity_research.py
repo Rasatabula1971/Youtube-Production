@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from types import SimpleNamespace
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -101,9 +102,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     },
                 )
             )
-            remove = stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
             schedule = stack.enter_context(
                 patch.object(research, "schedule_continuation")
             )
@@ -117,7 +115,6 @@ class OpportunityResearchTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "NEEDS_HUMAN_ATTENTION")
         self.assertEqual(result["refresh_attempts"], 3)
-        remove.assert_called_once()
         schedule.assert_not_called()
 
     def test_ready_velocity_runs_01_4_then_01_5_and_stops_for_human(self):
@@ -155,9 +152,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     side_effect=fake_run,
                 )
             )
-            remove = stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
             vidiq = stack.enter_context(
                 patch.object(
                     research,
@@ -176,7 +170,6 @@ class OpportunityResearchTests(unittest.TestCase):
             "AWAITING_HUMAN_OPPORTUNITY_REVIEW",
         )
         self.assertEqual(run.call_count, 3)
-        remove.assert_called_once()
         vidiq.assert_called_once_with(python_executable="python-test")
         self.assertEqual(result["vidiq_status"], "COMPLETE")
 
@@ -196,9 +189,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     return_value=("PARTIAL", "supplement partial"),
                 )
             )
-            remove = stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
 
             result = research.continue_research(
                 python_executable="python-test",
@@ -210,7 +200,6 @@ class OpportunityResearchTests(unittest.TestCase):
         self.assertEqual(result["status"], "AWAITING_HUMAN_OPPORTUNITY_REVIEW")
         self.assertEqual(result["vidiq_status"], "PARTIAL")
         vidiq.assert_called_once_with(python_executable="python-test")
-        remove.assert_called_once()
 
     def test_start_runs_discovery_then_enters_continuation(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -243,7 +232,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     return_value=expected,
                 )
             )
-            stack.enter_context(patch.object(research, "remove_continuation_task"))
 
             result = research.start_research(
                 python_executable="python-test",
@@ -263,3 +251,29 @@ class OpportunityResearchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedTaskTests(unittest.TestCase):
+    """D-178 review: the one Windows task also runs the viral radar, so the
+    research flow must never delete it (it used to on every finished, failed
+    or started run)."""
+
+    def test_no_research_path_deletes_the_scheduled_task(self):
+        commands = []
+
+        def fake_subprocess_run(command, *args, **kwargs):
+            commands.append([str(part) for part in command])
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(research.os, "name", "nt"), \
+                patch.object(research.subprocess, "run", side_effect=fake_subprocess_run), \
+                patch.object(research, "study_set_ready", return_value=True), \
+                patch.object(research, "run_vidiq_supplemental", return_value=("COMPLETE", "ok")), \
+                patch.object(research, "write_state", side_effect=lambda status, message, **kw: {"status": status}):
+            research.continue_research(
+                python_executable="python-test", minimum_interval_hours=1.5,
+                max_refresh_attempts=3, schedule_if_waiting=True,
+            )
+        flat = [" ".join(command).lower() for command in commands]
+        self.assertFalse(any("remove_experiment_01_3_auto_refresh" in c or "/delete" in c for c in flat), flat)
+        self.assertFalse(hasattr(research, "remove_continuation_task"))

@@ -44,7 +44,6 @@ EXP14_CONFIG = HERE / "experiment_01_4_config.json"
 INSTALL_SCHEDULER = (
     PROJECT_ROOT / "scripts" / "install_experiment_01_3_auto_refresh.ps1"
 )
-REMOVE_SCHEDULER = PROJECT_ROOT / "scripts" / "remove_experiment_01_3_auto_refresh.ps1"
 
 DEFAULT_REFRESH_INTERVAL_HOURS = 2
 DEFAULT_MAX_REFRESH_ATTEMPTS = 3
@@ -119,6 +118,7 @@ def velocity_ready() -> bool:
         return scheduled_refresh.current_cohort_ready_for_01_4(
             topic_velocity,
             config_01_4,
+            read_json(EXP13_DIR / "summary.json"),
         )
     except (KeyError, TypeError, ValueError):
         return False
@@ -143,6 +143,55 @@ def exp14_plan_ready() -> bool:
 def exp14_complete() -> bool:
     summary = read_json(EXP14_DIR / "summary.json")
     return summary.get("execution_status") == "COMPLETE"
+
+
+# YouTube's daily quota resets at midnight Pacific time: 07:00 UTC in summer
+# (PDT), 08:00 UTC in winter (PST). Without a time-zone database (Windows has
+# none in the standard library) both are allowed for: the spending moment is
+# dated as late as it could be (UTC-7), "now" as early as it could be (UTC-8).
+# The wait can be up to an hour too long, never too short.
+PACIFIC_LATEST = timedelta(hours=7)
+PACIFIC_EARLIEST = timedelta(hours=8)
+EXP14_PAUSED_STATUSES = {"QUOTA_EXHAUSTED", "SEARCH_BUDGET_REACHED"}
+
+
+def _parse_time(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def next_quota_boundary_after(spent_at: datetime) -> datetime:
+    """The first moment that is surely a later quota day than ``spent_at``."""
+    day = (spent_at.astimezone(timezone.utc) - PACIFIC_LATEST).date() + timedelta(days=1)
+    return datetime(day.year, day.month, day.day, tzinfo=timezone.utc) + PACIFIC_EARLIEST
+
+
+def next_quota_day_wait(summary_01_3: dict[str, Any], now: datetime) -> datetime | None:
+    """When 01.4 may spend search quota, or None if it may now (D-178).
+
+    Discovery can use up to 6,000 units. 01.4's searches on the same quota
+    day, with the radar, could pass the 10,000-unit daily limit, so they wait
+    for a later quota day than the one discovery finished in (a discovery
+    that resumed the next day counts from when it finished).
+    """
+    finished = _parse_time(summary_01_3.get("discovery_completed_at")) or _parse_time(
+        summary_01_3.get("cohort_created_at")
+    )
+    if finished is None:
+        return None
+    boundary = next_quota_boundary_after(finished)
+    return boundary if now < boundary else None
+
+
+def held_until(state: dict[str, Any], now: datetime) -> datetime | None:
+    """A quota-day wait already recorded in the research state."""
+    if state.get("status") != "WAITING_FOR_NEXT_QUOTA_DAY":
+        return None
+    due = _parse_time(state.get("next_refresh_due_at"))
+    return due if due is not None and now < due else None
 
 
 def schedule_continuation(
@@ -172,22 +221,11 @@ def schedule_continuation(
     return completed.returncode == 0
 
 
-def remove_continuation_task() -> None:
-    if os.name != "nt":
-        return
-    subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(REMOVE_SCHEDULER),
-        ],
-        cwd=PROJECT_ROOT,
-        check=False,
-    )
-
+# The one Windows task (scripts/install_experiment_01_3_auto_refresh.ps1) runs
+# opportunity_engine.scheduled_tick: this continuation AND the viral radar
+# (O13). The research flow therefore never removes it; before D-178 it did, on
+# every finished, failed or started run, which silently stopped the radar.
+# Only the owner removes it (Tools -> Remove Opportunity Automation).
 
 def run_vidiq_supplemental(
     *,
@@ -274,7 +312,6 @@ def advance_downstream(
     if not velocity_ready():
         raise RuntimeError("advance_downstream called before velocity was ready")
 
-    remove_continuation_task()
 
     if not exp14_complete() and not exp14_plan_ready():
         plan_code = run_command(
@@ -302,6 +339,26 @@ def advance_downstream(
         )
 
     if not exp14_complete():
+        now = utc_now()
+        waits = [
+            wait
+            for wait in (
+                next_quota_day_wait(read_json(EXP13_DIR / "summary.json"), now),
+                held_until(read_json(STATE_FILE), now),
+            )
+            if wait is not None
+        ]
+        resume_at = max(waits) if waits else None
+        if resume_at is not None:
+            return write_state(
+                "WAITING_FOR_NEXT_QUOTA_DAY",
+                (
+                    "The 01.4 plan is ready. Its searches wait for the next YouTube "
+                    "quota day after discovery, so one day never spends both."
+                ),
+                refresh_attempts=refresh_attempts,
+                next_refresh_due_at=resume_at.isoformat(),
+            )
         execute_code = run_command(
             [
                 python_executable,
@@ -312,6 +369,16 @@ def advance_downstream(
             ],
             "AUTOMATIC STEP — EXECUTE 01.4 EXPANSION",
         )
+        paused = str(read_json(EXP14_DIR / "search_checkpoint.json").get("status") or "")
+        if execute_code == 0 and not exp14_complete() and paused in EXP14_PAUSED_STATUSES:
+            # Out of quota (or budget) part-way: the checkpoint resumes on the
+            # next quota day; this is a pause, not a failure (D-178 review).
+            return write_state(
+                "WAITING_FOR_NEXT_QUOTA_DAY",
+                f"01.4 paused part-way ({paused}); it resumes from its checkpoint on the next quota day.",
+                refresh_attempts=refresh_attempts,
+                next_refresh_due_at=next_quota_boundary_after(utc_now()).isoformat(),
+            )
         if execute_code != 0 or not exp14_complete():
             return write_state(
                 "FAILED_01_4_EXECUTION",
@@ -360,7 +427,6 @@ def continue_research(
     refresh_attempts = int(state.get("refresh_attempts") or 0)
 
     if study_set_ready():
-        remove_continuation_task()
         return finalize_opportunity_handoff(
             python_executable=python_executable,
             refresh_attempts=refresh_attempts,
@@ -381,14 +447,12 @@ def continue_research(
     if refresh_status == "REFRESHED":
         refresh_attempts += 1
     elif refresh_status.startswith("FAILED"):
-        remove_continuation_task()
         return write_state(
             "FAILED_VELOCITY_REFRESH",
             str(refresh_result.get("message") or "Velocity refresh failed."),
             refresh_attempts=refresh_attempts,
         )
     elif refresh_status == "SKIPPED_INSUFFICIENT_COHORT":
-        remove_continuation_task()
         return write_state(
             "NEEDS_HUMAN_ATTENTION",
             "The frozen cohort is insufficient; discovery must be rerun.",
@@ -402,7 +466,6 @@ def continue_research(
         )
 
     if refresh_attempts >= max_refresh_attempts:
-        remove_continuation_task()
         return write_state(
             "NEEDS_HUMAN_ATTENTION",
             (
@@ -449,7 +512,6 @@ def start_research(
     minimum_interval_hours: float,
     max_refresh_attempts: int,
 ) -> dict[str, Any]:
-    remove_continuation_task()
     write_state(
         "DISCOVERY_RUNNING",
         "Experiment 01.3 discovery is running.",
