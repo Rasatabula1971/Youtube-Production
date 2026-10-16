@@ -119,6 +119,7 @@ def velocity_ready() -> bool:
         return scheduled_refresh.current_cohort_ready_for_01_4(
             topic_velocity,
             config_01_4,
+            read_json(EXP13_DIR / "summary.json"),
         )
     except (KeyError, TypeError, ValueError):
         return False
@@ -143,6 +144,35 @@ def exp14_plan_ready() -> bool:
 def exp14_complete() -> bool:
     summary = read_json(EXP14_DIR / "summary.json")
     return summary.get("execution_status") == "COMPLETE"
+
+
+# YouTube's daily quota resets at midnight Pacific time. UTC-8 (standard time)
+# is used all year: in summer it waits one hour longer than needed, never less.
+QUOTA_DAY_OFFSET = timedelta(hours=8)
+
+
+def quota_day(moment: datetime) -> Any:
+    return (moment.astimezone(timezone.utc) - QUOTA_DAY_OFFSET).date()
+
+
+def next_quota_day_wait(summary_01_3: dict[str, Any], now: datetime) -> datetime | None:
+    """When 01.4 may spend search quota, or None if it may now (D-178).
+
+    Discovery can use up to 6,000 units. 01.4's searches on the same quota
+    day, with the radar, could pass the 10,000-unit daily limit, so they wait
+    for the next quota day after the cohort was discovered.
+    """
+    created = str(summary_01_3.get("cohort_created_at") or "").strip()
+    try:
+        discovered = datetime.fromisoformat(created.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if discovered.tzinfo is None:
+        discovered = discovered.replace(tzinfo=timezone.utc)
+    if quota_day(now) > quota_day(discovered):
+        return None
+    next_day = quota_day(discovered) + timedelta(days=1)
+    return datetime(next_day.year, next_day.month, next_day.day, tzinfo=timezone.utc) + QUOTA_DAY_OFFSET
 
 
 def schedule_continuation(
@@ -302,6 +332,17 @@ def advance_downstream(
         )
 
     if not exp14_complete():
+        resume_at = next_quota_day_wait(read_json(EXP13_DIR / "summary.json"), utc_now())
+        if resume_at is not None:
+            return write_state(
+                "WAITING_FOR_NEXT_QUOTA_DAY",
+                (
+                    "The 01.4 plan is ready. Its searches wait for the next YouTube "
+                    "quota day after discovery, so one day never spends both."
+                ),
+                refresh_attempts=refresh_attempts,
+                next_refresh_due_at=resume_at.isoformat(),
+            )
         execute_code = run_command(
             [
                 python_executable,

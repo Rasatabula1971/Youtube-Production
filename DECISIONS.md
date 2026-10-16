@@ -5812,85 +5812,121 @@ Checked against `c0adb20`:
 
 ## D-178 — Two niches in the historical lane: Science Inside joins F1 in one cohort
 
-**Status:** Accepted (16 Oct 2026). PR 2 of the M1 closure (D-177, criterion 1).
+**Status:** Accepted (16 Oct 2026). PR 2 of the M1 closure (D-177, criterion 1),
+revised after its Stage 8 review.
 
 **Context.**
 - The historical lane (01.3 → 01.4 → 01.5) could only ever find motorsport:
   - all 8 topics were `automotive_racing`;
-  - every title had to contain one of 18 motorsport words;
+  - every title had to carry one of 18 motorsport words;
   - one 01.4 query family was "{root} rules banned".
-- 01.5 also deleted the earlier human gate decision and `approved_study_set.json`
-  whenever it rebuilt the handoff, so a new cohort would have erased the gate
-  history.
+- Three things also stood between a new cohort and the gate:
+  - The automatic continuation treated any existing `study_set.json`, or a
+    completed 01.4 run, as current. A new cohort would have stopped on the
+    old F1 study set, or reused the old 01.4 results.
+  - Snapshots from archived cohorts gave re-found F1 videos a velocity at
+    once, so 01.4 could freeze a plan before a new niche was ever measured.
+  - 01.5 deleted the earlier gate decision and `approved_study_set.json`.
 
 **Decision.**
 - **Each niche has its own title rules.**
-  - `niche_context_terms` gives the words a title must contain, per niche.
-  - `niche_exclude_title_terms` adds exclusions per niche, on top of the
-    shared `exclude_title_terms`.
-  - `query_families_by_niche` in 01.4 lets a niche use its own query
-    families; any other niche uses the shared list.
-  - Every topic is checked against its own niche's rules, in 01.3 and in 01.4.
-  - A config that still has only `motorsport_context_terms` keeps working for
-    the motorsport niche.
-- **F1 is unchanged.**
-  - The same 18 context words, the same 8 shared exclusions and the same 8
-    topics.
-  - The same query families, field names and reasons
-    (`motorsport_context_matches`, `missing_motorsport_context_in_title`,
-    `title_topic_and_motorsport_context`).
+  - `niche_context_terms`: the words a title must carry.
+  - `niche_exclude_title_terms`: added to the shared `exclude_title_terms`.
+  - In 01.4, `query_families_by_niche` (other niches use the shared list).
+  - Every topic is checked against its own niche, in 01.3 and in 01.4.
+  - A config with only `motorsport_context_terms` still works for F1.
+- **F1's rules are unchanged.**
+  - The same 18 context words, 8 exclusions and 8 topics.
+  - The same query families, field names and reasons.
   - A test hashes 400 F1 topic/title results and requires the value computed
-    on `a10af38` before this change.
+    on `a10af38`.
 - **`everyday_science` (Science Inside) has 8 topics:**
   - `tyre_grip`, `animal_abilities`, `household_appliances`,
     `musical_acoustics`, `road_cars`, `weather_storms`, `earth_oceans`,
-    `aircraft_wings`;
-  - each has strict, expansion and Shorts queries.
+    `aircraft_wings`.
   - **Context words:** science, physics, engineering, explained, explainer,
-    how, why, works, mechanism, chemistry, biology, experiment, slow motion,
-    inside.
+    mechanism, chemistry, chemical reaction, biology, experiment, slow motion,
+    how, why.
+  - **Match terms are specific.** Ambiguous words are qualified or dropped:
+    - "cloud" becomes "clouds" or "cloud cover";
+    - "moon" becomes "the moon";
+    - "car" becomes "car engine" or "car battery";
+    - "abs", "hybrid" and "speaker" are dropped.
+    - These rule out titles such as "How cloud computing works" and "Why the
+      Thunder won the NBA Finals".
   - **Exclusions:**
-    - motorsport words, including "power unit", so the two niches stay apart;
+    - motorsport words, including "power unit", so the two niches stay apart.
+      A "racing tyres vs road tyres" title therefore belongs to F1 only.
+    - personal "how I" / "why I" titles;
     - how-to, tutorial, repair, review, unboxing, buying guide, ASMR,
-      compilation, reaction, prank, music video, lyrics and cover.
-  - **Query families:**
+      compilation and prank;
+    - reaction videos, music videos, lyrics and song covers. These are named
+      precisely, so "chemical reaction" and "cloud cover" still pass.
+  - **The 01.4 families:**
     - how {root} works;
     - {root} science explained;
     - {root} physics;
-    - {root} inside;
+    - the science of {root};
     - {root} slow motion;
     - {root} myth.
-  - **Left out for now:** the "your body" family. It needs a medical-advice
-    exclusion first (R10).
-  - **Topic ids avoid generic words** such as "physics" or "science". The
-    radar's historical alignment matches any 4+ letter word of a topic id.
-  - Non-F1 results use neutral names: `niche_context_matches`,
-    `missing_niche_context_in_title` and `title_topic_and_niche_context`.
-- **01.5 archives, never deletes.** When 01.5 rebuilds, an earlier human
-  decision moves to `experiment_01_5/archive/gate_<UTC time>/`, together with
-  the approved study set and the study set and packets it was made against
-  (D-157's rule). The rebuilt handoff still starts the gate fresh.
+  - **Left out:** the "your body" family, until a medical-advice exclusion
+    exists (R10).
+- **A new cohort carries everything built from the old one into the archive.**
+  - Replacing the cohort moves `experiment_01_3`, `experiment_01_4` and
+    `experiment_01_5` into `output/archive/<name>_<UTC time>/` together.
+  - That includes the gate decision and the approved study set.
+  - If any move fails, those already made are undone, and discovery stops
+    with a message.
+  - The continuation then takes the new cohort through 01.4 and 01.5 from
+    scratch.
+- **01.4 waits for one refresh of the new cohort itself**
+  (`current_cohort_ready_for_01_4`, given 01.3's summary, needs mode
+  `refresh`). Every niche is then measured before the plan is frozen.
+- **01.4 spends quota only on a later quota day.** YouTube's quota resets at
+  midnight Pacific; UTC-8 is used all year, which waits an hour too long in
+  summer, never too little.
+  - Until then the continuation reports `WAITING_FOR_NEXT_QUOTA_DAY`.
+  - The plan itself is built offline and needs no quota.
+- **01.4's budget** goes from 30 to 60 searches, so each niche gets about the
+  depth F1 had alone.
+- **01.5 reserves at least two study-set places per niche** that has passing
+  packets (`min_per_niche`). With one niche, the result is unchanged.
+- **01.5 archives, never deletes.** A rebuild moves an earlier decision, the
+  approved set, the study set and the packets to
+  `experiment_01_5/archive/gate_<UTC time>/`, all or nothing.
+- **The radar's historical alignment uses the 01.3 rule.**
+  - A radar title is `ESTABLISHED_DEMAND` only if it would pass a historical
+    topic's own relevance check: topic words, niche context and exclusions.
+  - Before, any word of four or more letters in a topic id counted.
+  - F1 alignment now needs F1 context as well: "How car brakes work" no
+    longer aligns with the F1 `brakes` topic.
 - **Running it is the owner's step.** The next "Discover proven demand" or
-  "Run / Resume 01.3 Auto Discovery":
-  - archives the current cohort;
-  - discovers both niches.
-
-  Before clicking, check the ACTIVE study set:
+  "Run / Resume 01.3 Auto Discovery" archives the current cohort with its
+  01.4 / 01.5 output and gate decision. Before clicking, check the ACTIVE
+  study set:
   - **From your own video, topic or a radar pick:** the gate re-creates
     `approved_study_set.json` from it.
-  - **A historical F1 topic:** the new cohort ends that approval (archived,
-    not lost). Finish that video first.
+  - **A historical F1 topic:** that approval ends when you click (it is
+    archived, not lost). Finish that video first.
 - **Quota.**
-  - Discovery: 51 strict API searches (5,100 units), capped at 60 searches
-    (6,000 units), with yt-dlp after that.
-  - 01.4: its 30 searches run on a later day.
-  - With the radar, the busiest day stays under 8,000 units.
+  - **Discovery day:**
+    - 51 strict searches (27 F1 + 24 science) out of a cap of 60;
+    - then yt-dlp;
+    - plus channel baselines and the radar;
+    - about 7,300 units.
+  - **A later day:** 01.4 uses up to 60 searches, about 6,700 units with the
+    radar.
+  - Each day stays under 8,000 units. Because 51 of the 60 API searches go to
+    strict queries, F1's sparse-cell expansion now relies mostly on yt-dlp,
+    while measurement stays on the official API.
 - **Same bars for both niches.** `minimum_views` (500,000) and the 3-channel
   minimum are unchanged. A Science Inside cell that falls short is evidence,
-  not a reason to lower a bar now.
+  not a reason to lower a bar.
 
 **Consequences.**
-- 01.4's 30-search budget is shared round-robin across both niches' ready
-  cells, so each niche gets about half the depth F1 had alone.
-- Once the new cohort reaches 01.5, the radar's historical alignment also
-  recognises the Science Inside topics.
+- The first cohort after this change starts 01.4 a day after discovery at the
+  earliest.
+- Old 01.4 / 01.5 output and gate decisions are kept in `output/archive/`.
+- The radar marks fewer videos as established demand, so its evidence matrix
+  shows fewer STRONG historical-demand rows. This does not touch the D-177
+  test, which scores strength only.

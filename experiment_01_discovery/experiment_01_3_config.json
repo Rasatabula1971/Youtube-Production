@@ -34,15 +34,14 @@
       "engineering",
       "explained",
       "explainer",
-      "how",
-      "why",
-      "works",
       "mechanism",
       "chemistry",
+      "chemical reaction",
       "biology",
       "experiment",
       "slow motion",
-      "inside"
+      "how",
+      "why"
     ]
   },
   "niche_exclude_title_terms": {
@@ -59,6 +58,8 @@
       "nascar",
       "indycar",
       "power unit",
+      "how i",
+      "why i",
       "how to",
       "tutorial",
       "repair",
@@ -67,11 +68,18 @@
       "buying guide",
       "asmr",
       "compilation",
-      "reaction",
+      "reaction video",
+      "reacting to",
+      "reacts to",
       "prank",
       "music video",
       "lyrics",
-      "cover"
+      "cover song",
+      "guitar cover",
+      "piano cover",
+      "drum cover",
+      "vocal cover",
+      "acoustic cover"
     ]
   },
   "topics": [
@@ -260,7 +268,6 @@
         "insects",
         "bee",
         "bees",
-        "spider",
         "spiders",
         "cat",
         "cats",
@@ -324,9 +331,7 @@
         "steelpan",
         "steel pan",
         "instrument",
-        "instruments",
-        "speaker",
-        "speakers"
+        "instruments"
       ],
       "expansion_queries": [
         "how musical instruments make sound"
@@ -342,20 +347,21 @@
         "how car engines work"
       ],
       "match_terms": [
-        "car",
-        "cars",
-        "engine",
-        "engines",
+        "car engine",
+        "car engines",
+        "combustion engine",
+        "diesel engine",
         "brake",
         "brakes",
-        "abs",
         "airbag",
         "airbags",
         "transmission",
         "clutch",
-        "battery",
-        "hybrid",
-        "electric car"
+        "car battery",
+        "electric car",
+        "electric cars",
+        "turbocharger",
+        "spark plug"
       ],
       "expansion_queries": [
         "car science explained"
@@ -375,15 +381,17 @@
         "storm",
         "storms",
         "lightning",
-        "thunder",
+        "thunderstorm",
+        "thunderstorms",
         "hurricane",
         "hurricanes",
         "tornado",
         "tornadoes",
         "rain",
-        "cloud",
         "clouds",
-        "snow",
+        "cloud cover",
+        "snowflake",
+        "snowflakes",
         "hail",
         "wind"
       ],
@@ -413,8 +421,8 @@
         "earthquake",
         "earthquakes",
         "sky",
-        "sun",
-        "moon",
+        "the sun",
+        "the moon",
         "rainbow"
       ],
       "expansion_queries": [

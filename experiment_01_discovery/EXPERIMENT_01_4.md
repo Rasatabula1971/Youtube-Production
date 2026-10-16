@@ -100,6 +100,11 @@ Execution:
   context words (D-178);
 - uses each niche's own query families (`query_families_by_niche`); F1 keeps
   the shared list;
+- plans only after the cohort's own first refresh, so every niche is measured
+  before the plan is frozen (D-178);
+- spends search quota only on a later YouTube quota day than discovery
+  (midnight Pacific), so one day never pays for both; the automatic run waits
+  with `WAITING_FOR_NEXT_QUOTA_DAY` (D-178);
 - preserves query-family provenance; and
 - checkpoints completed search tasks.
 

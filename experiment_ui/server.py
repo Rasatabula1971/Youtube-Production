@@ -5249,6 +5249,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     research_status = str(research_state.get("status") or "")
     research_waiting = research_status in {
         "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH",
+        "WAITING_FOR_NEXT_QUOTA_DAY",
         "DISCOVERY_RUNNING",
 
     }
@@ -7546,6 +7547,20 @@ def workflow_guidance(
             ),
             "next_action_id": None,
             "next_title": "Automatic velocity validation",
+        }
+
+    if research_status == "WAITING_FOR_NEXT_QUOTA_DAY" and not study_set:
+        return {
+            "state": "WAITING_AUTOMATIC",
+            "current_action_id": None,
+            "current_title": "01.4 searches wait for tomorrow's YouTube quota",
+            "current_detail": str(
+                research_state.get("message")
+                or "The system will continue automatically."
+            ),
+            "next_action_id": None,
+            "next_title": "Review Opportunity",
+            "next_due_at": research_state.get("next_refresh_due_at"),
         }
 
     if research_status == "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH" and not study_set:

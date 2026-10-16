@@ -1117,8 +1117,24 @@ def deficient_topic_formats(
     return deficient
 
 
+def _unique_archive_path(archive_root: Path, name: str) -> Path:
+    destination = archive_root / name
+    suffix = 1
+    while destination.exists():
+        destination = archive_root / f"{name}_{suffix}"
+        suffix += 1
+    return destination
+
+
 def archive_existing_output() -> Path | None:
-    """Archive a prior 01.3 run before intentionally replacing its cohort."""
+    """Archive a prior 01.3 run before intentionally replacing its cohort.
+
+    The 01.4 and 01.5 output built from that cohort goes into the archive with
+    it, including the gate decision and the approved study set. Otherwise the
+    automatic continuation would find the old study set or the old completed
+    01.4 run and never take the new cohort through 01.4 and 01.5 (D-178).
+    Either every folder moves or none does.
+    """
 
     if not OUTPUT_DIR.exists():
         return None
@@ -1126,13 +1142,25 @@ def archive_existing_output() -> Path | None:
     archive_root = OUTPUT_DIR.parent / "archive"
     archive_root.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    destination = archive_root / f"experiment_01_3_{timestamp}"
-    suffix = 1
-    while destination.exists():
-        destination = archive_root / f"experiment_01_3_{timestamp}_{suffix}"
-        suffix += 1
-
-    shutil.move(str(OUTPUT_DIR), str(destination))
+    destination = _unique_archive_path(archive_root, f"experiment_01_3_{timestamp}")
+    moves = [
+        (directory, _unique_archive_path(archive_root, f"{directory.name}_{timestamp}"))
+        for directory in (OUTPUT_DIR.parent / "experiment_01_4", OUTPUT_DIR.parent / "experiment_01_5")
+        if directory.exists()
+    ]
+    moves.append((OUTPUT_DIR, destination))
+    done: list[tuple[Path, Path]] = []
+    try:
+        for source, target in moves:
+            shutil.move(str(source), str(target))
+            done.append((source, target))
+    except OSError as exc:
+        for source, target in reversed(done):
+            shutil.move(str(target), str(source))
+        raise SystemExit(
+            f"Could not archive the previous cohort ({exc}). Nothing was moved; "
+            "close any open output files and run discovery again."
+        ) from exc
     return destination
 
 

@@ -16,6 +16,7 @@ from unittest.mock import patch
 from experiment_01_discovery import experiment_01_3 as e3
 from experiment_01_discovery import experiment_01_4 as e4
 from experiment_01_discovery import experiment_01_5 as e5
+from experiment_01_discovery import opportunity_research as research
 
 # The 18 words and 8 exclusions the F1 lane has always used (c0adb20).
 F1_CONTEXT = [
@@ -179,12 +180,175 @@ class ScienceInsideTests(unittest.TestCase):
         self.assertIn("how airplane wing works", queries)
         self.assertIn("airplane wing science explained", queries)
         self.assertFalse(any("rules banned" in q for q in queries))
+        for topic in [t for t, d in config["topic_definitions"].items() if d["niche"] == "everyday_science"]:
+            cell = {"topic": topic, "niche": "everyday_science", "format_candidate": "short_candidate"}
+            for task in e4.build_tasks_for_cell(cell, config):
+                words = task["query"].split()
+                self.assertEqual(len(words), len(set(words)), task["query"])  # no "physics physics"
 
     def test_a_niche_without_words_fails_loudly(self):
         config = json.loads(json.dumps(self.config))
         del config["niche_context_terms"]["everyday_science"]
         with self.assertRaisesRegex(ValueError, "everyday_science"):
             e3.check_niche_terms(config, {"automotive_racing", "everyday_science"})
+
+
+class ReviewFindingTests(unittest.TestCase):
+    """Stage 8 review of D-178 (87aa30b): each failed before its fix."""
+
+    def setUp(self):
+        self.config = e3.load_config()
+        self.topics = {t["topic"]: t for t in self.config["topics"]}
+
+    def rate(self, topic, title):
+        definition = self.topics[topic]
+        niche = definition["niche"]
+        return e3.classify_topic_relevance(
+            title, definition["match_terms"],
+            e3.niche_context_terms(self.config, niche), e3.niche_exclude_terms(self.config, niche),
+            niche=niche,
+        )["topic_relevance"]
+
+    def test_off_niche_titles_no_longer_pass(self):
+        for topic, title in (
+            ("road_cars", "How I got abs in 30 days"),
+            ("road_cars", "Why hybrid work is failing"),
+            ("weather_storms", "How cloud computing works"),
+            ("weather_storms", "Why the Thunder won the NBA Finals"),
+            ("animal_abilities", "Why Spider-Man: No Way Home works"),
+            ("musical_acoustics", "How the Speaker of the House is chosen"),
+            ("aircraft_wings", "Inside a $70 million private jet"),
+            ("earth_oceans", "Why Moon Knight failed"),
+            ("road_cars", "Inside Ferrari's new hybrid engine"),
+            ("road_cars", "Why are cars so expensive now"),
+        ):
+            with self.subTest(title=title):
+                self.assertEqual(self.rate(topic, title), "OFF_TOPIC")
+
+    def test_real_explainers_pass(self):
+        for topic, title in (
+            ("road_cars", "The chemical reaction inside your car battery"),
+            ("weather_storms", "Why cloud cover keeps nights warm"),
+            ("aircraft_wings", "Why Planes Don't Fly Over the Pacific"),
+            ("earth_oceans", "Why is the sky blue?"),
+            ("household_appliances", "How a fridge actually makes cold"),
+            ("animal_abilities", "Why do cats always land on their feet"),
+            ("musical_acoustics", "The physics of the steelpan's tuned notes"),
+            ("tyre_grip", "Why airplane tires are filled with nitrogen"),
+        ):
+            with self.subTest(title=title):
+                self.assertEqual(self.rate(topic, title), "ON_TOPIC")
+
+
+class NewCohortFlowTests(unittest.TestCase):
+    """Finding 1: a new cohort must go through 01.4 and 01.5 again."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / "output"
+        self.exp13 = self.root / "experiment_01_3"
+        for name in ("experiment_01_3", "experiment_01_4", "experiment_01_5"):
+            (self.root / name).mkdir(parents=True)
+        (self.exp13 / "cohort_manifest.json").write_text("{}", encoding="utf-8")
+        (self.root / "experiment_01_4" / "summary.json").write_text('{"execution_status": "COMPLETE"}', encoding="utf-8")
+        (self.root / "experiment_01_5" / "study_set.json").write_text('[{"video_id": "old"}]', encoding="utf-8")
+        (self.root / "experiment_01_5" / "approved_study_set.json").write_text('[{"video_id": "old"}]', encoding="utf-8")
+        target = patch.object(e3, "OUTPUT_DIR", self.exp13)
+        target.start()
+        self.addCleanup(target.stop)
+
+    def test_replacing_the_cohort_archives_its_01_4_and_01_5_output(self):
+        destination = e3.archive_existing_output()
+        archived = sorted(p.name.rsplit("_", 1)[0] for p in (self.root / "archive").iterdir())
+        self.assertEqual(archived, ["experiment_01_3", "experiment_01_4", "experiment_01_5"])
+        self.assertTrue(destination.name.startswith("experiment_01_3_"))
+        for name in ("experiment_01_3", "experiment_01_4", "experiment_01_5"):
+            self.assertFalse((self.root / name).exists(), name)
+        old_gate = next((self.root / "archive").glob("experiment_01_5_*"))
+        self.assertEqual(json.loads((old_gate / "approved_study_set.json").read_text()), [{"video_id": "old"}])
+
+    def test_a_failed_move_leaves_everything_in_place(self):
+        real_move = e3.shutil.move
+        calls = []
+
+        def flaky(source, target):
+            calls.append(source)
+            if len(calls) == 2:
+                raise PermissionError("file in use")
+            return real_move(source, target)
+
+        with patch.object(e3.shutil, "move", side_effect=flaky):
+            with self.assertRaisesRegex(SystemExit, "Nothing was moved"):
+                e3.archive_existing_output()
+        for name in ("experiment_01_3", "experiment_01_4", "experiment_01_5"):
+            self.assertTrue((self.root / name).exists(), name)
+        self.assertEqual(list((self.root / "archive").iterdir()), [])
+
+
+class QuotaDayTests(unittest.TestCase):
+    """Finding 5: 01.4's searches wait for the quota day after discovery."""
+
+    def test_the_next_quota_day_starts_at_08_00_utc(self):
+        summary = {"cohort_created_at": "2026-10-16T14:00:00+00:00"}  # 06:00 PST, 16 Oct
+        wait = research.next_quota_day_wait(summary, datetime(2026, 10, 16, 16, tzinfo=timezone.utc))
+        self.assertEqual(wait, datetime(2026, 10, 17, 8, tzinfo=timezone.utc))
+        self.assertEqual(research.next_quota_day_wait(summary, datetime(2026, 10, 17, 7, 59, tzinfo=timezone.utc)), wait)
+        self.assertIsNone(research.next_quota_day_wait(summary, datetime(2026, 10, 17, 8, tzinfo=timezone.utc)))
+        # Discovered at 03:00 UTC is still the previous Pacific day.
+        late = {"cohort_created_at": "2026-10-17T03:00:00Z"}
+        self.assertIsNone(research.next_quota_day_wait(late, datetime(2026, 10, 17, 9, tzinfo=timezone.utc)))
+        self.assertIsNone(research.next_quota_day_wait({}, datetime(2026, 10, 17, tzinfo=timezone.utc)))
+
+    def test_01_4_execution_waits_and_says_why(self):
+        commands = []
+        now = datetime(2026, 10, 16, 16, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "experiment_01_3").mkdir()
+            (root / "experiment_01_3" / "summary.json").write_text(
+                json.dumps({"mode": "refresh", "cohort_created_at": "2026-10-16T14:00:00+00:00"}), encoding="utf-8")
+            with patch.multiple(research, EXP13_DIR=root / "experiment_01_3", EXP14_DIR=root / "experiment_01_4",
+                                EXP15_DIR=root / "experiment_01_5", OUTPUT_ROOT=root, STATE_FILE=root / "state.json"), \
+                    patch.object(research, "velocity_ready", return_value=True), \
+                    patch.object(research, "exp14_plan_ready", return_value=True), \
+                    patch.object(research, "remove_continuation_task"), \
+                    patch.object(research, "utc_now", return_value=now), \
+                    patch.object(research, "run_command", side_effect=lambda c, l: commands.append(c) or 0):
+                state = research.advance_downstream(python_executable="python", refresh_attempts=1)
+        self.assertEqual(state["status"], "WAITING_FOR_NEXT_QUOTA_DAY")
+        self.assertEqual(state["next_refresh_due_at"], "2026-10-17T08:00:00+00:00")
+        self.assertEqual(commands, [])
+
+    def test_the_01_4_budget_suits_two_niches_on_their_own_day(self):
+        self.assertEqual(e4.load_config()["maximum_plan_searches"], 60)  # 6,000 units, a day of its own
+
+
+class StudySetShareTests(unittest.TestCase):
+    """Finding 6: one niche cannot take the whole study set."""
+
+    def packet(self, n, niche, index):
+        return {"gate_status": "PASS", "video_id": f"{niche}{n}", "channel_id": f"ch_{niche}_{n}", "niche": niche,
+                "topic": f"{niche}_t{n % 4}", "format_candidate": "long_form_candidate",
+                "primary_metric": {"value": index}, "views": 1000}
+
+    def config(self, floor=2):
+        return {"max_study_candidates": 8, "max_per_topic_format": 2, "max_per_channel": 1, "min_per_niche": floor}
+
+    def test_each_niche_gets_its_floor(self):
+        packets = [self.packet(n, "automotive_racing", 9 - n * 0.01) for n in range(24)]
+        packets += [self.packet(n, "everyday_science", 1 - n * 0.01) for n in range(24)]
+        chosen = e5.build_study_set(packets, self.config())
+        niches = [p["niche"] for p in chosen]
+        self.assertEqual((len(chosen), niches.count("everyday_science")), (8, 2))
+        self.assertEqual([p["study_set_sequence"] for p in chosen], list(range(1, 9)))
+        self.assertIn("at least 2 per niche where available", chosen[0]["selection_basis"])
+
+    def test_one_niche_is_unchanged(self):
+        packets = [self.packet(n, "automotive_racing", 9 - n * 0.01) for n in range(24)]
+        with_floor = e5.build_study_set(packets, self.config(2))
+        without = e5.build_study_set(packets, self.config(0))
+        self.assertEqual(with_floor, without)
 
 
 class GateArchiveTests(unittest.TestCase):
@@ -223,6 +387,25 @@ class GateArchiveTests(unittest.TestCase):
         (self.out / "approved_study_set.json").write_text("[]", encoding="utf-8")
         again = e5.archive_gate_files(now=datetime(2026, 10, 16, 12, tzinfo=timezone.utc))
         self.assertEqual(again.name, "gate_20261016T120000Z_1")
+
+    def test_a_failed_move_puts_everything_back(self):
+        for name in ("human_opportunity_decision.json", "approved_study_set.json", "study_set.json"):
+            (self.out / name).write_text("{}", encoding="utf-8")
+        real_move = e5.shutil.move
+        calls = []
+
+        def flaky(source, target):
+            calls.append(source)
+            if len(calls) == 2:
+                raise PermissionError("sharing violation")
+            return real_move(source, target)
+
+        with patch.object(e5.shutil, "move", side_effect=flaky):
+            with self.assertRaises(PermissionError):
+                e5.archive_gate_files()
+        for name in ("human_opportunity_decision.json", "approved_study_set.json", "study_set.json"):
+            self.assertTrue((self.out / name).exists(), name)
+        self.assertEqual(list((self.out / "archive").iterdir()), [])
 
     def test_nothing_is_archived_without_a_decision(self):
         (self.out / "study_set.json").write_text("[]", encoding="utf-8")

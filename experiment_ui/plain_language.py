@@ -139,6 +139,7 @@ SENTENCES: dict[str, str] = {
     "WAITING_FOR_HUMAN_OPPORTUNITY_GATE": "Waiting for your decision on the opportunities.",
     "WAITING_FOR_DISCOVERY_OUTPUT": "Waiting for discovery to finish.",
     "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH": "Waiting for the automatic velocity refresh.",
+    "WAITING_FOR_NEXT_QUOTA_DAY": "Waiting for the next YouTube quota day before the 01.4 searches.",
     "WAITING_FOR_NEXT_STAGE": "Waiting for the next stage.",
     "ACTION_REQUIRED": "A step is ready to run.",
     "RUNNING_AUTOMATIC": "The automatic run is working.",
