@@ -75,6 +75,42 @@ FORMAT_ALIASES = {
 }
 
 
+# Every lane decides a video's format from its length alone: 180 seconds or
+# less is "short". The YouTube Data API does not say whether a video is a
+# Short, so "short" here is a length heuristic, never a confirmed Shorts
+# classification (M1 criterion 5, D-177). Candidate videos carry
+# ``format_basis`` and the UI shows FORMAT_LABELS, never a bare "Short".
+SHORT_MAX_SECONDS = 180
+FORMAT_BASIS = "duration_heuristic"
+# No length was measured (some yt-dlp flat results carry none); the format
+# field still says long_form for compatibility, but nothing claims a length.
+FORMAT_BASIS_UNKNOWN = "duration_unknown"
+FORMAT_LABELS = {
+    "short": f"Short (≤ {SHORT_MAX_SECONDS} s, by length)",
+    "long_form": f"Long-form (over {SHORT_MAX_SECONDS} s)",
+}
+FORMAT_UNKNOWN_LABEL = "Format unknown (no length measured)"
+
+
+def format_basis(duration_seconds: object) -> str:
+    """How a format was decided: by a measured length, or not at all."""
+    try:
+        seconds = float(str(duration_seconds or 0))
+    except ValueError:
+        return FORMAT_BASIS_UNKNOWN
+    return FORMAT_BASIS if seconds > 0 else FORMAT_BASIS_UNKNOWN
+
+
+def format_label(value: object, basis: object = FORMAT_BASIS) -> str:
+    """The UI wording for a format, which names how it was decided."""
+    if basis == FORMAT_BASIS_UNKNOWN:
+        return FORMAT_UNKNOWN_LABEL
+    try:
+        return FORMAT_LABELS[normalize_format(value)]
+    except ValueError:
+        return "Format unknown"
+
+
 def normalize_format(value: object) -> str:
     """Map a pipeline format label to a packet format, or raise ValueError."""
     key = str(value or "").strip()

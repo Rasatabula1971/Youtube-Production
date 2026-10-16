@@ -144,7 +144,10 @@ output fields. Historical topics get exactly the same requests as before.
 3. **Classify (O9), on first sight.** Two ratios with their basis named:
    views vs the channel's median views, and views/hour vs its median lifetime
    views/hour. `strength_rules` (hypotheses) set EARLY_SIGNAL /
-   BREAKOUT_CANDIDATE / BREAKOUT. Trajectory comes from snapshots
+   BREAKOUT_CANDIDATE / BREAKOUT. **The viral outlier bar is 3×** (D-177):
+   from a day old, under 3× the channel's normal is NORMAL, 3× to under 5× is
+   BREAKOUT_CANDIDATE (`VS-OUTLIER`) and 5× or more is BREAKOUT. Under a day
+   old, `VS-EARLY` flags EARLY_SIGNAL. Trajectory comes from snapshots
    (ACCELERATING, STABLE_HIGH, DECELERATING, FLAT). Historical alignment checks
    the historical topics. Breadth comes from theme clustering (O10, below).
 4. **Track (O8).** Promising videos are snapshotted every 6 h (under 2 days),
@@ -152,6 +155,35 @@ output fields. Historical topics get exactly the same requests as before.
    `output/viral/snapshots.jsonl` (the D-021 format). After 15 days a video
    leaves the radar and its outcome is kept beside its 24 h / 3 d / 7 d
    classifications, to calibrate the thresholds (R7).
+5. **Measure the radar (D-177).**
+   - **Ratings kept.** Each tracked video keeps its first rating and its
+     24 h / 3 d / 7 d milestone ratings, each with the baseline median it used.
+   - **Comparison group.** Every upload a full pass sees for the first time
+     on its channel page under 48 hours old joins it, flagged or not, so
+     there is a base rate. Its channel baseline is frozen at that moment; all
+     its later ratings and its day-15 result use that one baseline.
+     - Every full pass rates every member, even one that has dropped off the
+       channel page. That gives each member its own 24 h / 3 d / 7 d ratings,
+       and each reading goes to `output/viral/cohort_observations.jsonl`.
+     - After day 15 each member gets its reading (at most 1 API unit per 50).
+   - **Outcome log.** Both groups land in `output/viral/outcomes.jsonl`, with
+     one append-only row per (group, video). A reading is `ON_TIME` (day
+     15–16), `LATE` or `MISSED`.
+   - **Baseline.** It comes only from the channel's uploads page. Videos
+     measured because they are tracked or in the comparison group never join
+     it.
+   - **The test.** It was fixed in D-177 before any data was seen, and it is
+     scored only inside the comparison group. The calibration report (M1
+     closure, PR 3) applies it.
+   - **What a rating means.** From a day old a rating is a band of views ÷
+     channel median and nothing else (D-177, P1). The pre-registered test asks
+     whether a 3–5× video at day 3 reaches 5× by day 15, at least 25% of the
+     time and at least 3× as often as a random fresh upload.
+
+Formats are decided by length alone: 180 seconds or less is "short". YouTube
+does not say whether a video is a Short, so every video carries
+`format_basis: duration_heuristic`, and the UI says "Short (≤ 180 s, by
+length)".
 
 Breakouts appear in the inbox as **VIRAL** cards. *Watch* moves one to the
 Watching tab, and *Analyze why it worked* makes it the study set. Failures are

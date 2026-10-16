@@ -27,7 +27,7 @@ from experiment_01_discovery.scheduled_refresh import acquire_lock, release_lock
 from opportunity_engine import channel_scope, viral_radar  # noqa: E402
 
 STATUS_FILE = viral_radar.RADAR_DIR / "schedule_status.json"
-LOCK_FILE = viral_radar.RADAR_DIR / "radar_tick.lock"
+LOCK_FILE = viral_radar.TICK_LOCK_FILE  # a manual pass takes the same lock (D-177)
 
 ACTION_DISCOVERY = "DISCOVERY"
 ACTION_SNAPSHOTS = "SNAPSHOTS"

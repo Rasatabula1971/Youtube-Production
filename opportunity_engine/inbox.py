@@ -127,6 +127,15 @@ def _evidence_matrix(packet: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _format_basis(video: dict[str, Any]) -> str:
+    """The stored basis, else from the stored length (older packets), else by length."""
+    if video.get("format_basis"):
+        return str(video["format_basis"])
+    if "duration_seconds" in video:
+        return models.format_basis(video.get("duration_seconds"))
+    return models.FORMAT_BASIS
+
+
 def _videos(packet: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
     return [
         {
@@ -136,6 +145,10 @@ def _videos(packet: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
             "channel_title": video.get("channel_title"),
             "views": video.get("views"),
             "format": video.get("format"),
+            # Every lane decides format by length (D-177); packets written
+            # before format_basis existed were decided the same way.
+            "format_basis": _format_basis(video),
+            "format_label": models.format_label(video.get("format"), _format_basis(video)),
             "age_days": video.get("age_days"),
         }
         for video in (packet.get("candidate_videos") or [])[:limit]

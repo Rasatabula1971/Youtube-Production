@@ -582,14 +582,15 @@ Do not add infrastructure merely because it may be useful later.
 
 M1 succeeds when we can demonstrate that the Opportunity Engine:
 
-- discovers candidates across multiple niches;
+- discovers candidates across multiple niches — at least `automotive_racing` and `everyday_science` in one historical-lane cohort, each niche + format compared only with itself (D-177);
 - distinguishes absolute demand from channel-relative breakout;
 - handles weak baselines transparently;
 - avoids calling lifetime average views/day "current velocity";
 - does not mistake duration heuristics for confirmed Shorts classification;
-- provides enough evidence to select candidates for Experiment 02 without relying on an invented composite score.
+- provides enough evidence to select candidates for Experiment 02 without relying on an invented composite score;
+- measures the viral radar's early ratings against a comparison group of fresh uploads, using the day-15 test fixed in D-177 before any data was seen, and reports the result whatever it is.
 
-Only then should discovery logic be frozen and the project advance.
+M1 closes by a decision entry that cites the evidence report. Only then should discovery logic be frozen (thresholds and rules change only by a new decision, and a retune is checked on a fresh sample) and the project advance. Until then `production_engine` takes no new features; fixes are still allowed (D-177).
 
 
 ## 7. Transformation Engine framework

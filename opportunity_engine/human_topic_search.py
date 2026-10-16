@@ -376,6 +376,7 @@ def explore(
             "channel_id": video.get("channel_id"),
             "channel_title": video.get("channel_title"),
             "format": "short" if 0 < duration <= SHORT_MAX_SECONDS else "long_form",
+            "format_basis": models.format_basis(duration),
             "published_at": video.get("published_at"),
             "age_days": _age_days(video.get("published_at"), now) if video.get("published_at") else None,
             "duration_seconds": duration,

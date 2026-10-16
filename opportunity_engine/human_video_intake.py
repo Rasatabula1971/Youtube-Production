@@ -31,7 +31,7 @@ PACKETS_DIR = HERE / "output" / "opportunities" / "human_video"
 ENV_FILE = _ROOT / ".env"
 GENERATOR = "opportunity_engine.human_video_intake"
 YT_DLP_TIMEOUT_SECONDS = 60
-SHORT_MAX_SECONDS = 180
+SHORT_MAX_SECONDS = models.SHORT_MAX_SECONDS  # one length rule for every lane (D-177)
 
 VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
 YOUTUBE_HOSTS = {
@@ -300,6 +300,7 @@ def build_video_packet(
         "channel_id": metadata.get("channel_id"),
         "channel_title": metadata.get("channel_title"),
         "format": fmt,
+        "format_basis": models.format_basis(duration),
         "published_at": metadata.get("published_at"),
         "age_days": _age_days(metadata.get("published_at"), now),
         "duration_seconds": duration,
