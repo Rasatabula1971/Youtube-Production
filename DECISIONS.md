@@ -5640,7 +5640,11 @@ Checked against `c0adb20`:
      - Members with `channel_new` are left out. Their channel's first
        successful crawl was the pass that enrolled them, so a "this week"
        search may have found the channel through that very video.
-   - **Base rate.** The HIT rate of all scored members.
+   - **Base rate.** The HIT rate of all scored members. A member with no valid
+     3-day rating, for example because the PC was off, still counts in the
+     base rate and towards the 100, because its first rating and day-15
+     reading are valid. It cannot count as a candidate. This was fixed before
+     any data was read (final review).
    - **Pass bar.**
      - Members rated `BREAKOUT_CANDIDATE` at the 3-day milestone have a HIT
        rate at least 3× the base rate.
@@ -5709,7 +5713,10 @@ Checked against `c0adb20`:
    - `VS-EARLY` (under 24 h) is unchanged.
    - The radar page's shortlist already defaults to a minimum outlier of 3×
      (D-162).
-   - Packets already written keep the rule ids they were written with.
+   - Packets of videos still tracked when this reaches the PC are rebuilt by
+     the next pass under the new rules. A legacy video at 1–3× then shows
+     NORMAL in the inbox, and one rated by `VS-BREAKOUT-FAST` shows
+     `VS-OUTLIER`. Packets of videos no longer tracked keep their old rule ids.
 
 **This change (PR 1).**
 - **Ratings that survive.**
