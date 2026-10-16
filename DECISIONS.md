@@ -5605,40 +5605,68 @@ Checked against `c0adb20`:
      From then on, discovery thresholds and rules change only by a new
      decision, and any retune is checked on a fresh sample, never the one it
      was tuned on.
-2. **The radar test, fixed before any outcome data was looked at:**
-   - **Ratings tested.** A tracked video's rating at a milestone is its last
-     rating at or before 24 hours, 3 days or 7 days of age.
-   - **Result.** Views at the day-15 reading divided by the channel median in
-     the rating being tested.
+2. **The radar test, fixed before any outcome data was looked at** (amended
+   after the Stage 8 review of PR 1, still before any data):
+   - **Who is scored.** Only the comparison group: every upload from the
+     watched channels that a full pass first sees under 48 hours old, with a
+     usable baseline, whatever its rating. One population on one timeline.
+   - **Ratings tested.** Each member is rated on every full pass (about every
+     8 hours), whether or not it is tracked. Its rating at a milestone is its
+     last full-pass rating at or before 24 hours, 3 days or 7 days of age.
+   - **Result.** Views at the day-15 reading divided by **one median per
+     video**: the channel median in its first rating, fixed before any
+     outcome.
    - **Grades.** HIT is at least 5× (the `VS-BREAKOUT` bar). PARTIAL is 2× to
      under 5×. MISS is under 2×.
-   - **What is scored.**
+   - **What counts.**
      - Only readings taken between day 15 and day 16 (`ON_TIME`) are scored.
        `LATE` and `MISSED` readings are counted and reported.
-     - Videos tracked before this change (`legacy`) are reported apart and
-       never count toward the bar.
-   - **Comparison group.** Every upload from the watched channels that is
-     first seen under 48 hours old and has a usable baseline, whatever its
-     first rating. Its HIT rate is the base rate.
+     - The first row per (group, video) counts; the writer also refuses a
+       second one.
+     - Members whose channel joined the watchlist in the pass that first saw
+       them (`channel_new`) are left out, because a "this week" search may
+       have found the channel through that very video.
+   - **Base rate.** The HIT rate of all scored members.
    - **Pass bar.**
-     - Videos rated `BREAKOUT_CANDIDATE` at the 3-day milestone have a HIT
+     - Members rated `BREAKOUT_CANDIDATE` at the 3-day milestone have a HIT
        rate at least 3× the base rate.
-     - At least 30 such candidates and at least 100 comparison videos are
-       scored.
+     - At least 30 such members and at least 100 members in total are scored.
+     - Members rated `BREAKOUT` at 3 days are reported on the same terms.
+   - **Tracked-group rows** (`group: tracked`) cover videos first seen later
+     or without a baseline, and legacy records. They are reported, never
+     scored.
    - **If it fails.** M1 can still close, but the radar's evidence levels drop
      one step (STRONG → MODERATE → WEAK) until a later, separate sample passes.
-   - **Two tightenings of the contract**, made before any data was seen:
+   - **Tightenings of the contract**, all made before any data was seen:
      - The base rate counts all fresh uploads, not only `NORMAL` ones.
-       Leaving out the flagged ones would lower the base rate and flatter
-       the radar.
-     - Candidates are scored at the 3-day milestone, because early detection
-       is the point. A video first flagged at day 10 is reported, not scored
-       for the bar.
-   - **Open, to decide before the report scores any data: an absolute
-     precision floor.** The 3× lift bar is probably easy to meet. Views never
-     fall and the median is fixed, so a video already at 2× the median by
-     day 3 ends at 2× or more. The useful question is how often a candidate
-     reaches 5×.
+       Leaving out the flagged ones would flatter the radar.
+     - Candidates are scored on their 3-day rating, because early detection
+       is the point.
+     - Candidates are scored only inside the comparison group, with the
+       group's denominator. Without this, a tracked row and a comparison row
+       for the same video could grade it differently.
+   - **What the test can and cannot show.** The review found a known limit,
+     P1, which is pre-existing in #137:
+     - Every baseline video is at least 15 days (360 h) old, so its median
+       lifetime views/hour is at most median views ÷ 360.
+     - For a video 72 h old or younger, the views/hour ratio is therefore at
+       least 5× its views ratio. The views/hour conditions in
+       `VS-CANDIDATE-VPH` and `VS-BREAKOUT-FAST` are automatic.
+     - So at 24–72 h the ratings are bands of views ÷ channel median: under
+       1× is `NORMAL`, 1×–3× is `BREAKOUT_CANDIDATE`, and 3× or more is
+       `BREAKOUT`. A check of 20,000 random baselines found no exceptions.
+     - The test therefore measures whether a video's channel-relative views
+       by day 3 predict its day-15 result. It cannot credit the views/hour
+       basis, and the evidence report must say so.
+     - No retune during data collection. The comparison group's full-pass
+       readings (`cohort_observations.jsonl`) are the raw material for an
+       age-matched basis (R4), to be checked later on a fresh sample.
+   - **Still open, for the owner, before the report scores any data:**
+     - An absolute precision floor: the share of candidates that reach 5×.
+       Views never fall and the median is fixed, so a candidate already at
+       2× ends at 2× or more, and the 3× lift bar is probably easy.
+     - Whether to replace the views/hour basis with an age-matched one before
+       M1 closes.
 3. **Production feature freeze** (pending in D-175). `production_engine` takes
    no new features until M1 closes. Fixes are still allowed.
 4. **The Opportunity Gate move** (pending in D-175) waits until M1 closes. Moving
@@ -5648,34 +5676,58 @@ Checked against `c0adb20`:
 
 **This change (PR 1).**
 - **Ratings that survive.**
-  - Each tracked record keeps a `first_rating` that is never overwritten.
+  - Each tracked record keeps a `first_rating`: the rating that started
+    tracking, never overwritten.
   - Its 24 h / 3 d / 7 d `milestones` are stored as ratings arrive, so the
     60-entry list cap can no longer drop them.
   - Every rating records its strength, rule, ratios and the baseline median
     it used.
   - A record tracked before this change is seeded from whatever its list
-    still holds.
-- **The comparison group.**
-  - A full pass enrols every upload it sees for the first time under
-    `fresh_cohort_max_age_hours` (48), unless it has no usable baseline (that
-    is counted).
-  - After day 15, any pass reads the group's due videos, even ones newer
-    uploads have pushed off the channel page. This costs at most one API unit
-    per 50 videos.
-  - A video not read by `outcome_reading_max_hours` (384, day 16) is recorded
-    as `MISSED`.
-- **The outcome log.**
-  - `opportunity_engine/output/viral/outcomes.jsonl` is append-only. It holds
-    one row per tracked video leaving the radar and per comparison video
-    read: group, first rating, milestones, final views and age, reading
-    status and the legacy flag.
-  - `radar_state.json` gains `cohort`, the comparison videos still waiting
-    for their reading. Its schema version is unchanged, so existing state
-    loads.
+    still holds, and its outcome row says `legacy`.
+- **The comparison group** (`cohort` in `radar_state.json`).
+  - **Who joins.** A full pass enrols every upload it sees for the first time
+    under `fresh_cohort_max_age_hours` (48), with its first rating and
+    `channel_new`. An upload with no usable baseline is not enrolled; it is
+    counted instead.
+  - **Ratings.** Every full pass rates every member, including members newer
+    uploads have pushed off the channel page, and keeps its milestones. Each
+    reading also goes to `cohort_observations.jsonl`.
+  - **Day-15 reading.** After day 15 any pass takes it. This costs at most one
+    API unit per 50 videos.
+  - **Missed readings.** A member unread by `outcome_reading_max_hours` (384,
+    day 16) is recorded as `MISSED`, and so is one whose views stay hidden.
+  - **Totals.** Running totals live in `cohort_counts`, because
+    `last_run.json` is overwritten every pass.
+- **The outcome log** (`opportunity_engine/output/viral/outcomes.jsonl`).
+  - It is append-only, with one row per (group, video). It holds:
+    - the first rating and the milestones;
+    - the final views and the age at the reading;
+    - the reading status;
+    - `legacy` and `channel_new`.
+  - A pass that crashes before saving and runs again cannot add a second row.
+  - A tracked video that vanishes is recorded as `MISSED`, with its ratings.
+- **Fixes from the Stage 8 review** (each has a test that failed on
+  `55c9eaf`):
+  - The baseline comes only from the channel's uploads page. A snapshot pass
+    measures day-15 comparison videos, and these were being taken as the
+    baseline, which changed the ratings under test.
+  - Duplicate outcome rows after a crash.
+  - No row for a vanished candidate.
+  - A video with hidden views tracked forever.
+  - Comparison videos rated off the full-pass timeline.
+  - Running totals lost on the next pass.
+  - One channel whose playlist is gone (HTTP 404) no longer ends the whole
+    pass. Other failures still do, and a channel YouTube stops returning is
+    no longer crawled.
+  - A packet write refused by Windows is retried, using the shared atomic
+    writer.
+  - A video with no measured length is labelled "Format unknown (no length
+    measured)", not "Long-form".
 - **The Shorts basis.**
   - `models.SHORT_MAX_SECONDS` (180) is the one length rule. A test checks
     that the radar config and both human lanes use it.
-  - `models.FORMAT_BASIS = "duration_heuristic"`.
+  - `models.FORMAT_BASIS = "duration_heuristic"`, or `duration_unknown` when
+    no length was measured.
   - Radar records and new radar and human-lane candidate videos carry
     `format_basis`. The inbox gives every video `format_basis` and a
     `format_label`, such as "Short (≤ 180 s, by length)", and the radar page
@@ -5688,6 +5740,15 @@ Checked against `c0adb20`:
 **Consequences.**
 - The outcome log grows by about one row per fresh upload on the watched
   channels, plus one per tracked video.
-- Base-rate rows start about 15 days after this change reaches the PC.
-- The calibration report (PR 3) reads the outcome log. Nothing in the UI
-  reads it yet.
+- The observation log grows by about three rows a day per comparison video
+  for its 15 days.
+- Full passes measure every comparison video: about 1 API unit per 50.
+- Scored rows start about 15 days after this change reaches the PC.
+- The calibration report (PR 3) reads these logs. Nothing in the UI reads
+  them yet.
+- Known limits for interpreting results:
+  - Channels that upload more than about 1.3 videos a day are
+    under-represented: the 20-upload page leaves too few uploads old enough
+    for a baseline.
+  - The baseline is a median of lifetime views from uploads aged 15 days to
+    months.

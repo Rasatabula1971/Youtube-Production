@@ -82,14 +82,29 @@ FORMAT_ALIASES = {
 # ``format_basis`` and the UI shows FORMAT_LABELS, never a bare "Short".
 SHORT_MAX_SECONDS = 180
 FORMAT_BASIS = "duration_heuristic"
+# No length was measured (some yt-dlp flat results carry none); the format
+# field still says long_form for compatibility, but nothing claims a length.
+FORMAT_BASIS_UNKNOWN = "duration_unknown"
 FORMAT_LABELS = {
     "short": f"Short (≤ {SHORT_MAX_SECONDS} s, by length)",
     "long_form": f"Long-form (over {SHORT_MAX_SECONDS} s)",
 }
+FORMAT_UNKNOWN_LABEL = "Format unknown (no length measured)"
 
 
-def format_label(value: object) -> str:
+def format_basis(duration_seconds: object) -> str:
+    """How a format was decided: by a measured length, or not at all."""
+    try:
+        seconds = float(str(duration_seconds or 0))
+    except ValueError:
+        return FORMAT_BASIS_UNKNOWN
+    return FORMAT_BASIS if seconds > 0 else FORMAT_BASIS_UNKNOWN
+
+
+def format_label(value: object, basis: object = FORMAT_BASIS) -> str:
     """The UI wording for a format, which names how it was decided."""
+    if basis == FORMAT_BASIS_UNKNOWN:
+        return FORMAT_UNKNOWN_LABEL
     try:
         return FORMAT_LABELS[normalize_format(value)]
     except ValueError:

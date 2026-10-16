@@ -47,6 +47,7 @@ class FakeApi:
         self.channels = channels or {CH: {"subs": "50000"}}
         self.handles = handles or {}
         self.hidden_from_playlist = set()
+        self.playlist_errors = {}
         self.calls = []
 
     def __call__(self, resource, **params):
@@ -68,6 +69,8 @@ class FakeApi:
                 ]
             }
         if resource == "playlistItems":
+            if params["playlistId"] in self.playlist_errors:
+                raise self.playlist_errors[params["playlistId"]]
             cid = "UC" + params["playlistId"][2:]
             ids = [
                 v
@@ -104,6 +107,13 @@ class RadarTestCase(unittest.TestCase):
             self.addCleanup(target.stop)
         self.config = json.loads(json.dumps(channel_scope.load_config()))
         self.config["viral_radar"]["watchlist_handles"] = ["@brakelab"]
+
+    def outcome_rows(self):
+        path = vr.outcomes_file()
+        self.assertTrue(str(path).startswith(str(self.root)))
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
     def run_radar(self, api, now=NOW, searcher=None):
         return vr.run(
@@ -257,13 +267,6 @@ class CalibrationDataTests(RadarTestCase):
     """D-177: what the day-15 test needs is kept, for flagged videos and for a
     fresh-upload comparison group, whatever the run cadence."""
 
-    def outcome_rows(self):
-        path = vr.outcomes_file()
-        self.assertTrue(str(path).startswith(str(self.root)))
-        if not path.exists():
-            return []
-        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-
     def test_milestones_survive_more_than_sixty_ratings(self):
         # With several tracked videos a tick runs nearly every two hours, and
         # each pass rates every tracked video. Before D-177 the 60-entry cap on
@@ -342,11 +345,14 @@ class CalibrationDataTests(RadarTestCase):
         self.assertEqual(cohort[vid(20)]["first_rating"]["strength"], "NORMAL")
         self.assertEqual(cohort[vid(21)]["first_rating"]["strength"], "BREAKOUT")
         self.assertEqual(cohort[vid(20)]["first_rating"]["baseline_median_views"], 10_350.0)
+        self.assertTrue(cohort[vid(20)]["channel_new"])  # the channel joined in this pass
 
         api.videos[vid(24)] = item(24, 1, 50)
         summary = self.run_radar(api, now=NOW + timedelta(hours=8))
         self.assertEqual(summary["fresh_cohort"]["enrolled"], 1)  # only the new upload
-        self.assertEqual(sorted(vr.load_state()["cohort"]), [vid(20), vid(21), vid(24)])
+        cohort = vr.load_state()["cohort"]
+        self.assertEqual(sorted(cohort), [vid(20), vid(21), vid(24)])
+        self.assertFalse(cohort[vid(24)]["channel_new"])
 
     def test_the_day_15_reading_is_taken_even_off_the_uploads_page(self):
         api = FakeApi(MATURE + [item(20, 6, 500)], handles={"@brakelab": CH})
@@ -379,6 +385,135 @@ class CalibrationDataTests(RadarTestCase):
         self.assertEqual(summary["fresh_cohort"]["missed"], 1)
         row = self.outcome_rows()[0]
         self.assertEqual((row["reading"], row["final_views"]), (vr.READING_MISSED, None))
+
+
+class ReviewFindingTests(RadarTestCase):
+    """Stage 8 review of PR 1 (D-177): each test failed on 55c9eaf."""
+
+    def quiet_fresh(self):
+        return [item(20, 6, 500), item(21, 6, 600), item(22, 6, 700)]
+
+    def test_snapshot_passes_never_rebuild_the_baseline_from_comparison_videos(self):
+        api = FakeApi(MATURE + self.quiet_fresh(), handles={"@brakelab": CH})
+        self.run_radar(api)
+        api.videos[vid(30)] = item(30, -322, 25_000)  # published at +322 h
+        self.run_radar(api, now=NOW + timedelta(hours=352))  # age 30 h: 2.4x -> candidate
+        record = vr.load_state()["tracked"][vid(30)]
+        self.assertEqual((record["strength"], record["baseline"]["median_views"]), ("BREAKOUT_CANDIDATE", 10_350.0))
+        # Six hours later the three quiet uploads are past day 15 and due for
+        # their reading in a snapshot pass; they must not become the baseline.
+        vr.run(api=api, config=self.config, now=NOW + timedelta(hours=358), mode=vr.MODE_SNAPSHOTS)
+        record = vr.load_state()["tracked"][vid(30)]
+        self.assertEqual(record["baseline"]["median_views"], 10_350.0)
+        self.assertEqual(record["strength"], "BREAKOUT_CANDIDATE")
+        self.assertEqual(record["milestones"]["3d"]["baseline_median_views"], 10_350.0)
+
+    def test_a_pass_that_crashes_before_saving_does_not_record_twice(self):
+        api = FakeApi(MATURE + [item(10, 30, 60_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        with patch.object(vr, "save_state", side_effect=OSError("file in use")):
+            with self.assertRaises(OSError):
+                self.run_radar(api, now=NOW + timedelta(hours=335))
+        self.run_radar(api, now=NOW + timedelta(hours=337))
+        rows = self.outcome_rows()
+        self.assertEqual(sorted((r["group"], r["video_id"]) for r in rows), [("fresh_cohort", vid(10)), ("tracked", vid(10))])
+        self.assertEqual({r["final_age_hours"] for r in rows}, {365.0})  # the first reading stands
+
+    def test_a_vanished_candidate_is_recorded_missed_with_its_ratings(self):
+        api = FakeApi(MATURE + [item(10, 48, 80_000)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        del api.videos[vid(10)]
+        self.run_radar(api, now=NOW + timedelta(hours=1))
+        rows = self.outcome_rows()
+        self.assertEqual([(r["group"], r["reading"], r["final_views"]) for r in rows], [("tracked", vr.READING_MISSED, None)])
+        self.assertEqual(rows[0]["milestones"]["3d"]["strength"], "BREAKOUT")
+
+    def test_hidden_views_after_day_15_end_as_missed_not_tracked_forever(self):
+        api = FakeApi(MATURE + [item(10, 30, 60_000), item(20, 6, 500)], handles={"@brakelab": CH})
+        self.run_radar(api)
+        for video_id in (vid(10), vid(20)):
+            api.videos[video_id]["statistics"] = {}
+        self.run_radar(api, now=NOW + timedelta(hours=356))  # ages 386 h and 362 h
+        state = vr.load_state()
+        self.assertNotIn(vid(10), state["tracked"])
+        self.assertIn(vid(20), state["cohort"])  # still inside day 16: try again
+        self.run_radar(api, now=NOW + timedelta(hours=380))
+        self.assertEqual(vr.load_state()["cohort"], {})
+        readings = sorted((r["group"], r["video_id"], r["reading"], r["final_views"]) for r in self.outcome_rows())
+        self.assertEqual(readings, [
+            ("fresh_cohort", vid(10), "MISSED", None),
+            ("fresh_cohort", vid(20), "MISSED", None),
+            ("tracked", vid(10), "MISSED", None),
+        ])
+        self.assertIsNone(vr.next_snapshot_due(vr.load_state(), self.config["viral_radar"], NOW + timedelta(hours=381)))
+
+    def test_comparison_videos_get_milestone_ratings_on_full_passes_only(self):
+        api = FakeApi(MATURE + [item(20, 6, 500)], handles={"@brakelab": CH})
+        self.run_radar(api)  # age 6 h
+        self.run_radar(api, now=NOW + timedelta(hours=18))  # 24 h
+        vr.run(api=api, config=self.config, now=NOW + timedelta(hours=20), mode=vr.MODE_SNAPSHOTS)
+        api.hidden_from_playlist = {vid(20)}  # off the uploads page from now on
+        self.run_radar(api, now=NOW + timedelta(hours=66))  # 72 h
+        self.run_radar(api, now=NOW + timedelta(hours=162))  # 168 h
+        self.run_radar(api, now=NOW + timedelta(hours=356))  # 362 h: the reading
+        row = self.outcome_rows()[0]
+        marks = row["milestones"]
+        self.assertEqual([marks[k]["age_hours"] for k in ("24h", "3d", "7d")], [24.0, 72.0, 168.0])
+        self.assertEqual({marks[k]["baseline_median_views"] for k in marks}, {10_350.0})
+        self.assertEqual(row["first_rating"]["age_hours"], 6.0)
+        observed = [json.loads(line)["age_hours"] for line in vr.cohort_observations_file().read_text().splitlines()]
+        self.assertEqual(observed, [6.0, 24.0, 72.0, 168.0])
+
+    def test_running_totals_survive_the_next_pass(self):
+        api = FakeApi(MATURE + [item(23, 10, 400, duration="PT40S")], handles={"@brakelab": CH})
+        self.run_radar(api)
+        api.videos[vid(24)] = item(24, -6, 300, duration="PT30S")
+        self.run_radar(api, now=NOW + timedelta(hours=8))
+        counts = vr.load_state()["cohort_counts"]
+        self.assertEqual(counts["skipped_no_baseline"], 2)
+        self.assertEqual(vr.status_snapshot()["fresh_cohort_counts"], counts)
+
+    def test_one_missing_playlist_does_not_stop_the_pass(self):
+        api = FakeApi(
+            MATURE + [item(20, 6, 500), item(40, 6, 500, channel=CH2)],
+            channels={CH: {"subs": "5"}, CH2: {"subs": "9"}},
+            handles={"@brakelab": CH, "@gone": CH2},
+        )
+        self.config["viral_radar"]["watchlist_handles"] = ["@brakelab", "@gone"]
+        api.playlist_errors["UU" + CH2[2:]] = vr.RadarError(
+            vr.API_UNAVAILABLE,
+            "YouTube API request failed: YouTube rejected the request (HTTP 404 reason=playlistNotFound).",
+        )
+        summary = self.run_radar(api)
+        self.assertEqual(summary["status"], "COMPLETE")
+        self.assertTrue(any("not found; skipped" in e for e in summary["errors"]))
+        self.assertIn(vid(20), vr.load_state()["cohort"])
+
+        # Any other failure still ends the pass.
+        api.playlist_errors["UU" + CH2[2:]] = vr.RadarError(vr.API_UNAVAILABLE, "HTTP 403 reason=quotaExceeded")
+        self.assertEqual(self.run_radar(api, now=NOW + timedelta(hours=8))["status"], "API_VALIDATION_UNAVAILABLE")
+
+    def test_a_channel_youtube_no_longer_returns_stops_being_crawled(self):
+        api = FakeApi(MATURE, channels={CH: {"subs": "5"}, CH2: {"subs": "9"}}, handles={"@brakelab": CH})
+        state = vr.empty_state()
+        state["watchlist"][CH2] = {"source": "x", "uploads_playlist": "UU" + CH2[2:]}
+        vr.save_state(state)
+        del api.channels[CH2]
+        self.run_radar(api)
+        self.assertIsNone(vr.load_state()["watchlist"][CH2]["uploads_playlist"])
+        self.assertNotIn(("playlistItems", "UU" + CH2[2:]), [(c[0], c[1].get("playlistId")) for c in api.calls])
+
+    def test_an_unmeasured_length_is_never_labelled_long_form(self):
+        from opportunity_engine import inbox, models
+
+        self.assertEqual(models.format_basis(0), "duration_unknown")
+        self.assertEqual(models.format_basis(None), "duration_unknown")
+        self.assertEqual(models.format_basis(181), "duration_heuristic")
+        self.assertEqual(models.format_label("long_form", "duration_unknown"), "Format unknown (no length measured)")
+        old_packet = {"candidate_videos": [{"video_id": vid(1), "format": "long_form", "duration_seconds": 0}]}
+        self.assertEqual(inbox._videos(old_packet)[0]["format_label"], "Format unknown (no length measured)")
+        measured = {"candidate_videos": [{"video_id": vid(1), "format": "long_form", "duration_seconds": 600}]}
+        self.assertEqual(inbox._videos(measured)[0]["format_label"], "Long-form (over 180 s)")
 
 
 class FormatBasisTests(RadarTestCase):

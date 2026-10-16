@@ -300,7 +300,7 @@ def build_video_packet(
         "channel_id": metadata.get("channel_id"),
         "channel_title": metadata.get("channel_title"),
         "format": fmt,
-        "format_basis": models.FORMAT_BASIS,
+        "format_basis": models.format_basis(duration),
         "published_at": metadata.get("published_at"),
         "age_days": _age_days(metadata.get("published_at"), now),
         "duration_seconds": duration,

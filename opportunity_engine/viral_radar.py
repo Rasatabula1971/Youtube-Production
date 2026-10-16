@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import statistics
@@ -32,7 +31,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from core.pipeline_integrity import atomic_write_json  # noqa: E402
+from core.pipeline_integrity import (  # noqa: E402
+    append_jsonl,
+    atomic_write_json,
+    atomic_write_text,
+    read_jsonl,
+)
 
 from experiment_01_discovery.market_intelligence import (  # noqa: E402
     VELOCITY_VALID,
@@ -128,6 +132,9 @@ def empty_state() -> dict[str, Any]:
         "tracked": {},
         "completed": {},
         "cohort": {},
+        # Running totals for the comparison group; last_run.json is
+        # overwritten every pass, so it cannot hold them (D-177 review).
+        "cohort_counts": {"enrolled": 0, "skipped_no_baseline": 0, "readings": 0, "missed": 0},
         "bucket_cursor": 0,
         "throttled_until": None,
         "last_discovery_run": None,
@@ -322,6 +329,11 @@ def refresh_channels(state: dict[str, Any], api: Api) -> None:
     for start in range(0, len(ids), 50):
         batch = ids[start : start + 50]
         data = api("channels", part="snippet,contentDetails,statistics", id=",".join(batch), maxResults=50)
+        returned = {str(item.get("id")) for item in data.get("items") or []}
+        for channel_id in batch:
+            if channel_id not in returned:
+                # Terminated or hidden: stop reading a playlist that no longer exists.
+                state["watchlist"][channel_id]["uploads_playlist"] = None
         for item in data.get("items") or []:
             entry = state["watchlist"].get(item.get("id"))
             if entry is None:
@@ -338,19 +350,37 @@ def _int(value: Any) -> int | None:
     return int(value) if str(value or "").isdigit() else None
 
 
-def crawl_uploads(state: dict[str, Any], api: Api, settings: dict[str, Any]) -> dict[str, list[str]]:
-    """Recent upload ids per channel from each uploads playlist (1 unit per channel)."""
+def _missing_resource(exc: RadarError) -> bool:
+    """YouTube's 404 for one playlist (removed, or no public uploads)."""
+    return "HTTP 404" in str(exc)
+
+
+def crawl_uploads(
+    state: dict[str, Any], api: Api, settings: dict[str, Any], errors: list[str] | None = None
+) -> dict[str, list[str]]:
+    """Recent upload ids per channel from each uploads playlist (1 unit per channel).
+
+    One channel whose playlist is gone is skipped and named; it must not stop
+    the whole pass. Any other failure (quota, network) still ends the run.
+    """
     uploads: dict[str, list[str]] = {}
     for channel_id, entry in state["watchlist"].items():
         playlist = entry.get("uploads_playlist")
         if not playlist:
             continue
-        data = api(
-            "playlistItems",
-            part="contentDetails",
-            playlistId=playlist,
-            maxResults=min(int(settings["uploads_per_channel"]), 50),
-        )
+        try:
+            data = api(
+                "playlistItems",
+                part="contentDetails",
+                playlistId=playlist,
+                maxResults=min(int(settings["uploads_per_channel"]), 50),
+            )
+        except RadarError as exc:
+            if not _missing_resource(exc):
+                raise
+            if errors is not None:
+                errors.append(f"uploads of {entry.get('title') or channel_id} not found; skipped")
+            continue
         uploads[channel_id] = [
             str((item.get("contentDetails") or {}).get("videoId"))
             for item in data.get("items") or []
@@ -635,9 +665,14 @@ def _record_rating(record: dict[str, Any], entry: dict[str, Any]) -> None:
     if not isinstance(record.get("milestones"), dict):
         record["milestones"] = _milestones(record.get("classifications") or [])
     record["classifications"] = ((record.get("classifications") or []) + [entry])[-60:]
+    _mark_milestones(record["milestones"], entry)
+
+
+def _mark_milestones(marks: dict[str, Any], entry: dict[str, Any]) -> None:
+    """The newest rating at or before each milestone age replaces the last."""
     for label, limit in MILESTONES:
         if float(entry["age_hours"]) <= limit:
-            record["milestones"][label] = entry
+            marks[label] = entry
 
 
 def _reading(hours: float, settings: dict[str, Any]) -> str:
@@ -650,11 +685,29 @@ def outcomes_file() -> Path:
     return SNAPSHOT_FILE.parent / "outcomes.jsonl"
 
 
-def _append_outcome(row: dict[str, Any]) -> None:
-    path = outcomes_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+def cohort_observations_file() -> Path:
+    """Every full-pass reading of a comparison video (age, views), for later
+    age-matched curves (R4). Kept apart from snapshots.jsonl, which the radar
+    page reads in full on every load."""
+    return SNAPSHOT_FILE.parent / "cohort_observations.jsonl"
+
+
+def written_outcome_keys() -> set[tuple[str, str]]:
+    return {
+        (str(row.get("group")), str(row.get("video_id")))
+        for row in read_jsonl(outcomes_file())
+    }
+
+
+def _append_outcome(row: dict[str, Any], written: set[tuple[str, str]]) -> bool:
+    """One row per (group, video): a pass that crashes before the state is
+    saved and runs again must not record the same video twice (D-177)."""
+    key = (str(row["group"]), str(row["video_id"]))
+    if key in written:
+        return False
+    append_jsonl(outcomes_file(), row)
+    written.add(key)
+    return True
 
 
 def _cohort_outcome(
@@ -665,14 +718,42 @@ def _cohort_outcome(
         "video_id": video_id,
         "channel_id": entry.get("channel_id"),
         "format": entry.get("format"),
-        "format_basis": models.FORMAT_BASIS,
+        "format_basis": entry.get("format_basis") or models.FORMAT_BASIS,
         "first_rating": entry.get("first_rating"),
-        "milestones": None,
+        "milestones": entry.get("milestones"),
+        "channel_new": bool(entry.get("channel_new")),
         "final_views": views,
         "final_age_hours": round(hours, 2) if hours is not None else None,
         "reading": reading,
         "recorded_at": at,
         "legacy": False,
+    }
+
+
+def _tracked_outcome(
+    video_id: str,
+    record: dict[str, Any],
+    milestones: dict[str, Any],
+    views: Any,
+    hours: float | None,
+    reading: str,
+    at: str,
+) -> dict[str, Any]:
+    return {
+        "group": GROUP_TRACKED,
+        "video_id": video_id,
+        "channel_id": (record.get("video") or {}).get("channel_id"),
+        "format": record.get("format"),
+        "format_basis": record.get("format_basis") or models.FORMAT_BASIS,
+        "first_rating": record.get("first_rating"),
+        "milestones": milestones,
+        "final_views": views,
+        "final_age_hours": round(hours, 2) if hours is not None else None,
+        "reading": reading,
+        "recorded_at": at,
+        # Tracked before D-177: no first rating, milestones only as far as
+        # the capped rating list still reached.
+        "legacy": "first_rating" not in record,
     }
 
 
@@ -780,7 +861,7 @@ def build_viral_packet(record: dict[str, Any], config: dict[str, Any]) -> dict[s
                 "channel_id": video.get("channel_id"),
                 "channel_title": video.get("channel_title"),
                 "format": record["format"],
-                "format_basis": models.FORMAT_BASIS,
+                "format_basis": record.get("format_basis") or models.format_basis(video.get("duration_seconds")),
                 "published_at": video.get("published_at"),
                 "age_days": round(record["metrics"]["age_hours"] / 24, 2),
                 "duration_seconds": video.get("duration_seconds"),
@@ -800,11 +881,9 @@ def save_packet(packet: dict[str, Any]) -> None:
     if errors:
         raise ValueError("Invalid VIRAL_RADAR packet: " + "; ".join(errors))
     video_id = packet["candidate_videos"][0]["video_id"]
-    path = packet_path(video_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(packet, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    # The shared writer retries a replace that Windows refuses while the UI
+    # has the file open (D-177 review): a refusal here used to end the pass.
+    atomic_write_text(packet_path(video_id), json.dumps(packet, indent=2, ensure_ascii=False) + "\n")
 
 
 # --------------------------------------------------------------------------
@@ -881,18 +960,19 @@ def run(
         if mode == MODE_FULL:
             summary["errors"].extend(resolve_handles(state, counted, settings, now))
             refresh_channels(state, counted)
-            uploads = crawl_uploads(state, counted, settings)
+            uploads = crawl_uploads(state, counted, settings, summary["errors"])
         tracked_ids = list(state["tracked"])
-        # Fresh uploads past day 15 get their reading even when newer uploads
-        # have pushed them off the channel's page: at most 1 unit per 50.
+        # Comparison videos are read even after newer uploads push them off
+        # the channel page: every one on a full pass (their 24 h / 3 d / 7 d
+        # ratings), and those past day 15 on any pass. At most 1 unit per 50.
         window_end = float(settings["active_window_days"]) * 24
-        due_cohort_ids = [
+        cohort_ids = [
             video_id
             for video_id, entry in state["cohort"].items()
-            if (age_hours(entry, now) or 0.0) > window_end
+            if mode == MODE_FULL or (age_hours(entry, now) or 0.0) > window_end
         ]
         measured = measure_videos(
-            [v for ids in uploads.values() for v in ids] + tracked_ids + due_cohort_ids, counted
+            [v for ids in uploads.values() for v in ids] + tracked_ids + cohort_ids, counted
         )
     except RadarError as exc:
         summary.update(status=exc.code)
@@ -910,9 +990,19 @@ def run(
         )
     window_hours = float(settings["active_window_days"]) * 24
     fresh_max_hours = float(settings.get("fresh_cohort_max_age_hours", DEFAULT_FRESH_MAX_AGE_HOURS))
+    reading_max = float(settings.get("outcome_reading_max_hours", DEFAULT_READING_MAX_HOURS))
+    counts = state["cohort_counts"]
+    written = written_outcome_keys()
+    # The baseline is the channel's own uploads page and nothing else. Videos
+    # measured only because they are tracked or in the comparison group must
+    # not join it: in a snapshot pass that would rebuild the baseline from
+    # those videos alone and change the very ratings being tested (D-177
+    # review). With no page read, a tracked video keeps its last baseline.
+    page_ids = {video_id for ids in uploads.values() for video_id in ids}
     by_channel: dict[str, list[dict[str, Any]]] = {}
     for video in measured.values():
-        by_channel.setdefault(str(video.get("channel_id")), []).append(video)
+        if video["video_id"] in page_ids:
+            by_channel.setdefault(str(video.get("channel_id")), []).append(video)
     for videos in by_channel.values():
         videos.sort(key=lambda v: str(v.get("published_at") or ""), reverse=True)
 
@@ -924,20 +1014,25 @@ def run(
         video_id = video["video_id"]
         hours = age_hours(video, now)
         record = state["tracked"].get(video_id)
-        if hours is None or video.get("live") or video.get("views") is None:
+        if hours is None:
             continue
+        readable = not video.get("live") and video.get("views") is not None
         if hours > window_hours:
+            if not readable and hours <= reading_max:
+                continue  # views hidden for now: try again, MISSED after day 16
+            reading = _reading(hours, settings) if readable else READING_MISSED
+            views = video.get("views") if readable else None
             if record:
-                _complete(state, video_id, record, video, hours, observed_at, settings)
+                _complete(state, video_id, record, video, hours, observed_at, reading, written)
                 summary["completed_tracking"] += 1
             cohort_entry = state["cohort"].pop(video_id, None)
             if cohort_entry is not None:
-                _append_outcome(
-                    _cohort_outcome(
-                        video_id, cohort_entry, video.get("views"), hours, _reading(hours, settings), observed_at
-                    )
-                )
-                cohort_summary["readings"] += 1
+                _append_outcome(_cohort_outcome(video_id, cohort_entry, views, hours, reading, observed_at), written)
+                key = "readings" if readable else "missed"
+                cohort_summary[key] += 1
+                counts[key] = int(counts.get(key) or 0) + 1
+            continue
+        if not readable:
             continue
         summary["recent_videos"] += 1
         first_sighting = video_id not in state["seen_video_ids"]
@@ -950,19 +1045,45 @@ def run(
         metrics = ratios(video, baseline, follower_count, now)
         strength, rule_id = classify_strength(metrics, settings)
         summary["classified"][strength] = summary["classified"].get(strength, 0) + 1
+        rating = _rating(metrics, baseline, strength, rule_id, observed_at)
         if first_sighting and hours < fresh_max_hours:
             # Every fresh upload joins the comparison group, flagged or not;
             # without a baseline the day-15 test has nothing to divide by.
             if strength == "INSUFFICIENT_EVIDENCE":
                 cohort_summary["skipped_no_baseline"] += 1
+                counts["skipped_no_baseline"] = int(counts.get("skipped_no_baseline") or 0) + 1
             else:
                 state["cohort"][video_id] = {
                     "channel_id": video.get("channel_id"),
                     "published_at": video.get("published_at"),
                     "format": fmt,
-                    "first_rating": _rating(metrics, baseline, strength, rule_id, observed_at),
+                    "format_basis": models.format_basis(video.get("duration_seconds")),
+                    "first_rating": rating,
+                    "milestones": {label: None for label, _ in MILESTONES},
+                    # The channel joined in this very pass (a bucket search may
+                    # have found it through this video): the report leaves
+                    # these out of the base rate (D-177).
+                    "channel_new": (state["watchlist"].get(str(video.get("channel_id"))) or {}).get("added_at")
+                    == observed_at,
                 }
                 cohort_summary["enrolled"] += 1
+                counts["enrolled"] = int(counts.get("enrolled") or 0) + 1
+        cohort_entry = state["cohort"].get(video_id)
+        if cohort_entry is not None and mode == MODE_FULL:
+            # The comparison group is rated on full passes only, every 8 hours
+            # for every member, flagged or not: one timeline for all (D-177).
+            _mark_milestones(cohort_entry.setdefault("milestones", {}), rating)
+            append_jsonl(
+                cohort_observations_file(),
+                {
+                    "video_id": video_id,
+                    "observed_at": observed_at,
+                    "age_hours": metrics["age_hours"],
+                    "views": metrics["views"],
+                    "likes": video.get("likes"),
+                    "comments": video.get("comments"),
+                },
+            )
         if strength not in settings["track_strengths"] and not record:
             continue
         if record is None:
@@ -970,7 +1091,9 @@ def run(
                 "first_seen_at": observed_at,
                 "snapshots_taken": [],
                 "classifications": [],
-                "first_rating": _rating(metrics, baseline, strength, rule_id, observed_at),
+                # The rating that started tracking, which is not always the
+                # first sighting (the comparison group keeps that one).
+                "first_rating": rating,
             }
         if snapshot_due(record, hours, settings, now):
             append_snapshot(video, hours, observed_at)
@@ -987,7 +1110,7 @@ def run(
         record.update(
             video=video,
             format=fmt,
-            format_basis=models.FORMAT_BASIS,
+            format_basis=models.format_basis(video.get("duration_seconds")),
             baseline=baseline,
             metrics=metrics,
             strength=strength,
@@ -998,26 +1121,37 @@ def run(
             historical_topic=topic,
             tracking_status="TRACKING",
         )
-        _record_rating(record, {**_rating(metrics, baseline, strength, rule_id, observed_at), "trajectory": trajectory})
+        _record_rating(record, {**rating, "trajectory": trajectory})
         state["tracked"][video_id] = record
         summary["tracked"] += 1
 
-    # Tracked videos that disappeared (deleted or private) stop being tracked.
+    # Tracked videos that disappeared (deleted or private) stop being tracked,
+    # and are recorded as MISSED so a vanished candidate is still counted.
     for video_id in [v for v in state["tracked"] if v not in measured]:
         record = state["tracked"].pop(video_id)
         record["tracking_status"] = "UNAVAILABLE"
         state["completed"][video_id] = {"at": observed_at, "reason": "video unavailable", "last": record.get("metrics")}
+        milestones = record.get("milestones")
+        if not isinstance(milestones, dict):
+            milestones = _milestones(record.get("classifications") or [])
+        _append_outcome(
+            _tracked_outcome(
+                video_id, record, milestones, None, age_hours(record.get("video") or {}, now),
+                READING_MISSED, observed_at,
+            ),
+            written,
+        )
 
     # A fresh upload that could not be read by day 16 is recorded as missed,
     # so the report can say how many were left out (D-177).
-    reading_max = float(settings.get("outcome_reading_max_hours", DEFAULT_READING_MAX_HOURS))
     for video_id in [v for v in state["cohort"] if v not in measured]:
         entry = state["cohort"][video_id]
         hours = age_hours(entry, now)
         if hours is not None and hours > reading_max:
             state["cohort"].pop(video_id)
-            _append_outcome(_cohort_outcome(video_id, entry, None, hours, READING_MISSED, observed_at))
+            _append_outcome(_cohort_outcome(video_id, entry, None, hours, READING_MISSED, observed_at), written)
             cohort_summary["missed"] += 1
+            counts["missed"] = int(counts.get("missed") or 0) + 1
     cohort_summary["size"] = len(state["cohort"])
 
     # O10: themes across independent channels, then one packet per breakout.
@@ -1061,39 +1195,24 @@ def _complete(
     video: dict[str, Any],
     hours: float,
     at: str,
-    settings: dict[str, Any],
+    reading: str,
+    written: set[tuple[str, str]],
 ) -> None:
     """Leave the active radar after the window; keep the outcome (R7, D-177)."""
     milestones = record.get("milestones")
     if not isinstance(milestones, dict):
         milestones = _milestones(record.get("classifications") or [])
+    final_views = video.get("views") if reading != READING_MISSED else None
     record["outcome"] = {
-        "final_views": video.get("views"),
+        "final_views": final_views,
         "final_age_hours": round(hours, 2),
-        "reading": _reading(hours, settings),
+        "reading": reading,
         "classified_at": milestones,
     }
     record["tracking_status"] = "TRACKING_COMPLETE"
     state["completed"][video_id] = {"at": at, "reason": "15-day window ended", "outcome": record["outcome"]}
     state["tracked"].pop(video_id, None)
-    _append_outcome(
-        {
-            "group": GROUP_TRACKED,
-            "video_id": video_id,
-            "channel_id": (record.get("video") or {}).get("channel_id") or video.get("channel_id"),
-            "format": record.get("format"),
-            "format_basis": models.FORMAT_BASIS,
-            "first_rating": record.get("first_rating"),
-            "milestones": milestones,
-            "final_views": video.get("views"),
-            "final_age_hours": round(hours, 2),
-            "reading": record["outcome"]["reading"],
-            "recorded_at": at,
-            # Tracked before D-177: no first rating, milestones only as far as
-            # the capped rating list still reached.
-            "legacy": "first_rating" not in record,
-        }
-    )
+    _append_outcome(_tracked_outcome(video_id, record, milestones, final_views, hours, reading, at), written)
     if load_packet(video_id) is not None and record.get("metrics"):
         record["video"] = {**record.get("video", {}), **{k: v for k, v in video.items() if v is not None}}
         try:
@@ -1225,7 +1344,7 @@ def radar_overview(now: datetime | None = None) -> dict[str, Any]:
             "title": video.get("title"),
             "channel_title": video.get("channel_title"),
             "format": record.get("format"),
-            "format_label": models.format_label(record.get("format")),
+            "format_label": models.format_label(record.get("format"), record.get("format_basis") or models.FORMAT_BASIS),
             "strength": record.get("strength"),
             "trajectory": record.get("trajectory"),
             "breadth": record.get("breadth"),
@@ -1345,6 +1464,7 @@ def status_snapshot() -> dict[str, Any]:
         "tracked_count": len(state["tracked"]),
         "completed_count": len(state["completed"]),
         "fresh_cohort_size": len(state["cohort"]),
+        "fresh_cohort_counts": state["cohort_counts"],
         "throttled_until": state.get("throttled_until"),
         "replicated_themes": sum(1 for c in load_clusters() if c.get("breadth") == "REPLICATED"),
     }

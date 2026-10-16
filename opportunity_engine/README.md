@@ -157,12 +157,21 @@ output fields. Historical topics get exactly the same requests as before.
      24 h / 3 d / 7 d milestone ratings, each with the baseline median it used.
    - **Comparison group.** Every upload a full pass sees for the first time
      under 48 hours old joins it, flagged or not, so there is a base rate.
-     After day 15 each one gets a reading, even if it has dropped off the
-     channel page (at most 1 API unit per 50).
-   - **Outcome log.** Both groups land in `output/viral/outcomes.jsonl`
-     (append-only). A reading is `ON_TIME` (day 15–16), `LATE` or `MISSED`.
-   - **The test.** It was fixed in D-177 before any data was seen. The
-     calibration report (M1 closure, PR 3) applies it.
+     - Every full pass rates every member, even one that has dropped off the
+       channel page. That gives each member its own 24 h / 3 d / 7 d ratings,
+       and each reading goes to `output/viral/cohort_observations.jsonl`.
+     - After day 15 each member gets its reading (at most 1 API unit per 50).
+   - **Outcome log.** Both groups land in `output/viral/outcomes.jsonl`, with
+     one append-only row per (group, video). A reading is `ON_TIME` (day
+     15–16), `LATE` or `MISSED`.
+   - **Baseline.** It comes only from the channel's uploads page. Videos
+     measured because they are tracked or in the comparison group never join
+     it.
+   - **The test.** It was fixed in D-177 before any data was seen, and it is
+     scored only inside the comparison group. The calibration report (M1
+     closure, PR 3) applies it.
+   - **What a rating means.** At 24–72 h the views/hour condition is always
+     met, so a rating there reflects views ÷ channel median only (D-177, P1).
 
 Formats are decided by length alone: 180 seconds or less is "short". YouTube
 does not say whether a video is a Short, so every video carries
