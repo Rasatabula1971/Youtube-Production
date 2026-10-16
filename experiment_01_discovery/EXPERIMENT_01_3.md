@@ -38,9 +38,12 @@ Configuration lives in:
 
 `experiment_01_3_config.json`
 
-Every configured topic now has an explicit `niche`. The current eight F1
-topics all belong to `automotive_racing`. Future niches may share the same
-Experiment 01.3 run without contaminating each other's velocity baseline.
+Every configured topic has an explicit `niche`. Two niches share one run
+(D-178): eight F1 topics in `automotive_racing` and eight Science Inside
+topics in `everyday_science` (airplane tires, hummingbird flight, microwave
+ovens, refrigerators, sonic booms, car airbags, lightning, hiccups). Each
+niche + format keeps its own velocity baseline, so neither contaminates the
+other.
 
 ## Output isolation
 
@@ -82,7 +85,10 @@ A video enters the cohort only when:
 1. it is inside the primary age window, or the fallback window for a sparse topic/format cell;
 2. it has at least the configured minimum views;
 3. its **title** contains a target mechanism term;
-4. its **title** also contains Formula 1 / motorsport context;
+4. its **title** also contains a context word for the topic's niche
+   (`context_terms_by_niche`, D-178): Formula 1 / motorsport words for
+   `automotive_racing`, explanation words (how, why, explained, science…) for
+   `everyday_science`;
 5. its title does not contain configured gaming/sim-racing exclusion terms; and
 6. its actual duration format matches the search branch that discovered it.
 

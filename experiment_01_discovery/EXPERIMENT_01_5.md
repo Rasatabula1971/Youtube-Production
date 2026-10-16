@@ -82,7 +82,10 @@ Machine-generated files:
 
 The human opportunity gate writes:
 
-- `human_opportunity_decision.json` — auditable creator decisions;
+- `human_opportunity_decision.json` — auditable creator decisions. A rebuilt
+  handoff retires it: it and `approved_study_set.json` move, with the study
+  set they were made against, to
+  `output/archive/experiment_01_5_gate_<time>/` (D-178), never deleted;
 - `approved_study_set.json` — created only when at least one opportunity is
   explicitly approved and all selected examples are kept.
 

@@ -169,3 +169,30 @@ class Experiment014Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SecondNicheTests(unittest.TestCase):
+    """D-178: per-niche context words and niche-limited query families."""
+
+    def setUp(self):
+        from experiment_01_discovery import experiment_01_4 as exp14
+
+        self.exp14 = exp14
+        self.config = exp14.load_config()
+
+    def test_rules_family_is_asked_only_of_motorsport_topics(self):
+        def families(topic, niche):
+            cell = {"topic": topic, "niche": niche, "format_candidate": "long_form_candidate"}
+            return sorted({task["family"] for task in self.exp14.build_tasks_for_cell(cell, self.config)})
+
+        everything = sorted(f["family"] for f in self.config["query_families"])
+        self.assertEqual(families("brakes", "automotive_racing"), everything)
+        self.assertNotIn("rules_loopholes", families("microwave_oven", "everyday_science"))
+        self.assertEqual(len(families("microwave_oven", "everyday_science")), len(everything) - 1)
+
+    def test_every_topic_has_context_words_for_its_niche(self):
+        from experiment_01_discovery.experiment_01_3 import context_terms_for
+
+        for topic, definition in self.config["topic_definitions"].items():
+            self.assertTrue(context_terms_for(self.config, definition["niche"]), topic)
+        self.assertEqual(len(self.config["topic_definitions"]), 16)

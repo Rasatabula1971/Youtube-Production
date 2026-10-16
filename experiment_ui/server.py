@@ -656,7 +656,12 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "--discovery-backend",
             "auto",
         ],
-        "description": "Uses YouTube Data API v3 search when available and automatically falls back to Agent Reach / yt-dlp when search quota is unavailable. Official API metadata and measurement remain unchanged.",
+        "description": (
+            "Uses YouTube Data API v3 search when available and automatically falls back to Agent Reach / yt-dlp "
+            "when search quota is unavailable. Official API metadata and measurement remain unchanged. Searches "
+            "both niches (F1 and Science Inside). When the new 01.5 handoff is built, the current historical "
+            "opportunity decision is archived, not deleted, and the new handoff needs a fresh decision (D-178)."
+        ),
     },
     "exp13_restart": {
         "label": "Restart 01.3 Discovery Clean",
@@ -674,7 +679,9 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
         ],
         "description": (
             "Archives the current 01.3 output, deletes the saved discovery "
-            "checkpoint, and starts a completely new corrected discovery run."
+            "checkpoint, and starts a completely new corrected discovery run. "
+            "When the new 01.5 handoff is built, the current historical "
+            "opportunity decision is archived, not deleted (D-178)."
         ),
     },
     "exp13_refresh": {

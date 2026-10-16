@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from core.jsonio import load_json_or_exit as load_json
@@ -310,6 +312,36 @@ CSV_FIELDS = [
 ]
 
 
+ARCHIVE_ROOT = OUTPUT_ROOT / "archive"
+
+
+def archive_gate_decision(stamp: str | None = None) -> Path | None:
+    """Move the human decision and approved study set out of the way.
+
+    A new handoff retires the earlier decision, but it is moved to
+    ``output/archive/experiment_01_5_gate_<time>/`` with a copy of the study
+    set and packets it was made against, never deleted (D-157, D-178).
+    Nothing to retire returns None.
+    """
+    present = [path for path in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE) if path.exists()]
+    if not present:
+        return None
+    stamp = stamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    destination = ARCHIVE_ROOT / f"experiment_01_5_gate_{stamp}"
+    suffix = 1
+    while destination.exists():
+        destination = ARCHIVE_ROOT / f"experiment_01_5_gate_{stamp}_{suffix}"
+        suffix += 1
+    destination.mkdir(parents=True)
+    for path in (STUDY_SET_FILE, PACKETS_FILE):
+        if path.exists():
+            shutil.copy2(path, destination / path.name)
+    for path in present:
+        shutil.move(str(path), str(destination / path.name))
+    print(f"Earlier human opportunity decision archived to {destination}")
+    return destination
+
+
 def write_outputs(
     packets: list[dict[str, Any]],
     study_set: list[dict[str, Any]],
@@ -319,10 +351,9 @@ def write_outputs(
 ) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # A rebuilt machine handoff invalidates any earlier human decision.
-    for stale_gate_file in (HUMAN_DECISION_FILE, APPROVED_STUDY_SET_FILE):
-        if stale_gate_file.exists():
-            stale_gate_file.unlink()
+    # A rebuilt machine handoff invalidates any earlier human decision. It is
+    # archived, never deleted (D-157, D-178).
+    archive_gate_decision()
 
     PACKETS_FILE.write_text(
         json.dumps(packets, indent=2, ensure_ascii=False),

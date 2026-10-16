@@ -181,21 +181,26 @@ def calculate_age_window(
 def classify_topic_relevance(
     title: str,
     topic_terms: list[str],
-    motorsport_context_terms: list[str],
+    context_terms: list[str],
     exclude_title_terms: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Strict title-only topic validation for Experiment 01.3."""
+    """Strict title-only topic validation for Experiments 01.3 and 01.4.
+
+    A title must name the topic and carry one of its niche's context words
+    (``context_terms_for``): motorsport words for ``automotive_racing``,
+    explanation words for ``everyday_science`` (D-178).
+    """
 
     excluded = matching_terms(title, exclude_title_terms or [])
     topic_matches = matching_terms(title, topic_terms)
-    context_matches = matching_terms(title, motorsport_context_terms)
+    context_matches = matching_terms(title, context_terms)
 
     if excluded:
         return {
             "topic_relevance": "OFF_TOPIC",
             "topic_relevance_reason": "excluded_title_term",
             "topic_term_matches": topic_matches,
-            "motorsport_context_matches": context_matches,
+            "context_matches": context_matches,
             "excluded_title_matches": excluded,
         }
     if not topic_matches:
@@ -203,24 +208,40 @@ def classify_topic_relevance(
             "topic_relevance": "OFF_TOPIC",
             "topic_relevance_reason": "missing_topic_term_in_title",
             "topic_term_matches": [],
-            "motorsport_context_matches": context_matches,
+            "context_matches": context_matches,
             "excluded_title_matches": [],
         }
     if not context_matches:
         return {
             "topic_relevance": "OFF_TOPIC",
-            "topic_relevance_reason": "missing_motorsport_context_in_title",
+            "topic_relevance_reason": "missing_niche_context_in_title",
             "topic_term_matches": topic_matches,
-            "motorsport_context_matches": [],
+            "context_matches": [],
             "excluded_title_matches": [],
         }
     return {
         "topic_relevance": "ON_TOPIC",
-        "topic_relevance_reason": "title_topic_and_motorsport_context",
+        "topic_relevance_reason": "title_topic_and_niche_context",
         "topic_term_matches": topic_matches,
-        "motorsport_context_matches": context_matches,
+        "context_matches": context_matches,
         "excluded_title_matches": [],
     }
+
+
+def context_terms_for(config: dict[str, Any], niche: str) -> list[str]:
+    """The context words a title needs for a topic in ``niche`` (D-178).
+
+    ``context_terms_by_niche`` gives each niche its own list, so a science
+    topic is not rejected for lacking motorsport words. A config without the
+    map uses the original ``motorsport_context_terms`` for every topic.
+    """
+    by_niche = config.get("context_terms_by_niche")
+    if isinstance(by_niche, dict):
+        terms = by_niche.get(niche)
+        if not isinstance(terms, list) or not terms:
+            raise ValueError(f"No context terms are configured for niche '{niche}'.")
+        return [str(term) for term in terms]
+    return [str(term) for term in config["motorsport_context_terms"]]
 
 
 def topic_channel_confidence(count: int) -> str:
@@ -392,14 +413,16 @@ def load_config() -> dict[str, Any]:
         "search_profiles",
         "wide_age_tolerance_days",
         "minimum_unique_channels_per_topic_format",
-        "motorsport_context_terms",
         "topics",
     }
     missing = sorted(required - set(config))
+    if not ({"context_terms_by_niche", "motorsport_context_terms"} & set(config)):
+        missing.append("context_terms_by_niche")
     if missing:
         raise SystemExit("Experiment 01.3 config is missing: " + ", ".join(missing))
     try:
-        topic_niche_map(config)
+        for niche in set(topic_niche_map(config).values()):
+            context_terms_for(config, niche)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     return config
@@ -1114,7 +1137,7 @@ def build_rows(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     topics = {str(t["topic"]): t for t in config["topics"]}
     topic_niches = topic_niche_map(config)
-    context_terms = list(config["motorsport_context_terms"])
+    context_by_niche = {niche: context_terms_for(config, niche) for niche in set(topic_niches.values())}
     exclude_title_terms = list(config.get("exclude_title_terms", []))
     minimum_views = int(config["minimum_views"])
     minimum_age = float(age_window["minimum_age_days"])
@@ -1166,14 +1189,14 @@ def build_rows(
                     "topic_relevance": "OFF_TOPIC",
                     "topic_relevance_reason": "format_branch_mismatch",
                     "topic_term_matches": [],
-                    "motorsport_context_matches": [],
+                    "context_matches": [],
                     "excluded_title_matches": [],
                 }
             else:
                 result = classify_topic_relevance(
                     title,
                     list(topics[topic_name].get("match_terms", [])),
-                    context_terms,
+                    context_by_niche[topic_niches[topic_name]],
                     exclude_title_terms,
                 )
 
