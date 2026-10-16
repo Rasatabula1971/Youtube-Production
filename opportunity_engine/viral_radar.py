@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import statistics
@@ -31,12 +32,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from core.pipeline_integrity import (  # noqa: E402
-    append_jsonl,
-    atomic_write_json,
-    atomic_write_text,
-    read_jsonl,
-)
+from core.pipeline_integrity import atomic_write_json, atomic_write_text  # noqa: E402
+
+from experiment_01_discovery.scheduled_refresh import acquire_lock, release_lock  # noqa: E402
 
 from experiment_01_discovery.market_intelligence import (  # noqa: E402
     VELOCITY_VALID,
@@ -66,6 +64,7 @@ STATE_FILE = RADAR_DIR / "radar_state.json"
 SUMMARY_FILE = RADAR_DIR / "last_run.json"
 SNAPSHOT_FILE = RADAR_DIR / "snapshots.jsonl"
 CLUSTERS_FILE = RADAR_DIR / "clusters.json"
+TICK_LOCK_FILE = RADAR_DIR / "radar_tick.lock"  # shared with radar_scheduler
 PACKETS_DIR = HERE / "output" / "opportunities" / "viral"
 GENERATOR = "opportunity_engine.viral_radar"
 SCHEMA_VERSION = 1
@@ -243,7 +242,9 @@ def _add_channel(
         return False
     if len(state["watchlist"]) >= int(settings["max_watchlist_channels"]):
         return False
-    state["watchlist"][channel_id] = {"source": source, "added_at": now.isoformat()}
+    # Cleared by the first successful crawl, which may be a later pass if
+    # this one fails (D-177: channel_new).
+    state["watchlist"][channel_id] = {"source": source, "added_at": now.isoformat(), "pending_first_crawl": True}
     return True
 
 
@@ -356,12 +357,17 @@ def _missing_resource(exc: RadarError) -> bool:
 
 
 def crawl_uploads(
-    state: dict[str, Any], api: Api, settings: dict[str, Any], errors: list[str] | None = None
+    state: dict[str, Any],
+    api: Api,
+    settings: dict[str, Any],
+    errors: list[str] | None = None,
+    first_crawled: set[str] | None = None,
 ) -> dict[str, list[str]]:
     """Recent upload ids per channel from each uploads playlist (1 unit per channel).
 
     One channel whose playlist is gone is skipped and named; it must not stop
     the whole pass. Any other failure (quota, network) still ends the run.
+    Channels read for the first time are added to ``first_crawled``.
     """
     uploads: dict[str, list[str]] = {}
     for channel_id, entry in state["watchlist"].items():
@@ -386,6 +392,8 @@ def crawl_uploads(
             for item in data.get("items") or []
             if (item.get("contentDetails") or {}).get("videoId")
         ]
+        if entry.get("pending_first_crawl") and first_crawled is not None:
+            first_crawled.add(channel_id)  # cleared once the pass has enrolled its videos
     return uploads
 
 
@@ -692,11 +700,54 @@ def cohort_observations_file() -> Path:
     return SNAPSHOT_FILE.parent / "cohort_observations.jsonl"
 
 
-def written_outcome_keys() -> set[tuple[str, str]]:
-    return {
-        (str(row.get("group")), str(row.get("video_id")))
-        for row in read_jsonl(outcomes_file())
-    }
+OUTCOME_KEY_TAIL_BYTES = 4 * 1024 * 1024
+
+
+def written_outcome_keys(tail_bytes: int = OUTCOME_KEY_TAIL_BYTES) -> set[tuple[str, str]]:
+    """(group, video) keys already in the outcome log, from its last few MB.
+
+    A duplicate can only come from a pass re-run after a crash, a tick or two
+    later, so the end of the log is enough; reading all of it every pass would
+    grow slower each month (D-177 re-review B5).
+    """
+    path = outcomes_file()
+    try:
+        with path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, size - tail_bytes))
+            chunk = handle.read()
+    except OSError:
+        return set()
+    lines = chunk.decode("utf-8", errors="replace").splitlines()
+    if size > tail_bytes and lines:
+        lines = lines[1:]  # the first line may be cut
+    keys: set[tuple[str, str]] = set()
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            keys.add((str(row.get("group")), str(row.get("video_id"))))
+    return keys
+
+
+def _append_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Append JSON lines in one write. If the last line was torn by a crash, a
+    newline goes first so the new rows stay readable (D-177 re-review B6)."""
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("ab+") as handle:
+        prefix = b""
+        if handle.seek(0, os.SEEK_END) > 0:
+            handle.seek(-1, os.SEEK_END)
+            if handle.read(1) != b"\n":
+                prefix = b"\n"
+        text = "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows)
+        handle.write(prefix + text.encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _append_outcome(row: dict[str, Any], written: set[tuple[str, str]]) -> bool:
@@ -705,7 +756,7 @@ def _append_outcome(row: dict[str, Any], written: set[tuple[str, str]]) -> bool:
     key = (str(row["group"]), str(row["video_id"]))
     if key in written:
         return False
-    append_jsonl(outcomes_file(), row)
+    _append_rows(outcomes_file(), [row])
     written.add(key)
     return True
 
@@ -955,12 +1006,14 @@ def run(
             summary["errors"].append(f"bucket discovery: {discovery['status']}")
         state["last_discovery_run"] = observed_at
 
+    first_crawled: set[str] = set()
+    observations: list[dict[str, Any]] = []
     try:
         uploads: dict[str, list[str]] = {}
         if mode == MODE_FULL:
             summary["errors"].extend(resolve_handles(state, counted, settings, now))
             refresh_channels(state, counted)
-            uploads = crawl_uploads(state, counted, settings, summary["errors"])
+            uploads = crawl_uploads(state, counted, settings, summary["errors"], first_crawled)
         tracked_ids = list(state["tracked"])
         # Comparison videos are read even after newer uploads push them off
         # the channel page: every one on a full pass (their 24 h / 3 d / 7 d
@@ -1034,11 +1087,37 @@ def run(
             continue
         if not readable:
             continue
+        follower_count = (state["watchlist"].get(str(video.get("channel_id"))) or {}).get("follower_count")
+        cohort_entry = state["cohort"].get(video_id)
+        if cohort_entry is not None and mode == MODE_FULL:
+            # The comparison group is rated on full passes only, against the
+            # baseline frozen when the video joined: one timeline and one
+            # baseline for every member, tracked or not (D-177 re-review B1).
+            frozen = cohort_entry.get("baseline") or {}
+            cohort_metrics = ratios(video, frozen, follower_count, now)
+            cohort_strength, cohort_rule = classify_strength(cohort_metrics, settings)
+            _mark_milestones(
+                cohort_entry.setdefault("milestones", {}),
+                _rating(cohort_metrics, frozen, cohort_strength, cohort_rule, observed_at),
+            )
+            observations.append(
+                {
+                    "video_id": video_id,
+                    "observed_at": observed_at,
+                    "age_hours": cohort_metrics["age_hours"],
+                    "views": cohort_metrics["views"],
+                    "likes": video.get("likes"),
+                    "comments": video.get("comments"),
+                }
+            )
+        if video_id not in page_ids and record is None:
+            # Measured only for the comparison group, off its channel page:
+            # the radar itself does not see it, so it never starts tracking.
+            continue
         summary["recent_videos"] += 1
         first_sighting = video_id not in state["seen_video_ids"]
         state["seen_video_ids"].setdefault(video_id, observed_at)
         fmt = video_format(video, settings)
-        follower_count = (state["watchlist"].get(str(video.get("channel_id"))) or {}).get("follower_count")
         baseline = channel_baseline(by_channel.get(str(video.get("channel_id")), []), fmt, settings, now)
         if not baseline["sufficient"] and record:
             baseline = record.get("baseline") or baseline  # keep the last good baseline
@@ -1053,37 +1132,35 @@ def run(
                 cohort_summary["skipped_no_baseline"] += 1
                 counts["skipped_no_baseline"] = int(counts.get("skipped_no_baseline") or 0) + 1
             else:
+                marks: dict[str, Any] = {label: None for label, _ in MILESTONES}
+                _mark_milestones(marks, rating)
                 state["cohort"][video_id] = {
                     "channel_id": video.get("channel_id"),
                     "published_at": video.get("published_at"),
                     "format": fmt,
                     "format_basis": models.format_basis(video.get("duration_seconds")),
+                    # Frozen: every later rating of this member, and its
+                    # day-15 result, use this one baseline (D-177).
+                    "baseline": baseline,
                     "first_rating": rating,
-                    "milestones": {label: None for label, _ in MILESTONES},
-                    # The channel joined in this very pass (a bucket search may
-                    # have found it through this video): the report leaves
-                    # these out of the base rate (D-177).
-                    "channel_new": (state["watchlist"].get(str(video.get("channel_id"))) or {}).get("added_at")
-                    == observed_at,
+                    "milestones": marks,
+                    # This pass was the channel's first successful crawl (a
+                    # bucket search may have found it through this video):
+                    # the report leaves these out of the base rate (D-177).
+                    "channel_new": str(video.get("channel_id")) in first_crawled,
                 }
+                observations.append(
+                    {
+                        "video_id": video_id,
+                        "observed_at": observed_at,
+                        "age_hours": metrics["age_hours"],
+                        "views": metrics["views"],
+                        "likes": video.get("likes"),
+                        "comments": video.get("comments"),
+                    }
+                )
                 cohort_summary["enrolled"] += 1
                 counts["enrolled"] = int(counts.get("enrolled") or 0) + 1
-        cohort_entry = state["cohort"].get(video_id)
-        if cohort_entry is not None and mode == MODE_FULL:
-            # The comparison group is rated on full passes only, every 8 hours
-            # for every member, flagged or not: one timeline for all (D-177).
-            _mark_milestones(cohort_entry.setdefault("milestones", {}), rating)
-            append_jsonl(
-                cohort_observations_file(),
-                {
-                    "video_id": video_id,
-                    "observed_at": observed_at,
-                    "age_hours": metrics["age_hours"],
-                    "views": metrics["views"],
-                    "likes": video.get("likes"),
-                    "comments": video.get("comments"),
-                },
-            )
         if strength not in settings["track_strengths"] and not record:
             continue
         if record is None:
@@ -1153,6 +1230,11 @@ def run(
             cohort_summary["missed"] += 1
             counts["missed"] = int(counts.get("missed") or 0) + 1
     cohort_summary["size"] = len(state["cohort"])
+    _append_rows(cohort_observations_file(), observations)  # one write per pass
+    # Only now has a first crawl enrolled its videos; a pass that failed
+    # earlier leaves the channel new for the next one (D-177 re-review B2).
+    for channel_id in first_crawled:
+        (state["watchlist"].get(channel_id) or {}).pop("pending_first_crawl", None)
 
     # O10: themes across independent channels, then one packet per breakout.
     clusters = viral_cluster.cluster(state["tracked"], config["viral_clustering"])
@@ -1470,6 +1552,20 @@ def status_snapshot() -> dict[str, Any]:
     }
 
 
+def locked_run(mode: str) -> dict[str, Any] | None:
+    """A manual pass takes the scheduler's lock, so two passes never overlap
+    and overwrite each other's state (D-177 re-review). None if it is held."""
+    config = channel_scope.load_config()
+    now = datetime.now(timezone.utc)
+    stale = int(config["radar_schedule"]["lock_stale_minutes"])
+    if not acquire_lock(TICK_LOCK_FILE, now=now, stale_minutes=stale):
+        return None
+    try:
+        return run(config=config, now=now, mode=mode)
+    finally:
+        release_lock(TICK_LOCK_FILE)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("mode", choices=["run", "snapshots", "status"])
@@ -1477,7 +1573,10 @@ def main() -> None:
     if args.mode == "status":
         print(json.dumps(status_snapshot(), indent=2))
         return
-    summary = run(mode=MODE_SNAPSHOTS if args.mode == "snapshots" else MODE_FULL)
+    summary = locked_run(MODE_SNAPSHOTS if args.mode == "snapshots" else MODE_FULL)
+    if summary is None:
+        print("Another radar pass is running (the scheduled task or an earlier click). Nothing was done; try again in a few minutes.")
+        raise SystemExit(1)
     print(f"Viral radar: {summary['status']}  ({summary['api_calls']} API calls)")
     print(f"  Watchlist {summary['watchlist_size']} channels (+{summary['new_channels']} new)")
     print(f"  Recent uploads checked {summary['recent_videos']}: {summary['classified']}")

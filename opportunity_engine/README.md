@@ -156,7 +156,9 @@ output fields. Historical topics get exactly the same requests as before.
    - **Ratings kept.** Each tracked video keeps its first rating and its
      24 h / 3 d / 7 d milestone ratings, each with the baseline median it used.
    - **Comparison group.** Every upload a full pass sees for the first time
-     under 48 hours old joins it, flagged or not, so there is a base rate.
+     on its channel page under 48 hours old joins it, flagged or not, so
+     there is a base rate. Its channel baseline is frozen at that moment; all
+     its later ratings and its day-15 result use that one baseline.
      - Every full pass rates every member, even one that has dropped off the
        channel page. That gives each member its own 24 h / 3 d / 7 d ratings,
        and each reading goes to `output/viral/cohort_observations.jsonl`.
