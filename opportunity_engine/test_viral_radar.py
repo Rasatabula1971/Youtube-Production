@@ -399,8 +399,8 @@ class ReviewFindingTests(RadarTestCase):
     def test_snapshot_passes_never_rebuild_the_baseline_from_comparison_videos(self):
         api = FakeApi(MATURE + self.quiet_fresh(), handles={"@brakelab": CH})
         self.run_radar(api)
-        api.videos[vid(30)] = item(30, -322, 25_000)  # published at +322 h
-        self.run_radar(api, now=NOW + timedelta(hours=352))  # age 30 h: 2.4x -> candidate
+        api.videos[vid(30)] = item(30, -322, 40_000)  # published at +322 h
+        self.run_radar(api, now=NOW + timedelta(hours=352))  # age 30 h: 3.9x -> candidate
         record = vr.load_state()["tracked"][vid(30)]
         self.assertEqual((record["strength"], record["baseline"]["median_views"]), ("BREAKOUT_CANDIDATE", 10_350.0))
         # Six hours later the three quiet uploads are past day 15 and due for
@@ -532,7 +532,7 @@ class ReReviewFindingTests(RadarTestCase):
         frozen = vr.load_state()["cohort"][vid(20)]["baseline"]
         self.assertEqual((frozen["median_views"], frozen["sample_size"]), (10_200.0, 3))
         api.hidden_from_playlist = {vid(1)}
-        api.videos[vid(20)]["statistics"]["viewCount"] = "25500"  # 2.5x
+        api.videos[vid(20)]["statistics"]["viewCount"] = "35700"  # 3.5x
         self.run_radar(api, now=NOW + timedelta(hours=66))  # age 72 h
         state = vr.load_state()
         mark = state["cohort"][vid(20)]["milestones"]["3d"]
@@ -800,8 +800,24 @@ class UnitTests(unittest.TestCase):
 
     def test_strength_needs_both_bases(self):
         self.assertEqual(vr.classify_strength({"age_hours": 50, "lifetime_ratio": None, "vph_ratio": 3}, self.settings)[0], "INSUFFICIENT_EVIDENCE")
-        self.assertEqual(vr.classify_strength({"age_hours": 50, "lifetime_ratio": 3.5, "vph_ratio": 12}, self.settings), ("BREAKOUT", "VS-BREAKOUT-FAST"))
-        self.assertEqual(vr.classify_strength({"age_hours": 100, "lifetime_ratio": 3.5, "vph_ratio": 12}, self.settings), ("BREAKOUT_CANDIDATE", "VS-CANDIDATE"))
+        self.assertEqual(vr.classify_strength({"age_hours": 50, "lifetime_ratio": 3.5, "vph_ratio": 12}, self.settings), ("BREAKOUT_CANDIDATE", "VS-OUTLIER"))
+        self.assertEqual(vr.classify_strength({"age_hours": 100, "lifetime_ratio": 3.5, "vph_ratio": 12}, self.settings), ("BREAKOUT_CANDIDATE", "VS-OUTLIER"))
+        self.assertEqual(vr.classify_strength({"age_hours": 50, "lifetime_ratio": 5.0, "vph_ratio": 40}, self.settings), ("BREAKOUT", "VS-BREAKOUT"))
+
+    def test_a_viral_outlier_is_3x_the_channel_normal_or_more(self):
+        """Owner, D-177: under 3x is never flagged once a video is a day old,
+        whatever its views per hour (the old 1x/2x rules are gone)."""
+        for ratio, vph in ((1.0, 50), (2.0, 50), (2.99, 500)):
+            for hours in (25, 50, 100, 300):  # past the first day (VS-EARLY covers up to 24 h)
+                self.assertEqual(
+                    vr.classify_strength({"age_hours": hours, "lifetime_ratio": ratio, "vph_ratio": vph}, self.settings),
+                    ("NORMAL", None),
+                )
+        self.assertEqual(vr.classify_strength({"age_hours": 24, "lifetime_ratio": 3.0, "vph_ratio": 1}, self.settings)[0], "BREAKOUT_CANDIDATE")
+        self.assertEqual(vr.classify_strength({"age_hours": 72, "lifetime_ratio": 4.99, "vph_ratio": 100}, self.settings)[0], "BREAKOUT_CANDIDATE")
+        for rule in self.settings["strength_rules"]:
+            if rule["strength"] != "EARLY_SIGNAL":
+                self.assertGreaterEqual(rule["min_lifetime_ratio"], 3.0, rule["rule_id"])
         self.assertEqual(vr.classify_strength({"age_hours": 10, "lifetime_ratio": 0.2, "vph_ratio": 50}, self.settings)[0], "NORMAL")
 
     def test_trajectory_labels(self):

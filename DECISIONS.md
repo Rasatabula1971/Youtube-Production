@@ -5573,7 +5573,9 @@ canonical-JSON hash copies.
 
 **Status:** Accepted (15 Oct 2026). Closure plan: the Project document
 `M1_Closure_Contract.md`. This entry records the decisions and the first change
-(PR 1).
+(PR 1). On 15 Oct the owner set the open items before deploy: the viral outlier
+bar is 3× (decision 6), the precision floor is 25% (2a), and the radar is
+measured as it is.
 
 **Context.** The M1 criteria (PROJECT.md §9) were written before Opportunity
 Engine v2.1, which has three lanes and one active channel (Science Inside).
@@ -5614,7 +5616,7 @@ Checked against `c0adb20`:
      with the member. Every later rating of the member and its day-15 result
      use it, whether or not the radar tracks the video and whether or not it
      is still on the page. So a member's ratings never depend on tracking, and
-     a member at 2× by day 3 does end at 2× or more.
+     a member at 3× by day 3 does end at 3× or more.
    - **Ratings tested.**
      - Each member is rated on every full pass, about every 8 hours.
      - Its rating at a milestone is its last full-pass rating at or before 24
@@ -5669,27 +5671,45 @@ Checked against `c0adb20`:
      - Every baseline video is at least 15 days (360 h) old, so its median
        lifetime views/hour is at most median views ÷ 360.
      - For a video 72 h old or younger, the views/hour ratio is therefore at
-       least 5× its views ratio. The views/hour conditions in
-       `VS-CANDIDATE-VPH` and `VS-BREAKOUT-FAST` are automatic.
-     - So at 24–72 h the ratings are bands of views ÷ channel median: under 1×
-       is `NORMAL`, 1×–3× is `BREAKOUT_CANDIDATE`, 3× or more is `BREAKOUT`.
-       Checks of 20,000 random baselines found no exceptions.
-     - The test therefore measures whether a video's channel-relative views by
-       day 3 predict its day-15 result. It cannot credit the views/hour basis,
-       and the evidence report must say so.
-     - Data collection runs with the radar exactly as it is. A different basis,
-       for example an age-matched one built from `cohort_observations.jsonl`
-       (R4), is a separate later decision, checked on a fresh sample.
-   - **2a. Precision floor:** SET BY THE OWNER BEFORE DEPLOY. It is the share of
-     3-day `BREAKOUT_CANDIDATE` members that reach HIT. Until it is set, this
-     change is not deployed to the PC, so no outcome data exists before the
-     test is complete.
+       least 5× its views ratio, so the views/hour conditions of the old
+       `VS-CANDIDATE-VPH` and `VS-BREAKOUT-FAST` rules were automatic. The
+       review checked 20,000 random baselines and found no exceptions.
+     - Decision 6 removes both rules. From a day old, ratings are now plain
+       bands of views ÷ channel median:
+       - under 3×: `NORMAL`;
+       - 3× to under 5×: `BREAKOUT_CANDIDATE`;
+       - 5× or more: `BREAKOUT`.
+       Only `VS-EARLY` (under 24 h) still uses views/hour, and there its
+       condition is close to automatic too.
+     - The test therefore measures whether a video at 3–5× its channel's
+       normal by day 3 reaches 5× by day 15. It does not credit a views/hour
+       basis, and the evidence report must say so.
+     - The owner chose to measure the radar as it is. A different basis, for
+       example an age-matched one built from `cohort_observations.jsonl` (R4),
+       is a separate later decision, checked on a fresh sample.
+   - **2a. Precision floor (owner, 15 Oct 2026): 25%.** At least one in four
+     members rated `BREAKOUT_CANDIDATE` at the 3-day milestone, that is 3–5×
+     by day 3, must reach HIT (5×) by day 15. It was set before deploy, so no
+     outcome data existed when the test was completed.
 3. **Production feature freeze** (pending in D-175). `production_engine` takes
    no new features until M1 closes. Fixes are still allowed.
 4. **The Opportunity Gate move** (pending in D-175) waits until M1 closes. Moving
    files while evidence is collected risks the scheduled task.
 5. **Audit #10** (the cost of a failure after dispatch) comes after M1 and
    before the next paid batch.
+6. **The viral outlier bar is 3× (owner, 15 Oct 2026).** Once a video is a
+   day old, the radar flags it only at 3× its channel's normal (the median
+   views of its mature uploads in the same format) or more.
+   - `VS-OUTLIER`: 3× to under 5× is `BREAKOUT_CANDIDATE`.
+   - `VS-BREAKOUT`: 5× or more is `BREAKOUT`.
+   - `VS-CANDIDATE` (2×), `VS-CANDIDATE-VPH` (1× plus views/hour) and
+     `VS-BREAKOUT-FAST` (3× plus views/hour at 1–3 days) are removed. Under
+     P1 they flagged 1–3× videos and called 3–5× videos at 1–3 days
+     breakouts.
+   - `VS-EARLY` (under 24 h) is unchanged.
+   - The radar page's shortlist already defaults to a minimum outlier of 3×
+     (D-162).
+   - Packets already written keep the rule ids they were written with.
 
 **This change (PR 1).**
 - **Ratings that survive.**

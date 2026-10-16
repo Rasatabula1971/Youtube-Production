@@ -144,7 +144,10 @@ output fields. Historical topics get exactly the same requests as before.
 3. **Classify (O9), on first sight.** Two ratios with their basis named:
    views vs the channel's median views, and views/hour vs its median lifetime
    views/hour. `strength_rules` (hypotheses) set EARLY_SIGNAL /
-   BREAKOUT_CANDIDATE / BREAKOUT. Trajectory comes from snapshots
+   BREAKOUT_CANDIDATE / BREAKOUT. **The viral outlier bar is 3×** (D-177):
+   from a day old, under 3× the channel's normal is NORMAL, 3× to under 5× is
+   BREAKOUT_CANDIDATE (`VS-OUTLIER`) and 5× or more is BREAKOUT. Under a day
+   old, `VS-EARLY` flags EARLY_SIGNAL. Trajectory comes from snapshots
    (ACCELERATING, STABLE_HIGH, DECELERATING, FLAT). Historical alignment checks
    the historical topics. Breadth comes from theme clustering (O10, below).
 4. **Track (O8).** Promising videos are snapshotted every 6 h (under 2 days),
@@ -172,8 +175,10 @@ output fields. Historical topics get exactly the same requests as before.
    - **The test.** It was fixed in D-177 before any data was seen, and it is
      scored only inside the comparison group. The calibration report (M1
      closure, PR 3) applies it.
-   - **What a rating means.** At 24–72 h the views/hour condition is always
-     met, so a rating there reflects views ÷ channel median only (D-177, P1).
+   - **What a rating means.** From a day old a rating is a band of views ÷
+     channel median and nothing else (D-177, P1). The pre-registered test asks
+     whether a 3–5× video at day 3 reaches 5× by day 15, at least 25% of the
+     time and at least 3× as often as a random fresh upload.
 
 Formats are decided by length alone: 180 seconds or less is "short". YouTube
 does not say whether a video is a Short, so every video carries

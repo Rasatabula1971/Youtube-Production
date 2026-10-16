@@ -438,28 +438,11 @@
         "description": "At least a day old and 5x the channel's mature-upload median views."
       },
       {
-        "rule_id": "VS-BREAKOUT-FAST",
-        "strength": "BREAKOUT",
+        "rule_id": "VS-OUTLIER",
+        "strength": "BREAKOUT_CANDIDATE",
         "min_age_hours": 24,
-        "max_age_hours": 72,
         "min_lifetime_ratio": 3.0,
-        "min_vph_ratio": 10.0,
-        "description": "1-3 days old, 3x median views and 10x the channel's median lifetime views/hour."
-      },
-      {
-        "rule_id": "VS-CANDIDATE",
-        "strength": "BREAKOUT_CANDIDATE",
-        "min_age_hours": 24,
-        "min_lifetime_ratio": 2.0,
-        "description": "At least a day old and 2x median views."
-      },
-      {
-        "rule_id": "VS-CANDIDATE-VPH",
-        "strength": "BREAKOUT_CANDIDATE",
-        "min_age_hours": 24,
-        "min_vph_ratio": 5.0,
-        "min_lifetime_ratio": 1.0,
-        "description": "At least a day old, at the median already, and 5x median lifetime views/hour."
+        "description": "At least a day old and 3x the channel's mature-upload median views: the viral outlier bar (owner, D-177)."
       },
       {
         "rule_id": "VS-EARLY",
