@@ -5813,7 +5813,7 @@ Checked against `c0adb20`:
 ## D-178 — Two niches in the historical lane: Science Inside joins F1 in one cohort
 
 **Status:** Accepted (16 Oct 2026). PR 2 of the M1 closure (D-177, criterion 1),
-revised after two Stage 8 reviews.
+revised after three Stage 8 reviews.
 
 **Context.**
 - The historical lane (01.3 → 01.4 → 01.5) could only ever find motorsport:
@@ -5912,6 +5912,20 @@ revised after two Stage 8 reviews.
   used to stop at 30.
 - **The research flow never removes the shared Windows task**
   (`remove_continuation_task` is gone). Only the owner removes it, from Tools.
+  Because the task now ticks every 2 hours for good, the continuation:
+  - leaves `NEEDS_HUMAN_ATTENTION` and `FAILED_DISCOVERY` untouched until the
+    owner acts, as the old task removal effectively did;
+  - with no frozen cohort (discovery paused, failed or never ran), reports
+    `NEEDS_HUMAN_ATTENTION` once, pointing to Run Opportunity Research (which
+    resumes a saved discovery), rather than a wait that never ends;
+  - leaves a `DISCOVERY_RUNNING` state alone for 12 hours, then reports it as
+    unfinished;
+  - hands off a study set, and runs its paid vidIQ supplement, once per study
+    set (keyed by its SHA-256). A handoff from before this change is adopted
+    without calling vidIQ again.
+- **01.4 pauses only for quota.** A search rejected for any other reason (a bad
+  key, say) is recorded as `API_ERROR`, not `QUOTA_EXHAUSTED`. The run then
+  fails and is retried on later ticks, instead of pausing a day at a time.
 - **After a 01.4 or 01.5 failure** the UI shows "retries on the next scheduled
   tick", not "Run Opportunity Research". That button would re-discover the
   cohort and spend the discovery quota again. Tools → Restart 01.3 Discovery
@@ -5942,15 +5956,19 @@ revised after two Stage 8 reviews.
     archived, not lost). Finish that video first.
 - **Quota.**
   - **Discovery day:**
-    - 51 strict searches (27 F1 + 24 science) out of a cap of 60;
-    - then yt-dlp;
+    - 51 strict searches (27 F1 + 24 science), then 9 expansion searches,
+      reaching the cap of 60;
+    - after that, yt-dlp;
     - plus channel baselines and the radar;
     - about 7,300 units.
   - **A later quota day:** 01.4 runs its whole plan, up to 60 searches, about
     6,000–6,700 units with the radar.
-  - Each day stays under 8,000 units. Because 51 of the 60 API searches go to
-    strict queries, F1's sparse-cell expansion now relies mostly on yt-dlp,
-    while measurement stays on the official API.
+  - Each day stays under 8,000 units. The third review's simulation measured
+    6,072 units of research on discovery day and 6,004 on the 01.4 day (radar
+    not included).
+  - Because 51 of the 60 API searches go to strict queries, most of F1's
+    sparse-cell expansion now runs on yt-dlp. Measurement stays on the
+    official API.
 - **Same bars for both niches.** `minimum_views` (500,000) and the 3-channel
   minimum are unchanged. A Science Inside cell that falls short is evidence,
   not a reason to lower a bar.

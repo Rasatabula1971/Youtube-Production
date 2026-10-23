@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from core.hashing import sha256_file
+
 from experiment_01_discovery import scheduled_refresh
 
 HERE = Path(__file__).resolve().parent
@@ -72,6 +74,7 @@ def write_state(
     scheduler_armed: bool = False,
     vidiq_status: str | None = None,
     vidiq_message: str | None = None,
+    study_set_sha256: str | None = None,
 ) -> dict[str, Any]:
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -85,6 +88,7 @@ def write_state(
         "scheduler_armed": scheduler_armed,
         "vidiq_status": vidiq_status,
         "vidiq_message": vidiq_message,
+        "study_set_sha256": study_set_sha256,
     }
     STATE_FILE.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False),
@@ -135,6 +139,11 @@ def study_set_ready() -> bool:
     return isinstance(payload, list) and bool(payload)
 
 
+def current_study_set_sha256() -> str | None:
+    path = EXP15_DIR / "study_set.json"
+    return sha256_file(path) if path.exists() else None
+
+
 def exp14_plan_ready() -> bool:
     plan = read_json(EXP14_DIR / "expansion_plan.json")
     return plan.get("status") == "READY"
@@ -150,6 +159,8 @@ def exp14_complete() -> bool:
 # none in the standard library) both are allowed for: the spending moment is
 # dated as late as it could be (UTC-7), "now" as early as it could be (UTC-8).
 # The wait can be up to an hour too long, never too short.
+OWNER_STOP_STATES = {"NEEDS_HUMAN_ATTENTION", "FAILED_DISCOVERY"}
+DISCOVERY_STALE_AFTER = timedelta(hours=12)
 PACIFIC_LATEST = timedelta(hours=7)
 PACIFIC_EARLIEST = timedelta(hours=8)
 EXP14_PAUSED_STATUSES = {"QUOTA_EXHAUSTED", "SEARCH_BUDGET_REACHED"}
@@ -301,6 +312,9 @@ def finalize_opportunity_handoff(
         refresh_attempts=refresh_attempts,
         vidiq_status=vidiq_status,
         vidiq_message=vidiq_message,
+        # The handoff (and its vidIQ supplement) runs once per study set; the
+        # every-2-hours task must not repeat paid calls (D-178 review).
+        study_set_sha256=current_study_set_sha256(),
     )
 
 
@@ -425,8 +439,42 @@ def continue_research(
 ) -> dict[str, Any]:
     state = read_json(STATE_FILE)
     refresh_attempts = int(state.get("refresh_attempts") or 0)
+    status = str(state.get("status") or "")
+
+    # The shared task runs this every 2 hours for good (D-178), so states
+    # that wait for the owner stay as they are; they used to end the task.
+    if status in OWNER_STOP_STATES:
+        return state
+
+    if not (EXP13_DIR / "cohort_manifest.json").exists():
+        started = _parse_time(state.get("updated_at"))
+        if status == "DISCOVERY_RUNNING" and started and utc_now() - started < DISCOVERY_STALE_AFTER:
+            return state  # a discovery is still running; leave its state alone
+        return write_state(
+            "NEEDS_HUMAN_ATTENTION",
+            (
+                "No frozen 01.3 cohort exists (discovery paused, failed or never ran). "
+                "Run Opportunity Research to resume or restart it."
+            ),
+            refresh_attempts=refresh_attempts,
+        )
 
     if study_set_ready():
+        if status == "AWAITING_HUMAN_OPPORTUNITY_REVIEW":
+            recorded = state.get("study_set_sha256")
+            current = current_study_set_sha256()
+            if recorded == current:
+                return state  # already handed off; nothing to repeat
+            if recorded is None:
+                # Handed off before D-178: adopt it rather than re-run vidIQ.
+                return write_state(
+                    status,
+                    str(state.get("message") or ""),
+                    refresh_attempts=refresh_attempts,
+                    vidiq_status=state.get("vidiq_status"),
+                    vidiq_message=state.get("vidiq_message"),
+                    study_set_sha256=current,
+                )
         return finalize_opportunity_handoff(
             python_executable=python_executable,
             refresh_attempts=refresh_attempts,

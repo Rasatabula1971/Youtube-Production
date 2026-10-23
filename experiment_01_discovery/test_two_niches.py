@@ -268,6 +268,20 @@ class NewCohortFlowTests(unittest.TestCase):
         old_gate = next((self.root / "archive").glob("experiment_01_5_*"))
         self.assertEqual(json.loads((old_gate / "approved_study_set.json").read_text()), [{"video_id": "old"}])
 
+    def test_a_failed_put_back_says_where_each_folder_is(self):
+        real_rename = e3.os.rename
+        calls = []
+
+        def flaky(source, target):
+            calls.append(source)
+            if len(calls) >= 2:
+                raise PermissionError("file in use")
+            return real_rename(source, target)
+
+        with patch.object(e3.os, "rename", side_effect=flaky):
+            with self.assertRaisesRegex(SystemExit, "could not put everything back: experiment_01_4 is now"):
+                e3.archive_existing_output()
+
     def test_a_failed_move_leaves_everything_in_place(self):
         real_rename = e3.os.rename
         calls = []
@@ -335,6 +349,21 @@ class QuotaDayTests(unittest.TestCase):
                 state = research.advance_downstream(python_executable="python", refresh_attempts=1)
         self.assertEqual(state["status"], "WAITING_FOR_NEXT_QUOTA_DAY")
         self.assertEqual(state["next_refresh_due_at"], "2026-10-19T08:00:00+00:00")
+
+    def test_only_a_quota_answer_pauses_01_4(self):
+        plan = {"search_tasks": [{"task_id": "t1", "query": "q", "search_order": "viewCount", "video_duration_filter": "short",
+                                  "sequence": 1, "topic": "x", "format_candidate": "short_candidate", "family": "f"}],
+                "published_after": "2021-01-01T00:00:00Z", "created_at": "now"}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(e4, "OUTPUT_DIR", Path(tmp)), \
+                patch.object(e4, "CHECKPOINT_FILE", Path(tmp) / "search_checkpoint.json"):
+            for message, expected in (
+                ("YouTube rejected the request (HTTP 403 reason=quotaExceeded).", "QUOTA_EXHAUSTED"),
+                ("YouTube rejected the request (HTTP 400 reason=keyInvalid).", "API_ERROR"),
+            ):
+                (Path(tmp) / "search_checkpoint.json").unlink(missing_ok=True)
+                with patch.object(e4, "api_get", side_effect=SystemExit(message)):
+                    _, status, calls = e4.execute_plan(plan, "key", max_searches=10, region_code=None, language=None)
+                self.assertEqual((status, calls), (expected, 0), message)
 
     def test_01_4_execute_defaults_to_the_whole_plan(self):
         import inspect

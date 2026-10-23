@@ -400,9 +400,16 @@ def execute_plan(
 
         try:
             data = api_get("search", api_key, **params)
-        except SystemExit:
-            save_checkpoint(plan, completed, search_results, "QUOTA_EXHAUSTED")
-            return search_results, "QUOTA_EXHAUSTED", calls
+        except SystemExit as exc:
+            # Only a quota answer is a pause until the next quota day; any
+            # other rejection (a bad key, say) is an error (D-178 review).
+            reason = (
+                "QUOTA_EXHAUSTED"
+                if any(marker in str(exc) for marker in ("quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"))
+                else "API_ERROR"
+            )
+            save_checkpoint(plan, completed, search_results, reason)
+            return search_results, reason, calls
 
         calls += 1
         video_ids = [

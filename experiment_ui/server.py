@@ -5586,7 +5586,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
         "exp13_auto_refresh_install": {
             "enabled": IS_WINDOWS,
             "reason": (
-                "Install a self-limiting Windows scheduled refresh every two hours."
+                "Install the one Windows scheduled task: every two hours it continues Opportunity Research and runs a viral radar tick."
                 if IS_WINDOWS
                 else "Windows Task Scheduler automation is available only on Windows."
             ),
@@ -7574,7 +7574,9 @@ def workflow_guidance(
             "current_title": "01.4 / 01.5 retries on the next scheduled tick",
             "current_detail": (
                 str(research_state.get("message") or "The last step failed.")
-                + " The current cohort is kept; the job log has the reason."
+                + " The current cohort is kept. The scheduled task retries every 2 hours"
+                " (if it isn't installed, use Tools -> Install Opportunity Automation);"
+                " the reason is in opportunity_engine/output/viral/scheduled_tick.log."
             ),
             "next_action_id": None,
             "next_title": "Review Opportunity",

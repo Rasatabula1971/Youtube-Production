@@ -1157,8 +1157,18 @@ def archive_existing_output() -> Path | None:
             os.rename(source, target)
             done.append((source, target))
     except OSError as exc:
+        stuck = []
         for source, target in reversed(done):
-            os.rename(target, source)
+            try:
+                os.rename(target, source)
+            except OSError:
+                stuck.append(f"{source.name} is now {target}")
+        if stuck:
+            raise SystemExit(
+                f"Could not archive the previous cohort ({exc}), and could not put "
+                f"everything back: {'; '.join(stuck)}. Move it back by hand before "
+                "running discovery again."
+            ) from exc
         raise SystemExit(
             f"Could not archive the previous cohort ({exc}). Nothing was moved; "
             "close any open output files and run discovery again."
