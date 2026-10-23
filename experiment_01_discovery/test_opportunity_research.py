@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from types import SimpleNamespace
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +19,9 @@ class OpportunityResearchTests(unittest.TestCase):
         exp13.mkdir(parents=True)
         exp14.mkdir(parents=True)
         exp15.mkdir(parents=True)
+        # These flows run on a frozen cohort (D-178: without one, the
+        # continuation stops for the owner).
+        (exp13 / "cohort_manifest.json").write_text("{}", encoding="utf-8")
 
         stack.enter_context(patch.object(research, "OUTPUT_ROOT", root))
         stack.enter_context(patch.object(research, "EXP13_DIR", exp13))
@@ -101,9 +105,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     },
                 )
             )
-            remove = stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
             schedule = stack.enter_context(
                 patch.object(research, "schedule_continuation")
             )
@@ -117,7 +118,6 @@ class OpportunityResearchTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "NEEDS_HUMAN_ATTENTION")
         self.assertEqual(result["refresh_attempts"], 3)
-        remove.assert_called_once()
         schedule.assert_not_called()
 
     def test_ready_velocity_runs_01_4_then_01_5_and_stops_for_human(self):
@@ -155,9 +155,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     side_effect=fake_run,
                 )
             )
-            remove = stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
             vidiq = stack.enter_context(
                 patch.object(
                     research,
@@ -176,7 +173,6 @@ class OpportunityResearchTests(unittest.TestCase):
             "AWAITING_HUMAN_OPPORTUNITY_REVIEW",
         )
         self.assertEqual(run.call_count, 3)
-        remove.assert_called_once()
         vidiq.assert_called_once_with(python_executable="python-test")
         self.assertEqual(result["vidiq_status"], "COMPLETE")
 
@@ -196,9 +192,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     return_value=("PARTIAL", "supplement partial"),
                 )
             )
-            remove = stack.enter_context(
-                patch.object(research, "remove_continuation_task")
-            )
 
             result = research.continue_research(
                 python_executable="python-test",
@@ -210,7 +203,6 @@ class OpportunityResearchTests(unittest.TestCase):
         self.assertEqual(result["status"], "AWAITING_HUMAN_OPPORTUNITY_REVIEW")
         self.assertEqual(result["vidiq_status"], "PARTIAL")
         vidiq.assert_called_once_with(python_executable="python-test")
-        remove.assert_called_once()
 
     def test_start_runs_discovery_then_enters_continuation(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
@@ -243,7 +235,6 @@ class OpportunityResearchTests(unittest.TestCase):
                     return_value=expected,
                 )
             )
-            stack.enter_context(patch.object(research, "remove_continuation_task"))
 
             result = research.start_research(
                 python_executable="python-test",
@@ -263,3 +254,213 @@ class OpportunityResearchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedTaskTests(unittest.TestCase):
+    """D-178 review: the one Windows task also runs the viral radar, so the
+    research flow must never delete it (it used to on every finished, failed
+    or started run)."""
+
+    def test_no_research_path_deletes_the_scheduled_task(self):
+        commands = []
+
+        def fake_subprocess_run(command, *args, **kwargs):
+            commands.append([str(part) for part in command])
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(research.os, "name", "nt"), \
+                patch.object(research.subprocess, "run", side_effect=fake_subprocess_run), \
+                patch.object(research, "study_set_ready", return_value=True), \
+                patch.object(research, "run_vidiq_supplemental", return_value=("COMPLETE", "ok")), \
+                patch.object(research, "write_state", side_effect=lambda status, message, **kw: {"status": status}):
+            research.continue_research(
+                python_executable="python-test", minimum_interval_hours=1.5,
+                max_refresh_attempts=3, schedule_if_waiting=True,
+            )
+        flat = [" ".join(command).lower() for command in commands]
+        self.assertFalse(any("remove_experiment_01_3_auto_refresh" in c or "/delete" in c for c in flat), flat)
+        self.assertFalse(hasattr(research, "remove_continuation_task"))
+
+
+class ContinuationStopsTests(unittest.TestCase):
+    """D-178 review: the shared task now ticks for good, so the continuation
+    must stop at owner states and must not repeat the vidIQ supplement."""
+
+    patch_output_paths = OpportunityResearchTests.patch_output_paths
+
+    def run_continue(self, stack, **patches):
+        for name, value in patches.items():
+            stack.enter_context(patch.object(research, name, value))
+        return research.continue_research(
+            python_executable="python-test", minimum_interval_hours=1.5,
+            max_refresh_attempts=3, schedule_if_waiting=True,
+        )
+
+    def test_no_cohort_stops_for_the_owner_and_stays_stopped(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_3" / "cohort_manifest.json").unlink()
+            research.STATE_FILE.write_text(json.dumps({"status": "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH"}), encoding="utf-8")
+            refresh = stack.enter_context(patch.object(research.scheduled_refresh, "run_scheduled_refresh"))
+            first = self.run_continue(stack)
+            second = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                                max_refresh_attempts=3, schedule_if_waiting=True)
+        self.assertEqual(first["status"], "NEEDS_HUMAN_ATTENTION")
+        self.assertIn("Run Opportunity Research", first["message"])
+        self.assertEqual(second, first)  # unchanged: no wait re-armed
+        refresh.assert_not_called()
+
+    def test_a_running_discovery_is_left_alone_until_it_goes_stale(self):
+        from datetime import datetime, timedelta, timezone
+        now = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_3" / "cohort_manifest.json").unlink()
+            running = {"status": "DISCOVERY_RUNNING", "updated_at": (now - timedelta(hours=2)).isoformat()}
+            research.STATE_FILE.write_text(json.dumps(running), encoding="utf-8")
+            self.assertEqual(self.run_continue(stack, utc_now=lambda: now), running)
+            running["updated_at"] = (now - timedelta(hours=13)).isoformat()
+            research.STATE_FILE.write_text(json.dumps(running), encoding="utf-8")
+            stale = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                               max_refresh_attempts=3, schedule_if_waiting=True)
+        self.assertEqual(stale["status"], "NEEDS_HUMAN_ATTENTION")
+
+    def test_a_stop_clears_once_a_new_cohort_is_frozen(self):
+        # Fourth review F1: discovery run from Tools leaves the state alone; a
+        # tick during it stops for the owner; the new cohort must carry on.
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            manifest = root / "experiment_01_3" / "cohort_manifest.json"
+            manifest.unlink()
+            research.STATE_FILE.write_text(json.dumps({"status": "FAILED_01_4_EXECUTION"}), encoding="utf-8")
+            refresh = stack.enter_context(patch.object(
+                research.scheduled_refresh, "run_scheduled_refresh", return_value={"status": "REFRESHED"}))
+            stack.enter_context(patch.object(research, "schedule_continuation", return_value=True))
+            stopped = self.run_continue(stack)
+            self.assertEqual((stopped["status"], stopped["cohort_id"]), ("NEEDS_HUMAN_ATTENTION", None))
+            manifest.write_text(json.dumps({"cohort_id": "day120_adaptive_20261023T150000Z"}), encoding="utf-8")
+            carried = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                                 max_refresh_attempts=3, schedule_if_waiting=True)
+            again = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                               max_refresh_attempts=3, schedule_if_waiting=True)
+        self.assertEqual(carried["status"], "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH")
+        self.assertEqual(carried["cohort_id"], "day120_adaptive_20261023T150000Z")
+        self.assertEqual(again["status"], "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH")
+        self.assertEqual(refresh.call_count, 2)
+
+    def test_a_stop_stays_while_the_cohort_it_was_written_against_remains(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_3" / "cohort_manifest.json").write_text('{"cohort_id": "c1"}', encoding="utf-8")
+            stopped = {"status": "NEEDS_HUMAN_ATTENTION", "message": "insufficient", "cohort_id": "c1"}
+            research.STATE_FILE.write_text(json.dumps(stopped), encoding="utf-8")
+            refresh = stack.enter_context(patch.object(research.scheduled_refresh, "run_scheduled_refresh"))
+            self.assertEqual(self.run_continue(stack), stopped)
+            refresh.assert_not_called()
+
+    def test_a_legacy_stop_clears_only_for_a_manifest_written_after_it(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            manifest = root / "experiment_01_3" / "cohort_manifest.json"
+            legacy = {"status": "FAILED_DISCOVERY", "updated_at": "2026-10-20T12:00:00+00:00"}
+            research.STATE_FILE.write_text(json.dumps(legacy), encoding="utf-8")
+            os.utime(manifest, (1760900000, 1760900000))  # 2025: older than the stop
+            self.assertFalse(research.new_cohort_since(legacy))
+            os.utime(manifest, (1761300000, 1761300000))  # 2025-10-24, after the stop
+            self.assertTrue(research.new_cohort_since(dict(legacy, updated_at="2025-10-21T00:00:00+00:00")))
+
+    def test_a_long_discovery_with_a_fresh_checkpoint_is_not_called_stale(self):
+        # Fourth review F2: the 12 h rule follows the discovery's own checkpoint.
+        import os
+        from datetime import datetime, timedelta, timezone
+        now = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_3" / "cohort_manifest.json").unlink()
+            running = {"status": "DISCOVERY_RUNNING", "updated_at": (now - timedelta(hours=20)).isoformat()}
+            research.STATE_FILE.write_text(json.dumps(running), encoding="utf-8")
+            checkpoint = research.discovery_checkpoint_file()
+            checkpoint.write_text("{}", encoding="utf-8")
+            fresh = (now - timedelta(hours=1)).timestamp()
+            os.utime(checkpoint, (fresh, fresh))
+            self.assertEqual(self.run_continue(stack, utc_now=lambda: now), running)
+            old = (now - timedelta(hours=13)).timestamp()
+            os.utime(checkpoint, (old, old))
+            stale = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                               max_refresh_attempts=3, schedule_if_waiting=True)
+        self.assertEqual(stale["status"], "NEEDS_HUMAN_ATTENTION")
+
+    def test_start_research_carries_its_cohort_on_after_a_stop_written_during_it(self):
+        # Fourth review F2: a tick mid-discovery wrote a stop; the closing
+        # continuation must still take the new cohort on.
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            manifest = root / "experiment_01_3" / "cohort_manifest.json"
+            manifest.unlink()
+
+            def discover(command, label):
+                research.write_state("NEEDS_HUMAN_ATTENTION", "No frozen 01.3 cohort exists.", refresh_attempts=0)
+                manifest.write_text('{"cohort_id": "fresh"}', encoding="utf-8")
+                return 0
+
+            stack.enter_context(patch.object(research, "run_command", side_effect=discover))
+            stack.enter_context(patch.object(
+                research.scheduled_refresh, "run_scheduled_refresh", return_value={"status": "REFRESHED"}))
+            stack.enter_context(patch.object(research, "schedule_continuation", return_value=True))
+            result = research.start_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                             max_refresh_attempts=3)
+        self.assertEqual((result["status"], result["cohort_id"]), ("WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH", "fresh"))
+
+    def test_the_checkpoint_path_is_01_3s_own(self):
+        from experiment_01_discovery import experiment_01_3
+        self.assertEqual(research.discovery_checkpoint_file(), experiment_01_3.CHECKPOINT_FILE)
+
+    def test_needs_attention_is_not_refreshed_past_the_cap(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            stopped = {"status": "NEEDS_HUMAN_ATTENTION", "refresh_attempts": 3, "message": "still insufficient"}
+            research.STATE_FILE.write_text(json.dumps(stopped), encoding="utf-8")
+            refresh = stack.enter_context(patch.object(research.scheduled_refresh, "run_scheduled_refresh"))
+            result = self.run_continue(stack, velocity_ready=lambda: True)
+        self.assertEqual(result, stopped)
+        refresh.assert_not_called()
+
+    def test_vidiq_runs_once_per_study_set(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            study = root / "experiment_01_5" / "study_set.json"
+            study.write_text('[{"video_id": "a"}]', encoding="utf-8")
+            vidiq = stack.enter_context(patch.object(research, "run_vidiq_supplemental", return_value=("COMPLETE", "ok")))
+            for _ in range(3):
+                result = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                                    max_refresh_attempts=3, schedule_if_waiting=True)
+            self.assertEqual(result["status"], "AWAITING_HUMAN_OPPORTUNITY_REVIEW")
+            self.assertEqual(vidiq.call_count, 1)
+            study.write_text('[{"video_id": "b"}]', encoding="utf-8")  # a rebuilt study set
+            research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                       max_refresh_attempts=3, schedule_if_waiting=True)
+            self.assertEqual(vidiq.call_count, 2)
+
+    def test_a_handoff_from_before_d178_is_adopted_without_calling_vidiq(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_5" / "study_set.json").write_text('[{"video_id": "a"}]', encoding="utf-8")
+            research.STATE_FILE.write_text(json.dumps({"status": "AWAITING_HUMAN_OPPORTUNITY_REVIEW", "message": "m",
+                                                       "vidiq_status": "COMPLETE"}), encoding="utf-8")
+            vidiq = stack.enter_context(patch.object(research, "run_vidiq_supplemental"))
+            result = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                                max_refresh_attempts=3, schedule_if_waiting=True)
+        vidiq.assert_not_called()
+        self.assertEqual(result["status"], "AWAITING_HUMAN_OPPORTUNITY_REVIEW")
+        self.assertIsNotNone(result["study_set_sha256"])

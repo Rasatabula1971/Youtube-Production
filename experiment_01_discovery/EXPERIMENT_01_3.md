@@ -38,9 +38,21 @@ Configuration lives in:
 
 `experiment_01_3_config.json`
 
-Every configured topic now has an explicit `niche`. The current eight F1
-topics all belong to `automotive_racing`. Future niches may share the same
-Experiment 01.3 run without contaminating each other's velocity baseline.
+Every configured topic has an explicit `niche`. Two niches share one run
+(D-178):
+- the eight F1 topics belong to `automotive_racing`;
+- eight Science Inside topics belong to `everyday_science`.
+
+Each niche keeps its own velocity baseline (niche + format), so neither
+contaminates the other.
+
+Each niche also has its own title rules:
+- `niche_context_terms` gives the words a title must contain;
+- `niche_exclude_title_terms` adds exclusions for that niche only.
+
+`everyday_science` excludes motorsport titles, so the two niches stay apart.
+It also excludes how-to, review and music-video formats. The F1 rules are
+unchanged: a test checks that 400 F1 topic/title results are byte-identical.
 
 ## Output isolation
 
@@ -82,8 +94,11 @@ A video enters the cohort only when:
 1. it is inside the primary age window, or the fallback window for a sparse topic/format cell;
 2. it has at least the configured minimum views;
 3. its **title** contains a target mechanism term;
-4. its **title** also contains Formula 1 / motorsport context;
-5. its title does not contain configured gaming/sim-racing exclusion terms; and
+4. its **title** also contains its niche's context words: Formula 1 /
+   motorsport context for `automotive_racing`, explainer words such as
+   "science", "physics", "how" or "why" for `everyday_science`;
+5. its title does not contain the shared exclusion terms (gaming/sim racing)
+   or its niche's own exclusion terms; and
 6. its actual duration format matches the search branch that discovered it.
 
 Descriptions no longer qualify a video for a topic. This prevents metadata text
@@ -315,7 +330,7 @@ frozen cohort and later refresh measurements
 The fallback changes discovery only.
 
 All candidate videos still pass the same project-owned age, minimum-view,
-title-topic, motorsport-context and actual-duration validation before they may
+title-topic, niche-context and actual-duration validation before they may
 enter the cohort.
 
 Official YouTube API metadata remains canonical for accepted candidates and for

@@ -36,6 +36,7 @@ from core.pipeline_integrity import atomic_write_json, atomic_write_text  # noqa
 
 from experiment_01_discovery.scheduled_refresh import acquire_lock, release_lock  # noqa: E402
 
+from experiment_01_discovery import experiment_01_3  # noqa: E402
 from experiment_01_discovery.market_intelligence import (  # noqa: E402
     VELOCITY_VALID,
     calculate_snapshot_velocity,
@@ -563,24 +564,60 @@ def classify_trajectory(
 
 
 def historical_topics() -> list[dict[str, Any]]:
+    """Topics in the historical study set, each with the 01.3 title rule that
+    defines it: its match terms plus its niche's context words and exclusions.
+
+    Words taken from a topic id ("road", "animal", "wings") matched far too
+    much (D-178 review), so a radar title now aligns with a historical topic
+    only if it would pass that topic's own 01.3 relevance check. A topic whose
+    rule is no longer configured is skipped.
+    """
     try:
         packets = historical_adapter.build().get("packets") or []
     except (OSError, ValueError):
         return []
-    topics = []
+    try:
+        config = json.loads(experiment_01_3.CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    definitions = {str(t.get("topic")): t for t in config.get("topics") or [] if isinstance(t, dict)}
+    topics: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for packet in packets:
-        words = [w for w in re.findall(r"[a-z0-9]+", str(packet.get("topic") or "").lower()) if len(w) >= 4]
-        if words:
-            topics.append({"topic": packet.get("topic"), "words": words})
+        topic = str(packet.get("topic") or "")
+        definition = definitions.get(topic)
+        if not definition or topic in seen:
+            continue
+        niche = str(definition.get("niche") or packet.get("niche") or "")
+        try:
+            context = experiment_01_3.niche_context_terms(config, niche)
+        except ValueError:
+            continue
+        seen.add(topic)
+        topics.append(
+            {
+                "topic": topic,
+                "niche": niche,
+                "match_terms": list(definition.get("match_terms") or []),
+                "context_terms": context,
+                "exclude_terms": experiment_01_3.niche_exclude_terms(config, niche),
+            }
+        )
     return topics
 
 
 def classify_history(title: str, topics: list[dict[str, Any]]) -> tuple[str, str | None]:
     if not topics:
         return "UNASSESSED", None
-    title_words = set(re.findall(r"[a-z0-9]+", str(title or "").lower()))
     for topic in topics:
-        if any(word in title_words or word.rstrip("s") in title_words for word in topic["words"]):
+        result = experiment_01_3.classify_topic_relevance(
+            str(title or ""),
+            topic["match_terms"],
+            topic["context_terms"],
+            topic["exclude_terms"],
+            niche=topic["niche"],
+        )
+        if result["topic_relevance"] == "ON_TOPIC":
             return "ESTABLISHED_DEMAND", str(topic["topic"])
     return "NO_HISTORY", None
 

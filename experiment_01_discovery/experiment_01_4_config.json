@@ -3,29 +3,84 @@
   "purpose": "depth_first_topic_expansion",
   "minimum_unique_channels": 3,
   "minimum_velocity_samples": 3,
-  "maximum_plan_searches": 30,
+  "maximum_plan_searches": 60,
   "search_order": "viewCount",
   "lookback_days": 1825,
-  "motorsport_context_terms": [
-    "f1",
-    "formula 1",
-    "formula one",
-    "motorsport",
-    "race car",
-    "racecar",
-    "racing",
-    "grand prix",
-    "pit stop",
-    "mclaren",
-    "ferrari",
-    "red bull",
-    "mercedes",
-    "aston martin",
-    "alpine",
-    "williams",
-    "sauber",
-    "haas"
-  ],
+  "niche_context_terms": {
+    "automotive_racing": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "race car",
+      "racecar",
+      "racing",
+      "grand prix",
+      "pit stop",
+      "mclaren",
+      "ferrari",
+      "red bull",
+      "mercedes",
+      "aston martin",
+      "alpine",
+      "williams",
+      "sauber",
+      "haas"
+    ],
+    "everyday_science": [
+      "science",
+      "physics",
+      "engineering",
+      "explained",
+      "explainer",
+      "mechanism",
+      "chemistry",
+      "chemical reaction",
+      "biology",
+      "experiment",
+      "slow motion",
+      "how",
+      "why"
+    ]
+  },
+  "niche_exclude_title_terms": {
+    "everyday_science": [
+      "f1",
+      "formula 1",
+      "formula one",
+      "motorsport",
+      "grand prix",
+      "race car",
+      "racecar",
+      "racing",
+      "pit stop",
+      "nascar",
+      "indycar",
+      "power unit",
+      "how i",
+      "why i",
+      "how to",
+      "tutorial",
+      "repair",
+      "review",
+      "unboxing",
+      "buying guide",
+      "asmr",
+      "compilation",
+      "reaction video",
+      "reacting to",
+      "reacts to",
+      "prank",
+      "music video",
+      "lyrics",
+      "cover song",
+      "guitar cover",
+      "piano cover",
+      "drum cover",
+      "vocal cover",
+      "acoustic cover"
+    ]
+  },
   "exclude_title_terms": [
     "sim racing",
     "simracing",
@@ -118,6 +173,167 @@
         "pitstop"
       ],
       "niche": "automotive_racing"
+    },
+    "tyre_grip": {
+      "query_root": "tire grip",
+      "match_terms": [
+        "tire",
+        "tires",
+        "tyre",
+        "tyres",
+        "traction"
+      ],
+      "niche": "everyday_science"
+    },
+    "animal_abilities": {
+      "query_root": "animal flight",
+      "match_terms": [
+        "animal",
+        "animals",
+        "hummingbird",
+        "hummingbirds",
+        "gecko",
+        "geckos",
+        "bird",
+        "birds",
+        "insect",
+        "insects",
+        "bee",
+        "bees",
+        "spiders",
+        "cat",
+        "cats",
+        "shark",
+        "sharks"
+      ],
+      "niche": "everyday_science"
+    },
+    "household_appliances": {
+      "query_root": "fridge cooling",
+      "match_terms": [
+        "refrigerator",
+        "refrigerators",
+        "fridge",
+        "fridges",
+        "microwave",
+        "microwaves",
+        "washing machine",
+        "dishwasher",
+        "air conditioner",
+        "air conditioning",
+        "toaster",
+        "vacuum cleaner",
+        "kettle",
+        "oven"
+      ],
+      "niche": "everyday_science"
+    },
+    "musical_acoustics": {
+      "query_root": "instrument acoustics",
+      "match_terms": [
+        "sound",
+        "sounds",
+        "acoustic",
+        "acoustics",
+        "resonance",
+        "guitar",
+        "guitars",
+        "piano",
+        "violin",
+        "drum",
+        "drums",
+        "steelpan",
+        "steel pan",
+        "instrument",
+        "instruments"
+      ],
+      "niche": "everyday_science"
+    },
+    "road_cars": {
+      "query_root": "car engine",
+      "match_terms": [
+        "car engine",
+        "car engines",
+        "combustion engine",
+        "diesel engine",
+        "brake",
+        "brakes",
+        "airbag",
+        "airbags",
+        "transmission",
+        "clutch",
+        "car battery",
+        "electric car",
+        "electric cars",
+        "turbocharger",
+        "spark plug"
+      ],
+      "niche": "everyday_science"
+    },
+    "weather_storms": {
+      "query_root": "lightning",
+      "match_terms": [
+        "weather",
+        "storm",
+        "storms",
+        "lightning",
+        "thunderstorm",
+        "thunderstorms",
+        "hurricane",
+        "hurricanes",
+        "tornado",
+        "tornadoes",
+        "rain",
+        "clouds",
+        "cloud cover",
+        "snowflake",
+        "snowflakes",
+        "hail",
+        "wind"
+      ],
+      "niche": "everyday_science"
+    },
+    "earth_oceans": {
+      "query_root": "ocean wave",
+      "match_terms": [
+        "ocean",
+        "oceans",
+        "sea",
+        "wave",
+        "waves",
+        "tide",
+        "tides",
+        "volcano",
+        "volcanoes",
+        "earthquake",
+        "earthquakes",
+        "sky",
+        "the sun",
+        "the moon",
+        "rainbow"
+      ],
+      "niche": "everyday_science"
+    },
+    "aircraft_wings": {
+      "query_root": "airplane wing",
+      "match_terms": [
+        "airplane",
+        "airplanes",
+        "aeroplane",
+        "plane",
+        "planes",
+        "aircraft",
+        "jet engine",
+        "jet engines",
+        "fighter jet",
+        "fighter jets",
+        "jet plane",
+        "jet planes",
+        "wing",
+        "wings",
+        "helicopter"
+      ],
+      "niche": "everyday_science"
     }
   },
   "query_families": [
@@ -145,5 +361,33 @@
       "family": "rules_loopholes",
       "template": "{root} rules banned"
     }
-  ]
+  ],
+  "query_families_by_niche": {
+    "everyday_science": [
+      {
+        "family": "how_it_works",
+        "template": "how {root} works"
+      },
+      {
+        "family": "science_explained",
+        "template": "{root} science explained"
+      },
+      {
+        "family": "physics",
+        "template": "{root} physics"
+      },
+      {
+        "family": "the_science_of",
+        "template": "the science of {root}"
+      },
+      {
+        "family": "slow_motion",
+        "template": "{root} slow motion"
+      },
+      {
+        "family": "myth_misconception",
+        "template": "{root} myth"
+      }
+    ]
+  }
 }

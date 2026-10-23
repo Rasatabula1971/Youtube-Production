@@ -839,11 +839,26 @@ class UnitTests(unittest.TestCase):
         self.assertTrue(vr.snapshot_due(None, 300, self.settings, NOW))
 
     def test_historical_alignment(self):
-        topics = [{"topic": "brakes", "words": ["brakes"]}]
+        topics = [{"topic": "brakes", "niche": "automotive_racing", "match_terms": ["brake", "brakes"],
+                   "context_terms": ["f1", "formula 1"], "exclude_terms": ["sim racing"]}]
         self.assertEqual(vr.classify_history("Why F1 brakes glow", topics), ("ESTABLISHED_DEMAND", "brakes"))
         self.assertEqual(vr.classify_history("Why F1 brake discs glow", topics)[0], "ESTABLISHED_DEMAND")
         self.assertEqual(vr.classify_history("Hummingbirds", topics)[0], "NO_HISTORY")
+        self.assertEqual(vr.classify_history("How car brakes work", topics)[0], "NO_HISTORY")  # no F1 context
+        self.assertEqual(vr.classify_history("Sim racing F1 brakes", topics)[0], "NO_HISTORY")
         self.assertEqual(vr.classify_history("anything", [])[0], "UNASSESSED")
+
+    def test_historical_topics_carry_the_01_3_rule_not_id_words(self):
+        """D-178 review: 'road_cars' must not align every title with 'road' or 'car'."""
+        packets = [{"topic": "road_cars", "niche": "everyday_science"}, {"topic": "road_cars", "niche": "everyday_science"},
+                   {"topic": "no_longer_configured", "niche": "everyday_science"}]
+        with patch.object(historical_adapter, "build", return_value={"packets": packets}):
+            topics = vr.historical_topics()
+        self.assertEqual([t["topic"] for t in topics], ["road_cars"])
+        for title in ("I bought the cheapest car in America", "Road trip across Iceland", "Funny animal moments",
+                      "Chicken wings eating contest", "Grip strength workout"):
+            self.assertEqual(vr.classify_history(title, topics)[0], "NO_HISTORY", title)
+        self.assertEqual(vr.classify_history("Why car brakes glow when overheated", topics), ("ESTABLISHED_DEMAND", "road_cars"))
 
     def test_watchlist_rejects_bad_ids_and_respects_cap(self):
         state = vr.empty_state()

@@ -1,6 +1,6 @@
 """Stage 2 Experiment 01.3 — Age-Matched Velocity Validation.
 
-Discover a fixed cohort of motorsport-engineering videos at roughly the same
+Discover a fixed cohort of videos, one or more niches (D-178), at roughly the same
 age, then refresh only those exact video IDs to measure current velocity.
 Shorts and long-form candidates are benchmarked separately. No final score.
 """
@@ -12,7 +12,6 @@ import csv
 import json
 import os
 import re
-import shutil
 import statistics
 from collections.abc import Sequence
 from collections import defaultdict
@@ -178,24 +177,78 @@ def calculate_age_window(
     }
 
 
+# The first niche keeps the field and reason names it always had, so its
+# validation results stay byte-identical (D-178). Other niches use neutral
+# names: "motorsport context" would be wrong for them.
+LEGACY_CONTEXT_NICHE = "automotive_racing"
+
+
+def context_labels(niche: str) -> tuple[str, str, str]:
+    """(matches field, missing-context reason, on-topic reason) for a niche."""
+    if niche == LEGACY_CONTEXT_NICHE:
+        return (
+            "motorsport_context_matches",
+            "missing_motorsport_context_in_title",
+            "title_topic_and_motorsport_context",
+        )
+    return (
+        "niche_context_matches",
+        "missing_niche_context_in_title",
+        "title_topic_and_niche_context",
+    )
+
+
+def niche_context_terms(config: dict[str, Any], niche: str) -> list[str]:
+    """The words a title must carry to count for this niche (D-178).
+
+    ``niche_context_terms`` maps niche to words. An older config with only
+    ``motorsport_context_terms`` still works for the motorsport niche.
+    """
+    by_niche = config.get("niche_context_terms")
+    if isinstance(by_niche, dict) and niche in by_niche:
+        return list(by_niche[niche])
+    if niche == LEGACY_CONTEXT_NICHE and "motorsport_context_terms" in config:
+        return list(config["motorsport_context_terms"])
+    raise ValueError(f"No context terms configured for niche '{niche}'.")
+
+
+def niche_exclude_terms(config: dict[str, Any], niche: str) -> list[str]:
+    """Shared title exclusions plus any for this niche (D-178)."""
+    extra = (config.get("niche_exclude_title_terms") or {}).get(niche) or []
+    return list(config.get("exclude_title_terms", [])) + [
+        term for term in extra if term not in config.get("exclude_title_terms", [])
+    ]
+
+
+def check_niche_terms(config: dict[str, Any], niches: set[str]) -> None:
+    """Fail loudly if a configured niche has no context terms."""
+    for niche in sorted(niches):
+        terms = niche_context_terms(config, niche)
+        if not terms:
+            raise ValueError(f"Context terms for niche '{niche}' are empty.")
+
+
 def classify_topic_relevance(
     title: str,
     topic_terms: list[str],
-    motorsport_context_terms: list[str],
+    context_terms: list[str],
     exclude_title_terms: list[str] | None = None,
+    *,
+    niche: str = LEGACY_CONTEXT_NICHE,
 ) -> dict[str, Any]:
-    """Strict title-only topic validation for Experiment 01.3."""
+    """Strict title-only topic validation for Experiment 01.3 and 01.4."""
 
+    matches_key, missing_reason, on_topic_reason = context_labels(niche)
     excluded = matching_terms(title, exclude_title_terms or [])
     topic_matches = matching_terms(title, topic_terms)
-    context_matches = matching_terms(title, motorsport_context_terms)
+    context_matches = matching_terms(title, context_terms)
 
     if excluded:
         return {
             "topic_relevance": "OFF_TOPIC",
             "topic_relevance_reason": "excluded_title_term",
             "topic_term_matches": topic_matches,
-            "motorsport_context_matches": context_matches,
+            matches_key: context_matches,
             "excluded_title_matches": excluded,
         }
     if not topic_matches:
@@ -203,22 +256,22 @@ def classify_topic_relevance(
             "topic_relevance": "OFF_TOPIC",
             "topic_relevance_reason": "missing_topic_term_in_title",
             "topic_term_matches": [],
-            "motorsport_context_matches": context_matches,
+            matches_key: context_matches,
             "excluded_title_matches": [],
         }
     if not context_matches:
         return {
             "topic_relevance": "OFF_TOPIC",
-            "topic_relevance_reason": "missing_motorsport_context_in_title",
+            "topic_relevance_reason": missing_reason,
             "topic_term_matches": topic_matches,
-            "motorsport_context_matches": [],
+            matches_key: [],
             "excluded_title_matches": [],
         }
     return {
         "topic_relevance": "ON_TOPIC",
-        "topic_relevance_reason": "title_topic_and_motorsport_context",
+        "topic_relevance_reason": on_topic_reason,
         "topic_term_matches": topic_matches,
-        "motorsport_context_matches": context_matches,
+        matches_key: context_matches,
         "excluded_title_matches": [],
     }
 
@@ -392,14 +445,13 @@ def load_config() -> dict[str, Any]:
         "search_profiles",
         "wide_age_tolerance_days",
         "minimum_unique_channels_per_topic_format",
-        "motorsport_context_terms",
         "topics",
     }
     missing = sorted(required - set(config))
     if missing:
         raise SystemExit("Experiment 01.3 config is missing: " + ", ".join(missing))
     try:
-        topic_niche_map(config)
+        check_niche_terms(config, set(topic_niche_map(config).values()))
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     return config
@@ -1064,23 +1116,73 @@ def deficient_topic_formats(
     return deficient
 
 
-def archive_existing_output() -> Path | None:
-    """Archive a prior 01.3 run before intentionally replacing its cohort."""
+def _unique_archive_path(archive_root: Path, name: str) -> Path:
+    destination = archive_root / name
+    suffix = 1
+    while destination.exists():
+        destination = archive_root / f"{name}_{suffix}"
+        suffix += 1
+    return destination
 
-    if not OUTPUT_DIR.exists():
+
+def archive_existing_output() -> Path | None:
+    """Archive a prior 01.3 run before intentionally replacing its cohort.
+
+    The 01.4 and 01.5 output built from that cohort goes into the archive with
+    it, including the gate decision and the approved study set. Otherwise the
+    automatic continuation would find the old study set or the old completed
+    01.4 run and never take the new cohort through 01.4 and 01.5 (D-178).
+    Either every folder moves or none does. 01.4 and 01.5 output is archived
+    even when there is no 01.3 folder: a study set left behind would be
+    handed off, with its paid vidIQ supplement, as if it came from the new
+    cohort (D-178 review). Returns the 01.3 archive, or None without one.
+    """
+
+    downstream = [
+        directory
+        for directory in (OUTPUT_DIR.parent / "experiment_01_4", OUTPUT_DIR.parent / "experiment_01_5")
+        if directory.exists()
+    ]
+    has_cohort_dir = OUTPUT_DIR.exists()
+    if not has_cohort_dir and not downstream:
         return None
 
     archive_root = OUTPUT_DIR.parent / "archive"
     archive_root.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    destination = archive_root / f"experiment_01_3_{timestamp}"
-    suffix = 1
-    while destination.exists():
-        destination = archive_root / f"experiment_01_3_{timestamp}_{suffix}"
-        suffix += 1
-
-    shutil.move(str(OUTPUT_DIR), str(destination))
-    return destination
+    destination = _unique_archive_path(archive_root, f"experiment_01_3_{timestamp}")
+    moves = [
+        (directory, _unique_archive_path(archive_root, f"{directory.name}_{timestamp}"))
+        for directory in downstream
+    ]
+    if has_cohort_dir:
+        moves.append((OUTPUT_DIR, destination))
+    done: list[tuple[Path, Path]] = []
+    try:
+        for source, target in moves:
+            # os.rename either moves the folder or fails with nothing
+            # touched; shutil.move would fall back to copy-then-delete and
+            # could leave half a folder behind on Windows (D-178 review).
+            os.rename(source, target)
+            done.append((source, target))
+    except OSError as exc:
+        stuck = []
+        for source, target in reversed(done):
+            try:
+                os.rename(target, source)
+            except OSError:
+                stuck.append(f"{source.name} is now {target}")
+        if stuck:
+            raise SystemExit(
+                f"Could not archive the previous cohort ({exc}), and could not put "
+                f"everything back: {'; '.join(stuck)}. Move it back by hand before "
+                "running discovery again."
+            ) from exc
+        raise SystemExit(
+            f"Could not archive the previous cohort ({exc}). Nothing was moved; "
+            "close any open output files and run discovery again."
+        ) from exc
+    return destination if has_cohort_dir else None
 
 
 def prepare_output_for_discovery(*, replace_cohort: bool) -> Path | None:
@@ -1091,8 +1193,6 @@ def prepare_output_for_discovery(*, replace_cohort: bool) -> Path | None:
     incomplete/failed discovery attempt, so archive it automatically and allow
     a clean retry.
     """
-    if not OUTPUT_DIR.exists():
-        return None
     if MANIFEST_FILE.exists() and not replace_cohort:
         raise SystemExit(
             "01.3 output already exists. Use --mode refresh, or rerun discovery "
@@ -1114,8 +1214,6 @@ def build_rows(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     topics = {str(t["topic"]): t for t in config["topics"]}
     topic_niches = topic_niche_map(config)
-    context_terms = list(config["motorsport_context_terms"])
-    exclude_title_terms = list(config.get("exclude_title_terms", []))
     minimum_views = int(config["minimum_views"])
     minimum_age = float(age_window["minimum_age_days"])
     maximum_age = float(age_window["maximum_age_days"])
@@ -1155,6 +1253,7 @@ def build_rows(
         validation = {}
 
         for topic_name in searched_topics:
+            niche = topic_niches.get(topic_name, LEGACY_CONTEXT_NICHE)
             format_matches = [
                 match
                 for match in query_matches.get(video_id, [])
@@ -1166,15 +1265,17 @@ def build_rows(
                     "topic_relevance": "OFF_TOPIC",
                     "topic_relevance_reason": "format_branch_mismatch",
                     "topic_term_matches": [],
-                    "motorsport_context_matches": [],
+                    context_labels(niche)[0]: [],
                     "excluded_title_matches": [],
                 }
             else:
+                # Each topic is checked against its own niche's words (D-178).
                 result = classify_topic_relevance(
                     title,
                     list(topics[topic_name].get("match_terms", [])),
-                    context_terms,
-                    exclude_title_terms,
+                    niche_context_terms(config, niche),
+                    niche_exclude_terms(config, niche),
+                    niche=niche,
                 )
 
             validation[topic_name] = result
@@ -1549,6 +1650,7 @@ def build_summary(
         "mode": mode,
         "cohort_id": manifest.get("cohort_id"),
         "cohort_created_at": manifest.get("created_at"),
+        "discovery_completed_at": manifest.get("discovery_completed_at"),
         "target_age_days": manifest.get("target_age_days"),
         "age_tolerance_days": manifest.get("age_tolerance_days"),
         "minimum_age_days": manifest.get("minimum_age_days"),
@@ -1597,7 +1699,7 @@ def build_summary(
         "topic_velocity": topic_velocity,
         "important_notes": [
             "The cohort is frozen after discovery; refresh mode performs no new search.",
-            "Topic and motorsport-context validation use title text only.",
+            "Topic and niche-context validation use title text only (each topic against its own niche's words).",
             "Discovery uses separate short/medium/long YouTube duration branches.",
             "The primary 105-135 day window widens to 90-150 only for sparse topic/format cells.",
             "Primary metric: median current views/day within the same age window, niche and format.",
@@ -1753,7 +1855,7 @@ def run_discover(
         f"Fallback age window: "
         f"{wide_window['minimum_age_days']}-{wide_window['maximum_age_days']} days"
     )
-    print("Validation: title-only topic + motorsport context")
+    print("Validation: title-only topic + niche context")
     print("Search: format-separated short / medium / long branches")
     print(f"Discovery backend: {args.discovery_backend}")
     print(f"Per-run YouTube API search budget: {args.max_searches}\n")
@@ -1931,13 +2033,16 @@ def run_discover(
         if CHECKPOINT_FILE.exists():
             CHECKPOINT_FILE.unlink()
         raise SystemExit(
-            "No videos passed the age, view, title-topic and motorsport-context filters."
+            "No videos passed the age, view, title-topic and niche-context filters."
         )
 
     manifest = {
         "experiment_id": EXPERIMENT_ID,
         "cohort_id": (f"day{target}_adaptive_{observed_dt.strftime('%Y%m%dT%H%M%SZ')}"),
         "created_at": observed_at,
+        # When the search spending ended (a resumed discovery can end a day
+        # later than it started); 01.4 waits for a later quota day (D-178).
+        "discovery_completed_at": datetime.now(timezone.utc).isoformat(),
         "target_age_days": target,
         "age_tolerance_days": tolerance,
         "minimum_age_days": strict_window["minimum_age_days"],

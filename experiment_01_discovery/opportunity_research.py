@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from core.hashing import sha256_file
+
 from experiment_01_discovery import scheduled_refresh
 
 HERE = Path(__file__).resolve().parent
@@ -44,7 +46,6 @@ EXP14_CONFIG = HERE / "experiment_01_4_config.json"
 INSTALL_SCHEDULER = (
     PROJECT_ROOT / "scripts" / "install_experiment_01_3_auto_refresh.ps1"
 )
-REMOVE_SCHEDULER = PROJECT_ROOT / "scripts" / "remove_experiment_01_3_auto_refresh.ps1"
 
 DEFAULT_REFRESH_INTERVAL_HOURS = 2
 DEFAULT_MAX_REFRESH_ATTEMPTS = 3
@@ -64,6 +65,64 @@ def read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def current_cohort_id() -> str | None:
+    """Identity of the frozen 01.3 cohort, or None when there is none.
+
+    Discovery writes the manifest once, with a unique ``cohort_id``;
+    velocity refreshes only read it.
+    """
+    path = EXP13_DIR / "cohort_manifest.json"
+    if not path.exists():
+        return None
+    cohort_id = read_json(path).get("cohort_id")
+    if cohort_id:
+        return str(cohort_id)
+    try:
+        return f"mtime:{path.stat().st_mtime_ns}"
+    except OSError:
+        return None
+
+
+def new_cohort_since(state: dict[str, Any]) -> bool:
+    """Whether a frozen cohort exists that the state was not written against.
+
+    A discovery run from Tools, or a resumed one, is the owner acting on a
+    stop; the next tick must carry its cohort on rather than stay stopped
+    (D-178 review). States written before ``cohort_id`` was recorded fall
+    back to comparing the manifest's time with the state's.
+    """
+    current = current_cohort_id()
+    if current is None:
+        return False
+    if "cohort_id" in state:
+        return state.get("cohort_id") != current
+    stopped_at = _parse_time(state.get("updated_at"))
+    try:
+        written = datetime.fromtimestamp((EXP13_DIR / "cohort_manifest.json").stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return False
+    return stopped_at is not None and written > stopped_at
+
+
+def discovery_last_alive(state: dict[str, Any]) -> datetime | None:
+    """The latest sign of life of a running discovery: its start, or its
+    checkpoint. 01.3 saves the checkpoint at a fresh start and after its
+    strict and expansion passes, not after every search, so a single pass
+    longer than 12 hours still reads as stale (D-178 review, judged unlikely
+    with 16 topics; the stop then clears once the cohort is frozen)."""
+    times = [t for t in (_parse_time(state.get("updated_at")),) if t]
+    try:
+        times.append(datetime.fromtimestamp(discovery_checkpoint_file().stat().st_mtime, tz=timezone.utc))
+    except OSError:
+        pass
+    return max(times) if times else None
+
+
+def discovery_checkpoint_file() -> Path:
+    """01.3's own checkpoint (``experiment_01_3.CHECKPOINT_FILE``)."""
+    return OUTPUT_ROOT / "experiment_01_3_discovery_checkpoint.json"
+
+
 def write_state(
     status: str,
     message: str,
@@ -73,6 +132,7 @@ def write_state(
     scheduler_armed: bool = False,
     vidiq_status: str | None = None,
     vidiq_message: str | None = None,
+    study_set_sha256: str | None = None,
 ) -> dict[str, Any]:
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -86,6 +146,10 @@ def write_state(
         "scheduler_armed": scheduler_armed,
         "vidiq_status": vidiq_status,
         "vidiq_message": vidiq_message,
+        "study_set_sha256": study_set_sha256,
+        # The frozen cohort this state was written against: an owner stop
+        # clears itself once a different cohort exists (D-178 review).
+        "cohort_id": current_cohort_id(),
     }
     STATE_FILE.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False),
@@ -119,6 +183,7 @@ def velocity_ready() -> bool:
         return scheduled_refresh.current_cohort_ready_for_01_4(
             topic_velocity,
             config_01_4,
+            read_json(EXP13_DIR / "summary.json"),
         )
     except (KeyError, TypeError, ValueError):
         return False
@@ -135,6 +200,11 @@ def study_set_ready() -> bool:
     return isinstance(payload, list) and bool(payload)
 
 
+def current_study_set_sha256() -> str | None:
+    path = EXP15_DIR / "study_set.json"
+    return sha256_file(path) if path.exists() else None
+
+
 def exp14_plan_ready() -> bool:
     plan = read_json(EXP14_DIR / "expansion_plan.json")
     return plan.get("status") == "READY"
@@ -143,6 +213,57 @@ def exp14_plan_ready() -> bool:
 def exp14_complete() -> bool:
     summary = read_json(EXP14_DIR / "summary.json")
     return summary.get("execution_status") == "COMPLETE"
+
+
+# YouTube's daily quota resets at midnight Pacific time: 07:00 UTC in summer
+# (PDT), 08:00 UTC in winter (PST). Without a time-zone database (Windows has
+# none in the standard library) both are allowed for: the spending moment is
+# dated as late as it could be (UTC-7), "now" as early as it could be (UTC-8).
+# The wait can be up to an hour too long, never too short.
+OWNER_STOP_STATES = {"NEEDS_HUMAN_ATTENTION", "FAILED_DISCOVERY"}
+DISCOVERY_STALE_AFTER = timedelta(hours=12)
+PACIFIC_LATEST = timedelta(hours=7)
+PACIFIC_EARLIEST = timedelta(hours=8)
+EXP14_PAUSED_STATUSES = {"QUOTA_EXHAUSTED", "SEARCH_BUDGET_REACHED"}
+
+
+def _parse_time(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def next_quota_boundary_after(spent_at: datetime) -> datetime:
+    """The first moment that is surely a later quota day than ``spent_at``."""
+    day = (spent_at.astimezone(timezone.utc) - PACIFIC_LATEST).date() + timedelta(days=1)
+    return datetime(day.year, day.month, day.day, tzinfo=timezone.utc) + PACIFIC_EARLIEST
+
+
+def next_quota_day_wait(summary_01_3: dict[str, Any], now: datetime) -> datetime | None:
+    """When 01.4 may spend search quota, or None if it may now (D-178).
+
+    Discovery can use up to 6,000 units. 01.4's searches on the same quota
+    day, with the radar, could pass the 10,000-unit daily limit, so they wait
+    for a later quota day than the one discovery finished in (a discovery
+    that resumed the next day counts from when it finished).
+    """
+    finished = _parse_time(summary_01_3.get("discovery_completed_at")) or _parse_time(
+        summary_01_3.get("cohort_created_at")
+    )
+    if finished is None:
+        return None
+    boundary = next_quota_boundary_after(finished)
+    return boundary if now < boundary else None
+
+
+def held_until(state: dict[str, Any], now: datetime) -> datetime | None:
+    """A quota-day wait already recorded in the research state."""
+    if state.get("status") != "WAITING_FOR_NEXT_QUOTA_DAY":
+        return None
+    due = _parse_time(state.get("next_refresh_due_at"))
+    return due if due is not None and now < due else None
 
 
 def schedule_continuation(
@@ -172,22 +293,11 @@ def schedule_continuation(
     return completed.returncode == 0
 
 
-def remove_continuation_task() -> None:
-    if os.name != "nt":
-        return
-    subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(REMOVE_SCHEDULER),
-        ],
-        cwd=PROJECT_ROOT,
-        check=False,
-    )
-
+# The one Windows task (scripts/install_experiment_01_3_auto_refresh.ps1) runs
+# opportunity_engine.scheduled_tick: this continuation AND the viral radar
+# (O13). The research flow therefore never removes it; before D-178 it did, on
+# every finished, failed or started run, which silently stopped the radar.
+# Only the owner removes it (Tools -> Remove Opportunity Automation).
 
 def run_vidiq_supplemental(
     *,
@@ -263,6 +373,9 @@ def finalize_opportunity_handoff(
         refresh_attempts=refresh_attempts,
         vidiq_status=vidiq_status,
         vidiq_message=vidiq_message,
+        # The handoff (and its vidIQ supplement) runs once per study set; the
+        # every-2-hours task must not repeat paid calls (D-178 review).
+        study_set_sha256=current_study_set_sha256(),
     )
 
 
@@ -274,7 +387,6 @@ def advance_downstream(
     if not velocity_ready():
         raise RuntimeError("advance_downstream called before velocity was ready")
 
-    remove_continuation_task()
 
     if not exp14_complete() and not exp14_plan_ready():
         plan_code = run_command(
@@ -302,6 +414,26 @@ def advance_downstream(
         )
 
     if not exp14_complete():
+        now = utc_now()
+        waits = [
+            wait
+            for wait in (
+                next_quota_day_wait(read_json(EXP13_DIR / "summary.json"), now),
+                held_until(read_json(STATE_FILE), now),
+            )
+            if wait is not None
+        ]
+        resume_at = max(waits) if waits else None
+        if resume_at is not None:
+            return write_state(
+                "WAITING_FOR_NEXT_QUOTA_DAY",
+                (
+                    "The 01.4 plan is ready. Its searches wait for the next YouTube "
+                    "quota day after discovery, so one day never spends both."
+                ),
+                refresh_attempts=refresh_attempts,
+                next_refresh_due_at=resume_at.isoformat(),
+            )
         execute_code = run_command(
             [
                 python_executable,
@@ -312,6 +444,16 @@ def advance_downstream(
             ],
             "AUTOMATIC STEP — EXECUTE 01.4 EXPANSION",
         )
+        paused = str(read_json(EXP14_DIR / "search_checkpoint.json").get("status") or "")
+        if execute_code == 0 and not exp14_complete() and paused in EXP14_PAUSED_STATUSES:
+            # Out of quota (or budget) part-way: the checkpoint resumes on the
+            # next quota day; this is a pause, not a failure (D-178 review).
+            return write_state(
+                "WAITING_FOR_NEXT_QUOTA_DAY",
+                f"01.4 paused part-way ({paused}); it resumes from its checkpoint on the next quota day.",
+                refresh_attempts=refresh_attempts,
+                next_refresh_due_at=next_quota_boundary_after(utc_now()).isoformat(),
+            )
         if execute_code != 0 or not exp14_complete():
             return write_state(
                 "FAILED_01_4_EXECUTION",
@@ -358,9 +500,45 @@ def continue_research(
 ) -> dict[str, Any]:
     state = read_json(STATE_FILE)
     refresh_attempts = int(state.get("refresh_attempts") or 0)
+    status = str(state.get("status") or "")
+
+    # The shared task runs this every 2 hours for good (D-178), so states
+    # that wait for the owner stay as they are; they used to end the task.
+    # A new frozen cohort since the stop is the owner acting: carry it on.
+    if status in OWNER_STOP_STATES:
+        if not new_cohort_since(state):
+            return state
+        refresh_attempts = 0
+
+    if not (EXP13_DIR / "cohort_manifest.json").exists():
+        alive = discovery_last_alive(state)
+        if status == "DISCOVERY_RUNNING" and alive and utc_now() - alive < DISCOVERY_STALE_AFTER:
+            return state  # a discovery is still working; leave its state alone
+        return write_state(
+            "NEEDS_HUMAN_ATTENTION",
+            (
+                "No frozen 01.3 cohort exists (discovery paused, failed or never ran). "
+                "Run Opportunity Research to resume or restart it."
+            ),
+            refresh_attempts=refresh_attempts,
+        )
 
     if study_set_ready():
-        remove_continuation_task()
+        if status == "AWAITING_HUMAN_OPPORTUNITY_REVIEW":
+            recorded = state.get("study_set_sha256")
+            current = current_study_set_sha256()
+            if recorded == current:
+                return state  # already handed off; nothing to repeat
+            if recorded is None:
+                # Handed off before D-178: adopt it rather than re-run vidIQ.
+                return write_state(
+                    status,
+                    str(state.get("message") or ""),
+                    refresh_attempts=refresh_attempts,
+                    vidiq_status=state.get("vidiq_status"),
+                    vidiq_message=state.get("vidiq_message"),
+                    study_set_sha256=current,
+                )
         return finalize_opportunity_handoff(
             python_executable=python_executable,
             refresh_attempts=refresh_attempts,
@@ -381,14 +559,12 @@ def continue_research(
     if refresh_status == "REFRESHED":
         refresh_attempts += 1
     elif refresh_status.startswith("FAILED"):
-        remove_continuation_task()
         return write_state(
             "FAILED_VELOCITY_REFRESH",
             str(refresh_result.get("message") or "Velocity refresh failed."),
             refresh_attempts=refresh_attempts,
         )
     elif refresh_status == "SKIPPED_INSUFFICIENT_COHORT":
-        remove_continuation_task()
         return write_state(
             "NEEDS_HUMAN_ATTENTION",
             "The frozen cohort is insufficient; discovery must be rerun.",
@@ -402,7 +578,6 @@ def continue_research(
         )
 
     if refresh_attempts >= max_refresh_attempts:
-        remove_continuation_task()
         return write_state(
             "NEEDS_HUMAN_ATTENTION",
             (
@@ -449,7 +624,6 @@ def start_research(
     minimum_interval_hours: float,
     max_refresh_attempts: int,
 ) -> dict[str, Any]:
-    remove_continuation_task()
     write_state(
         "DISCOVERY_RUNNING",
         "Experiment 01.3 discovery is running.",
