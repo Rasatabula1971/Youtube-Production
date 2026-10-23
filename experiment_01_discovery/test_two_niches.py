@@ -268,6 +268,18 @@ class NewCohortFlowTests(unittest.TestCase):
         old_gate = next((self.root / "archive").glob("experiment_01_5_*"))
         self.assertEqual(json.loads((old_gate / "approved_study_set.json").read_text()), [{"video_id": "old"}])
 
+    def test_downstream_output_is_archived_even_without_a_01_3_folder(self):
+        # Fourth review, item 2: a study set left behind would be handed off,
+        # with its paid vidIQ supplement, as if the new cohort had built it.
+        import shutil
+        shutil.rmtree(self.exp13)
+        self.assertIsNone(e3.prepare_output_for_discovery(replace_cohort=False))
+        for name in ("experiment_01_4", "experiment_01_5"):
+            self.assertFalse((self.root / name).exists(), name)
+        archived = sorted(p.name.rsplit("_", 1)[0] for p in (self.root / "archive").iterdir())
+        self.assertEqual(archived, ["experiment_01_4", "experiment_01_5"])
+        self.assertIsNone(e3.archive_existing_output())  # nothing left: nothing to do
+
     def test_a_failed_put_back_says_where_each_folder_is(self):
         real_rename = e3.os.rename
         calls = []

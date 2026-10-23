@@ -106,7 +106,10 @@ def new_cohort_since(state: dict[str, Any]) -> bool:
 
 def discovery_last_alive(state: dict[str, Any]) -> datetime | None:
     """The latest sign of life of a running discovery: its start, or its
-    checkpoint, which 01.3 rewrites as it works (D-178 review)."""
+    checkpoint. 01.3 saves the checkpoint at a fresh start and after its
+    strict and expansion passes, not after every search, so a single pass
+    longer than 12 hours still reads as stale (D-178 review, judged unlikely
+    with 16 topics; the stop then clears once the cohort is frozen)."""
     times = [t for t in (_parse_time(state.get("updated_at")),) if t]
     try:
         times.append(datetime.fromtimestamp(discovery_checkpoint_file().stat().st_mtime, tz=timezone.utc))

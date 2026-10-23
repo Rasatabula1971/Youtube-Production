@@ -1132,10 +1132,19 @@ def archive_existing_output() -> Path | None:
     it, including the gate decision and the approved study set. Otherwise the
     automatic continuation would find the old study set or the old completed
     01.4 run and never take the new cohort through 01.4 and 01.5 (D-178).
-    Either every folder moves or none does.
+    Either every folder moves or none does. 01.4 and 01.5 output is archived
+    even when there is no 01.3 folder: a study set left behind would be
+    handed off, with its paid vidIQ supplement, as if it came from the new
+    cohort (D-178 review). Returns the 01.3 archive, or None without one.
     """
 
-    if not OUTPUT_DIR.exists():
+    downstream = [
+        directory
+        for directory in (OUTPUT_DIR.parent / "experiment_01_4", OUTPUT_DIR.parent / "experiment_01_5")
+        if directory.exists()
+    ]
+    has_cohort_dir = OUTPUT_DIR.exists()
+    if not has_cohort_dir and not downstream:
         return None
 
     archive_root = OUTPUT_DIR.parent / "archive"
@@ -1144,10 +1153,10 @@ def archive_existing_output() -> Path | None:
     destination = _unique_archive_path(archive_root, f"experiment_01_3_{timestamp}")
     moves = [
         (directory, _unique_archive_path(archive_root, f"{directory.name}_{timestamp}"))
-        for directory in (OUTPUT_DIR.parent / "experiment_01_4", OUTPUT_DIR.parent / "experiment_01_5")
-        if directory.exists()
+        for directory in downstream
     ]
-    moves.append((OUTPUT_DIR, destination))
+    if has_cohort_dir:
+        moves.append((OUTPUT_DIR, destination))
     done: list[tuple[Path, Path]] = []
     try:
         for source, target in moves:
@@ -1173,7 +1182,7 @@ def archive_existing_output() -> Path | None:
             f"Could not archive the previous cohort ({exc}). Nothing was moved; "
             "close any open output files and run discovery again."
         ) from exc
-    return destination
+    return destination if has_cohort_dir else None
 
 
 def prepare_output_for_discovery(*, replace_cohort: bool) -> Path | None:
@@ -1184,8 +1193,6 @@ def prepare_output_for_discovery(*, replace_cohort: bool) -> Path | None:
     incomplete/failed discovery attempt, so archive it automatically and allow
     a clean retry.
     """
-    if not OUTPUT_DIR.exists():
-        return None
     if MANIFEST_FILE.exists() and not replace_cohort:
         raise SystemExit(
             "01.3 output already exists. Use --mode refresh, or rerun discovery "
