@@ -327,6 +327,102 @@ class ContinuationStopsTests(unittest.TestCase):
                                                max_refresh_attempts=3, schedule_if_waiting=True)
         self.assertEqual(stale["status"], "NEEDS_HUMAN_ATTENTION")
 
+    def test_a_stop_clears_once_a_new_cohort_is_frozen(self):
+        # Fourth review F1: discovery run from Tools leaves the state alone; a
+        # tick during it stops for the owner; the new cohort must carry on.
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            manifest = root / "experiment_01_3" / "cohort_manifest.json"
+            manifest.unlink()
+            research.STATE_FILE.write_text(json.dumps({"status": "FAILED_01_4_EXECUTION"}), encoding="utf-8")
+            refresh = stack.enter_context(patch.object(
+                research.scheduled_refresh, "run_scheduled_refresh", return_value={"status": "REFRESHED"}))
+            stack.enter_context(patch.object(research, "schedule_continuation", return_value=True))
+            stopped = self.run_continue(stack)
+            self.assertEqual((stopped["status"], stopped["cohort_id"]), ("NEEDS_HUMAN_ATTENTION", None))
+            manifest.write_text(json.dumps({"cohort_id": "day120_adaptive_20261023T150000Z"}), encoding="utf-8")
+            carried = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                                 max_refresh_attempts=3, schedule_if_waiting=True)
+            again = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                               max_refresh_attempts=3, schedule_if_waiting=True)
+        self.assertEqual(carried["status"], "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH")
+        self.assertEqual(carried["cohort_id"], "day120_adaptive_20261023T150000Z")
+        self.assertEqual(again["status"], "WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH")
+        self.assertEqual(refresh.call_count, 2)
+
+    def test_a_stop_stays_while_the_cohort_it_was_written_against_remains(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_3" / "cohort_manifest.json").write_text('{"cohort_id": "c1"}', encoding="utf-8")
+            stopped = {"status": "NEEDS_HUMAN_ATTENTION", "message": "insufficient", "cohort_id": "c1"}
+            research.STATE_FILE.write_text(json.dumps(stopped), encoding="utf-8")
+            refresh = stack.enter_context(patch.object(research.scheduled_refresh, "run_scheduled_refresh"))
+            self.assertEqual(self.run_continue(stack), stopped)
+            refresh.assert_not_called()
+
+    def test_a_legacy_stop_clears_only_for_a_manifest_written_after_it(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            manifest = root / "experiment_01_3" / "cohort_manifest.json"
+            legacy = {"status": "FAILED_DISCOVERY", "updated_at": "2026-10-20T12:00:00+00:00"}
+            research.STATE_FILE.write_text(json.dumps(legacy), encoding="utf-8")
+            os.utime(manifest, (1760900000, 1760900000))  # 2025: older than the stop
+            self.assertFalse(research.new_cohort_since(legacy))
+            os.utime(manifest, (1761300000, 1761300000))  # 2025-10-24, after the stop
+            self.assertTrue(research.new_cohort_since(dict(legacy, updated_at="2025-10-21T00:00:00+00:00")))
+
+    def test_a_long_discovery_with_a_fresh_checkpoint_is_not_called_stale(self):
+        # Fourth review F2: the 12 h rule follows the discovery's own checkpoint.
+        import os
+        from datetime import datetime, timedelta, timezone
+        now = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            (root / "experiment_01_3" / "cohort_manifest.json").unlink()
+            running = {"status": "DISCOVERY_RUNNING", "updated_at": (now - timedelta(hours=20)).isoformat()}
+            research.STATE_FILE.write_text(json.dumps(running), encoding="utf-8")
+            checkpoint = research.discovery_checkpoint_file()
+            checkpoint.write_text("{}", encoding="utf-8")
+            fresh = (now - timedelta(hours=1)).timestamp()
+            os.utime(checkpoint, (fresh, fresh))
+            self.assertEqual(self.run_continue(stack, utc_now=lambda: now), running)
+            old = (now - timedelta(hours=13)).timestamp()
+            os.utime(checkpoint, (old, old))
+            stale = research.continue_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                               max_refresh_attempts=3, schedule_if_waiting=True)
+        self.assertEqual(stale["status"], "NEEDS_HUMAN_ATTENTION")
+
+    def test_start_research_carries_its_cohort_on_after_a_stop_written_during_it(self):
+        # Fourth review F2: a tick mid-discovery wrote a stop; the closing
+        # continuation must still take the new cohort on.
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_output_paths(stack, root)
+            manifest = root / "experiment_01_3" / "cohort_manifest.json"
+            manifest.unlink()
+
+            def discover(command, label):
+                research.write_state("NEEDS_HUMAN_ATTENTION", "No frozen 01.3 cohort exists.", refresh_attempts=0)
+                manifest.write_text('{"cohort_id": "fresh"}', encoding="utf-8")
+                return 0
+
+            stack.enter_context(patch.object(research, "run_command", side_effect=discover))
+            stack.enter_context(patch.object(
+                research.scheduled_refresh, "run_scheduled_refresh", return_value={"status": "REFRESHED"}))
+            stack.enter_context(patch.object(research, "schedule_continuation", return_value=True))
+            result = research.start_research(python_executable="python-test", minimum_interval_hours=1.5,
+                                             max_refresh_attempts=3)
+        self.assertEqual((result["status"], result["cohort_id"]), ("WAITING_FOR_AUTOMATIC_VELOCITY_REFRESH", "fresh"))
+
+    def test_the_checkpoint_path_is_01_3s_own(self):
+        from experiment_01_discovery import experiment_01_3
+        self.assertEqual(research.discovery_checkpoint_file(), experiment_01_3.CHECKPOINT_FILE)
+
     def test_needs_attention_is_not_refreshed_past_the_cap(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)

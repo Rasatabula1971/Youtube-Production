@@ -5813,7 +5813,7 @@ Checked against `c0adb20`:
 ## D-178 — Two niches in the historical lane: Science Inside joins F1 in one cohort
 
 **Status:** Accepted (16 Oct 2026). PR 2 of the M1 closure (D-177, criterion 1),
-revised after three Stage 8 reviews.
+revised after four Stage 8 reviews.
 
 **Context.**
 - The historical lane (01.3 → 01.4 → 01.5) could only ever find motorsport:
@@ -5914,18 +5914,30 @@ revised after three Stage 8 reviews.
   (`remove_continuation_task` is gone). Only the owner removes it, from Tools.
   Because the task now ticks every 2 hours for good, the continuation:
   - leaves `NEEDS_HUMAN_ATTENTION` and `FAILED_DISCOVERY` untouched until the
-    owner acts, as the old task removal effectively did;
+    owner acts, as the old task removal effectively did. A frozen cohort that
+    is new since the stop counts as the owner acting, and the next tick
+    carries it on. That cohort may come from a Tools discovery, a resumed run,
+    or the run that was underway when the stop was written. Every state
+    records the `cohort_id` it was written against. A stop written before
+    that field existed clears only for a manifest written after it;
   - with no frozen cohort (discovery paused, failed or never ran), reports
     `NEEDS_HUMAN_ATTENTION` once, pointing to Run Opportunity Research (which
     resumes a saved discovery), rather than a wait that never ends;
-  - leaves a `DISCOVERY_RUNNING` state alone for 12 hours, then reports it as
-    unfinished;
+  - leaves a `DISCOVERY_RUNNING` state alone while the discovery shows a sign
+    of life: its start, or a rewrite of 01.3's discovery checkpoint within the
+    last 12 hours. After that it reports the discovery as unfinished;
   - hands off a study set, and runs its paid vidIQ supplement, once per study
     set (keyed by its SHA-256). A handoff from before this change is adopted
     without calling vidIQ again.
-- **01.4 pauses only for quota.** A search rejected for any other reason (a bad
-  key, say) is recorded as `API_ERROR`, not `QUOTA_EXHAUSTED`. The run then
-  fails and is retried on later ticks, instead of pausing a day at a time.
+- **01.4 pauses only for quota.** Only YouTube's `quotaExceeded` or
+  `dailyLimitExceeded` answers pause 01.4 (`QUOTA_EXHAUSTED`). A search
+  rejected for any other reason (a bad key, say) is recorded as `API_ERROR`.
+  The run then fails and is retried on later ticks, instead of pausing a day
+  at a time. A rate limit is retried inside `api_get`; if it persists, it ends
+  as a 01.4 failure.
+- **Known follow-up.** After `FAILED_01_4_EXECUTION` the 2-hourly retry has no
+  cap. A failure after the searches have finished repeats the video and
+  channel measurements, about 100 units per tick. The UI tells the owner.
 - **After a 01.4 or 01.5 failure** the UI shows "retries on the next scheduled
   tick", not "Run Opportunity Research". That button would re-discover the
   cohort and spend the discovery quota again. Tools → Restart 01.3 Discovery

@@ -403,9 +403,11 @@ def execute_plan(
         except SystemExit as exc:
             # Only a quota answer is a pause until the next quota day; any
             # other rejection (a bad key, say) is an error (D-178 review).
+            # api_get retries rate limits itself and then raises HTTPError, not
+            # SystemExit, so only these two daily-quota reasons arrive here.
             reason = (
                 "QUOTA_EXHAUSTED"
-                if any(marker in str(exc) for marker in ("quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"))
+                if any(marker in str(exc) for marker in ("quotaExceeded", "dailyLimitExceeded"))
                 else "API_ERROR"
             )
             save_checkpoint(plan, completed, search_results, reason)

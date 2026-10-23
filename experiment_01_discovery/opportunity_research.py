@@ -65,6 +65,61 @@ def read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def current_cohort_id() -> str | None:
+    """Identity of the frozen 01.3 cohort, or None when there is none.
+
+    Discovery writes the manifest once, with a unique ``cohort_id``;
+    velocity refreshes only read it.
+    """
+    path = EXP13_DIR / "cohort_manifest.json"
+    if not path.exists():
+        return None
+    cohort_id = read_json(path).get("cohort_id")
+    if cohort_id:
+        return str(cohort_id)
+    try:
+        return f"mtime:{path.stat().st_mtime_ns}"
+    except OSError:
+        return None
+
+
+def new_cohort_since(state: dict[str, Any]) -> bool:
+    """Whether a frozen cohort exists that the state was not written against.
+
+    A discovery run from Tools, or a resumed one, is the owner acting on a
+    stop; the next tick must carry its cohort on rather than stay stopped
+    (D-178 review). States written before ``cohort_id`` was recorded fall
+    back to comparing the manifest's time with the state's.
+    """
+    current = current_cohort_id()
+    if current is None:
+        return False
+    if "cohort_id" in state:
+        return state.get("cohort_id") != current
+    stopped_at = _parse_time(state.get("updated_at"))
+    try:
+        written = datetime.fromtimestamp((EXP13_DIR / "cohort_manifest.json").stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return False
+    return stopped_at is not None and written > stopped_at
+
+
+def discovery_last_alive(state: dict[str, Any]) -> datetime | None:
+    """The latest sign of life of a running discovery: its start, or its
+    checkpoint, which 01.3 rewrites as it works (D-178 review)."""
+    times = [t for t in (_parse_time(state.get("updated_at")),) if t]
+    try:
+        times.append(datetime.fromtimestamp(discovery_checkpoint_file().stat().st_mtime, tz=timezone.utc))
+    except OSError:
+        pass
+    return max(times) if times else None
+
+
+def discovery_checkpoint_file() -> Path:
+    """01.3's own checkpoint (``experiment_01_3.CHECKPOINT_FILE``)."""
+    return OUTPUT_ROOT / "experiment_01_3_discovery_checkpoint.json"
+
+
 def write_state(
     status: str,
     message: str,
@@ -89,6 +144,9 @@ def write_state(
         "vidiq_status": vidiq_status,
         "vidiq_message": vidiq_message,
         "study_set_sha256": study_set_sha256,
+        # The frozen cohort this state was written against: an owner stop
+        # clears itself once a different cohort exists (D-178 review).
+        "cohort_id": current_cohort_id(),
     }
     STATE_FILE.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False),
@@ -443,13 +501,16 @@ def continue_research(
 
     # The shared task runs this every 2 hours for good (D-178), so states
     # that wait for the owner stay as they are; they used to end the task.
+    # A new frozen cohort since the stop is the owner acting: carry it on.
     if status in OWNER_STOP_STATES:
-        return state
+        if not new_cohort_since(state):
+            return state
+        refresh_attempts = 0
 
     if not (EXP13_DIR / "cohort_manifest.json").exists():
-        started = _parse_time(state.get("updated_at"))
-        if status == "DISCOVERY_RUNNING" and started and utc_now() - started < DISCOVERY_STALE_AFTER:
-            return state  # a discovery is still running; leave its state alone
+        alive = discovery_last_alive(state)
+        if status == "DISCOVERY_RUNNING" and alive and utc_now() - alive < DISCOVERY_STALE_AFTER:
+            return state  # a discovery is still working; leave its state alone
         return write_state(
             "NEEDS_HUMAN_ATTENTION",
             (
