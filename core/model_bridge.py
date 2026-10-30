@@ -5,6 +5,7 @@ experiment_02_analysis/analysis_model_runner.py.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -490,6 +491,121 @@ def _gemini_attempt(
     }
 
 
+def _gemini_endpoint(model: str) -> str:
+    """The generateContent URL for a configured model, checked to stay on
+    Google's fixed Gemini HTTPS host."""
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", model):
+        raise ValueError("DIRECT_GEMINI model contains unsupported characters")
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        + model
+        + ":generateContent"
+    )
+    parsed_endpoint = urllib.parse.urlparse(endpoint)
+    if (
+        parsed_endpoint.scheme != "https"
+        or parsed_endpoint.hostname != "generativelanguage.googleapis.com"
+    ):
+        raise ValueError("Direct Gemini endpoint failed host validation")
+    return endpoint
+
+
+def call_direct_gemini_image(
+    prompt: str,
+    image_bytes: bytes,
+    *,
+    mime_type: str = "image/jpeg",
+    timeout_seconds: float = 60.0,
+) -> dict[str, Any]:
+    """One free-tier Gemini request with a single image attached (D-179).
+
+    Same key, model list, host check and billing attestation (D-161) as the
+    text route: until the operator has attested that the key's project cannot
+    bill, no request is made. The answer is the model's JSON text; the caller
+    validates it. A model that is out of quota or unavailable (404, 429, 5xx)
+    hands over to the next configured model.
+    """
+    reason = direct_gemini_unavailable_reason()
+    if reason is not None:
+        return {
+            "status": "UNAVAILABLE",
+            "reason_code": reason,
+            "message": (
+                direct_gemini_billing_status()["problem"]
+                if reason == DIRECT_GEMINI_BILLING_UNCONFIRMED
+                else f"Set {DIRECT_GEMINI_KEY_ENV} in .env to use the free Gemini API."
+            ),
+            "paid_inference_executed": False,
+            "attempts": [],
+        }
+    settings = direct_gemini_settings()
+    api_key = str(settings["api_key"])
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    attempts: list[dict[str, Any]] = []
+    for model in list(settings["models"]):
+        endpoint = _gemini_endpoint(model)
+        body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {"inlineData": {"mimeType": mime_type, "data": encoded}},
+                    ],
+                }
+            ],
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
+        }
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            method="POST",
+        )
+        attempt: dict[str, Any] = {"model_id": model, "error_detail": None}
+        try:
+            # _gemini_endpoint keeps this on Google's fixed Gemini HTTPS host.
+            with urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+                request,
+                timeout=min(max(timeout_seconds, 5.0), 180.0),
+            ) as response:
+                parsed = json.loads(response.read().decode("utf-8"))
+            candidates = parsed.get("candidates") if isinstance(parsed, dict) else None
+            if not isinstance(candidates, list) or not candidates:
+                raise ValueError("Gemini returned no candidates")
+            parts = (candidates[0].get("content") or {}).get("parts") or []
+            output = "".join(
+                str(part.get("text") or "") for part in parts if isinstance(part, dict)
+            ).strip()
+            if not output:
+                raise ValueError("Gemini returned an empty response")
+            attempts.append({**attempt, "disposition": "ACCEPTED"})
+            return {
+                "status": "ACCEPTED",
+                "output": output,
+                "model_id": model,
+                # The operator attested the project has no billing (D-161).
+                "paid_inference_executed": False,
+                "billing_disabled_confirmed_on": direct_gemini_billing_status()["confirmed_on"],
+                "attempts": attempts,
+            }
+        except urllib.error.HTTPError as exc:
+            attempts.append({**attempt, "disposition": "HTTP_ERROR", "error_detail": _gemini_error_detail(exc, api_key)})
+            if exc.code in {404, 429, 500, 502, 503, 504}:
+                continue
+            break
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
+            attempts.append({**attempt, "disposition": type(exc).__name__, "error_detail": str(exc)[:300]})
+            continue
+    return {
+        "status": "FAILED",
+        "reason_code": "DIRECT_GEMINI_IMAGE_FAILED",
+        "message": (attempts[-1]["error_detail"] if attempts else "No Gemini model configured."),
+        "paid_inference_executed": False,
+        "attempts": attempts,
+    }
+
+
 def call_direct_gemini_backup(
     payload: dict[str, Any],
     *,
@@ -580,20 +696,7 @@ def call_direct_gemini_backup(
         }
 
     for model in models:
-        if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", model):
-            raise ValueError("DIRECT_GEMINI model contains unsupported characters")
-
-        endpoint = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            + model
-            + ":generateContent"
-        )
-        parsed_endpoint = urllib.parse.urlparse(endpoint)
-        if (
-            parsed_endpoint.scheme != "https"
-            or parsed_endpoint.hostname != "generativelanguage.googleapis.com"
-        ):
-            raise ValueError("Direct Gemini endpoint failed host validation")
+        endpoint = _gemini_endpoint(model)
 
         for response_mode in ("STRUCTURED_SCHEMA", "JSON_ONLY"):
             generation_config: dict[str, Any] = {

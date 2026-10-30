@@ -814,8 +814,9 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "auto",
         ],
         "description": (
-            "Creates a bounded visual review set. A configured local Ollama "
-            "vision model may propose descriptions, but human approval is required."
+            "Creates a bounded visual review set. The free Gemini API (when its "
+            "billing check is confirmed) or a local Ollama model may propose "
+            "descriptions, but human approval is required."
         ),
     },
     "vision_doctor": {
@@ -829,8 +830,8 @@ ACTION_DEFS: dict[str, dict[str, Any]] = {
             "doctor",
         ],
         "description": (
-            "Checks whether local Ollama visual drafting is configured. "
-            "Human-only review remains available without it."
+            "Checks whether free Gemini or local Ollama visual drafting is "
+            "configured. Human-only review remains available without either."
         ),
     },
     "exp2_visual_retry": {

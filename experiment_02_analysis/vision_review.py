@@ -2,9 +2,10 @@
 
 Frame descriptions are never accepted as evidence automatically.
 
-This module can ask a local Ollama vision model for draft observations, but
-those drafts remain PENDING until a human accepts/edits or rejects them. Only
-human-approved observations are converted into Experiment 02 visual evidence.
+This module can ask the free Gemini API (D-179) or a local Ollama vision model
+for draft observations, but those drafts remain PENDING until a human
+accepts/edits or rejects them. Only human-approved observations are converted
+into Experiment 02 visual evidence.
 """
 
 from __future__ import annotations
@@ -14,12 +15,14 @@ import base64
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core import model_bridge
 from core.pipeline_integrity import append_jsonl, atomic_write_json, read_jsonl
 from urllib.parse import urlparse
 
@@ -39,6 +42,9 @@ OLLAMA_MODEL_ENV = "EXPERIMENT_02_VISION_MODEL"
 OLLAMA_HOST_ENV = "OLLAMA_HOST"
 DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
 ALLOWED_CONFIDENCE = {"LOW", "MODERATE", "HIGH"}
+# The free Gemini tier allows a handful of requests a minute; one frame at a
+# time with a short pause stays inside it (D-179).
+GEMINI_FRAME_PAUSE_SECONDS = 4.5
 OBSERVATION_MAX_CHARS = 800
 
 VISION_PROMPT = """Describe only what is directly visible in this single video frame.
@@ -258,8 +264,12 @@ def ollama_frame_proposal(
     message = outer.get("message")
     if not isinstance(message, dict):
         raise ValueError("Ollama response is missing message")
-    raw_content = str(message.get("content") or "").strip()
-    parsed = json.loads(raw_content)
+    return proposal_from_json(str(message.get("content") or ""))
+
+
+def proposal_from_json(raw_content: str) -> dict[str, Any]:
+    """A model's JSON answer as a draft observation; never a decision."""
+    parsed = json.loads(raw_content.strip())
     if not isinstance(parsed, dict):
         raise ValueError("Vision proposal must be a JSON object")
 
@@ -289,6 +299,38 @@ def ollama_frame_proposal(
         "uncertainty": uncertainty,
         "confidence": confidence,
     }
+
+
+def gemini_provider_status() -> dict[str, Any]:
+    """Whether the free Gemini API can draft frame observations (D-179)."""
+    reason = model_bridge.direct_gemini_unavailable_reason()
+    models = list(model_bridge.direct_gemini_settings()["models"])
+    if reason is None:
+        return {
+            "status": "READY",
+            "provider": "gemini",
+            "model": models[0] if models else None,
+            "message": "Free Gemini API vision drafts are available.",
+        }
+    message = (
+        model_bridge.direct_gemini_billing_status()["problem"]
+        if reason == model_bridge.DIRECT_GEMINI_BILLING_UNCONFIRMED
+        else f"Set {model_bridge.DIRECT_GEMINI_KEY_ENV} in .env to use the free Gemini API."
+    )
+    return {"status": reason, "provider": "gemini", "model": None, "message": message}
+
+
+def gemini_frame_proposal(image_path: Path, *, timeout_seconds: float = 60.0) -> dict[str, Any]:
+    mime_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+    result = model_bridge.call_direct_gemini_image(
+        VISION_PROMPT,
+        image_path.read_bytes(),
+        mime_type=mime_type,
+        timeout_seconds=timeout_seconds,
+    )
+    if result.get("status") != "ACCEPTED":
+        raise ValueError(str(result.get("message") or result.get("reason_code") or "Gemini failed"))
+    return {**proposal_from_json(str(result["output"])), "model": result.get("model_id")}
 
 
 def evenly_selected_indexes(total: int, maximum: int) -> list[int]:
@@ -398,26 +440,48 @@ def build_packet(
     if not frames:
         raise ValueError(f"No retained visual frames available for {video_id}")
 
-    provider_status = vision_provider_status(model=model, host=host)
+    # Drafts come from the free Gemini API when it is set up, then a local
+    # Ollama model, else the reviewer describes each frame (D-058, D-179).
+    gemini_status: dict[str, Any] = (
+        gemini_provider_status() if provider in {"auto", "gemini"} else {}
+    )
+    use_gemini = gemini_status.get("status") == "READY"
+    if provider == "gemini" and not use_gemini:
+        raise ValueError(gemini_status.get("message") or "Gemini vision unavailable")
+
+    provider_status: dict[str, Any] = (
+        gemini_status if use_gemini else vision_provider_status(model=model, host=host)
+    )
     use_ollama = (
-        provider in {"auto", "ollama"} and provider_status.get("status") == "READY"
+        not use_gemini
+        and provider in {"auto", "ollama"}
+        and provider_status.get("status") == "READY"
     )
     if provider == "ollama" and not use_ollama:
         raise ValueError(provider_status.get("message") or "Ollama vision unavailable")
 
-    selected_provider = "ollama" if use_ollama else "human"
+    selected_provider = "gemini" if use_gemini else "ollama" if use_ollama else "human"
     selected_model = (
         str(provider_status.get("model"))
-        if use_ollama and provider_status.get("model")
+        if (use_gemini or use_ollama) and provider_status.get("model")
         else None
     )
     selected_host = str(provider_status.get("host") or DEFAULT_OLLAMA_HOST)
+    if not use_gemini and gemini_status:
+        provider_status = {**provider_status, "gemini_status": gemini_status}
 
     items: list[dict[str, Any]] = []
-    for frame in frames:
+    for index, frame in enumerate(frames):
         proposal = None
         proposal_error = None
-        if use_ollama and selected_model:
+        if use_gemini:
+            if index:
+                time.sleep(GEMINI_FRAME_PAUSE_SECONDS)
+            try:
+                proposal = gemini_frame_proposal(Path(frame["path"]))
+            except Exception as exc:
+                proposal_error = f"{type(exc).__name__}: {exc}"
+        elif use_ollama and selected_model:
             try:
                 proposal = ollama_frame_proposal(
                     Path(frame["path"]),
@@ -806,7 +870,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=("auto", "human", "ollama"),
+        choices=("auto", "human", "gemini", "ollama"),
         default="auto",
     )
     parser.add_argument("--model", default=None)
@@ -816,10 +880,13 @@ def main() -> None:
     if args.mode == "doctor":
         print(
             json.dumps(
-                vision_provider_status(
-                    model=args.model,
-                    host=args.host,
-                ),
+                {
+                    "gemini": gemini_provider_status(),
+                    "ollama": vision_provider_status(
+                        model=args.model,
+                        host=args.host,
+                    ),
+                },
                 indent=2,
                 ensure_ascii=False,
             )

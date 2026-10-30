@@ -178,6 +178,77 @@ class VisionReviewTests(unittest.TestCase):
         self.assertIn("P ZERO", proposal["observation"])
         self.assertNotIn("decision", proposal)
 
+    def gemini_ready(self, stack: ExitStack, root: Path) -> None:
+        billing = root / "billing.json"
+        billing.write_text(json.dumps({"billing_disabled_confirmed": True, "confirmed_on": "2026-10-29"}), encoding="utf-8")
+        stack.enter_context(patch.object(vision.model_bridge, "DIRECT_GEMINI_BILLING_FILE", billing))
+        stack.enter_context(patch.dict("os.environ", {"DIRECT_GEMINI_API_KEY": "test-key", "DIRECT_GEMINI_MODELS": "gemini-lite,gemini-flash"}))
+        stack.enter_context(patch.object(vision.time, "sleep"))
+
+    def test_gemini_drafts_every_frame_when_it_is_set_up(self):
+        """D-179: the free Gemini API comes before a slow local model."""
+        answer = {"candidates": [{"content": {"parts": [{"text": json.dumps(
+            {"observation": "A worn racing tyre fills the frame.", "visible_text": "", "confidence": "HIGH", "uncertainty": ""}
+        )}]}}]}
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            self.write_visual_source(root)
+            self.gemini_ready(stack, root)
+            ollama = stack.enter_context(patch.object(vision, "ollama_frame_proposal"))
+            urlopen = stack.enter_context(patch.object(
+                vision.model_bridge.urllib.request, "urlopen", return_value=_FakeResponse(answer)))
+            packet = vision.build_packet("v1")
+
+        self.assertEqual((packet["provider"], packet["model"]), ("gemini", "gemini-lite"))
+        self.assertTrue(all(item["proposal"]["observation"].startswith("A worn racing tyre") for item in packet["frames"]))
+        self.assertTrue(all(item["decision"] == "PENDING" for item in packet["frames"]))  # still a draft
+        ollama.assert_not_called()
+        request = urlopen.call_args.args[0]
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(request.full_url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-lite:generateContent")
+        self.assertEqual(body["contents"][0]["parts"][1]["inlineData"]["mimeType"], "image/jpeg")
+        self.assertEqual(request.get_header("X-goog-api-key"), "test-key")
+
+    def test_without_the_billing_attestation_no_frame_leaves_the_pc(self):
+        """D-161 holds for images too: until it is confirmed, Ollama or human review is used."""
+        billing = {"billing_disabled_confirmed": False, "confirmed_on": None}
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            self.write_visual_source(root)
+            (root / "billing.json").write_text(json.dumps(billing), encoding="utf-8")
+            stack.enter_context(patch.object(vision.model_bridge, "DIRECT_GEMINI_BILLING_FILE", root / "billing.json"))
+            stack.enter_context(patch.dict("os.environ", {"DIRECT_GEMINI_API_KEY": "test-key"}))
+            urlopen = stack.enter_context(patch.object(vision.model_bridge.urllib.request, "urlopen"))
+            packet = vision.build_packet("v1", provider="auto", model="")
+            with self.assertRaisesRegex(ValueError, "billing"):
+                vision.build_packet("v1", provider="gemini")
+
+        urlopen.assert_not_called()
+        self.assertEqual(packet["provider"], "human")
+        self.assertEqual(packet["provider_status"]["gemini_status"]["status"], "DIRECT_GEMINI_BILLING_UNCONFIRMED")
+
+    def test_a_frame_gemini_cannot_draft_is_left_for_the_reviewer(self):
+        import urllib.error
+
+        def quota(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, 429, "quota", {}, None)
+
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            self.patch_paths(stack, root)
+            self.write_visual_source(root)
+            self.gemini_ready(stack, root)
+            urlopen = stack.enter_context(patch.object(vision.model_bridge.urllib.request, "urlopen", side_effect=quota))
+            packet = vision.build_packet("v1")
+
+        self.assertEqual(packet["provider"], "gemini")
+        self.assertTrue(all(item["proposal"] is None for item in packet["frames"]))
+        self.assertTrue(all("HTTP_429" in item["proposal_error"] for item in packet["frames"]))
+        # Each frame tried the lite model, then the next free model.
+        self.assertEqual(urlopen.call_count, 2 * len(packet["frames"]))
+
     def test_review_action_never_accepts_blank_observation(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
