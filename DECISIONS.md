@@ -5995,3 +5995,38 @@ revised after four Stage 8 reviews.
 - The radar marks fewer videos as established demand, so its evidence matrix
   shows fewer STRONG historical-demand rows. This does not touch the D-177
   test, which scores strength only.
+
+## D-179 — Frame descriptions are drafted by the free Gemini API first
+
+**Status:** Accepted (29 Oct 2026, owner). Amends D-058.
+
+**Context.** D-058 made vision drafting local-first: a local Ollama model
+proposes a description of each retained frame (an opening frame plus up to 8
+scene frames per video), and the reviewer accepts, edits or rejects every one.
+On the owner's laptop, Ollama takes 10–30 minutes per study set. The FAIR
+bridge sends text only, so FAIR cannot look at a frame.
+
+**Decision.**
+- **Order of providers.** `vision_review --provider auto` drafts with the free
+  Gemini API when the direct Gemini route can run, then a local Ollama model,
+  and otherwise leaves every frame for the reviewer to describe.
+  `--provider gemini` forces Gemini and refuses, with the reason, when it
+  cannot run.
+- **One rule for text and images.** `core.model_bridge.call_direct_gemini_image`
+  uses the direct Gemini route's key, model list, host check and billing
+  attestation (D-161). Until `billing_disabled_confirmed` is true, no frame is
+  sent and no request is made.
+- **Rate limits.** Frames go one at a time with a 4.5-second pause, to stay
+  within the free tier's per-minute limit.
+- **Model fallback.** A model that answers 404, 429 or 5xx hands over to the
+  next configured model.
+- **Failed frames.** A frame no model could draft keeps its error and waits for
+  the reviewer.
+- **D-058 is unchanged otherwise.** A draft is never evidence: every frame
+  still needs the reviewer's accept, edit or reject.
+
+**Consequences.**
+- Still frames from the public source videos are sent to Google. On the free
+  tier, Google may use them to improve its products.
+- Drafting a study set takes about 2 minutes instead of 10–30.
+- Ollama stays as the fallback when the Gemini route is off.
