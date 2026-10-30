@@ -33,6 +33,7 @@ from story_script_engine.story_plan_engine import (
     STORY_PLAN_REQUESTS_DIR,
     STORY_PLAN_RESPONSES_DIR,
     STORY_PLANS_DIR,
+    normalize_story_plan_response,
     validate_story_plan_response,
     validation_contract_sha256,
 )
@@ -237,7 +238,7 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
         "8. The material immediately after the hook must justify, contextualize, or begin proving the hook.\n"
         "9. Assign one primary audience-psychology mechanism to every beat and make each beat change the viewer's state.\n"
         "10. Manage cognitive load deliberately. Prefer one primary new idea per beat when the explanation is complex.\n"
-        "11. Track open loops with open_loop_id and loop_action. Every OPEN must later receive a PAYOFF; never create a fake unresolved hook.\n"
+        "11. Track open loops with open_loop_id and loop_action. Every OPEN must later receive a PAYOFF; on a beat with loop_action NONE, set open_loop_id to an empty string. Never create a fake unresolved hook.\n"
         "12. Use tension, novelty and expectation violation only when they serve the verified story and accepted viewer promise.\n"
         "13. Use only accepted_claim_ids for factual beats and factual opening claims.\n"
         "14. Do not invent facts or copy source-video wording, sequence, personality, or exact execution.\n"
@@ -368,7 +369,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
     atomic_write_text(raw_path, raw)
 
     try:
-        response = parse_model_json(raw)
+        response = normalize_story_plan_response(parse_model_json(raw))
         validation = validate_story_plan_response(response, request)
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         report = {

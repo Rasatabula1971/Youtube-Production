@@ -70,6 +70,9 @@ OPENING_BEAT_MECHANISMS = {
 }
 
 LOOP_ACTIONS = {"NONE", "OPEN", "ADVANCE", "PAYOFF"}
+# The schema makes open_loop_id a required string, so a model with no loop to
+# name on a NONE beat writes one of these words instead of leaving it empty.
+EMPTY_LOOP_ID_PLACEHOLDERS = {"none", "null", "n/a", "na", "-"}
 TENSION_LEVELS = {"LOW", "MEDIUM", "HIGH"}
 
 
@@ -280,6 +283,27 @@ def build_story_plan_request(
             "verified_research_sha256": base["source_package_sha256"],
         },
     }
+
+
+def normalize_story_plan_response(response: dict[str, Any]) -> dict[str, Any]:
+    """Clear a placeholder open_loop_id on beats whose loop_action is NONE.
+
+    "none" there means no loop; it never names one. A real loop id on a NONE
+    beat is left alone, so validation still rejects it.
+    """
+    beats = response.get("beats")
+    if not isinstance(beats, list):
+        return response
+    for beat in beats:
+        psychology = beat.get("psychology") if isinstance(beat, dict) else None
+        if not isinstance(psychology, dict):
+            continue
+        if str(psychology.get("loop_action", "")).strip().upper() != "NONE":
+            continue
+        loop_id = psychology.get("open_loop_id")
+        if isinstance(loop_id, str) and loop_id.strip().lower() in EMPTY_LOOP_ID_PLACEHOLDERS:
+            psychology["open_loop_id"] = ""
+    return response
 
 
 def validate_story_plan_response(

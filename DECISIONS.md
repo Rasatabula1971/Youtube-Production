@@ -6050,3 +6050,26 @@ blocks, and is still waived after the configured search rounds (D-163).
 **Consequences.** A site that refuses readers no longer stops a sourced
 concept. The coverage rule is unchanged: the Research Gate still needs a
 source for every question.
+
+## D-181 — A placeholder loop id on a NONE beat counts as empty
+
+**Context.** The story-plan schema makes `open_loop_id` a required string, and
+the prompt never said what to put there on a beat with no loop. On the tyre
+video, Groq's gpt-oss-20b wrote `"none"` with `loop_action: NONE`. FAIR
+accepted the output, but the validator refused it ("open_loop_id must be empty
+when loop_action is NONE"), and that was the plan's only error. Each retry
+sent this concept to the same model first. That used up Groq's per-minute
+allowance, so the second concept was rate-limited and ran out of attempts
+before reaching a route that could answer.
+
+**Decision.**
+- The prompt now says: on a NONE beat, set `open_loop_id` to an empty string.
+- Before validation, `normalize_story_plan_response` clears `open_loop_id` on
+  NONE beats when it holds a placeholder word: none, null, n/a, na or -.
+- A real loop id on a NONE beat is left as written and is still rejected.
+
+**Consequences.** A model's way of writing "no loop" no longer stops a story
+plan. The loop rules are unchanged: every OPEN still needs a PAYOFF, and every
+loop action other than NONE still needs an id. The story-plan validation
+contract fingerprint changes, so story plans already on disk are
+re-validated on their next run.

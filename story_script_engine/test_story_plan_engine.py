@@ -5,6 +5,7 @@ from pathlib import Path
 
 from story_script_engine.story_plan_engine import (
     build_story_plan_request,
+    normalize_story_plan_response,
     validate_story_plan_response,
 )
 
@@ -186,6 +187,27 @@ class StoryPlanEngineTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertTrue(
             any("unapproved claim_id" in error for error in result["errors"])
+        )
+
+    def test_a_placeholder_loop_id_on_a_none_beat_is_cleared(self):
+        """gpt-oss-20b wrote open_loop_id "none" with loop_action NONE, and the plan was refused."""
+        response = self.valid_response()
+        response["beats"][1]["psychology"]["loop_action"] = "NONE"
+        response["beats"][1]["psychology"]["open_loop_id"] = "none"
+        self.assertFalse(validate_story_plan_response(response, self.request())["valid"])
+        normalized = normalize_story_plan_response(response)
+        self.assertEqual(normalized["beats"][1]["psychology"]["open_loop_id"], "")
+        result = validate_story_plan_response(normalized, self.request())
+        self.assertTrue(result["valid"], result["errors"])
+
+    def test_a_real_loop_id_on_a_none_beat_is_still_rejected(self):
+        response = self.valid_response()
+        response["beats"][1]["psychology"]["loop_action"] = "NONE"
+        response["beats"][1]["psychology"]["open_loop_id"] = "loop-main"
+        result = validate_story_plan_response(normalize_story_plan_response(response), self.request())
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("open_loop_id must be empty when loop_action is NONE" in error for error in result["errors"])
         )
 
     def test_story_plan_rejects_unresolved_open_loop(self):
