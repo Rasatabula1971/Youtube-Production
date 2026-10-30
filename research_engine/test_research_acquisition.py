@@ -64,6 +64,68 @@ class ResearchAcquisitionTests(unittest.TestCase):
             evidence["provenance"]["search_backends"], ["exa", "duckduckgo", "wikipedia"]
         )
 
+    def test_a_refused_page_does_not_block_a_question_that_has_other_sources(self):
+        """A paywalled DOI returned 403 on every retry, so a fully sourced concept stayed PARTIAL."""
+
+        def search(query, *, limit, backends):
+            return {
+                "backend": "duckduckgo",
+                "result_urls": ["https://doi.org/paywalled", f"https://example.org/{query[:3]}"],
+                "attempts": [],
+            }
+
+        def read(url, *, backends):
+            if "doi.org" in url:
+                raise RuntimeError("Every page reader failed: direct: 403")
+            return {"backend": "direct", "content": "Evidence text for " + url}
+
+        with (
+            patch.object(module, "search_web_with_fallback", side_effect=search),
+            patch.object(module, "read_web_page_with_fallback", side_effect=read),
+        ):
+            result = module.acquire_plan(plan(self.root))
+        self.assertEqual(result["status"], "COMPLETE")
+        self.assertEqual(result["errors"], 0)
+        self.assertIsNone(result["first_error"])
+        evidence = json.loads(Path(result["evidence"]).read_text(encoding="utf-8"))
+        self.assertEqual(evidence["unresolved_question_ids"], [])
+        # Recorded for each question that tried it, but blocking none.
+        self.assertEqual(
+            [item["url"] for item in evidence["errors"]],
+            ["https://doi.org/paywalled", "https://doi.org/paywalled"],
+        )
+
+    def test_a_refused_page_still_blocks_a_question_with_no_source(self):
+        def search(query, *, limit, backends):
+            return {"backend": "duckduckgo", "result_urls": ["https://doi.org/paywalled"], "attempts": []}
+
+        def read(url, *, backends):
+            raise RuntimeError("Every page reader failed: direct: 403")
+
+        two = plan(self.root)
+        payload = json.loads(two.read_text(encoding="utf-8"))
+        payload["research_questions"].append({"question_id": "q3", "question": "Open question"})
+        two.write_text(json.dumps(payload), encoding="utf-8")
+
+        def search_mixed(query, *, limit, backends):
+            if query == "Open question":
+                return search(query, limit=limit, backends=backends)
+            return {"backend": "duckduckgo", "result_urls": [f"https://example.org/{query[:3]}"], "attempts": []}
+
+        def read_mixed(url, *, backends):
+            if "doi.org" in url:
+                return read(url, backends=backends)
+            return {"backend": "direct", "content": "Evidence text"}
+
+        with (
+            patch.object(module, "search_web_with_fallback", side_effect=search_mixed),
+            patch.object(module, "read_web_page_with_fallback", side_effect=read_mixed),
+        ):
+            result = module.acquire_plan(two)
+        self.assertEqual(result["status"], "PARTIAL")
+        self.assertEqual(result["errors"], 1)
+        self.assertIn("403", result["first_error"])
+
     def test_failure_reports_first_real_error(self):
         def search(query, *, limit, backends):
             raise RuntimeError("Every web search backend failed: exa: mcporter missing")

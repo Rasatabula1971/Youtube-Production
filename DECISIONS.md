@@ -6030,3 +6030,23 @@ bridge sends text only, so FAIR cannot look at a frame.
   tier, Google may use them to improve its products.
 - Drafting a study set takes about 2 minutes instead of 10–30.
 - Ollama stays as the fallback when the Gemini route is off.
+
+## D-180 — A refused page does not block a question that already has sources
+
+**Context.** Research acquisition (D-129, D-163) marked a concept PARTIAL on
+any read or search error, even when every required question already had
+pages. On the owner's tyre video, one paywalled DOI link returned 403 to
+both page readers. The loop had already used the next result in its place,
+so both questions had their 3 pages. But each retry searched again, met the
+same link and stayed PARTIAL. The research model only takes COMPLETE
+evidence, so the video could not go on. The run message also said some
+questions had no source, which was not true.
+
+**Decision.** An error blocks only while its question has no source. Once
+every required question has a page, the evidence is COMPLETE. The errors are
+still recorded in the evidence file. A question that never gets a page still
+blocks, and is still waived after the configured search rounds (D-163).
+
+**Consequences.** A site that refuses readers no longer stops a sourced
+concept. The coverage rule is unchanged: the Research Gate still needs a
+source for every question.

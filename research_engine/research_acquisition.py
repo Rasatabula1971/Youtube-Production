@@ -273,8 +273,12 @@ def acquire_plan(plan_path: Path, *, force: bool = False) -> dict[str, Any]:
         if search_rounds.get(question_id, 0) >= config["max_search_rounds_per_question"]
     )
     unresolved_question_ids = sorted(uncovered - set(unsourced_question_ids))
+    # An error blocks only while its question still has no source. A page that
+    # refuses the reader (a paywalled DOI, a 403) is replaced by the next
+    # result; once the question has a page, the same refusal on every retry
+    # must not hold research back. Errors stay recorded in the evidence.
     blocking_errors = [
-        item for item in errors if str(item.get("question_id") or "") not in unsourced_question_ids
+        item for item in errors if str(item.get("question_id") or "") in unresolved_question_ids
     ]
     status = (
         "COMPLETE"
