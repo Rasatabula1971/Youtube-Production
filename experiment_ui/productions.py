@@ -348,8 +348,14 @@ def derive(
     final_render_keys: set[tuple[str, str]] | None = None,
     last_run: dict[str, Any] | None = None,
     action_labels: dict[str, str] | None = None,
+    dropped_concept_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Derive every production from the current artifact state."""
+    """Derive every production from the current artifact state.
+
+    A concept dropped at the Research Gate is still accepted at the Concept
+    Gate, so it is left out here by its drop record (D-182).
+    """
+    dropped = dropped_concept_ids or set()
     final_keys = final_render_keys or set()
     concept_gate, research, story = _dict(concept_gate), _dict(research), _dict(story)
     title_direction, fmt = _dict(title_direction), _dict(fmt)
@@ -358,6 +364,8 @@ def derive(
     for concept in _items(concept_gate.get("concepts")):
         concept_id = _cid(concept)
         if not concept_id or str(concept.get("decision") or "").upper() != "ACCEPT":
+            continue
+        if concept_id in dropped:
             continue
         branches: list[dict[str, Any]] = []
         stage = "RESEARCH"

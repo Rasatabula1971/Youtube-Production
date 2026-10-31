@@ -1074,6 +1074,9 @@ def drop_concept(*, concept_id: str, note: str | None) -> dict[str, Any]:
     )
     slug = safe_slug(concept_id)
     for path in (
+        # Without its plan the research stage no longer counts the concept;
+        # the next research prepare would not rebuild it either.
+        research_plans.PLANS_DIR / f"{slug}.research_plan.json",
         Path(bundle["request_path"]),
         REVIEWED_DIR / f"{slug}.research_gate_reviewed.json",
         VERIFIED_DIR / f"{slug}.verified_research_package.json",

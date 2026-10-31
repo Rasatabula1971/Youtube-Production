@@ -87,6 +87,7 @@ class ResearchReviewTests(unittest.TestCase):
         stack.enter_context(
             patch.object(review.research_plans, "DROPPED_FILE", output / "dropped_concepts.json")
         )
+        stack.enter_context(patch.object(review.research_plans, "PLANS_DIR", plans))
 
     def criteria(self):
         return {name: True for name in self.config()["required_accept_criteria"]}
@@ -217,7 +218,10 @@ class ResearchReviewTests(unittest.TestCase):
                 review.drop_concept(concept_id="c1", note=" ")
             with self.assertRaisesRegex(ValueError, "Unknown concept_id"):
                 review.drop_concept(concept_id="nope", note="x")
+            plan = review.research_plans.PLANS_DIR / "c1.research_plan.json"
+            plan.write_text("{}", encoding="utf-8")
             final = review.drop_concept(concept_id="c1", note="Nothing backs the title.")
+            plan_kept = plan.exists()
             registry = json.loads(review.research_plans.DROPPED_FILE.read_text(encoding="utf-8"))
             c1_verified = (review.VERIFIED_DIR / "c1.verified_research_package.json").exists()
             c1_request = (review.REVIEW_REQUESTS_DIR / "c1.research_gate_request.json").exists()
@@ -226,6 +230,7 @@ class ResearchReviewTests(unittest.TestCase):
         self.assertEqual(registry["concepts"]["c1"]["note"], "Nothing backs the title.")
         self.assertFalse(c1_verified)
         self.assertFalse(c1_request)
+        self.assertFalse(plan_kept)
         self.assertEqual({item["concept_id"] for item in final["claims"]}, {"c2"})
         self.assertTrue(final["complete"])
         self.assertIn("DROP_CONCEPT", history)
