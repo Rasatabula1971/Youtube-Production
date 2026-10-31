@@ -15,13 +15,14 @@ not wait for the thumbnail; publishing does.
 
 from __future__ import annotations
 
-import hashlib
 import json
+import re
 import struct
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.hashing import sha256_file, sha256_text
 from core.jsonio import load_json
 from core.pipeline_integrity import atomic_write_json
 from core.request_memo import memoized
@@ -31,14 +32,14 @@ from packaging_engine.packaging_brief import snapshot as packaging_brief_snapsho
 
 HERE = Path(__file__).resolve().parent
 UPLOAD_DIR = HERE / "output" / "thumbnail_uploads"
-MAX_BYTES = 2_000_000  # YouTube's thumbnail limit is 2 MB
+MAX_BYTES = 2_000_000  # the YouTube API's thumbnail limit is 2 MB
+# Rules from "Thumbnail Science: What 5M+ Science Shorts and 1M+ Long-Form
+# Videos Actually Do" (owner's research doc, 31 Oct 2026; summary in the
+# project doc claude/Thumbnail_Prompt_Rules.md). The channels are faceless.
+SOURCE_DOC = "https://claude.ai/artifact/PRVeNEq51oKmw6oekwW1od"
 CANVAS = {
-    "short": ("vertical 9:16", "1080 x 1920"),
-    "long_form": ("16:9", "1280 x 720"),
-}
-KEEP_CLEAR = {
-    "short": "the bottom fifth and the right edge, where YouTube puts the caption and buttons",
-    "long_form": "the bottom-right corner, where YouTube shows the video length",
+    "short": "vertical 9:16, 2160 x 3840 pixels (or the largest 9:16 size your tool makes)",
+    "long_form": "16:9, 3840 x 2160 pixels (or the largest 16:9 size your tool makes)",
 }
 MOOD = {
     "curiosity": "curious, intriguing",
@@ -51,17 +52,109 @@ MOOD = {
     "consequence": "dramatic",
     "transformation": "a clear before and after",
 }
+VERSUS_ANGLES = {"comparison", "transformation"}
+# What the owner checks before uploading (the doc's pre-publish checklist).
+CHECKLIST = {
+    "short": [
+        "One idea, readable at phone size",
+        "One subject in the centre band, so a 4:5 or 3:2 crop still shows it",
+        "Text is 2-4 words, centred, and does not repeat the title",
+        "Nothing important in the bottom quarter or along the right edge",
+        "Subject brighter than its background; one warm or yellow accent at most",
+        "No human face, logo or watermark",
+        "It shows only what the Short delivers",
+    ],
+    "long_form": [
+        "One idea, readable at 168 x 94 px (about 1/8 size) in one second",
+        "1-3 focal objects; the main subject fills about 40-70% of the frame",
+        "Text is 0-5 words and does not repeat the title",
+        "Nothing important in the bottom-right corner",
+        "Brightness around the middle; subject brighter than background; one warm accent",
+        "No human face, logo, watermark or screenshot",
+        "It promises only what the first 30 seconds deliver",
+    ],
+}
 
 
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
 
 
-def build_prompt(package: dict[str, Any], brief: dict[str, Any] | None) -> str:
-    """One detailed, deterministic thumbnail prompt for an image tool."""
-    brief = brief or {}
-    fmt = str(package.get("format") or brief.get("format") or "long_form")
-    ratio, size = CANVAS.get(fmt, CANVAS["long_form"])
+LEADING_INSTRUCTION = re.compile(r"^(explain|show|reveal|demonstrate|describe)\s+(that|how|why)\s+", re.IGNORECASE)
+
+
+def _as_moment(text: str) -> str:
+    """A story-plan instruction ("Explain that X") as the thing to show ("X")."""
+    moment = LEADING_INSTRUCTION.sub("", text).strip().rstrip(".")
+    return (moment[:1].upper() + moment[1:] + ".") if moment else ""
+
+
+def _facts(brief: dict[str, Any]) -> list[str]:
+    claims = [
+        _clean(claim.get("statement"))
+        for claim in brief.get("approved_claims") or []
+        if isinstance(claim, dict) and _clean(claim.get("statement"))
+    ]
+    if not claims:
+        return ["Show no numbers, statistics or factual claims."]
+    return [
+        "Only these facts may appear, in words or in the picture:",
+        *[f"- {claim}" for claim in claims],
+        "Show no other number, statistic or claim.",
+    ]
+
+
+def _short_prompt(package: dict[str, Any], brief: dict[str, Any]) -> list[str]:
+    subject = _clean(brief.get("strongest_visual_event"))
+    payoff = _as_moment(_clean(brief.get("video_payoff")) or _clean(brief.get("strongest_transformation")))
+    question = _clean(brief.get("central_question"))
+    lines = [
+        "Create a YouTube Shorts cover image for a faceless science channel.",
+        "",
+        f"Canvas: {CANVAS['short']}.",
+        f'The Short\'s title (do not write it on the image): "{_clean(package.get("title_text"))}"',
+    ]
+    if question:
+        lines.append(f"The question it should make the viewer ask: {question}")
+    if subject:
+        lines.append(f"Main subject: {subject}")
+    if payoff:
+        lines.append(f"Show the reveal moment the Short builds to: {payoff}")
+    angle = _clean(package.get("psychological_angle")).lower()
+    if angle:
+        lines.append(f"Mood: {MOOD.get(angle, angle)}.")
+    lines += [
+        (
+            "Composition: one subject, centred, filling about 40-60% of the frame height, inside the middle band, "
+            "so a 4:5 or 3:2 crop still shows it."
+        ),
+        (
+            "Background: flat and clearly separated from the subject, such as a sky-blue or cyan field, a clean "
+            "studio, or a dark field with the subject lit. No clutter."
+        ),
+        (
+            "Style: a clean 3D-render look, the subject brighter than its background, at most one warm or yellow "
+            "accent colour."
+        ),
+        (
+            "Text: a 2-4 word label or question in heavy white capital letters with a dark outline, centred in the "
+            'middle band (the style of "NO STEERING?" on a video about trains). Bold rounded or geometric sans-serif '
+            "(like Montserrat ExtraBold). "
+            "It must add to the title, not repeat it. No other words."
+        ),
+    ]
+    lines += _facts(brief)
+    lines += [
+        "Keep clear: the bottom quarter and the right edge, where YouTube puts the caption and buttons.",
+        (
+            "Do not include: human faces or people, logos or brand names, watermarks, subtitles, YouTube icons "
+            "or play buttons, borders."
+        ),
+    ]
+    return lines
+
+
+def _long_prompt(package: dict[str, Any], brief: dict[str, Any]) -> list[str]:
     raw_concept = package.get("thumbnail_concept")
     concept: dict[str, Any] = raw_concept if isinstance(raw_concept, dict) else {}
     angle = _clean(package.get("psychological_angle")).lower()
@@ -69,19 +162,21 @@ def build_prompt(package: dict[str, Any], brief: dict[str, Any] | None) -> str:
     surprise = _clean(concept.get("visual_anomaly")) or _clean(brief.get("opening_hook"))
     question = _clean(concept.get("viewer_visual_question")) or _clean(brief.get("central_question"))
     text = _clean(package.get("thumbnail_text"))
-    claims = [
-        _clean(claim.get("statement"))
-        for claim in brief.get("approved_claims") or []
-        if isinstance(claim, dict) and _clean(claim.get("statement"))
-    ]
+    layout = (
+        "Versus / before-after: two states side by side, the lesser or before state on the left, the "
+        "greater or after state on the right."
+        if angle in VERSUS_ANGLES
+        else "Hero object: one object fills about 40-70% of the frame on a clean or dark background."
+    )
     lines = [
-        f"Create a finished YouTube {'Shorts ' if fmt == 'short' else ''}thumbnail image.",
+        "Create a YouTube video thumbnail for a faceless science and engineering channel.",
         "",
-        f"Canvas: {ratio}, {size} pixels.",
+        f"Canvas: {CANVAS['long_form']}.",
         f'Video title, shown next to the thumbnail (do not write it out in full): "{_clean(package.get("title_text"))}"',
     ]
     if question:
         lines.append(f"The question it should make the viewer ask: {question}")
+    lines.append(f"Layout: {layout}")
     if subject:
         lines.append(f"Main subject: {subject}")
     if surprise:
@@ -91,37 +186,44 @@ def build_prompt(package: dict[str, Any], brief: dict[str, Any] | None) -> str:
             lines.append(f"{label}: {_clean(concept.get(key))}")
     if angle:
         lines.append(f"Mood: {MOOD.get(angle, angle)}.")
+    lines += [
+        "Composition: one idea, 1-3 focal objects at most. It must read in one second at 168 x 94 pixels.",
+        (
+            "Colour: medium overall brightness, the subject clearly brighter than its background, one warm accent "
+            "(red, orange or yellow). One background system: a bright cyan or blue field, a black field with one "
+            "lit object, or a warm, saturated natural scene."
+        ),
+    ]
     if text:
-        lines.append(f'Text on the image, exactly: "{text}". Large, bold, high contrast, no other words.')
+        lines.append(f'Text on the image, exactly: "{text}".')
     else:
-        lines.append(
-            "Text on the image: 2 to 4 large, bold words that add to the title rather than repeat it. "
-            "No other words."
-        )
-    if claims:
-        lines.append("Only these facts may appear, in words or in the picture:")
-        lines.extend(f"- {claim}" for claim in claims)
-        lines.append("Show no other number, statistic or claim.")
-    else:
-        lines.append("Show no numbers, statistics or factual claims.")
-    lines.extend(
-        [
-            (
-                "Style: photorealistic, one clear focal point, strong contrast, the subject well separated "
-                "from a simpler or blurred background, readable on a phone at small size."
-            ),
-            f"Keep clear: {KEEP_CLEAR.get(fmt, KEEP_CLEAR['long_form'])}.",
-            (
-                "Do not include: real or famous people, logos or brand names, watermarks, YouTube icons or "
-                "play buttons, borders."
-            ),
-        ]
-    )
+        lines.append("Text on the image: 0 to 5 words that add to the title, not repeat it.")
+    lines += [
+        (
+            "Text style: heavy sans-serif in ALL CAPS, white with a dark outline, shadow or box, and one accent "
+            "word in red or yellow. Letters about 10-20% of the image height. Place it in the top band or on the "
+            "side opposite the subject."
+        ),
+        "Use an arrow or circle only to point at a detail too small to notice. No screenshots.",
+    ]
+    lines += _facts(brief)
+    lines += [
+        "Keep clear: the bottom-right corner, where YouTube shows the video length.",
+        (
+            "Do not include: human faces or people, logos or brand names, watermarks, YouTube icons or play "
+            "buttons, borders."
+        ),
+        "Promise only what the video's first 30 seconds deliver.",
+    ]
+    return lines
+
+
+def build_prompt(package: dict[str, Any], brief: dict[str, Any] | None) -> str:
+    """One detailed, deterministic thumbnail prompt for an image tool."""
+    brief = brief or {}
+    fmt = str(package.get("format") or brief.get("format") or "long_form")
+    lines = _short_prompt(package, brief) if fmt == "short" else _long_prompt(package, brief)
     return "\n".join(lines)
-
-
-def _prompt_sha256(prompt: str) -> str:
-    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
 def record_path(video_id: str) -> Path:
@@ -167,7 +269,7 @@ def current_upload(package: dict[str, Any]) -> dict[str, Any] | None:
     if (
         not image.is_file()
         or record.get("made_for") != _made_for(package)
-        or hashlib.sha256(image.read_bytes()).hexdigest() != record.get("image_sha256")
+        or sha256_file(image) != record.get("image_sha256")
     ):
         return None
     return record
@@ -189,10 +291,11 @@ def items() -> list[dict[str, Any]]:
                 "format": package.get("format"),
                 "title": package.get("title_text"),
                 "prompt": prompt,
-                "prompt_sha256": _prompt_sha256(prompt),
+                "prompt_sha256": sha256_text(prompt),
                 "uploaded": upload is not None,
                 "upload": upload,
                 "replace_needed": upload is None and record_path(video_id).is_file(),
+                "checklist": CHECKLIST.get(str(package.get("format") or ""), CHECKLIST["long_form"]),
             }
         )
     return rows
@@ -251,7 +354,7 @@ def upload(*, video_id: str, data: bytes, made_with: str, reviewer: str) -> dict
         "video_id": video_id,
         "format": row["format"],
         "image": str(image.resolve()),
-        "image_sha256": hashlib.sha256(data).hexdigest(),
+        "image_sha256": sha256_file(image),
         "bytes": len(data),
         "width": size[0] if size else None,
         "height": size[1] if size else None,

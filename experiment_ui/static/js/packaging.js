@@ -60,6 +60,10 @@
           "<h3>" + esc(row.title || row.video_id) + ' <span class="muted">· ' + esc(fmt) + "</span></h3>" + state +
           '<label>Prompt <textarea readonly rows="12" data-pk-prompt="' + esc(row.video_id) + '">' + esc(row.prompt) + "</textarea></label>" +
           '<p><button type="button" class="ghost compact" data-pk-copy="' + esc(row.video_id) + '">Copy prompt</button></p>' +
+          ((row.checklist || []).length
+            ? "<details><summary>Check before you upload</summary><ul>" +
+              row.checklist.map(function (line) { return "<li>" + esc(line) + "</li>"; }).join("") + "</ul></details>"
+            : "") +
           '<form data-pk-upload="' + esc(row.video_id) + '">' +
           '<label>Made with <input name="made_with" placeholder="ChatGPT, Gemini…" value="' + esc(madeWith[row.video_id] || "") + '"></label> ' +
           '<label>Image <input type="file" name="image" accept="image/png,image/jpeg,image/webp" required></label> ' +

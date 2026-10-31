@@ -41,25 +41,38 @@ def png(width: int, height: int) -> bytes:
 
 
 class PromptTests(unittest.TestCase):
-    def test_a_short_prompt_carries_every_detail_for_an_image_tool(self):
-        prompt = thumbs.build_prompt(SHORT, BRIEF)
+    """Specs from the owner's "Thumbnail Science" research doc (31 Oct 2026)."""
+
+    def test_a_short_prompt_follows_the_faceless_shorts_cover_spec(self):
+        prompt = thumbs.build_prompt(SHORT, {**BRIEF, "video_payoff": "Explain that ribs slice water away."})
         for expected in (
-            "Shorts thumbnail", "vertical 9:16, 1080 x 1920", SHORT["title_text"],
-            BRIEF["strongest_visual_event"], BRIEF["opening_hook"], BRIEF["central_question"],
-            "Mood: tense, high stakes.", "2 to 4 large, bold words",
+            "Shorts cover image for a faceless science channel",
+            "vertical 9:16, 2160 x 3840", SHORT["title_text"], "do not write it on the image",
+            BRIEF["strongest_visual_event"], BRIEF["central_question"],
+            "Show the reveal moment the Short builds to: Ribs slice water away.",
+            "one subject, centred, filling about 40-60% of the frame height", "4:5 or 3:2 crop",
+            "sky-blue or cyan field", "3D-render look", "2-4 word label or question",
+            "heavy white capital letters with a dark outline", "Montserrat ExtraBold",
             "- Aircraft tires use longitudinal grooves instead of block patterns.",
-            "Show no other number, statistic or claim.", "where YouTube puts the caption and buttons",
-            "real or famous people, logos",
+            "Show no other number, statistic or claim.", "the bottom quarter and the right edge",
+            "human faces or people, logos",
         ):
             self.assertIn(expected, prompt)
 
-    def test_a_long_form_prompt_uses_the_accepted_thumbnail_concept_and_its_exact_text(self):
+    def test_a_long_form_prompt_follows_the_long_form_spec(self):
         prompt = thumbs.build_prompt(LONG, {**BRIEF, "format": "long_form"})
-        self.assertIn("16:9, 1280 x 720", prompt)
-        self.assertIn("Main subject: A worn aircraft tire close up", prompt)
-        self.assertIn("What is surprising about it: No tread blocks at all", prompt)
-        self.assertIn('Text on the image, exactly: "BALD ON PURPOSE"', prompt)
-        self.assertIn("bottom-right corner", prompt)
+        for expected in (
+            "16:9, 3840 x 2160", "Layout: Hero object", "Main subject: A worn aircraft tire close up",
+            "What is surprising about it: No tread blocks at all", "1-3 focal objects",
+            "168 x 94 pixels", 'Text on the image, exactly: "BALD ON PURPOSE"', "ALL CAPS",
+            "one accent word in red or yellow", "10-20% of the image height", "No screenshots",
+            "bottom-right corner", "first 30 seconds",
+        ):
+            self.assertIn(expected, prompt)
+
+    def test_a_comparison_angle_gets_the_versus_layout(self):
+        prompt = thumbs.build_prompt({**LONG, "psychological_angle": "comparison"}, BRIEF)
+        self.assertIn("Layout: Versus / before-after", prompt)
 
     def test_the_prompt_is_the_same_every_time(self):
         self.assertEqual(thumbs.build_prompt(SHORT, BRIEF), thumbs.build_prompt(SHORT, BRIEF))
@@ -86,6 +99,7 @@ class UploadTests(unittest.TestCase):
         self.assertEqual((record["width"], record["height"], record["made_with"]), (1080, 1920, "Gemini"))
         row = thumbs.items()[0]
         self.assertTrue(row["uploaded"])
+        self.assertIn("Nothing important in the bottom quarter or along the right edge", row["checklist"])
         self.assertEqual(thumbs.image_file("c_tyre:short"), Path(record["image"]))
 
     def test_a_changed_title_asks_for_a_new_thumbnail(self):

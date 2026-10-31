@@ -6430,8 +6430,33 @@ of his choice (ChatGPT, Gemini) and uploads the finished image.
   template renderer and Thumbnail Gate stay available but are not required.
 - `owner_stops` lists `thumbnail_upload` in both lanes.
 
+- **The prompt follows the owner's research doc** "Thumbnail Science: What 5M+
+  Science Shorts and 1M+ Long-Form Videos Actually Do" (31 Oct 2026; summary in
+  the project doc `claude/Thumbnail_Prompt_Rules.md`).
+  - Shorts:
+    - faceless cover at 9:16, 2160 x 3840, showing the reveal moment;
+    - one subject centred in the middle band, so 4:5 and 3:2 crops survive;
+    - flat, high-separation background and a 3D-render look;
+    - a 2-4 word white label or question with a dark outline;
+    - keep the bottom quarter and right edge clear.
+  - Long-form:
+    - 16:9, 3840 x 2160, laid out as a hero object (versus/before-after for
+      comparison and transformation angles);
+    - 1-3 focal objects, readable at 168 x 94 px;
+    - 0-5 ALL CAPS words with one red or yellow accent word, never in the
+      bottom-right;
+    - mid brightness with the subject brighter than its background, one warm
+      accent, one background system;
+    - no faces or screenshots;
+    - promise only what the first 30 seconds deliver.
+  - Each upload card shows the doc's pre-publish checklist for its format.
+
 **Consequences.**
 - The Aviation Tires Short's package changes (its thumbnail source), so its
   format plan is redone once on the next Continue.
+- The doc finds custom Shorts covers a minor lever: they arrived in July 2026,
+  appear only off-feed, are limited to Partner Program channels first, and
+  cannot be A/B tested. The upload to YouTube may refuse a Shorts cover until
+  the channel qualifies; the video is still recorded.
 - The thumbnail is not checked by a validator; its facts are bounded only by
   the prompt. The owner sees it before he uploads.
