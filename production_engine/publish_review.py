@@ -39,6 +39,7 @@ from production_engine.final_export_review import approval_is_current
 from core.hashing import sha256_file
 from core.jsonio import load_json
 from core.slugs import safe_slug
+from packaging_engine import thumbnail_upload
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "output"
@@ -49,7 +50,6 @@ APPROVED_DIR = OUTPUT / "approved_publish"
 PUBLISHED_DIR = OUTPUT / "published_videos"
 PENDING_UPLOADS_DIR = OUTPUT / "pending_uploads"
 HISTORY_FILE = OUTPUT / "publish_history.jsonl"
-VIDEO_FRAME = "VIDEO_FRAME"  # packaging_engine.short_lane.VIDEO_FRAME
 DECISIONS = {"APPROVE_PUBLISH", "HOLD"}
 PRIVACY = {"private", "unlisted", "public"}
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -125,11 +125,15 @@ def build_drafts() -> list[dict[str, Any]]:
             if not package:
                 problems.append(f"The final package bundle has no {fmt} package.")
         image = package.get("thumbnail_image") or {}
+        if package and not image.get("image"):
+            # Made by the owner from the thumbnail prompt and uploaded (D-191).
+            uploaded = thumbnail_upload.current_upload(package)
+            image = {"image": uploaded["image"], "image_sha256": uploaded["image_sha256"]} if uploaded else {}
         thumbnail = str(image.get("image") or "")
-        # A Short's thumbnail is a frame of the video; YouTube picks it (D-190).
-        video_frame = package.get("thumbnail_source") == VIDEO_FRAME
-        if package and not video_frame and not (thumbnail and Path(thumbnail).is_file()):
-            problems.append("The approved thumbnail image file is missing.")
+        if package and not (thumbnail and Path(thumbnail).is_file()):
+            problems.append(
+                "No thumbnail yet: make it from its prompt and upload it under Packaging, Thumbnail image."
+            )
         sources, research_sha = _sources(concept_id, int(config.get("max_description_sources") or 12))
         synthetic = bool(config.get("contains_synthetic_media_default", True))
         metadata = {
@@ -160,9 +164,6 @@ def build_drafts() -> list[dict[str, Any]]:
                 "verified_research_sha256": research_sha,
             },
         }
-        if video_frame:
-            # Only a Short's draft carries the key, so earlier drafts keep their hash.
-            base["thumbnail_source"] = VIDEO_FRAME
         drafts.append({**base, "draft_metadata": metadata, "base_sha256": _hash(base)})
     return drafts
 
@@ -365,8 +366,6 @@ def apply_action(
         record["video_sha256"] = draft["video_sha256"]
         record["thumbnail_file"] = draft["thumbnail_file"]
         record["thumbnail_sha256"] = draft["thumbnail_sha256"]
-        if draft.get("thumbnail_source"):
-            record["thumbnail_source"] = draft["thumbnail_source"]
         record["provenance"] = draft["provenance"]
         atomic_write_json(approved, record)
     else:

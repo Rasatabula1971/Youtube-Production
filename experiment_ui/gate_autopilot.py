@@ -78,10 +78,11 @@ def gate_mode(gate: str, policy: dict[str, Any], lane: str | None = None) -> str
 
 
 # Owner decisions that no policy setting makes automatic, in pipeline order.
-ALWAYS_HUMAN = ("topic", "script", "final_packaging", "visual_rights", "final_export", "publish")
+# The thumbnail is made by the owner from its prompt and uploaded (D-191).
+ALWAYS_HUMAN = ("topic", "script", "final_packaging", "thumbnail_upload", "visual_rights", "final_export", "publish")
 PIPELINE_ORDER = (
     "topic", "vision", "analysis", "concept", "research", "script", "title_direction",
-    "final_packaging", "format", "performance", "narration_preview", "visual_plan",
+    "final_packaging", "thumbnail_upload", "format", "performance", "narration_preview", "visual_plan",
     "narration_spend", "final_audio", "visual_candidate", "rough_cut", "visual_spend",
     "visual_rights", "edit_preview", "final_export", "publish",
 )

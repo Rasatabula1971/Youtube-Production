@@ -2,7 +2,7 @@
   "acceptable_validation_statuses": [
     "PASS"
   ],
-  "require_approved_thumbnail_image": true,
+  "require_approved_thumbnail_image": false,
   "required_accept_criteria": [
     "title_and_thumbnail_read_as_one_unit",
     "single_clear_promise",

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from packaging_engine import thumbnail_upload
 from production_engine import publish_review as gate
 from production_engine import youtube_upload as uploader
 
@@ -334,8 +335,8 @@ class UploadTests(PublishTests):
         self.assertFalse(published["thumbnail_set"])
 
 
-class ShortFramePublishTests(unittest.TestCase):
-    """D-190: a Short's thumbnail is a frame of the video; nothing to upload."""
+class UploadedThumbnailPublishTests(unittest.TestCase):
+    """D-191: the thumbnail is made from its prompt and uploaded; publishing uses it."""
 
     item = PublishTests.item
     fake_http = UploadTests.fake_http
@@ -350,25 +351,42 @@ class ShortFramePublishTests(unittest.TestCase):
         self.requests = []
         self.bodies = []
         self.approval["format"] = "short"
-        (self.root / "bundles" / "c1.final_package.json").write_text(json.dumps({"packages": {"short": {
+        self.package = {
+            "video_id": "c1:short", "format": "short",
             "title_text": "How Smooth Plane Tires Keep You Safe", "viewer_promise": "See why.",
-            "thumbnail_source": "VIDEO_FRAME", "thumbnail_image": None,
-        }}}))
+            "thumbnail_source": "UPLOADED_FROM_PROMPT", "thumbnail_image": None,
+        }
+        (self.root / "bundles" / "c1.final_package.json").write_text(json.dumps({"packages": {"short": self.package}}))
+        uploads = self.root / "uploads"
+        item = patch.object(thumbnail_upload, "UPLOAD_DIR", uploads)
+        item.start()
+        self.addCleanup(item.stop)
 
-    def test_a_short_needs_no_thumbnail_file_to_be_approved(self):
-        item = self.item()
-        self.assertEqual(item["problems"], [])
-        snap = gate.apply_action(concept_id="c1", format="short", decision="APPROVE_PUBLISH", metadata={})
-        self.assertEqual(snap["items"][0]["status"], "APPROVED_FOR_UPLOAD")
+    def upload_thumbnail(self, title=None):
+        package = {**self.package, "title_text": title or self.package["title_text"]}
+        with patch.object(thumbnail_upload, "items", return_value=[{"video_id": "c1:short", "format": "short", "prompt_sha256": "p"}]), \
+                patch.object(thumbnail_upload, "_packages", return_value=[package]):
+            return thumbnail_upload.upload(video_id="c1:short", data=self.thumb.read_bytes(), made_with="ChatGPT", reviewer="me")
 
-    def test_the_upload_sets_no_thumbnail_for_a_short(self):
+    def test_without_an_uploaded_thumbnail_publishing_says_what_to_do(self):
+        problems = self.item()["problems"]
+        self.assertTrue(any("upload it under Packaging" in problem for problem in problems))
+        with self.assertRaisesRegex(ValueError, "Cannot approve"):
+            gate.apply_action(concept_id="c1", format="short", decision="APPROVE_PUBLISH", metadata={})
+
+    def test_the_uploaded_thumbnail_is_approved_and_sent_to_youtube(self):
+        record = self.upload_thumbnail()
+        self.assertEqual(self.item()["problems"], [])
         gate.apply_action(concept_id="c1", format="short", decision="APPROVE_PUBLISH", metadata={})
         snap = uploader.upload(concept_id="c1", format="short", http=self.fake_http())
-        self.assertFalse([u for m, u, r in self.requests if "thumbnails/set" in u])
-        published = snap["items"][0]["published"]
-        self.assertEqual((published["youtube_video_id"], published["thumbnail_source"]), ("VIDEOid_001", "VIDEO_FRAME"))
-        self.assertFalse(published["thumbnail_set"])
+        sent = [r for m, u, r in self.requests if "thumbnails/set" in u]
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].data, Path(record["image"]).read_bytes())
+        self.assertTrue(snap["items"][0]["published"]["thumbnail_set"])
 
+    def test_a_thumbnail_made_for_an_earlier_title_no_longer_counts(self):
+        self.upload_thumbnail(title="An Older Title")
+        self.assertTrue(any("upload it under Packaging" in problem for problem in self.item()["problems"]))
 
 if __name__ == "__main__":
     unittest.main()

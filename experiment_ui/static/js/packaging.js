@@ -11,6 +11,7 @@
   // decision; title direction is decided by the gate policy when its checks
   // pass and shown only while it holds something; the rest is reference.
   const TABS = [
+    ["upload", "Thumbnail image", "yours"],
     ["final", "Final package", "yours"],
     ["titles", "Title Direction", "policy"],
     ["angles", "Brief & angles", "reference"],
@@ -35,6 +36,64 @@
   };
 
   let activeTab = "final";
+  const madeWith = Object.create(null);  // video_id -> tool name typed
+
+  // Thumbnails are made by you from a generated prompt and uploaded (D-191).
+  function uploads() { return (status().thumbnail_uploads || []).filter(Boolean); }
+  function uploadsPending() { return uploads().filter(function (row) { return !row.uploaded; }); }
+
+  function uploadHtml() {
+    const rows = uploads();
+    if (!rows.length) {
+      return "<h2>No packaged video yet</h2><p class=\"muted\">Each video gets a thumbnail prompt once its package is accepted.</p>";
+    }
+    return "<h2>Thumbnail image</h2><p class=\"muted\">Copy a video's prompt into ChatGPT, Gemini or any image tool, " +
+      "make the thumbnail there, then upload the finished image. Production does not wait for it; publishing does.</p>" +
+      rows.map(function (row) {
+        const fmt = row.format === "short" ? "Short" : "Long-form";
+        const state = row.uploaded
+          ? '<figure class="pk-thumb-upload"><img src="' + esc(row.image_url) + '" alt="Uploaded thumbnail" loading="lazy">' +
+            "<figcaption>Uploaded · made with " + esc((row.upload || {}).made_with || "") +
+            ((row.upload || {}).width ? " · " + esc(row.upload.width) + "×" + esc(row.upload.height) : "") + "</figcaption></figure>"
+          : '<p class="muted"><strong>' + (row.replace_needed ? "The title or thumbnail text changed: upload a new one." : "Not uploaded yet.") + "</strong></p>";
+        return '<section class="concept-detail-card pk-upload-card">' +
+          "<h3>" + esc(row.title || row.video_id) + ' <span class="muted">· ' + esc(fmt) + "</span></h3>" + state +
+          '<label>Prompt <textarea readonly rows="12" data-pk-prompt="' + esc(row.video_id) + '">' + esc(row.prompt) + "</textarea></label>" +
+          '<p><button type="button" class="ghost compact" data-pk-copy="' + esc(row.video_id) + '">Copy prompt</button></p>' +
+          '<form data-pk-upload="' + esc(row.video_id) + '">' +
+          '<label>Made with <input name="made_with" placeholder="ChatGPT, Gemini…" value="' + esc(madeWith[row.video_id] || "") + '"></label> ' +
+          '<label>Image <input type="file" name="image" accept="image/png,image/jpeg,image/webp" required></label> ' +
+          '<button type="submit">' + (row.uploaded ? "Replace thumbnail" : "Upload thumbnail") + "</button></form></section>";
+      }).join("");
+  }
+
+  // Re-encode in the browser so YouTube's 2 MB limit is met without extra tools.
+  function encodeThumbnail(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onerror = function () { reject(new Error("Could not read the image file")); };
+      reader.onload = function () {
+        const img = new Image();
+        img.onerror = function () { reject(new Error("That file is not an image this browser can read")); };
+        img.onload = function () {
+          const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          let quality = 0.92;
+          let data = canvas.toDataURL("image/jpeg", quality);
+          while (data.length * 0.75 > 1900000 && quality > 0.5) {
+            quality -= 0.1;
+            data = canvas.toDataURL("image/jpeg", quality);
+          }
+          resolve(data.slice(data.indexOf(",") + 1));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
   const pendingFocus = Object.create(null);
   const workspaces = Object.create(null);
   // Selections made in the evidence panels, kept per item so repaints keep them.
@@ -459,6 +518,7 @@
   const REVIEW_TABS = { titles: titleConfig, final: finalConfig };
 
   function pendingCount(tab) {
+    if (tab === "upload") return uploadsPending().length;
     const config = REVIEW_TABS[tab];
     return config ? config.items().filter(config.pending).length : 0;
   }
@@ -518,7 +578,7 @@
     const on = tab[0] === activeTab;
     const count = pendingCount(tab[0]);
     return '<button type="button" role="tab" class="pw-tab' + (on ? " active" : "") + '" aria-selected="' + on +
-      '" data-pk-tab="' + tab[0] + '">' + esc(tab[1]) + (REVIEW_TABS[tab[0]] ? ' <span class="tab-count">' + count + "</span>" : "") + "</button>";
+      '" data-pk-tab="' + tab[0] + '">' + esc(tab[1]) + (REVIEW_TABS[tab[0]] || tab[0] === "upload" ? ' <span class="tab-count">' + count + "</span>" : "") + "</button>";
   }
 
   function renderTabs() {
@@ -558,6 +618,16 @@
     }
     const root = document.getElementById("packaging-" + activeTab);
     if (!root) return;
+    if (activeTab === "upload") {
+      const uploadPage = uploadHtml();
+      if (painted.upload === uploadPage) return;
+      // Keep a file the operator already picked: do not repaint over an open form.
+      if (root.querySelector && root.querySelector("[data-pk-upload] input[type=file]") &&
+          Array.prototype.some.call(root.querySelectorAll("[data-pk-upload] input[type=file]"), function (input) { return input.files && input.files.length; })) return;
+      painted.upload = uploadPage;
+      root.innerHTML = uploadPage;
+      return;
+    }
     const html = activeTab === "angles" ? anglesHtml() : activeTab === "thumbnails" ? thumbnailsHtml() : pairingHtml();
     if (painted[activeTab] === html) return;
     painted[activeTab] = html;
@@ -576,11 +646,56 @@
   }
 
   document.addEventListener("click", function (event) {
+    const copy = event.target.closest && event.target.closest("[data-pk-copy]");
+    if (copy) {
+      const box = document.querySelector('[data-pk-prompt="' + CSS.escape(copy.dataset.pkCopy) + '"]');
+      const value = box ? box.value : "";
+      const done = function () { yp().showToast("Prompt copied", false); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(done, function () { box.select(); document.execCommand("copy"); done(); });
+      } else if (box) {
+        box.select(); document.execCommand("copy"); done();
+      }
+      return;
+    }
     const tab = event.target.closest && event.target.closest("[data-pk-tab]");
     if (!tab) return;
     activeTab = tab.dataset.pkTab;
     history.replaceState({}, "", "/packaging#" + activeTab);
     render();
+  });
+
+  document.addEventListener("submit", async function (event) {
+    const form = event.target.closest && event.target.closest("[data-pk-upload]");
+    if (!form) return;
+    event.preventDefault();
+    const videoId = form.dataset.pkUpload;
+    const file = form.elements.image.files[0];
+    if (!file) return;
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    button.textContent = "Uploading…";
+    try {
+      const encoded = await encodeThumbnail(file);
+      await yp().api("/api/thumbnail-upload", {
+        method: "POST",
+        body: JSON.stringify({ video_id: videoId, image_base64: encoded, made_with: form.elements.made_with.value })
+      });
+      form.reset();
+      painted.upload = "";
+      yp().showToast("Thumbnail uploaded", false);
+      await yp().refresh();
+    } catch (error) {
+      yp().showToast(error.message, true);
+      button.disabled = false;
+      button.textContent = "Upload thumbnail";
+    }
+  });
+
+  document.addEventListener("input", function (event) {
+    const target = event.target;
+    const form = target.closest && target.closest("[data-pk-upload]");
+    if (form && target.name === "made_with") madeWith[form.dataset.pkUpload] = target.value;
   });
 
   // Selections live in module state so repaints and polls keep them.
@@ -624,7 +739,12 @@
 
   // Pending packaging decisions for the one Review Queue (D-164).
   function queueItems() {
-    const rows = [];
+    const rows = uploadsPending().map(function (row) {
+      return {
+        route: "/packaging", subroute: "upload", gate: "Thumbnail image", group: "yours",
+        title: String(row.title || row.video_id), concept_id: row.concept_id || ""
+      };
+    });
     TABS.forEach(function (tab) {
       const config = REVIEW_TABS[tab[0]];
       if (!config) return;

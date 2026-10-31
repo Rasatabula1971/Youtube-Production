@@ -195,8 +195,9 @@ class ResearchAutoTests(unittest.TestCase):
 
 # The owner decisions in the accepted contract (claude/Two_Lanes_Contract.md).
 CONTRACT = {
-    "short": {"topic", "script", "finished_video"},
-    "long_form": {"topic", "concept", "script", "package", "finished_video"},
+    # The owner added the thumbnail he makes from its prompt and uploads (D-191).
+    "short": {"topic", "script", "thumbnail_upload", "finished_video"},
+    "long_form": {"topic", "concept", "script", "package", "thumbnail_upload", "finished_video"},
 }
 AS_CONTRACT = {"final_packaging": "package", "final_export": "finished_video"}
 # Stops still on the owner until the later PRs of the contract land.
@@ -311,6 +312,22 @@ class ShortPackagingPathTests(unittest.TestCase):
             patch.object(server, "final_packaging_gate_state", return_value=accepted),
         ):
             self.assertFalse(server.final_packaging_overview(package_validation_ready=True)["ready"])
+
+
+class ThumbnailUploadStateTests(unittest.TestCase):
+    def test_each_packaged_video_shows_its_prompt_and_upload(self):
+        from unittest.mock import patch
+
+        from experiment_ui import server
+
+        rows = [
+            {"video_id": "c1:short", "uploaded": True, "upload": {"image_sha256": "abcdef1234567890"}, "prompt": "P"},
+            {"video_id": "c2:long_form", "uploaded": False, "upload": None, "prompt": "Q"},
+        ]
+        with patch.object(server.thumbnail_upload, "items", return_value=rows):
+            state = server.thumbnail_uploads_state()
+        self.assertIn("video_id=c1%3Ashort", state[0]["image_url"])
+        self.assertIsNone(state[1]["image_url"])
 
 
 if __name__ == "__main__":

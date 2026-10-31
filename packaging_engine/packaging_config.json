@@ -103,8 +103,8 @@
     ]
   },
   "short_lane_package": {
-    "note": "Two Lanes (D-190): a Short is packaged from its brief, the title chosen at Title Direction plus a frame of the finished video as thumbnail. The angle, thumbnail-concept, 25-pair matrix, thumbnail-image and Final Packaging steps run for long-form only. Set enabled to false to send Shorts through every step again.",
+    "note": "Two Lanes (D-190, D-191): a Short is packaged from its brief, the title chosen at Title Direction; its thumbnail is made by the owner from the generated prompt and uploaded. The angle, thumbnail-concept, 25-pair matrix, thumbnail-image and Final Packaging steps run for long-form only. Set enabled to false to send Shorts through every step again.",
     "enabled": true,
-    "thumbnail": "VIDEO_FRAME"
+    "thumbnail": "UPLOADED_FROM_PROMPT"
   }
 }

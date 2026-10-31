@@ -15,8 +15,8 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
-VIDEO_FRAME = "VIDEO_FRAME"
-CONTRACT = "SHORT_LANE_TITLE_AND_VIDEO_FRAME"
+UPLOADED = "UPLOADED_FROM_PROMPT"
+CONTRACT = "SHORT_LANE_TITLE_AND_UPLOADED_THUMBNAIL"
 
 
 def settings() -> dict[str, Any]:

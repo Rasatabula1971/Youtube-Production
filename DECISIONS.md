@@ -6392,3 +6392,46 @@ Lanes contract (D-188) removes these steps for Shorts.
 - The current Aviation Tires Short goes from title to Format planning on the
   next Continue. Its earlier angle, thumbnail and pairing files become stale
   and are not used.
+
+## D-191 — The owner makes each thumbnail from a generated prompt and uploads it
+
+**Context.** D-190 gave Shorts a frame of the video as thumbnail. Long-form
+waited on a rendered template image that needed a subject image and an image
+generator. The owner's decision, 31 Oct 2026: for Shorts and long-form alike,
+the pipeline writes a detailed prompt; he makes the thumbnail in an image tool
+of his choice (ChatGPT, Gemini) and uploads the finished image.
+
+**Decision.**
+- `packaging_engine/thumbnail_upload.py` writes one prompt per packaged video
+  from the accepted package and its Packaging Brief. It names:
+  - the canvas (Short 9:16, 1080 x 1920; long-form 16:9, 1280 x 720);
+  - the title it sits beside;
+  - the viewer's question, the main subject and the surprise;
+  - the mood, from the title angle;
+  - the text: the accepted thumbnail text, exactly, or 2 to 4 words that add
+    to the title;
+  - the only facts it may show (the approved claims);
+  - what to keep clear and what to leave out.
+
+  The prompt has no timestamp.
+- **Packaging → Thumbnail image** has, for each video, the prompt, Copy
+  prompt, and Upload. The browser re-encodes the image as a JPEG within
+  YouTube's 2 MB limit. The upload is stored with the title and thumbnail
+  text it was made for; if either changes, it no longer counts. Uploads are
+  not locked while a run is going. Missing uploads appear in the Review Queue.
+- Production does not wait for the thumbnail; publishing does. A publish
+  draft uses the package's image if it has one, otherwise the upload. With
+  neither, it says what to do. The YouTube upload sets the thumbnail as
+  before.
+- **Short lane:** `thumbnail_source: UPLOADED_FROM_PROMPT` replaces
+  VIDEO_FRAME, and the frame branches in publishing are removed.
+- **Long-form:** `require_approved_thumbnail_image` is now false, so a package
+  can be accepted at the Final Package gate without a rendered image. The
+  template renderer and Thumbnail Gate stay available but are not required.
+- `owner_stops` lists `thumbnail_upload` in both lanes.
+
+**Consequences.**
+- The Aviation Tires Short's package changes (its thumbnail source), so its
+  format plan is redone once on the next Continue.
+- The thumbnail is not checked by a validator; its facts are bounded only by
+  the prompt. The owner sees it before he uploads.
