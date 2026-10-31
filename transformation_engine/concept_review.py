@@ -36,6 +36,7 @@ STATE_FILE = OUTPUT_DIR / "concept_gate_ui_state.json"
 IDEA_BANK_DIR = OUTPUT_DIR.parent.parent / ".idea_bank"
 SAVED_IDEAS_FILE = IDEA_BANK_DIR / "saved_ideas.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DECIDED_BY_ENV = "YOUTUBE_DECIDED_BY"
 DEFAULT_REVIEWER = "local-operator"
 
 
@@ -269,6 +270,10 @@ def prepare_state() -> dict[str, Any]:
             if str(concept_id) in available_ids
         ) if isinstance(previous, dict) else [],
     }
+    if isinstance(previous, dict) and previous.get("lane_reserve"):
+        state["lane_reserve"] = [
+            concept_id for concept_id in previous["lane_reserve"] if str(concept_id) in available_ids
+        ]
     write_json(STATE_FILE, state)
     return snapshot()
 
@@ -295,6 +300,7 @@ def public_item(
         "decision": decision.get("decision", "PENDING"),
         "criteria_decisions": decision.get("criteria", {}),
         "note": decision.get("note", ""),
+        "decided_by": decision.get("decided_by") or ("HUMAN" if decision else None),
         "chosen_format": decision.get("format"),
         "idea_id": idea_id,
         "idea_saved": idea_id in (saved_ids or set()),
@@ -375,6 +381,8 @@ def snapshot() -> dict[str, Any]:
         "criteria": request.get("criteria", {}),
         "concepts": items,
         "override_concepts": override_items,
+        # Short lane: the on-topic concepts not picked, next first (D-188).
+        "lane_reserve": list(state.get("lane_reserve") or []),
         "saved_idea_count": len(saved_ideas),
         "saved_ideas": saved_ideas,
         # Pool size against the 15–25 target, and any finalist shortfall (D-130).
@@ -525,6 +533,10 @@ def apply_action(
     }
     if chosen_format:
         saved["format"] = chosen_format
+    decided_by = str(os.getenv(DECIDED_BY_ENV) or "").strip().upper()
+    if decided_by and decided_by != "HUMAN":
+        # Continue Automatically decided it under the gate policy (D-188).
+        saved["decided_by"] = decided_by
     state.setdefault("decisions", {})[concept_id] = saved
 
     if value == "REWORK":
@@ -546,6 +558,56 @@ def apply_action(
     state["status"] = "AWAITING_HUMAN_DECISION"
     finalize_if_complete(state, request)
     return snapshot()
+
+
+def record_lane_reserve(concept_ids: list[str]) -> None:
+    """Remember the on-topic concepts the Short lane did not pick, next first (D-188)."""
+    state = current_state()
+    if not state:
+        raise ValueError("Concept Gate is not prepared or is stale")
+    state["lane_reserve"] = [str(concept_id) for concept_id in concept_ids]
+    write_json(STATE_FILE, state)
+
+
+def promote_reserve(*, exclude: set[str], note: str) -> str | None:
+    """Accept the next reserve concept after an automatic pick was too thin (D-188).
+
+    The Short lane picked one concept and kept the other on-topic ones in
+    reserve. When research drops the pick, the next one is accepted here, under
+    the gate policy, and the research handoff is rewritten so research starts
+    on it. Returns the concept accepted, or None when the reserve is used up.
+    """
+    state = current_state()
+    if not state or state.get("status") != "COMPLETE":
+        raise ValueError("Concept Gate is not complete; nothing to promote")
+    candidates = load_json(DEFAULT_CANDIDATES)
+    request = build_review_request(candidates, load_config())
+    items = {str(item.get("concept_id")): item for item in request.get("items", [])}
+    reserve = [str(value) for value in state.get("lane_reserve") or []]
+    decisions = state.setdefault("decisions", {})
+    chosen = None
+    while reserve:
+        concept_id = reserve.pop(0)
+        current = decisions.get(concept_id) or {}
+        if concept_id in exclude or concept_id not in items or current.get("decision") == "ACCEPT":
+            continue
+        chosen = concept_id
+        break
+    state["lane_reserve"] = reserve
+    if chosen is None:
+        write_json(STATE_FILE, state)
+        return None
+    item = items[chosen]
+    decisions[chosen] = {
+        "concept_id": chosen,
+        "decision": "ACCEPT",
+        "criteria": {criterion: True for criterion in item.get("required_accept_criteria", [])},
+        "note": str(note or "").strip(),
+        "concept_fingerprint": concept_fingerprint(item),
+        "decided_by": str(os.getenv(DECIDED_BY_ENV) or "GATE_POLICY").strip().upper(),
+    }
+    finalize_if_complete(state, request)
+    return chosen
 
 
 def main() -> None:

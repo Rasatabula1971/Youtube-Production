@@ -58,7 +58,8 @@ class GateAutopilotTests(unittest.TestCase):
 
     def test_unlisted_and_unknown_states_are_left_alone(self):
         control = Recorder()
-        for state in ("HUMAN_SCRIPT_GATE", "HUMAN_CONCEPT_GATE", "HUMAN_VISUAL_RIGHTS_GATE",
+        # The concept gate has a lane policy now (D-188); test_two_lanes covers it.
+        for state in ("HUMAN_SCRIPT_GATE", "HUMAN_VISUAL_RIGHTS_GATE",
                       "HUMAN_FINAL_PACKAGING_GATE", "HUMAN_FINAL_EXPORT_GATE", "HUMAN_PUBLISH_GATE", None):
             self.assertEqual(autopilot.decide(state, control, AUTO_ALL)["decided"], 0)
         self.assertEqual(control.calls, [])
@@ -219,7 +220,9 @@ class GateAutopilotTests(unittest.TestCase):
         policy = autopilot.load_policy()
         self.assertEqual(set(policy["gates"]), set(autopilot.RUNNERS))
         human = {gate for gate, mode in policy["gates"].items() if mode == "HUMAN"}
-        self.assertEqual(human, {"narration_preview", "rough_cut"})
+        # The concept is the owner's in the long-form lane only (D-188).
+        self.assertEqual(human, {"concept", "narration_preview", "rough_cut"})
+        self.assertEqual(autopilot.gate_mode("concept", policy, "short"), "AUTO_IF_CLEAN")
         self.assertTrue(all(mode in {"AUTO_IF_CLEAN", "HUMAN"} for mode in policy["gates"].values()))
 
     def test_a_human_gate_is_never_decided_by_the_policy(self):

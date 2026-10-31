@@ -198,7 +198,8 @@ class OpportunityGateTests(unittest.TestCase):
                 rows = json.loads(approved.read_text(encoding="utf-8"))
                 self.assertEqual([row["video_id"] for row in rows], ["v1", "v2"])
 
-    def test_approval_requires_every_selected_example_to_be_kept(self):
+    def test_approving_the_topic_keeps_the_examples_still_pending(self):
+        """Two Lanes (D-188): one decision for the topic, not one per example."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             patches = self.patched_paths(root)
@@ -212,26 +213,20 @@ class OpportunityGateTests(unittest.TestCase):
                     opportunity["niche"],
                     "automotive_racing",
                 )
-                self.assertFalse(opportunity["can_approve"])
-                with self.assertRaisesRegex(
-                    ValueError, "Review every selected example"
-                ):
-                    gate.apply_gate_action(
-                        action="APPROVE_TOPIC",
-                        opportunity_key=key,
-                    )
-
-                for video_id in ("v1", "v2"):
-                    gate.apply_gate_action(
-                        action="KEEP_EXAMPLE",
-                        opportunity_key=key,
-                        video_id=video_id,
-                    )
+                self.assertTrue(opportunity["can_approve"])
+                gate.apply_gate_action(
+                    action="KEEP_EXAMPLE",
+                    opportunity_key=key,
+                    video_id="v1",
+                )
 
                 result = gate.apply_gate_action(
                     action="APPROVE_TOPIC",
                     opportunity_key=key,
                 )
+                state = json.loads(gate.DECISION_FILE.read_text(encoding="utf-8"))
+                decisions = state["opportunities"][key]["video_decisions"]
+                self.assertEqual(decisions, {"v1": "KEEP", "v2": "KEEP"})
 
                 self.assertTrue(result["ready_for_experiment_02"])
                 self.assertTrue(approved.exists())

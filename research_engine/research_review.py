@@ -21,6 +21,7 @@ from research_engine.evidence_policy import (
 from research_engine.research_gate import (
     DEFAULT_DRAFTS_DIR,
     HUMAN_REWORK_ORIGIN,
+    LEFT_OUT_DECIDER,
     POLICY_DECIDER,
     REVIEWED_DIR,
     REVIEW_REQUESTS_DIR,
@@ -41,8 +42,10 @@ from core.hashing import sha256_file
 OUTPUT_DIR = DEFAULT_DRAFTS_DIR.parent
 STATE_FILE = OUTPUT_DIR / "research_gate_ui_state.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
+DECIDED_BY_ENV = "YOUTUBE_DECIDED_BY"
 DEFAULT_REVIEWER = "local-operator"
 POLICY_REVIEWER = "evidence-policy"
+LEFT_OUT_PREFIX = "Left out automatically, unconfirmed: "
 
 
 def history_file() -> Path:
@@ -167,7 +170,12 @@ def _apply_evidence_policy(
         for item in bundle["request"].get("items", []):
             key = key_for(concept_id, str(item.get("claim_id") or ""))
             existing = decisions.get(key)
-            if isinstance(existing, dict) and existing.get("decided_by") != POLICY_DECIDER:
+            left_out = isinstance(existing, dict) and existing.get("decided_by") == LEFT_OUT_DECIDER
+            if (
+                isinstance(existing, dict)
+                and existing.get("decided_by") != POLICY_DECIDER
+                and not left_out
+            ):
                 continue
             if held and key in held:
                 # A person sent this claim back; it is theirs to decide again.
@@ -178,6 +186,9 @@ def _apply_evidence_policy(
                 evaluate_claim(item, settings) if settings.get("enabled", True) else None
             )
             if evaluation is None or evaluation["classification"] != AUTO_CLEARED:
+                if left_out and isinstance(existing, dict):
+                    # Still unconfirmed: it stays left out (D-188).
+                    decisions[key] = existing
                 continue
             decisions[key] = {
                 "claim_id": str(item.get("claim_id") or ""),
@@ -1055,11 +1066,14 @@ def drop_concept(*, concept_id: str, note: str | None) -> dict[str, Any]:
     if bundle is None:
         raise ValueError("Unknown concept_id")
     reviewer = os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER)
+    # The gate policy drops a too-thin concept itself (D-188); say who did.
+    decided_by = os.getenv(DECIDED_BY_ENV) or "HUMAN"
     dropped = research_plans.dropped_concepts()
     dropped[concept_id] = {
         "working_title": (bundle["request"].get("concept") or {}).get("working_title"),
         "note": clean_note,
         "reviewer": reviewer,
+        "decided_by": decided_by,
         "dropped_at": datetime.now(timezone.utc).isoformat(),
     }
     write_json(research_plans.DROPPED_FILE, {"artifact": "dropped_concepts", "concepts": dropped})
@@ -1067,7 +1081,7 @@ def drop_concept(*, concept_id: str, note: str | None) -> dict[str, Any]:
         {
             "concept_id": concept_id,
             "decision": "DROP_CONCEPT",
-            "decided_by": "HUMAN",
+            "decided_by": decided_by,
             "reviewer": reviewer,
             "note": clean_note,
         }
@@ -1084,6 +1098,148 @@ def drop_concept(*, concept_id: str, note: str | None) -> dict[str, Any]:
         if path.exists():
             path.unlink()
     return prepare_state()
+
+
+def _left_out_note(item: dict[str, Any], settings: dict[str, Any]) -> str:
+    evaluation = evaluate_claim(item, settings) if settings.get("enabled", True) else None
+    reasons = [str(reason) for reason in (evaluation or {}).get("reasons", []) if str(reason).strip()]
+    detail = " ".join(reasons) if reasons else "the evidence policy could not clear it."
+    return (LEFT_OUT_PREFIX + detail + " It is not used in the script.")[:600]
+
+
+def leave_out_unconfirmed() -> dict[str, Any]:
+    """Leave out every claim the evidence policy could not clear (Two Lanes, D-188).
+
+    Claims the policy clears are already accepted. The rest are rejected with
+    ``decided_by: GATE_POLICY`` so the owner does not decide them one by one;
+    the script screen lists them as "left out, unconfirmed", and the owner can
+    still accept one from the Research Gate. A question left with no accepted
+    claim is waived, so the script says nothing about it; the title's promise
+    is never waived (D-182). Returns what was left out and waived, and each
+    concept's research status afterwards.
+    """
+    state = current_state()
+    if not state:
+        raise ValueError("Research Gate is not prepared or is stale")
+    requests = build_requests()
+    config = load_config()
+    settings = policy_settings(config)
+    decisions = state.setdefault("decisions", {})
+    reviewer = os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER)
+    left_out: list[dict[str, Any]] = []
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        for item in bundle["request"].get("items", []):
+            claim_id = str(item.get("claim_id") or "")
+            key = key_for(concept_id, claim_id)
+            if key in decisions:
+                continue
+            note = _left_out_note(item, settings)
+            decisions[key] = {
+                "claim_id": claim_id,
+                "decision": "REJECT",
+                "criteria": {criterion: False for criterion in item.get("required_accept_criteria", [])},
+                "note": note,
+                "claim_fingerprint": claim_fingerprint(item),
+                "decided_by": LEFT_OUT_DECIDER,
+            }
+            record_history(
+                {
+                    "concept_id": concept_id,
+                    "claim_id": claim_id,
+                    "decision": "REJECT",
+                    "decided_by": LEFT_OUT_DECIDER,
+                    "reviewer": reviewer,
+                    "note": note,
+                    "claim_fingerprint": claim_fingerprint(item),
+                }
+            )
+            left_out.append({"concept_id": concept_id, "claim_id": claim_id, "statement": item.get("statement")})
+
+    waived: list[dict[str, Any]] = []
+    waivers = state.setdefault("waived_questions", {})
+    holds = state.get("unwaived_questions") or {}
+    now = datetime.now(timezone.utc).isoformat()
+    for bundle in requests:
+        concept_id = bundle["concept_id"]
+        request = bundle["request"]
+        answered = {
+            str(question_id)
+            for item in request.get("items", [])
+            if (decisions.get(key_for(concept_id, str(item.get("claim_id") or ""))) or {}).get("decision") == "ACCEPT"
+            for question_id in item.get("question_ids", [])
+        }
+        saved_waivers = waivers.get(concept_id)
+        concept_waivers: dict[str, Any] = saved_waivers if isinstance(saved_waivers, dict) else {}
+        saved_holds = holds.get(concept_id) if isinstance(holds, dict) else None
+        concept_holds: dict[str, Any] = saved_holds if isinstance(saved_holds, dict) else {}
+        promise_ids = _title_promise_ids(request)
+        for question_id, text in _original_questions(request).items():
+            if question_id in answered or question_id in promise_ids:
+                continue
+            if question_id in concept_waivers or question_id in concept_holds:
+                continue
+            note = (
+                "Waived automatically: no claim answering this question could be "
+                "confirmed, so the script says nothing about it."
+            )
+            concept_waivers[question_id] = {
+                "question": text,
+                "note": note,
+                "reviewer": reviewer,
+                "decided_by": LEFT_OUT_DECIDER,
+                "waived_at": now,
+            }
+            waivers[concept_id] = concept_waivers
+            record_history(
+                {
+                    "concept_id": concept_id,
+                    "question_id": question_id,
+                    "question": text,
+                    "decision": "WAIVE_QUESTION",
+                    "decided_by": LEFT_OUT_DECIDER,
+                    "reviewer": reviewer,
+                    "note": note,
+                }
+            )
+            waived.append({"concept_id": concept_id, "question_id": question_id, "question": text})
+
+    state["status"] = "AWAITING_HUMAN_DECISION"
+    finalize_if_complete(state, requests)
+    summary = load_json(SUMMARY_FILE) if SUMMARY_FILE.exists() else {}
+    coverage = {row["concept_id"]: row for row in question_coverage(requests, state)}
+    packages = []
+    for item in summary.get("packages", []) if isinstance(summary, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        row = coverage.get(str(item.get("concept_id")), {})
+        packages.append(
+            {
+                **item,
+                "working_title": row.get("working_title"),
+                "evidence_shortfalls": row.get("evidence_shortfalls", []),
+            }
+        )
+    return {"left_out": left_out, "waived": waived, "packages": packages}
+
+
+def left_out_claims(concept_id: str) -> list[dict[str, Any]]:
+    """The claims the gate policy left out of a concept's script, from its reviewed research."""
+    path = REVIEWED_DIR / f"{safe_slug(concept_id)}.research_gate_reviewed.json"
+    payload = load_json(path) if path.exists() else {}
+    rows = []
+    for claim in payload.get("rejected", []) if isinstance(payload, dict) else []:
+        gate = claim.get("research_gate") if isinstance(claim, dict) else None
+        if not isinstance(gate, dict) or gate.get("decided_by") != LEFT_OUT_DECIDER:
+            continue
+        rows.append(
+            {
+                "claim_id": claim.get("claim_id"),
+                "statement": claim.get("statement"),
+                "reason": str(gate.get("note") or "").removeprefix(LEFT_OUT_PREFIX),
+            }
+        )
+    return rows
 
 
 def finalize_if_complete(

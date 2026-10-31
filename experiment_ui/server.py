@@ -164,6 +164,11 @@ from transformation_engine.concept_review import (
 from transformation_engine.concept_review import (
     snapshot as concept_gate_snapshot,
 )
+# Used by gate_autopilot through this module, the control it is handed (D-188).
+from transformation_engine.concept_review import (  # noqa: F401
+    promote_reserve as promote_concept_reserve,
+    record_lane_reserve as record_concept_lane_reserve,
+)
 from transformation_engine.transformation_engine import (
     validation_contract_sha256 as transformation_validation_contract_sha256,
 )
@@ -237,6 +242,8 @@ from research_engine.research_review import (
     apply_question_waiver as apply_research_question_waiver,
     apply_action as apply_research_gate_action,
     drop_concept as drop_research_concept,
+    leave_out_unconfirmed as leave_out_unconfirmed_research,  # noqa: F401 (gate_autopilot)
+    left_out_claims as research_left_out_claims,
 )
 from research_engine.research_review import (
     snapshot as research_gate_snapshot,
@@ -2535,6 +2542,14 @@ def drop_concept_everywhere(*, concept_id: str, note: str) -> dict[str, Any]:
     return {**payload, "dropped_concept_id": concept_id, "leftover_script_requests_removed": removed}
 
 
+def with_left_out_claims(payload: dict[str, Any]) -> dict[str, Any]:
+    """Name, on each script, the claims research left out as unconfirmed (D-188)."""
+    for script in payload.get("scripts") or []:
+        if isinstance(script, dict):
+            script["left_out_claims"] = research_left_out_claims(str(script.get("concept_id") or ""))
+    return payload
+
+
 def research_artifact_state() -> dict[str, Any]:
     upstream = transformation_artifact_state()
     research_handoff_hash = (
@@ -4323,6 +4338,7 @@ def productions_snapshot(
             for action_id, definition in ACTION_DEFS.items()
         },
         dropped_concept_ids=set(dropped_research_concepts()),
+        dropped_records=dropped_research_concepts(),
     )
     updated = production_updated_at(
         [p["concept_id"] for p in snapshot["productions"]]
@@ -9132,7 +9148,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(research_gate_snapshot())
             return
         if route == "/api/script-gate":
-            self._send_json(script_gate_snapshot())
+            self._send_json(with_left_out_claims(script_gate_snapshot()))
             return
         if route == "/api/script-section-review":
             query = parse_qs(urlparse(self.path).query)
@@ -9658,14 +9674,14 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if route == "/api/script-gate":
-                payload = apply_script_gate_action(
+                payload = with_left_out_claims(apply_script_gate_action(
                     concept_id=str(body.get("concept_id", "")),
                     format=str(body.get("format", "")),
                     decision=str(body.get("decision", "")),
                     criteria=body.get("criteria", {}),
                     note=(str(body["note"]) if body.get("note") is not None else None),
                     accept_open_sections=body.get("accept_open_sections") is True,
-                )
+                ))
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
