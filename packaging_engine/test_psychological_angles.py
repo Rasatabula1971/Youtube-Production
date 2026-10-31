@@ -186,6 +186,10 @@ class PsychologicalAnglesTests(unittest.TestCase):
             "short-curiosity",
         )
         self.assertEqual(request["angle_count"], 5)
+        # D-184: the prompt names every word the validator refuses.
+        instructions = " ".join(request["instructions"])
+        for word in module.RISKY_CLAIM_WORDS:
+            self.assertIn(word, instructions)
 
 
 if __name__ == "__main__":
