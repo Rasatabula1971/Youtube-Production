@@ -60,6 +60,15 @@ DIRECT_GEMINI_REFUSED_REASONS = {
     ),
 }
 DIRECT_GEMINI_BILLING_UNCONFIRMED = "DIRECT_GEMINI_BILLING_UNCONFIRMED"
+DIRECT_GEMINI_FIRST = "DIRECT_GEMINI_FIRST"
+# What call_direct_gemini_backup reports as "the FAIR result" when Gemini is
+# asked before FAIR: nothing ran yet and nothing was paid.
+_GEMINI_FIRST_NOT_RUN = {
+    "status": "NOT_RUN",
+    "reason_code": DIRECT_GEMINI_FIRST,
+    "paid_inference_executed": False,
+    "attempts": [],
+}
 DIRECT_GEMINI_NOT_CONFIGURED = "DIRECT_GEMINI_NOT_CONFIGURED"
 
 
@@ -255,6 +264,11 @@ def bridge_payload(
     if action == "solve":
         payload["prompt"] = prompt
         payload["expected_schema"] = schema
+        # Read by call_fair_bridge and never sent to FAIR (D-187).
+        runner = config.get("runner")
+        payload["direct_gemini_first"] = bool(
+            isinstance(runner, dict) and runner.get("direct_gemini_first", False)
+        )
     return payload
 
 
@@ -832,6 +846,22 @@ def call_fair_bridge(
     python_executable: Path,
     timeout_seconds: float,
 ) -> dict[str, Any]:
+    # Gemini first (D-187): the free Gemini API, under the same key, model list
+    # and billing attestation as the backup (D-161), answers before the FAIR
+    # pool. Groq's per-minute token limit stopped runs that Gemini's free tier
+    # absorbs. FAIR stays the fallback when Gemini refuses or is out of quota.
+    payload = dict(payload)
+    gemini_first = bool(payload.pop("direct_gemini_first", False))
+    gemini_first_result: dict[str, Any] | None = None
+    if gemini_first and payload.get("prompt") and direct_gemini_available():
+        gemini_first_result = call_direct_gemini_backup(
+            payload,
+            timeout_seconds=timeout_seconds,
+            fair_result=dict(_GEMINI_FIRST_NOT_RUN),
+        )
+        if gemini_first_result.get("status") == "ACCEPTED":
+            return {**gemini_first_result, "reason_code": DIRECT_GEMINI_FIRST, "direct_gemini_first": True}
+
     if not python_executable.exists():
         raise FileNotFoundError(
             f"FAIR Python executable not found: {python_executable}"
@@ -880,7 +910,18 @@ def call_fair_bridge(
         if not isinstance(result, dict):
             raise RuntimeError("FAIR bridge result must be a JSON object")
         decision = direct_gemini_fallback_decision(result)
-        if decision["eligible"] and direct_gemini_available():
+        if gemini_first_result is not None:
+            # Gemini was asked first and could not answer; asking it again as
+            # the backup would only repeat the same refusal.
+            result = {
+                **result,
+                "direct_gemini_first": {
+                    "tried": True,
+                    "reason_code": gemini_first_result.get("reason_code"),
+                    "attempts": gemini_first_result.get("attempts", []),
+                },
+            }
+        elif decision["eligible"] and direct_gemini_available():
             return call_direct_gemini_backup(
                 payload,
                 timeout_seconds=timeout_seconds,
