@@ -17,6 +17,9 @@ ignore = ["TRY004"]
 "experiment_02_analysis/human_review.py" = ["BLE001"]
 "experiment_02_analysis/vision_review.py" = ["BLE001", "S310"]
 "format_engine/format_engine.py" = ["BLE001"]
+# A subsystem boundary like the runners: any provider or parser failure in the
+# corrected attempt becomes a reported status (D-186).
+"packaging_engine/validation_repair.py" = ["BLE001"]
 "format_engine/format_model_runner.py" = ["BLE001"]
 "packaging_engine/package_model_runner.py" = ["BLE001"]
 "research_engine/research_acquisition.py" = ["BLE001"]

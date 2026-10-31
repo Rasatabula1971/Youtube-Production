@@ -38,6 +38,8 @@ from packaging_engine.thumbnail_concepts import (
     run_apply,
     validate_response,
 )
+from packaging_engine.validation_repair import attempt_repair, repair_report
+from packaging_engine.validation_repair import failure_status as repair_failure_status
 from core.hashing import sha256_file
 from core.slugs import safe_slug
 
@@ -257,14 +259,35 @@ def run_one(
         parsed = parse_model_json(raw)
         validate_response(parsed, request)
     except Exception as exc:
-        report = {
-            **base,
-            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        }
-        atomic_write_json(report_path, report)
-        return report
+        # One corrected attempt with the validator's exact error (D-186).
+        repair = attempt_repair(
+            payload=payload,
+            raw=raw,
+            error=str(exc),
+            call=lambda repaired: call_fair_bridge(
+                repaired,
+                python_executable=paths["python"],
+                timeout_seconds=float(
+                    runner_config["runner"].get("subprocess_timeout_seconds", 300)
+                ),
+            ),
+            check=lambda answer: validate_response(answer, request),
+        )
+        if repair["raw"]:
+            atomic_write_text(RAW_OUTPUTS_DIR / f"{slug}.repair.txt", repair["raw"])
+        if repair["status"] != "REPAIRED":
+            report = {
+                **base,
+                "status": repair_failure_status(repair),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                **repair_report(repair),
+            }
+            atomic_write_json(report_path, report)
+            return report
+        parsed = repair["parsed"]
+        bridge_result = repair["bridge_result"]
+        base = {**base, **repair_report(repair), "first_validation_error": str(exc)}
 
     response = {
         **parsed,
