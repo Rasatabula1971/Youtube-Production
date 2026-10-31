@@ -108,6 +108,17 @@ class ScriptReviewTests(unittest.TestCase):
             "note": "",
         }
 
+    def test_an_empty_request_folder_is_ready_to_prepare(self):
+        """Emptying the folder read as AWAITING_HUMAN_DECISION with nothing to decide,
+        so the Script Gate was never prepared again."""
+        with tempfile.TemporaryDirectory() as tmp:
+            requests = Path(tmp) / "script_review_requests"
+            requests.mkdir()
+            with patch.object(script_review, "REVIEW_REQUESTS_DIR", requests):
+                snap = script_review.snapshot()
+        self.assertEqual(snap["status"], "READY_TO_PREPARE")
+        self.assertFalse(snap["complete"])
+
     def test_snapshot_tracks_branches_independently(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
