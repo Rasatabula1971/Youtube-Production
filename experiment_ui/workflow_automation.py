@@ -16,6 +16,7 @@ from typing import Any
 
 from experiment_ui import gate_autopilot
 from experiment_ui import server as control
+from core import request_memo
 from core.pipeline_integrity import atomic_write_json
 
 LAST_RUN_FILE = control.UI_OUTPUT_DIR / "last_auto_run.json"
@@ -331,8 +332,10 @@ def _run_steps(
     completed_actions: list[str], stuck: dict[str, dict[str, Any]], held: dict[str, list[str]]
 ) -> dict[str, Any]:
     for _ in range(MAX_STEPS_PER_RUN):
-        readiness = control.action_readiness()
-        guidance = control.workflow_guidance(readiness)
+        # One read of the pipeline per step; each currency check runs once (D-189).
+        with request_memo.scope():
+            readiness = control.action_readiness()
+            guidance = control.workflow_guidance(readiness)
         if run_gate_policy(guidance.get("state"), completed_actions, held):
             continue
         preview_machine_pending = any(

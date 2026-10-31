@@ -168,6 +168,7 @@ from transformation_engine.transformation_engine import (
     validation_contract_sha256 as transformation_validation_contract_sha256,
 )
 from core.slugs import safe_slug as transformation_safe_slug
+from core import request_memo
 
 TRANSFORM_OUTPUT = TRANSFORM_DIR / "output"
 TRANSFORM_REQUESTS_DIR = TRANSFORM_OUTPUT / "concept_requests"
@@ -9029,6 +9030,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
     def do_GET(self) -> None:
+        # A read computes each packaging currency check once (D-189).
+        with request_memo.scope():
+            self._do_get()
+
+    def _do_get(self) -> None:
         route = urlparse(self.path).path
         # API reads carry job logs, pipeline state and the CSRF token: a page
         # on another origin must not read them through DNS rebinding (UI-19).

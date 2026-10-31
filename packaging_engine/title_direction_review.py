@@ -26,6 +26,7 @@ from core.hashing import sha256_file
 from core.jsonio import load_json
 from core.slugs import safe_slug
 from core.hashing import canonical_sha256 as _content_hash
+from core.request_memo import memoized
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "output"
@@ -213,6 +214,7 @@ def _public_item(item: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@memoized
 def snapshot() -> dict[str, Any]:
     if not CANDIDATES_FILE.is_file():
         return {

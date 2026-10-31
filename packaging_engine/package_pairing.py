@@ -39,6 +39,7 @@ from packaging_engine.title_direction import CANDIDATES_FILE as TITLE_CANDIDATES
 from packaging_engine.title_direction_review import snapshot as title_direction_snapshot
 from core.hashing import sha256_file
 from core.slugs import safe_slug
+from core.request_memo import memoized
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -144,6 +145,7 @@ def lexical_redundancy(title: str, thumbnail_text: str) -> dict[str, Any]:
     }
 
 
+@memoized
 def _current_briefs() -> dict[str, tuple[Path, dict[str, Any]]]:
     state = packaging_brief_snapshot()
     if not state.get("ready"):
@@ -162,6 +164,7 @@ def _current_briefs() -> dict[str, tuple[Path, dict[str, Any]]]:
     return out
 
 
+@memoized
 def _current_angle_items() -> dict[str, dict[str, Any]]:
     if not ANGLES_FILE.is_file():
         raise ValueError("WAITING_FOR_PSYCHOLOGICAL_ANGLES")
@@ -182,6 +185,7 @@ def _current_angle_items() -> dict[str, dict[str, Any]]:
     return out
 
 
+@memoized
 def _current_thumbnail_items() -> dict[str, dict[str, Any]]:
     state = thumbnail_snapshot()
     if not state.get("ready"):
@@ -204,6 +208,7 @@ def _current_thumbnail_items() -> dict[str, dict[str, Any]]:
     return out
 
 
+@memoized
 def _title_concepts() -> dict[str, dict[str, Any]]:
     gate = title_direction_snapshot()
     if gate.get("status") != "TITLE_DIRECTION_SELECTED" or not gate.get("ready"):
@@ -390,6 +395,7 @@ def _pair(
     }
 
 
+@memoized
 def build_inputs() -> list[dict[str, Any]]:
     briefs = _current_briefs()
     angles = _current_angle_items()
@@ -607,6 +613,7 @@ def run_prepare() -> dict[str, Any]:
     return result
 
 
+@memoized
 def _current_request_map() -> dict[tuple[str, str], dict[str, Any]]:
     inputs = build_inputs()
     out: dict[tuple[str, str], dict[str, Any]] = {}
@@ -621,6 +628,7 @@ def _current_request_map() -> dict[tuple[str, str], dict[str, Any]]:
     return out
 
 
+@memoized
 def request_is_current(path: Path) -> dict[str, Any] | None:
     if not path.is_file() or path.parent.resolve() != REQUESTS_DIR.resolve():
         return None
@@ -636,6 +644,7 @@ def request_is_current(path: Path) -> dict[str, Any] | None:
         return None
 
 
+@memoized
 def request_snapshot() -> dict[str, Any]:
     try:
         current_map = _current_request_map()
@@ -1009,6 +1018,7 @@ def _response_path_for(request: dict[str, Any]) -> Path:
     return RESPONSES_DIR / f"{slug}.package_pairing_response.json"
 
 
+@memoized
 def _collect_current() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     validations: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -1121,6 +1131,7 @@ def run_apply() -> dict[str, Any]:
     return result
 
 
+@memoized
 def snapshot() -> dict[str, Any]:
     request_state = request_snapshot()
     expected_requests = int(request_state.get("expected") or 0)

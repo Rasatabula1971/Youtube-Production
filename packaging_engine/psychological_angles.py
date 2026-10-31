@@ -27,6 +27,7 @@ from packaging_engine.packaging_brief import (
 from core.hashing import sha256_file
 from core.slugs import safe_slug
 from core.hashing import canonical_sha256 as fingerprint
+from core.request_memo import memoized
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -359,6 +360,7 @@ def validate_response(
     }
 
 
+@memoized
 def request_is_current(path: Path) -> dict[str, Any] | None:
     if not path.is_file() or path.parent.resolve() != REQUESTS_DIR.resolve():
         return None
@@ -440,6 +442,7 @@ def run_prepare() -> dict[str, Any]:
 
 
 
+@memoized
 def request_snapshot() -> dict[str, Any]:
     brief_state = packaging_brief_snapshot()
     expected = int(brief_state.get("current") or 0) if brief_state.get("ready") else 0
@@ -529,6 +532,7 @@ def run_apply() -> dict[str, Any]:
     return result
 
 
+@memoized
 def item_is_current(item: dict[str, Any]) -> bool:
     try:
         request_path = Path(str(item.get("request_file") or ""))
@@ -559,6 +563,7 @@ def item_is_current(item: dict[str, Any]) -> bool:
         return False
 
 
+@memoized
 def snapshot() -> dict[str, Any]:
     brief_state = packaging_brief_snapshot()
     expected = int(brief_state.get("current") or 0) if brief_state.get("ready") else 0
