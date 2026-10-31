@@ -2964,8 +2964,9 @@ function renderTitleDirectionReview(snapshot, force) {
   titleDirectionDetail.innerHTML =
     '<div class="concept-detail-card"><h4>DIRECTION CONTRACT</h4>' +
     '<p>Choose the psychology/title direction that best represents the approved script. This does <strong>not</strong> permanently lock the public title text.</p></div>' +
-    titleDirectionSetHtml("short", titles.short, selected.short) +
-    titleDirectionSetHtml("long_form", titles.long_form, selected.long_form);
+    titleDirectionFormats(item).map(function (format) {
+      return titleDirectionSetHtml(format, titles[format], selected[format]);
+    }).join("");
 
   titleDirectionNote.value = item.note || "";
   titleDirectionPrev.disabled = titleDirectionCursor <= 0;
@@ -2977,9 +2978,17 @@ function renderTitleDirectionReview(snapshot, force) {
   titleDirectionEditing = false;
 }
 
-function collectTitleDirectionSelections() {
+// Only formats with an approved script need a title (D-183).
+function titleDirectionFormats(item) {
+  const required = ((item && item.required_formats) || []).filter(function (format) {
+    return format === "short" || format === "long_form";
+  });
+  return required.length ? required : ["short", "long_form"];
+}
+
+function collectTitleDirectionSelections(item) {
   const result = {};
-  ["short", "long_form"].forEach(function (format) {
+  titleDirectionFormats(item).forEach(function (format) {
     const checked = titleDirectionDetail.querySelector(
       'input[name="title-direction-' + format + '"]:checked'
     );
@@ -3010,7 +3019,7 @@ async function submitTitleDirectionDecision(decision) {
   if (!item) return;
   try {
     const selectedTitles =
-      decision === "ACCEPT" ? collectTitleDirectionSelections() : null;
+      decision === "ACCEPT" ? collectTitleDirectionSelections(item) : null;
     const payload = await api("/api/title-direction-gate", {
       method: "POST",
       body: JSON.stringify({

@@ -157,6 +157,29 @@ class TitleDirectionReviewTests(unittest.TestCase):
                         },
                     )
 
+    def test_a_short_only_production_needs_only_a_short_title(self):
+        """D-183: Aviation Tires has only a Short script, yet Save stayed locked on a Long-form title."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            patches, paths = self.patched(root)
+            approved_scripts = root / "approved_scripts"
+            write_json(
+                approved_scripts / "c1.approved_script.json",
+                {"concept_id": "c1", "required_branches": ["short"]},
+            )
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], \
+                    patch.object(module, "APPROVED_SCRIPTS_DIR", approved_scripts):
+                prepared = module.prepare_state()
+                snapshot = module.apply_action(
+                    concept_id="c1",
+                    decision="ACCEPT",
+                    selected_titles={"short": self.selections()["short"]},
+                )
+                approved = json.loads(paths["approved_file"].read_text(encoding="utf-8"))
+        self.assertEqual(prepared["concepts"][0]["required_formats"], ["short"])
+        self.assertTrue(snapshot["ready"])
+        self.assertEqual(list(approved["selected"][0]["selected_titles"]), ["short"])
+
     def test_rework_preserves_upstream_and_invalidates_only_title_generation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

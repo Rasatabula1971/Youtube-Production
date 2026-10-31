@@ -17,6 +17,7 @@ from typing import Any
 
 from core.pipeline_integrity import atomic_write_json
 from packaging_engine.title_direction import (
+    APPROVED_SCRIPTS_DIR,
     CANDIDATES_FILE,
     REQUESTS_DIR,
     RESPONSES_DIR,
@@ -32,6 +33,7 @@ STATE_FILE = OUTPUT_DIR / "title_direction_gate_state.json"
 APPROVED_FILE = OUTPUT_DIR / "selected_title_directions.json"
 HISTORY_DIR = OUTPUT_DIR / "title_direction_history"
 SUMMARY_FILE = OUTPUT_DIR / "title_direction_gate_summary.json"
+FORMATS = ("short", "long_form")
 
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DEFAULT_REVIEWER = "local-operator"
@@ -181,11 +183,30 @@ def prepare_state() -> dict[str, Any]:
     return snapshot()
 
 
+def required_formats(concept_id: str) -> tuple[str, ...]:
+    """The formats this concept has an approved script for (D-183).
+
+    Title directions are still generated for both formats, but a title is
+    needed only where a script will be produced: everything after this gate
+    works per approved script branch. Without a readable approved script the
+    old rule holds and both formats are required.
+    """
+    path = APPROVED_SCRIPTS_DIR / f"{safe_slug(concept_id)}.approved_script.json"
+    try:
+        bundle = load_json(path)
+    except (OSError, ValueError):
+        return FORMATS
+    branches = bundle.get("required_branches") if isinstance(bundle, dict) else None
+    formats = tuple(fmt for fmt in FORMATS if isinstance(branches, list) and fmt in branches)
+    return formats or FORMATS
+
+
 def _public_item(item: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     concept_id = str(item.get("concept_id") or "")
     decision = state.get("decisions", {}).get(concept_id, {})
     return {
         **item,
+        "required_formats": list(required_formats(concept_id)),
         "decision": decision.get("decision", "PENDING"),
         "selected_titles": decision.get("selected_titles", {}),
         "note": decision.get("note", ""),
@@ -426,7 +447,7 @@ def apply_action(
             return snapshot()
         normalized_duplicate = {
             fmt: _normalize_selection(item, fmt, (selected_titles or {}).get(fmt))
-            for fmt in ("short", "long_form")
+            for fmt in required_formats(str(concept_id))
         }
         if (
             normalized_duplicate == existing.get("selected_titles", {})
@@ -453,11 +474,15 @@ def apply_action(
 
     selection_payload: dict[str, Any] = {}
     if value == "ACCEPT":
+        formats = required_formats(str(concept_id))
         if not isinstance(selected_titles, dict):
-            raise ValueError("ACCEPT requires Short and Long-form title selections")
+            raise ValueError(
+                "ACCEPT requires a title selection for: "
+                + ", ".join("Short" if fmt == "short" else "Long-form" for fmt in formats)
+            )
         selection_payload = {
             fmt: _normalize_selection(item, fmt, selected_titles.get(fmt))
-            for fmt in ("short", "long_form")
+            for fmt in formats
         }
 
     state.setdefault("decisions", {})[str(concept_id)] = {
