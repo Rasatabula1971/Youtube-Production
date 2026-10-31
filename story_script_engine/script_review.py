@@ -23,6 +23,7 @@ from story_script_engine.story_script_engine import DRAFTS_DIR, OUTPUT_DIR, REQU
 from core.hashing import sha256_file
 from core.jsonio import load_json
 from core.slugs import safe_slug
+from core.request_memo import memoized
 
 REVIEW_REQUESTS_DIR = OUTPUT_DIR / "script_review_requests"
 RESPONSES_DIR = OUTPUT_DIR / "script_review_responses"
@@ -449,6 +450,7 @@ def _refresh_approved_bundle(concept_id: str) -> Path | None:
     return approved_path
 
 
+@memoized
 def _approved_bundle_is_current(concept_id: str) -> bool:
     approved_path = APPROVED_DIR / f"{safe_slug(concept_id)}.approved_script.json"
     if not approved_path.is_file():

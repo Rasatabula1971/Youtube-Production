@@ -27,6 +27,7 @@ from packaging_engine.title_direction_review import (
 )
 from core.hashing import sha256_file
 from core.slugs import safe_slug
+from core.request_memo import memoized
 from story_script_engine.script_review import (
     APPROVED_DIR as APPROVED_SCRIPTS_DIR,
     _approved_bundle_is_current,
@@ -427,6 +428,7 @@ def build_brief(
     }
 
 
+@memoized
 def brief_is_current(path: Path) -> dict[str, Any] | None:
     if not path.is_file() or path.parent.resolve() != BRIEF_DIR.resolve():
         return None
@@ -468,6 +470,7 @@ def brief_is_current(path: Path) -> dict[str, Any] | None:
     return brief if rebuilt == brief else None
 
 
+@memoized
 def snapshot() -> dict[str, Any]:
     current: list[dict[str, Any]] = []
     stale = 0

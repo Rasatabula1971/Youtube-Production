@@ -6311,3 +6311,38 @@ This is the first of its four PRs.
   test holds the contract table, minus the stops PR 2 (Short packaging) and
   PR 3 (narration preview, rough cut, visual rights, export plus publish)
   remove.
+## D-189 — Each packaging currency check runs once per read
+
+**Context.** The Command Center stayed on "Loading..." once the Aviation Tires
+Short reached Final Packaging. `/api/final-packaging-gate` alone took about 20
+seconds, and `/api/status`, which reads it and the stages around it several
+times, took minutes.
+
+Each packaging stage proves its inputs are current by rebuilding them from
+their own inputs, back to the approved script, and it does so once per item:
+- The pairing request check rebuilt all pairing inputs for each of the 5
+  request files.
+- Each rebuild re-checked the thumbnail concepts, angles, briefs and approved
+  script beneath it.
+
+**Decision.**
+- `core/request_memo.py`: inside a scope, a function marked `@memoized` runs
+  once per distinct argument list. Later calls get a deep copy of the result,
+  or the same exception. Outside a scope nothing changes.
+- The marked functions are the read-only currency checks of the packaging
+  chain:
+  - packaging brief, psychological angles, thumbnail concepts, title direction
+    snapshot, pairing inputs and validations;
+  - the approved-script check;
+  - the thumbnail render units.
+- Scopes cover:
+  - every GET request of the control UI;
+  - each step's readiness and guidance read in Continue Automatically.
+
+  No POST is scoped, so an answer can never hide a write made in the same
+  request.
+
+**Consequences.**
+- One read builds the pairing inputs once instead of once per request file and
+  per caller.
+- The checks are unchanged. They are computed once per read, not skipped.
