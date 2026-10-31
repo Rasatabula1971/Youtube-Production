@@ -545,9 +545,21 @@
       return;
     }
     const shown = filterProductions(productions, productionFilter);
-    paint(list, shown.length
+    paint(list, (shown.length
       ? shown.map(productionRow).join("")
-      : '<p class="empty-state">' + esc(PRODUCTION_EMPTY[productionFilter]) + "</p>");
+      : '<p class="empty-state">' + esc(PRODUCTION_EMPTY[productionFilter]) + "</p>") +
+      droppedHtml((latest.productions || {}).dropped || []));
+  }
+
+  // Concepts taken out of production, and why; an automatic drop says so (D-188).
+  function droppedHtml(rows) {
+    if (!rows.length) return "";
+    return '<div class="dropped-productions"><h4>Dropped · ' + rows.length + "</h4><ul>" +
+      rows.map(function (row) {
+        return "<li><strong>" + esc(row.title) + "</strong> — " +
+          esc(row.decided_by === "GATE_POLICY" ? "dropped automatically" : "dropped by you") +
+          (row.note ? ": " + esc(row.note) : "") + "</li>";
+      }).join("") + "</ul></div>";
   }
 
   function render(data) {

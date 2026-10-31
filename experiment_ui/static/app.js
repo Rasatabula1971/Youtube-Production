@@ -2095,7 +2095,7 @@ function renderOpportunityGate(gate) {
     });
 
     html += '</div><div class="topic-actions"><div class="topic-action-copy">' +
-      '<strong>Your decision</strong><span>Approve only after every selected example is kept.</span></div>' +
+      '<strong>Your decision</strong><span>Approving keeps every example shown. Replace any you do not want first.</span></div>' +
       '<div class="topic-action-buttons">' +
       '<button class="gate-button approve" data-gate-action="APPROVE_TOPIC" data-opportunity-id="' +
       escapeHtml(opportunity.opportunity_id) + '"' +
@@ -4338,6 +4338,18 @@ async function submitScriptSectionAction(action, extra) {
   }
 }
 
+// Claims the gate policy left out of the script: shown, not decided (D-188).
+function leftOutClaimsHtml(claims) {
+  if (!claims.length) return "";
+  return '<div class="concept-detail-card"><h4>LEFT OUT, UNCONFIRMED · ' + claims.length + '</h4>' +
+    '<p>The evidence could not confirm these, so the script does not use them. ' +
+    'To use one, accept it at the Research Gate.</p><ul>' +
+    claims.map(function (claim) {
+      return '<li><strong>' + escapeHtml(claim.statement || claim.claim_id || "") + '</strong>' +
+        (claim.reason ? '<br><span class="muted">' + escapeHtml(claim.reason) + '</span>' : "") + '</li>';
+    }).join("") + '</ul></div>';
+}
+
 function renderScriptReview(snapshot, force) {
   latestScriptSnapshot = snapshot || {};
   if (
@@ -4455,7 +4467,8 @@ function renderScriptReview(snapshot, force) {
       escapeHtml(script.opening_hook || "") + '</p></div>' +
     sections +
     '<div class="concept-detail-card">' + editButton("closing:closing") + '<h4>CLOSING</h4><p>' +
-      escapeHtml(script.closing || "") + '</p></div>';
+      escapeHtml(script.closing || "") + '</p></div>' +
+    leftOutClaimsHtml(script.left_out_claims || []);
 
   scriptCriteria.innerHTML = "";
 

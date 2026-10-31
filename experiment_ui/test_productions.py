@@ -378,6 +378,17 @@ class DroppedConceptTests(unittest.TestCase):
         result = derive(concept_gate=gate, dropped_concept_ids={"c2"})
         self.assertEqual([p["concept_id"] for p in result["productions"]], [CID])
 
+    def test_a_drop_and_its_reason_are_shown(self):
+        """D-188: an automatic drop is not silent; Productions lists it and why."""
+        gate = concept_gate((CID, "ACCEPT"), ("c2", "ACCEPT"))
+        records = {"c2": {"note": "Dropped automatically: research too thin.", "decided_by": "GATE_POLICY"}}
+        result = derive(concept_gate=gate, dropped_records=records)
+        self.assertEqual([p["concept_id"] for p in result["productions"]], [CID])
+        self.assertEqual(result["dropped"], [{
+            "concept_id": "c2", "title": "Title c2", "note": "Dropped automatically: research too thin.",
+            "decided_by": "GATE_POLICY", "dropped_at": None,
+        }])
+
 
 if __name__ == "__main__":
     unittest.main()

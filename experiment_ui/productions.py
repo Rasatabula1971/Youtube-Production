@@ -349,23 +349,38 @@ def derive(
     last_run: dict[str, Any] | None = None,
     action_labels: dict[str, str] | None = None,
     dropped_concept_ids: set[str] | None = None,
+    dropped_records: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Derive every production from the current artifact state.
 
     A concept dropped at the Research Gate is still accepted at the Concept
-    Gate, so it is left out here by its drop record (D-182).
+    Gate, so it is left out here by its drop record (D-182). Its drop and the
+    reason are listed under ``dropped``, so an automatic drop is seen (D-188).
     """
-    dropped = dropped_concept_ids or set()
+    records = dropped_records if isinstance(dropped_records, dict) else {}
+    dropped = set(dropped_concept_ids or set()) | set(records)
     final_keys = final_render_keys or set()
     concept_gate, research, story = _dict(concept_gate), _dict(research), _dict(story)
     title_direction, fmt = _dict(title_direction), _dict(fmt)
     voice, narration = _dict(voice), _dict(narration)
     productions: list[dict[str, Any]] = []
+    dropped_rows: list[dict[str, Any]] = []
     for concept in _items(concept_gate.get("concepts")):
         concept_id = _cid(concept)
         if not concept_id or str(concept.get("decision") or "").upper() != "ACCEPT":
             continue
         if concept_id in dropped:
+            found = records.get(concept_id)
+            record: dict[str, Any] = found if isinstance(found, dict) else {}
+            dropped_rows.append(
+                {
+                    "concept_id": concept_id,
+                    "title": str(concept.get("working_title") or record.get("working_title") or concept_id),
+                    "note": str(record.get("note") or ""),
+                    "decided_by": str(record.get("decided_by") or "HUMAN"),
+                    "dropped_at": record.get("dropped_at"),
+                }
+            )
             continue
         branches: list[dict[str, Any]] = []
         stage = "RESEARCH"
@@ -426,6 +441,7 @@ def derive(
         "by_stage": by_stage,
         "stages": [{"id": sid, "label": label} for sid, label in STAGES],
         "productions": productions,
+        "dropped": dropped_rows,
     }
 
 

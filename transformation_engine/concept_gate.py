@@ -285,6 +285,10 @@ def validate_decisions(
         }
         if chosen_format:
             mapped[concept_id]["format"] = chosen_format
+        decided_by = str(decision.get("decided_by") or "").strip().upper()
+        if decided_by and decided_by != "HUMAN":
+            # Only an automatic decision carries the key (Two Lanes, D-188).
+            mapped[concept_id]["decided_by"] = decided_by
 
     missing = sorted(expected - set(mapped))
     if missing:
@@ -334,6 +338,8 @@ def apply_gate(
             "reviewer": reviewer,
             "reviewed_at": reviewed_at,
         }
+        if decision.get("decided_by"):
+            concept["concept_gate"]["decided_by"] = decision["decided_by"]
 
         if decision["decision"] == "ACCEPT":
             resolution = resolve_format(

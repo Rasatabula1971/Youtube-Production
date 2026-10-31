@@ -20,6 +20,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from transformation_engine import topic_guard
+from transformation_engine.concept_triage import decision_rank
+
 POLICY_FILE = Path(__file__).resolve().parent / "gate_policy.json"
 REVIEWER_ENV = "YOUTUBE_REVIEWER_ID"
 DECIDED_BY_ENV = "YOUTUBE_DECIDED_BY"
@@ -27,8 +30,14 @@ POLICY_DECIDER = "GATE_POLICY"
 AUTO = "AUTO_IF_CLEAN"
 NOTE = "Automatic (gate policy D-156): "
 
+SHORT, LONG_FORM = "short", "long_form"
+TOO_THIN = "RESEARCH_TOO_THIN"
+
 # Workflow state -> gate key in gate_policy.json.
 STATE_GATES = {
+    # Two Lanes (D-188).
+    "HUMAN_CONCEPT_GATE": "concept",
+    "HUMAN_RESEARCH_GATE": "research",
     "HUMAN_VISION_GATE": "vision",
     "HUMAN_ANALYSIS_GATE": "analysis",
     "HUMAN_TITLE_DIRECTION_GATE": "title_direction",
@@ -56,10 +65,39 @@ def load_policy(path: Path | None = None) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {"gates": {}}
 
 
-def gate_mode(gate: str, policy: dict[str, Any]) -> str:
+def gate_mode(gate: str, policy: dict[str, Any], lane: str | None = None) -> str:
+    """A gate's mode; a lane's own setting wins over the shared one (D-188)."""
+    lanes = policy.get("lanes")
+    lane_gates = lanes.get(lane) if isinstance(lanes, dict) and lane else None
+    if isinstance(lane_gates, dict) and gate in lane_gates:
+        return str(lane_gates[gate] or "HUMAN").upper()
     gates = policy.get("gates")
     value = gates.get(gate) if isinstance(gates, dict) else None
     return str(value or "HUMAN").upper()
+
+
+# Owner decisions that no policy setting makes automatic, in pipeline order.
+ALWAYS_HUMAN = ("topic", "script", "final_packaging", "visual_rights", "final_export", "publish")
+PIPELINE_ORDER = (
+    "topic", "vision", "analysis", "concept", "research", "script", "title_direction",
+    "final_packaging", "format", "performance", "narration_preview", "visual_plan",
+    "narration_spend", "final_audio", "visual_candidate", "rough_cut", "visual_spend",
+    "visual_rights", "edit_preview", "final_export", "publish",
+)
+
+
+def owner_stops(lane: str, policy: dict[str, Any] | None = None) -> list[str]:
+    """The gates that stop for the owner in a lane, in pipeline order (D-188).
+
+    A gate stops when no policy decides it, or when the policy leaves it HUMAN
+    for this lane. An AUTO_IF_CLEAN gate still stops when an item fails its
+    checks; that is a flag, not a decision the owner makes every time.
+    """
+    policy = policy if policy is not None else load_policy()
+    return [
+        gate for gate in PIPELINE_ORDER
+        if gate in ALWAYS_HUMAN or gate_mode(gate, policy, lane) != AUTO
+    ]
 
 
 @contextmanager
@@ -539,7 +577,122 @@ def _decide_edit_preview(control: Any) -> tuple[int, list[str]]:
     return decided, held
 
 
+def _study_rows(control: Any) -> list[dict[str, Any]]:
+    try:
+        rows = json.loads((Path(control.EXP15_DIR) / "approved_study_set.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+def concept_lane(concepts: list[dict[str, Any]]) -> str:
+    """Short when every concept at the gate is a Short; otherwise long-form (D-188)."""
+    formats = {str(item.get("format_intent") or "").strip().lower() for item in concepts}
+    return SHORT if formats == {SHORT} else LONG_FORM
+
+
+def rank_concepts(concepts: list[dict[str, Any]], terms: list[str]) -> list[dict[str, Any]]:
+    """On-topic concepts first, each group in triage order; each row says why (D-188)."""
+    rows = []
+    for item in concepts:
+        guard = topic_guard.on_topic(item, terms)
+        rows.append({**item, "topic_guard": guard})
+    rows.sort(key=lambda row: decision_rank(row.get("llm_triage") or {}), reverse=True)
+    return [row for row in rows if row["topic_guard"]["on_topic"]] + [
+        row for row in rows if not row["topic_guard"]["on_topic"]
+    ]
+
+
+def _concept_lane(control: Any) -> str:
+    return concept_lane(list(control.concept_gate_snapshot().get("concepts", [])))
+
+
+def _decide_concept(control: Any) -> tuple[int, list[str]]:
+    """Short lane: accept the top on-topic concept; keep the other on-topic ones in reserve."""
+    concepts = list(control.concept_gate_snapshot().get("concepts", []))
+    if any(item.get("decision") not in {None, "", "PENDING"} for item in concepts):
+        return 0, ["concepts: you have started deciding this gate; it is left to you"]
+    guard = topic_guard.topic_terms(_study_rows(control))
+    ranked = rank_concepts(concepts, guard["terms"])
+    on_topic = [row for row in ranked if row["topic_guard"]["on_topic"]]
+    if not on_topic:
+        words = ", ".join(guard["terms"]) or "none found"
+        return 0, [f"concepts: none is about the approved topic (topic words: {words}); pick one yourself"]
+    pick, reserve = on_topic[0], on_topic[1:]
+    decided, held = 0, list[str]()
+    score = (pick.get("llm_triage") or {}).get("overall_score")
+    decided += _apply(
+        control.apply_concept_gate_action, {
+            "concept_id": str(pick["concept_id"]), "decision": "ACCEPT", "criteria": {},
+            "note": NOTE + f"Short lane: the highest triage score ({score}) among the concepts "
+            f"about the topic (matched: {', '.join(pick['topic_guard']['matched'])}).",
+        },
+        str(pick["concept_id"]), held,
+    )
+    for row in ranked[1:]:
+        if row["topic_guard"]["on_topic"]:
+            place = reserve.index(row) + 1
+            note = (f"Short lane makes one video; kept in reserve (next {place}) in case "
+                    "research finds the pick too thin.")
+        else:
+            note = "Not about the approved topic: no topic word in its title or premise."
+        decided += _apply(
+            control.apply_concept_gate_action,
+            {"concept_id": str(row["concept_id"]), "decision": "REJECT", "criteria": {}, "note": NOTE + note},
+            str(row["concept_id"]), held,
+        )
+    if not held:
+        control.record_concept_lane_reserve([str(row["concept_id"]) for row in reserve])
+    return decided, held
+
+
+def _decide_research(control: Any) -> tuple[int, list[str]]:
+    """Leave out what the evidence cannot confirm; drop a too-thin concept and try the next."""
+    outcome = control.leave_out_unconfirmed_research()
+    decided = len(outcome.get("left_out") or []) + len(outcome.get("waived") or [])
+    held = list[str]()
+    if decided:
+        RUN_NOTES.append(
+            f"Research: {len(outcome.get('left_out') or [])} unconfirmed claim(s) left out of the script."
+        )
+    for package in outcome.get("packages") or []:
+        status = str(package.get("status") or "")
+        concept_id = str(package.get("concept_id") or "")
+        title = str(package.get("working_title") or concept_id)
+        if status == "READY_FOR_STORY_SCRIPT":
+            continue
+        if status != TOO_THIN and package.get("accepted"):
+            held.append(f"{title}: {status.replace('_', ' ').lower()}; questions you kept open need an answer")
+            continue
+        reason = "; ".join(str(item) for item in package.get("evidence_shortfalls") or []) or (
+            "no claim could be confirmed"
+        )
+        note = f"Dropped automatically: research too thin ({reason})."[:500]
+        if not _apply(control.drop_concept_everywhere, {"concept_id": concept_id, "note": note}, title, held):
+            continue
+        decided += 1
+        RUN_NOTES.append(f"{title}: {note}")
+        try:
+            promoted = control.promote_concept_reserve(
+                exclude=set(control.dropped_research_concepts()),
+                note=NOTE + f"Short lane: next concept tried after {title!r} was too thin.",
+            )
+        except (ValueError, OSError) as exc:
+            held.append(f"{title}: dropped; the next concept could not be started ({exc})"[:300])
+            continue
+        if promoted:
+            RUN_NOTES.append(f"Next concept tried: {promoted}.")
+        else:
+            held.append(f"{title}: dropped as too thin, and no on-topic concept is left to try")
+    return decided, held
+
+
+RUN_NOTES: list[str] = []
+LANE_RESOLVERS: dict[str, Callable[[Any], str]] = {"concept": _concept_lane}
+
 RUNNERS: dict[str, Callable[[Any], tuple[int, list[str]]]] = {
+    "concept": _decide_concept,
+    "research": _decide_research,
     "vision": _decide_vision,
     "analysis": _decide_analysis,
     "title_direction": _decide_title_direction,
@@ -564,8 +717,12 @@ def decide(state: str | None, control: Any, policy: dict[str, Any] | None = None
     """
     gate = STATE_GATES.get(str(state or ""))
     policy = policy if policy is not None else load_policy()
-    if gate is None or gate_mode(gate, policy) != AUTO:
+    if gate is None:
         return {"gate": gate, "decided": 0, "held": []}
+    lane = LANE_RESOLVERS[gate](control) if gate in LANE_RESOLVERS else None
+    if gate_mode(gate, policy, lane) != AUTO:
+        return {"gate": gate, "decided": 0, "held": [], "lane": lane}
+    RUN_NOTES.clear()
     with _reviewer(str(policy.get("reviewer_id") or "gate-policy-auto")):
         decided, held = RUNNERS[gate](control)
-    return {"gate": gate, "decided": decided, "held": held}
+    return {"gate": gate, "decided": decided, "held": held, "lane": lane, "notes": list(RUN_NOTES)}
