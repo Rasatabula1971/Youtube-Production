@@ -53,6 +53,12 @@ class ThumbnailConceptNicheConventionTests(unittest.TestCase):
             )
         )
 
+    def test_the_prompt_names_every_refused_word(self):
+        """D-184: the validator refuses exact words the prompt never named."""
+        instructions = " ".join(tc.build_request(self.angle_item)["instructions"])
+        for word in tc.RISKY_CLAIM_WORDS:
+            self.assertIn(word, instructions)
+
     def test_request_unchanged_without_configured_niche(self):
         self.write_tabulation()
         request = tc.build_request(self.angle_item)

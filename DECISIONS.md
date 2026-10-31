@@ -6166,3 +6166,17 @@ packaging brief, angles, thumbnails, pairing and the final package.
 - Generation is unchanged and still makes five titles per format, so current
   title directions stay valid.
 - Without a readable approved script, both formats are required as before.
+
+## D-184 — Packaging prompts name the exact words the validators refuse
+
+**Context.** The angle and thumbnail validators refuse ten words: fastest,
+slowest, best, worst, first, only, never, impossible, dangerous and secret.
+They allow one only when a cited claim uses it. The prompts said only "Do
+not invent … danger", so the model had to guess. On Aviation Tires, a
+"stakes" field said "dangerous" and the whole angle set was rejected. The
+owner's chosen title ("The Secret Behind Aircraft Tires…") made "secret" the
+likely next failure.
+
+**Decision.** Both prompts list the exact words and say to describe the idea
+in other words. The prompt versions are now v1.1, which regenerates the angle
+and thumbnail requests. The validators are unchanged.

@@ -37,7 +37,7 @@ ANGLES_FILE = OUTPUT_DIR / "psychological_angles.json"
 SUMMARY_FILE = OUTPUT_DIR / "psychological_angle_summary.json"
 
 SCHEMA_VERSION = "1.0"
-PROMPT_VERSION = "psychological-packaging-angles-v1.0"
+PROMPT_VERSION = "psychological-packaging-angles-v1.1"
 
 NUMBER_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:[$£€]?\d+(?:[.,]\d+)*(?:\s?%|\s?[xX])?)(?![A-Za-z0-9])"
@@ -185,6 +185,7 @@ def build_request(brief_path: Path, brief: dict[str, Any]) -> dict[str, Any]:
             "Creative framing is allowed; factual invention is not.",
             "Every hypothesis must cite at least one allowed evidence ref.",
             "Do not invent numbers, records, superlatives, danger, scientific certainty or unsupported outcomes.",
+            banned_words_instruction(),
             "SEARCH, BROWSE and HYBRID require different emphasis as specified in format_strategy.",
             "Do not predict CTR, virality, views, retention or recommendation performance.",
         ],
@@ -193,6 +194,19 @@ def build_request(brief_path: Path, brief: dict[str, Any]) -> dict[str, Any]:
             "packaging_brief_sha256": sha256_file(brief_path),
         },
     }
+
+
+def banned_words_instruction() -> str:
+    """The exact words the validator refuses, named in the prompt (D-184).
+
+    "Do not invent danger" left the model to guess: a stakes field said
+    "dangerous" and the whole set was rejected.
+    """
+    return (
+        "Do not use these words anywhere in your output unless the evidence ref you cite uses the same word: "
+        + ", ".join(sorted(RISKY_CLAIM_WORDS))
+        + ". Describe the same idea in other words instead."
+    )
 
 
 def _allowed_numbers(request: dict[str, Any]) -> set[str]:
