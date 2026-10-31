@@ -104,6 +104,12 @@ class FinalPackagingIntegrationTests(unittest.TestCase):
                 return_value=ready(current_pairs=50, **{"pass": 12}),
             ),
             patch.object(server, "final_packaging_gate_state", return_value=final_state),
+            # A long-form branch is waiting, so the long-form steps run (D-190).
+            patch.object(
+                server,
+                "short_package_lane_state",
+                return_value={"chain_needed": True, "short_ready": True},
+            ),
             patch.object(
                 server,
                 "format_artifact_state",

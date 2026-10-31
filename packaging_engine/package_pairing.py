@@ -22,7 +22,8 @@ _STORY = _ROOT / "story_script_engine"
 from core.pipeline_integrity import atomic_write_json
 from packaging_engine.packaging_brief import (
     BRIEF_DIR,
-    brief_is_current,
+    # Shorts skip these steps; only long-form briefs are theirs (D-190).
+    chain_brief_is_current as brief_is_current,
     load_json,
     snapshot as packaging_brief_snapshot,
 )
@@ -159,7 +160,7 @@ def _current_briefs() -> dict[str, tuple[Path, dict[str, Any]]]:
         if video_id in out:
             raise ValueError("DUPLICATE_PACKAGING_BRIEF")
         out[video_id] = (path, brief)
-    if len(out) != int(state.get("current") or 0):
+    if len(out) != int(state.get("chain_current") or 0):
         raise ValueError("STALE_PACKAGING_BRIEF")
     return out
 

@@ -17,7 +17,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 _STORY = _ROOT / "story_script_engine"
 
 from core.pipeline_integrity import atomic_write_json
-from packaging_engine.packaging_brief import brief_is_current, load_json
+# Shorts skip these steps; only long-form briefs are theirs (D-190).
+from packaging_engine.packaging_brief import chain_brief_is_current as brief_is_current, load_json
 from packaging_engine.psychological_angles import (
     ANGLES_FILE,
     item_is_current as angle_item_is_current,

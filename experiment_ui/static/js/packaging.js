@@ -487,7 +487,15 @@
       },
       emptyHtml: function () {
         const gate = tab === "titles" ? titleGate() : finalGate();
+        // Shorts are packaged automatically from their chosen title (D-190).
+        const shorts = tab === "titles" ? [] : ((gate.short_lane || {}).short_packages || []);
+        const shortHtml = shorts.length
+          ? '<p class="muted">Packaged automatically: ' + shorts.map(function (item) {
+              return "<strong>" + esc(item.title_text) + "</strong>";
+            }).join(", ") + ". A Short's thumbnail is a frame of the finished video.</p>"
+          : "";
         return "<h2>Nothing waiting at " + esc(tab === "titles" ? "Title Direction" : "the Final Package gate") + "</h2>" +
+          shortHtml +
           '<p class="muted">' + esc(plain(gate.status) || "Not started.") + " Decisions appear here when packaging reaches this step.</p>" +
           '<div class="rw-empty-actions"><a href="/analysis" class="button-link ghost compact" data-route="/analysis">Classic view</a></div>';
       }

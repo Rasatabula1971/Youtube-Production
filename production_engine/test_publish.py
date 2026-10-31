@@ -334,5 +334,41 @@ class UploadTests(PublishTests):
         self.assertFalse(published["thumbnail_set"])
 
 
+class ShortFramePublishTests(unittest.TestCase):
+    """D-190: a Short's thumbnail is a frame of the video; nothing to upload."""
+
+    item = PublishTests.item
+    fake_http = UploadTests.fake_http
+
+    def setUp(self):
+        PublishTests.setUp(self)
+        self.config["youtube_upload"]["enabled"] = True
+        env = {"YOUTUBE_OAUTH_CLIENT_ID": "id", "YOUTUBE_OAUTH_CLIENT_SECRET": "secret", "YOUTUBE_OAUTH_REFRESH_TOKEN": "refresh"}
+        item = patch.dict("os.environ", env)
+        item.start()
+        self.addCleanup(item.stop)
+        self.requests = []
+        self.bodies = []
+        self.approval["format"] = "short"
+        (self.root / "bundles" / "c1.final_package.json").write_text(json.dumps({"packages": {"short": {
+            "title_text": "How Smooth Plane Tires Keep You Safe", "viewer_promise": "See why.",
+            "thumbnail_source": "VIDEO_FRAME", "thumbnail_image": None,
+        }}}))
+
+    def test_a_short_needs_no_thumbnail_file_to_be_approved(self):
+        item = self.item()
+        self.assertEqual(item["problems"], [])
+        snap = gate.apply_action(concept_id="c1", format="short", decision="APPROVE_PUBLISH", metadata={})
+        self.assertEqual(snap["items"][0]["status"], "APPROVED_FOR_UPLOAD")
+
+    def test_the_upload_sets_no_thumbnail_for_a_short(self):
+        gate.apply_action(concept_id="c1", format="short", decision="APPROVE_PUBLISH", metadata={})
+        snap = uploader.upload(concept_id="c1", format="short", http=self.fake_http())
+        self.assertFalse([u for m, u, r in self.requests if "thumbnails/set" in u])
+        published = snap["items"][0]["published"]
+        self.assertEqual((published["youtube_video_id"], published["thumbnail_source"]), ("VIDEOid_001", "VIDEO_FRAME"))
+        self.assertFalse(published["thumbnail_set"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -201,7 +201,7 @@ CONTRACT = {
 AS_CONTRACT = {"final_packaging": "package", "final_export": "finished_video"}
 # Stops still on the owner until the later PRs of the contract land.
 LATER = {
-    "short": {"final_packaging": "PR 2", "narration_preview": "PR 3", "rough_cut": "PR 3",
+    "short": {"narration_preview": "PR 3", "rough_cut": "PR 3",
               "visual_rights": "PR 3", "publish": "PR 3 (one decision with export)"},
     "long_form": {"narration_preview": "PR 3", "rough_cut": "PR 3", "visual_rights": "PR 3",
                   "publish": "PR 3 (one decision with export)"},
@@ -216,10 +216,12 @@ class OwnerStopsTests(unittest.TestCase):
                 stops = [gate for gate in autopilot.owner_stops(lane, policy) if gate not in LATER[lane]]
                 self.assertEqual({AS_CONTRACT.get(gate, gate) for gate in stops}, expected)
 
-    def test_concept_and_research_no_longer_stop_a_short(self):
+    def test_concept_research_and_packaging_no_longer_stop_a_short(self):
         stops = autopilot.owner_stops("short", autopilot.load_policy())
         self.assertNotIn("concept", stops)
         self.assertNotIn("research", stops)
+        self.assertNotIn("final_packaging", stops)
+        self.assertIn("final_packaging", autopilot.owner_stops("long_form", autopilot.load_policy()))
         self.assertIn("concept", autopilot.owner_stops("long_form", autopilot.load_policy()))
 
 
@@ -234,6 +236,81 @@ class ScriptScreenTests(unittest.TestCase):
             payload = server.with_left_out_claims({"scripts": [{"concept_id": "c1"}, {"concept_id": "c2"}]})
         self.assertEqual(payload["scripts"][0]["left_out_claims"], rows)
         self.assertEqual(payload["scripts"][1]["left_out_claims"], [])
+
+
+class ShortPackagingPathTests(unittest.TestCase):
+    """PR 2 (D-190): a Short skips angles, thumbnails, the matrix and the Final Package gate."""
+
+    def guidance(self, lanes, final_state=None):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        from experiment_ui import server
+
+        not_ready = {"ready": False}
+        patches = {
+            "opportunity_gate_snapshot": {"ready_for_experiment_02": True, "opportunities": []},
+            "opportunity_research_state": {},
+            "vision_review_snapshot": {"awaiting_human_review": False, "complete": True},
+            "human_analysis_review_snapshot": {"status": "COMPLETE"},
+            "transformation_artifact_state": {"candidates_ready": True, "concept_gate": {"status": "COMPLETE"}},
+            "packaging_artifact_state": {"candidates_ready": True, "packaging_gate": {"status": "COMPLETE"}},
+            "research_artifact_state": {"drafts_ready": True, "research_gate": {"status": "COMPLETE"}},
+            "story_script_artifact_state": {
+                "drafts_ready": True, "production_ready": True, "script_gate": {"status": "COMPLETE"},
+            },
+            "title_direction_artifact_state": {
+                "requests_ready": True, "candidates_ready": True, "gate": {"status": "TITLE_DIRECTION_SELECTED"},
+            },
+            "packaging_brief_snapshot": {"ready": True},
+            # The long-form steps have nothing current: a Short must not wait on them.
+            "psychological_angle_request_snapshot": not_ready,
+            "psychological_angle_snapshot": not_ready,
+            "thumbnail_concept_request_snapshot": not_ready,
+            "thumbnail_concept_snapshot": not_ready,
+            "package_pairing_request_snapshot": not_ready,
+            "package_validation_snapshot": not_ready,
+            "final_packaging_gate_state": final_state or {"status": "WAITING_FOR_PACKAGE_VALIDATION", "ready": False},
+            "short_package_lane_state": lanes,
+            "format_artifact_state": {"plans_ready": False, "format_gate": {"status": "WAITING_FOR_FORMAT_PLANS"}},
+        }
+        with ExitStack() as stack:
+            for name, value in patches.items():
+                stack.enter_context(patch.object(server, name, return_value=value))
+            return server.workflow_guidance({}), server.final_packaging_overview()
+
+    def test_a_short_goes_from_title_to_format_planning(self):
+        """The Aviation Tires Short sat at the Final Package gate with no thumbnail image."""
+        workflow, overview = self.guidance({"chain_needed": False, "short_ready": True})
+        self.assertNotIn("Psychological", workflow["current_title"])
+        self.assertNotEqual(workflow["state"], "HUMAN_FINAL_PACKAGING_GATE")
+        self.assertTrue(overview["ready"])
+        self.assertEqual(overview["status"], "SHORT_LANE_PACKAGED")
+
+    def test_a_short_without_a_chosen_title_stops_and_says_why(self):
+        workflow, overview = self.guidance(
+            {"chain_needed": False, "short_ready": False, "short_missing": ["c_tyre"]}
+        )
+        self.assertEqual(workflow["state"], "SHORT_PACKAGE_BLOCKED")
+        self.assertIn("c_tyre", workflow["current_detail"])
+        self.assertFalse(overview["ready"])
+
+    def test_long_form_still_takes_every_step(self):
+        workflow, overview = self.guidance({"chain_needed": True, "short_ready": True})
+        self.assertEqual(workflow["current_title"], "Prepare Psychological Packaging Angles")
+        self.assertFalse(overview["ready"])
+
+    def test_with_both_lanes_packaging_is_done_only_when_both_are(self):
+        accepted = {"status": "FINAL_PACKAGING_APPROVED", "ready": True}
+        from unittest.mock import patch
+
+        from experiment_ui import server
+
+        with (
+            patch.object(server, "short_package_lane_state", return_value={"chain_needed": True, "short_ready": False}),
+            patch.object(server, "final_packaging_gate_state", return_value=accepted),
+        ):
+            self.assertFalse(server.final_packaging_overview(package_validation_ready=True)["ready"])
 
 
 if __name__ == "__main__":

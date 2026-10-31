@@ -20,7 +20,9 @@ _STORY = _ROOT / "story_script_engine"
 from core.pipeline_integrity import atomic_write_json
 from packaging_engine.packaging_brief import (
     BRIEF_DIR,
-    brief_is_current,
+    # Shorts skip these steps; only long-form briefs are theirs (D-190).
+    chain_brief_is_current as brief_is_current,
+    brief_is_current as current_brief,
     load_json,
     snapshot as packaging_brief_snapshot,
 )
@@ -28,6 +30,7 @@ from core.hashing import sha256_file
 from core.slugs import safe_slug
 from core.hashing import canonical_sha256 as fingerprint
 from core.request_memo import memoized
+from packaging_engine import short_lane
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -387,6 +390,8 @@ def run_prepare() -> dict[str, Any]:
 
     paths = sorted(BRIEF_DIR.glob("*.packaging_brief.json")) if BRIEF_DIR.exists() else []
     for brief_path in paths:
+        if short_lane.is_short_lane(current_brief(brief_path)):
+            continue  # a Short is packaged from its brief (D-190)
         try:
             brief = brief_is_current(brief_path)
             if brief is None:
@@ -419,7 +424,7 @@ def run_prepare() -> dict[str, Any]:
             stale.unlink()
 
     brief_state = packaging_brief_snapshot()
-    expected = int(brief_state.get("current") or 0)
+    expected = int(brief_state.get("chain_current") or 0)
     status = (
         "PSYCHOLOGICAL_ANGLE_REQUESTS_READY"
         if expected > 0 and len(prepared) == expected and not failures
@@ -445,7 +450,7 @@ def run_prepare() -> dict[str, Any]:
 @memoized
 def request_snapshot() -> dict[str, Any]:
     brief_state = packaging_brief_snapshot()
-    expected = int(brief_state.get("current") or 0) if brief_state.get("ready") else 0
+    expected = int(brief_state.get("chain_current") or 0) if brief_state.get("ready") else 0
     current = 0
     stale = 0
     if REQUESTS_DIR.exists():
@@ -515,7 +520,7 @@ def run_apply() -> dict[str, Any]:
     }
     atomic_write_json(ANGLES_FILE, artifact)
     brief_state = packaging_brief_snapshot()
-    expected = int(brief_state.get("current") or 0)
+    expected = int(brief_state.get("chain_current") or 0)
     result = {
         "status": (
             "PSYCHOLOGICAL_ANGLES_READY"
@@ -566,7 +571,7 @@ def item_is_current(item: dict[str, Any]) -> bool:
 @memoized
 def snapshot() -> dict[str, Any]:
     brief_state = packaging_brief_snapshot()
-    expected = int(brief_state.get("current") or 0) if brief_state.get("ready") else 0
+    expected = int(brief_state.get("chain_current") or 0) if brief_state.get("ready") else 0
     current: list[dict[str, Any]] = []
     stale = 0
     if ANGLES_FILE.is_file():
