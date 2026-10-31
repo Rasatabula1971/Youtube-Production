@@ -49,6 +49,7 @@ APPROVED_DIR = OUTPUT / "approved_publish"
 PUBLISHED_DIR = OUTPUT / "published_videos"
 PENDING_UPLOADS_DIR = OUTPUT / "pending_uploads"
 HISTORY_FILE = OUTPUT / "publish_history.jsonl"
+VIDEO_FRAME = "VIDEO_FRAME"  # packaging_engine.short_lane.VIDEO_FRAME
 DECISIONS = {"APPROVE_PUBLISH", "HOLD"}
 PRIVACY = {"private", "unlisted", "public"}
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -125,7 +126,9 @@ def build_drafts() -> list[dict[str, Any]]:
                 problems.append(f"The final package bundle has no {fmt} package.")
         image = package.get("thumbnail_image") or {}
         thumbnail = str(image.get("image") or "")
-        if package and not (thumbnail and Path(thumbnail).is_file()):
+        # A Short's thumbnail is a frame of the video; YouTube picks it (D-190).
+        video_frame = package.get("thumbnail_source") == VIDEO_FRAME
+        if package and not video_frame and not (thumbnail and Path(thumbnail).is_file()):
             problems.append("The approved thumbnail image file is missing.")
         sources, research_sha = _sources(concept_id, int(config.get("max_description_sources") or 12))
         synthetic = bool(config.get("contains_synthetic_media_default", True))
@@ -157,6 +160,9 @@ def build_drafts() -> list[dict[str, Any]]:
                 "verified_research_sha256": research_sha,
             },
         }
+        if video_frame:
+            # Only a Short's draft carries the key, so earlier drafts keep their hash.
+            base["thumbnail_source"] = VIDEO_FRAME
         drafts.append({**base, "draft_metadata": metadata, "base_sha256": _hash(base)})
     return drafts
 
@@ -359,6 +365,8 @@ def apply_action(
         record["video_sha256"] = draft["video_sha256"]
         record["thumbnail_file"] = draft["thumbnail_file"]
         record["thumbnail_sha256"] = draft["thumbnail_sha256"]
+        if draft.get("thumbnail_source"):
+            record["thumbnail_source"] = draft["thumbnail_source"]
         record["provenance"] = draft["provenance"]
         atomic_write_json(approved, record)
     else:

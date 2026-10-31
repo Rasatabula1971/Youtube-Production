@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from packaging_engine import short_lane
 from transformation_engine import topic_guard
 from transformation_engine.concept_triage import decision_rank
 
@@ -94,9 +95,11 @@ def owner_stops(lane: str, policy: dict[str, Any] | None = None) -> list[str]:
     checks; that is a flag, not a decision the owner makes every time.
     """
     policy = policy if policy is not None else load_policy()
+    # A Short is packaged from its chosen title; no Final Packaging stop (D-190).
+    skipped = {"final_packaging"} if lane == SHORT and short_lane.enabled() else set()
     return [
         gate for gate in PIPELINE_ORDER
-        if gate in ALWAYS_HUMAN or gate_mode(gate, policy, lane) != AUTO
+        if gate not in skipped and (gate in ALWAYS_HUMAN or gate_mode(gate, policy, lane) != AUTO)
     ]
 
 

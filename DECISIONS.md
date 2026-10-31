@@ -6346,3 +6346,49 @@ their own inputs, back to the approved script, and it does so once per item:
 - One read builds the pairing inputs once instead of once per request file and
   per caller.
 - The checks are unchanged. They are computed once per read, not skipped.
+
+## D-190 — Two lanes, part 2: a Short is packaged from its chosen title
+
+**Context.** The Aviation Tires Short stopped at the Final Package gate. No
+package could be accepted, because every one needed an approved rendered
+thumbnail image. There is no image generator and no subject image, so the
+owner had nothing he could do. Before that, the Short went through
+psychological angles, five thumbnail concepts and a 25-pair title and
+thumbnail matrix. A Short is shown with a frame of the video anyway. The Two
+Lanes contract (D-188) removes these steps for Shorts.
+
+**Decision.**
+- A Short brief takes the Short lane (`packaging_engine/short_lane.py`;
+  `packaging_config.json` `short_lane_package.enabled`, on by default).
+- The angle, thumbnail-concept, pairing-matrix, thumbnail-image and Final
+  Packaging steps work only on long-form briefs:
+  - they read briefs through `chain_brief_is_current`;
+  - they count `chain_current`.
+- `short_package.build_bundle` builds the Short's package from its current
+  brief:
+  - the title chosen at Title Direction;
+  - the approved opening hook and Viewer Promise;
+  - the title's evidence references;
+  - `thumbnail_source: VIDEO_FRAME`;
+  - `decided_by: GATE_POLICY`.
+
+  It has the same shape as an accepted Final Packaging bundle and no
+  timestamp, so its hash changes only when the brief does. The Final
+  Packaging bundles include it, so Format planning reads it unchanged.
+- `final_packaging_overview` is ready when every long-form branch is accepted
+  at the gate and every Short has its package. The workflow guidance and the
+  action readiness use it.
+  - With only Shorts, the long-form steps and the gate are skipped.
+  - A Short with no chosen title stops as SHORT_PACKAGE_BLOCKED and says so.
+- **Publishing.** A Short needs no thumbnail file to be approved. The upload
+  sets no thumbnail, and records `thumbnail_source: VIDEO_FRAME`. Long-form
+  drafts keep their hash.
+- `owner_stops("short")` no longer includes Final Packaging.
+
+**Consequences.**
+- The Short's title is not checked against thumbnails in a matrix. It already
+  passed the Title Direction checks: the length contract and evidence
+  references.
+- The current Aviation Tires Short goes from title to Format planning on the
+  next Continue. Its earlier angle, thumbnail and pairing files become stale
+  and are not used.

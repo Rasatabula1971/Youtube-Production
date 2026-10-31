@@ -28,6 +28,7 @@ from packaging_engine.title_direction_review import (
 from core.hashing import sha256_file
 from core.slugs import safe_slug
 from core.request_memo import memoized
+from packaging_engine import short_lane
 from story_script_engine.script_review import (
     APPROVED_DIR as APPROVED_SCRIPTS_DIR,
     _approved_bundle_is_current,
@@ -471,6 +472,13 @@ def brief_is_current(path: Path) -> dict[str, Any] | None:
 
 
 @memoized
+def chain_brief_is_current(path: Path) -> dict[str, Any] | None:
+    """A current brief the long-form packaging steps work on; None for a Short (D-190)."""
+    brief = brief_is_current(path)
+    return None if short_lane.is_short_lane(brief) else brief
+
+
+@memoized
 def snapshot() -> dict[str, Any]:
     current: list[dict[str, Any]] = []
     stale = 0
@@ -484,6 +492,7 @@ def snapshot() -> dict[str, Any]:
                 {
                     "concept_id": brief.get("concept_id"),
                     "format": brief.get("format"),
+                    "short_lane": short_lane.is_short_lane(brief),
                     "video_id": brief.get("video_id"),
                     "search_vs_browse_intent": brief.get("search_vs_browse_intent"),
                     "viewer_expectation": (
@@ -543,6 +552,9 @@ def snapshot() -> dict[str, Any]:
         "expected": expected,
         "expected_inputs_current": expected_inputs_current,
         "current": len(current),
+        # The long-form steps (angles to Final Packaging) count only these (D-190).
+        "chain_current": sum(not item["short_lane"] for item in current),
+        "short_lane_current": sum(item["short_lane"] for item in current),
         "stale": stale,
         "briefs": current,
     }

@@ -209,6 +209,7 @@ from packaging_engine.package_pairing import (
     request_snapshot as package_pairing_request_snapshot,
     snapshot as package_validation_snapshot,
 )
+from packaging_engine.short_package import lane_state as short_package_lane_state
 from packaging_engine.final_packaging_review import (
     apply_action as apply_final_packaging_gate_action,
     current_bundle_hashes as final_package_bundle_hashes,
@@ -1749,6 +1750,31 @@ def final_packaging_gate_state() -> dict[str, Any]:
             "complete": False,
             "items": [],
         }
+
+
+def final_packaging_overview(package_validation_ready: bool | None = None) -> dict[str, Any]:
+    """Final packaging for every concept: the gate for long-form, automatic for Shorts (D-190).
+
+    ``ready`` holds when every long-form branch has an accepted package at the
+    Final Packaging Gate and every Short has its package built from its brief.
+    With only Shorts, the long-form steps and the gate are skipped.
+    """
+    try:
+        lanes = short_package_lane_state()
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        lanes = {"chain_needed": True, "short_ready": False, "error": str(exc)}
+    if lanes.get("chain_needed"):
+        if package_validation_ready is None:
+            package_validation_ready = bool(package_validation_snapshot().get("ready"))
+        final = (
+            final_packaging_gate_state()
+            if package_validation_ready
+            else {"status": "WAITING_FOR_PACKAGE_VALIDATION", "ready": False}
+        )
+    else:
+        final = {"status": "SHORT_LANE_PACKAGED", "ready": True, "items": []}
+    ready = bool(final.get("ready")) and bool(lanes.get("short_ready"))
+    return {**final, "ready": ready, "short_lane": lanes}
 
 
 def video_budget_state() -> dict[str, Any]:
@@ -4624,11 +4650,7 @@ def stage_statuses() -> list[dict[str, Any]]:
     thumbnails_ready = bool(thumbnails.get("ready"))
     package_validation = package_validation_snapshot()
     package_validation_ready = bool(package_validation.get("ready"))
-    final_packaging = (
-        final_packaging_gate_state()
-        if package_validation_ready
-        else {"status": "WAITING_FOR_PACKAGE_VALIDATION", "ready": False}
-    )
+    final_packaging = final_packaging_overview(package_validation_ready)
     final_packaging_status = str(final_packaging.get("status") or "")
     final_packaging_ready = bool(final_packaging.get("ready"))
     fmt = format_artifact_state()
@@ -5373,11 +5395,7 @@ def action_readiness() -> dict[str, dict[str, Any]]:
     pairing_requests = package_pairing_request_snapshot()
     package_validation = package_validation_snapshot()
     package_validation_ready = bool(package_validation.get("ready"))
-    final_packaging = (
-        final_packaging_gate_state()
-        if package_validation_ready
-        else {"status": "WAITING_FOR_PACKAGE_VALIDATION", "ready": False}
-    )
+    final_packaging = final_packaging_overview(package_validation_ready)
     final_packaging_ready = bool(final_packaging.get("ready"))
     fmt = format_artifact_state()
     format_requests_ready = bool(fmt["requests_ready"])
@@ -6215,8 +6233,10 @@ def action_readiness() -> dict[str, dict[str, Any]]:
             ),
         },
         "psychological_angle_prepare": {
+            # Shorts are packaged from their brief; these steps are long-form only (D-190).
             "enabled": (
                 packaging_brief_ready
+                and int(packaging_brief.get("chain_current") or 0) > 0
                 and not angles_ready
                 and not bool(angle_requests.get("ready"))
             ),
@@ -7831,126 +7851,143 @@ def workflow_guidance(
                 "next_title": "Prepare psychological packaging angles",
             }
 
-        angle_requests = psychological_angle_request_snapshot()
-        angles = psychological_angle_snapshot()
-        if not angles.get("ready"):
-            if not angle_requests.get("ready"):
-                return {
-                    "state": "ACTION_REQUIRED",
-                    "current_action_id": "auto_continue",
-                    "current_title": "Prepare Psychological Packaging Angles",
-                    "current_detail": (
-                        "Build one current request per approved format from the exact "
-                        "Packaging Brief. Five distinct primary psychological drivers "
-                        "are required and exactly one hypothesis remains anchored to "
-                        "the human-selected title direction."
-                    ),
-                    "next_action_id": None,
-                    "next_title": "Generate five diverse packaging hypotheses",
-                }
+        # Shorts are packaged from their brief; the steps below are long-form
+        # only, and run only while a long-form branch needs them (D-190).
+        overview = final_packaging_overview()
+        if not overview["short_lane"].get("chain_needed") and not overview.get("ready"):
+            missing = ", ".join(overview["short_lane"].get("short_missing") or [])
             return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Generate Psychological Packaging Angles",
-                "current_detail": (
-                    "Use the configured free-first FAIR path to create five genuinely "
-                    "different packaging hypotheses per format. Creative framing may "
-                    "vary; facts, numbers and claims remain evidence-bound."
-                ),
-                "next_action_id": None,
-                "next_title": "Prepare thumbnail concepts",
-            }
-
-        thumbnail_requests = thumbnail_concept_request_snapshot()
-        thumbnails = thumbnail_concept_snapshot()
-        if not thumbnails.get("ready"):
-            if not thumbnail_requests.get("ready"):
-                return {
-                    "state": "ACTION_REQUIRED",
-                    "current_action_id": "auto_continue",
-                    "current_title": "Prepare Thumbnail Concepts",
-                    "current_detail": (
-                        "Bind each current psychological angle to the exact Viewer "
-                        "Promise and approved evidence. Concepts must stay 16:9, "
-                        "mobile-legible, timestamp-safe and visually simple."
-                    ),
-                    "next_action_id": None,
-                    "next_title": "Generate one thumbnail concept per angle",
-                }
-            return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Generate Thumbnail Concepts",
-                "current_detail": (
-                    "Generate structured thumbnail concepts only. Each angle gets one "
-                    "visual proposition with one focal point, at most three meaningful "
-                    "elements, evidence-bound text and no image-generation spend."
-                ),
-                "next_action_id": None,
-                "next_title": "Slice 25 thumbnail concept boundary",
-            }
-
-        pairing_requests = package_pairing_request_snapshot()
-        validation = package_validation_snapshot()
-        if not validation.get("ready"):
-            if not pairing_requests.get("ready"):
-                return {
-                    "state": "ACTION_REQUIRED",
-                    "current_action_id": "auto_continue",
-                    "current_title": "Build Full Title + Thumbnail Pairing Matrix",
-                    "current_detail": (
-                        "Cross-pair all five title directions with all five thumbnail "
-                        "concepts for each format. This creates 25 compatibility "
-                        "hypotheses per format rather than assuming Title 1 belongs to "
-                        "Thumbnail 1."
-                    ),
-                    "next_action_id": None,
-                    "next_title": "Validate every package pair",
-                }
-            return {
-                "state": "ACTION_REQUIRED",
-                "current_action_id": "auto_continue",
-                "current_title": "Validate Title + Thumbnail Packages",
-                "current_detail": (
-                    "Evaluate each pair for semantic/visual redundancy, psychological "
-                    "complementarity, information gain, evidence credibility, Viewer "
-                    "Promise consistency and Hook Alignment. Hard truth failures "
-                    "override all diagnostic scores."
-                ),
-                "next_action_id": None,
-                "next_title": "Slice 26 package validation boundary",
-            }
-
-        final_packaging = final_packaging_gate_state()
-        final_packaging_status = str(final_packaging.get("status") or "")
-        if final_packaging_status == "FINAL_PACKAGING_REJECTED":
-            return {
-                "state": "FINAL_PACKAGING_REJECTED",
+                "state": "SHORT_PACKAGE_BLOCKED",
                 "current_action_id": None,
-                "current_title": "Final Package Rejected",
+                "current_title": "Short Package Needs a Title",
                 "current_detail": (
-                    "At least one format has no accepted package. Accept a validated "
-                    "package, or route rework to the title directions, thumbnail "
-                    "concepts or script branch. Format planning stays held."
+                    "A Short is packaged from the title chosen at Title Direction; "
+                    f"none is chosen for: {missing}. Choose it at the Title Direction step."
                 ),
                 "next_action_id": None,
-                "next_title": "Revisit the Final Packaging Gate",
+                "next_title": "Choose the Short's title",
             }
-        if not final_packaging.get("ready"):
-            return {
-                "state": "HUMAN_FINAL_PACKAGING_GATE",
-                "current_action_id": None,
-                "current_title": "Choose the Final Package",
-                "current_detail": (
-                    f"{int(validation.get('pass') or 0)} of "
-                    f"{int(validation.get('current_pairs') or 0)} title-thumbnail "
-                    "pairs passed validation. For each format, accept one PASS pair "
-                    "whose thumbnail image is approved at the Thumbnail Gate, or "
-                    "route rework to the titles, thumbnail concepts or script."
-                ),
-                "next_action_id": None,
-                "next_title": "Accept one package per format",
-            }
+        if overview["short_lane"].get("chain_needed"):
+            angle_requests = psychological_angle_request_snapshot()
+            angles = psychological_angle_snapshot()
+            if not angles.get("ready"):
+                if not angle_requests.get("ready"):
+                    return {
+                        "state": "ACTION_REQUIRED",
+                        "current_action_id": "auto_continue",
+                        "current_title": "Prepare Psychological Packaging Angles",
+                        "current_detail": (
+                            "Build one current request per approved format from the exact "
+                            "Packaging Brief. Five distinct primary psychological drivers "
+                            "are required and exactly one hypothesis remains anchored to "
+                            "the human-selected title direction."
+                        ),
+                        "next_action_id": None,
+                        "next_title": "Generate five diverse packaging hypotheses",
+                    }
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Generate Psychological Packaging Angles",
+                    "current_detail": (
+                        "Use the configured free-first FAIR path to create five genuinely "
+                        "different packaging hypotheses per format. Creative framing may "
+                        "vary; facts, numbers and claims remain evidence-bound."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Prepare thumbnail concepts",
+                }
+
+            thumbnail_requests = thumbnail_concept_request_snapshot()
+            thumbnails = thumbnail_concept_snapshot()
+            if not thumbnails.get("ready"):
+                if not thumbnail_requests.get("ready"):
+                    return {
+                        "state": "ACTION_REQUIRED",
+                        "current_action_id": "auto_continue",
+                        "current_title": "Prepare Thumbnail Concepts",
+                        "current_detail": (
+                            "Bind each current psychological angle to the exact Viewer "
+                            "Promise and approved evidence. Concepts must stay 16:9, "
+                            "mobile-legible, timestamp-safe and visually simple."
+                        ),
+                        "next_action_id": None,
+                        "next_title": "Generate one thumbnail concept per angle",
+                    }
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Generate Thumbnail Concepts",
+                    "current_detail": (
+                        "Generate structured thumbnail concepts only. Each angle gets one "
+                        "visual proposition with one focal point, at most three meaningful "
+                        "elements, evidence-bound text and no image-generation spend."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Slice 25 thumbnail concept boundary",
+                }
+
+            pairing_requests = package_pairing_request_snapshot()
+            validation = package_validation_snapshot()
+            if not validation.get("ready"):
+                if not pairing_requests.get("ready"):
+                    return {
+                        "state": "ACTION_REQUIRED",
+                        "current_action_id": "auto_continue",
+                        "current_title": "Build Full Title + Thumbnail Pairing Matrix",
+                        "current_detail": (
+                            "Cross-pair all five title directions with all five thumbnail "
+                            "concepts for each format. This creates 25 compatibility "
+                            "hypotheses per format rather than assuming Title 1 belongs to "
+                            "Thumbnail 1."
+                        ),
+                        "next_action_id": None,
+                        "next_title": "Validate every package pair",
+                    }
+                return {
+                    "state": "ACTION_REQUIRED",
+                    "current_action_id": "auto_continue",
+                    "current_title": "Validate Title + Thumbnail Packages",
+                    "current_detail": (
+                        "Evaluate each pair for semantic/visual redundancy, psychological "
+                        "complementarity, information gain, evidence credibility, Viewer "
+                        "Promise consistency and Hook Alignment. Hard truth failures "
+                        "override all diagnostic scores."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Slice 26 package validation boundary",
+                }
+
+            final_packaging = overview
+            final_packaging_status = str(final_packaging.get("status") or "")
+            if final_packaging_status == "FINAL_PACKAGING_REJECTED":
+                return {
+                    "state": "FINAL_PACKAGING_REJECTED",
+                    "current_action_id": None,
+                    "current_title": "Final Package Rejected",
+                    "current_detail": (
+                        "At least one format has no accepted package. Accept a validated "
+                        "package, or route rework to the title directions, thumbnail "
+                        "concepts or script branch. Format planning stays held."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Revisit the Final Packaging Gate",
+                }
+            if not final_packaging.get("ready"):
+                return {
+                    "state": "HUMAN_FINAL_PACKAGING_GATE",
+                    "current_action_id": None,
+                    "current_title": "Choose the Final Package",
+                    "current_detail": (
+                        f"{int(validation.get('pass') or 0)} of "
+                        f"{int(validation.get('current_pairs') or 0)} title-thumbnail "
+                        "pairs passed validation. For each format, accept one PASS pair "
+                        "whose thumbnail image is approved at the Thumbnail Gate, or "
+                        "route rework to the titles, thumbnail concepts or script."
+                    ),
+                    "next_action_id": None,
+                    "next_title": "Accept one package per format",
+                }
 
     fmt = format_artifact_state()
     format_gate = fmt.get("format_gate", {})
@@ -8904,7 +8941,10 @@ def status_payload() -> dict[str, Any]:
         "thumbnail_concepts": thumbnail_concept_snapshot(),
         "package_pairing_requests": package_pairing_request_snapshot(),
         "package_validation": package_validation_snapshot(),
-        "final_packaging_gate": final_packaging_gate_state(),
+        "final_packaging_gate": {
+            **final_packaging_gate_state(),
+            "short_lane": final_packaging_overview().get("short_lane", {}),
+        },
         "title_direction_gate": title_direction_gate_snapshot(),
         "format": fmt,
         "format_gate": fmt["format_gate"],

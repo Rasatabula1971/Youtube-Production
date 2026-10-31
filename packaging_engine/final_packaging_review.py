@@ -444,13 +444,19 @@ def bundle_path(concept_id: str) -> Path:
 
 
 def current_bundles(payload: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
-    """Current approved bundles keyed by concept_id (computed, not read from disk)."""
+    """Current approved bundles keyed by concept_id (computed, not read from disk).
+
+    A Short's bundle is built from its brief (D-190); long-form bundles come
+    from the decisions at this gate.
+    """
+    from packaging_engine import short_package
+
+    out: dict[str, dict[str, Any]] = dict(short_package.current_bundles())
     payload = payload or snapshot()
     validations = payload.get("_validations")
     if not isinstance(validations, list):
-        return {}
+        return out
     state = _load_state()
-    out: dict[str, dict[str, Any]] = {}
     for row in payload.get("concepts", []):
         concept_id = str(row.get("concept_id") or "")
         if not row.get("approved"):
