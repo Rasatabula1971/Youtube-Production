@@ -234,6 +234,7 @@ RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 from research_engine.research_review import (
     apply_question_waiver as apply_research_question_waiver,
     apply_action as apply_research_gate_action,
+    drop_concept as drop_research_concept,
 )
 from research_engine.research_review import (
     snapshot as research_gate_snapshot,
@@ -258,7 +259,9 @@ from story_script_engine.script_section_service import (
     apply_action as apply_script_section_review_action,
     snapshot as script_section_review_snapshot,
 )
+from story_script_engine.leftovers import prune_leftover_script_requests
 from story_script_engine.story_plan_engine import (
+    run_prepare as run_story_plan_prepare,
     validation_contract_sha256 as story_plan_validation_contract_sha256,
 )
 from story_script_engine.story_script_engine import (
@@ -2514,6 +2517,20 @@ def packaging_artifact_state() -> dict[str, Any]:
         "packaging_gate_complete": bool(gate.get("complete")),
         "research_ready": research_ready,
     }
+
+
+def drop_concept_everywhere(*, concept_id: str, note: str) -> dict[str, Any]:
+    """Drop a concept at the Research Gate and clear it from Story / Script (D-182).
+
+    The automatic run only re-prepares a stage whose current work looks
+    incomplete, and with the dropped concept gone the rest looks complete, so
+    its story and script requests are cleared here. Old study sets' leftover
+    script requests go with them.
+    """
+    payload = drop_research_concept(concept_id=concept_id, note=note)
+    run_story_plan_prepare()
+    removed = prune_leftover_script_requests()
+    return {**payload, "dropped_concept_id": concept_id, "leftover_script_requests_removed": removed}
 
 
 def research_artifact_state() -> dict[str, Any]:
@@ -9583,6 +9600,17 @@ class Handler(BaseHTTPRequestHandler):
                         str(body["rework_target"]) if body.get("rework_target") else None
                     ),
                 ))
+                auto_job = maybe_start_automatic_workflow()
+                if auto_job:
+                    payload = {**payload, "automation_job": auto_job}
+                self._send_json(payload)
+                return
+
+            if route == "/api/research-gate" and body.get("action") == "DROP_CONCEPT":
+                payload = drop_concept_everywhere(
+                    concept_id=str(body.get("concept_id", "")),
+                    note=str(body.get("note") or ""),
+                )
                 auto_job = maybe_start_automatic_workflow()
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}

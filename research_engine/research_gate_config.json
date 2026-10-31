@@ -19,5 +19,8 @@
       "dataset",
       "documentation"
     ]
+  },
+  "minimum_evidence": {
+    "accepted_claims": 2
   }
 }

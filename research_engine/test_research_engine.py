@@ -1,5 +1,10 @@
 from research_engine import research_engine as module
+import json
+import tempfile
 import unittest
+from contextlib import ExitStack
+from pathlib import Path
+from unittest.mock import patch
 
 from research_engine.research_engine import (
     build_research_plan,
@@ -132,10 +137,13 @@ class ResearchEngineTests(unittest.TestCase):
     def test_plan_creates_stable_question_ids(self):
         plan = build_research_plan(self.concept)
 
+        # rq001 tests the working title's promise (D-182); the concept's own
+        # questions follow it.
         self.assertEqual(
             [item["question_id"] for item in plan["research_questions"]],
-            ["rq001", "rq002", "pkgq001"],
+            ["rq001", "rq002", "rq003", "pkgq001"],
         )
+        self.assertEqual(plan["research_questions"][0]["origin"], "title_promise")
         self.assertEqual(
             plan["research_questions"][-1]["origin"],
             "legacy_packaging",
@@ -156,7 +164,7 @@ class ResearchEngineTests(unittest.TestCase):
 
         self.assertEqual(
             [item["question_id"] for item in plan["research_questions"]],
-            ["rq001", "rq002"],
+            ["rq001", "rq002", "rq003"],
         )
         self.assertEqual(plan["packaging"], {})
 
@@ -331,6 +339,73 @@ class ResearchEngineTests(unittest.TestCase):
                 ["gear/ratio", "gear ratio"],
                 label="concept",
             )
+
+    def test_the_first_question_tests_the_working_title_promise(self):
+        """D-182: "Single Cup of Water" reached the script with nothing behind its title."""
+        plan = build_research_plan(self.concept)
+        first = plan["research_questions"][0]
+        self.assertEqual(first["question_id"], "rq001")
+        self.assertEqual(first["origin"], "title_promise")
+        self.assertIn("Why Racing Brakes Behave Backwards", first["question"])
+        self.assertEqual(plan["research_questions"][1]["origin"], "concept")
+
+    def test_a_concept_without_a_working_title_gets_no_promise_question(self):
+        concept = dict(self.concept)
+        concept.pop("working_title")
+        concept.pop("packaging", None)
+        plan = build_research_plan(concept)
+        self.assertNotIn(
+            "title_promise", [item["origin"] for item in plan["research_questions"]]
+        )
+
+    def prepared_dirs(self, stack, root):
+        output = root / "output"
+        plans = output / "plans"
+        stack.enter_context(patch.object(module, "OUTPUT_DIR", output))
+        stack.enter_context(patch.object(module, "PLANS_DIR", plans))
+        stack.enter_context(patch.object(module, "SUMMARY_FILE", output / "summary.json"))
+        stack.enter_context(patch.object(module, "DROPPED_FILE", output / "dropped_concepts.json"))
+        handoff = root / "research_handoff.json"
+        second = {**self.concept, "concept_id": "c2", "working_title": "Second"}
+        handoff.write_text(
+            json.dumps({"artifact": "research_handoff", "concepts": [self.concept, second]}),
+            encoding="utf-8",
+        )
+        return output, plans, handoff
+
+    def test_a_plan_already_built_from_the_same_handoff_is_kept_as_it_is(self):
+        """Research under way must not restart because this code adds a question."""
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            output, plans, handoff = self.prepared_dirs(stack, Path(tmp))
+            module.run_prepare(handoff)
+            plan_path = plans / "c1.research_plan.json"
+            old = json.loads(plan_path.read_text(encoding="utf-8"))
+            old["research_questions"] = [q for q in old["research_questions"] if q["origin"] != "title_promise"]
+            plan_path.write_text(json.dumps(old), encoding="utf-8")
+            before = plan_path.read_bytes()
+            module.run_prepare(handoff)
+            self.assertEqual(plan_path.read_bytes(), before)
+
+            handoff.write_text(
+                json.dumps({"artifact": "research_handoff", "concepts": [self.concept]}),
+                encoding="utf-8",
+            )
+            module.run_prepare(handoff)
+            rebuilt = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual(rebuilt["research_questions"][0]["origin"], "title_promise")
+
+    def test_a_dropped_concept_gets_no_research_plan(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            output, plans, handoff = self.prepared_dirs(stack, Path(tmp))
+            module.run_prepare(handoff)
+            self.assertTrue((plans / "c2.research_plan.json").exists())
+            (output / "dropped_concepts.json").write_text(
+                json.dumps({"concepts": {"c2": {"note": "Too thin."}}}), encoding="utf-8"
+            )
+            summary = module.run_prepare(handoff)
+            self.assertFalse((plans / "c2.research_plan.json").exists())
+            self.assertTrue((plans / "c1.research_plan.json").exists())
+        self.assertEqual(summary["dropped_concepts_skipped"], ["c2"])
 
 
 if __name__ == "__main__":

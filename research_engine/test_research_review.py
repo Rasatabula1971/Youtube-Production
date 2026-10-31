@@ -84,9 +84,152 @@ class ResearchReviewTests(unittest.TestCase):
         stack.enter_context(
             patch.object(review, "load_config", return_value=self.config())
         )
+        stack.enter_context(
+            patch.object(review.research_plans, "DROPPED_FILE", output / "dropped_concepts.json")
+        )
 
     def criteria(self):
         return {name: True for name in self.config()["required_accept_criteria"]}
+
+    def strict(self, stack):
+        """The shipped rule: at least two accepted claims (D-182)."""
+        stack.enter_context(
+            patch.object(
+                review,
+                "load_config",
+                return_value={**self.config(), "minimum_evidence": {"accepted_claims": 2}},
+            )
+        )
+
+    def verified(self, concept_id="c1"):
+        path = review.VERIFIED_DIR / f"{concept_id}.verified_research_package.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def two_claim_package(self, concept_id="c1"):
+        package = self.package()
+        package["concept_id"] = concept_id
+        package["claims"].append(
+            {**package["claims"][0], "claim_id": "clm002", "statement": "A second bounded claim."}
+        )
+        return package
+
+    def write_draft(self, package):
+        path = review.DEFAULT_DRAFTS_DIR / f"{package['concept_id']}.draft_research_package.json"
+        path.write_text(json.dumps(package), encoding="utf-8")
+
+    def accept_all(self, concept_id, claim_ids):
+        final = None
+        for claim_id in claim_ids:
+            final = review.apply_action(
+                concept_id=concept_id, claim_id=claim_id, decision="ACCEPT", criteria={}, note=""
+            )
+        return final
+
+    def test_one_accepted_claim_is_too_thin_for_a_script(self):
+        """D-182: "Single Cup of Water" went on to the script on one accepted claim."""
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.strict(stack)
+            self.write_draft(self.package())
+            review.prepare_state()
+            final = self.accept_all("c1", ["clm001"])
+            verified = self.verified()
+        self.assertEqual(verified["status"], "RESEARCH_TOO_THIN")
+        self.assertIn("Only 1 accepted claim", verified["evidence_shortfalls"][0])
+        self.assertEqual(final["ready_for_story_script"], 0)
+        row = final["question_coverage"][0]
+        self.assertFalse(row["ready"])
+        self.assertIn("Too thin for a script", row["summary"])
+
+    def test_two_accepted_claims_are_enough(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.strict(stack)
+            self.write_draft(self.two_claim_package())
+            review.prepare_state()
+            final = self.accept_all("c1", ["clm001", "clm002"])
+        self.assertEqual(final["ready_for_story_script"], 1)
+        self.assertEqual(final["question_coverage"][0]["evidence_shortfalls"], [])
+
+    def promise_package(self):
+        package = self.two_claim_package()
+        package["research_questions"] = [
+            {"question_id": "rq001", "question": "Is the title true?", "origin": "title_promise"},
+            {"question_id": "rq002", "question": "What causes it?", "origin": "concept"},
+        ]
+        for claim in package["claims"]:
+            claim["question_ids"] = ["rq002"]
+        return package
+
+    def test_the_title_promise_is_never_waived(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.strict(stack)
+            self.write_draft(self.promise_package())
+            review.prepare_state()
+            # No claim refers to rq001, which waives an ordinary question (D-163).
+            auto_waived = review.current_state().get("waived_questions", {}).get("c1", {})
+            final = self.accept_all("c1", ["clm001", "clm002"])
+            with self.assertRaisesRegex(ValueError, "title's promise cannot be waived"):
+                review.apply_question_waiver(
+                    concept_id="c1", question_id="rq001", waive=True, note="Not needed."
+                )
+            verified = self.verified()
+        self.assertNotIn("rq001", auto_waived)
+        promise = next(q for q in verified["question_status"] if q["question_id"] == "rq001")
+        self.assertEqual(promise["status"], "TITLE_PROMISE_UNSUPPORTED")
+        self.assertEqual(verified["status"], "RESEARCH_TOO_THIN")
+        self.assertIn("No accepted claim backs what the title promises.", verified["evidence_shortfalls"])
+        question = next(
+            q for q in final["question_coverage"][0]["questions"] if q["question_id"] == "rq001"
+        )
+        self.assertTrue(question["title_promise"])
+        self.assertFalse(question["waivable"])
+
+    def test_research_verified_before_the_rule_is_rechecked_on_the_next_prepare(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.write_draft(self.package())
+            self.write_draft(self.two_claim_package("c2"))
+            review.prepare_state()
+            self.accept_all("c1", ["clm001"])
+            self.accept_all("c2", ["clm001", "clm002"])
+            self.assertEqual(self.verified("c1")["status"], "READY_FOR_STORY_SCRIPT")
+            passing = (review.VERIFIED_DIR / "c2.verified_research_package.json").read_bytes()
+
+            self.strict(stack)
+            review.prepare_state()
+            thin = self.verified("c1")
+            unchanged = (review.VERIFIED_DIR / "c2.verified_research_package.json").read_bytes()
+        self.assertEqual(thin["status"], "RESEARCH_TOO_THIN")
+        # A package that passes is left byte for byte, so its scripts stay current.
+        self.assertEqual(unchanged, passing)
+
+    def test_dropping_a_concept_takes_it_out_of_the_gate_and_verified_research(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            self.patch_paths(stack, Path(tmp))
+            self.write_draft(self.package())
+            self.write_draft(self.two_claim_package("c2"))
+            review.prepare_state()
+            self.accept_all("c1", ["clm001"])
+            self.accept_all("c2", ["clm001", "clm002"])
+            with self.assertRaisesRegex(ValueError, "note"):
+                review.drop_concept(concept_id="c1", note=" ")
+            with self.assertRaisesRegex(ValueError, "Unknown concept_id"):
+                review.drop_concept(concept_id="nope", note="x")
+            final = review.drop_concept(concept_id="c1", note="Nothing backs the title.")
+            registry = json.loads(review.research_plans.DROPPED_FILE.read_text(encoding="utf-8"))
+            c1_verified = (review.VERIFIED_DIR / "c1.verified_research_package.json").exists()
+            c1_request = (review.REVIEW_REQUESTS_DIR / "c1.research_gate_request.json").exists()
+            history = review.history_file().read_text(encoding="utf-8")
+            again = review.snapshot()
+        self.assertEqual(registry["concepts"]["c1"]["note"], "Nothing backs the title.")
+        self.assertFalse(c1_verified)
+        self.assertFalse(c1_request)
+        self.assertEqual({item["concept_id"] for item in final["claims"]}, {"c2"})
+        self.assertTrue(final["complete"])
+        self.assertIn("DROP_CONCEPT", history)
+        self.assertEqual({item["concept_id"] for item in again["claims"]}, {"c2"})
 
     def test_prepare_exposes_pending_claim(self):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:

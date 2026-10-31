@@ -58,6 +58,7 @@ SENTENCES: dict[str, str] = {
     "WAITING_FOR_RESEARCH_RESPONSES": "Waiting for the model's research claims.",
     "NO_SOURCES": "No source page was found for any research question; rework or reject the concept.",
     "RESEARCH_INCOMPLETE": "Not ready for the script: a question is unanswered or no claim was accepted.",
+    "RESEARCH_TOO_THIN": "Too thin for a script: too few accepted claims, or nothing backs the title's promise. Rework a claim or drop the concept.",
     "READY_FOR_STORY_SCRIPT": "Research verified; the story and script can be written.",
     "RESEARCH_GATE_READY": "Research claims are ready for your review.",
     "WAITING_FOR_ACCEPTED_CONCEPTS": "Waiting for you to accept a concept.",

@@ -26,6 +26,10 @@ from core.slugs import safe_slug
 
 HERE = Path(__file__).resolve().parent
 HUMAN_REWORK_ORIGIN = "human_rework"
+TITLE_PROMISE_ORIGIN = "title_promise"
+TOO_THIN = "RESEARCH_TOO_THIN"
+# Without a minimum_evidence setting the old rule holds: one accepted claim.
+DEFAULT_MINIMUM_ACCEPTED_CLAIMS = 1
 POLICY_DECIDER = "EVIDENCE_POLICY"
 CONFIG_FILE = HERE / "research_gate_config.json"
 
@@ -284,6 +288,47 @@ def validate_decisions(
     return mapped
 
 
+def minimum_accepted_claims(config: dict[str, Any]) -> int:
+    settings = config.get("minimum_evidence") if isinstance(config, dict) else None
+    value = settings.get("accepted_claims") if isinstance(settings, dict) else None
+    return int(value) if isinstance(value, int) and value > 0 else DEFAULT_MINIMUM_ACCEPTED_CLAIMS
+
+
+def evidence_shortfalls(
+    *,
+    accepted_count: int,
+    research_questions: list[dict[str, Any]],
+    answered_question_ids: set[str],
+    config: dict[str, Any],
+) -> list[str]:
+    """Why decided research is still too thin to write a script from (D-182).
+
+    Every claim decided and every question answered or waived is not enough on
+    its own: a concept left with one accepted claim, or with nothing behind
+    its title's promise, made a script the model had to fill with unsourced
+    statements.
+    """
+    reasons: list[str] = []
+    minimum = minimum_accepted_claims(config)
+    if accepted_count < minimum:
+        reasons.append(
+            f"Only {accepted_count} accepted claim{'' if accepted_count == 1 else 's'}; "
+            f"a script needs at least {minimum}."
+        )
+    for question in research_questions:
+        if not isinstance(question, dict) or question.get("origin") != TITLE_PROMISE_ORIGIN:
+            continue
+        if str(question.get("question_id")) not in answered_question_ids:
+            reasons.append("No accepted claim backs what the title promises.")
+    return reasons
+
+
+def gate_status(*, accepted_count: int, unresolved: list[str], shortfalls: list[str]) -> str:
+    if not accepted_count or unresolved:
+        return "RESEARCH_INCOMPLETE"
+    return TOO_THIN if shortfalls else "READY_FOR_STORY_SCRIPT"
+
+
 def apply_gate(
     package: dict[str, Any],
     request: dict[str, Any],
@@ -362,8 +407,15 @@ def apply_gate(
         instruction = question.get("origin") == HUMAN_REWORK_ORIGIN
         # A reviewer may waive an original question the evidence cannot answer.
         # The script then has no accepted claim for it and may not state it.
-        waiver = waivers.get(question_id) if not resolved and not instruction else None
-        if not resolved and not instruction and not isinstance(waiver, dict):
+        # The title's promise is never waived: with nothing behind it, the
+        # concept is too thin and is dropped instead (D-182).
+        promise = question.get("origin") == TITLE_PROMISE_ORIGIN
+        waiver = (
+            waivers.get(question_id)
+            if not resolved and not instruction and not promise
+            else None
+        )
+        if not resolved and not instruction and not promise and not isinstance(waiver, dict):
             unresolved.append(question_id)
         entry = {
             "question_id": question_id,
@@ -375,6 +427,8 @@ def apply_gate(
                 if instruction
                 else "WAIVED_NOT_FOR_SCRIPT"
                 if isinstance(waiver, dict)
+                else "TITLE_PROMISE_UNSUPPORTED"
+                if promise
                 else "UNRESOLVED"
             ),
             "accepted_claim_ids": [claim["claim_id"] for claim in linked],
@@ -408,14 +462,23 @@ def apply_gate(
         "question_status": question_status,
     }
 
+    shortfalls = evidence_shortfalls(
+        accepted_count=len(buckets["accepted"]),
+        research_questions=package.get("research_questions", []),
+        answered_question_ids={
+            item["question_id"] for item in question_status if item["status"] == "RESOLVED_FOR_SCRIPT"
+        },
+        config=config,
+    )
     verified = {
         "artifact": "verified_research_package",
         "concept_id": package.get("concept_id"),
-        "status": (
-            "READY_FOR_STORY_SCRIPT"
-            if buckets["accepted"] and not unresolved
-            else "RESEARCH_INCOMPLETE"
+        "status": gate_status(
+            accepted_count=len(buckets["accepted"]),
+            unresolved=unresolved,
+            shortfalls=shortfalls,
         ),
+        "evidence_shortfalls": shortfalls,
         "concept": package.get("concept", {}),
         "research_questions": package.get("research_questions", []),
         "question_status": question_status,
