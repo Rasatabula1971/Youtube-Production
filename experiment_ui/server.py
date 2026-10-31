@@ -10,6 +10,8 @@ import argparse
 import hashlib
 import json
 import re
+import base64
+import binascii
 import os
 import secrets
 import shutil
@@ -210,6 +212,7 @@ from packaging_engine.package_pairing import (
     snapshot as package_validation_snapshot,
 )
 from packaging_engine.short_package import lane_state as short_package_lane_state
+from packaging_engine import thumbnail_upload
 from packaging_engine.final_packaging_review import (
     apply_action as apply_final_packaging_gate_action,
     current_bundle_hashes as final_package_bundle_hashes,
@@ -1775,6 +1778,21 @@ def final_packaging_overview(package_validation_ready: bool | None = None) -> di
         final = {"status": "SHORT_LANE_PACKAGED", "ready": True, "items": []}
     ready = bool(final.get("ready")) and bool(lanes.get("short_ready"))
     return {**final, "ready": ready, "short_lane": lanes}
+
+
+def thumbnail_uploads_state() -> list[dict[str, Any]]:
+    """Each packaged video's thumbnail prompt and upload (D-191); empty on error."""
+    try:
+        rows = thumbnail_upload.items()
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    for row in rows:
+        row["image_url"] = (
+            "/api/thumbnail-upload-file?" + urlencode({"video_id": row["video_id"], "v": (row["upload"] or {}).get("image_sha256", "")[:12]})
+            if row["uploaded"]
+            else None
+        )
+    return rows
 
 
 def video_budget_state() -> dict[str, Any]:
@@ -8941,6 +8959,7 @@ def status_payload() -> dict[str, Any]:
         "thumbnail_concepts": thumbnail_concept_snapshot(),
         "package_pairing_requests": package_pairing_request_snapshot(),
         "package_validation": package_validation_snapshot(),
+        "thumbnail_uploads": thumbnail_uploads_state(),
         "final_packaging_gate": {
             **final_packaging_gate_state(),
             "short_lane": final_packaging_overview().get("short_lane", {}),
@@ -9396,6 +9415,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(exc)}, 404)
                 return
             self._send_static(path, image_content_type(path))
+            return
+        if route == "/api/thumbnail-upload-file":
+            # The thumbnail the owner uploaded for one video (D-191).
+            video_id = str((parse_qs(urlparse(self.path).query).get("video_id") or [""])[0])
+            image = thumbnail_upload.image_file(video_id)
+            if image is None:
+                self._send_json({"error": "No uploaded thumbnail for this video."}, 404)
+                return
+            self._send_static(image, image_content_type(image))
             return
         if route == "/api/vision-frame":
             query = parse_qs(urlparse(self.path).query)
@@ -10283,6 +10311,22 @@ class Handler(BaseHTTPRequestHandler):
                 if auto_job:
                     payload = {**payload, "automation_job": auto_job}
                 self._send_json(payload)
+                return
+
+            if route == "/api/thumbnail-upload":
+                # The thumbnail the owner made from its prompt (D-191). Not locked
+                # while a run is going: only publishing reads it.
+                try:
+                    data = base64.b64decode(str(body.get("image_base64") or ""), validate=True)
+                except (ValueError, binascii.Error) as exc:
+                    raise ValueError("The image did not arrive intact; try the upload again") from exc
+                thumbnail_upload.upload(
+                    video_id=str(body.get("video_id", "")),
+                    data=data,
+                    made_with=str(body.get("made_with", "")),
+                    reviewer=os.getenv("YOUTUBE_REVIEWER_ID", "local-operator"),
+                )
+                self._send_json({"thumbnail_uploads": thumbnail_uploads_state()})
                 return
 
             if route == "/api/thumbnail-images":

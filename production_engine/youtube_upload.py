@@ -189,15 +189,11 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
             )
         raise ValueError("Approve the publish package before uploading")
     video = Path(str(approval["video_file"]))
-    # A Short's thumbnail is a frame of the video: nothing to upload (D-190).
-    video_frame = approval.get("thumbnail_source") == "VIDEO_FRAME"
-    thumbnail = Path(str(approval.get("thumbnail_file") or ""))
+    thumbnail = Path(str(approval["thumbnail_file"]))
     if not known_id:
         if video.suffix.lower() not in VIDEO_TYPES or not video.is_file() or _sha256(video) != approval["video_sha256"]:
             raise ValueError("The approved video file is missing or changed since approval")
-    if not video_frame and (
-        thumbnail.suffix.lower() not in IMAGE_TYPES or not thumbnail.is_file() or _sha256(thumbnail) != approval["thumbnail_sha256"]
-    ):
+    if thumbnail.suffix.lower() not in IMAGE_TYPES or not thumbnail.is_file() or _sha256(thumbnail) != approval["thumbnail_sha256"]:
         raise ValueError("The approved thumbnail file is missing or changed since approval")
 
     config = settings()
@@ -279,24 +275,22 @@ def _upload(concept_id: str, fmt: str, http: Callable[..., tuple[dict[str, str],
         )
 
     thumbnail_error = None
-    if not video_frame:
-        try:
-            http(
-                urllib.request.Request(  # noqa: S310 - fixed https URL
-                    THUMBNAIL_URL + urllib.parse.quote(video_id), data=thumbnail.read_bytes(), method="POST",
-                    headers={**auth, "Content-Type": IMAGE_TYPES[thumbnail.suffix.lower()]},
-                ),
-                120,
-            )
-        except (ValueError, OSError) as exc:
-            # The video exists on YouTube: record it so a retry never uploads it again.
-            thumbnail_error = str(exc)
+    try:
+        http(
+            urllib.request.Request(  # noqa: S310 - fixed https URL
+                THUMBNAIL_URL + urllib.parse.quote(video_id), data=thumbnail.read_bytes(), method="POST",
+                headers={**auth, "Content-Type": IMAGE_TYPES[thumbnail.suffix.lower()]},
+            ),
+            120,
+        )
+    except (ValueError, OSError) as exc:
+        # The video exists on YouTube: record it so a retry never uploads it again.
+        thumbnail_error = str(exc)
     uploaded_with = str((publish_review.pending_upload(concept_id, fmt) or {}).get("metadata_sha256") or meta_hash)
     return publish_review.record_upload(
         concept_id=concept_id, format=fmt, youtube_video_id=video_id, method="YOUTUBE_DATA_API",
         details={
-            "thumbnail_set": thumbnail_error is None and not video_frame,
-            "thumbnail_source": "VIDEO_FRAME" if video_frame else "IMAGE",
+            "thumbnail_set": thumbnail_error is None,
             "thumbnail_error": thumbnail_error,
             "resumed": resumed,
             # False when the approval changed after YouTube received the video:

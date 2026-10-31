@@ -1,4 +1,4 @@
-"""A Short is packaged from its brief: chosen title, hook, promise, video frame (D-190)."""
+"""A Short is packaged from its brief: chosen title, hook and promise (D-190, D-191)."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class ShortPackageTests(unittest.TestCase):
         self.path = Path(tmp.name) / "c_tyre.short.packaging_brief.json"
         self.path.write_text(json.dumps(brief()), encoding="utf-8")
 
-    def test_the_bundle_is_the_chosen_title_hook_promise_and_a_video_frame(self):
+    def test_the_bundle_is_the_chosen_title_hook_and_promise_with_an_uploaded_thumbnail(self):
         bundle = short_package.build_bundle(self.path, brief())
         package = bundle["packages"]["short"]
         self.assertEqual(bundle["status"], "FINAL_PACKAGE_APPROVED")
@@ -53,7 +53,7 @@ class ShortPackageTests(unittest.TestCase):
         self.assertEqual(package["title_text"], "How Smooth Plane Tires Keep You Safe on Wet Runways")
         self.assertEqual(package["opening_hook"], brief()["opening_hook"])
         self.assertEqual(package["viewer_promise"], "Discover how bald-looking tires stop a plane.")
-        self.assertEqual(package["thumbnail_source"], short_lane.VIDEO_FRAME)
+        self.assertEqual(package["thumbnail_source"], short_lane.UPLOADED)
         self.assertIsNone(package["thumbnail_image"])
         self.assertEqual(package["title_evidence_refs"], ["cl_002"])
         self.assertEqual(package["decision"]["decided_by"], "GATE_POLICY")

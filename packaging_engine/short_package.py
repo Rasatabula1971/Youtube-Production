@@ -4,9 +4,9 @@ The Final Packaging Gate locks one title, thumbnail, hook and promise per
 format after a 25-pair matrix and an approved thumbnail image. For a Short
 that was most of a day of decisions for a 45-second video, and Shorts are
 shown with a frame of the video anyway. A Short's package is therefore the
-title chosen at the Title Direction step, the approved opening hook and Viewer
-Promise from its Packaging Brief, and a frame of the finished video as its
-thumbnail. It has the same shape as an accepted Final Packaging bundle, so the
+title chosen at the Title Direction step and the approved opening hook and
+Viewer Promise from its Packaging Brief. Its thumbnail is made by the owner
+from the generated prompt and uploaded (D-191). It has the same shape as an accepted Final Packaging bundle, so the
 Format stage and publishing read it the same way.
 
 Nothing here calls a model or invents wording: every field is copied from the
@@ -49,10 +49,10 @@ def build_bundle(brief_path: Path, brief: dict[str, Any]) -> dict[str, Any]:
         "title_search_intent": brief.get("search_vs_browse_intent"),
         "thumbnail_id": None,
         "thumbnail_text": None,
-        "thumbnail_source": short_lane.VIDEO_FRAME,
+        "thumbnail_source": short_lane.UPLOADED,
         "thumbnail_concept": {
-            "source": short_lane.VIDEO_FRAME,
-            "note": "A frame of the finished Short; YouTube shows a frame for Shorts.",
+            "source": short_lane.UPLOADED,
+            "note": "Made by the owner from the thumbnail prompt and uploaded.",
         },
         "thumbnail_image": None,
         "psychological_angle": title.get("psychological_angle"),
@@ -65,8 +65,8 @@ def build_bundle(brief_path: Path, brief: dict[str, Any]) -> dict[str, Any]:
             "decided_by": DECIDER,
             "criteria": {},
             "note": (
-                "Short lane (D-190): the title chosen at Title Direction, the approved hook "
-                "and promise, and a frame of the finished video as thumbnail."
+                "Short lane (D-190): the title chosen at Title Direction and the approved "
+                "hook and promise; the thumbnail is made from its prompt and uploaded (D-191)."
             ),
         },
         "provenance": {
@@ -125,7 +125,7 @@ def lane_state() -> dict[str, Any]:
             {
                 "concept_id": concept_id,
                 "title_text": bundle["packages"]["short"]["title_text"],
-                "thumbnail_source": short_lane.VIDEO_FRAME,
+                "thumbnail_source": short_lane.UPLOADED,
             }
             for concept_id, bundle in sorted(bundles.items())
         ],

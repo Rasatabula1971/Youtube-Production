@@ -65,6 +65,9 @@ class FinalPackagingGateTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         self.config = copy.deepcopy(fpr.load_config())
+        # These tests cover the rendered-image rule; the shipped config turns it
+        # off because the owner uploads the thumbnail at publishing (D-191).
+        self.config["require_approved_thumbnail_image"] = True
         self.validations = [
             package("c1:long_form", "lt1", "lth1"),
             package("c1:long_form", "lt2", "lth1"),
@@ -286,3 +289,12 @@ class FinalPackagingGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UploadedThumbnailConfigTests(unittest.TestCase):
+    def test_the_shipped_gate_no_longer_needs_a_rendered_image(self):
+        """The Aviation Tires package could not be accepted without one (D-191)."""
+        config = fpr.load_config()
+        self.assertFalse(config["require_approved_thumbnail_image"])
+        self.assertNotIn(config["image_criterion"], fpr.required_criteria(config))
+
