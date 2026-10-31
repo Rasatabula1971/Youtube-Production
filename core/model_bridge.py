@@ -265,8 +265,10 @@ def bridge_payload(
         payload["prompt"] = prompt
         payload["expected_schema"] = schema
         # Read by call_fair_bridge and never sent to FAIR (D-187).
-        runner = config.get("runner") if isinstance(config.get("runner"), dict) else {}
-        payload["direct_gemini_first"] = bool(runner.get("direct_gemini_first", False))
+        runner = config.get("runner")
+        payload["direct_gemini_first"] = bool(
+            isinstance(runner, dict) and runner.get("direct_gemini_first", False)
+        )
     return payload
 
 

@@ -6216,3 +6216,36 @@ a repair attempt; packaging had none.
 
 **Consequences.** A one-off slip costs one more free model call instead of a
 stopped run. A repeated slip still stops the run and shows both errors.
+
+## D-187 — The free Gemini API answers first; FAIR is the fallback
+
+**Context.** D-129 made FAIR primary, with direct Gemini only a backup when
+the free pool was exhausted. In practice:
+- FAIR's best route, Groq gpt-oss-120b, allows 8,000 tokens a minute. One
+  story, script or packaging request is about 6,000 to 9,000 tokens.
+- Back-to-back steps, and any repair attempt, hit the per-minute limit.
+- FAIR then spent its three answered attempts on routes that reject these
+  schemas (Groq 20b, the Cloudflare models), so runs stopped and the owner
+  pressed Continue again.
+
+The free Gemini API (Flash-Lite: 10 requests a minute, 250,000 tokens a
+minute, 500 requests a day) had already handled analysis, concepts, research
+and frame drafts. The owner asked for it to go first.
+
+**Decision.**
+- With `runner.direct_gemini_first` set (the shipped config sets it), the
+  shared bridge asks the free Gemini API before FAIR on every solve request.
+  It uses the existing key, model list, host check and billing attestation
+  (D-161).
+- With no attestation, Gemini is never called, as before.
+- If Gemini cannot answer (quota, error), FAIR runs as before. It does not
+  call Gemini a second time as its backup.
+- The flag is removed before the payload reaches FAIR.
+
+**Consequences.**
+- Most model steps finish on the first call.
+- Requests go to Google's free tier, where Google may use them to improve its
+  products. This was already true for the backup and for vision (D-179).
+- FAIR, including its own Gemini key (a separate free project, confirmed by
+  the owner), stays available when the first key is limited.
+- Setting the flag to false restores D-129's order.
