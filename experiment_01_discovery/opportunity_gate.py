@@ -423,7 +423,8 @@ def gate_snapshot() -> dict[str, Any]:
                 "niche": opportunity.get("niche"),
                 "format_candidate": opportunity.get("format_candidate"),
                 "decision": opportunity.get("decision", "PENDING"),
-                "can_approve": _all_examples_kept(opportunity),
+                # Approving keeps the examples not yet decided (D-188).
+                "can_approve": bool(opportunity.get("selected_video_ids")),
                 "alternatives_available": alternative_count,
                 "topic_evidence": topic_evidence,
                 "vidiq_evidence": vidiq_opportunities.get(key, {}),
@@ -540,10 +541,15 @@ def apply_gate_action(
         opportunity["decision"] = "PENDING"
 
     elif action == "APPROVE_TOPIC":
-        if not _all_examples_kept(opportunity):
-            raise ValueError(
-                "Review every selected example first. Mark each one KEEP or replace it."
-            )
+        # Approving the topic keeps every example still pending; replacing one
+        # first stays possible (Two Lanes, D-188).
+        selected = [str(item) for item in opportunity.get("selected_video_ids", [])]
+        if not selected:
+            raise ValueError("This opportunity has no selected examples to study.")
+        decisions = opportunity.setdefault("video_decisions", {})
+        for selected_id in selected:
+            if decisions.get(selected_id) != "KEEP":
+                decisions[selected_id] = "KEEP"
         opportunity["decision"] = "APPROVE"
 
     elif action == "REJECT_TOPIC":

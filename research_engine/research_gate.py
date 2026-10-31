@@ -31,6 +31,8 @@ TOO_THIN = "RESEARCH_TOO_THIN"
 # Without a minimum_evidence setting the old rule holds: one accepted claim.
 DEFAULT_MINIMUM_ACCEPTED_CLAIMS = 1
 POLICY_DECIDER = "EVIDENCE_POLICY"
+# The gate policy may only leave a claim out, never accept one (Two Lanes, D-188).
+LEFT_OUT_DECIDER = "GATE_POLICY"
 CONFIG_FILE = HERE / "research_gate_config.json"
 
 OUTPUT_DIR = HERE / "output"
@@ -251,8 +253,12 @@ def validate_decisions(
             )
 
         decided_by = str(decision.get("decided_by") or "HUMAN").strip().upper()
-        if decided_by not in {"HUMAN", POLICY_DECIDER}:
+        if decided_by not in {"HUMAN", POLICY_DECIDER, LEFT_OUT_DECIDER}:
             raise ValueError(f"Unknown decided_by for {claim_id}: {decided_by!r}")
+        if decided_by == LEFT_OUT_DECIDER and value != "REJECT":
+            raise ValueError(
+                f"The gate policy may only leave {claim_id} out, never accept or rework it"
+            )
         policy_reasons: list[str] = []
         if decided_by == POLICY_DECIDER:
             # The evidence policy may only accept, and only a claim it clears
@@ -374,7 +380,7 @@ def apply_gate(
             "criteria": decision["criteria"],
             "note": decision["note"],
             "decided_by": decision["decided_by"],
-            "reviewer": reviewer if decision["decided_by"] == "HUMAN" else POLICY_DECIDER,
+            "reviewer": reviewer if decision["decided_by"] == "HUMAN" else decision["decided_by"],
             "reviewed_at": reviewed_at,
         }
         if decision.get("policy_reasons"):

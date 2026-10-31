@@ -322,6 +322,8 @@ def run_gate_policy(state: str | None, completed_actions: list[str], held: dict[
     print(f"AUTOMATIC MACHINE STEP — Gate policy: {outcome['gate'].replace('_', ' ')}")
     print("=" * 72)
     print(f"Decided automatically: {outcome['decided']}; left for you: {len(outcome.get('held') or [])}")
+    for line in outcome.get("notes") or []:
+        print(f"  {line}")
     for line in outcome.get("held") or []:
         print(f"  held: {line}")
     completed_actions.append(f"gate_policy:{outcome['gate']}")

@@ -6250,6 +6250,67 @@ and frame drafts. The owner asked for it to go first.
   the owner), stays available when the first key is limited.
 - Setting the flag to false restores D-129's order.
 
+## D-188 — Two lanes, part 1: the lane policy (concept, research, topic)
+
+**Context.** One 45-second Short (Aviation Tires) took two days to reach
+packaging and asked for about 11 owner stops: every research claim, 18 frames,
+a 25-pair matrix, a hand-sourced thumbnail. The owner accepted the Two Lanes
+contract (`claude/Two_Lanes_Contract.md`, 31 Oct 2026):
+- Short: 3 decisions (topic, script, finished video).
+- Long-form: 5 decisions (topic, concept, script, package, finished video).
+
+This is the first of its four PRs.
+
+**Decision.**
+- **Lanes in the gate policy.** `gate_policy.json` has a `lanes` block. A
+  lane's own setting wins over the shared `gates` one. The concept gate's lane
+  is Short when every concept at the gate is a Short, otherwise long-form.
+- **Topic.** Approving the topic keeps every example still pending. Replacing
+  one first stays possible.
+- **On-topic guard** (`transformation_engine/topic_guard.py`). The topic words
+  come from the approved study set's topic slug, or the seed topic of a
+  submitted video or question. A concept is on topic when its title or premise
+  uses one of them (tyre and tire match). With no topic words, nothing is on
+  topic, so nothing is picked automatically.
+- **Concept, Short lane** (AUTO_IF_CLEAN).
+  - The highest triage-ranked on-topic concept is accepted.
+  - The other on-topic concepts are kept in reserve, in rank order. Off-topic
+    ones are rejected as "not about the approved topic".
+  - Every decision is recorded with `decided_by: GATE_POLICY`.
+  - If the owner has already started deciding, or no concept is on topic, the
+    gate is left to the owner.
+- **Concept, long-form lane** stays with the owner. Top 3 comes in PR 4.
+- **Research** (AUTO_IF_CLEAN, both lanes).
+  - Claims the evidence policy clears are accepted, as before (D-131).
+  - Every other undecided claim is rejected with `decided_by: GATE_POLICY` and
+    left out of the script. The research gate accepts GATE_POLICY only on a
+    rejection.
+  - A question left with no accepted claim is waived. The title's promise is
+    never waived (D-182).
+  - The evidence policy can still accept a left-out claim later, and the owner
+    can accept one from the Research Gate.
+- **Too thin.** A concept still not ready (too thin, or no claim confirmed) is
+  dropped automatically. The drop records `decided_by: GATE_POLICY` and the
+  shortfall. In the Short lane, the next reserve concept is accepted and the
+  research handoff rewritten, so research starts on it. With the reserve used
+  up, the drop is held for the owner. Questions the owner kept open stop for
+  the owner.
+- **Shown, not asked.**
+  - The script screen lists the claims left out as "left out, unconfirmed",
+    with the reason.
+  - Productions lists dropped concepts and why, and says whether the drop was
+    automatic.
+  - The run log prints the leave-outs, drops and the next concept tried.
+
+**Consequences.**
+- A Short no longer stops at the concept or research gate unless a check fails.
+- An automatic pick can differ from the owner's choice: on the Aviation Tires
+  shortlist it would have picked "Inside a Tire One Millisecond Before
+  Failure" (88), not "Aviation Tires" (81).
+- `owner_stops(lane)` lists the gates that stop for the owner per lane. Its
+  test holds the contract table, minus the stops PR 2 (Short packaging) and
+  PR 3 (narration preview, rough cut, visual rights, export plus publish)
+  remove.
 ## D-189 — Each packaging currency check runs once per read
 
 **Context.** The Command Center stayed on "Loading..." once the Aviation Tires
