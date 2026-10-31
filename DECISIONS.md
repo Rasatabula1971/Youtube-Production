@@ -6180,3 +6180,16 @@ likely next failure.
 **Decision.** Both prompts list the exact words and say to describe the idea
 in other words. The prompt versions are now v1.1, which regenerates the angle
 and thumbnail requests. The validators are unchanged.
+
+## D-185 — A risky word in the approved title may appear in angles and thumbnails
+
+**Context.** After D-184, angles passed, but the thumbnail set was rejected
+for "secret". The owner had approved the title "The Secret Behind Aircraft
+Tires That Look Like Slick Rubber" at the Title Direction Gate, and the
+thumbnail request passes that title to the model. So the title was allowed to
+use the word while the thumbnail could not echo it.
+
+**Decision.** In the angle and thumbnail checks, a word from the refused list
+is allowed when the selected title uses it. Every other refused word still
+needs a cited claim that uses it. A thumbnail that only repeats the title
+is still rejected. The prompts say the same, and their versions are now v1.2.

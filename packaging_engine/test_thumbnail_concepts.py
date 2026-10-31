@@ -135,6 +135,19 @@ class ThumbnailConceptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "repeats selected title"):
             module.validate_response(response, self.request())
 
+    def test_a_risky_word_the_approved_title_uses_is_allowed(self):
+        """D-185: the owner approved "The Secret Behind Aircraft Tires…"; its thumbnail echoed "secret"."""
+        request = self.request()
+        request["selected_title_direction"] = {"title_text": "The Secret Behind Cold Race Brakes"}
+        response = self.response()
+        response["thumbnail_concepts"][0]["viewer_visual_question"] = "What secret hides in the alpha cold disc?"
+        result = module.validate_response(response, request)
+        self.assertEqual(len(result["thumbnail_concepts"]), 5)
+        # A risky word the title does not use still needs a claim.
+        response["thumbnail_concepts"][0]["viewer_visual_question"] = "Why is the alpha disc so dangerous?"
+        with self.assertRaisesRegex(ValueError, "high-risk claim word 'dangerous'"):
+            module.validate_response(response, request)
+
     def test_invented_evidence_ref_is_rejected(self):
         response = self.response()
         response["thumbnail_concepts"][0]["evidence_refs"] = ["invented"]

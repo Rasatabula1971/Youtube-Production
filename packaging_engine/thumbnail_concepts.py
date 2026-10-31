@@ -36,7 +36,7 @@ SUMMARY_FILE = OUTPUT_DIR / "thumbnail_concept_summary.json"
 REWORK_FILE = OUTPUT_DIR / "thumbnail_concept_rework.json"
 
 SCHEMA_VERSION = "1.0"
-PROMPT_VERSION = "thumbnail-concepts-v1.1"
+PROMPT_VERSION = "thumbnail-concepts-v1.2"
 
 NUMBER_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:[$£€]?\d+(?:[.,]\d+)*(?:\s?%|\s?[xX])?)(?![A-Za-z0-9])"
@@ -251,10 +251,15 @@ def niche_conventions(video_format: Any) -> dict[str, Any]:
     return packaging_conventions(str(niche), str(video_format)).get(str(video_format), {})
 
 
+def _selected_title_text(request: dict[str, Any]) -> str:
+    selected = request.get("selected_title_direction")
+    return str(selected.get("title_text") or "").lower() if isinstance(selected, dict) else ""
+
+
 def banned_words_instruction() -> str:
     """The exact words the validator refuses, named in the prompt (D-184)."""
     return (
-        "Do not use these words anywhere in your output unless the evidence ref you cite uses the same word: "
+        "Do not use these words anywhere in your output unless the evidence ref you cite, or the selected title, uses the same word: "
         + ", ".join(sorted(RISKY_CLAIM_WORDS))
         + ". Describe the same idea in other words instead."
     )
@@ -286,7 +291,9 @@ def _validate_claim_language(
         if number.strip().lower() not in _allowed_numbers(request):
             raise ValueError(f"{path} invents unsupported number {number!r}")
     lower = text.lower()
-    cited = " ".join(_claims_by_id(request).get(ref, "") for ref in refs).lower()
+    # A word the owner accepted in the selected title is the owner's
+    # decision, already taken at the Title Direction Gate (D-185).
+    cited = _selected_title_text(request) + " " + " ".join(_claims_by_id(request).get(ref, "") for ref in refs).lower()
     for word in RISKY_CLAIM_WORDS:
         if re.search(rf"\b{re.escape(word)}\b", lower) and not re.search(
             rf"\b{re.escape(word)}\b", cited
