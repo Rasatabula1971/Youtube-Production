@@ -6193,3 +6193,26 @@ use the word while the thumbnail could not echo it.
 is allowed when the selected title uses it. Every other refused word still
 needs a cited claim that uses it. A thumbnail that only repeats the title
 is still rejected. The prompts say the same, and their versions are now v1.2.
+
+## D-186 — A packaging answer that fails validation gets one corrected attempt
+
+**Context.** On Aviation Tires, the packaging validators stopped the
+automatic run three times in a row. Each catch was a real slip ("dangerous",
+"secret", an invented "300"). Each time the owner pressed Continue again for
+a fresh answer that could slip somewhere else. The concept stage already has
+a repair attempt; packaging had none.
+
+**Decision.**
+- When the title direction, angle, thumbnail or pairing answer fails
+  validation, the runner asks the model once more in the same run. It sends
+  the validator's exact error and the previous answer
+  (`packaging_engine/validation_repair.py`).
+- The corrected answer goes through the same validator and the same cost
+  policy. Nothing is relaxed.
+- If it fails too, the run stops as before. The report records both errors
+  and the corrected attempt.
+- The corrected answer is saved as `<item>.repair.txt` next to the raw
+  output.
+
+**Consequences.** A one-off slip costs one more free model call instead of a
+stopped run. A repeated slip still stops the run and shows both errors.
