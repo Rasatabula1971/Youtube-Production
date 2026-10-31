@@ -671,7 +671,12 @@ def apply(request_path: Path, response_path_file: Path) -> dict[str, Any]:
 
 
 def snapshot() -> dict[str, Any]:
-    if not REVIEW_REQUESTS_DIR.exists():
+    # An empty folder is the same as none: nothing has been prepared yet. Read
+    # as "awaiting a decision", it left nothing to decide and nothing to
+    # prepare, and the automatic run stopped for good.
+    if not REVIEW_REQUESTS_DIR.exists() or not any(
+        REVIEW_REQUESTS_DIR.glob("*.script_review_request.json")
+    ):
         return {
             "status": "READY_TO_PREPARE",
             "complete": False,
