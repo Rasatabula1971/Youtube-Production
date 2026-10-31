@@ -45,6 +45,7 @@ from core.pipeline_integrity import atomic_write_json
 from packaging_engine import niche_thumbnail_study as niche
 from core.hashing import canonical_sha256 as content_sha256, sha256_file
 from core.jsonio import load_json
+from core.request_memo import memoized
 
 TEMPLATE_FILE = HERE / "thumbnail_template.json"
 PACKAGING_CONFIG_FILE = PACKAGING_DIR / "packaging_config.json"
@@ -170,6 +171,7 @@ CONCEPT_FIELDS = (
 )
 
 
+@memoized
 def pairing_sources() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """Current Slice 26 pair validations and Slice 25 concept sets, or nothing yet."""
     from packaging_engine import package_pairing
@@ -182,6 +184,7 @@ def pairing_sources() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     return validations, concepts
 
 
+@memoized
 def load_render_units(template: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """One render unit per thumbnail concept with at least one renderable pair."""
     template = template or load_template()
@@ -911,6 +914,7 @@ def current_render(
     return report, problems
 
 
+@memoized
 def current_approvals(template: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
     """Approved thumbnail records whose render is still current, keyed by render_id."""
     template = template or load_template()

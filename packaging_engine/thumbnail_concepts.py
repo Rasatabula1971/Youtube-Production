@@ -25,6 +25,7 @@ from packaging_engine.psychological_angles import (
 )
 from core.hashing import sha256_file
 from core.slugs import safe_slug
+from core.request_memo import memoized
 
 HERE = Path(__file__).resolve().parent
 CONFIG_FILE = HERE / "packaging_config.json"
@@ -527,6 +528,7 @@ def run_prepare() -> dict[str, Any]:
     return result
 
 
+@memoized
 def request_is_current(path: Path) -> dict[str, Any] | None:
     if not path.is_file() or path.parent.resolve() != REQUESTS_DIR.resolve():
         return None
@@ -549,6 +551,7 @@ def request_is_current(path: Path) -> dict[str, Any] | None:
 
 
 
+@memoized
 def request_snapshot() -> dict[str, Any]:
     angle_state = angle_snapshot()
     expected = int(angle_state.get("current") or 0) if angle_state.get("ready") else 0
@@ -640,6 +643,7 @@ def run_apply() -> dict[str, Any]:
     return result
 
 
+@memoized
 def item_is_current(item: dict[str, Any]) -> bool:
     try:
         request_path = Path(str(item.get("request_file") or ""))
@@ -670,6 +674,7 @@ def item_is_current(item: dict[str, Any]) -> bool:
         return False
 
 
+@memoized
 def snapshot() -> dict[str, Any]:
     angle_state = angle_snapshot()
     expected = int(angle_state.get("current") or 0) if angle_state.get("ready") else 0
