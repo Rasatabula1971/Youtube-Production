@@ -23,6 +23,8 @@ from core.pipeline_integrity import (
 
 EXP2_DIR = _ROOT / "experiment_02_analysis"
 
+from core.hashing import sha256_file
+from core.jsonio import load_json
 from core.model_bridge import (
     bridge_payload,
     call_fair_bridge,
@@ -32,7 +34,9 @@ from core.model_bridge import (
     resolve_fair_paths,
     safe_attempts,
 )
-
+from core.slugs import safe_slug
+from packaging_engine.validation_repair import attempt_repair, repair_report
+from packaging_engine.validation_repair import failure_status as repair_failure_status
 from production_engine.voice_performance import (
     MODEL_RUNS_DIR,
     RAW_OUTPUTS_DIR,
@@ -42,9 +46,6 @@ from production_engine.voice_performance import (
     validate_response,
     validation_contract_sha256,
 )
-from core.hashing import sha256_file
-from core.jsonio import load_json
-from core.slugs import safe_slug
 
 BATCH_SUMMARY_FILE = SPECS_DIR.parent / "voice_performance_model_batch_summary.json"
 
@@ -145,6 +146,37 @@ def build_prompt(request: dict[str, Any], maximum_chars: int) -> str:
     if len(prompt) > maximum_chars:
         raise ValueError("Voice Performance prompt exceeds configured maximum")
     return prompt
+
+
+def drop_unspoken_emphasis(response: Any, request: dict[str, Any]) -> list[dict[str, str]]:
+    """Remove emphasis terms the narration does not contain word for word (D-192).
+
+    Emphasis is a delivery hint, not content. The model stressed "touch down"
+    where the script says "touches down", and the whole plan (emotion, pace
+    and pauses for every beat) was thrown away. Such a term is dropped and
+    recorded instead; the spoken words never change, and every other check
+    still applies. Empty or non-text terms are left for the validator.
+    """
+    narration = {
+        str(beat.get("beat_id") or ""): str(beat.get("immutable_narration") or "").casefold()
+        for beat in request.get("beats", [])
+        if isinstance(beat, dict)
+    }
+    dropped: list[dict[str, str]] = []
+    directions = response.get("directions") if isinstance(response, dict) else None
+    for direction in directions if isinstance(directions, list) else []:
+        if not isinstance(direction, dict) or not isinstance(direction.get("emphasis_terms"), list):
+            continue
+        beat_id = str(direction.get("beat_id") or "")
+        kept = []
+        for term in direction["emphasis_terms"]:
+            text = term.strip() if isinstance(term, str) else ""
+            if text and beat_id in narration and text.casefold() not in narration[beat_id]:
+                dropped.append({"beat_id": beat_id, "term": text})
+                continue
+            kept.append(term)
+        direction["emphasis_terms"] = kept
+    return dropped
 
 
 def artifact_slug(request: dict[str, Any]) -> str:
@@ -269,29 +301,51 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
     raw = str(result.get("output") or "")
     raw_path = RAW_OUTPUTS_DIR / f"{slug}.txt"
     atomic_write_text(raw_path, raw)
+    dropped: list[dict[str, str]] = []
+
+    def checked(answer: dict[str, Any]) -> dict[str, Any]:
+        """Drop unspoken emphasis, then validate; raises with the validator's errors."""
+        dropped[:] = drop_unspoken_emphasis(answer, request)
+        outcome = validate_response(answer, request)
+        if not outcome["valid"]:
+            raise ValueError("; ".join(str(error) for error in outcome["errors"]))
+        return outcome
+
     try:
         response = parse_model_json(raw)
+        validation = checked(response)
+    except Exception as exc:  # noqa: BLE001 - any slip gets one corrected attempt (D-192)
+        first_error = str(exc)
+        repair = attempt_repair(
+            payload=payload,
+            raw=raw,
+            error=first_error,
+            call=lambda repaired: call_fair_bridge(
+                repaired,
+                python_executable=paths["python"],
+                timeout_seconds=float(config["runner"].get("subprocess_timeout_seconds", 300)),
+            ),
+            check=checked,
+        )
+        if repair["raw"]:
+            atomic_write_text(RAW_OUTPUTS_DIR / f"{slug}.repair.txt", repair["raw"])
+        if repair["status"] != "REPAIRED":
+            report = {
+                **base,
+                "status": repair_failure_status(repair),
+                "error_type": type(exc).__name__,
+                "errors": [first_error[:1000]],
+                "raw_output": str(raw_path),
+                **repair_report(repair),
+            }
+            atomic_write_json(report_path, report)
+            return report
+        response = repair["parsed"]
         validation = validate_response(response, request)
-    except (OSError, TimeoutError, RuntimeError, ValueError, TypeError, KeyError) as exc:
-        report = {
-            **base,
-            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
-            "error_type": type(exc).__name__,
-            "message": str(exc)[:1000],
-            "raw_output": str(raw_path),
-        }
-        atomic_write_json(report_path, report)
-        return report
-
-    if not validation["valid"]:
-        report = {
-            **base,
-            "status": "MODEL_OUTPUT_VALIDATION_ERROR",
-            "errors": validation["errors"],
-            "raw_output": str(raw_path),
-        }
-        atomic_write_json(report_path, report)
-        return report
+        result = repair["bridge_result"]
+        base = {**base, **repair_report(repair), "first_validation_error": first_error[:1000]}
+    if dropped:
+        base = {**base, "emphasis_terms_dropped": list(dropped)}
 
     atomic_write_json(response_path, response)
     spec = {
@@ -311,6 +365,7 @@ def run_one(path: Path, force: bool, config: dict[str, Any]) -> dict[str, Any]:
             request.get("render_prerequisites_configured")
         ),
         "validation": validation,
+        "emphasis_terms_dropped": list(dropped),
         "spec_provenance": {
             "request_source": str(path),
             "request_sha256": request_hash,

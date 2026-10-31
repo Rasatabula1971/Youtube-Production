@@ -6460,3 +6460,23 @@ of his choice (ChatGPT, Gemini) and uploads the finished image.
   the channel qualifies; the video is still recorded.
 - The thumbnail is not checked by a validator; its facts are bounded only by
   the prompt. The owner sees it before he uploads.
+
+## D-192 — A stress word the script doesn't say no longer throws the voice plan away
+
+**Context.** On the Aviation Tires Short the voice model marked "touch down"
+for stress where the script says "touches down". The validator rightly refused
+the term, but the run threw away the whole plan (emotion, pace and pauses for
+all 5 beats) and stopped, so the owner pressed Continue for a fresh answer.
+
+**Decision.**
+- In `voice_model_runner`, a non-empty emphasis term the beat's narration
+  does not contain word for word (ignoring case) is dropped before validation.
+  The drop is recorded in the run report and the spec
+  (`emphasis_terms_dropped`). The spoken words never change, the validator in
+  `voice_performance.py` is unchanged, and the fingerprinted contract file is
+  untouched.
+- Any other slip gets one corrected attempt with the validator's exact error
+  (the D-186 helper). A second slip still stops the run with both errors.
+
+**Consequences.** A beat can end up with fewer stressed words than the model
+proposed. The narration itself is unchanged.
