@@ -3446,7 +3446,8 @@ const researchCoverage = document.getElementById("researchCoverage");
 
 function renderResearchCoverage(snapshot) {
   const rows = ((snapshot && snapshot.question_coverage) || []).filter(function (row) {
-    return (row.questions || []).some(function (q) { return q.status !== "ANSWERED"; });
+    return (row.evidence_shortfalls || []).length ||
+      (row.questions || []).some(function (q) { return q.status !== "ANSWERED"; });
   });
   if (!rows.length) {
     researchCoverage.hidden = true;
@@ -3454,31 +3455,72 @@ function renderResearchCoverage(snapshot) {
     return;
   }
   const unanswered = rows.reduce(function (total, row) { return total + (row.unanswered || 0); }, 0);
+  const thin = rows.filter(function (row) { return (row.evidence_shortfalls || []).length; }).length;
   researchCoverage.hidden = false;
   researchCoverage.innerHTML =
-    '<h4>' + (unanswered
-      ? unanswered + " research question(s) have no accepted claim"
-      : "Waived research questions") + '</h4>' +
-    (unanswered
-      ? '<p class="muted">A concept goes on to Story / Script only when each of its original questions is answered by an accepted claim or waived. Accepting other claims will not help: Rework a claim with a note asking for evidence on the question, or mark it Not needed for script.</p>'
+    '<h4>' + (thin
+      ? thin + " concept(s) too thin for a script"
+      : unanswered
+        ? unanswered + " research question(s) have no accepted claim"
+        : "Waived research questions") + '</h4>' +
+    (unanswered || thin
+      ? '<p class="muted">A concept goes on to Story / Script only when each of its original questions is answered by an accepted claim or waived, it has enough accepted claims, and an accepted claim backs what its title promises. Rework a claim with a note asking for the missing evidence, mark a question Not needed for script, or drop the concept so it stops holding up the others.</p>'
       : "") +
     rows.map(function (row) {
+      const shortfalls = row.evidence_shortfalls || [];
       return '<div class="research-coverage-concept"><strong>' +
-        escapeHtml(row.working_title || row.concept_id) + '</strong><ul>' +
+        escapeHtml(row.working_title || row.concept_id) + '</strong>' +
+        (shortfalls.length
+          ? '<p class="muted">' + shortfalls.map(escapeHtml).join(" ") + '</p>'
+          : "") +
+        '<ul>' +
         (row.questions || []).filter(function (q) { return q.status !== "ANSWERED"; }).map(function (q) {
           const waived = q.status === "WAIVED";
+          const promise = Boolean(q.title_promise);
           return '<li><span class="status-chip ' + (waived ? "success" : "failed") + '">' +
-            (waived ? "WAIVED" : "UNANSWERED") + '</span> ' +
+            (waived ? "WAIVED" : promise ? "TITLE PROMISE UNANSWERED" : "UNANSWERED") + '</span> ' +
             escapeHtml(q.question_id + " — " + (q.question || "")) +
             (waived && q.waiver ? ' <span class="muted">(' + escapeHtml(q.waiver.note || "") + ')</span>' : "") +
-            ' <button class="ghost" type="button" data-waive-action="' +
-            (waived ? "UNWAIVE_QUESTION" : "WAIVE_QUESTION") +
-            '" data-concept-id="' + escapeHtml(row.concept_id) +
-            '" data-question-id="' + escapeHtml(q.question_id) + '">' +
-            (waived ? "Undo waive" : "Not needed for script") + '</button></li>';
+            (q.waivable === false
+              ? ""
+              : ' <button class="ghost" type="button" data-waive-action="' +
+                (waived ? "UNWAIVE_QUESTION" : "WAIVE_QUESTION") +
+                '" data-concept-id="' + escapeHtml(row.concept_id) +
+                '" data-question-id="' + escapeHtml(q.question_id) + '">' +
+                (waived ? "Undo waive" : "Not needed for script") + '</button>') +
+            '</li>';
         }).join("") +
-        '</ul></div>';
+        '</ul><button class="ghost danger" type="button" data-drop-concept="' +
+        escapeHtml(row.concept_id) + '">Drop concept</button></div>';
     }).join("");
+}
+
+async function submitDropConcept(button) {
+  const note = window.prompt(
+    "Why drop this concept? It leaves research, story and script, and stops holding up the other videos.",
+    ""
+  );
+  if (note === null) return;
+  if (!note.trim()) {
+    showToast("Dropping a concept needs a note.", true);
+    return;
+  }
+  try {
+    const payload = await api("/api/research-gate", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "DROP_CONCEPT",
+        concept_id: button.dataset.dropConcept,
+        note: note
+      })
+    });
+    researchEditing = false;
+    renderResearchReview(payload, true);
+    showToast("Concept dropped.", false);
+    await loadStatus();
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 async function submitQuestionWaiver(button) {
@@ -3515,6 +3557,11 @@ async function submitQuestionWaiver(button) {
 }
 
 researchCoverage.addEventListener("click", function (event) {
+  const drop = event.target.closest("[data-drop-concept]");
+  if (drop) {
+    submitDropConcept(drop);
+    return;
+  }
   const button = event.target.closest("[data-waive-action]");
   if (button) submitQuestionWaiver(button);
 });

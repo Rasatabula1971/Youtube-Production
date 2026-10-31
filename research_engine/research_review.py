@@ -25,11 +25,15 @@ from research_engine.research_gate import (
     REVIEWED_DIR,
     REVIEW_REQUESTS_DIR,
     SUMMARY_FILE,
+    TITLE_PROMISE_ORIGIN,
     VERIFIED_DIR,
     apply_gate,
     build_review_request,
+    evidence_shortfalls,
+    gate_status,
     load_config,
 )
+from research_engine import research_engine as research_plans
 from core.jsonio import load_json
 from core.slugs import safe_slug
 from core.hashing import sha256_file
@@ -246,6 +250,14 @@ def _original_questions(request: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _title_promise_ids(request: dict[str, Any]) -> set[str]:
+    return {
+        str(question.get("question_id"))
+        for question in request.get("research_questions", [])
+        if isinstance(question, dict) and question.get("origin") == TITLE_PROMISE_ORIGIN
+    }
+
+
 def _preserved_by_question(
     requests: list[dict[str, Any]],
     previous: dict[str, Any],
@@ -361,8 +373,12 @@ def _auto_waivers(
         concept_waivers: dict[str, Any] = saved_waivers if isinstance(saved_waivers, dict) else {}
         saved_holds = holds.get(concept_id)
         concept_holds: dict[str, Any] = saved_holds if isinstance(saved_holds, dict) else {}
+        promise_ids = _title_promise_ids(request)
         for question_id, text in _original_questions(request).items():
             if question_id in concept_waivers or question_id in concept_holds:
+                continue
+            if question_id in promise_ids:
+                # The title's promise is never waived (D-182).
                 continue
             if question_id in unsourced:
                 rounds = unsourced[question_id]
@@ -430,6 +446,7 @@ def concept_summary(
     decided: int,
     unanswered: int,
     waived: int,
+    shortfalls: list[str] | None = None,
 ) -> str:
     """Plain words for where one concept stands at the Research Gate (D-163)."""
     if pending:
@@ -449,6 +466,11 @@ def concept_summary(
             f"Not ready for the script: {unanswered} question{'' if unanswered == 1 else 's'} "
             "unanswered. Mark it Not needed for script, or Rework a claim with a note asking "
             "for evidence on it."
+        )
+    if shortfalls:
+        return (
+            "Too thin for a script: " + " ".join(shortfalls)
+            + " Rework a claim with a note asking for that evidence, or drop the concept."
         )
     return "Ready for the script." + (
         f" {waived} question{' was' if waived == 1 else 's were'} waived." if waived else ""
@@ -473,13 +495,21 @@ def question_coverage(
                 for question_id in item.get("question_ids", []):
                     accepted.setdefault(str(question_id), []).append(str(item["claim_id"]))
         concept_waivers = waivers.get(concept_id, {}) if isinstance(waivers, dict) else {}
+        promise_ids = _title_promise_ids(request)
         questions = []
         for question_id, text in _original_questions(request).items():
-            waiver = concept_waivers.get(question_id) if isinstance(concept_waivers, dict) else None
+            promise = question_id in promise_ids
+            waiver = (
+                concept_waivers.get(question_id)
+                if isinstance(concept_waivers, dict) and not promise
+                else None
+            )
             questions.append(
                 {
                     "question_id": question_id,
                     "question": text,
+                    "title_promise": promise,
+                    "waivable": not promise,
                     "accepted_claim_ids": accepted.get(question_id, []),
                     "status": (
                         "ANSWERED"
@@ -498,8 +528,16 @@ def question_coverage(
         ]
         pending = claim_decisions.count("PENDING")
         accepted_count = claim_decisions.count("ACCEPT")
-        unanswered = sum(q["status"] == "UNANSWERED" for q in questions)
+        unanswered = sum(
+            q["status"] == "UNANSWERED" and not q["title_promise"] for q in questions
+        )
         waived = sum(q["status"] == "WAIVED" for q in questions)
+        shortfalls = evidence_shortfalls(
+            accepted_count=accepted_count,
+            research_questions=request.get("research_questions", []),
+            answered_question_ids={str(q["question_id"]) for q in questions if q["status"] == "ANSWERED"},
+            config=load_config(),
+        )
         rows.append(
             {
                 "concept_id": concept_id,
@@ -508,13 +546,21 @@ def question_coverage(
                 "unanswered": unanswered,
                 "pending_claims": pending,
                 "accepted_claims": accepted_count,
-                "ready": bool(claim_decisions) and not pending and accepted_count > 0 and not unanswered,
+                "evidence_shortfalls": shortfalls,
+                "ready": (
+                    bool(claim_decisions)
+                    and not pending
+                    and accepted_count > 0
+                    and not unanswered
+                    and not shortfalls
+                ),
                 "summary": concept_summary(
                     pending=pending,
                     accepted=accepted_count,
                     decided=len(claim_decisions),
                     unanswered=unanswered,
                     waived=waived,
+                    shortfalls=shortfalls,
                 ),
             }
         )
@@ -539,6 +585,11 @@ def apply_question_waiver(
     questions = _original_questions(bundle["request"])
     if question_id not in questions:
         raise ValueError("Only an original research question of this concept can be waived")
+    if waive and question_id in _title_promise_ids(bundle["request"]):
+        raise ValueError(
+            "The title's promise cannot be waived. If no accepted claim backs it, "
+            "drop the concept (D-182)."
+        )
     waivers = state.setdefault("waived_questions", {})
     holds = state.setdefault("unwaived_questions", {})
     if waive:
@@ -747,7 +798,19 @@ def _apply_rework_feedback(
 def current_drafts() -> list[Path]:
     if not DEFAULT_DRAFTS_DIR.exists():
         return []
-    return sorted(DEFAULT_DRAFTS_DIR.glob("*.draft_research_package.json"))
+    paths = sorted(DEFAULT_DRAFTS_DIR.glob("*.draft_research_package.json"))
+    dropped = research_plans.dropped_concepts()
+    if not dropped:
+        return paths
+    kept = []
+    for path in paths:
+        try:
+            concept_id = str(load_json(path).get("concept_id", "")).strip()
+        except (OSError, ValueError):
+            concept_id = ""
+        if concept_id not in dropped:
+            kept.append(path)
+    return kept
 
 
 def drafts_hashes() -> dict[str, str]:
@@ -945,6 +1008,81 @@ def _decision_fingerprint(
     ).hexdigest()
 
 
+def _recheck_minimum_evidence(verified: dict[str, Any], path: Path) -> None:
+    """Apply the minimum-evidence rule to a package decided before it (D-182).
+
+    The file is rewritten only when the rule changes its status, so a package
+    that passes stays byte for byte and the scripts built on it stay current.
+    """
+    question_status = verified.get("question_status") or []
+    shortfalls = evidence_shortfalls(
+        accepted_count=len(verified.get("claims") or []),
+        research_questions=verified.get("research_questions") or [],
+        answered_question_ids={
+            str(item.get("question_id"))
+            for item in question_status
+            if isinstance(item, dict) and item.get("status") == "RESOLVED_FOR_SCRIPT"
+        },
+        config=load_config(),
+    )
+    status = gate_status(
+        accepted_count=len(verified.get("claims") or []),
+        unresolved=list(verified.get("unresolved_question_ids") or []),
+        shortfalls=shortfalls,
+    )
+    if status == verified.get("status") and (
+        not shortfalls or shortfalls == verified.get("evidence_shortfalls")
+    ):
+        return
+    verified["status"] = status
+    verified["evidence_shortfalls"] = shortfalls
+    write_json(path, verified)
+
+
+def drop_concept(*, concept_id: str, note: str | None) -> dict[str, Any]:
+    """Take a concept out of research and every later stage (D-182).
+
+    The concept stays in the Concept Gate's handoff, so the drop is recorded
+    where the research plans are built: it gets no plan, its draft is not
+    reviewed, and its verified research is removed, so the Story and Script
+    stages no longer include it or wait for it.
+    """
+    clean_note = str(note or "").strip()
+    if not clean_note:
+        raise ValueError("Dropping a concept requires a note saying why")
+    requests = build_requests()
+    bundle = next((item for item in requests if item["concept_id"] == concept_id), None)
+    if bundle is None:
+        raise ValueError("Unknown concept_id")
+    reviewer = os.getenv(REVIEWER_ENV, DEFAULT_REVIEWER)
+    dropped = research_plans.dropped_concepts()
+    dropped[concept_id] = {
+        "working_title": (bundle["request"].get("concept") or {}).get("working_title"),
+        "note": clean_note,
+        "reviewer": reviewer,
+        "dropped_at": datetime.now(timezone.utc).isoformat(),
+    }
+    write_json(research_plans.DROPPED_FILE, {"artifact": "dropped_concepts", "concepts": dropped})
+    record_history(
+        {
+            "concept_id": concept_id,
+            "decision": "DROP_CONCEPT",
+            "decided_by": "HUMAN",
+            "reviewer": reviewer,
+            "note": clean_note,
+        }
+    )
+    slug = safe_slug(concept_id)
+    for path in (
+        Path(bundle["request_path"]),
+        REVIEWED_DIR / f"{slug}.research_gate_reviewed.json",
+        VERIFIED_DIR / f"{slug}.verified_research_package.json",
+    ):
+        if path.exists():
+            path.unlink()
+    return prepare_state()
+
+
 def finalize_if_complete(
     state: dict[str, Any],
     requests: list[dict[str, Any]],
@@ -996,6 +1134,7 @@ def finalize_if_complete(
         ):
             verified = existing
             reviewed_counts = load_json(reviewed_path).get("counts", {})
+            _recheck_minimum_evidence(verified, verified_path)
         else:
             package = load_json(Path(bundle["draft_path"]))
             response = {

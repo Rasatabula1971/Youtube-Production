@@ -30,6 +30,7 @@ from core.model_bridge import (
     safe_attempts,
 )
 
+from story_script_engine.leftovers import prune_leftover_script_requests
 from story_script_engine.story_script_engine import (
     DRAFTS_DIR,
     OUTPUT_DIR,
@@ -409,6 +410,10 @@ def run_one(
 def run_batch(
     requests_dir: Path, force: bool, maximum: int | None, config: dict[str, Any]
 ) -> dict[str, Any]:
+    # A request whose concept has no current story plan is a leftover from an
+    # old study set or a dropped concept: drafting it spends free-model quota
+    # the current scripts need (D-182).
+    pruned = prune_leftover_script_requests(requests_dir)
     paths = sorted(requests_dir.glob("*.script_request.json"))
     limit = int(
         maximum
@@ -450,6 +455,7 @@ def run_batch(
     summary = {
         "status": status,
         "requests_found": len(paths),
+        "leftover_requests_removed": pruned,
         "model_runs_invoked": invoked,
         "batch_limit": limit,
         "results": results,

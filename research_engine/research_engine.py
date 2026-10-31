@@ -31,6 +31,11 @@ PLANS_DIR = OUTPUT_DIR / "plans"
 RESPONSES_DIR = OUTPUT_DIR / "research_responses"
 DRAFTS_DIR = OUTPUT_DIR / "draft_packages"
 REJECTED_FILE = OUTPUT_DIR / "rejected_research_inputs.json"
+# Concepts the reviewer dropped at the Research Gate (D-182). A dropped concept
+# gets no research plan, so it leaves every later stage, and it stays dropped
+# while it is still in the Concept Gate's handoff.
+DROPPED_FILE = OUTPUT_DIR / "dropped_concepts.json"
+TITLE_PROMISE_ORIGIN = "title_promise"
 SUMMARY_FILE = OUTPUT_DIR / "summary.json"
 
 
@@ -46,6 +51,34 @@ def load_config() -> dict[str, Any]:
     if missing:
         raise SystemExit("Research config is missing: " + ", ".join(missing))
     return config
+
+
+def dropped_concepts() -> dict[str, Any]:
+    """Concept id -> drop record, from the Research Gate (D-182)."""
+    if not DROPPED_FILE.exists():
+        return {}
+    try:
+        payload = load_json(DROPPED_FILE)
+    except (OSError, ValueError):
+        return {}
+    concepts = payload.get("concepts") if isinstance(payload, dict) else None
+    return dict(concepts) if isinstance(concepts, dict) else {}
+
+
+def title_promise_question(working_title: Any) -> str | None:
+    """The question that tests what the working title promises (D-182).
+
+    The title is written before any research. Without a question about it,
+    research can answer every concept question and still leave the title's
+    hook with no evidence behind it.
+    """
+    title = str(working_title or "").strip()
+    if not title:
+        return None
+    return (
+        f'What evidence supports or contradicts the promise in the title "{title}"? '
+        "State exactly what the sources show, including where they disagree with it."
+    )
 
 
 def assert_unique_slug_ids(values: list[str], *, label: str) -> None:
@@ -83,18 +116,21 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(raw_questions, list) or not raw_questions:
         raise ValueError(f"Concept {concept_id} requires research_questions")
 
-    questions = []
-    for index, question in enumerate(raw_questions, start=1):
+    # The title's promise is asked first, so the per-concept page limit never
+    # leaves it without sources (D-182).
+    entries: list[tuple[str, str]] = []
+    promise = title_promise_question(concept.get("working_title"))
+    if promise:
+        entries.append((promise, TITLE_PROMISE_ORIGIN))
+    for question in raw_questions:
         text = str(question).strip()
         if not text:
             raise ValueError(f"Concept {concept_id} has an empty research question")
-        questions.append(
-            {
-                "question_id": f"rq{index:03d}",
-                "question": text,
-                "origin": "concept",
-            }
-        )
+        entries.append((text, "concept"))
+    questions = [
+        {"question_id": f"rq{index:03d}", "question": text, "origin": origin}
+        for index, (text, origin) in enumerate(entries, start=1)
+    ]
 
     packaging_value = concept.get("packaging")
     packaging = (
@@ -155,6 +191,7 @@ def build_research_plan(concept: dict[str, Any]) -> dict[str, Any]:
             "The accepted concept, viewer need and verified evidence define the story contract. Final public packaging is selected only after the script is approved.",
             "Preserve the accepted viewer problem, viewer moment, desired outcome, Human Framing contract, content-gap status, and channel-fit rationale for Story / Script.",
             "Research factual assumptions embedded in the Hook Experience, stakes, drama source, and Explanation Payoff before Story / Script treats them as true.",
+            "The title_promise question tests what the working title promises. Find evidence that supports or contradicts it; if the sources contradict the title, record that rather than a claim that flatters it.",
             "Do not treat a HYPOTHESIS or UNASSESSED content gap as a proven audience fact.",
             "Legacy packaging research dependencies, when present on an older resumable handoff, remain research questions but new runs do not require pre-script packaging.",
         ],
@@ -538,6 +575,25 @@ def validate_research_response(
     }
 
 
+def _plan_from_same_handoff(destination: Path, handoff_sha256: str) -> dict[str, Any] | None:
+    """An existing plan built from this same handoff, kept byte for byte.
+
+    Rebuilding it would add questions this code now asks (the title promise,
+    D-182) to research already under way, and mark its evidence, verified
+    research and scripts stale. A new handoff builds new plans as before.
+    """
+    if not destination.exists():
+        return None
+    try:
+        existing = load_json(destination)
+    except (OSError, ValueError):
+        return None
+    provenance = existing.get("plan_provenance") if isinstance(existing, dict) else None
+    if isinstance(provenance, dict) and provenance.get("research_handoff_sha256") == handoff_sha256:
+        return existing
+    return None
+
+
 def run_prepare(handoff_path: Path) -> dict[str, Any]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PLANS_DIR.mkdir(parents=True, exist_ok=True)
@@ -570,7 +626,12 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
     paths = []
     current_destinations: set[Path] = set()
     seen_concept_ids: set[str] = set()
+    dropped = dropped_concepts()
+    skipped_dropped: list[str] = []
     for concept in concepts:
+        if str(concept.get("concept_id", "")).strip() in dropped:
+            skipped_dropped.append(str(concept.get("concept_id")).strip())
+            continue
         plan = build_research_plan(concept)
         plan["plan_provenance"] = {
             "research_handoff_source": str(handoff_path),
@@ -590,10 +651,12 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
             raise ValueError(f"Duplicate concept_id in research handoff: {concept_id}")
         seen_concept_ids.add(concept_id)
         destination = PLANS_DIR / f"{safe_slug(plan['concept_id'])}.research_plan.json"
-        destination.write_text(
-            json.dumps(plan, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        existing = _plan_from_same_handoff(destination, handoff_sha256)
+        if existing is None:
+            destination.write_text(
+                json.dumps(plan, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
         current_destinations.add(destination.resolve())
         paths.append(str(destination))
 
@@ -605,6 +668,7 @@ def run_prepare(handoff_path: Path) -> dict[str, Any]:
         "status": ("RESEARCH_PLANS_READY" if paths else "NO_ACCEPTED_CONCEPTS"),
         "plans_created": len(paths),
         "plans": paths,
+        "dropped_concepts_skipped": skipped_dropped,
         "network_calls": 0,
         "model_calls": 0,
     }

@@ -6073,3 +6073,69 @@ plan. The loop rules are unchanged: every OPEN still needs a PAYOFF, and every
 loop action other than NONE still needs an id. The story-plan validation
 contract fingerprint changes, so story plans already on disk are
 re-validated on their next run.
+
+## D-182 — Research must back the title, and a thin concept can be dropped
+
+**Context.** "How a Single Cup of Water Destroys Your Stopping Distance" got to
+script drafting with one accepted claim (a speed threshold from one German
+winter-tyre study). Four things let it through:
+- The title was written at the concept stage, and no research question asked
+  whether it was true.
+- Its second question was waived automatically (D-163).
+- The gate needed only one accepted claim.
+- Nothing could take a concept out once it was verified.
+
+The model then filled the script with statements no claim backed. The number
+check caught "80 km/h" but not "a cup of water", "half the distance" or "a
+centimetre deep". Because the Script Gate waits for every concept's draft,
+this concept also held up Aviation Tires. Separately, script requests were
+built from every story plan on disk. The previous study set's scripts were
+therefore drafted again, used up Groq's per-minute allowance, and would have
+appeared at the Script Gate.
+
+**Decision.**
+- **The title is researched.** A new plan's first question (`rq001`, origin
+  `title_promise`) asks what evidence supports or contradicts the working
+  title's promise.
+  - It is never waived, automatically or by the reviewer.
+  - A plan already built from the same Concept Gate handoff is kept as it is,
+    so research under way does not restart.
+- **Minimum evidence.** Verified research is `RESEARCH_TOO_THIN`, not
+  `READY_FOR_STORY_SCRIPT`, when either is true:
+  - it has fewer accepted claims than `minimum_evidence.accepted_claims`
+    (shipped as 2; without the setting the old minimum of 1 applies);
+  - no accepted claim answers the title-promise question.
+
+  The reasons go into `evidence_shortfalls`. A package verified earlier is
+  re-checked at the next gate prepare or action. Its file is rewritten only
+  when its status changes, so research that passes, and the scripts built on
+  it, stay current.
+- **Drop concept.** At the Research Gate the reviewer can drop any concept,
+  with a note.
+  - The drop is recorded in `research_engine/output/dropped_concepts.json`.
+  - The dropped concept gets no research plan, its draft is not reviewed, and
+    its verified research is removed.
+  - The UI action then re-prepares the story requests and clears its script
+    requests, so the other concepts go on without it.
+  - To restore a concept, remove its entry from that file.
+- **Only current work runs downstream.** A plan or draft is current only if
+  the request it was made from still exists unchanged
+  (`story_script_engine/leftovers.py`).
+  - Before drafting, the script runner removes script requests whose concept
+    has no current story plan.
+  - The Script Gate shows only drafts made from a current script request.
+  - This logic lives outside `story_script_engine.py` and
+    `story_plan_engine.py`, whose contents are validation fingerprints;
+    changing them would have marked every current plan and draft stale.
+
+**Consequences.**
+- A concept needs two accepted claims and evidence for its title before a
+  script is written. Fewer weak scripts reach review, and more concepts stop
+  at the Research Gate.
+- A concept that cannot meet the bar is dropped there and no longer blocks
+  the others.
+- Old study sets stop spending free-model quota and stop appearing at the
+  Script Gate.
+- On the owner's current data, the Single Cup of Water concept becomes too
+  thin at the next gate action. Aviation Tires' verified research is
+  unchanged byte for byte.

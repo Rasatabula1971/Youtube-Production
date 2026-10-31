@@ -18,6 +18,7 @@ from story_script_engine.script_section_state import (
     state_path_for,
 )
 
+from story_script_engine.leftovers import current_script_drafts, prune_leftover_script_requests
 from story_script_engine.story_script_engine import DRAFTS_DIR, OUTPUT_DIR, REQUESTS_DIR
 from core.hashing import sha256_file
 from core.jsonio import load_json
@@ -124,11 +125,10 @@ def build_review_request(draft: dict[str, Any], draft_path: Path) -> dict[str, A
 
 def prepare() -> dict[str, Any]:
     REVIEW_REQUESTS_DIR.mkdir(parents=True, exist_ok=True)
-    paths = (
-        sorted(DRAFTS_DIR.glob("*.script_draft.json"))
-        if DRAFTS_DIR.exists()
-        else []
-    )
+    # Only drafts of concepts still in the batch go to the Script Gate; an old
+    # study set's or a dropped concept's draft is a leftover (D-182).
+    prune_leftover_script_requests(REQUESTS_DIR)
+    paths = current_script_drafts(DRAFTS_DIR, REQUESTS_DIR)
     prepared: list[dict[str, Any]] = []
     current: set[Path] = set()
     for path in paths:
