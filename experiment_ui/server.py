@@ -231,6 +231,7 @@ PACKAGING_BRIEF_DIR = PACKAGING_OUTPUT / "packaging_briefs"
 
 RESEARCH_DIR = PROJECT_ROOT / "research_engine"
 
+from research_engine.research_engine import dropped_concepts as dropped_research_concepts
 from research_engine.research_review import (
     apply_question_waiver as apply_research_question_waiver,
     apply_action as apply_research_gate_action,
@@ -2541,6 +2542,7 @@ def research_artifact_state() -> dict[str, Any]:
         else None
     )
     plan_hashes: dict[str, str] = {}
+    dropped = dropped_research_concepts()
     if research_handoff_hash and RESEARCH_PLANS_DIR.exists():
         for path in RESEARCH_PLANS_DIR.glob("*.research_plan.json"):
             payload = safe_load_json(path)
@@ -2550,6 +2552,7 @@ def research_artifact_state() -> dict[str, Any]:
             concept_id = str(payload.get("concept_id") or "").strip()
             if (
                 concept_id
+                and concept_id not in dropped
                 and isinstance(provenance, dict)
                 and (
                     provenance.get("research_handoff_sha256")
@@ -4318,6 +4321,7 @@ def productions_snapshot(
             action_id: str(definition.get("label") or action_id)
             for action_id, definition in ACTION_DEFS.items()
         },
+        dropped_concept_ids=set(dropped_research_concepts()),
     )
     updated = production_updated_at(
         [p["concept_id"] for p in snapshot["productions"]]

@@ -371,5 +371,13 @@ class ProductionDetailTests(unittest.TestCase):
         self.assertEqual([r["status"] for r in produce["rows"]], ["accept", "accept"])
 
 
+class DroppedConceptTests(unittest.TestCase):
+    def test_a_dropped_concept_is_not_a_production(self):
+        """D-182: Single Cup of Water stayed under Active after Drop concept."""
+        gate = concept_gate((CID, "ACCEPT"), ("c2", "ACCEPT"))
+        result = derive(concept_gate=gate, dropped_concept_ids={"c2"})
+        self.assertEqual([p["concept_id"] for p in result["productions"]], [CID])
+
+
 if __name__ == "__main__":
     unittest.main()

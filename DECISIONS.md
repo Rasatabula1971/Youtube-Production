@@ -6139,3 +6139,9 @@ appeared at the Script Gate.
 - On the owner's current data, the Single Cup of Water concept becomes too
   thin at the next gate action. Aviation Tires' verified research is
   unchanged byte for byte.
+
+**D-182 follow-up.** A dropped concept stayed under Active productions. That
+page lists the Concept Gate's accepted concepts, and the drop does not change
+the Concept Gate. Now:
+- Productions and the research-stage state skip concepts in the drop record.
+- Drop also deletes the concept's research plan.
