@@ -131,8 +131,12 @@ def pick_titles(concept: dict[str, Any], packaging_config: dict[str, Any]) -> di
         "long_form": packaging_config.get("long_title_contract") or {},
     }
     titles = concept.get("titles") or {}
+    # Only formats with an approved script need a title (D-183).
+    required = [str(f) for f in concept.get("required_formats") or contracts]
     selected: dict[str, Any] = {}
     for fmt, contract in contracts.items():
+        if fmt not in required:
+            continue
         candidates = [c for c in titles.get(fmt) or [] if isinstance(c, dict)]
         candidates.sort(
             key=lambda c: angles.index(str(c.get("psychological_angle")))

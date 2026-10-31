@@ -104,6 +104,13 @@
     return (titleGate().concepts || []).filter(Boolean);
   }
 
+  // Only formats with an approved script need a title (D-183).
+  function formatsFor(item) {
+    const required = (item && item.required_formats) || [];
+    const list = FORMATS.filter(function (f) { return required.indexOf(f[0]) >= 0; });
+    return list.length ? list : FORMATS;
+  }
+
   function choicesFor(item) {
     if (!titleChoices[item.concept_id]) {
       const chosen = {};
@@ -121,7 +128,8 @@
   function titleEvidence(item) {
     const chosen = choicesFor(item);
     const locked = String(item.decision || "PENDING").toUpperCase() !== "PENDING";
-    return FORMATS.map(function (f) {
+    const formats = formatsFor(item);
+    return formats.map(function (f) {
       const candidates = ((item.titles || {})[f[0]] || []).filter(Boolean);
       const rows = candidates.map(function (c) {
         const on = chosen[f[0]] && chosen[f[0]].title_id === c.title_id;
@@ -141,7 +149,11 @@
       }).join("");
       return section(f[1] + " title", rows ? '<ul class="pk-titles">' + rows + "</ul>" : '<p class="muted">No candidates for this format.</p>');
     }).join("") +
-      (locked ? '<p class="muted">This selection is final. Choose Rework to change it.</p>' : '<p class="muted">Pick one title per format; you can edit the wording before accepting.</p>');
+      (locked
+        ? '<p class="muted">This selection is final. Choose Rework to change it.</p>'
+        : '<p class="muted">' + (formats.length === 1
+          ? "Pick one " + formats[0][1] + " title; only a " + formats[0][1] + " script was approved."
+          : "Pick one title per format") + " You can edit the wording before accepting.</p>");
   }
 
   const titleConfig = {
@@ -166,10 +178,11 @@
           value: "ACCEPT", label: "Accept these titles", hint: "Packaging brief, angles and thumbnails follow automatically.", tone: "complete",
           validate: function () {
             const chosen = choicesFor(item);
-            for (let i = 0; i < FORMATS.length; i += 1) {
-              const pick = chosen[FORMATS[i][0]];
-              if (!pick || !pick.title_id) return "Choose one " + FORMATS[i][1] + " title.";
-              if (!String(pick.title_text || "").trim()) return "The " + FORMATS[i][1] + " title wording cannot be blank.";
+            const formats = formatsFor(item);
+            for (let i = 0; i < formats.length; i += 1) {
+              const pick = chosen[formats[i][0]];
+              if (!pick || !pick.title_id) return "Choose one " + formats[i][1] + " title.";
+              if (!String(pick.title_text || "").trim()) return "The " + formats[i][1] + " title wording cannot be blank.";
             }
             return "";
           }
@@ -183,7 +196,7 @@
       if (decision === "ACCEPT") {
         selected = {};
         const chosen = choicesFor(item);
-        FORMATS.forEach(function (f) {
+        formatsFor(item).forEach(function (f) {
           selected[f[0]] = { title_id: chosen[f[0]].title_id, title_text: String(chosen[f[0]].title_text || "").trim() };
         });
       }

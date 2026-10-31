@@ -6145,3 +6145,24 @@ page lists the Concept Gate's accepted concepts, and the drop does not change
 the Concept Gate. Now:
 - Productions and the research-stage state skip concepts in the drop record.
 - Drop also deletes the concept's research plan.
+
+## D-183 — A title is required only for formats with an approved script
+
+**Context.** Title directions are generated for both Short and Long-form, and
+the Title Direction Gate required one of each. Aviation Tires has only an
+approved Short script (`required_branches: ["short"]`), so Save stayed locked
+until the owner picked a Long-form title nothing would use.
+Everything after the gate already works per approved script branch: the
+packaging brief, angles, thumbnails, pairing and the final package.
+
+**Decision.**
+- The gate requires a title only for the formats in the concept's approved
+  script `required_branches`. The gate snapshot exposes them as
+  `required_formats`.
+- The Packaging page and the classic panel show and validate only those
+  formats.
+- The gate policy (autopilot) picks only those formats, so a Long-form title
+  that fits no contract no longer holds a Short-only production.
+- Generation is unchanged and still makes five titles per format, so current
+  title directions stay valid.
+- Without a readable approved script, both formats are required as before.

@@ -151,6 +151,21 @@ class GateAutopilotTests(unittest.TestCase):
         self.assertEqual(control.calls, [])
         self.assertIn("no title fits", outcome["held"][0])
 
+    def test_title_direction_needs_only_the_scripted_formats(self):
+        """D-183: a long-form title that fits no contract must not hold a Short-only production."""
+        concept = {"concept_id": "c1", "decision": "PENDING", "required_formats": ["short"], "titles": {
+            "short": [title("short", "stakes", "Your wheel is lying to you")],
+            "long_form": [title("long_form", "payoff", "x " * 60)],
+        }}
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "packaging_config.json"
+            config.write_text(json.dumps(PACKAGING), encoding="utf-8")
+            control = Recorder(title_direction_gate_snapshot={"concepts": [concept]})
+            control.PACKAGING_CONFIG_FILE = config
+            outcome = autopilot.decide("HUMAN_TITLE_DIRECTION_GATE", control, AUTO_ALL)
+        self.assertEqual(outcome["decided"], 1)
+        self.assertEqual(control.calls[0][1]["selected_titles"], {"short": {"title_id": "short-stakes"}})
+
     def test_format_holds_overlap_and_inseparable_branches(self):
         clean = {"concept_id": "c1", "decision": "PENDING", "source_overlap": {"matches": []},
                  "branch_separation": {"identical": False, "truncation": False}}
