@@ -130,6 +130,15 @@ class PsychologicalAnglesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "high-risk claim word"):
             module.validate_response(response, self.request())
 
+    def test_a_risky_word_the_approved_title_uses_is_allowed(self):
+        """D-185: a word the owner accepted in the title is not a new claim."""
+        request = self.request()
+        request["selected_title_direction"] = {"title_text": "The Best Brakes Are Cold Ones"}
+        response = self.response()
+        response["angles"][0]["expected_click_reason"] = "Discover why these are the best brakes."
+        result = module.validate_response(response, request)
+        self.assertEqual(len(result["angles"]), 5)
+
     def test_build_request_preserves_search_browse_strategy_and_selected_direction(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "c1.short.packaging_brief.json"

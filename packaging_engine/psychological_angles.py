@@ -37,7 +37,7 @@ ANGLES_FILE = OUTPUT_DIR / "psychological_angles.json"
 SUMMARY_FILE = OUTPUT_DIR / "psychological_angle_summary.json"
 
 SCHEMA_VERSION = "1.0"
-PROMPT_VERSION = "psychological-packaging-angles-v1.1"
+PROMPT_VERSION = "psychological-packaging-angles-v1.2"
 
 NUMBER_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:[$£€]?\d+(?:[.,]\d+)*(?:\s?%|\s?[xX])?)(?![A-Za-z0-9])"
@@ -196,6 +196,11 @@ def build_request(brief_path: Path, brief: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _selected_title_text(request: dict[str, Any]) -> str:
+    selected = request.get("selected_title_direction")
+    return str(selected.get("title_text") or "").lower() if isinstance(selected, dict) else ""
+
+
 def banned_words_instruction() -> str:
     """The exact words the validator refuses, named in the prompt (D-184).
 
@@ -203,7 +208,7 @@ def banned_words_instruction() -> str:
     "dangerous" and the whole set was rejected.
     """
     return (
-        "Do not use these words anywhere in your output unless the evidence ref you cite uses the same word: "
+        "Do not use these words anywhere in your output unless the evidence ref you cite, or the selected title, uses the same word: "
         + ", ".join(sorted(RISKY_CLAIM_WORDS))
         + ". Describe the same idea in other words instead."
     )
@@ -238,7 +243,9 @@ def _validate_claim_language(
 
     lower = text.lower()
     claims = _claims_by_id(request)
-    cited = " ".join(claims.get(ref, "") for ref in refs).lower()
+    # A word the owner accepted in the selected title is the owner's
+    # decision, already taken at the Title Direction Gate (D-185).
+    cited = _selected_title_text(request) + " " + " ".join(claims.get(ref, "") for ref in refs).lower()
     for word in RISKY_CLAIM_WORDS:
         if re.search(rf"\b{re.escape(word)}\b", lower) and not re.search(
             rf"\b{re.escape(word)}\b", cited
