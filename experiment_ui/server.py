@@ -8043,6 +8043,27 @@ def workflow_guidance(
             "next_title": "Prepare Visual Acquisition",
         }
 
+    # A blocked pre-render check used to end in a silent "waiting" (D-194).
+    engagement_state = pre_render_engagement_snapshot()
+    if engagement_state.get("status") == "BLOCKED":
+        problems = sorted({
+            str(error).replace("_", " ").lower()
+            for item in engagement_state.get("items", [])
+            if isinstance(item, dict) and item.get("status") == "BLOCKED"
+            for error in item.get("errors", [])
+        })
+        return {
+            "state": "PRE_RENDER_CHECK_BLOCKED",
+            "current_action_id": None,
+            "current_title": "Script Structure Check Blocked the Narration",
+            "current_detail": (
+                "The pre-render check found: " + "; ".join(problems)
+                + ". Send the script back for rework at the Script Gate, or tell Claude if the check is wrong."
+            ),
+            "next_action_id": None,
+            "next_title": "Rework the script",
+        }
+
     preview_gate = narration_preview_gate_snapshot()
     if (
         preview_gate.get("items")

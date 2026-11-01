@@ -104,5 +104,59 @@ class PreRenderEngagementTests(unittest.TestCase):
         self.assertIn("EXPOSITION_BEAT_TOO_LONG_WITHOUT_STRUCTURAL_RESET", result["errors"])
 
 
+
+TYRE_BEATS = [
+    ("Establish the paradox of smooth aircraft tires during a high-speed wet landing", "The jet touches down in a rainstorm."),
+    ("Explain hydroplaning and why deep treads help cars", "On roads, deep grooves push water away."),
+    ("Introduce aircraft tire design with longitudinal grooves", "Aircraft use straight ribs instead of deep blocks."),
+    ("Demonstrate how straight grooves evacuate water and prevent hydroplaning", "The ribs slice water like a blade."),
+    ("Emphasize safety and engineering efficiency of the design", "Those smooth tires are a safety feature."),
+]
+
+
+class ExplainerStructureTests(unittest.TestCase):
+    """D-194: the approved Aviation Tires Short was blocked on all three structure checks."""
+
+    def tyre(self) -> dict:
+        payload = spec("short")
+        payload["beats"] = [
+            {"beat_id": f"beat_0{i + 1}", "purpose": purpose, "immutable_narration": text, "reveal_beat": False}
+            for i, (purpose, text) in enumerate(TYRE_BEATS)
+        ]
+        payload["directions"] = [
+            {"emotion": e, "intensity": .5, "speed": sp, "pause_before_ms": 200 + i, "pause_after_ms": 300}
+            for i, (e, sp) in enumerate([("curious", 1.0), ("neutral", 1.0), ("serious", .95), ("reflective", .95), ("neutral", 1.0)])
+        ]
+        return payload
+
+    def test_a_paradox_opening_and_a_demonstrate_how_payoff_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "spec.json"
+            source.write_text("{}", encoding="utf-8")
+            result = validate_spec(self.tyre(), source)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["status"], "PASS")
+
+    def test_a_reveal_beat_flag_counts_as_the_payoff(self):
+        payload = spec("short")
+        payload["beats"][-1]["purpose"] = "wrap up"
+        payload["beats"][2]["reveal_beat"] = True
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "spec.json"
+            source.write_text("{}", encoding="utf-8")
+            result = validate_spec(payload, source)
+        self.assertNotIn("NO_EXPLICIT_PAYOFF_OR_RESOLUTION_BEAT", result["errors"])
+
+    def test_a_plain_list_of_facts_is_still_blocked(self):
+        payload = spec("short")
+        for beat in payload["beats"]:
+            beat["purpose"] = "describe the part"
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "spec.json"
+            source.write_text("{}", encoding="utf-8")
+            result = validate_spec(payload, source)
+        self.assertIn("OPENING_BEAT_LACKS_HOOK_OR_TENSION_INTENT", result["errors"])
+        self.assertIn("NO_EXPLICIT_PAYOFF_OR_RESOLUTION_BEAT", result["errors"])
+
 if __name__ == "__main__":
     unittest.main()
