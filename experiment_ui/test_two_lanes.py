@@ -280,6 +280,34 @@ class ShortPackagingPathTests(unittest.TestCase):
                 stack.enter_context(patch.object(server, name, return_value=value))
             return server.workflow_guidance({}), server.final_packaging_overview()
 
+    def patched_upstream(self):
+        """Every stage up to packaging complete, as in guidance()."""
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        from experiment_ui import server
+
+        done = {
+            "opportunity_gate_snapshot": {"ready_for_experiment_02": True, "opportunities": []},
+            "opportunity_research_state": {},
+            "vision_review_snapshot": {"awaiting_human_review": False, "complete": True},
+            "human_analysis_review_snapshot": {"status": "COMPLETE"},
+            "transformation_artifact_state": {"candidates_ready": True, "concept_gate": {"status": "COMPLETE"}},
+            "packaging_artifact_state": {"candidates_ready": True, "packaging_gate": {"status": "COMPLETE"}},
+            "research_artifact_state": {"drafts_ready": True, "research_gate": {"status": "COMPLETE"}},
+            "story_script_artifact_state": {
+                "drafts_ready": True, "production_ready": True, "script_gate": {"status": "COMPLETE"},
+            },
+            "title_direction_artifact_state": {
+                "requests_ready": True, "candidates_ready": True, "gate": {"status": "TITLE_DIRECTION_SELECTED"},
+            },
+            "packaging_brief_snapshot": {"ready": True},
+        }
+        stack = ExitStack()
+        for name, value in done.items():
+            stack.enter_context(patch.object(server, name, return_value=value))
+        return stack
+
     def test_a_short_goes_from_title_to_format_planning(self):
         """The Aviation Tires Short sat at the Final Package gate with no thumbnail image."""
         workflow, overview = self.guidance({"chain_needed": False, "short_ready": True})
@@ -328,6 +356,25 @@ class ThumbnailUploadStateTests(unittest.TestCase):
             state = server.thumbnail_uploads_state()
         self.assertIn("video_id=c1%3Ashort", state[0]["image_url"])
         self.assertIsNone(state[1]["image_url"])
+
+
+class BlockedCheckIsVisibleTests(unittest.TestCase):
+    def test_a_blocked_pre_render_check_says_what_and_why(self):
+        """D-194: it showed "Waiting for the next ready production step"."""
+        from unittest.mock import patch
+
+        from experiment_ui import server
+
+        blocked = {"status": "BLOCKED", "items": [{"status": "BLOCKED", "errors": ["NO_EXPLICIT_PAYOFF_OR_RESOLUTION_BEAT"]}]}
+        done = {"status": "COMPLETE", "complete": True}
+        with ShortPackagingPathTests.patched_upstream(self), \
+                patch.object(server, "short_package_lane_state", return_value={"chain_needed": False, "short_ready": True}), \
+                patch.object(server, "format_artifact_state", return_value={"plans_ready": True, "format_gate": done}), \
+                patch.object(server, "voice_performance_artifact_state", return_value={"specs_ready": True, "performance_gate": done}), \
+                patch.object(server, "pre_render_engagement_snapshot", return_value=blocked):
+            workflow = server.workflow_guidance({})
+        self.assertEqual(workflow["state"], "PRE_RENDER_CHECK_BLOCKED")
+        self.assertIn("no explicit payoff or resolution beat", workflow["current_detail"])
 
 
 if __name__ == "__main__":

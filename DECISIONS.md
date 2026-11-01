@@ -6494,3 +6494,21 @@ Script Gate.
 folder with no review requests the same as a missing folder:
 READY_TO_PREPARE. The next run prepares the gate, and the gate policy decides
 it as before.
+
+## D-194 — The pre-render structure check reads explainer scripts, and says when it blocks
+
+**Context.** The approved Aviation Tires Short was blocked before its
+narration preview on all three structure checks: no hook intent, no early
+tension, no payoff beat. The check matches words in each beat's purpose. The
+script states its tension as a "paradox", and its payoff as "Demonstrate how
+straight grooves evacuate water", so none of the words matched. The workflow
+then showed only "Waiting for the next ready production step".
+
+**Decision.**
+- **Hook and early tension** also count curiosity words: paradox, mystery,
+  surprise, myth, misconception, counterintuitive, contradict.
+- **Payoff** also counts "demonstrate how", "show how", "explain why", and any
+  beat marked `reveal_beat`.
+- A beat list with none of these is still blocked.
+- When the check blocks, the workflow stops at PRE_RENDER_CHECK_BLOCKED and
+  names the problems in plain words.

@@ -66,15 +66,23 @@ def validate_spec(spec: dict[str, Any], source: Path) -> dict[str, Any]:
     ]
     total_words = sum(_words(text) for text in narration)
 
-    hook_terms = ("hook", "opening", "question", "tension", "problem", "stakes", "contradiction")
-    problem_terms = ("problem", "tension", "stakes", "conflict", "question", "obstacle", "risk")
-    payoff_terms = ("payoff", "reveal", "solution", "answer", "resolution", "conclusion")
+    # Explainer scripts state their tension as a paradox or a surprise, and
+    # their payoff as "demonstrate how" or a reveal beat; the old word lists
+    # missed the approved Aviation Tires Short on all three counts (D-194).
+    curiosity_terms = ("paradox", "mystery", "surprise", "myth", "misconception", "counterintuitive", "contradict")
+    hook_terms = ("hook", "opening", "question", "tension", "problem", "stakes", *curiosity_terms)
+    problem_terms = ("problem", "tension", "stakes", "conflict", "question", "obstacle", "risk", *curiosity_terms)
+    payoff_terms = (
+        "payoff", "reveal", "solution", "answer", "resolution", "conclusion",
+        "demonstrate how", "demonstrates how", "show how", "shows how", "explain why", "explains why",
+    )
+    reveal_flags = [bool(beat.get("reveal_beat")) for beat in beats if isinstance(beat, dict)]
 
     if purposes and not _has_any(purposes[0], hook_terms):
         errors.append("OPENING_BEAT_LACKS_HOOK_OR_TENSION_INTENT")
     if purposes and not any(_has_any(text, problem_terms) for text in purposes[: max(2, len(purposes) // 2 + 1)]):
         errors.append("PROBLEM_OR_TENSION_NOT_ESTABLISHED_EARLY")
-    if purposes and not any(_has_any(text, payoff_terms) for text in purposes):
+    if purposes and not any(reveal_flags) and not any(_has_any(text, payoff_terms) for text in purposes):
         errors.append("NO_EXPLICIT_PAYOFF_OR_RESOLUTION_BEAT")
     if purposes and not _has_any(purposes[-1], payoff_terms):
         warnings.append("FINAL_BEAT_DOES_NOT_SIGNAL_PAYOFF_OR_RESOLUTION")
