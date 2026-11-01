@@ -377,7 +377,10 @@ def apply_payload(
 
 
 def snapshot() -> dict[str, Any]:
-    if not REVIEW_REQUESTS_DIR.exists():
+    # An empty folder is the same as none: nothing is prepared yet. Read as
+    # "awaiting a decision" it left nothing to decide, and the automatic run
+    # stopped at the gate for good (D-193, as D-149 for the Script Gate).
+    if not REVIEW_REQUESTS_DIR.exists() or not any(REVIEW_REQUESTS_DIR.glob("*.voice_review_request.json")):
         return {
             "status": "READY_TO_PREPARE",
             "complete": False,
