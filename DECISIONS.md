@@ -6512,3 +6512,14 @@ then showed only "Waiting for the next ready production step".
 - A beat list with none of these is still blocked.
 - When the check blocks, the workflow stops at PRE_RENDER_CHECK_BLOCKED and
   names the problems in plain words.
+
+## D-195 — A pre-render check result made under older rules is checked again
+
+**Context.** After D-194 fixed the check's rules, the Aviation Tires Short
+still showed PRE_RENDER_CHECK_BLOCKED. The stored BLOCKED result was still
+current: the same voice spec, the same hash. A blocked check is never re-run
+automatically, so it would have blocked forever.
+
+**Decision.** Each result records a `check_version`. A result whose version
+differs from the code's `CHECK_VERSION` (now "2") is stale, so the next
+Continue runs the check again. Bump the version whenever the rules change.
