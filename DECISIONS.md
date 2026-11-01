@@ -6480,3 +6480,17 @@ all 5 beats) and stopped, so the owner pressed Continue for a fresh answer.
 
 **Consequences.** A beat can end up with fewer stressed words than the model
 proposed. The narration itself is unchanged.
+
+## D-193 — An emptied format or voice review folder is ready to prepare
+
+**Context.** When the Aviation Tires Short's package changed (D-191), the
+format plan was redone. The stale-cleanup emptied the Format Gate's review
+folder. The gate then read as AWAITING_HUMAN_DECISION with no plans: nothing
+to decide and nothing to prepare, so Continue Automatically stopped at
+HUMAN_FORMAT_GATE for good. This is the same deadlock D-149 fixed for the
+Script Gate.
+
+**Decision.** The Format Gate and Voice Performance Gate snapshots treat a
+folder with no review requests the same as a missing folder:
+READY_TO_PREPARE. The next run prepares the gate, and the gate policy decides
+it as before.
