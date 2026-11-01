@@ -158,5 +158,23 @@ class ExplainerStructureTests(unittest.TestCase):
         self.assertIn("OPENING_BEAT_LACKS_HOOK_OR_TENSION_INTENT", result["errors"])
         self.assertIn("NO_EXPLICIT_PAYOFF_OR_RESOLUTION_BEAT", result["errors"])
 
+
+class CheckVersionTests(unittest.TestCase):
+    def test_a_result_made_under_older_rules_is_checked_again(self):
+        """D-195: the old BLOCKED result kept blocking after the rules were fixed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "c1.short.approved_voice_spec.json"
+            source.write_text("{}", encoding="utf-8")
+            results = Path(tmp) / "results"
+            with patch.object(pre_render_engagement, "RESULTS_DIR", results):
+                result = validate_spec(spec("short"), source)
+                results.mkdir()
+                path = pre_render_engagement._result_path(source)
+                path.write_text(json.dumps(result), encoding="utf-8")
+                self.assertIsNotNone(pre_render_engagement._current_result(source))
+                result["provenance"]["check_version"] = "1"
+                path.write_text(json.dumps(result), encoding="utf-8")
+                self.assertIsNone(pre_render_engagement._current_result(source))
+
 if __name__ == "__main__":
     unittest.main()

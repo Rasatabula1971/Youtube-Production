@@ -24,6 +24,9 @@ RESULTS_DIR = OUTPUT_DIR / "pre_render_engagement"
 SUMMARY_FILE = OUTPUT_DIR / "pre_render_engagement_summary.json"
 
 SHORT_FORMATS = {"short", "shorts", "youtube_short", "short_form"}
+# Bump when the rules change: a result made under other rules is stale and the
+# check runs again (D-195). A blocked result otherwise kept blocking forever.
+CHECK_VERSION = "2"
 
 
 def _words(value: str) -> int:
@@ -150,6 +153,7 @@ def validate_spec(spec: dict[str, Any], source: Path) -> dict[str, Any]:
             "long_form_fixed_reset_interval": False,
         },
         "provenance": {
+            "check_version": CHECK_VERSION,
             "approved_voice_spec": str(source.resolve()),
             "approved_voice_spec_sha256": sha256_file(source),
         },
@@ -177,6 +181,8 @@ def _current_result(source: Path) -> dict[str, Any] | None:
     if recorded != source.resolve():
         return None
     if provenance.get("approved_voice_spec_sha256") != sha256_file(source):
+        return None
+    if provenance.get("check_version") != CHECK_VERSION:
         return None
     return payload
 
